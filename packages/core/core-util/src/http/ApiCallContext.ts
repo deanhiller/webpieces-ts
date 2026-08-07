@@ -1,4 +1,4 @@
-import { ContextKey, AnyContextKey } from '../ContextKey';
+import { AnyUntrustedContextKey } from '../ContextKey';
 
 /**
  * ApiCallContext - the tiny seam that lets {@link LogApiCall} (browser-safe, core-util) stamp a
@@ -26,18 +26,22 @@ export interface ApiCallContext {
     isActive(): boolean;
 
     /**
-     * Stamp one ContextKey → value into the ambient context. The logger reads it back off the context
+     * Stamp one UNTRUSTED ContextKey → value into the ambient context. Untrusted by type on purpose:
+     * this seam is reachable from browser-side client code, so if it accepted a trusted key it would
+     * be a side door for forging a proven identity. The one key it actually stamps
+     * ({@link WebpiecesCoreHeaders.API_CALL_INFO}) is a log tag, which is untrusted by nature.
+     * The logger reads it back off the context
      * (server: RequestContext.buildStructuredLogFields; browser: its own store) during the log emit.
      */
     // webpieces-disable no-any-unknown -- a context value is heterogeneous (the api struct here; strings elsewhere)
-    set(contextKey: AnyContextKey, value: unknown): void;
+    set(contextKey: AnyUntrustedContextKey, value: unknown): void;
 
     /**
      * Clear one ContextKey. {@link LogApiCall} calls set → log → remove as one SYNCHRONOUS span, so the
      * tag is never held across `await`. That is what makes a single browser global safe: single-threaded,
      * nothing can interleave between set and remove, so a concurrent call can never clobber the slot.
      */
-    remove(contextKey: AnyContextKey): void;
+    remove(contextKey: AnyUntrustedContextKey): void;
 }
 
 /**

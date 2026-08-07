@@ -64,7 +64,7 @@ export function bigIntSafeFormat(): Format {
  * Inject every logged HeaderRegistry key present in the active RequestContext frame
  * into the record under its `name` (→ top-level jsonPayload.<name> in GCP, filterable
  * as jsonPayload.requestId, jsonPayload.tenantId, …). Values are read DIRECTLY from
- * RequestContext, secured keys masked via {@link ContextKey.maskIfSecured} — no
+ * RequestContext, secured keys masked via {@link ContextKey.maskForLogs} — no
  * ContextReader. Caller-supplied fields on the record win on conflict. Runs on EVERY
  * winston call, including winston's own handleExceptions/handleRejections lines that
  * bypass the WinstonLogger wrapper.

@@ -17,7 +17,9 @@
 |---|---|
 | `name` | Always set. The context storage key, the log/MDC key, and the recorder name. |
 | `httpHeader?` | If set, the key is **transferred over the wire** under this header. If unset, it is context-only and never leaves the process. |
-| `isSecured` | If true, the value is partially **masked** in logs (`maskIfSecured`). |
+| `trust` | `'trusted'` (the framework PROVED it) or `'untrusted'` (a caller asserted it). Stated by which factory built the key — `ContextKey.trusted(name, provenance, ...)` / `ContextKey.untrusted(...)`; there is no public constructor and no default. |
+| `provenance` | Required on a trusted key: WHY it is trusted, in prose. |
+| `maskInLogs` | If true, the value is partially **masked** in logs (`maskForLogs`). Log redaction only — unrelated to `trust`. |
 | `isLogged` | Defaults true. If false, the value is **never logged**. |
 
 `isTransferred()` is simply `this.httpHeader !== undefined`. Masking is length-aware: `< 8` chars →
@@ -28,9 +30,11 @@
 `packages/core/core-util/src/http/HeaderRegistry.ts`. "The single, GLOBAL source of truth for every
 ContextKey the platform knows about. Port of Java webpieces' HeaderTranslation." Configured once at
 startup (`HeaderRegistry.configure(svrHeaders, platformHeaders)`), it precomputes cached
-collections: `getTransferredKeys()`, `getSecuredNames()`, `getLoggedKeys()`, and a case-insensitive
+collections: `getTransferredKeys()`, `getMaskedNames()`, `getLoggedKeys()`, and a case-insensitive
 `findByHttpHeader()`. `configure()` runs `checkForDuplicates` and **throws** if two keys share a
-`name` but disagree on flags, or share an `httpHeader` under different names. `get()` throws until
+`name` but disagree on flags — including on `trust`, the most security-relevant of them, since
+whichever module loaded first would otherwise decide whether every reader of that key is authorizing
+on a spoofable value — or share an `httpHeader` under different names. `get()` throws until
 `configure()` has run — misconfiguration is loud, not silent.
 
 ### Built-in keys — `WebpiecesCoreHeaders.ts`
@@ -68,7 +72,10 @@ singleton (the moral equivalent of Java WebPieces' `ThreadLocal` `Context`). Hig
   fresh empty Map that *shadows* the outer one — every outer value goes invisible and a second
   request id is minted, silently splitting a trace across two ids. The guard makes that a loud
   error: "Exactly ONE scope per request — the transport opens it."
-- `getHeader(key)`/`putHeader(key, value)` delegate to `get`/`put` by `key.name`.
+- `getTrusted(key)`/`putTrusted(key, value)` and `getUntrusted(key)`/`putUntrusted(key, value)` read and
+  write by `key.name`. The verbs are trust-typed: passing the wrong kind of key is a COMPILE error, so a
+  reader can never mistake a spoofable header for a proven fact. `getAny(key)` is the key-agnostic
+  serialization read (log fields, outbound headers); it has no write twin on purpose.
 - **`buildLogFields()`** (string-only, masked) and **`buildStructuredLogFields()`** (object-valued
   keys survive; also injects `version` from `ServiceInfo`) iterate `getLoggedKeys()` and are what
   the logging backends read on every record. Both return an **empty** map outside a `run(...)`
@@ -102,7 +109,7 @@ For a `jwt` route the filter calls `jwtHook.parseJwt(token)` → `applyAuthValue
 context**:
 
 ```ts
-for (const entry of values.entries) { RequestContext.putHeader(entry.key, entry.value); }
+for (const entry of values.entries) { RequestContext.putTrusted(entry.key, entry.value); }
 RequestContext.put(PRINCIPAL_KEY, values); // '__webpieces_principal__'
 ```
 
@@ -127,8 +134,13 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   under `key.httpHeader`; `x-request-id` propagates unchanged; overwrite `CLIENT_VERSION` with this
   service's version. Values are **raw** (unmasked) — this map goes on the wire, not into logs.
 - **Inbound** `fillFromRequest(request)`: `setRequest(request)`, stamp `HTTP_METHOD`/`REQUEST_PATH`,
-  loop `getTransferredKeys()` and `putHeader(key, request.getHeaderValues(key)[0])`; if there is no
-  incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
+  loop `getTransferredKeys()` and route each header by the key's TRUST: an untrusted key is written
+  straight in, a **trusted** one is stashed in `PendingWireTrust` and NOT written. This fill runs at
+  transport level, BEFORE any filter, so nothing has verified the caller yet — writing a trusted value
+  here would mean `getTrusted` could return a header a stranger typed. `AuthFilter` then admits the
+  pending values on a route that authenticated its CALLER (`@AuthOidc`/`@AuthSharedSecret`), and on
+  `@AuthJwt`/`@Public` requires an exact match from the authenticator or rejects the request. If there
+  is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
 
 The Node client (`NodeProxyClient.outboundHeaders()`) uses the exact same
 `buildOutboundHeaders()`; the server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps

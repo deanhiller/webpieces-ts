@@ -9,7 +9,7 @@ import { ClientRegistry } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
 import { Server2AppModules } from '../../server2/src/Server2AppModules';
-import { TestAuthConfig, TestJwtHook } from '../../client-server/src/test/TestAuthConfig';
+import { TestAuthConfig, TestJwtHook, TEST_SHARED_SECRET } from '../../client-server/src/test/TestAuthConfig';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -36,6 +36,12 @@ let logLines: string[];
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 async function bootBothServers(): Promise<void> {
+    // Server2Api is @AuthSharedSecret('INTERNAL_API_SECRET'): server2 must ACCEPT this value
+    // (CompanyAuthConfig reads it from env) and client-server's outbound client must SEND it (its
+    // InversifyModule builds Secrets from the same env var). Setting it here wires both halves the
+    // way prod does, instead of rebinding two containers.
+    process.env['INTERNAL_API_SECRET'] = TEST_SHARED_SECRET;
+
     // client-server's outbound Server2Api client resolves 'server2' via the local registry (off-GCP).
     ClientRegistry.clear();
     ClientRegistry.addUrlMapping('server2', `http://localhost:${server2Port}`);
@@ -63,6 +69,7 @@ async function bootBothServers(): Promise<void> {
 }
 
 async function stopBothServers(): Promise<void> {
+    delete process.env['INTERNAL_API_SECRET'];
     logSpy.mockRestore();
     ClientRegistry.clear();
     await new Promise<void>((resolve: () => void) => clientServerHttp.close(() => resolve()));

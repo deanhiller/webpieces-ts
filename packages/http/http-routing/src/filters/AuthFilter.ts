@@ -1,6 +1,6 @@
 import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
-import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
+import { provideFrameworkSingleton, PendingWireTrust, PendingTrustedValue, RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
@@ -83,6 +83,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         if (!mode || mode.kind === 'public') {
             // Public: best-effort parse so a logged-out page can still know the logged-in user.
             this.bestEffortJwt(authHeader);
+            this.reconcileWireTrust(/*callerVerified*/ false);
             return nextFilter.invoke(meta);
         }
 
@@ -97,7 +98,69 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 this.enforceSharedSecret(this.credential(authHeader, SHARED_SECRET_SCHEME), mode.secretKey);
                 break;
         }
+        // OIDC and shared-secret both authenticate the CALLER ITSELF, so an internal service is on
+        // the other end and the trusted context it forwarded may be believed. A user JWT proves only
+        // who the USER is — the sender is still whoever holds the token, i.e. a browser.
+        this.reconcileWireTrust(/*callerVerified*/ mode.kind === 'oidc' || mode.kind === 'shared-secret');
         return nextFilter.invoke(meta);
+    }
+
+    /**
+     * Decide what happens to the trusted keys that arrived on the WIRE and were held back by
+     * {@link PendingWireTrust} (read that class for why they are held rather than written).
+     *
+     * `callerVerified` — the endpoint authenticated the SENDER (`@AuthOidc`, `@AuthSharedSecret`).
+     * The sender is a service we trust, this is the service-to-service hop, and its forwarded
+     * identity is admitted as-is. This is the case that makes propagating a verified userId across
+     * internal services work.
+     *
+     * Otherwise the sender is a browser or anyone else with curl, and the ONLY acceptable inbound
+     * trusted value is one the authenticator independently derived to the same value. Everything
+     * else is rejected — see {@link requireVouched}.
+     *
+     * Runs AFTER the mode enforcement above, because that is what stamps the authenticator's own
+     * values (`applyAuthValues`); comparing before it ran would compare against nothing.
+     */
+    private reconcileWireTrust(callerVerified: boolean): void {
+        const pending = PendingWireTrust.takeAll();
+        for (const item of pending) {
+            if (callerVerified) {
+                RequestContext.putTrusted(item.key, item.value);
+            } else {
+                this.requireVouched(item);
+            }
+        }
+    }
+
+    /**
+     * On a browser-reachable route, an inbound trusted header must match what the authenticator
+     * itself derived, or the request dies. Both failure shapes are rejections, not repairs:
+     *
+     * - DIFFERENT value — the caller said `alice`, the credential says `bob`. Silently letting the
+     *   credential win is not safe, because upstream rate limiters commonly bucket on the header
+     *   rather than the token: the request was already counted against the wrong principal, so
+     *   every forged header would be a free rate-limit bypass. No honest caller contradicts its own
+     *   credential.
+     * - NOTHING vouched for it — nobody derived this key at all, so there is no evidence behind a
+     *   value a stranger typed. This is the common case, not the exotic one: the framework's
+     *   {@link DefaultJwtHook} stamps NO entries, and an app hook only stamps the keys it can prove,
+     *   so any other trusted key a caller sends lands here.
+     *
+     * The pending value is discarded either way — the throw is what leaves the request.
+     */
+    private requireVouched(item: PendingTrustedValue): void {
+        const vouched = RequestContext.getTrusted(item.key);
+        if (vouched === item.value) {
+            return;
+        }
+        log.error(
+            `Rejecting inbound '${item.key.httpHeader}': it is a TRUSTED context key, this route does ` +
+            `not authenticate its caller, and the credential ` +
+            (vouched === undefined ? 'vouched for no such value' : 'derived a different value') + '.',
+        );
+        throw new HttpUnauthorizedError(
+            `Header '${item.key.httpHeader}' cannot be supplied by the caller on this endpoint`,
+        );
     }
 
     private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
@@ -160,7 +223,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     /** Stamp the parsed user's context entries + the principal into the RequestContext. */
     private applyAuthValues(values: AuthValues): void {
         for (const entry of values.entries) {
-            RequestContext.putHeader(entry.key, entry.value);
+            // ContextTuple.key is a TRUSTED key by type, so this is the one sanctioned write of a
+            // proven identity: the app's JwtHook derived it from a credential we just verified.
+            RequestContext.putTrusted(entry.key, entry.value);
         }
         RequestContext.put(PRINCIPAL_KEY, values);
     }

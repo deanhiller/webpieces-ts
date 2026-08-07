@@ -1,4 +1,7 @@
 import {
+    AnyContextKey,
+    AnyTrustedContextKey,
+    AnyUntrustedContextKey,
     HeaderRegistry,
     RecorderKeys,
     ServiceInfo,
@@ -6,6 +9,7 @@ import {
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { provideFrameworkSingleton } from './frameworkProvide';
+import { PendingWireTrust } from './PendingWireTrust';
 import { HttpRequest } from './HttpRequest';
 import { RequestContext } from './RequestContext';
 
@@ -45,10 +49,11 @@ export class RequestContextHeaders {
         const headers = new Map<string, string>();
         // getTransferredKeys() is precomputed at configure() time.
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
-            // getTransferredKeys() is AnyContextKey[]; every transferred value is a wire
-            // string, so read by name rather than asserting a value type on a generically-typed key.
-            const value = RequestContext.get<string>(key.name);
-            if (value !== undefined && value !== null && value !== '') {
+            // getTransferredKeys() is AnyContextKey[] — mixed in both value type and trust — so this
+            // reads through getAny (serialization to the wire, not a trust decision) and narrows with
+            // the typeof-string guard; every transferred value is a wire string.
+            const value = RequestContext.getAny(key);
+            if (typeof value === 'string' && value !== '') {
                 headers.set(key.httpHeader!, value);
             }
         }
@@ -93,21 +98,45 @@ export class RequestContextHeaders {
         // Stamp the inbound method+path as top-level logged keys (jsonPayload.httpMethod / requestPath)
         // so EVERY log line of this request carries them. Sourced from the just-published HttpRequest;
         // NOT transferred over the wire, so a downstream hop stamps its own inbound values.
-        RequestContext.putHeader(WebpiecesCoreHeaders.HTTP_METHOD, request.method);
-        RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_PATH, request.path);
+        RequestContext.putUntrusted(WebpiecesCoreHeaders.HTTP_METHOD, request.method);
+        RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_PATH, request.path);
 
         // getTransferredKeys() is precomputed at configure() time.
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
             const values = request.getHeaderValues(key);
             if (values && values.length > 0) {
-                RequestContext.putHeader(key, values[0]);
+                this.acceptInbound(key, values[0]);
             }
         }
 
-        if (!RequestContext.hasHeader(WebpiecesCoreHeaders.REQUEST_ID)) {
-            RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID, this.generateRequestId());
+        if (!RequestContext.hasKey(WebpiecesCoreHeaders.REQUEST_ID)) {
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_ID, this.generateRequestId());
             this.stampRequestIdSource();
         }
+    }
+
+    /**
+     * ONE inbound header -> the context, routed by the key's TRUST.
+     *
+     * An untrusted key goes straight in — nobody was ever going to make a security decision on it.
+     *
+     * A TRUSTED key does NOT. This transport-level fill runs BEFORE any filter, so at this instant
+     * nothing has verified who the caller is; writing the value now would mean `getTrusted` could
+     * return a header a stranger typed. It is stashed in {@link PendingWireTrust} instead and
+     * admitted (or rejected) by `AuthFilter`, which knows the route's auth mode. See that class for
+     * the full rationale — this two-step is the reason trusted keys can safely keep an `httpHeader`
+     * and therefore the reason service-to-service identity propagation works at all.
+     *
+     * The cast is the one place trust is narrowed from the registry's mixed `AnyContextKey`: the
+     * runtime `isTrusted()` check IS the evidence for it, and it is confined to this single line
+     * rather than spread across every caller.
+     */
+    private acceptInbound(key: AnyContextKey, value: string): void {
+        if (key.isTrusted()) {
+            PendingWireTrust.stash(key as AnyTrustedContextKey, value);
+            return;
+        }
+        RequestContext.putUntrusted(key as AnyUntrustedContextKey, value);
     }
 
     /**
@@ -122,7 +151,7 @@ export class RequestContextHeaders {
     private stampRequestIdSource(): void {
         const svcName = ServiceInfo.getName();
         if (svcName) {
-            RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID_SOURCE, svcName);
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_ID_SOURCE, svcName);
         }
     }
 
@@ -140,7 +169,7 @@ export class RequestContextHeaders {
         if (!RequestContext.isActive()) {
             return undefined;
         }
-        return RequestContext.getHeader<TestCaseRecorder>(RecorderKeys.RECORDER);
+        return RequestContext.getUntrusted<TestCaseRecorder>(RecorderKeys.RECORDER);
     }
 
     /** Guard both directions: no ambient request scope means there is no context to fill or read. */

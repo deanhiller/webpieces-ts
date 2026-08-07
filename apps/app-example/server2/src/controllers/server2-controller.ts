@@ -25,8 +25,8 @@ export class Server2Controller extends Server2Api {
     }
 
     override async fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
-        const requestId = RequestContext.getHeader(WebpiecesCoreHeaders.REQUEST_ID);
-        const tenant = RequestContext.getHeader(CompanyHeaders.TENANT_ID);
+        const requestId = RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID);
+        const tenant = RequestContext.getUntrusted(CompanyHeaders.TENANT_ID);
         const greeting = this.greetingService.greet(request.name);
 
         return {

@@ -16,20 +16,20 @@ import { ChunkingRawStream } from '../ChunkingRawStream';
 import { LoggedError } from '../LoggedError';
 import { logLevelToBunyanLevel } from '../levels';
 
-const REQUEST_ID = new ContextKey<string>('requestId', 'x-request-id');
+const REQUEST_ID = ContextKey.untrusted<string>('requestId', 'x-request-id');
 // secured → masked in logs
-const AUTH_TOKEN = new ContextKey<string>('authToken', 'x-auth-token', true);
+const AUTH_TOKEN = ContextKey.untrusted<string>('authToken', 'x-auth-token', true);
 // routed-endpoint identity — rendered specially by the console line ([Controller.method]).
-const CONTROLLER = new ContextKey<string>('controller');
-const METHOD = new ContextKey<string>('method');
+const CONTROLLER = ContextKey.untrusted<string>('controller');
+const METHOD = ContextKey.untrusted<string>('method');
 
 // Run `fn` inside a RequestContext carrying the canned context values the loggers
 // read directly (requestId + a long secured authToken that masks to "sup...lue").
 function withContext(fn: () => void): void {
     RequestContext.run(() => {
-        RequestContext.putHeader(REQUEST_ID, 'req-123');
+        RequestContext.putUntrusted(REQUEST_ID, 'req-123');
         // length 20 (> 15) → masked to first3 + "..." + last3 = "sup...lue"
-        RequestContext.putHeader(AUTH_TOKEN, 'supersecretlongvalue');
+        RequestContext.putUntrusted(AUTH_TOKEN, 'supersecretlongvalue');
         fn();
     });
 }
@@ -206,9 +206,9 @@ describe('BunyanConsoleFactory local pretty line (trytami format)', () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
         const factory = new BunyanConsoleFactory();
         RequestContext.run(() => {
-            RequestContext.putHeader(REQUEST_ID, 'req-123');
-            RequestContext.putHeader(CONTROLLER, 'LoginController');
-            RequestContext.putHeader(METHOD, 'login');
+            RequestContext.putUntrusted(REQUEST_ID, 'req-123');
+            RequestContext.putUntrusted(CONTROLLER, 'LoginController');
+            RequestContext.putUntrusted(METHOD, 'login');
             factory.getLogger('TokenService').info('hello world');
         });
         await flush();

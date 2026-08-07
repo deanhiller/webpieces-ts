@@ -9,7 +9,7 @@
 
 export { toError } from './lib/errorUtils';
 export { ContextKey } from './ContextKey';
-export type { AnyContextKey } from './ContextKey';
+export type { AnyContextKey, AnyTrustedContextKey, AnyUntrustedContextKey, Trust } from './ContextKey';
 export { ContextTuple } from './ContextTuple';
 
 // @DocumentDesign — DI-design-root marker. Applies to ANY project kind (server
