@@ -11,7 +11,7 @@
  *   ? new WinstonGcpFactory()      // Cloud Run → stdout JSON
  *   : new WinstonConsoleFactory(); // local → pretty console
  * // setupRuntime identifies the service (name+version are REQUIRED inputs) and installs the backend:
- * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', loggerFactory, ...))
+ * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', 'deployed', loggerFactory, ...))
  * ```
  *
  * (svcName rides winston `defaultMeta`, read at factory CONSTRUCTION — so if you need it on winston

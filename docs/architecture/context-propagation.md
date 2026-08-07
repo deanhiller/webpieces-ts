@@ -165,7 +165,7 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
 
   `destination` is a `DestinationTrust`, and it is the OUTBOUND half of the trust rule below. A
   **trusted** key is emitted only when the destination endpoint authenticates its CALLER
-  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / undeclared endpoint it is
+  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / `@AuthLocalOnly` / undeclared endpoint it is
   omitted, because that endpoint's `AuthFilter` is obliged to reject it — sending it would 401 our
   own request. Untrusted keys always travel. `DestinationTrust.forAuthMode(route.authMeta?.mode)` is
   the only way to build one, so the caller cannot assert a posture the route does not have, and
@@ -176,7 +176,8 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   transport level, BEFORE any filter, so nothing has verified the caller yet — writing a trusted value
   here would mean `getTrusted` could return a header a stranger typed. `AuthFilter` then admits the
   pending values on a route that authenticated its CALLER (`@AuthOidc`/`@AuthSharedSecret`), and on
-  `@AuthJwt`/`@Public` requires an exact match from the authenticator or rejects the request. If there
+  `@AuthJwt`/`@Public`/`@AuthLocalOnly` requires an exact match from the authenticator or rejects the
+  request. If there
   is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
 
 The Node client (`NodeProxyClient.outboundContextHeaders(destination)`) uses the exact same
@@ -185,7 +186,8 @@ server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps each request
 `RequestContext.run(...)` then calls `fillFromRequest`. The BROWSER twin
 (`ContextMgr.buildOutboundHeaders(destination)`) applies the same rule, and never reaches the
 permissive branch: `BrowserProxyClient` refuses to bind an `@AuthOidc`/`@AuthSharedSecret` contract
-at all, so every browser destination is `@AuthJwt` or `@Public`.
+at all, so every browser destination is `@AuthJwt`, `@Public` or `@AuthLocalOnly` (a browser calling
+a dev-only endpoint on the developer's own server is that mode's motivating case).
 
 ## Propagation **through a Cloud Tasks queue**
 

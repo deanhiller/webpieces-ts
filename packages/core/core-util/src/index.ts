@@ -44,17 +44,13 @@ export {
     MISSING_AUTH_DECORATOR_FIX,
     AuthOidc,
     AuthSharedSecret,
-    // API kind (RPC vs PubSub/Cloud Tasks) + queue naming
-    Rpc,
-    PubSub,
-    Queue,
+    AuthLocalOnly,
     MaskLog,
     getApiPath,
     getEndpoints,
     getEndpointOptions,
     getEndpointKind,
     getEndpointKinds,
-    ENDPOINT_KINDS_BY_API_KIND,
     getMaskSpec,
     isFormPost,
     isApiPath,
@@ -62,16 +58,25 @@ export {
     getAuthMode,
     assertEveryEndpointHasAuthMode,
     assertEveryExternalEndpointDeclaresCaller,
-    getApiKind,
-    assertApiKind,
-    assertPubSubConventions,
-    getQueueName,
     validateNoConflictingDecorators,
     AuthMeta,
     RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
-export type { AuthMode, ApiKind, EndpointKind, JwtRoles, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export type { AuthMode, EndpointKind, JwtRoles, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+// API kind (RPC vs PubSub/Cloud Tasks) + queue naming. Split out of decorators.ts for file size only;
+// one-way dependency api-kind -> decorators, and the barrel keeps the surface identical.
+export {
+    Rpc,
+    PubSub,
+    Queue,
+    ENDPOINT_KINDS_BY_API_KIND,
+    getApiKind,
+    assertApiKind,
+    assertPubSubConventions,
+    getQueueName,
+} from './http/api-kind';
+export type { ApiKind } from './http/api-kind';
 // WHO calls an `external` endpoint — the caller declaration @Endpoint(..., 'external', {calledBy})
 // requires, and the reader for it.
 export { EXTERNAL_SYSTEM_KINDS, DEFAULT_CALLER_KIND, ExternalCaller, isExternalSystemKind, getEndpointCaller } from './http/external-caller';
@@ -132,6 +137,10 @@ export type { ServiceUrlDeriver } from './http/ClientRegistry';
 // "What service am I" — set once at startup, read by the logging backends and by
 // RequestContextHeaders (to stamp requestIdSource on ids this service mints).
 export { ServiceInfo } from './http/ServiceInfo';
+// "Where am I running" — declared once at startup (setupRuntime, from RuntimeSetupOptions.locality).
+// The ONE input to @AuthLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
+export { RuntimeLocality } from './http/RuntimeLocality';
+export type { Locality } from './http/RuntimeLocality';
 // Pluggable, bidirectional error translation (app exception <-> wire form). Registered on
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
 export { ErrorWireForm } from './http/ErrorTranslation';

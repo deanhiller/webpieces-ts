@@ -7,6 +7,7 @@ export {
     rolesRequired,
     AuthOidc,
     AuthSharedSecret,
+    AuthLocalOnly,
     Rpc,
     PubSub,
     Queue,

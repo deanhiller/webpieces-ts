@@ -43,6 +43,7 @@ export async function setupCompanyRuntime(
         new RuntimeSetupOptions(
             options.svcName,
             options.svcVersion,
+            options.locality,
             options.loggerFactory,
             /*platformHeaders*/ true,
             options.config,
