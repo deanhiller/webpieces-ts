@@ -11,7 +11,7 @@
  *   ? new BunyanGcpFactory()      // Cloud Logging via @google-cloud/logging-bunyan
  *   : new BunyanConsoleFactory(); // local → pretty console
  * // setupRuntime identifies the service (name+version are REQUIRED inputs) and installs the backend:
- * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', loggerFactory, ...))
+ * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', 'deployed', loggerFactory, ...))
  * ```
  *
  * BREAKING (was `new BunyanFactoryOptions('my-service')` passed to each factory): the service name

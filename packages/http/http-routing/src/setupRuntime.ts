@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ApiCallContextHolder, HeaderRegistry, LoggerFactory, LogManager, ServiceInfo } from '@webpieces/core-util';
+import { ApiCallContextHolder, HeaderRegistry, Locality, LoggerFactory, LogManager, RuntimeLocality, ServiceInfo } from '@webpieces/core-util';
 import { RequestContextApiCallContext } from '@webpieces/core-context';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
@@ -25,6 +25,17 @@ export class RuntimeSetupOptions {
          * (a git SHA, a semver tag, a CI build number); it just has to identify THIS build so a log
          * line can say which one emitted it. Must be non-blank. */
         public readonly svcVersion: string,
+        /**
+         * WHERE this process runs — `'local'` (a developer's machine) or `'deployed'` (everything
+         * else). Published to {@link RuntimeLocality}; the ONE input to `@AuthLocalOnly` enforcement.
+         *
+         * REQUIRED and POSITIONAL on purpose, exactly like `@Endpoint(path, kind)`: only the app
+         * knows how its platform is detected (Cloud Run's `K_SERVICE`, an ECS metadata URL, the
+         * absence of both), the framework must not guess, and a defaulted field would mean "forgot
+         * to say" and "said deployed" are the same line of code. Derive it at your startup, e.g.
+         * `getServiceName() === 'local' ? 'local' : 'deployed'`.
+         */
+        public readonly locality: Locality,
         /** Logging backend to install (LogManager.setFactory). */
         public readonly loggerFactory: LoggerFactory,
         /** Include the webpieces platform default headers. */
@@ -62,6 +73,11 @@ export async function setupRuntime(
     // log field must never 500 live traffic); the "say which build you are" guarantee lives HERE, the
     // one startup every server runs.
     ServiceInfo.setInfo(options.svcName, options.svcVersion);
+
+    // 0b. Declare WHERE we run, before any route is built: ApiRoutingFactory reads it in step 4 to
+    // decide whether @AuthLocalOnly routes are registered at all. Undeclared reads as DEPLOYED, so
+    // this call is what lets a local-only endpoint exist — never what hides one.
+    RuntimeLocality.declare(options.locality);
 
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
     HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);

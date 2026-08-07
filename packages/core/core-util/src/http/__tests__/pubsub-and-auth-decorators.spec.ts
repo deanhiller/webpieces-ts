@@ -2,24 +2,26 @@ import 'reflect-metadata';
 import {
     ApiPath,
     Endpoint,
-    PubSub,
-    Rpc,
-    Queue,
     Public,
     AuthJwt,
     AuthOidc,
     AuthSharedSecret,
-    getApiKind,
     getEndpointKind,
     getEndpointKinds,
-    getQueueName,
     getAuthMode,
     rolesRequired,
     MISSING_AUTH_DECORATOR_FIX,
-    assertApiKind,
-    assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
 } from '../decorators';
+import {
+    PubSub,
+    Rpc,
+    Queue,
+    getApiKind,
+    getQueueName,
+    assertApiKind,
+    assertPubSubConventions,
+} from '../api-kind';
 
 @PubSub()
 @AuthOidc()
@@ -197,7 +199,7 @@ describe('auth modes', () => {
         expect(() => assertEveryEndpointHasAuthMode(NakedApi)).toThrow(MISSING_AUTH_DECORATOR_FIX);
         // The menu must be COMPLETE — an incomplete one becomes the API the caller believes exists.
         for (const member of ["@AuthJwt({roles: ['admin']})", '@AuthJwt({allRolesAllowed: true})',
-            '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)']) {
+            '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)', '@AuthLocalOnly()']) {
             expect(MISSING_AUTH_DECORATOR_FIX).toContain(member);
         }
         // ...and must name NO removed spelling. One list, so retiring a decorator means adding it here

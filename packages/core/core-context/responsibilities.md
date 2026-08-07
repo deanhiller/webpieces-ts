@@ -20,6 +20,23 @@ AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpie
   follows `await` and callbacks by itself, so nothing else needs these. The snapshot is OPAQUE — its
   constructor is private and `copyContext()` is its only producer — so the restore side cannot be
   handed a hand-assembled map, which would forge whatever trusted values it contained.
+- `CapturedContext.withTrusted()` / `.withoutTrusted()` — NON-MUTATING transforms producing the
+  `RestorableContext` that `runWithContext`/`restoreContext` accept. A bare capture is NOT accepted by
+  either, so every call site states whether the proven identity travels (`withTrusted`, the faithful
+  re-root) or is deliberately dropped (`withoutTrusted`: a background job keeps `requestId`/`actionId`
+  so it stays greppable and loses `userId`/`orgId`/roles because it runs as the system). A method pair
+  rather than a `keepTrusted` flag so neither intent is shorter to type and both are greppable;
+  `withoutTrusted` needs no capability token, because it only ever REMOVES entries and dropping cannot
+  forge. What survives a drop is exactly "registered as an UNTRUSTED ContextKey" — the framework's
+  unregistered reserved slots go too.
+- `runDetachedScope()` — the OPPOSITE case: a fresh, EMPTY, nestable scope that inherits nothing, for
+  work whose context was reconstructed from OUTSIDE this process (a browser-log line whose context the
+  browser captured; one batch spans several user actions, so inheriting the shipping request's
+  `actionId` would be wrong). Values are written INSIDE the closure with the trust verbs — no container
+  crosses the boundary, so code fed by a source that PROVES nothing (a browser) cannot fabricate a
+  trusted value. That is a limit on the source, not on the key: `putTrusted` inside a detached scope is
+  correct when the caller HAS proven the value. `runWithContext` PRESERVES a real context;
+  `runDetachedScope` DISCARDS the ambient one.
 
 ## Out of Scope
 

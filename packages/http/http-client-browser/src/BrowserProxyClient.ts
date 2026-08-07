@@ -71,15 +71,35 @@ export class BrowserProxyClient extends ProxyClient {
      * Reject a contract this browser cannot satisfy, at bind time rather than on the first call.
      * Both service-to-service modes need credentials only a server has: @AuthOidc needs a runtime
      * service account to mint a token, @AuthSharedSecret needs a secret no browser may ship.
+     *
+     * @AuthLocalOnly is deliberately NOT rejected: a browser calling a dev-only endpoint on the
+     * developer's own server is the motivating case for that mode (shipping browser logs into the
+     * server log). It needs no credential — the server refuses it off-local by not having the route.
+     *
+     * An exhaustive switch with NO `default`, like {@link DestinationTrust.forAuthMode} and
+     * `AuthFilter.verifiesCaller`. This was a NEGATIVE allow-list (`kind !== 'oidc' && kind !==
+     * 'shared-secret'`), which silently WAVED THROUGH any future AuthMode kind — the browser would
+     * have bound a contract it cannot satisfy and failed on the first call instead of at bind time.
+     * Adding `local-only` is what surfaced it: the third reader of the union should fail to compile
+     * on a sixth kind for the same reason the other two do.
      */
     protected override assertEndpointSupported(authMeta: AuthMeta | undefined, methodName: string): void {
-        const kind = authMeta?.mode.kind;
-        if (kind !== 'oidc' && kind !== 'shared-secret') {
+        const mode = authMeta?.mode;
+        if (mode === undefined) {
             return;
         }
-        throw new Error(
-            `Endpoint ${methodName} is @${kind === 'oidc' ? 'AuthOidc' : 'AuthSharedSecret'} — a browser cannot ` +
-            `hold service credentials. Call it server-side with ClientHttpFactory from @webpieces/http-client-node.`,
-        );
+        switch (mode.kind) {
+            case 'public':
+            case 'jwt':
+            case 'local-only':
+                return;
+            case 'oidc':
+            case 'shared-secret':
+                throw new Error(
+                    `Endpoint ${methodName} is @${mode.kind === 'oidc' ? 'AuthOidc' : 'AuthSharedSecret'} — a browser ` +
+                    `cannot hold service credentials. Call it server-side with ClientHttpFactory from ` +
+                    `@webpieces/http-client-node.`,
+                );
+        }
     }
 }

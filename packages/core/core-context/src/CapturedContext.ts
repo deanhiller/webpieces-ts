@@ -1,3 +1,5 @@
+import { HeaderRegistry } from '@webpieces/core-util';
+
 /**
  * A capability TOKEN, not data — the thing you must be holding to build a {@link CapturedContext} or
  * to unpack one.
@@ -39,6 +41,29 @@ export class ContextCaptureAuthority {
 /**
  * CapturedContext — an OPAQUE snapshot of a {@link RequestContext} scope.
  *
+ * ## THE THREE CASES — pick by where the values came from and what may keep the identity
+ *
+ * | you have | you want | write |
+ * |---|---|---|
+ * | a genuine prior scope | ALL of it, trusted values included | `runWithContext(snapshot.withTrusted(), fn)` |
+ * | a genuine prior scope | the trace fields but NOT the identity | `runWithContext(snapshot.withoutTrusted(), fn)` |
+ * | values from OUTSIDE this process | exactly what you re-state, nothing inherited | `RequestContext.runDetachedScope(fn)` |
+ *
+ * Row 1 is a faithful re-root of a broken async chain — the work continues AS that user. Row 2 is a
+ * deliberate PRIVILEGE DROP: a background job keeps `requestId`/`actionId` so it stays greppable, and
+ * loses `userId`/`orgId`/roles because it runs as the system (see {@link withoutTrusted}). Row 3 is a
+ * different question entirely — the values were never in a scope here, so there is no snapshot to take;
+ * see `RequestContext.runDetachedScope`, where each value is written inside the closure with the trust
+ * verbs.
+ *
+ * There is NO bare form of rows 1 and 2. `copyContext()` hands back a `CapturedContext`, and
+ * `runWithContext`/`restoreContext` do not accept one — they take the {@link RestorableContext} that
+ * {@link withTrusted} and {@link withoutTrusted} produce. Every call site therefore STATES whether the
+ * proven identity travels, and neither intent is shorter to type than the other. That is CLAUDE.md shim
+ * shape #5 applied here: a bare snapshot silently carrying a user identity is a widening that is an
+ * absence rather than a token, and it is ungreppable. Now `grep -rn withTrusted` enumerates every place
+ * an identity crosses a scope boundary and `grep -rn withoutTrusted` every deliberate drop.
+ *
  * ## What it is for
  *
  * `AsyncLocalStorage` follows `await`, `.then()` and ordinary callbacks on its own, so the vast
@@ -50,7 +75,8 @@ export class ContextCaptureAuthority {
  * log fields and the proven identity would silently vanish from everything the work logs or calls.
  *
  * The answer is two halves: `RequestContext.copyContext()` where the work is ENQUEUED, and
- * `RequestContext.runWithContext(captured, fn)` (or `restoreContext(captured)`) where it RUNS.
+ * `RequestContext.runWithContext(captured.withTrusted(), fn)` — or `.withoutTrusted()`, or
+ * `restoreContext(...)` of either — where it RUNS. The narrowing is not optional; see the table above.
  *
  * ## Why it is opaque instead of a `Map<string, unknown>`
  *
@@ -75,16 +101,17 @@ export class ContextCaptureAuthority {
  *   type-checks. Withholding the class object is what actually closes it;
  * - the entries live in `#entries`, a genuine ECMAScript private field, so they are unreachable at
  *   RUNTIME as well as at compile time — no `Object.keys`, no cast, no index signature;
- * - the map is defensively copied ON CAPTURE and again ON RESTORE, so a caller who still holds the
- *   live context (or who keeps writing to it after capturing) cannot reach through the snapshot, and a
- *   snapshot can be restored repeatedly without the first restore's mutations bleeding into the second.
+ * - the map is defensively copied ON CAPTURE, again on each NARROWING, and again ON RESTORE, so a
+ *   caller who still holds the live context (or who keeps writing to it after capturing) cannot reach
+ *   through the snapshot, narrowing never mutates the capture it came from, and a snapshot can be
+ *   restored repeatedly without the first restore's mutations bleeding into the second.
  *
  * There is deliberately no reader: nothing hands the entries back out. That is why `getAll()` is gone
  * rather than re-typed to return one of these — a `CapturedContext` you cannot read is useless as a
  * `getAll`, and a readable one would be the raw enumeration of every trusted value all over again.
  *
- * The one residual: a consumer holding a snapshot can still cast a token into `toFreshStore` and read
- * the entries back out as a plain Map. That is knowingly accepted, and it is the same asymmetry
+ * The one residual: a consumer holding a NARROWED snapshot can still cast a token into
+ * {@link RestorableContext.toFreshStore} and read the entries back out as a plain Map. That is knowingly accepted, and it is the same asymmetry
  * `RequestContext.getAny` states — FORGING a trusted value is the dangerous direction and is closed
  * here; reading one you were already legitimately handed, without saying `getTrusted`, costs you
  * nothing but the type. Closing it too would mean no method could take the token at all, which is to
@@ -123,6 +150,130 @@ export class CapturedContext {
     }
 
     /**
+     * Carry EVERY value onward, the proven identity included — the faithful re-root. The work runs AS
+     * that user: `getTrusted(USER_ID)` inside it answers exactly what it answered in the original scope,
+     * which is the entire point when a request's own continuation was re-rooted onto a queue or a timer.
+     *
+     * Said OUT LOUD, because it is the wide branch. A bare snapshot is deliberately not accepted by
+     * `runWithContext`/`restoreContext` (see the class doc), so the identity never crosses a scope
+     * boundary by default or by omission, and `grep -rn withTrusted` enumerates every place it does.
+     *
+     * NON-MUTATING, like its sibling — the receiver is unchanged, so ONE snapshot can be narrowed both
+     * ways at two different call sites.
+     */
+    withTrusted(): RestorableContext {
+        return RestorableContext.of(ContextCaptureAuthority.INTERNAL, this.#entries);
+    }
+
+    /**
+     * Carry only the UNTRUSTED values — a deliberate PRIVILEGE DROP.
+     *
+     * ```typescript
+     * const snapshot = RequestContext.copyContext();
+     * RequestContext.runWithContext(snapshot.withTrusted(), fn);     // runs AS that user
+     * RequestContext.runWithContext(snapshot.withoutTrusted(), fn);  // runs as the SYSTEM
+     * ```
+     *
+     * The case: a background job or fire-and-forget task spawned during a request should keep the
+     * untrusted trace fields — `requestId`, `actionId` — so its log lines are still greppable back to
+     * the click that caused them, but it must NOT keep `userId` / `orgId` / roles, because it executes
+     * as the system rather than as that user. Carrying the proven identity onward would make every
+     * downstream authorization decision think the user is still on the other end of the wire.
+     *
+     * A METHOD PAIR, never a `keepTrusted: boolean` on {@link RequestContext.runWithContext}: a
+     * parameter makes the two intents equally easy to type and impossible to grep, and a defaulted one
+     * makes the permissive branch the shortest thing to write — CLAUDE.md shim shape #5, "a widening
+     * that is an ABSENCE rather than a token", the same reason `@AuthJwt({allRolesAllowed: true})` says
+     * the wide grant out loud. As a transform on the SNAPSHOT rather than a second capture mechanism it
+     * composes with BOTH consumers — `runWithContext` and `restoreContext` — for free.
+     *
+     * NON-MUTATING: the receiver is untouched, so one snapshot can be used both ways.
+     *
+     * NO AUTHORITY TOKEN, deliberately, and it must not grow one. The token on {@link capture} exists
+     * because CONSTRUCTING a snapshot from arbitrary entries forges trust. This direction only ever
+     * REMOVES entries: whatever survives was already in a real capture of a real scope, so the result
+     * is strictly less privileged than the object the caller is already holding. Dropping cannot forge.
+     *
+     * WHAT SURVIVES is exactly "registered as an UNTRUSTED {@link ContextKey}". Trusted keys go, and so
+     * do names the {@link HeaderRegistry} does not know — the framework's reserved slots (the
+     * `HttpRequest`, the AuthFilter principal, the Cloud Tasks schedule frame), which carry no declared
+     * trust and are the caller's identity and connection rather than trace fields. A privilege drop
+     * that guessed in the permissive direction would not be one. For the same reason, with no registry
+     * configured NOTHING is knowably untrusted and the result is empty — always the safe answer, since
+     * this method's only job is to remove.
+     */
+    withoutTrusted(): RestorableContext {
+        // webpieces-disable no-any-unknown -- the context store is deliberately type-erased; see #entries
+        const kept = new Map<string, unknown>();
+        if (!HeaderRegistry.isConfigured()) {
+            return RestorableContext.of(ContextCaptureAuthority.INTERNAL, kept);
+        }
+        const registry = HeaderRegistry.get();
+        for (const name of this.#entries.keys()) {
+            const key = registry.findByName(name);
+            if (key && key.isUntrusted()) {
+                kept.set(name, this.#entries.get(name));
+            }
+        }
+        return RestorableContext.of(ContextCaptureAuthority.INTERNAL, kept);
+    }
+
+    /**
+     * How many entries the snapshot holds. The one thing it will tell you about itself — a count is
+     * not a value, so it leaks nothing, and it lets a caller (and a test) see that a capture taken
+     * outside an active scope is simply empty rather than an error.
+     */
+    size(): number {
+        return this.#entries.size;
+    }
+}
+
+/**
+ * A snapshot whose TRUST INTENT has been stated — the only thing `RequestContext.restoreContext` and
+ * `RequestContext.runWithContext` accept.
+ *
+ * It exists to make the wide choice unskippable. A single type would have meant
+ * `runWithContext(snapshot, fn)` compiling next to `runWithContext(snapshot.withTrusted(), fn)`: two
+ * spellings of one thing (shim shape #1), with the shorter one silently carrying a user identity into
+ * work that may have no business running as that user. Splitting the type deletes the default — a
+ * capture is inert until it says which it means — so there is exactly one spelling per intent, and
+ * `grep -rn withTrusted` / `grep -rn withoutTrusted` enumerate the two populations of call sites.
+ *
+ * Two CLASSES rather than a phantom type parameter on {@link CapturedContext}, even though this repo
+ * uses that trick on `ContextKey<V, T extends Trust>`. There the parameter rides along with a key that
+ * consumers name constantly and read values through, so it earns its complexity. Here the two states
+ * have DIFFERENT MEMBERS — a capture can only be narrowed, a narrowed one can only be restored — and a
+ * type that changes its members between states is a second class, not a second type argument. Naming
+ * it also gives the field/queue-entry type a consumer holds a name that says what it is.
+ *
+ * The #622 opacity guarantees are unchanged and are why this class is also barrel-exported as a TYPE
+ * ONLY: private constructor, a capability token on the producer, a real `#entries` private field, and
+ * defensive copies on the way in and on the way out.
+ */
+export class RestorableContext {
+    /** Same real ECMAScript private field, for the same reason — see {@link CapturedContext}. */
+    // webpieces-disable no-any-unknown -- the context store is deliberately type-erased; each ContextKey carries its own value type and the typed verbs re-apply it on read
+    readonly #entries: Map<string, unknown>;
+
+    /** PRIVATE — {@link of} is the only producer, and only this module can call it. */
+    // webpieces-disable no-any-unknown -- see #entries
+    private constructor(entries: Map<string, unknown>) {
+        this.#entries = new Map(entries);
+    }
+
+    /**
+     * The ONLY producer, called by `CapturedContext.withTrusted()` / `withoutTrusted()`. Guarded the
+     * same way `capture` is: a token no consumer can name, and a barrel that exports this class as a
+     * TYPE ONLY, so the class object — and with it this static — never reaches a consumer at all.
+     */
+    // webpieces-disable no-any-unknown -- see #entries
+    // webpieces-disable no-function-outside-class -- static factory standing in for the (private) constructor; an instance method would presuppose the instance being created
+    static of(authority: ContextCaptureAuthority, entries: Map<string, unknown>): RestorableContext {
+        void authority;
+        return new RestorableContext(entries);
+    }
+
+    /**
      * Overwrite a LIVE store with this snapshot — the engine behind `RequestContext.restoreContext`.
      * Write-only by design: it pushes entries in and hands nothing back, so it is not a side door onto
      * the snapshot's contents.
@@ -147,11 +298,7 @@ export class CapturedContext {
         return new Map(this.#entries);
     }
 
-    /**
-     * How many entries the snapshot holds. The one thing it will tell you about itself — a count is
-     * not a value, so it leaks nothing, and it lets a caller (and a test) see that a capture taken
-     * outside an active scope is simply empty rather than an error.
-     */
+    /** How many entries survived the narrowing. A count is not a value, so it leaks nothing. */
     size(): number {
         return this.#entries.size;
     }

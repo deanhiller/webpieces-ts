@@ -1,7 +1,9 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
-import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, getMaskSpec, RouteMetadata, AuthMeta, MISSING_AUTH_DECORATOR_FIX } from '@webpieces/core-util';
+import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, getMaskSpec, LogManager, RouteMetadata, AuthMeta, MISSING_AUTH_DECORATOR_FIX, RuntimeLocality } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
+
+const log = LogManager.getLogger('ApiRoutingFactory');
 
 /**
  * Type representing a class constructor (abstract or concrete).
@@ -88,6 +90,19 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                     `Endpoint '${methodName}' in ${apiName} has no auth decorator. ` +
                     MISSING_AUTH_DECORATOR_FIX,
                 );
+            }
+
+            // @AuthLocalOnly: off-local the route is never registered, so the endpoint does not
+            // exist rather than existing-and-refusing. This is the PRIMARY gate; AuthFilter's 404 is
+            // the backstop for routes added by hand through RouteBuilder. One decorator drives both
+            // — the point of moving this into the framework was that apps were hand-syncing exactly
+            // these two halves across two files with a comment.
+            if (authMeta.mode.kind === 'local-only' && !RuntimeLocality.isLocalDevelopment()) {
+                log.info(
+                    `Skipping @AuthLocalOnly endpoint ${apiName}.${methodName} — this process is not ` +
+                    `a local developer machine, so the route is not registered at all.`,
+                );
+                continue;
             }
 
             const fullPath = basePath + endpointPath;

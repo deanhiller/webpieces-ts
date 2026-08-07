@@ -4,6 +4,7 @@ import {
     ErrorTranslation,
     FailureClassifier,
     KeyedFailureClassifier,
+    Locality,
 } from '@webpieces/core-util';
 import { ContainerModule } from 'inversify';
 import { WebpiecesConfig } from '@webpieces/http-routing';
@@ -49,6 +50,17 @@ export class CompanySetupOptions {
      *   build, so a log line can say which one emitted it. Real deployments inject it at build time
      *   (a Docker build arg into a generated file, an env var, ...); the default here marks a build
      *   that was NOT injected, which is exactly what a developer's local run is.
+     * @param locality - WHERE this process runs ('local' | 'deployed'), forwarded into
+     *   RuntimeSetupOptions and published to {@link RuntimeLocality}. It decides whether
+     *   `@AuthLocalOnly` endpoints are registered at all. The default is `'deployed'` — the
+     *   RESTRICTIVE answer — so a wrapper that forgets to derive it refuses dev-only endpoints
+     *   rather than shipping them. A real company wrapper derives it from its platform, e.g.
+     *   `getServiceName() === 'local' ? 'local' : 'deployed'`, and makes this REQUIRED — exactly as
+     *   the svcName/svcVersion notes above already say. `RuntimeSetupOptions.locality` is required at
+     *   the FRAMEWORK boundary, which is the boundary that matters; every parameter of this
+     *   example-app wrapper is defaulted so the example's tests stay boilerplate-free, and this one
+     *   follows that established local convention rather than inventing a second one. Its default is
+     *   the RESTRICTIVE value, so the convention costs safety nothing.
      */
     constructor(
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
@@ -59,5 +71,6 @@ export class CompanySetupOptions {
         public readonly failureClassifiers: KeyedFailureClassifier[] = [],
         public readonly svcName: string = 'app-example',
         public readonly svcVersion: string = 'local-dev',
+        public readonly locality: Locality = 'deployed',
     ) {}
 }

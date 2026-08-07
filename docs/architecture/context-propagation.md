@@ -71,7 +71,35 @@ singleton (the moral equivalent of Java WebPieces' `ThreadLocal` `Context`). Hig
 - **`run(fn)` throws on nesting.** AsyncLocalStorage would happily let a second `run()` install a
   fresh empty Map that *shadows* the outer one — every outer value goes invisible and a second
   request id is minted, silently splitting a trace across two ids. The guard makes that a loud
-  error: "Exactly ONE scope per request — the transport opens it."
+  error: "Exactly ONE scope per request — the transport opens it." The error names
+  `runDetachedScope(fn)`, because the guard is aimed at the ACCIDENTAL empty scope, not the deliberate
+  one.
+- **`runDetachedScope(fn)`** is the deliberate one: a fresh, EMPTY, nestable scope that inherits
+  nothing, for work whose context was reconstructed elsewhere — the browser-log shipper, where one
+  batch spans several user actions and emitting under the shipping request's scope would stamp every
+  line with the wrong `actionId`. Values are written INSIDE the closure with `putTrusted`/
+  `putUntrusted`; there is deliberately **no** Map/object-taking form, so an external payload cannot
+  set a trusted key (it does not compile) and the deleted `runWithContext(map, fn)` forgery path has no
+  second door. It is a limit on the SOURCE, not on the key: `putTrusted` inside a detached scope is
+  correct whenever the caller HAS proven the value (a verified JWT claim, a signed webhook).
+- **`CapturedContext.withTrusted()` / `.withoutTrusted()`** state, at every call site, whether the
+  proven identity travels. A bare `CapturedContext` is NOT accepted by `runWithContext`/`restoreContext`
+  — they take the `RestorableContext` those two produce — so the wide choice cannot be made by omission
+  and both intents cost the same to type. Three cases total:
+
+  | you have | you want | write |
+  |---|---|---|
+  | a genuine prior scope | all of it, trusted values included | `runWithContext(snapshot.withTrusted(), fn)` |
+  | a genuine prior scope | trace fields but NOT the identity | `runWithContext(snapshot.withoutTrusted(), fn)` |
+  | values from OUTSIDE this process | exactly what you re-state | `runDetachedScope(fn)` |
+
+  Row 2 is a deliberate **privilege drop** — a background job keeps `requestId`/`actionId` so it stays
+  greppable and loses `userId`/`orgId`/roles because it runs as the *system*. Both are non-mutating
+  transforms on the snapshot rather than a `keepTrusted` flag, so `grep -rn withTrusted` enumerates
+  every place an identity crosses a scope boundary and `grep -rn withoutTrusted` every deliberate drop.
+  `withoutTrusted()` needs no capability token, unlike `capture`: it only ever removes entries, and
+  dropping cannot forge. What survives a drop is exactly "registered as an UNTRUSTED ContextKey" — the
+  framework's unregistered reserved slots (HttpRequest, principal) go too.
 - `getTrusted(key)`/`putTrusted(key, value)` and `getUntrusted(key)`/`putUntrusted(key, value)` read and
   write by `key.name`. The verbs are trust-typed: passing the wrong kind of key is a COMPILE error, so a
   reader can never mistake a spoofable header for a proven fact. `getAny(key)` is the key-agnostic
@@ -137,7 +165,7 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
 
   `destination` is a `DestinationTrust`, and it is the OUTBOUND half of the trust rule below. A
   **trusted** key is emitted only when the destination endpoint authenticates its CALLER
-  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / undeclared endpoint it is
+  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / `@AuthLocalOnly` / undeclared endpoint it is
   omitted, because that endpoint's `AuthFilter` is obliged to reject it — sending it would 401 our
   own request. Untrusted keys always travel. `DestinationTrust.forAuthMode(route.authMeta?.mode)` is
   the only way to build one, so the caller cannot assert a posture the route does not have, and
@@ -148,7 +176,8 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   transport level, BEFORE any filter, so nothing has verified the caller yet — writing a trusted value
   here would mean `getTrusted` could return a header a stranger typed. `AuthFilter` then admits the
   pending values on a route that authenticated its CALLER (`@AuthOidc`/`@AuthSharedSecret`), and on
-  `@AuthJwt`/`@Public` requires an exact match from the authenticator or rejects the request. If there
+  `@AuthJwt`/`@Public`/`@AuthLocalOnly` requires an exact match from the authenticator or rejects the
+  request. If there
   is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
 
 The Node client (`NodeProxyClient.outboundContextHeaders(destination)`) uses the exact same
@@ -157,7 +186,8 @@ server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps each request
 `RequestContext.run(...)` then calls `fillFromRequest`. The BROWSER twin
 (`ContextMgr.buildOutboundHeaders(destination)`) applies the same rule, and never reaches the
 permissive branch: `BrowserProxyClient` refuses to bind an `@AuthOidc`/`@AuthSharedSecret` contract
-at all, so every browser destination is `@AuthJwt` or `@Public`.
+at all, so every browser destination is `@AuthJwt`, `@Public` or `@AuthLocalOnly` (a browser calling
+a dev-only endpoint on the developer's own server is that mode's motivating case).
 
 ## Propagation **through a Cloud Tasks queue**
 

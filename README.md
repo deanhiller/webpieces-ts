@@ -249,11 +249,58 @@ function async saveData(data: any) {
 The one case it does not cover is work whose async chain was **broken and re-rooted** somewhere else — a job pushed onto an in-memory queue during a request and drained later by a background loop, a batch flushed on a scheduler tick, a listener fired from a socket the request does not own. There, capture at hand-off and restore at execution:
 
 ```typescript
-const captured = RequestContext.copyContext();          // where the work is enqueued
-queue.push(() => RequestContext.runWithContext(captured, () => doWork()));  // where it runs
+const captured = RequestContext.copyContext();                     // where the work is enqueued
+queue.push(() => RequestContext.runWithContext(captured.withTrusted(), () => doWork()));  // where it runs
 ```
 
-`copyContext()` is the ONLY way to obtain a `CapturedContext`, and it is the only thing the restore side accepts. That is deliberate: a restored context legitimately contains **trusted** values, so its contents can't be type-checked — making the payload opaque is what stops a hand-assembled `Map` from forging one.
+`copyContext()` is the ONLY way to obtain a `CapturedContext`, and a narrowing of one is the only thing the restore side accepts. That is deliberate: a restored context legitimately contains **trusted** values, so its contents can't be type-checked — making the payload opaque is what stops a hand-assembled `Map` from forging one.
+
+A bare `CapturedContext` is **not** accepted by `runWithContext`/`restoreContext`. You must say `.withTrusted()` (the work runs AS that user) or `.withoutTrusted()` (it runs as the system). Neither is shorter than the other, so a user identity never crosses a scope boundary by omission, and `grep -rn withTrusted` / `grep -rn withoutTrusted` enumerate the two populations of call sites.
+
+The opposite case is work that must **not** inherit the ambient context — a browser-log line whose
+context was captured on ANOTHER machine, where stamping the shipping request's `actionId` onto it would
+silently destroy the ability to grep an action. That is `runDetachedScope`: a fresh, empty, nestable
+scope whose values are written **inside** the closure with the ordinary trust verbs.
+
+```typescript
+RequestContext.runDetachedScope(() => {
+  RequestContext.putUntrusted(ACTION_ID, line.actionId);   // nothing inherited; nothing else present
+  log.info(line.message);
+});
+```
+
+No container of values crosses the boundary — there is no Map/object-taking form, on purpose. Writing
+the values inside is what keeps the trust verbs in play: a loop over a mixed `AnyContextKey[]` must
+branch on `key.isTrusted()` before it can write anything, and `putUntrusted` does not compile for a
+trusted key, so code fed by a **browser** — which proves nothing — cannot fabricate a proven value. That
+is a limit on the SOURCE, not on the key: `putTrusted` inside a detached scope is ordinary and correct
+when the caller HAS proven the value (a verified JWT claim, or a signed webhook whose phone number the
+app looked up to a userId).
+
+### Three cases, and how to pick
+
+| you have | you want | write |
+|---|---|---|
+| a genuine prior scope | all of it, trusted values included | `runWithContext(snapshot.withTrusted(), fn)` |
+| a genuine prior scope | the trace fields but NOT the identity | `runWithContext(snapshot.withoutTrusted(), fn)` |
+| values from OUTSIDE this process | exactly what you re-state, nothing inherited | `runDetachedScope(fn)` |
+
+Row 2 is a deliberate **privilege drop**: a background job spawned during a request should keep
+`requestId`/`actionId` so its log lines stay greppable back to the click, and must lose
+`userId`/`orgId`/roles because it runs as the **system**, not as that user.
+
+```typescript
+const snapshot = RequestContext.copyContext();
+queue.push(() => RequestContext.runWithContext(snapshot.withoutTrusted(), () => doWork()));
+```
+
+Both are non-mutating transforms on the snapshot, not a flag on the run call — a `keepTrusted: boolean`
+would make both intents equally easy to type and impossible to grep, and a defaulted one would make the
+permissive branch the shortest thing to write. `withoutTrusted()` needs no capability token, unlike
+`capture`: it only ever REMOVES entries, and dropping can never forge. What survives a drop is exactly
+"registered as an UNTRUSTED `ContextKey`" — the framework's unregistered reserved slots (the
+`HttpRequest`, the AuthFilter principal) go too, since a drop that guessed permissively would not be
+one.
 
 ## Testing Without HTTP
 
