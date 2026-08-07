@@ -121,7 +121,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         }
 
         const branch = this.currentBranch(ctx.workspaceRoot);
-        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command.
         triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
@@ -130,15 +130,15 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main (state B is another guard)');
 
         const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: we asked for the 'main' entry by key, so
         // a mismatch means the map's key and the entry's own `branch` disagree — a shape bug. Kept so
         // that degrades to an allow. Unreachable in normal operation.
-        if (status.branch !== 'main') return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== 'main') return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
         // Offline / origin unresolvable — we have nothing to be stale RELATIVE TO.
-        if (status.originMain === '') return this.allow(ctx, branch, 'origin-main-unknown (fail-open)', cache);
+        if (status.originMain === '') return this.failOpen(ctx, branch, 'origin-main-unknown', cache);
 
         // Ancestry, not equality: the moment the pull lands (or we are simply ahead), we are current.
         if (this.contains(ctx.workspaceRoot, status.originMain)) {
@@ -148,7 +148,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         // A dirty tree means the pull is not a clean fast-forward. Do not cut the agent off from the
         // files it must read to resolve that — the same valve read-stale-guard opens.
         if (this.isDirty(ctx.workspaceRoot)) {
-            return this.allow(ctx, branch, 'dirty-tree-on-main (fail-open)', cache);
+            return this.failOpen(ctx, branch, 'dirty-tree-on-main', cache);
         }
 
         const reader = this.staleContentRead(ctx);
@@ -256,6 +256,21 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
 
     private cacheSummary(status: MainSyncStatus): string {
         return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} ts=${status.timestamp}`;
+    }
+
+    /**
+     * The guard could not ESTABLISH the state it judges on, so it judged nothing.
+     *
+     * A sibling of allow() rather than a reason string passed to it, because the difference has to
+     * reach the LOG as a value: `ALLOW_FAIL_OPEN` vs `ALLOW`. It was previously a `' (fail-open)'`
+     * suffix on the free-text reason, which meant an abstention and a real approval were the same
+     * verdict and the abstentions could not be counted — so nobody could tell whether these guards
+     * were protecting anything or quietly standing down. Never block on data you could not
+     * establish; but say out loud, in a field, that you did not establish it.
+     */
+    private failOpen(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_FAIL_OPEN', reason, cache);
+        return [];
     }
 
     private allow(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {

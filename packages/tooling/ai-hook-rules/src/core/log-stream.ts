@@ -102,7 +102,7 @@ export class LogStream {
      * The detached main-sync refresher (main-sync-refresh.ts → sync-main.ts) is a separate node
      * process with a fresh, unidentified `logStream`. Before this existed the parent logged
      * SPAWN_ATTEMPT to its own prefixed stream while the child logged START/FINISH/ERROR to the
-     * shared `unknown-coordinator-hook-guard-async-work.log` — so ONE refresh cycle was split across
+     * shared, unidentified `unknown-coordinator-hook` writer — so ONE refresh cycle was split across
      * two files, every agent's child appended to that one shared file (the PIPE_BUF tearing this
      * class exists to remove, still live on that stream), and the documented
      * "SPAWN_ATTEMPT with no START means the child never launched" check read as a false failure on
@@ -117,7 +117,7 @@ export class LogStream {
      * `<sessionId>-<agentId|coordinator>-<hook><suffix>`, ALWAYS.
      *
      * The three identity dimensions stay in the FILE while the stream moves to the DIRECTORY
-     * ({@link StreamDir}), because they are what makes one writer per file true and the stream is not:
+     * (see log-streams.ts), because they are what makes one writer per file true and the stream is not:
      * `wp-ai-guards-hook` and `wp-ai-rules-hook` are separate processes that Claude Code launches in
      * PARALLEL on the same tool call, so dropping `hook` here would put two concurrent appenders on
      * one path — the exact tearing this class exists to remove, reintroduced by a rename.

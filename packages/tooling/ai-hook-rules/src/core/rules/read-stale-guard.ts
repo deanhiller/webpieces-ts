@@ -98,7 +98,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         if (ctx.relativePath.startsWith('..')) return [];
 
         const branch = this.currentBranch(ctx.workspaceRoot);
-        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
         // BOTH states — the merged-branch signal comes out of that same cache.
@@ -116,15 +116,15 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
     // State A — on main, possibly behind origin/main.
     private checkStaleMain(ctx: FileContext, branch: string): readonly Violation[] {
         const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: we asked for the 'main' entry by key, so
         // a mismatch means the map's key and the entry's own `branch` disagree — a shape bug. Kept so
         // that degrades to an allow. Unreachable in normal operation.
-        if (status.branch !== 'main') return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== 'main') return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
         // Offline / origin unresolvable, or no local main to compare against.
-        if (status.originMain === '') return this.allow(ctx, branch, 'origin-main-unknown (fail-open)', cache);
+        if (status.originMain === '') return this.failOpen(ctx, branch, 'origin-main-unknown', cache);
 
         // Escape valve 2 — ancestry, NOT equality. See the class comment.
         if (this.contains(ctx.workspaceRoot, status.originMain)) {
@@ -134,7 +134,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         // Escape valve 1 — a dirty tree means the pull is not a clean fast-forward; do not trap
         // the agent away from the files it needs to resolve it.
         if (this.isDirty(ctx.workspaceRoot)) {
-            return this.allow(ctx, branch, 'dirty-tree-on-main (fail-open)', cache);
+            return this.failOpen(ctx, branch, 'dirty-tree-on-main', cache);
         }
 
         return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
@@ -157,17 +157,17 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
      */
     private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: the entry was looked up BY `branch`, so
         // a mismatch is a shape bug rather than the old "cache is for another branch" state. Kept so
         // such a bug degrades to an allow. Unreachable in normal operation. (A branch the refresh has
         // not seen yet is the `status === null` case above — still fail-open.)
-        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
         if (this.isDirty(ctx.workspaceRoot)) {
-            return this.allow(ctx, branch, 'dirty-merged-branch (fail-open)', cache);
+            return this.failOpen(ctx, branch, 'dirty-merged-branch', cache);
         }
 
         const pr = status.mergedPr !== '' ? status.mergedPr : '?';
@@ -256,6 +256,21 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
     private cacheSummary(status: MainSyncStatus): string {
         const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
         return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} merged=${merged} ts=${status.timestamp}`;
+    }
+
+    /**
+     * The guard could not ESTABLISH the state it judges on, so it judged nothing.
+     *
+     * A sibling of allow() rather than a reason string passed to it, because the difference has to
+     * reach the LOG as a value: `ALLOW_FAIL_OPEN` vs `ALLOW`. It was previously a `' (fail-open)'`
+     * suffix on the free-text reason, which meant an abstention and a real approval were the same
+     * verdict and the abstentions could not be counted — so nobody could tell whether these guards
+     * were protecting anything or quietly standing down. Never block on data you could not
+     * establish; but say out loud, in a field, that you did not establish it.
+     */
+    private failOpen(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_FAIL_OPEN', reason, cache);
+        return [];
     }
 
     private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {

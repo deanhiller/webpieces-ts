@@ -32,7 +32,7 @@ import { logStream, StreamIdentity } from './log-stream';
  *
  * The last three are the SPAWNER's LogStream identity, and adopting them here is the whole reason
  * they are passed. This process has its own fresh module-level `logStream`; left unidentified it
- * named every line `unknown-coordinator-hook-guard-async-work.log` — one shared file that every
+ * named every line `unknown-coordinator-hook.log` — one shared file that every
  * agent's refresher child appended to concurrently (the PIPE_BUF tearing LogStream exists to remove),
  * and which held this run's START/FINISH while the parent's SPAWN_ATTEMPT sat in a different file
  * entirely. Adopting the parent's identity puts one refresh cycle back in one stream. Absent argv
@@ -68,7 +68,7 @@ export function spawnerIdentity(argv: string[]): StreamIdentity {
 export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, argvDetail: string = ''): void {
     const startedMs = Date.now();
 
-    // First action: prove the detached child actually started. If guard-async-work.log has no START line
+    // First action: prove the detached child actually started. If the async-refresh stream has no START line
     // for a spawn, the child never launched (or died before this point).
     logSyncEvent(repoRoot, new SyncLogEvent('START', process.pid, '-', `argv=${argvDetail}`));
 

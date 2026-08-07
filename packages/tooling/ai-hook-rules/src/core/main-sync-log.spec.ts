@@ -32,7 +32,7 @@ describe('main-sync-log', () => {
         expect(content.trim().split('\n').length).toBe(1);
     });
 
-    it('rotates to guard-async-work.1.log once the log exceeds the size cap', () => {
+    it('rotates the writer into its .1.log sibling once the log exceeds the size cap', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
         fs.mkdirSync(path.join(logsDir, ASYNC_REFRESH_STREAM), { recursive: true });

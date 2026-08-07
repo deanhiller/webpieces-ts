@@ -44,7 +44,7 @@ export class SyncLogEvent {
 
 /**
  * Append one tab-separated line per refresher event to
- * `.webpieces/logs/<stream>guard-async-work.log` (see LogStream for the prefix). `root` is
+ * `.webpieces/logs/async-refresh/<writer>.log` (see LogStream for the writer key). `root` is
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */

@@ -132,8 +132,8 @@ describe('branch-keyed main-sync cache — every worktree stays armed', () => {
         bashGuardBlocks('deanhiller/feat');
         bashGuardBlocks('deanhiller/other');
         editGuardBlocks('deanhiller/other');
-        expect(log.reasons).not.toContain('stale-cross-branch-cache (fail-open)');
-        expect(log.reasons).not.toContain('no-sync-cache (fail-open)');
+        expect(log.reasons).not.toContain('stale-cross-branch-cache');
+        expect(log.reasons).not.toContain('no-sync-cache');
         expect(log.reasons.filter((r: string): boolean => r.startsWith('already-merged'))).toHaveLength(3);
     });
 
@@ -142,7 +142,7 @@ describe('branch-keyed main-sync cache — every worktree stays armed', () => {
     it('fails open with no-sync-cache for a branch absent from the map', () => {
         expect(bashGuardBlocks('deanhiller/brand-new')).toBe(false);
         expect(editGuardBlocks('deanhiller/brand-new')).toBe(false);
-        expect(log.reasons).toEqual(['no-sync-cache (fail-open)', 'no-sync-cache (fail-open)']);
+        expect(log.reasons).toEqual(['no-sync-cache', 'no-sync-cache']);
     });
 
     // TEST 3: a v1 document, written by the PREVIOUS release and still on disk after the upgrade.
@@ -152,8 +152,8 @@ describe('branch-keyed main-sync cache — every worktree stays armed', () => {
 
         expect(bashGuardBlocks('deanhiller/feat')).toBe(true);
         expect(bashGuardBlocks('deanhiller/other')).toBe(false);
-        expect(log.reasons).toContain('no-sync-cache (fail-open)');
-        expect(log.reasons).not.toContain('stale-cross-branch-cache (fail-open)');
+        expect(log.reasons).toContain('no-sync-cache');
+        expect(log.reasons).not.toContain('stale-cross-branch-cache');
     });
 
     // A clean (unmerged) entry must still read as clean — the map changed the lookup, not the verdicts.
@@ -175,7 +175,7 @@ describe('branch-keyed main-sync cache — every worktree stays armed', () => {
             'deanhiller/feat': status('someone/else', true),
         }));
         expect(bashGuardBlocks('deanhiller/feat')).toBe(false);
-        expect(log.reasons).toContain('stale-cross-branch-cache (fail-open)');
+        expect(log.reasons).toContain('stale-cross-branch-cache');
     });
 
     // Sanity: MainSyncFileStore is exported from the package root, which is how the refresher and the

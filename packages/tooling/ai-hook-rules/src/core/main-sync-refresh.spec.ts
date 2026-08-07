@@ -58,7 +58,7 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
 /**
  * The detached child is a SEPARATE node process with a fresh, unidentified `logStream`. Until the
  * identity was put on its argv, the parent logged SPAWN_ATTEMPT to its own prefixed stream while the
- * child logged START/FINISH/ERROR to the shared `unknown-coordinator-hook-guard-async-work.log` —
+ * child logged START/FINISH/ERROR to a shared, unidentified `unknown-coordinator-hook` writer —
  * one refresh cycle in two files, every agent's child appending to the same shared path (the PIPE_BUF
  * tearing LogStream exists to remove), and the documented "SPAWN_ATTEMPT with no START means the
  * child never launched" check reading as a false failure on every cycle.

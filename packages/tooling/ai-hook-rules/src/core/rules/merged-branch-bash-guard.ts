@@ -74,7 +74,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     check(ctx: BashContext): readonly Violation[] {
         const branch = this.currentBranch(ctx.workspaceRoot);
         // Can't determine the branch (not a git repo, git unavailable) → never block. Fail-open.
-        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command. (The
         // runner also warms it, but only when feature-branch-guard is loaded — do it here too so this
@@ -84,13 +84,13 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first command of the session), or a branch this refresh has not seen → allow;
         // the refresh we just spawned populates it.
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: the entry was looked up BY `branch`, so
         // a mismatch is a shape bug rather than the old "cache is for another branch" state. Kept so
         // such a bug degrades to an allow. Unreachable in normal operation.
-        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
 
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
 
@@ -177,6 +177,21 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     private cacheSummary(status: MainSyncStatus): string {
         const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
         return `cache=${status.branch} merged=${merged} conflict=${String(status.conflict)} ts=${status.timestamp}`;
+    }
+
+    /**
+     * The guard could not ESTABLISH the state it judges on, so it judged nothing.
+     *
+     * A sibling of allow() rather than a reason string passed to it, because the difference has to
+     * reach the LOG as a value: `ALLOW_FAIL_OPEN` vs `ALLOW`. It was previously a `' (fail-open)'`
+     * suffix on the free-text reason, which meant an abstention and a real approval were the same
+     * verdict and the abstentions could not be counted — so nobody could tell whether these guards
+     * were protecting anything or quietly standing down. Never block on data you could not
+     * establish; but say out loud, in a field, that you did not establish it.
+     */
+    private failOpen(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_FAIL_OPEN', reason, cache);
+        return [];
     }
 
     private allow(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
