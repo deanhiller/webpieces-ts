@@ -15,6 +15,7 @@ import {
 
 import { toError } from './to-error';
 import { logSyncEvent, SyncLogEvent } from './main-sync-log';
+import { logStream, StreamIdentity } from './log-stream';
 
 /**
  * The detached, fire-and-forget refresher spawned (by file path, not a bin) from
@@ -27,14 +28,36 @@ import { logSyncEvent, SyncLogEvent } from './main-sync-log';
  * it and is alive, we exit immediately (don't pile up `git fetch`es). If the holder is finished, dead,
  * or older than hangTimeoutMinutes, the lock is reclaimed and we proceed.
  *
- * argv: [, , repoRoot, hangTimeoutMinutes]
+ * argv: [, , repoRoot, hangTimeoutMinutes, sessionId, agentId, hook]
+ *
+ * The last three are the SPAWNER's LogStream identity, and adopting them here is the whole reason
+ * they are passed. This process has its own fresh module-level `logStream`; left unidentified it
+ * named every line `unknown-coordinator-hook-guard-async-work.log` — one shared file that every
+ * agent's refresher child appended to concurrently (the PIPE_BUF tearing LogStream exists to remove),
+ * and which held this run's START/FINISH while the parent's SPAWN_ATTEMPT sat in a different file
+ * entirely. Adopting the parent's identity puts one refresh cycle back in one stream. Absent argv
+ * (a hand-run of this file) leaves the default, which still prefixes.
  */
 export function main(): void {
+    logStream.identify(spawnerIdentity(process.argv));
     refreshMainSync(
         process.argv[2] ?? process.cwd(),
         Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES,
         process.argv.slice(2).join(' '),
     );
+}
+
+/**
+ * The spawner's LogStream identity as it arrives on this child's argv — positions 4/5/6, which is
+ * where `triggerMainSyncRefresh` puts them (its own array is offset by two: node + script path).
+ *
+ * Exported so ONE test can pin BOTH ends of the contract at once. The bug this closes is precisely a
+ * disagreement between two files about argv positions, and a test that only checks the reader would
+ * have stayed green through it.
+ */
+// webpieces-disable no-function-outside-class -- argv parse for this detached main(), matching the file's existing shape
+export function spawnerIdentity(argv: string[]): StreamIdentity {
+    return new StreamIdentity(argv[4] ?? '', argv[5] ?? '', argv[6] ?? 'hook');
 }
 
 /**

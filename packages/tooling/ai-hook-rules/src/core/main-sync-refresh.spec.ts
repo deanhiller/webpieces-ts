@@ -3,11 +3,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest } from './main-sync-refresh';
+import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
+import { spawnerIdentity } from './sync-main';
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.
-import { LogStream } from './log-stream';
+import { LogStream, StreamIdentity } from './log-stream';
 function streamName(base: string): string { return new LogStream().fileName(base); }
 
 
@@ -46,5 +47,43 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
         resetMainSyncRefreshLatchForTest();  // stands in for a fresh hook process
         triggerMainSyncRefresh(root);
         expect(spawnAttempts(root)).toBe(2);
+    });
+});
+
+/**
+ * The detached child is a SEPARATE node process with a fresh, unidentified `logStream`. Until the
+ * identity was put on its argv, the parent logged SPAWN_ATTEMPT to its own prefixed stream while the
+ * child logged START/FINISH/ERROR to the shared `unknown-coordinator-hook-guard-async-work.log` —
+ * one refresh cycle in two files, every agent's child appending to the same shared path (the PIPE_BUF
+ * tearing LogStream exists to remove), and the documented "SPAWN_ATTEMPT with no START means the
+ * child never launched" check reading as a false failure on every cycle.
+ *
+ * The bug is a disagreement about ARGV POSITIONS between two files, so both ends are pinned here at
+ * once: a test of the reader alone would have stayed green through it.
+ */
+describe('the detached refresher inherits its spawner`s stream identity', () => {
+    const IDENTITY = new StreamIdentity('sess-1', 'agent-9', 'guards');
+
+    it('round-trips session/agent/hook from the spawn argv into the child`s LogStream', () => {
+        const argv = refresherArgv('/x/sync-main.js', '/repo', 30, IDENTITY);
+        // The child sees [execPath, script, ...argv] — the two-slot offset the positions depend on.
+        expect(spawnerIdentity(['/usr/bin/node', ...argv])).toEqual(IDENTITY);
+    });
+
+    it('makes parent and child name the SAME file, which is the whole point', () => {
+        const parent = new LogStream();
+        parent.identify(IDENTITY);
+        const child = new LogStream();
+        child.identify(spawnerIdentity(['/usr/bin/node', ...refresherArgv('/x.js', '/repo', 30, parent.identity())]));
+
+        expect(child.fileName('guard-async-work.log')).toBe(parent.fileName('guard-async-work.log'));
+        expect(child.fileName('guard-async-work.log')).not.toContain('unknown-coordinator-hook-');
+    });
+
+    it('still prefixes when the spawner never identified — a distinct stream, never a bare name', () => {
+        const argv = refresherArgv('/x.js', '/repo', 30, new LogStream().identity());
+        const child = new LogStream();
+        child.identify(spawnerIdentity(['/usr/bin/node', ...argv]));
+        expect(child.fileName('guard-async-work.log')).toBe('unknown-coordinator-hook-guard-async-work.log');
     });
 });

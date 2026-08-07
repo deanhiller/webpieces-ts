@@ -13,7 +13,7 @@ import { emitDeny, emitAllow } from './claude-code-response';
 import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
-import { logStream } from '../core/log-stream';
+import { logStream, StreamIdentity } from '../core/log-stream';
 import { L0_FAULT_SHIM_STALE } from '../core/l0-fault-codes';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
@@ -314,7 +314,7 @@ export async function runMain(mode: HookMode): Promise<void> {
 
         // BEFORE enforceCommittedShim(), which can itself write a BLOCK line. See LogStream for why
         // all three of session/agent/hook are needed to keep concurrent writers off one file.
-        logStream.identify(payload.session_id ?? '', payload.agent_id ?? '', mode);
+        logStream.identify(new StreamIdentity(payload.session_id ?? '', payload.agent_id ?? '', mode));
 
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays

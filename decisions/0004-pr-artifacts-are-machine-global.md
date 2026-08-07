@@ -61,6 +61,12 @@ Applied to the three scopes now in play:
 | the fact | its scope | where it lives |
 |---|---|---|
 | in-flight merge, review.json, per-checklist verdicts, logs | ONE TREE | `DotWebpieces.local()` |
+<!-- 2026-08-07: the "logs → ONE TREE" row still holds. Logs stay in `{repo}/.webpieces/**/logs/`,
+     resolved through `DotWebpieces.local()`. What changed is the FILENAME, not the scope: one tree can
+     hold many concurrent writers, so each log carries a
+     `<sessionId>-<agentId|coordinator>-<hook>-` prefix and the rejection DETAIL files sit in a
+     directory of that same name. See docs/tooling-logs.md. -->
+
 | which branches are merged, main-sync status + lock | ONE CLONE | `DotWebpieces.shared()` |
 | **the gated commit body for PR #N** | **the REMOTE REPO** | `MachineStateHome` + `PrBodyStore` |
 

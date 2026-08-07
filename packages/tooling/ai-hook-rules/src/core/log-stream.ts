@@ -1,5 +1,24 @@
-import { dotWebpieces } from '@webpieces/rules-config';
-import * as path from 'path';
+/**
+ * WHO is writing — the three fields that make a log filename unique, carried as one value.
+ *
+ * Data-only (per CLAUDE.md: classes for data, explicit construction). It exists as a class rather
+ * than three loose parameters because the identity has to CROSS A PROCESS BOUNDARY: the detached
+ * main-sync refresher is a separate node process, and the spawner hands it these three fields on
+ * argv so parent and child write ONE stream. A single named carrier is what makes "read it back out
+ * of the parent, put it on argv, set it in the child" a three-line round trip instead of three
+ * parallel string parameters that can be reordered at either end.
+ */
+export class StreamIdentity {
+    readonly sessionId: string;
+    readonly agentId: string;
+    readonly hook: string;
+
+    constructor(sessionId: string, agentId: string, hook: string) {
+        this.sessionId = sessionId;
+        this.agentId = agentId;
+        this.hook = hook;
+    }
+}
 
 /**
  * WHICH LOG FILE does this hook invocation append to?
@@ -64,10 +83,26 @@ export class LogStream {
      * coordinator — that absence IS the signal, see AgentIdentity — and renders as `coordinator`.
      * An empty `sessionId` renders as `unknown`: visible, never merged into another stream.
      */
-    identify(sessionId: string, agentId: string, hook: string): void {
-        this.sessionId = sessionId;
-        this.agentId = agentId;
-        this.hook = hook;
+    identify(identity: StreamIdentity): void {
+        this.sessionId = identity.sessionId;
+        this.agentId = identity.agentId;
+        this.hook = identity.hook;
+    }
+
+    /**
+     * This process's identity, readable so it can be HANDED TO A CHILD PROCESS.
+     *
+     * The detached main-sync refresher (main-sync-refresh.ts → sync-main.ts) is a separate node
+     * process with a fresh, unidentified `logStream`. Before this existed the parent logged
+     * SPAWN_ATTEMPT to its own prefixed stream while the child logged START/FINISH/ERROR to the
+     * shared `unknown-coordinator-hook-guard-async-work.log` — so ONE refresh cycle was split across
+     * two files, every agent's child appended to that one shared file (the PIPE_BUF tearing this
+     * class exists to remove, still live on that stream), and the documented
+     * "SPAWN_ATTEMPT with no START means the child never launched" check read as a false failure on
+     * every single cycle. The spawner now reads this and puts it on the child's argv.
+     */
+    identity(): StreamIdentity {
+        return new StreamIdentity(this.sessionId, this.agentId, this.hook);
     }
 
     /**

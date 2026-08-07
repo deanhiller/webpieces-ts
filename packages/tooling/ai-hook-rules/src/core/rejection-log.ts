@@ -1,16 +1,39 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, RepoRootFinder, HOOKS_STATE_DIR } from '@webpieces/rules-config';
+import { dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 import { logStream } from './log-stream';
+import { toError } from './to-error';
 
-// The rejection log SPLITS across the two state dirs on purpose: the `.log` index goes to `logs/`
-// with every other webpieces log, while the dated `hooks/<YYYY-MM-DD>/writeInfo-*.md` DETAIL files
-// are not logs and stay in `hooks/` (see LOGS_STATE_DIR).
-const LOG_FILE = 'hook-rejection.log';
-const LOG_FILE_PREV = 'hook-rejection.1.log';
+/**
+ * The rejection index and its detail files, BOTH under `logs/`, both named by the same stream:
+ *
+ *   logs/<sid>-<agent>-<hook>-hook-rejection.log      ← the index (one line per block)
+ *   logs/<sid>-<agent>-<hook>-hook-rejection/         ← its detail dir, SAME base name
+ *       writeInfo-<epochMs>.md
+ *
+ * The detail files used to be `hooks/<YYYY-MM-DD>/writeInfo-<epochMs>.md` — a directory keyed only by
+ * the DATE, shared by every writer in the tree, written with a raw `writeFileSync`. Two agents blocked
+ * in the same millisecond produced the same path and one silently overwrote the other's evidence. The
+ * comment that licensed it claimed a per-worktree log has exactly one writer; LogStream's class
+ * comment is the measurement that disproves it (parallel PreToolUse hooks, non-isolated subagents and
+ * multiple Claude Code windows all share a tree). Naming the directory after the LOG THAT POINTS AT IT
+ * gives it the same one-owner-by-construction property the log itself has, and makes the pointer
+ * readable: the index line, the directory and the file are one name.
+ *
+ * RETENTION is therefore filename-based, not directory-date-based: there is no date level left, so
+ * `DetailPruner` parses `<epochMs>` out of each `writeInfo-*.md` (no `stat` call) and removes any
+ * stream directory left empty. Every delete is `force: true` and failures are swallowed, so concurrent
+ * agents racing the same week-old files is harmless.
+ */
+const LOG_BASE = 'hook-rejection';
+const LOG_FILE = `${LOG_BASE}.log`;
+const LOG_FILE_PREV = `${LOG_BASE}.1.log`;
+const DETAIL_PREFIX = 'writeInfo-';
+const DETAIL_SUFFIX = '.md';
+const DETAIL_RE = /^writeInfo-(\d+)\.md$/;
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded
 const MAX_AGE_DAYS = 7;
 
@@ -30,26 +53,23 @@ export function logRejection(
         const now = new Date();
         const timestamp = now.toISOString();
         const epochMs = String(now.getTime());
-        const dateStr = timestamp.slice(0, 10);
 
-        // LOCAL scope — a rejection is this worktree's event, and a per-worktree log has exactly one
-        // writer, so its appends and its daily detail files cannot collide with another agent's.
-        const hooksDir = dotWebpieces.localFile(root, HOOKS_STATE_DIR);
+        // LOCAL scope — a rejection is this worktree's event. WHICH writer's event is answered by the
+        // stream prefix, on the index AND on its detail directory, so neither can collide.
         const logsDir = dotWebpieces.logs(root);
-        const dayDir = path.join(hooksDir, dateStr);
-        fs.mkdirSync(dayDir, { recursive: true });
-        fs.mkdirSync(logsDir, { recursive: true });
+        const detailDirName = logStream.fileName(LOG_BASE);
+        const detailDir = path.join(logsDir, detailDirName);
+        fs.mkdirSync(detailDir, { recursive: true });
 
         const relativePath = computeRelativePath(input.filePath, root);
         const ruleNames = extractRuleNames(result.report);
-        const detailFileName = `writeInfo-${epochMs}.md`;
-        // Relative to the STATE DIR, not to the log file's own directory: the index now lives in
-        // `logs/` while the detail lives in `hooks/<date>/`, so a bare `<date>/<file>` would no
-        // longer resolve from where the reader found the line.
-        const detailRelPath = `${HOOKS_STATE_DIR}/${dateStr}/${detailFileName}`;
+        const detailFileName = `${DETAIL_PREFIX}${epochMs}${DETAIL_SUFFIX}`;
+        // Relative to `logs/` — the index's own directory — so the pointer resolves from exactly where
+        // the reader found the line, and reads as the log's own name plus a file.
+        const detailRelPath = `${detailDirName}/${detailFileName}`;
 
         const detail = buildDetailContent(timestamp, toolKind, relativePath, ruleNames, result.report, input);
-        fs.writeFileSync(path.join(dayDir, detailFileName), detail);
+        fs.writeFileSync(path.join(detailDir, detailFileName), detail);
 
         const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
         rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
@@ -61,7 +81,7 @@ export function logRejection(
         const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\tfault=${result.fault}\n`;
         fs.appendFileSync(logPath, logLine);
 
-        rotateOldDays(hooksDir, MAX_AGE_DAYS);
+        detailPruner.prune(logsDir, MAX_AGE_DAYS);
     } catch (err: unknown) {
         //const error = toError(err);
         void err;
@@ -160,30 +180,90 @@ function rotateLogFile(logPath: string, prevPath: string): void {
     }
 }
 
-function rotateOldDays(hooksDir: string, maxAgeDays: number): void {
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    let entries: string[];
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        entries = fs.readdirSync(hooksDir);
-    } catch (err: unknown) {
-        //const error = toError(err);
-        void err;
-        return;
+/**
+ * The 7-day sweep over rejection DETAIL files.
+ *
+ * A class rather than four module-scope helpers because the four belong together: `prune` is the
+ * policy and the other three are the swallow-everything filesystem calls it is built from, none of
+ * which means anything on its own.
+ *
+ * The age comes out of the FILENAME, not out of `stat` — the epoch millis are already in the name, so
+ * a sweep costs one `readdir` per stream directory and no syscall per file. (The old scheme could
+ * delete a whole `hooks/<YYYY-MM-DD>/` in one recursive `rm` because the date WAS the directory; the
+ * directory is now the WRITER, which never expires, so expiry moved down one level.)
+ *
+ * IDEMPOTENT AND RACE-TOLERANT ON PURPOSE. Several agents sweep the same directory concurrently, so
+ * two processes will regularly try to unlink the same week-old file and to rmdir the same emptied
+ * directory. `force: true` makes an already-gone target a no-op, an rmdir of a still-populated (or
+ * already-removed) directory fails harmlessly, and every error is swallowed: the loser of the race
+ * does nothing and reports nothing, which is the correct outcome — the file is gone either way.
+ */
+class DetailPruner {
+    prune(logsDir: string, maxAgeDays: number): void {
+        const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+        for (const dirName of this.readdirOrEmpty(logsDir)) {
+            const dir = path.join(logsDir, dirName);
+            if (!this.isDirectory(dir)) continue;
+            const names = this.readdirOrEmpty(dir);
+            let removed = 0;
+            for (const name of names) {
+                const match = DETAIL_RE.exec(name);
+                if (match === null) continue;
+                if (Number(match[1]) >= cutoff) continue;
+                this.removeFile(path.join(dir, name));
+                removed += 1;
+            }
+            // Only a directory we just emptied is a candidate, and the removal is a NON-recursive rmdir
+            // on purpose: it fails harmlessly if a concurrent writer dropped a fresh detail in between,
+            // so the sweep can never take a file it did not decide was expired.
+            if (removed > 0 && removed === names.length) this.removeEmptyDir(dir);
+        }
     }
 
-    for (const entry of entries) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(entry)) continue;
-        const dirDate = new Date(entry + 'T00:00:00Z');
-        if (isNaN(dirDate.getTime())) continue;
-        if (dirDate.getTime() < cutoff) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                fs.rmSync(path.join(hooksDir, entry), { recursive: true, force: true });
-            } catch (err: unknown) {
-                //const error = toError(err);
-                void err;
-            }
+    private readdirOrEmpty(dir: string): string[] {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return fs.readdirSync(dir);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return [];
+        }
+    }
+
+    private isDirectory(target: string): boolean {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return fs.statSync(target).isDirectory();
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
+    }
+
+    // `force: true` is what makes the concurrent sweep harmless: a file another agent already deleted
+    // is a no-op rather than an ENOENT.
+    private removeFile(target: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            fs.rmSync(target, { force: true });
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
+    }
+
+    // NON-recursive by design — see prune(). This must refuse a directory that is not empty.
+    private removeEmptyDir(target: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            fs.rmdirSync(target);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
         }
     }
 }
+
+const detailPruner = new DetailPruner();
