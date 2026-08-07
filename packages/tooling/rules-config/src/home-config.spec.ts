@@ -6,7 +6,7 @@ import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import {
     HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
-    HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
+    HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
 } from './home-config';
 
 const dirs: string[] = [];
@@ -94,28 +94,39 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig().buildGateLogCapture).toBe(false);
+        expect(new HomeConfig(false, false).buildGateLogCapture).toBe(false);
+        expect(new HomeConfig(false, false).wholeRepoBuildGuard).toBe(false);
+    });
+
+    // The guard whose ONLY switch lives in this file must read as OFF with no file — that is the entire
+    // difference between this release and the one that blocked every consumer's Bash calls on upgrade.
+    it('reports whole-repo-build-guard OFF when the file does not exist', () => {
+        expect(new HomeConfigService().load(fakeHome()).wholeRepoBuildGuard).toBe(false);
     });
 });
 
 describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
     it('is ON for the exact documented shape', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: true } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, buildGateLogCapture: true } }));
         expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(true);
     });
 
     it('is OFF for an explicit false — declining a preference is not an error', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: false } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, buildGateLogCapture: false } }));
         expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
     });
 
-    it('accepts an empty document, and an empty experimental section', () => {
-        for (const body of ['{}', JSON.stringify({ experimental: {} })]) {
+    it('reads whole-repo-build-guard true and false, independently of buildGateLogCapture', () => {
+        for (const on of [true, false]) {
             const home = fakeHome();
-            writeConfig(home, body);
-            expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+            writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': on } }));
+            const loaded = new HomeConfigService().load(home);
+            expect(loaded.wholeRepoBuildGuard).toBe(on);
+            // The two keys are different features (#620's log capture vs this guard) and neither implies
+            // the other — buildGateLogCapture stays optional and defaults OFF.
+            expect(loaded.buildGateLogCapture).toBe(false);
         }
     });
 });
@@ -126,6 +137,30 @@ describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
  * accepted shape is never migrated, and every reader of this file is a coding agent.
  */
 describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
+    /**
+     * The one key that decides whether tool calls get BLOCKED must be SAID, not inferred. Guessing OFF
+     * silently drops a feature the author asked for; guessing ON blocks their shell. So a file that
+     * exists without it fails, naming the edit — and an empty document is that same case, not an
+     * "accepted default".
+     */
+    it('rejects a file that never defines whole-repo-build-guard, naming the edit', () => {
+        for (const body of ['{}', JSON.stringify({ experimental: {} }), JSON.stringify({ experimental: { buildGateLogCapture: true } })]) {
+            const home = fakeHome();
+            writeConfig(home, body);
+            const msg = loadError(home).message;
+            expect(msg).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_WHOLE_REPO_BUILD_GUARD}" is REQUIRED`);
+            expect(msg).toContain('"whole-repo-build-guard": false');
+        }
+    });
+
+    it('rejects a non-boolean whole-repo-build-guard, showing the value it got', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': 'true' } }));
+        const msg = loadError(home).message;
+        expect(msg).toContain('must be the boolean');
+        expect(msg).toContain('"true"');
+    });
+
     it('rejects an unknown top-level key, naming the only key the file accepts', () => {
         const home = fakeHome();
         writeConfig(home, JSON.stringify({ experimentl: { buildGateLogCapture: true } }));

@@ -25,6 +25,20 @@ describe('BashContext.commandCode strips prose so guards do not block writing ab
         expect(code('git checkout "main"')).toContain('git checkout main');
     });
 
+    /**
+     * REGRESSION, from a real false positive. A whitespace-free quoted span used to be UNQUOTED, so a
+     * jq filter reached the guards as bare shell syntax: they split it on its own `|`/`(`/`;` and one
+     * fragment read exactly `test`, which whole-repo-build-guard classified as the workspace-wide test
+     * script — blocking a polling loop that contained no build at all. Quoting is how a shell says
+     * "data, not syntax", so a span carrying metacharacters is dropped like any other prose.
+     */
+    it('drops a whitespace-free quoted span carrying shell syntax — a jq filter is data', () => {
+        const command = `gh pr list --json title --jq '[.[]|select(.title|test("x"))]|length'`;
+        expect(code(command)).not.toContain('test(');
+        expect(code(command)).not.toContain('select');
+        expect(code(command)).toContain('gh pr list');
+    });
+
     it('leaves an ordinary command untouched', () => {
         expect(code('gh pr merge --squash')).toBe('gh pr merge --squash');
         expect(code('git push origin HEAD')).toBe('git push origin HEAD');

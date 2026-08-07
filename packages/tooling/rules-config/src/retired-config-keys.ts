@@ -118,6 +118,22 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
         'only, use that rule\'s own "excludePaths" inside its config block instead.',
         '[excludePaths]',
     ),
+
+    // --- whole-repo-build-guard, retired as a REPO-CONFIG key one release after it was added. It shipped
+    // as a conventional validated guard (mode ON by default, entry REQUIRED under hookGuards), so every
+    // consumer that upgraded hit fault Y — every Bash call blocked — for an experimental feature nobody
+    // had opted into. The switch now lives ONLY in the optional machine-local ~/.webpieces/config.json,
+    // whose absent state is byte-for-byte the old behaviour. A repo that never added the entry has nothing
+    // to do; a repo that added it to escape fault Y is told right here to take it back out.
+    new RetiredConfigKey(
+        RETIRED_SCOPE_RULE, 'whole-repo-build-guard', '~/.webpieces/config.json → experimental.whole-repo-build-guard',
+        'DELETE this entry from webpieces.config.json — no repo config key controls this guard any more, ' +
+        'and with the entry gone the guard is silently off for everyone in this repo. To switch it on for ' +
+        'YOUR machine only, put {"experimental": {"whole-repo-build-guard": true}} in ' +
+        '~/.webpieces/config.json — that file is optional, is tracked by no repo, and every webpieces ' +
+        'command behaves exactly as it does by default when it does not exist.',
+        '[whole-repo-build-guard]',
+    ),
 ];
 
 /**

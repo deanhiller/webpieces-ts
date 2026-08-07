@@ -115,6 +115,11 @@ const HEREDOC_BODY = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?^\t*\2\s*$/gm;
 // A single- or double-quoted span.
 const QUOTED_SPAN = /'([^']*)'|"([^"]*)"/g;
 
+// Shell syntax that a quoted span is explicitly NOT: separators, pipes, subshells, redirection,
+// expansion. Content carrying any of these is data (a jq filter, a regex, a glob), and unquoting it
+// would hand the segment scanner syntax the shell never sees. See stripProse.
+const SHELL_METACHARACTER = /[|;&()<>$`]/;
+
 export class BashContext {
     readonly tool: 'Bash';
     readonly command: string;
@@ -159,13 +164,27 @@ export class BashContext {
         this.options = {};
     }
 
-    // A quoted span WITHOUT whitespace is kept: `git checkout "main"` is a real command with a quoted
-    // argument, not prose. One containing whitespace is a sentence, and becomes a single space.
+    /**
+     * A quoted span WITHOUT whitespace is kept: `git checkout "main"` is a real command with a quoted
+     * argument, not prose. One containing whitespace is a sentence, and becomes a single space.
+     *
+     * ONE exception, and it is a false positive that actually fired: a whitespace-free span carrying
+     * SHELL METACHARACTERS is dropped too. Keeping the content strips only the quotes, so a jq filter —
+     * `--jq '[.[]|select(.title|test("x"))]|length'` — was handed to the guards as bare shell syntax.
+     * Every guard then split it on its `|`, `(` and `;` and saw a segment reading exactly `test`, which
+     * whole-repo-build-guard classified as the workspace-wide test script and BLOCKED. There was no
+     * build anywhere in that command; it polled npm and GitHub.
+     *
+     * Quoting is precisely how a shell says "this is DATA, not syntax", so honouring the quotes is the
+     * correct reading. And because commandCode only ever feeds blocklist-shaped guards, dropping more
+     * can only ever block LESS — never turn an allowed command into a refused one.
+     */
     private stripProse(command: string): string {
         const withoutHeredocs = command.replace(HEREDOC_BODY, ' ');
         return withoutHeredocs.replace(QUOTED_SPAN, (match: string, single?: string, double?: string): string => {
             const content = single ?? double ?? '';
-            return /\s/.test(content) ? ' ' : content;
+            if (/\s/.test(content)) return ' ';
+            return SHELL_METACHARACTER.test(content) ? ' ' : content;
         });
     }
 }

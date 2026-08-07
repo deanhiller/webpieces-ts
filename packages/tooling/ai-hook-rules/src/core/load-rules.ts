@@ -8,7 +8,7 @@ import {
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
     NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
-    NoJsFilesConfig, FeatureBranchGuardConfig, ReadStaleGuardConfig, MergedBranchBashGuardConfig, StaleMainBashGuardConfig, WholeRepoBuildGuardConfig, MatchRuleConfig,
+    NoJsFilesConfig, FeatureBranchGuardConfig, ReadStaleGuardConfig, MergedBranchBashGuardConfig, StaleMainBashGuardConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from './types';
@@ -73,7 +73,6 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'read-stale-guard': (c: BaseRuleConfig) => new ReadStaleGuardRule(c as ReadStaleGuardConfig),
     'merged-branch-bash-guard': (c: BaseRuleConfig) => new MergedBranchBashGuardRule(c as MergedBranchBashGuardConfig),
     'stale-main-bash-guard': (c: BaseRuleConfig) => new StaleMainBashGuardRule(c as StaleMainBashGuardConfig),
-    'whole-repo-build-guard': (c: BaseRuleConfig) => new WholeRepoBuildGuardRule(c as WholeRepoBuildGuardConfig),
 };
 
 // Index the typed config by rule name. Each value is the rule's *Config (a plain object from
@@ -87,6 +86,23 @@ export function loadRules(config: WebpiecesRulesConfig, workspaceRoot: string): 
     const builtIns = loadBuiltInRules(config);
     const custom = loadCustomRules(config, workspaceRoot);
     return [...builtIns, ...custom];
+}
+
+/**
+ * The EXPERIMENTAL bash guards: rules that have NO webpieces.config.json entry, are switched only from
+ * the optional machine-local `~/.webpieces/config.json`, and are therefore deliberately kept out of
+ * `builtInRuleNames`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y, "every built-in rule needs
+ * an entry, or every Bash call is blocked") can never see them. That containment is the whole point:
+ * whole-repo-build-guard shipped inside the config-driven set once and took every upgrading consumer's
+ * shell down with it.
+ *
+ * Each rule here decides for itself, from the home config, whether it does anything at all.
+ * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
+ * repo's gate actually runs.
+ */
+// webpieces-disable no-function-outside-class -- sibling of loadRules/loadMatchRules in this module; the whole loader is module-scope functions and a lone class for this one would break the file's shape
+export function loadExperimentalBashRules(affectedBuildCommand: string): Rule[] {
+    return [new WholeRepoBuildGuardRule(affectedBuildCommand)];
 }
 
 // One MatchRule per entry of the `match-rules` array. Kept separate from loadRules (built-ins/custom)

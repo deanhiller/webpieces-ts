@@ -20,7 +20,9 @@ export const HOOK_GUARD_NAMES: readonly string[] = [
     'read-stale-guard',
     'merged-branch-bash-guard',
     'stale-main-bash-guard',
-    'whole-repo-build-guard',
+    // `whole-repo-build-guard` is NOT here: it has no webpieces.config.json entry at all (see
+    // RETIRED_CONFIG_KEYS). It is an experimental bash guard switched from ~/.webpieces/config.json, and
+    // ai-hook-rules runs it outside the config-driven rule set entirely.
 ];
 
 const HOOK_GUARD_SET: ReadonlySet<string> = new Set(HOOK_GUARD_NAMES);

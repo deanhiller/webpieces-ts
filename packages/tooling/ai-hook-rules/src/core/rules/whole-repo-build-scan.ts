@@ -16,7 +16,9 @@ import { CommandScanner } from '../command-scan';
  *   BLOCKED  `nx affected` of a BUILD target with no `--base` (a far wider base than the fork point)
  *   BLOCKED  `nx <target>` with no project argument (`nx test`)
  *   BLOCKED  `vitest`/`vitest run` with no path, `--project` or `--dir` to narrow it
- *   BLOCKED  a bare `pnpm test` AT THE WORKSPACE ROOT — the root `test` script is the whole suite
+ *   BLOCKED  a bare `pnpm test` AT THE WORKSPACE ROOT — the root `test` script is the whole suite.
+ *            Only under a RUNNER: a naked `test` word is POSIX test(1), and classifying it as the
+ *            script blocked a polling loop whose jq filter merely contained `test(`.
  *
  *   ALLOWED  `nx affected --target=ci --base=<anything>` — the gate's own command
  *   ALLOWED  `nx run <project>:<target>`, `nx run-many -t test -p a b`, `nx test core-util`
@@ -112,6 +114,7 @@ export class WholeRepoBuildScan {
         // exactly how a scoped command ends up blocked.
         if (this.isNarrowed(this.scanner.words(segment))) return null;
 
+        const raw = this.scanner.words(segment);
         const words = this.effectiveWords(segment);
         if (words.length === 0) return null;
 
@@ -121,10 +124,19 @@ export class WholeRepoBuildScan {
         if (WHOLE_REPO_SCRIPTS.has(program)) return `${program} builds every project`;
         if (program === 'nx') return this.nxShape(args);
         if (program === 'vitest') return this.vitestShape(args);
-        if (program === 'test' && args.length === 0 && this.atWorkspaceRoot) {
+        // `test` ONLY as a package-manager script — `pnpm test`, `npm test`, `yarn test`. A NAKED `test`
+        // is POSIX test(1) (the `[` builtin), never a build, and treating the bare word as the script
+        // is how a fragment of somebody's data ends up classified as a workspace-wide test run.
+        if (program === 'test' && args.length === 0 && this.atWorkspaceRoot && this.viaRunner(raw)) {
             return 'the root `test` script runs every spec in the repo';
         }
         return null;
+    }
+
+    // Did a package-manager runner precede the program (`pnpm …`, `npx …`)? Read off the RAW words,
+    // before effectiveWords strips it, which is the only place that fact still exists.
+    private viaRunner(raw: readonly string[]): boolean {
+        return raw.length > 0 && RUNNERS.has(this.programName(raw[0]));
     }
 
     /**

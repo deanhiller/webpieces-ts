@@ -128,7 +128,6 @@ export {
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
-    WholeRepoBuildGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,

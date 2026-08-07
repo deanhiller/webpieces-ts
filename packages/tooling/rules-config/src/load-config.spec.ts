@@ -6,6 +6,9 @@ import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
 import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RetiredConfigKey } from './retired-config-keys';
 import { toError } from './to-error';
+import { defaultRules } from './default-rules';
+import { RULE_SCHEMAS } from './rule-schemas';
+import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';
 
 function mktmp(contents: Record<string, string>): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-config-'));
@@ -21,7 +24,9 @@ function mktmp(contents: Record<string, string>): string {
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
     'redirect-how-to-merge-main', 'feature-branch-guard', 'read-stale-guard', 'merged-branch-bash-guard',
-    'stale-main-bash-guard', 'whole-repo-build-guard',
+    // NOT 'whole-repo-build-guard' — it is retired as a repo-config key (it is switched from
+    // ~/.webpieces/config.json instead), so naming it here would FAIL the load rather than configure it.
+    'stale-main-bash-guard',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
@@ -374,6 +379,18 @@ describe('loadAndValidate — every retired key fails the load', () => {
             excludePaths: validExcludePaths(),
         }) });
     }
+
+    /**
+     * The guard is EXPERIMENTAL and switched ONLY from ~/.webpieces/config.json. Shipping it in
+     * `defaultRules` is what made it a rule every consumer had to configure: with a default entry it is
+     * loaded, the config-sync check (fault Y) finds no matching key, and EVERY Bash call is blocked on
+     * upgrade. That happened. This assertion is the tripwire.
+     */
+    it('does not ship whole-repo-build-guard as a default rule — fault Y must be unreachable for it', () => {
+        expect(Object.keys(defaultRules)).not.toContain('whole-repo-build-guard');
+        expect(RULE_SCHEMAS['whole-repo-build-guard']).toBeUndefined();
+        expect(SHIPPED_HOOK_GUARD_NAMES).not.toContain('whole-repo-build-guard');
+    });
 
     for (const entry of RETIRED_CONFIG_KEYS) {
         it(`rejects ${entry.label} "${entry.key}" and names where it went`, () => {

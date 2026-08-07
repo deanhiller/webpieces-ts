@@ -17,11 +17,23 @@ vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>
     };
 });
 
-import { WholeRepoBuildGuardConfig, HomeConfigService } from '@webpieces/rules-config';
+import { HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 
 const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
+
+// The guard is EXPERIMENTAL and OFF unless ~/.webpieces/config.json turns it on, so every test about
+// what it BLOCKS has to opt in first. Pinning the home config here also keeps the suite off the
+// developer's real one — a test that reads personal preferences passes or fails by accident.
+// HomeConfig(buildGateLogCapture, wholeRepoBuildGuard).
+function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
+    vi.spyOn(HomeConfigService.prototype, 'load')
+        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard));
+}
+
+beforeEach(() => { pinHomeConfig(true); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 function ctx(command: string): BashContext {
     return new BashContext(command, '/repo');
@@ -34,10 +46,8 @@ function ctxInSubdir(command: string): BashContext {
 }
 
 function guard(): WholeRepoBuildGuardRule {
-    const config = new WholeRepoBuildGuardConfig();
-    // load-config injects this from commands.pr-gate.buildCommand; the spec supplies it directly.
-    config.affectedBuildCommand = GATE_COMMAND;
-    return new WholeRepoBuildGuardRule(config);
+    // The runner passes commands.pr-gate.buildCommand straight to the constructor; the spec does the same.
+    return new WholeRepoBuildGuardRule(GATE_COMMAND);
 }
 
 function blocked(command: string): boolean {
@@ -153,6 +163,31 @@ describe('whole-repo-build-guard leaves narrow work alone', () => {
         expect(blocked('pnpm nx reset')).toBe(false);
     });
 
+    /**
+     * REGRESSION, from a real block. A polling loop that builds NOTHING — it queries npm and GitHub —
+     * was refused, because its jq filter is whitespace-free, so commandCode used to unquote it: the
+     * guards then saw bare shell syntax and split `select(.title|test("x"))` into a segment reading
+     * exactly `test`, which classified as the workspace-wide test script.
+     *
+     * Two independent fixes, either of which alone clears this, and both are wanted: a quoted span
+     * carrying shell metacharacters stays quoted (BashContext.stripProse), and a bare `test` counts
+     * only under a package-manager runner (a naked `test` is POSIX test(1)).
+     */
+    it('does not block a jq filter whose text merely contains test( — no build is in that command', () => {
+        expect(blocked(`gh pr list --json title --jq '.[]|select(.title|test("x"))'`)).toBe(false);
+        expect(blocked(
+            'for i in $(seq 1 170); do V=$(npm view @webpieces/nx-webpieces-rules version 2>/dev/null | tail -1); '
+            + `M=$(gh pr list --state merged --limit 6 --json title --jq '[.[]|select(.title|test("whole-repo-build-guard";"i"))]|length' 2>/dev/null); `
+            + 'if [ "$V" != "0.4.613" ] && [ -n "$V" ] && [ "$M" != "0" ]; then echo "..."; break; fi; sleep 60; done',
+        )).toBe(false);
+    });
+
+    // POSIX test(1) — the `[` builtin spelled out. Never a build, at any cwd.
+    it('does not block a naked test invocation', () => {
+        expect(blocked('test -f package.json')).toBe(false);
+        expect(blocked('test')).toBe(false);
+    });
+
     // Matching is on ctx.commandCode, which drops heredoc bodies and quoted prose — this repo's own
     // commit messages and docs are full of the command names this guard blocks.
     it('does not block a commit message that merely mentions the blocked commands', () => {
@@ -162,15 +197,7 @@ describe('whole-repo-build-guard leaves narrow work alone', () => {
 });
 
 describe('whole-repo-build-guard message', () => {
-    // This block is about the DEFAULT refusal, so pin the OPTIONAL home config to its default. The
-    // machine running the tests may well have opted into build-log capture, and a test that reads the
-    // developer's own preferences is a test that passes or fails by accident.
-    beforeEach(() => {
-        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue({ buildGateLogCapture: false });
-    });
-    afterEach(() => { vi.restoreAllMocks(); });
-
-    // The template is what webpieces.config.json holds; the RESOLVED command is what an agent can
+    // The template is what the pr-gate config holds; the RESOLVED command is what an agent can
     // paste anywhere. Handing over the raw `$(…)` is how advice starts failing in the wrong context.
     it('prints the configured command with $(git …) expanded, never the raw template', () => {
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
@@ -179,9 +206,7 @@ describe('whole-repo-build-guard message', () => {
     });
 
     it('follows the configured build command rather than a hard-coded one', () => {
-        const config = new WholeRepoBuildGuardConfig();
-        config.affectedBuildCommand = 'make ci-affected';
-        const message = new WholeRepoBuildGuardRule(config).check(ctx('pnpm run build-all'))[0].message ?? '';
+        const message = new WholeRepoBuildGuardRule('make ci-affected').check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message).toContain('make ci-affected');
     });
 
@@ -192,9 +217,7 @@ describe('whole-repo-build-guard message', () => {
      * string causes.
      */
     it('prints the SAME command in the fix hint as in the message', () => {
-        const config = new WholeRepoBuildGuardConfig();
-        config.affectedBuildCommand = 'make ci-affected';
-        const rule = new WholeRepoBuildGuardRule(config);
+        const rule = new WholeRepoBuildGuardRule('make ci-affected');
         const message = rule.check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(rule.fixHint.mainMessage).toContain('make ci-affected');
         expect(rule.fixHint.mainMessage).not.toContain('nx affected --target=ci');
@@ -204,14 +227,12 @@ describe('whole-repo-build-guard message', () => {
     // Read before check() has ever run (the report renders hints for rules that did not fire): the
     // fallback is the configured TEMPLATE, never a second literal.
     it('falls back to the configured template in the hint before any command is judged', () => {
-        const config = new WholeRepoBuildGuardConfig();
-        config.affectedBuildCommand = 'make ci-affected';
-        expect(new WholeRepoBuildGuardRule(config).fixHint.mainMessage).toContain('make ci-affected');
+        expect(new WholeRepoBuildGuardRule('make ci-affected').fixHint.mainMessage).toContain('make ci-affected');
     });
 
     // Absent config ⇒ the shipped default, which is the same string the pr-gate falls back to.
     it('falls back to the default affected command when the project configures none', () => {
-        const message = new WholeRepoBuildGuardRule(new WholeRepoBuildGuardConfig())
+        const message = new WholeRepoBuildGuardRule('')
             .check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message).toContain('pnpm nx affected --target=ci --base=abc1234def');
     });
@@ -228,17 +249,15 @@ describe('whole-repo-build-guard message', () => {
  * that names a build command; only an opted-in machine is told not to build at all.
  */
 describe('whole-repo-build-guard picks its message from ~/.webpieces/config.json', () => {
-    afterEach(() => { vi.restoreAllMocks(); });
-
     it('with capture OFF (the default, and the absent-file state) names the affected build', () => {
-        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue({ buildGateLogCapture: false });
+        pinHomeConfig(true, false);
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message).toContain('pnpm nx affected --target=ci --base=abc1234def');
         expect(message).not.toContain('wp-review-upsert-pr');
     });
 
     it('with capture ON says do not build — stage ② builds and writes a readable log', () => {
-        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue({ buildGateLogCapture: true });
+        pinHomeConfig(true, true);
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message).toContain('pnpm wp-review-upsert-pr');
         expect(message).toContain('stage ②');
@@ -249,12 +268,59 @@ describe('whole-repo-build-guard picks its message from ~/.webpieces/config.json
         expect(message.split('\n').length).toBeLessThanOrEqual(6);
     });
 
-    // A broken/unreadable home config may never change how a Bash command is judged.
-    it('falls back to the ordinary message when the home config throws', () => {
+});
+
+/**
+ * ══ THE GATE — and the case that protects every consumer of these packages ══════════════════════════
+ *
+ * This guard is EXPERIMENTAL. Its ONE switch is `experimental.whole-repo-build-guard` in the OPTIONAL
+ * machine-local ~/.webpieces/config.json, and essentially nobody has that file. For all of them the
+ * guard must be INERT — no block, no message, no log line — for every command, INCLUDING the ones it
+ * would otherwise refuse. The first release of this guard got that wrong in the other direction (it
+ * shipped ON by default AND demanded a webpieces.config.json entry, so upgrading blocked every Bash
+ * call), which is what these tests exist to prevent recurring.
+ */
+describe('whole-repo-build-guard does NOTHING without ~/.webpieces/config.json', () => {
+    // The absent file yields the all-defaults HomeConfig — exactly what HomeConfigService returns when
+    // ~/.webpieces (or the file inside it) does not exist, which the home-config suite pins separately.
+    it('allows a command it would otherwise refuse, when there is no home config', () => {
+        pinHomeConfig(false);
+        for (const command of ['pnpm run build-all', 'pnpm nx run-many --target=build', 'pnpm exec vitest run']) {
+            expect(guard().check(ctx(command))).toEqual([]);
+        }
+    });
+
+    it('is off for an explicit false, exactly as it is for the absent file', () => {
+        pinHomeConfig(false, true);
+        expect(guard().check(ctx('pnpm run build-all'))).toEqual([]);
+    });
+
+    it('blocks the same command once the switch is true', () => {
+        pinHomeConfig(true);
+        expect(guard().check(ctx('pnpm run build-all')).length).toBe(1);
+    });
+
+    /**
+     * A file that EXISTS was deliberately created, so a wrong one is a HARD FAILURE naming the fix —
+     * never a silent fallback. Editing ~/.webpieces/config.json is an unconditional PASS in the guards,
+     * so this block is always self-curable.
+     */
+    it('blocks with the loader’s own fix instruction when the home config is present but wrong', () => {
         vi.spyOn(HomeConfigService.prototype, 'load').mockImplementation((): never => {
-            throw new Error('~/.webpieces/config.json is not valid JSON');
+            throw new InformAiError('[~/.webpieces/config.json] "experimental.whole-repo-build-guard" is REQUIRED');
         });
-        const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
-        expect(message).toContain('pnpm nx affected');
+        const violations = guard().check(ctx('git status'));
+        expect(violations.length).toBe(1);
+        const message = violations[0].message ?? '';
+        expect(message).toContain('~/.webpieces/config.json is present but unusable');
+        expect(message).toContain('"experimental.whole-repo-build-guard" is REQUIRED');
+    });
+
+    it('reports a non-InformAiError failure too, rather than judging the command on a guess', () => {
+        vi.spyOn(HomeConfigService.prototype, 'load').mockImplementation((): never => {
+            throw new Error('EIO: i/o error');
+        });
+        const message = guard().check(ctx('git status'))[0].message ?? '';
+        expect(message).toContain('could not be read');
     });
 });
