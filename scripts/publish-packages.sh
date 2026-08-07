@@ -23,6 +23,30 @@
 #
 # Add a package and forget this file, and the release stops with a message telling you what to do,
 # instead of half-publishing and leaving npm inconsistent with the tag.
+#
+# THE SECOND HALF: A TRANSIENT PUBLISH FAILURE (run 585, 0.4.585)
+# ---------------------------------------------------------------
+# The preflight above closed the "stale list" hole. It did nothing about the SAME blast radius arriving
+# from the registry instead. Run 585 died on entry 21 of 28 with
+#
+#     npm error code E404
+#     npm error 404 Not Found - PUT https://registry.npmjs.org/@webpieces%2fcloudtasks-client
+#
+# The package already existed at 0.4.584, `npm owner ls` matched packages that published fine in that
+# same run, and the previous 7 releases were green — so this was not config or permissions. With npm
+# trusted publishing the registry MASKS an auth failure as a 404, and there was a 71-second stall before
+# "Publishing to registry", consistent with the short-lived OIDC ID token expiring partway through a long
+# sequential publish loop.
+#
+# `set -e` plus a bare loop turned one transient blip into a SPLIT RELEASE: 10 runtime packages at
+# 0.4.585 while cloudtasks-client and the entire tooling family stayed at 0.4.584. Two changes below
+# close it:
+#
+#   - publish_one() RETRIES with backoff, and treats "this exact version is already published" as
+#     SUCCESS. That second half is what makes re-running a failed release the correct recovery — before
+#     it, a re-run aborted on the first already-published package and never reached the stragglers.
+#   - the loop no longer aborts. It records every outcome and, if anything is still unpublished at the
+#     end, FAILS with a summary naming what published and what did not. A split release is now loud.
 
 set -euo pipefail
 
@@ -39,11 +63,38 @@ set -euo pipefail
 # 0.3.<run_number>, and republishing an existing version 403s and aborts the release.
 PUBLISH_FLAGS="${PUBLISH_FLAGS:---access public --provenance}"
 
+# Retry budget for ONE package. Overridable so the spec can run the real script with no sleeping.
+PUBLISH_ATTEMPTS="${PUBLISH_ATTEMPTS:-4}"
+PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
+
 # Dependency order. A package must appear AFTER everything it depends on: npm has no ordering
 # guarantee, and a consumer resolving a not-yet-published version fails.
+#
+# THE TOOLING FAMILY GOES FIRST, and that is a deliberate risk ordering, not tidiness. These six are
+# the packages this repo GOVERNS ITSELF WITH — the eslint plugin, the nx executors, the PreToolUse
+# guards and every `wp-*` bin. Stranding them is strictly the worst outcome of a partial release: the
+# runtime packages just sit a build behind, but a half-published tooling family desynchronises the
+# umbrella from its children and can wedge an agent session (see CLAUDE.md, "Published vs local
+# source"). Nothing in the family depends on any runtime package — `rules-config` has no @webpieces
+# dependency at all, the middle four depend only on `rules-config`, and `nx-webpieces-rules` bundles
+# the other five — so putting them at the front costs nothing and removes them as hostages of a
+# transient failure on an unrelated package like cloudtasks-client (entry 21 of 28, run 585).
+#
+# publish-packages.spec.ts re-derives this from the real manifests, so a new @webpieces
+# dependency that invalidates the order fails a test rather than a release.
 ORDER=(
-    packages/core/core-context
+    packages/tooling/rules-config
+    packages/tooling/pr-gate
+    packages/tooling/eslint-rules
+    packages/tooling/ai-hook-rules
+    packages/tooling/code-rules
+    packages/tooling/nx-webpieces-rules
+    # core-util has no @webpieces dependency; core-context depends on it. These two were the wrong way
+    # round until publish-packages.spec.ts re-derived the order from the manifests and said so — latent
+    # because npm never enforces the order, it just leaves a window where core-context resolves a
+    # core-util that is not on the registry yet.
     packages/core/core-util
+    packages/core/core-context
     # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm
     # trusted publishing (OIDC + --provenance) cannot CREATE a brand-new scoped package — only
     # publish to a name that already exists — so the first-ever publish 404'd and aborted the
@@ -63,12 +114,6 @@ ORDER=(
     packages/http/http-client-node
     packages/cloud/cloudtasks-client
     packages/http/http-server
-    packages/tooling/rules-config
-    packages/tooling/pr-gate
-    packages/tooling/eslint-rules
-    packages/tooling/ai-hook-rules
-    packages/tooling/code-rules
-    packages/tooling/nx-webpieces-rules
 )
 
 # Publishable in package.json, but deliberately never released. Each needs a reason.
@@ -164,11 +209,75 @@ fi
 echo "✅ Preflight passed: ${#ORDER[@]} package(s) to publish, ${#SKIP[@]} skipped"
 echo ""
 
+# Publish ONE package, retrying a transient registry failure.
+#
+# The already-published check is the load-bearing half. npm signals it three different ways depending on
+# registry and version (code EPUBLISHCONFLICT, a 403, or the prose "You cannot publish over the
+# previously published versions"), and all three mean the SAME thing here: the registry already holds
+# exactly what this run wanted to put there, which is success by any definition the release cares about.
+# Treating it as fatal is what made a plain re-run of run 585 useless — it would have died on entry 1.
+#
+# Note what is deliberately NOT special-cased: a 404. Under trusted publishing that is npm masking an
+# expired OIDC token, i.e. precisely the transient this retry exists for. A genuinely missing package
+# name still fails, just after PUBLISH_ATTEMPTS tries.
+publish_one() {
+    local dir="$1"
+    local attempt=1
+    local delay="$PUBLISH_RETRY_SLEEP"
+    local out=''
+
+    while : ; do
+        # shellcheck disable=SC2086 -- PUBLISH_FLAGS is an intentional word-split flag list
+        if out="$(npm publish "dist/$dir" $PUBLISH_FLAGS 2>&1)"; then
+            printf '%s\n' "$out"
+            return 0
+        fi
+        printf '%s\n' "$out"
+
+        if printf '%s' "$out" | grep -qiE 'EPUBLISHCONFLICT|cannot publish over|previously published version'; then
+            echo "  ✅ $dir is already published at this version — treating as success"
+            return 0
+        fi
+
+        if [ "$attempt" -ge "$PUBLISH_ATTEMPTS" ]; then
+            echo "  ❌ $dir failed $attempt attempt(s)"
+            return 1
+        fi
+
+        echo "  ⚠️  $dir attempt $attempt/$PUBLISH_ATTEMPTS failed — retrying in ${delay}s"
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+    done
+}
+
+# The loop does NOT abort on a failure. Aborting is what produced the split release: every package after
+# the failing one was never even attempted, and the ones that had already gone out could not be walked
+# back. Pressing on publishes everything that CAN publish, and the summary below is what keeps that
+# honest — a partial release still exits non-zero and names both halves.
+published=()
+unpublished=()
 for dir in "${ORDER[@]}"; do
     echo "📦 npm publish dist/$dir $PUBLISH_FLAGS"
-    # shellcheck disable=SC2086 -- PUBLISH_FLAGS is an intentional word-split flag list
-    npm publish "dist/$dir" $PUBLISH_FLAGS
+    if publish_one "$dir"; then
+        published+=("$dir")
+    else
+        unpublished+=("$dir")
+    fi
 done
 
 echo ""
+if [ "${#unpublished[@]}" -ne 0 ]; then
+    echo "❌ PARTIAL RELEASE — ${#published[@]} of ${#ORDER[@]} package(s) published"
+    echo ""
+    echo "Published:"
+    for dir in "${published[@]+"${published[@]}"}"; do echo "  ✅ $dir"; done
+    echo "NOT published:"
+    for dir in "${unpublished[@]}"; do echo "  ❌ $dir"; done
+    echo ""
+    echo "npm and the git tag now disagree. Re-run this script: already-published packages are skipped,"
+    echo "so a re-run publishes only the stragglers."
+    exit 1
+fi
+
 echo "✅ Published ${#ORDER[@]} package(s)"
