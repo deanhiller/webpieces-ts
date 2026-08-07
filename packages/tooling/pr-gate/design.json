@@ -9,6 +9,14 @@
             "maxLevel": 8,
             "nodes": [
                 {
+                    "id": "AgedTreeSweeper",
+                    "className": "AgedTreeSweeper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/aged-tree-sweep.ts",
+                    "level": 6
+                },
+                {
                     "id": "AiBranchName",
                     "className": "AiBranchName",
                     "kind": "class",
@@ -297,6 +305,22 @@
                     "level": 2
                 },
                 {
+                    "id": "MachineStateHome",
+                    "className": "MachineStateHome",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/machine-state-home.ts",
+                    "level": 6
+                },
+                {
+                    "id": "MergeBodyFiler",
+                    "className": "MergeBodyFiler",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-body-filer.ts",
+                    "level": 2
+                },
+                {
                     "id": "MergeEnd",
                     "className": "MergeEnd",
                     "kind": "class",
@@ -343,6 +367,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts",
                     "level": 2
+                },
+                {
+                    "id": "PrBodyStore",
+                    "className": "PrBodyStore",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/pr-body-store.ts",
+                    "level": 5
                 },
                 {
                     "id": "PrContextWriter",
@@ -694,12 +726,30 @@
                 },
                 {
                     "from": "CleanTmp",
+                    "to": "AgedTreeSweeper",
+                    "injection": "type",
+                    "token": "AgedTreeSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/aged-tree-sweep.ts#AgedTreeSweeper",
+                    "paramName": "sweeper",
+                    "paramType": "AgedTreeSweeper"
+                },
+                {
+                    "from": "CleanTmp",
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "CleanTmp",
+                    "to": "PrBodyStore",
+                    "injection": "type",
+                    "token": "PrBodyStore",
+                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
+                    "paramName": "prBodies",
+                    "paramType": "PrBodyStore"
                 },
                 {
                     "from": "CleanTmp",
@@ -973,6 +1023,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "MergeBodyFiler",
+                    "injection": "type",
+                    "token": "MergeBodyFiler",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-body-filer.ts#MergeBodyFiler",
+                    "paramName": "mergeBodyFiler",
+                    "paramType": "MergeBodyFiler"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",
@@ -1198,6 +1257,15 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "PrBodyStore",
+                    "injection": "type",
+                    "token": "PrBodyStore",
+                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
+                    "paramName": "prBodies",
+                    "paramType": "PrBodyStore"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "PrMerger",
                     "injection": "type",
                     "token": "PrMerger",
@@ -1222,6 +1290,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "MergeBodyFiler",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "MergeBodyFiler",
+                    "to": "PrBodyStore",
+                    "injection": "type",
+                    "token": "PrBodyStore",
+                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
+                    "paramName": "prBodies",
+                    "paramType": "PrBodyStore"
                 },
                 {
                     "from": "MergeEnd",
@@ -1357,6 +1443,33 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "PrBodyStore",
+                    "to": "AgedTreeSweeper",
+                    "injection": "type",
+                    "token": "AgedTreeSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/aged-tree-sweep.ts#AgedTreeSweeper",
+                    "paramName": "sweeper",
+                    "paramType": "AgedTreeSweeper"
+                },
+                {
+                    "from": "PrBodyStore",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "PrBodyStore",
+                    "to": "MachineStateHome",
+                    "injection": "type",
+                    "token": "MachineStateHome",
+                    "tokenKey": "class:packages/tooling/rules-config/src/machine-state-home.ts#MachineStateHome",
+                    "paramName": "stateHome",
+                    "paramType": "MachineStateHome"
                 },
                 {
                     "from": "PrContextWriter",

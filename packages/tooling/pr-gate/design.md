@@ -12,6 +12,7 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
+    AgedTreeSweeper["AgedTreeSweeper"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
     BranchArchiver["BranchArchiver"]
@@ -48,12 +49,15 @@ graph TD
     GitStatusParser["GitStatusParser"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
+    MachineStateHome["MachineStateHome"]
+    MergeBodyFiler["MergeBodyFiler"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
     MergeStart["MergeStart"]
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
+    PrBodyStore["PrBodyStore"]
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
@@ -95,7 +99,9 @@ graph TD
     ChecklistScanner --> DiffScope
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
+    CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
+    CleanTmp --> PrBodyStore
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchReaper
@@ -126,6 +132,7 @@ graph TD
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
+    FinishUpsertPrCommand --> MergeBodyFiler
     FinishUpsertPrCommand --> MergeState
     FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> RepoRootFinder
@@ -151,9 +158,12 @@ graph TD
     LandPrCommand --> BranchNaming
     LandPrCommand --> LandedWorktreeReaper
     LandPrCommand --> MergeInfoIndex
+    LandPrCommand --> PrBodyStore
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
     LandedWorktreeReaper --> WorktreeService
+    MergeBodyFiler --> DotWebpieces
+    MergeBodyFiler --> PrBodyStore
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -169,6 +179,9 @@ graph TD
     MergedBranchesService --> DotWebpieces
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    PrBodyStore --> AgedTreeSweeper
+    PrBodyStore --> DotWebpieces
+    PrBodyStore --> MachineStateHome
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand

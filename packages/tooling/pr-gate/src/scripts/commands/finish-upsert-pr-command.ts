@@ -21,6 +21,7 @@ import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
+import { MergeBodyFiler, MergeBodyRequest } from '../workflow/merge-body-filer';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import {
@@ -104,6 +105,9 @@ export class FinishUpsertPrCommand {
         // that genuinely never ran, so no other code path in this command can print it at a refusal.
         private readonly receipts: ReviewStageReceiptService,
         private readonly banner: FinishBanner,
+        // The MACHINE-GLOBAL home for the one artifact whose scope is bigger than this tree: the gated
+        // squash-commit body, which `wp-land-pr` must find from any tree (see MergeBodyFiler).
+        private readonly mergeBodyFiler: MergeBodyFiler,
     ) {}
 
     async run(): Promise<void> {
@@ -561,8 +565,16 @@ export class FinishUpsertPrCommand {
         // subject GitHub would inherit from the single squash commit on the branch.
         const ref = this.prRef(baseBranch);
         const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
-        const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
-        fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
+        // MACHINE-GLOBAL, keyed by the PR's identity, so `wp-land-pr` finds it from ANY tree — see
+        // MergeBodyFiler for the incident that moved it out of this worktree's pr-review/ dir.
+        const bodyRequest = new MergeBodyRequest();
+        bodyRequest.treeRoot = repoRoot;
+        bodyRequest.branch = baseBranch;
+        bodyRequest.feature = this.aiBranchName.getFeatureName();
+        bodyRequest.prNumber = ref.number;
+        bodyRequest.prUrl = ref.url;
+        bodyRequest.body = this.dashboard.renderCommitBody(input, ref.url) + '\n';
+        const mergeBodyFile = this.mergeBodyFiler.file(bodyRequest);
         // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
         // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
         // REQUIRED config — no default here on purpose. A missing value (an older published

@@ -5,7 +5,7 @@ import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
 import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
-import { LandPrCommand } from './commands/land-pr-command';
+import { LandPrCommand, LandPrOptions } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
@@ -102,9 +102,9 @@ export class PrGateApp {
     }
 
     /** `wp-land-pr`: squash-merge this branch's PR into main with the compact commit body. */
-    landPr(): Promise<void> {
+    landPr(opts: LandPrOptions = new LandPrOptions()): Promise<void> {
         this.assertNoResolveInProgress('wp-land-pr');
-        return this.landPrCommand.run();
+        return this.landPrCommand.run(opts);
     }
 
     /**
