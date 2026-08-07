@@ -31,8 +31,6 @@ import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
 //   • it had NO rotation, on a file now written on EVERY tool call.
 // ---------------------------------------------------------------------------
 
-/** The audit log's filename, and the sibling a rotation renames it to. Mirrors decision-log.ts. */
-
 /**
  * Rotation threshold, in bytes — 512 KB, the SAME number and the same `.1.log` naming as
  * decision-log.ts / rejection-log.ts / main-sync-log.ts. Deliberately identical rather than merely

@@ -8,7 +8,7 @@ import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
-import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict } from './decision-log';
+import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0, MATRIX_L2 } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
@@ -277,7 +277,7 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function logL0CureBypass(command: string, cwd: string): void {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)'));
+    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)', '-', L0_FAULT_NONE, MATRIX_L0));
 }
 
 /**
@@ -452,7 +452,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     // Intentional, not a silent hole. A LINKED WORKTREE of this repo is deliberately NOT foreign — it
     // is the same project, so the guards run against THAT tree's branch and cache.
     if (tree.kind === 'foreign') {
-        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'));
+        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW_EXEMPT', 'foreign git repo (out of scope)', '-', L0_FAULT_NONE, new MatrixRef('L1', '1')));
         return null;
     }
 
@@ -488,13 +488,13 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
         // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
         // logged below.
         if (/\b(?:git|gh)\b/.test(command)) {
-            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block'));
+            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2));
         }
         return null;
     }
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block'));
+    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2));
     const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }

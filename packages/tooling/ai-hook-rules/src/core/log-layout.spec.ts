@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { LOGS_STATE_DIR } from '@webpieces/rules-config';
 
-import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef } from './decision-log';
+import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef , MATRIX_L2 } from './decision-log';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logRejection } from './rejection-log';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
@@ -14,6 +14,7 @@ import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream, StreamIdentity, logStream } from './log-stream';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM, ALL_LOG_STREAMS } from './log-streams';
+import { L0_FAULT_NONE } from './l0-fault-codes';
 // One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
 // real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
 function streamName(stream: string, suffix: string = '.log'): string {
@@ -58,7 +59,7 @@ function exerciseEveryWriter(root: string): void {
     invocations.begin(root, 'Bash', 'ls');
     invocations.finish('ALLOW', '-');
 
-    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'gh pr create', 'dean/x', 'BLOCK_AI_CURE', 'nope'));
+    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'gh pr create', 'dean/x', 'BLOCK_AI_CURE', 'nope', '-', L0_FAULT_NONE, MATRIX_L2));
     logL1Decision(root, new GuardDecision('force-to-root', 'Bash', 'git status', 'dean/x', 'BLOCK_AI_CURE', 'git/gh from subdir', '-', '-', new MatrixRef('L1', '5')));
     logSyncEvent(root, new SyncLogEvent('FINISH', 123, 'main', 'done'));
 

@@ -13,7 +13,8 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision, Verdict } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner } from '../command-scan';
 import { StaleMainMessage } from './stale-main-message';
 import { ContentReadScan } from './content-read-scan';
@@ -291,7 +292,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('stale-main-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache),
+            new GuardDecision('stale-main-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
         );
     }
 

@@ -63,6 +63,7 @@ vi.mock('../decision-log', () => ({
             this.reason = reason;
         }
     },
+    MATRIX_L2: { layer: 'L2', row: '-' },
 }));
 
 import { MergedBranchBashGuardRule } from './merged-branch-bash-guard';

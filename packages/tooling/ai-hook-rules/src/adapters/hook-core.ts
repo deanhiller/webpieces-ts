@@ -3,7 +3,7 @@ import * as path from 'path';
 import { run, runBash, runRead } from '../core/runner';
 import { AgentIdentity } from '../core/coordinator-worktree';
 import { logRejection, extractRuleNames } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog, invocationLog } from '../core/decision-log';
+import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0, MATRIX_L2 } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -14,7 +14,7 @@ import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVe
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream, StreamIdentity } from '../core/log-stream';
-import { L0_FAULT_SHIM_STALE } from '../core/l0-fault-codes';
+import { L0_FAULT_SHIM_STALE, L0_FAULT_NONE } from '../core/l0-fault-codes';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -188,7 +188,7 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
                 root,
-                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
+                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, MATRIX_L2),
             );
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
@@ -288,7 +288,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const target = payload.tool_input.command ?? payload.tool_input.file_path ?? '';
     logGuardDecision(
         root,
-        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE),
+        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE, MATRIX_L0),
     );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same

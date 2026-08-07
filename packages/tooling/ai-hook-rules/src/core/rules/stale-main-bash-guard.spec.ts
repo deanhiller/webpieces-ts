@@ -48,6 +48,9 @@ vi.mock('../main-sync-refresh', () => ({ triggerMainSyncRefresh: (): void => und
 vi.mock('../decision-log', () => ({
     logGuardDecision: (): void => undefined,
     GuardDecision: class { constructor(...args: unknown[]) { void args; } },
+    // The layer token the guards now stamp on every line. A mock that omits it fails at import,
+    // which is the mock telling the truth: this module really does depend on it.
+    MATRIX_L2: { layer: 'L2', row: '-' },
 }));
 
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';

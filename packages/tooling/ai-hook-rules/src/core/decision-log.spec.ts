@@ -5,12 +5,13 @@ import * as path from 'path';
 
 import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from '@webpieces/rules-config';
 
-import { InvocationLog, logGuardDecision, GuardDecision, Verdict } from './decision-log';
+import { InvocationLog, logGuardDecision, GuardDecision, Verdict , MATRIX_L2 } from './decision-log';
 
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+import { L0_FAULT_NONE } from './l0-fault-codes';
 // One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
 // real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
 function streamName(stream: string, suffix: string = '.log'): string {
@@ -91,7 +92,7 @@ describe('InvocationLog', () => {
         expect(content).toContain('echo one two three');
     });
 
-    it('rotates to guard-invocations.1.log once the log exceeds the size cap', () => {
+    it('rotates the writer into its .1.log sibling once the log exceeds the size cap', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
         // streamName() already carries the stream segment, so only the DIRECTORY needs creating here.
@@ -214,7 +215,7 @@ describe('logGuardDecision', () => {
         const root = tmpRoot();
         logGuardDecision(
             root,
-            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK_AI_CURE', 'use pnpm wp-start-upsert-pr instead'),
+            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK_AI_CURE', 'use pnpm wp-start-upsert-pr instead', '-', L0_FAULT_NONE, MATRIX_L2),
         );
         const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
         expect(content).toContain('\tBLOCK_AI_CURE\t');
@@ -226,7 +227,7 @@ describe('logGuardDecision', () => {
 
     it('carries the same root / CLAUDE_PROJECT_DIR pair as the invocation stream', () => {
         const root = tmpRoot();
-        logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'ls', 'dean/foo', 'ALLOW', 'ok'));
+        logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'ls', 'dean/foo', 'ALLOW', 'ok', '-', L0_FAULT_NONE, MATRIX_L2));
         const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
         expect(content).toContain(`\troot=${root}\t`);
         expect(content).toContain('\tprojectDir=');

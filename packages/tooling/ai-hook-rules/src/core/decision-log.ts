@@ -56,8 +56,17 @@ export class MatrixRef {
     constructor(readonly layer: string, readonly row: string) {}
 }
 
-/** For the sites with no row array to cite yet — L2's guards, and the L0 fault stamps. */
-export const MATRIX_NONE = new MatrixRef('-', '-');
+/**
+ * The layer tokens. `row` is `'-'` for a layer with no row array YET (L2 is the un-converted one, and
+ * L0's faults are a table of letters rather than numbered rows) — but the LAYER is always named, so
+ * `grep layer=L2` works today and the row fills in when L2 converts.
+ *
+ * These are REQUIRED at the constructor, not defaulted: a defaulted `MatrixRef` would make the
+ * uncited case reachable by doing nothing and impossible to grep — the same defect this file's own
+ * docblock argues against for `'BLOCK'`, where silence was the one wrong answer available.
+ */
+export const MATRIX_L0 = new MatrixRef('L0', '-');
+export const MATRIX_L2 = new MatrixRef('L2', '-');
 
 // Data-only record of one guard decision (per CLAUDE.md: classes for data, not object literals).
 // `cache` summarizes the async-written main-sync-status.json that drove a feature-branch-guard
@@ -82,7 +91,7 @@ export class GuardDecision {
     matrix: MatrixRef;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string = L0_FAULT_NONE, matrix: MatrixRef = MATRIX_NONE) {
+    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string, matrix: MatrixRef) {
         this.rule = rule;
         this.tool = tool;
         this.target = target;
@@ -243,7 +252,7 @@ export class InvocationLog {
      *
      * `rule` is the rule that blocked, or '-' when there is none; `fault` is the L0 fault code when this
      * call ended on one (S/C/Y — the JS-side faults), else '-'. FIELD ORDER IS APPEND-ONLY: the five
-     * original fields keep their positions (cleanup automation mines this file), and `verdict=` /
+     * original fields keep their positions (cleanup automation mines this file), and `guards=` /
      * `rule=` / … / `fault=` are added at the end.
      */
     finish(verdict: Verdict, rule: string, fault: string = L0_FAULT_NONE): void {
