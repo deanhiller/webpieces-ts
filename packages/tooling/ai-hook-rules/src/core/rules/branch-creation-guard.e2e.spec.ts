@@ -28,6 +28,13 @@ import { BranchCreationGuardRule } from './branch-creation-guard';
  * real git, with no merged PR provable, NOTHING may be offered for deletion.
  */
 
+/**
+ * SLOW BY NATURE: `git init`, a commit, then six `git worktree add` calls in `beforeAll`, plus the
+ * `git worktree list --porcelain` reads under test. 46s standalone on an IDLE machine — within 10% of the
+ * 45s global before anything else runs, and it is the HOOK that runs out, not any `it()`. It gets 120s
+ * from vitest.setup.mts, which grants that to every `packages/tooling/**` suite.
+ */
+
 let root = '';
 let repo = '';
 
@@ -43,12 +50,19 @@ const worktrees = new WorktreeService();
 const merged = new MergedBranchesService(worktrees);
 
 /**
- * 60s, not the 15s default: this hook does REAL work — `git init`, a commit, SIX `git worktree add`
- * calls that each check out a working copy, and then the refresher's own `gh` probes. ~2s idle, but the
- * wall-clock scales with whatever else is shelling out to git at the same time, and `nx affected` runs
- * several projects' suites concurrently. It was already marginal at 15s and began timing out as more
- * git-backed specs landed beside it. The hook is not slow because it is wrong; six worktrees cost what
- * six worktrees cost.
+ * NO explicit timeout here, deliberately — it takes the 120s that vitest.setup.mts grants every
+ * `packages/tooling/**` spec.
+ *
+ * This hook does REAL work: `git init`, a commit, SIX `git worktree add` calls that each check out a
+ * working copy, then the refresher's own `gh` probes. ~2s idle, but wall-clock scales with whatever else
+ * is shelling out to git at the same time, and `nx affected` runs several projects' suites concurrently.
+ * The hook is not slow because it is wrong; six worktrees cost what six worktrees cost.
+ *
+ * It used to carry `}, 60_000)`. That was WORSE than no annotation once the class-wide budget existed: an
+ * explicit third argument OVERRIDES `vi.setConfig` from a setup file, so the one hook most in need of the
+ * 120s was the only one silently capped at 60s — against a 46s idle measurement, i.e. 14s of margin under
+ * exactly the load the budget exists to survive. Do not re-add a number here; raise it in
+ * vitest.setup.mts for the whole class or not at all.
  */
 beforeAll(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-worktree-cap-'));
@@ -82,7 +96,7 @@ beforeAll(() => {
     // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so
     // NOTHING is provably merged, and therefore nothing is reapable.
     merged.writeMergedBranches(repo, merged.computeMergedBranches(repo));
-}, 60_000);
+});
 
 afterAll(() => {
     if (root !== '') fs.rmSync(root, { recursive: true, force: true });
@@ -165,5 +179,5 @@ describe('branch-creation-guard against real git — the merged half', () => {
         expect(flat).not.toContain(wt1);
         expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).not.toContain('git worktree remove');
-    }, 60_000);
+    });
 });
