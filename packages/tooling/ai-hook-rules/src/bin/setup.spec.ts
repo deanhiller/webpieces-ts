@@ -2,10 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import {
-    migrate, applyHook, installTargets, readSettings, hasHook, renderShim,
-    RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget,
-} from './setup';
+import { migrate, applyHook, installTargets, hasHook, renderShim, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
+import { readSettings } from './hook-registration';
 import {
     INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS,
     RECOVERY_CMD, healShim, shimPath,

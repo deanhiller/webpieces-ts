@@ -16,10 +16,6 @@ import {
 // Re-exported for back-compat (setup.spec.ts + external callers). The shim body + path now live in
 // ./shim (shared with the runtime self-heal in hook-core). See shim.ts for the single source of truth.
 export { renderShim };
-// The settings.json reader lives in ./hook-registration (shared with wp-upgrade-shim, which must repair
-// the registration on a tree too broken to load the rule engine). Re-exported so there is still ONE
-// name to import it by.
-export { readSettings };
 
 const CONFIG_FILENAME = 'webpieces.config.json';
 const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
@@ -27,9 +23,11 @@ const DEFAULT_UPSERT_PR = 'pnpm wp-start-upsert-pr';
 const DEFAULT_MERGE_COMPLETE = 'pnpm wp-finish-upsert-pr';
 
 // ---------------------------------------------------------------------------
-// The two independently-installable hooks. Each can land in a different settings
-// file (see InstallTarget) so a team can ship the guards while a developer keeps
-// the code-style rules local while iterating.
+// The two independently-installable GUARD hooks. Each can land in a different settings file (see
+// InstallTarget) so a team can ship the guards while a developer keeps the code-style rules local
+// while iterating. The L-1 hook is a third registration but is NOT independently installable — it
+// rides with the guards hook (applyGuaranteeRoot), because it exists to protect the RELATIVE
+// resolution of these two and is meaningless without them.
 // ---------------------------------------------------------------------------
 class HookSpec {
     constructor(
