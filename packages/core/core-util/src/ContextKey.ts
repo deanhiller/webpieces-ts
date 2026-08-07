@@ -228,9 +228,36 @@ export class ContextKey<V, T extends Trust = Trust> {
      * True for a key built by {@link trusted}. The RUNTIME check used by the inbound fill and the
      * AuthFilter reconciliation; ordinary application code should never need it, because the typed
      * verbs already made the decision at compile time.
+     *
+     * It is a TYPE PREDICATE, so the branch that takes it holds a `ContextKey<V, 'trusted'>` and can
+     * hand the key straight to `putTrusted` / `PendingWireTrust.stash` with NO cast. Before this, every
+     * such site wrote `key as AnyTrustedContextKey` — a cast is exactly the thing an agent copies to
+     * the one place it is not warranted, so the runtime check now produces the type it proves.
      */
-    isTrusted(): boolean {
+    isTrusted(): this is ContextKey<V, 'trusted'> {
         return this.trust === 'trusted';
+    }
+
+    /**
+     * The other branch — true for a key built by {@link untrusted}, narrowing to
+     * `ContextKey<V, 'untrusted'>` so the key can go straight to `putUntrusted`.
+     *
+     * NOT a second spelling of `!isTrusted()`: that expression cannot narrow anything. TypeScript
+     * narrows the NEGATIVE of a `this is X` predicate by `Exclude`, and an {@link AnyContextKey} is
+     * `ContextKey<unknown, Trust>` — a single type, not a union of the two branches — so there is
+     * nothing to exclude and the key stays mixed. A positive predicate per branch is the only form that
+     * types the branch it guards, which is why both exist and why neither takes an argument saying
+     * which one you meant.
+     *
+     * This is what makes a loop over a mixed `AnyContextKey[]` — the {@link HeaderRegistry} arrays, a
+     * browser-log payload re-stated into a detached scope — safe BY CONSTRUCTION: the loop can only
+     * write a key whose trust it has just tested, and a trusted key cannot reach `putUntrusted` at all,
+     * so a loop fed by a source that proves nothing cannot fabricate a proven value, and nobody has to
+     * remember to filter. That is a limit on the SOURCE, not on the key: a trusted key is written all
+     * the time via `putTrusted`, by an authenticator or by app code that proved the value out of band.
+     */
+    isUntrusted(): this is ContextKey<V, 'untrusted'> {
+        return this.trust === 'untrusted';
     }
 
     /**

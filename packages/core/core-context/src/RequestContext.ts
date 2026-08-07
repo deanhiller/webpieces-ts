@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { ContextKey, AnyContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
-import { CapturedContext, ContextCaptureAuthority } from './CapturedContext';
+import { CapturedContext, ContextCaptureAuthority, RestorableContext } from './CapturedContext';
 
 /** Reserved context key under which the current HttpRequest is stored. */
 const HTTP_REQUEST_KEY = '__webpieces_http_request__';
@@ -38,6 +38,10 @@ class RequestContextImpl {
      * With this guard the setup is right or it is loud. It mirrors
      * `RequestContextHeaders.fillFromRequest()`, which throws when there is NO active scope.
      *
+     * If you genuinely WANT a fresh empty scope inside an active one — work that must not inherit the
+     * surrounding request's actionId/requestId — that is {@link runDetachedScope}, which says so by
+     * name. This guard exists to stop the ACCIDENTAL empty scope, not the deliberate one.
+     *
      * @throws Error when a RequestContext is already active.
      */
     run<T>(fn: () => T): T {
@@ -45,7 +49,10 @@ class RequestContextImpl {
             throw new Error(
                 'RequestContext.run(...) called inside an active RequestContext. Nesting installs a ' +
                 'fresh empty context that shadows the outer one: its values go invisible and a second ' +
-                'request id is minted. Exactly ONE scope per request — the transport opens it.',
+                'request id is minted. Exactly ONE scope per request — the transport opens it. If you ' +
+                'MEANT a fresh empty scope that does not inherit this one (a browser-log line, work ' +
+                'reconstructed from an external payload), use RequestContext.runDetachedScope(fn) and ' +
+                'write its values inside the closure with putTrusted/putUntrusted.',
             );
         }
         // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
@@ -61,8 +68,14 @@ class RequestContextImpl {
      *
      * A restored context legitimately contains TRUSTED values — reinstating what the original scope
      * proved is the entire point — so this cannot type-check its contents the way the trust verbs do.
-     * The guarantee instead comes from the PAYLOAD: a {@link CapturedContext} can only be produced by
-     * {@link copyContext}, so there is no hand-assembled Map to hand it and no way to forge one.
+     * The guarantee instead comes from the PAYLOAD: a {@link RestorableContext} can only be narrowed
+     * out of a {@link CapturedContext}, which only {@link copyContext} produces, so there is no
+     * hand-assembled Map to hand it and no way to forge one.
+     *
+     * The caller must SAY whether the proven identity travels — `snapshot.withTrusted()` (runs as that
+     * user) or `snapshot.withoutTrusted()` (runs as the system, keeping only the trace fields). A bare
+     * `CapturedContext` is deliberately not accepted; see {@link CapturedContext} for the three-case
+     * table and why the wide branch is spelled out rather than defaulted.
      *
      * The snapshot is copied into a fresh store, so writes inside `fn` stay inside `fn` and the
      * snapshot stays reusable.
@@ -73,8 +86,73 @@ class RequestContextImpl {
      * opened per job is correct, not a mistake. Prefer this over {@link restoreContext} unless you
      * specifically need the CURRENT scope overwritten in place.
      */
-    runWithContext<T>(captured: CapturedContext, fn: () => T): T {
+    runWithContext<T>(captured: RestorableContext, fn: () => T): T {
         return this.storage.run(captured.toFreshStore(ContextCaptureAuthority.INTERNAL), fn);
+    }
+
+    /**
+     * Open a FRESH, EMPTY, NESTED scope. Nothing is inherited from the enclosing scope, and nothing
+     * crosses the boundary as data — every value the work runs under is WRITTEN INSIDE `fn`, through
+     * the ordinary trust-typed verbs:
+     *
+     * ```typescript
+     * RequestContext.runDetachedScope(() => {
+     *     RequestContext.putUntrusted(WebpiecesCoreHeaders.ACTION_ID, line.actionId);
+     *     emit();   // runs under exactly what this closure wrote, and nothing else
+     * });
+     * ```
+     *
+     * ## When you want THIS and not {@link runWithContext}
+     *
+     * The two look similar and are opposites. `runWithContext` faithfully RE-ROOTS a real snapshot of a
+     * real scope, for work whose async chain was broken (a queued job, a timer flush) — it exists to
+     * PRESERVE a context. This one exists to DISCARD one: the values do not come from any scope this
+     * process ever had, they were reconstructed from somewhere else, and inheriting the ambient scope
+     * would be actively wrong.
+     *
+     * The live case is a browser-log shipper. A batch of browser lines arrives on one HTTP request; each
+     * line carries the context the BROWSER captured when it was written, and a single batch routinely
+     * spans several user actions. Emitting a line under the shipping request's own scope would stamp
+     * every line with that request's actionId and requestId, silently destroying the ability to grep an
+     * action while the feature still appeared to work. So each line is emitted detached, under exactly
+     * the keys the closure re-stated from the browser's payload.
+     *
+     * ## Why it MAY nest when {@link run} may not
+     *
+     * `run`'s nesting guard is right and is not softened here. It refuses a second EMPTY scope because
+     * there an empty scope is always an ACCIDENT — a transport opening the request scope twice, whose
+     * only effect is to hide the outer scope's values and mint a second request id. Here an empty scope
+     * is the thing that was ASKED for, in a distinctly-named verb, and the caller is normally already
+     * inside a request scope (the shipper's own). A guard would refuse the only situation the method has.
+     *
+     * ## No Map-taking form, ever
+     *
+     * There is deliberately no overload accepting a `Map`, an object, or an array of entries. That was
+     * the DELETED `runWithContext(map, fn)`, and it was a forgery path: a hand-built map is
+     * indistinguishable from a genuine snapshot, so `new Map([['userId','victim']])` minted a proven
+     * identity in one line without ever typing a trust verb. Writing the values INSIDE the closure is
+     * what closes it — a loop over a mixed `AnyContextKey[]` must branch on `key.isTrusted()` before it
+     * can write anything, and `putUntrusted` does not compile for a trusted key, so code fed by a
+     * BROWSER (which proves nothing) cannot fabricate a proven value. (See
+     * `DetachedScopeCompileAssertions`.)
+     *
+     * That is a limit on the SOURCE, not on the key. `putTrusted` inside a detached scope is ordinary
+     * and correct whenever the caller has actually proven the value — a verified JWT claim, or the
+     * signed-webhook case where Twilio/WhatsApp proves the phone number and the app looks up the
+     * userId. Trust is tamper-resistance, not secrecy (a trusted `userId` is a plain, fully-logged
+     * GUID; redaction is the separate `maskInLogs` axis on the key).
+     *
+     * SYNC AND ASYNC BOTH: `fn` may return a promise, and the detached scope follows every `await`
+     * inside it exactly as `run`/`runWithContext` do — same `AsyncLocalStorage.run` underneath. The
+     * enclosing scope is reinstated for everything after the synchronous return, INCLUDING when `fn`
+     * throws (AsyncLocalStorage unwinds the store as the frame unwinds); an async `fn` that is not
+     * awaited will therefore keep the detached scope for its own continuation while the caller has
+     * already resumed under the enclosing one, which is the intended and only sane reading of "detached".
+     */
+    runDetachedScope<T>(fn: () => T): T {
+        // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
+        const store = new Map<string, any>();
+        return this.storage.run(store, fn);
     }
 
     /**
@@ -382,22 +460,26 @@ class RequestContextImpl {
      * must be re-pointed in place.
      *
      * OVERWRITE, not merge — `clear()` runs first, so every entry the active scope holds and the
-     * snapshot does not is DROPPED. That includes the empty case: `restoreContext(copyContext())`
-     * taken outside a scope wipes the request id and every proven identity from a live request, and
-     * says nothing. That is faithful (a snapshot restores exactly what it captured) but it is the
-     * sharp edge of this method and the reason `runWithContext` is the default.
+     * snapshot does not is DROPPED. That includes the empty case:
+     * `restoreContext(copyContext().withTrusted())` taken outside a scope wipes the request id and
+     * every proven identity from a live request, and says nothing. That is faithful (a snapshot
+     * restores exactly what it captured) but it is the sharp edge of this method and the reason
+     * `runWithContext` is the default.
      *
-     * Takes only a {@link CapturedContext} for the reason spelled out there — the DELETED Map-taking
-     * form let `new Map([['userId','victim']])` forge a proven identity in one line.
+     * Takes only a {@link RestorableContext} for the reason spelled out there — the DELETED Map-taking
+     * form let `new Map([['userId','victim']])` forge a proven identity in one line — and that type
+     * exists only via `withTrusted()` / `withoutTrusted()`, so this call site states whether the proven
+     * identity survives the re-point.
      *
      * @throws Error when no RequestContext is active.
      */
-    restoreContext(captured: CapturedContext): void {
+    restoreContext(captured: RestorableContext): void {
         const store = this.storage.getStore();
         if (!store) {
             throw new Error(
                 'No context available to restore into. Either open one with RequestContext.run(...) ' +
-                'first, or use RequestContext.runWithContext(captured, fn), which opens its own.',
+                'first, or use RequestContext.runWithContext(captured.withTrusted(), fn) — or ' +
+                '.withoutTrusted() — which opens its own.',
             );
         }
         captured.restoreInto(ContextCaptureAuthority.INTERNAL, store);

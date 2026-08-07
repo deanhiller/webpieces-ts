@@ -10,6 +10,12 @@ export { RequestContext } from './RequestContext';
 // class object from the package surface, so there is no factory to reach and copyContext() really is
 // the only producer. (ContextCaptureAuthority is not exported here in any form.)
 export type { CapturedContext } from './CapturedContext';
+// The narrowed snapshot — what withTrusted() / withoutTrusted() produce and what
+// runWithContext()/restoreContext() accept. A bare CapturedContext is NOT accepted by either, so every
+// call site states whether the proven identity travels with the work (`grep -rn withTrusted`) or is
+// deliberately dropped (`grep -rn withoutTrusted`). Type-only for the same reason as above: with no
+// class object on the surface there is no `of(...)` factory to reach, cast or not.
+export type { RestorableContext } from './CapturedContext';
 // SERVER impl of the core-util ApiCallContext seam, bound to RequestContext. Importing it here runs
 // its install() side effect, so LogApiCall (core-util, browser-safe) stamps the real RequestContext on
 // a Node server without importing it. A browser never loads core-context → keeps the no-op.
