@@ -11,19 +11,10 @@ import { refreshMainSync } from './sync-main';
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
-// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
-// spec still names one logical stream and the path it checks is the real one production builds.
-const STREAM_OF: Record<string, string> = {
-    'guard-invocations': CALLS_STREAM,
-    'guard-sync-decisions': L2_DECISIONS_STREAM,
-    'guard-async-work': ASYNC_REFRESH_STREAM,
-    'hook-rejection': REJECTIONS_STREAM,
-};
-function streamName(base: string): string {
-    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
-    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
-    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
-    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
 }
 
 
@@ -39,7 +30,7 @@ let root: string;
 const service = new MainSyncStatusService();
 
 function asyncLog(): string {
-    const logPath = path.join(root, '.webpieces', 'logs', streamName('guard-async-work.log'));
+    const logPath = path.join(root, '.webpieces', 'logs', streamName(ASYNC_REFRESH_STREAM));
     return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 

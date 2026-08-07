@@ -101,7 +101,7 @@ function computeRelativePath(filePath: string, cwd: string): string {
 /**
  * The rule names a block report cites — every `[<rule-name>] (` header it opens with. Exported because
  * two audit streams need the same answer from the same regex: this file's rejection index, and the
- * `rule=` field guard-invocations.log now carries (see InvocationLog.finish). Two scrapers would be
+ * `rule=` field the `calls/` stream now carries (see InvocationLog.finish). Two scrapers would be
  * two answers to one question.
  */
 // webpieces-disable no-function-outside-class -- pure regex scraper beside this module's other module-scope helpers; exported so the invocation log and the rejection index scrape rule names with the SAME code.

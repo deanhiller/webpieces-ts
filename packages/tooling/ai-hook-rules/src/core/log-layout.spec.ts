@@ -14,19 +14,10 @@ import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream, StreamIdentity, logStream } from './log-stream';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM, ALL_LOG_STREAMS } from './log-streams';
-// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
-// spec still names one logical stream and the path it checks is the real one production builds.
-const STREAM_OF: Record<string, string> = {
-    'guard-invocations': CALLS_STREAM,
-    'guard-sync-decisions': L2_DECISIONS_STREAM,
-    'guard-async-work': ASYNC_REFRESH_STREAM,
-    'hook-rejection': REJECTIONS_STREAM,
-};
-function streamName(base: string): string {
-    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
-    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
-    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
-    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
 }
 // The process-wide stream is what production writes through, so a test that identifies it must put it
 // back — otherwise the next test's filenames stop matching streamName()'s unidentified default.
@@ -90,7 +81,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         exerciseEveryWriter(root);
 
         const logs = filesIn(path.join(root, '.webpieces', LOGS_STATE_DIR));
-        for (const expected of [streamName('guard-invocations.log'), streamName('guard-sync-decisions.log'), streamName('guard-async-work.log'), streamName('hook-rejection.log')]) {
+        for (const expected of [streamName(CALLS_STREAM), streamName(L2_DECISIONS_STREAM), streamName(ASYNC_REFRESH_STREAM), streamName(REJECTIONS_STREAM)]) {
             expect(logs, `missing ${expected}`).toContain(expected);
         }
         // L1's OWN stream. It had none: its blocks were filed under L2's name and its allows were not
@@ -102,7 +93,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         const root = tmpRoot();
         // 0 bytes on every measured run; it is written only when the child dies before its own
         // logging, which is exactly when you want it interleaved with the SPAWN_ATTEMPT above it.
-        expect(refresherChildStdioPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName('guard-async-work.log')));
+        expect(refresherChildStdioPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName(ASYNC_REFRESH_STREAM)));
     });
 
     it('puts ONLY stream directories directly under logs/', () => {

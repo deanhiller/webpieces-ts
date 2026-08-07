@@ -183,7 +183,7 @@ export class DotWebpieces {
         return path.join(this.local(startDir), LOGS_STATE_DIR);
     }
 
-    /** A path beneath the log directory — `dotWebpieces.logsFile(root, 'guard-invocations.log')`. */
+    /** A path beneath the log directory — `dotWebpieces.logsFile(root, CALLS_STREAM, writerFile)`. */
     logsFile(startDir: string, ...segments: string[]): string {
         return path.join(this.logs(startDir), ...segments);
     }

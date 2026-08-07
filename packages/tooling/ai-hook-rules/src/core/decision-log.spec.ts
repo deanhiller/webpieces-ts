@@ -11,19 +11,10 @@ import { InvocationLog, logGuardDecision, GuardDecision, Verdict } from './decis
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
-// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
-// spec still names one logical stream and the path it checks is the real one production builds.
-const STREAM_OF: Record<string, string> = {
-    'guard-invocations': CALLS_STREAM,
-    'guard-sync-decisions': L2_DECISIONS_STREAM,
-    'guard-async-work': ASYNC_REFRESH_STREAM,
-    'hook-rejection': REJECTIONS_STREAM,
-};
-function streamName(base: string): string {
-    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
-    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
-    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
-    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
 }
 
 
@@ -39,8 +30,8 @@ function logOne(root: string, tool: string, target: string, verdict: Verdict = '
     log.finish(verdict, rule);
 }
 
-const LOG_REL = `.webpieces/logs/${streamName('guard-invocations.log')}`;
-const DECISION_LOG_REL = `.webpieces/logs/${streamName('guard-sync-decisions.log')}`;
+const LOG_REL = `.webpieces/logs/${streamName(CALLS_STREAM)}`;
+const DECISION_LOG_REL = `.webpieces/logs/${streamName(L2_DECISIONS_STREAM)}`;
 
 // The temp dirs are not git repos and have no webpieces.config.json, so resolveRepoRoot falls back to
 // the passed dir (the temp root) and branchForLog returns 'unknown' — exactly the fail-open behavior
@@ -105,14 +96,14 @@ describe('InvocationLog', () => {
         const logsDir = path.join(root, '.webpieces/logs');
         // streamName() already carries the stream segment, so only the DIRECTORY needs creating here.
         fs.mkdirSync(path.join(logsDir, CALLS_STREAM), { recursive: true });
-        fs.writeFileSync(path.join(logsDir, streamName('guard-invocations.log')), 'x'.repeat(512 * 1024 + 10));
+        fs.writeFileSync(path.join(logsDir, streamName(CALLS_STREAM)), 'x'.repeat(512 * 1024 + 10));
         logOne(root, 'Bash', 'ls');
-        expect(fs.existsSync(path.join(logsDir, streamName('guard-invocations.1.log')))).toBe(true);
-        expect(fs.readFileSync(path.join(logsDir, streamName('guard-invocations.log')), 'utf8')).toContain('\tBash\t');
+        expect(fs.existsSync(path.join(logsDir, streamName(CALLS_STREAM, '.1.log')))).toBe(true);
+        expect(fs.readFileSync(path.join(logsDir, streamName(CALLS_STREAM)), 'utf8')).toContain('\tBash\t');
     });
 
     // The read-only fast path (hook-core.ts) logs a Read via this same class, so the file the AI
-    // opened lands in guard-invocations.log — this is the "did it read design.json first?" signal.
+    // opened lands in the `calls/` stream — this is the "did it read design.json first?" signal.
     it('records a Read of a design.json so opened files are visible in the history', () => {
         const root = tmpRoot();
         logOne(root, 'Read', 'packages/tooling/pr-gate/design.json');
@@ -124,7 +115,7 @@ describe('InvocationLog', () => {
 
 /**
  * THE VERDICT FIELDS. A line that says what the guard SAW but not what it DID forced every "what
- * happened to this call?" question through a timestamp join against guard-sync-decisions.log. These
+ * happened to this call?" question through a timestamp join against the L2 decision stream. These
  * lock the outcome onto the invocation stream itself.
  */
 describe('InvocationLog — the outcome lives on the invocation line', () => {

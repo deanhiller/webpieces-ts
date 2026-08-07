@@ -56,7 +56,7 @@ export function denyJson(reason: string, toolName: string): string {
 // PreToolUse protocol (exit 0 + JSON = the contract), so the process.exit stays and is allowlisted.
 //
 // Being the ONE boundary every path exits through is also why the per-invocation audit line is
-// flushed HERE: guard-invocations.log carries the outcome of its own call, and the outcome is not
+// flushed HERE: the `calls/` stream carries the outcome of its own call, and the outcome is not
 // known until this point. `rule` names what blocked (or '-'), for the line's `rule=` field.
 //
 // `fault` is the L0 fault code when the block IS an L0 fault (S/C/Y — the three decided here in JS,

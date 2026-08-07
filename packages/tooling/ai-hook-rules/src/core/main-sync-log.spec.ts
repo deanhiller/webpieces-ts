@@ -8,19 +8,10 @@ import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
-// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
-// spec still names one logical stream and the path it checks is the real one production builds.
-const STREAM_OF: Record<string, string> = {
-    'guard-invocations': CALLS_STREAM,
-    'guard-sync-decisions': L2_DECISIONS_STREAM,
-    'guard-async-work': ASYNC_REFRESH_STREAM,
-    'hook-rejection': REJECTIONS_STREAM,
-};
-function streamName(base: string): string {
-    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
-    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
-    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
-    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
 }
 
 
@@ -28,7 +19,7 @@ function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-synclog-'));
 }
 
-const LOG_REL = `.webpieces/logs/${streamName('guard-async-work.log')}`;
+const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
 
 describe('main-sync-log', () => {
     it('appends one tab-separated line with phase, pid, branch and detail', () => {
@@ -45,10 +36,10 @@ describe('main-sync-log', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
         fs.mkdirSync(path.join(logsDir, ASYNC_REFRESH_STREAM), { recursive: true });
-        fs.writeFileSync(path.join(logsDir, streamName('guard-async-work.log')), 'x'.repeat(512 * 1024 + 10));
+        fs.writeFileSync(path.join(logsDir, streamName(ASYNC_REFRESH_STREAM)), 'x'.repeat(512 * 1024 + 10));
         logSyncEvent(root, new SyncLogEvent('FINISH', 1, 'main', 'ok'));
-        expect(fs.existsSync(path.join(logsDir, streamName('guard-async-work.1.log')))).toBe(true);
-        expect(fs.readFileSync(path.join(logsDir, streamName('guard-async-work.log')), 'utf8')).toContain('\tFINISH\t');
+        expect(fs.existsSync(path.join(logsDir, streamName(ASYNC_REFRESH_STREAM, '.1.log')))).toBe(true);
+        expect(fs.readFileSync(path.join(logsDir, streamName(ASYNC_REFRESH_STREAM)), 'utf8')).toContain('\tFINISH\t');
     });
 
     it('collapses newlines/tabs in detail so one event is always one line', () => {
@@ -60,6 +51,6 @@ describe('main-sync-log', () => {
     });
 
     it('refresherChildStdioPath points inside .webpieces/logs', () => {
-        expect(refresherChildStdioPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName('guard-async-work.stderr.log')));
+        expect(refresherChildStdioPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName(ASYNC_REFRESH_STREAM)));
     });
 });

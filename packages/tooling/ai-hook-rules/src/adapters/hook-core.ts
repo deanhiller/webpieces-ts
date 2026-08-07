@@ -28,7 +28,7 @@ export type { HookMode };
 const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 // Read-only tools carry NO guard or code rule, but the guards hook owns the per-invocation audit log
-// (guard-invocations.log). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
+// (the `calls/` stream). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
 // log-and-allow fast path records every file the AI opens — so a human can later inspect whether it
 // read a project's design.json BEFORE editing the project. Never blocked. Scoped to Read for now;
 // widen (Grep/Glob/NotebookRead) later if desired.
@@ -292,7 +292,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
-    // grep finds it here as in the sh half's ai-hook-shim.log.
+    // grep finds it here as in the sh half's `L0-shim/` stream.
     emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
 }
 
@@ -344,7 +344,7 @@ export async function runMain(mode: HookMode): Promise<void> {
             emitAllow();
         }
 
-        // Per-invocation guard log (guard-invocations.log): tool + command/file + live branch +
+        // Per-invocation guard log (the `calls/` stream): tool + command/file + live branch +
         // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-effort;
         // never blocks the call. (The committed shim is no longer silently healed here — a mismatch is
         // reported by the self-guard above, not rewritten out from under the AI.)

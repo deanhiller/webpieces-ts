@@ -36,8 +36,8 @@ export class StreamIdentity {
  *     is absent for every one of them — so agent identity alone cannot tell them apart.
  *
  * `O_APPEND` is indivisible only under `PIPE_BUF`, which is **512 bytes on macOS**. Measured
- * 2026-08-06 across three repos: `guard-invocations.log` 208/3306 lines (6.3%) exceed it, max 608 B;
- * `guard-sync-decisions.log` 209/4097 (5.1%), max 625 B. So this tears TODAY, and the corrupted line
+ * 2026-08-06 across three repos: the invocation stream 208/3306 lines (6.3%) exceed it, max 608 B;
+ * the decision stream 209/4097 (5.1%), max 625 B. So this tears TODAY, and the corrupted line
  * is exactly the long one — the `recover=` line a human needs most.
  *
  * ─── The key: the LAYER is the directory, the WRITER is the file ──────────────────────────────────

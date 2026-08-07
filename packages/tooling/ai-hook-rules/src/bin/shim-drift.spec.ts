@@ -7,7 +7,7 @@ import { ShimTestkit } from './shim-testkit';
 import { L0_SHIM_STREAM } from '../core/log-streams';
 
 // The sh audit log now carries the same stream prefix as the JS side
-// (<session|unknown>-<agent|coordinator>-<binName>-ai-hook-shim.log), so specs LOCATE the stream
+// (logs/L0-shim/<session|unknown>-<agent|coordinator>-<binName>.log), so specs LOCATE the stream
 // rather than hard-coding a name — which also proves exactly one stream file was written.
 function shimLogPath(root: string): string {
     // The LAYER is the directory now: L0's shim writes into `logs/L0-shim/<writer>.log`.

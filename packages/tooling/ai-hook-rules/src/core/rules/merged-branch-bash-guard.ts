@@ -28,7 +28,7 @@ import { ContentReadScan } from './content-read-scan';
  * checked-out branch's PR is already merged into main, but BOTH are file-scoped: a `runBash()` command
  * never reaches either. So an agent that only ran shell — `scripts/local.sh start lang` (boots
  * servers), `cat`/`ls` of repo files, git — sailed through, even though the very same
- * `branchAlreadyMerged` flag was loaded and logged on the Bash path (`guard-invocations.log` →
+ * `branchAlreadyMerged` flag was loaded and logged on the Bash path (the `calls/` stream →
  * `merged=PR#…`). It was computed and thrown away; nothing consulted it for a block.
  *
  * Those two file guards intentionally leave Bash alone ("every cure is a Bash command, so Bash is the

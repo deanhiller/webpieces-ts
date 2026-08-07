@@ -5,8 +5,8 @@ import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
 
 // ---------------------------------------------------------------------------
 // THE L0 AUDIT LOG, in POSIX sh — the shim half of
-// `.webpieces/**/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`. The stream prefix is
-// the sh twin of ai-hook-rules' LogStream.fileName(): wp-ai-guards-hook and wp-ai-rules-hook are run
+// `.webpieces/**/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log`. The writer key is
+// the sh twin of ai-hook-rules' LogStream.writerFile(): wp-ai-guards-hook and wp-ai-rules-hook are run
 // IN PARALLEL by Claude Code on every file edit, so an unsplit name means two writers, one file, and
 // torn appends above PIPE_BUF. A payload with no session_id renders 'unknown', never a bare name —
 // there is no un-prefixed spelling on either side.

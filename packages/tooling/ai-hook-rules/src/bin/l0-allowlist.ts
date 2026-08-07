@@ -13,7 +13,7 @@ import { CONFIG_FILENAME } from '@webpieces/rules-config';
 // The OUTPUT-CAPTURE TAIL every escape hatch below tolerates — the 2026-07-21 deadlock report, part 2.
 // Every allowlist was anchored to a BARE command, but the way an AI assistant actually spells a
 // diagnostic command is `<cmd> 2>&1 | tail -20` (it trims the output it has to read back). The audit
-// log proves it: `.webpieces/logs/<stream>ai-hook-shim.log` has `pnpm install 2>&1 | tail -15` logged as
+// log proves it: `.webpieces/logs/L0-shim/<writer>.log` has `pnpm install 2>&1 | tail -15` logged as
 // DENY-STALE seconds away from a bare `pnpm install` logged as ALLOW-INSTALL — the same cure, denied
 // for its redirection. A cure that is denied when spelled the natural way reads to the assistant as
 // "the guard blocks its own fix", which is exactly the conclusion it drew before handing the fix back

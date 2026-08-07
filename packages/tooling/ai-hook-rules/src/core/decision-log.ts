@@ -198,7 +198,7 @@ export class GuardInvocation {
 /**
  * The per-INVOCATION stream — `.webpieces/logs/calls/<writer>.log` (see LogStream for the writer
  * key), one line for EVERY guards-hook
- * call (allow or block, bash or file), unlike guard-sync-decisions.log which records only the calls a
+ * call (allow or block, bash or file), unlike `L2-decisions/` which records only the calls a
  * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
  * main-sync-status.json snapshot (branch / merged / fork-point / conflict), and — since this class
  * replaced a bare log-and-forget function — HOW THE CALL ENDED.
@@ -282,7 +282,7 @@ export class InvocationLog {
                 // pointing at the primary is the straddle, without diffing two absolute paths.
                 `tree=${dotWebpieces.worktreeName(invocation.root) || 'primary'}`,
                 // WHICH L0 fault ended this call, in the same letters and the same field name the L0 sh
-                // shim uses (ai-hook-shim.log) — so ONE grep spans the whole trail.
+                // shim uses (the `L0-shim/` stream) — so ONE grep spans the whole trail.
                 `fault=${fault}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);
