@@ -257,6 +257,15 @@ describe('mergeMode NONE — "a human clicks merge" repos', () => {
         expect(outcome.message).toContain('mergeMode is NONE');
         expect(outcome.message).toContain('My PR title (#7)');
     });
+
+    // The half that used to go unsaid. A UI merge substitutes the BODY too, and on a repo whose
+    // squash_merge_commit_message is PR_BODY that means the whole dashboard lands in `git log` — which
+    // is what happened to two consumer repos. The remedy has to be NAMED here, not merely available.
+    it('names the BODY substitution and points at wp-land-pr, not just the subject', () => {
+        const [outcome] = mergeIn([0], true, MERGE_MODE_NONE);
+        expect(outcome.message).toContain('squash_merge_commit_message');
+        expect(outcome.message).toContain('pnpm wp-land-pr');
+    });
 });
 
 describe('an unknown or missing mergeMode — the fail-safe', () => {

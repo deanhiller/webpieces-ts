@@ -185,7 +185,19 @@ export class FinishBanner {
             return '   Nothing else is owed: GitHub lands it when the checks go green. You can stop here.\n';
         }
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
-            return '   Nothing else is owed by the tooling — a person merges it. You can stop here.\n';
+            return '   Nothing else is owed by the tooling — a person merges it. You can stop here.\n' +
+                '\n' +
+                '   ℹ️  HOW it gets merged decides what main\'s history says. Clicking Merge in the GitHub UI\n' +
+                '       writes the commit body from squash_merge_commit_message — on PR_BODY that is the\n' +
+                '       ENTIRE dashboard (risk table, hash points, gate token) pasted into `git log`. The\n' +
+                '       compact PR-link/risk/flags body the gate just rendered can ONLY be written by an\n' +
+                '       explicit `gh pr merge --body-file`, which is what this is:\n' +
+                '\n' +
+                '           pnpm wp-land-pr        # squash-merges THIS branch\'s PR with the gated body\n' +
+                '\n' +
+                '       It is not gated on mergeMode — running it IS the intent to merge — so a NONE repo\n' +
+                '       keeps its "a human decides when" policy AND gets a readable history. Ask the human\n' +
+                '       to merge; if they want you to do it, that is the command.\n';
         }
         return '';
     }
