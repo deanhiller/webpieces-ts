@@ -6,6 +6,20 @@ import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-
 // top-level `pr-gate` key in webpieces.config.json. It is built and validated by
 // loadAndValidate (load-config.ts); this module holds only the data classes + defaults + toGate.
 
+/**
+ * The build the pr-gate runs when a repo configures no `commands.pr-gate.buildCommand` — and the ONE
+ * definition of it, because two things now need it: the gate that RUNS it (pr-gate's BuildAffected)
+ * and the guard that REFUSES a whole-monorepo build and prints it instead (ai-hook-rules'
+ * whole-repo-build-guard). A second copy in either package is a message that can teach a command the
+ * gate does not run.
+ *
+ * `--base=$(git merge-base origin/main HEAD)` — the FORK POINT, not `origin/main`: basing on
+ * origin/main marks projects touched by other people's already-merged PRs as affected. The `$(…)`
+ * resolves because the gate spawns with `shell: true`; the guard resolves it itself before printing,
+ * so the AI is never handed a template it might paste somewhere without a shell.
+ */
+export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
+
 export class GateDefinition {
     name: string;
     patterns: string[];

@@ -26,8 +26,8 @@ migration project. That mechanism, packaged and reusable across companies, is th
 
 | Package | Stage / role | What it does |
 |---|---|---|
-| **`ai-hook-rules`** | **Edit time** (PreToolUse hook) | Refuses an agent's bad write *before the code exists*, returning the reason and the fix. Also holds workflow guards (feature-branch, stale-read, merge-in-progress, PR/merge). The stage with no pre-AI equivalent. |
-| **`code-rules`** | **Build time** (`wp-ci`, run by `pnpm build-all`) | ~30 diff-scoped validators, plus whole-repo invariants a single-file hook can't see (di-graph, import cycles, runtime-architecture, nx-wiring). Catches whatever bypassed the hook — a human in an editor, a different agent, a merge. |
+| **`ai-hook-rules`** | **Edit time** (PreToolUse hook) | Refuses an agent's bad write *before the code exists*, returning the reason and the fix. Also holds workflow guards (feature-branch, stale-read, merge-in-progress, PR/merge, whole-repo-build). The stage with no pre-AI equivalent. |
+| **`code-rules`** | **Build time** (`wp-ci`, run per project by `nx affected --target=ci`) | ~30 diff-scoped validators, plus whole-repo invariants a single-file hook can't see (di-graph, import cycles, runtime-architecture, nx-wiring). Catches whatever bypassed the hook — a human in an editor, a different agent, a merge. |
 | **`pr-gate`** | **PR time** (`wp-finish-upsert-pr`) | Re-runs the gate authoritatively before a PR is created/updated, and renders the risk dashboard. Local greens are convenience; this is the record. |
 | **`rules-config`** | Shared core | One implementation of *what a rule is* — mode resolution, epoch expiry, suppression spelling — consumed by all three stages. The published schema for `webpieces.config.json`. |
 | **`nx-webpieces-rules`** | Nx integration | Wires validation into the Nx build graph and the architecture visualizers. |

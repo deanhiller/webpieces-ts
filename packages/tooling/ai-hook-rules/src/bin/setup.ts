@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -18,7 +18,10 @@ import {
 export { renderShim };
 
 const CONFIG_FILENAME = 'webpieces.config.json';
-const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
+// The seeded buildCommand comes from @webpieces/rules-config, NOT from a copy here. This file used to
+// hold its own — with `--base=origin/main`, a DIFFERENT base from the one the gate documents — so a
+// freshly set-up repo was seeded with a command that rebuilds projects touched by other people's
+// merged PRs, and whole-repo-build-guard then quoted that command back in its refusals.
 const DEFAULT_UPSERT_PR = 'pnpm wp-start-upsert-pr';
 const DEFAULT_MERGE_COMPLETE = 'pnpm wp-finish-upsert-pr';
 

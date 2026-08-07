@@ -42,7 +42,7 @@ inside the renderer, and there is no third place. The byte-lock spec fails on an
 for consumers, wrong for the copy people read on GitHub. So the root files are **not** written by the
 runtime hook. They are byte-locked by a vitest spec that calls the local `render*Doc()` — and vitest
 resolves `@webpieces/*` to local source via `tsconfig.base.json` paths, so there is no lag at all. A
-stale root doc fails `build-all`, exactly like `validate-architecture-unchanged`. No repo-detection
+stale root doc fails the affected build, exactly like `validate-architecture-unchanged`. No repo-detection
 hack, and consumers keep getting the published copy at block time.
 
 ## The layers

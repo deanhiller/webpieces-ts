@@ -101,7 +101,7 @@ exactly what the previous one structurally cannot.**
   ┌──────────────────────┐        ┌──────────────────────┐      ┌──────────────────────┐
   │  @webpieces/         │        │  @webpieces/         │      │  @webpieces/         │
   │  ai-hook-rules       │        │  code-rules          │      │  pr-gate             │
-  │  PreToolUse hook     │        │  wp-ci (build-all)   │      │  wp-finish-upsert-pr │
+  │  PreToolUse hook     │        │  wp-ci (nx affected) │      │  wp-finish-upsert-pr │
   ├──────────────────────┤        ├──────────────────────┤      ├──────────────────────┤
   │ blocks the write     │        │ fails the build on   │      │ authoritative gate;  │
   │ BEFORE bad code      │        │ the diff, whoever    │      │ nothing merges       │
@@ -120,11 +120,13 @@ the hook runs.
 
 Beyond the code rules, this layer holds **workflow guards** — `feature-branch-guard` (don't edit on
 `main`), `read-stale-guard` (don't reason about an already-merged branch), `merge-in-progress-guard`,
-`branch-creation-guard`, `pr-merge-guard`. These encode process, not syntax: an agent physically
+`branch-creation-guard`, `pr-merge-guard`, `whole-repo-build-guard` (don't build the whole monorepo —
+run the affected build). These encode process, not syntax: an agent physically
 cannot start work in the wrong place. Configured under `hookGuards` in `webpieces.config.json`.
 
-**Build time — `packages/tooling/code-rules/`.** ~30 validators run from `wp-ci` (which
-`pnpm build-all` invokes). This catches anything that bypassed the hook: a human in an editor, a
+**Build time — `packages/tooling/code-rules/`.** ~30 validators run from `wp-ci`, which the affected
+build (`pnpm nx affected --target=ci --base=<fork point>`) invokes per project. This catches anything
+that bypassed the hook: a human in an editor, a
 different agent, a merge that reintroduced something. Also where the whole-repo invariants live that
 a single-file hook cannot see — `di-graph`, `no-file-import-cycles`, `runtime-architecture`,
 `nx-wiring`, `missing-design-annotation`.

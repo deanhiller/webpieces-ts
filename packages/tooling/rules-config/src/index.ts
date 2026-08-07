@@ -128,6 +128,7 @@ export {
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
+    WholeRepoBuildGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
@@ -186,6 +187,7 @@ export {
 export {
     GateDefinition,
     PrGateConfig,
+    DEFAULT_BUILD_COMMAND,
     LandPrConfig,
     DevDeployConfig,
     DEFAULT_DEV_BRANCH_NAMESPACE,

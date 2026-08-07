@@ -85,7 +85,7 @@ npx nx run architecture:generate
 ### Step 5: Verify
 
 ```bash
-npm run build-all
+pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)
 ```
 
 ## Important Notes

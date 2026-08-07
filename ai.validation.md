@@ -160,7 +160,7 @@ lint target
 ## NPM Scripts
 
 ```bash
-npm run build-all               # Run CI target on affected projects (runs all validations)
+pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)   # CI target on AFFECTED projects only (runs all validations)
 npm run arch:generate           # Generate architecture/dependencies.json
 npm run arch:visualize          # Open interactive dependency graph
 ```

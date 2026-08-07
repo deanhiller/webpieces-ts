@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver, InformAiError, RepoRootFinder, WorktreeService, toError } from '@webpieces/rules-config';
 
 import { LandPrCommand } from './land-pr-command';
+import { RepoConfigFixture } from '../workflow/repo-config-testkit';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
@@ -51,23 +52,12 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 /**
- * THIS repo's own webpieces.config.json, minus `checklists`.
- *
- * The real file is used (rather than a hand-rolled minimal one) so the spec exercises the same
- * validator the tool really faces — a hand-written stub would drift out from under it on the next
- * config change. `checklists` is dropped because its `doc` paths are validated as REPO-RELATIVE and
- * point at `.claude/review/*.md`, which exist in this repo and not in a temp clone; landing never reads
- * them.
+ * THIS repo's own webpieces.config.json, prepared for a temp clone by RepoConfigFixture — the real file
+ * rather than a hand-rolled stub, so the spec exercises the same validator the tool really faces.
  */
 function writeConfig(dir: string): void {
-    const source = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'webpieces.config.json');
-    // webpieces-disable no-any-unknown -- the repo's own config, opaque here; only one key is removed
-    const config = JSON.parse(fs.readFileSync(source, 'utf8')) as Record<string, unknown>;
-    // webpieces-disable no-any-unknown -- narrowing one nested section to delete a single key
-    const commands = config['commands'] as Record<string, Record<string, unknown>>;
-    delete commands['pr-gate']['checklists'];
-    delete commands['pr-gate']['checklistsWhy'];
-    fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify(config, null, 4) + '\n');
+    const fixture = new RepoConfigFixture();
+    fixture.writeTo(dir, fixture.load());
 }
 
 // A clone of "acme/widgets" with a main commit and the feature branch checked out.

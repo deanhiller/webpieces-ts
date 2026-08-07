@@ -131,6 +131,13 @@ export class ConfigLoader {
         if (mergeInProgress && mergeInProgress['mergeCompleteCommand'] === undefined) {
             mergeInProgress['mergeCompleteCommand'] = commands.mergeComplete;
         }
+        // The whole-repo build guard REFUSES a build of the world and prints the narrow command
+        // instead. That command must be the one this repo's gate actually runs — the guard hard-coding
+        // its own copy is how a message starts teaching a command the project no longer uses.
+        const wholeRepoBuild = rules['whole-repo-build-guard'];
+        if (wholeRepoBuild && wholeRepoBuild['affectedBuildCommand'] === undefined) {
+            wholeRepoBuild['affectedBuildCommand'] = commands.prGate.buildCommand;
+        }
     }
 
     // webpieces-disable no-any-unknown -- merging opaque option bags from config JSON

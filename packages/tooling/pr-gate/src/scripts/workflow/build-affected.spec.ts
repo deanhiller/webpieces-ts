@@ -6,6 +6,7 @@ import * as path from 'path';
 import { CliExitError, HomeConfig, HomeConfigService, toError } from '@webpieces/rules-config';
 import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
+import { RepoConfigFixture } from './repo-config-testkit';
 
 const dirs: string[] = [];
 let written = '';
@@ -53,22 +54,19 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 /**
- * A git repo carrying THIS repo's own webpieces.config.json (minus `checklists`, whose `doc` paths are
- * validated repo-relative and do not exist in a temp clone), with `buildCommand` swapped for `command`.
- * Using the real config means the spec faces the same validator the tool really faces.
+ * A git repo carrying THIS repo's own webpieces.config.json (see RepoConfigFixture), with
+ * `buildCommand` swapped for `command`. Using the real config means the spec faces the same validator
+ * the tool really faces.
  */
 function repoWithBuild(command: string): string {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-buildgate-')));
     dirs.push(dir);
-    const source = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'webpieces.config.json');
-    // webpieces-disable no-any-unknown -- the repo's own config, opaque here; two keys are edited
-    const config = JSON.parse(fs.readFileSync(source, 'utf8')) as Record<string, unknown>;
+    const fixture = new RepoConfigFixture();
+    const config = fixture.load();
     // webpieces-disable no-any-unknown -- narrowing one nested section
     const commands = config['commands'] as Record<string, Record<string, unknown>>;
-    delete commands['pr-gate']['checklists'];
-    delete commands['pr-gate']['checklistsWhy'];
     commands['pr-gate']['buildCommand'] = command;
-    fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify(config, null, 4) + '\n');
+    fixture.writeTo(dir, config);
     git(dir, 'init', '-q', '-b', 'main');
     git(dir, 'config', 'core.hooksPath', '/dev/null');
     git(dir, 'config', 'user.email', 'spec@example.com');

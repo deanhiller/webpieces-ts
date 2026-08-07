@@ -1,15 +1,14 @@
 import { spawnSync } from 'child_process';
-import { loadAndValidate, CliExitError, HomeConfigService } from '@webpieces/rules-config';
+import { loadAndValidate, CliExitError, HomeConfigService, DEFAULT_BUILD_COMMAND } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 
-// Single source of truth for the build gate. Only `wp-finish-upsert-pr` runs it (authoritatively,
-// before the one push) — `wp-start-upsert-pr` deliberately runs NO build gate, so `pr-gate.buildCommand`
-// is a finish-only knob. nx `affected` only rebuilds changed projects.
-// `--base=$(git merge-base origin/main HEAD)` (the fork point) instead of `--base=origin/main`:
-// origin/main rebuilds projects touched by OTHER people's merged PRs. The fork point scopes affected to
-// only YOUR branch's changes. The `$(...)` resolves because runBuildAffected runs with shell: true.
-export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
+// Single source of truth for RUNNING the build gate. `wp-start-upsert-pr` runs NO build; stage ②
+// (`wp-review-upsert-pr`) runs it authoritatively before any reviewer is spawned, and stage ③
+// (`wp-finish-upsert-pr`) re-runs it only when HEAD has moved since. nx `affected` only rebuilds
+// changed projects. The fallback command itself lives in @webpieces/rules-config as
+// DEFAULT_BUILD_COMMAND — whole-repo-build-guard prints the same string, and one definition is what
+// keeps the refusal message naming the build that actually runs.
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
