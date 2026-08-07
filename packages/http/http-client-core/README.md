@@ -11,7 +11,12 @@ The isomorphic engine behind the webpieces HTTP clients. You almost certainly wa
 This package holds what they share: `ProxyClient` (contract decorators → HTTP request),
 `buildClientProxy` (the typed `Proxy` trap), `ClientTarget`, and `ClientErrorTranslator`.
 
-The one seam between the two environments is `OutboundHeaders` (in `@webpieces/core-util`):
-`RequestContextHeaders` on the server, `ContextMgr` in a browser. Keeping that a seam is what
-lets this package depend on nothing but `core-util`, so no node-only import can reach a browser
-bundle.
+The one seam between the two environments is the abstract `ProxyClient.outboundContextHeaders(destination)`:
+`RequestContextHeaders` answers it on the server (via `@webpieces/core-context`), `ContextMgr` (in
+`@webpieces/core-util`) in a browser. Keeping that a seam is what lets this package depend on
+nothing but `core-util`, so no node-only import can reach a browser bundle.
+
+`destination` is a `DestinationTrust`, derived here from the route's own `AuthMode`, and it decides
+whether TRUSTED context keys (`x-user-id`, `x-org-id`, `x-webpieces-roles`) ride along: only an
+endpoint that authenticates its caller (`@AuthOidc` / `@AuthSharedSecret`) receives them. Untrusted
+keys always travel. See `docs/architecture/context-propagation.md`.

@@ -148,6 +148,10 @@ export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
 
+// The OUTBOUND half of the trust model: whether a TRUSTED context key may ride to the endpoint being
+// called. Built ONLY from the destination endpoint's AuthMode — see the class doc.
+export { DestinationTrust } from './http/DestinationTrust';
+
 // BROWSER-ONLY outbound-header propagation (app-held store + registry -> outbound HTTP headers).
 // Only @webpieces/http-client-browser may name it; the server reads RequestContext directly via
 // RequestContextHeaders in the Node-only @webpieces/core-context.

@@ -9,6 +9,7 @@ import {
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
     AuthMode,
+    DestinationTrust,
     MaskSpec,
     LogManager,
     LogApiCall,
@@ -126,7 +127,7 @@ export class TaskProxyClient {
                 plan.path,
                 plan.queueName,
                 requestDto,
-                this.buildContextHeaders(),
+                this.buildContextHeaders(plan.authMode),
                 plan.authMode,
                 frame.info ?? new ScheduleInfo(),
             );
@@ -165,15 +166,23 @@ export class TaskProxyClient {
     }
 
     /**
-     * Every transferred context key (txId/requestId/tenant…), request-id chained.
-     * Throws if there is no active RequestContext — an enqueue with no trace is a bug.
+     * Every transferred context key (txId/requestId/tenant…) the DELIVERY endpoint may receive,
+     * request-id chained. Throws if there is no active RequestContext — an enqueue with no trace is
+     * a bug.
      *
      * No credential can appear here: `authorization` is read off the inbound HttpRequest and is not
      * a ContextKey, so it never enters the RequestContext to be transferred. The invoker mints the
      * task's own delivery auth per the endpoint's @AuthOidc / @AuthSharedSecret mode.
+     *
+     * TRUSTED keys DO flow on this path, and that is the point of deriving {@link DestinationTrust}
+     * from `plan.authMode` rather than hardcoding it: a task is delivered under the OIDC token the
+     * invoker mints, so the delivery endpoint authenticates its caller and its AuthFilter admits the
+     * userId/orgId we vouched for. A @PubSub endpoint declared @Public or @AuthJwt would not, and it
+     * correctly stops receiving them — the enqueue keeps working, minus context the callee would
+     * have 401'd on.
      */
-    private buildContextHeaders(): Map<string, string> {
-        return this.headers.buildOutboundHeaders();
+    private buildContextHeaders(authMode: AuthMode): Map<string, string> {
+        return this.headers.buildOutboundHeaders(DestinationTrust.forAuthMode(authMode));
     }
 }
 

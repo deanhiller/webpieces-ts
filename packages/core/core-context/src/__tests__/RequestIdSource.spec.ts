@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { AuthMode, DestinationTrust, HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { HttpRequest } from '../HttpRequest';
 import { RequestContext } from '../RequestContext';
 import { RequestContextHeaders } from '../RequestContextHeaders';
 
 const headers = new RequestContextHeaders();
+
+// requestId is UNTRUSTED, so it travels to every destination; the narrowest one proves that.
+const PUBLIC_DESTINATION: AuthMode = { kind: 'public' };
 
 beforeEach(() => {
     HeaderRegistry.configure([], /*platformHeaders*/ true);
@@ -64,7 +67,7 @@ describe('REQUEST_ID_SOURCE records who MINTED the request id', () => {
         RequestContext.run(() => {
             headers.fillFromRequest(new HttpRequest('POST', '/p', new Map()));
 
-            const outbound = headers.buildOutboundHeaders();
+            const outbound = headers.buildOutboundHeaders(DestinationTrust.forAuthMode(PUBLIC_DESTINATION));
 
             // The id itself DOES travel — one id correlates the whole call tree...
             expect(outbound.get('x-request-id')).toBeDefined();

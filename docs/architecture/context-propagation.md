@@ -130,9 +130,18 @@ and (for transferred keys) propagate to the next hop — **without** the token i
 `packages/core/core-context/src/RequestContextHeaders.ts` — "the magic context ↔ the wire, for a
 SERVER. Both directions live here," and it fails fast outside a `run(...)` scope.
 
-- **Outbound** `buildOutboundHeaders()`: loop `getTransferredKeys()`, read each from context, emit
-  under `key.httpHeader`; `x-request-id` propagates unchanged; overwrite `CLIENT_VERSION` with this
-  service's version. Values are **raw** (unmasked) — this map goes on the wire, not into logs.
+- **Outbound** `buildOutboundHeaders(destination)`: loop `getTransferredKeys()`, read each from
+  context, emit under `key.httpHeader`; `x-request-id` propagates unchanged; overwrite
+  `CLIENT_VERSION` with this service's version. Values are **raw** (unmasked) — this map goes on the
+  wire, not into logs.
+
+  `destination` is a `DestinationTrust`, and it is the OUTBOUND half of the trust rule below. A
+  **trusted** key is emitted only when the destination endpoint authenticates its CALLER
+  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / undeclared endpoint it is
+  omitted, because that endpoint's `AuthFilter` is obliged to reject it — sending it would 401 our
+  own request. Untrusted keys always travel. `DestinationTrust.forAuthMode(route.authMeta?.mode)` is
+  the only way to build one, so the caller cannot assert a posture the route does not have, and
+  there is no permissive default to fall into.
 - **Inbound** `fillFromRequest(request)`: `setRequest(request)`, stamp `HTTP_METHOD`/`REQUEST_PATH`,
   loop `getTransferredKeys()` and route each header by the key's TRUST: an untrusted key is written
   straight in, a **trusted** one is stashed in `PendingWireTrust` and NOT written. This fill runs at
@@ -142,19 +151,26 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   `@AuthJwt`/`@Public` requires an exact match from the authenticator or rejects the request. If there
   is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
 
-The Node client (`NodeProxyClient.outboundHeaders()`) uses the exact same
-`buildOutboundHeaders()`; the server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps
-each request in `RequestContext.run(...)` then calls `fillFromRequest`.
+The Node client (`NodeProxyClient.outboundContextHeaders(destination)`) uses the exact same
+`buildOutboundHeaders(destination)`, with the destination derived from the route being called; the
+server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps each request in
+`RequestContext.run(...)` then calls `fillFromRequest`. The BROWSER twin
+(`ContextMgr.buildOutboundHeaders(destination)`) applies the same rule, and never reaches the
+permissive branch: `BrowserProxyClient` refuses to bind an `@AuthOidc`/`@AuthSharedSecret` contract
+at all, so every browser destination is `@AuthJwt` or `@Public`.
 
 ## Propagation **through a Cloud Tasks queue**
 
 This is the part most systems can't do. When a service enqueues a task
-(`TaskProxyClient.enqueue`), it calls the **same** `buildOutboundHeaders()` and hands the result to
-the invoker, which writes those headers onto the delivered task:
+(`TaskProxyClient.enqueue`), it calls the **same** `buildOutboundHeaders(destination)` — with the
+destination derived from the `@PubSub` endpoint's own auth mode — and hands the result to the
+invoker, which writes those headers onto the delivered task. A task is delivered under an OIDC token
+the invoker mints, so that endpoint authenticates its caller and the **trusted** keys (`orgId`,
+`userId`) propagate through the queue exactly as they do over a direct RPC hop:
 
 ```
 website (mints actionId) → server1 inbound fillFromRequest (mints requestId)
-   → TaskProxyClient.enqueue → buildOutboundHeaders() → GcpTaskInvoker.buildTask
+   → TaskProxyClient.enqueue → buildOutboundHeaders(destination) → GcpTaskInvoker.buildTask
    → context headers become the Cloud Task's HTTP-target headers
    → [ GCP Cloud Tasks queue ]
    → delivered as a real HTTP POST to server2's filter chain

@@ -6,6 +6,7 @@ import {
     isFormPost,
     getMaskSpec,
     AuthMeta,
+    DestinationTrust,
     RouteMetadata,
     ProtocolError,
     LogApiCall,
@@ -53,8 +54,22 @@ export abstract class ProxyClient {
     /** The callee's base URL. Async because a server may derive it from container metadata. */
     protected abstract resolveBaseUrl(): Promise<string>;
 
-    /** Context headers to put on the wire. Server reads RequestContext; browser reads its store. */
-    protected abstract outboundHeaders(): Map<string, string>;
+    /**
+     * Context headers to put on the wire. Server reads RequestContext; browser reads its store.
+     *
+     * `destination` is derived from THIS route's auth mode and decides whether TRUSTED context keys
+     * (`x-user-id`, `x-org-id`, `x-webpieces-roles`) may ride along — see {@link DestinationTrust}.
+     * It is a required argument on purpose: a defaulted "send everything" would put the permissive
+     * answer one keystroke away and make the safe one opt-in.
+     *
+     * RENAMED from `outboundHeaders()` in the same change that added `destination`, and the rename IS
+     * the migration. TypeScript accepts an override that declares FEWER parameters than its base, so a
+     * downstream `protected override outboundHeaders(): Map<string, string>` would have kept compiling
+     * and silently ignored the gate — the permissive behaviour surviving as a second spelling. Against
+     * the NEW name that subclass fails twice over: `override` names a member the base no longer has,
+     * and this abstract member is left unimplemented.
+     */
+    protected abstract outboundContextHeaders(destination: DestinationTrust): Map<string, string>;
 
     /**
      * Attach the endpoint's outbound credential. Service-to-service auth (@AuthOidc bearer,
@@ -210,9 +225,10 @@ export abstract class ProxyClient {
         };
 
         // Transferred context, request-id chained. The server impl throws here when there is no
-        // active RequestContext — an outbound call with no trace is a bug, not a default.
-        const outboundHeaders = this.outboundHeaders();
-        for (const entry of outboundHeaders.entries()) {
+        // active RequestContext — an outbound call with no trace is a bug, not a default. The
+        // destination's own auth mode decides whether trusted keys are part of that set.
+        const contextHeaders = this.outboundContextHeaders(DestinationTrust.forAuthMode(route.authMeta?.mode));
+        for (const entry of contextHeaders.entries()) {
             httpHeaders[entry[0]] = entry[1];
         }
 
