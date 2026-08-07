@@ -48,7 +48,7 @@ openclaw plugins enable @webpieces/ai-hook-rules
   (`hookGuards` section): bash git/PR guards on `Bash`, and file guards like
   `feature-branch-guard` on `Write|Edit|MultiEdit`. `Read` carries no guard — it is a
   log-and-allow fast path that records every file the AI opens in
-  `.webpieces/logs/<session>-<agent>-<hook>-guard-invocations.log`
+  `.webpieces/logs/calls/<session>-<agent>-<hook>.log`
   (never blocked), so you can see whether the AI read a project's `design.json` before editing it.
 
 For each guard hook the setup command prompts for a target: project `.claude/settings.json`,

@@ -10,7 +10,12 @@ import { refreshMainSync } from './sync-main';
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
-function streamName(base: string): string { return new LogStream().fileName(base); }
+import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
+}
 
 
 /**
@@ -25,7 +30,7 @@ let root: string;
 const service = new MainSyncStatusService();
 
 function asyncLog(): string {
-    const logPath = path.join(root, '.webpieces', 'logs', streamName('guard-async-work.log'));
+    const logPath = path.join(root, '.webpieces', 'logs', streamName(ASYNC_REFRESH_STREAM));
     return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 

@@ -13,7 +13,8 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner, CommandSegment } from '../command-scan';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
@@ -28,7 +29,7 @@ import { ContentReadScan } from './content-read-scan';
  * checked-out branch's PR is already merged into main, but BOTH are file-scoped: a `runBash()` command
  * never reaches either. So an agent that only ran shell — `scripts/local.sh start lang` (boots
  * servers), `cat`/`ls` of repo files, git — sailed through, even though the very same
- * `branchAlreadyMerged` flag was loaded and logged on the Bash path (`guard-invocations.log` →
+ * `branchAlreadyMerged` flag was loaded and logged on the Bash path (the `calls/` stream →
  * `merged=PR#…`). It was computed and thrown away; nothing consulted it for a block.
  *
  * Those two file guards intentionally leave Bash alone ("every cure is a Bash command, so Bash is the
@@ -74,7 +75,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     check(ctx: BashContext): readonly Violation[] {
         const branch = this.currentBranch(ctx.workspaceRoot);
         // Can't determine the branch (not a git repo, git unavailable) → never block. Fail-open.
-        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command. (The
         // runner also warms it, but only when feature-branch-guard is loaded — do it here too so this
@@ -84,13 +85,13 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first command of the session), or a branch this refresh has not seen → allow;
         // the refresh we just spawned populates it.
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: the entry was looked up BY `branch`, so
         // a mismatch is a shape bug rather than the old "cache is for another branch" state. Kept so
         // such a bug degrades to an allow. Unreachable in normal operation.
-        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
 
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
 
@@ -179,13 +180,28 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         return `cache=${status.branch} merged=${merged} conflict=${String(status.conflict)} ts=${status.timestamp}`;
     }
 
+    /**
+     * The guard could not ESTABLISH the state it judges on, so it judged nothing.
+     *
+     * A sibling of allow() rather than a reason string passed to it, because the difference has to
+     * reach the LOG as a value: `ALLOW_FAIL_OPEN` vs `ALLOW`. It was previously a `' (fail-open)'`
+     * suffix on the free-text reason, which meant an abstention and a real approval were the same
+     * verdict and the abstentions could not be counted — so nobody could tell whether these guards
+     * were protecting anything or quietly standing down. Never block on data you could not
+     * establish; but say out loud, in a field, that you did not establish it.
+     */
+    private failOpen(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_FAIL_OPEN', reason, cache);
+        return [];
+    }
+
     private allow(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'ALLOW', reason, cache);
         return [];
     }
 
     private block(ctx: BashContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
         return [new V(1, this.truncate(ctx.command), message)];
     }
 
@@ -194,10 +210,10 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         return s.length <= MAX ? s : s.slice(0, MAX) + '…';
     }
 
-    private logDecision(ctx: BashContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+    private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('merged-branch-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache),
+            new GuardDecision('merged-branch-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
         );
     }
 

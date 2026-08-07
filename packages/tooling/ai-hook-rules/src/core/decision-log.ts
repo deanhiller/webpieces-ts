@@ -3,27 +3,70 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
+import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-streams';
 
 import { L0_FAULT_NONE } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
-// the ASYNC log (guard-async-work.log, written by the detached refresher in main-sync-log.ts). This
+// the ASYNC log (the `async-refresh/` stream, written by the detached refresher in main-sync-log.ts). This
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/logs/<stream>guard-sync-decisions.log`
-// (see LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside `hooks/`'s non-log state).
-const LOG_FILE = 'guard-sync-decisions.log';
-const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
-// The per-INVOCATION stream (companion to the per-DECISION log above): one line for every guards-hook
-// call, so cleanup automation can mine tool + branch + sync-status + OUTCOME over time. See InvocationLog.
-const INVOCATION_LOG_FILE = 'guard-invocations.log';
-const INVOCATION_LOG_FILE_PREV = 'guard-invocations.1.log';
+// traceable to a stale or missing async write. Writes to `.webpieces/logs/L2-decisions/<writer>.log` —
+// the LAYER is the directory, the WRITER is the file (see log-streams.ts and LogStream).
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
 const MAX_TARGET_LEN = 160;
 
-export type Verdict = 'ALLOW' | 'BLOCK';
+/**
+ * THE ACTION CODEBOOK, as a type. These are the five actions GUARD_MATRIX.md numbers 1-5, and they
+ * are the vocabulary EVERY layer reports in — so one grep spans L-1, L0, L1 and L2.
+ *
+ * The three distinctions this exists to make, none of which `'ALLOW' | 'BLOCK'` could:
+ *
+ *   ALLOW            no objection — the call was HANDED DOWN to the next layer. A layer saying ALLOW
+ *                    is NOT saying the call ran: the layer below it, or the PARALLEL L-1 hook, may
+ *                    still deny. This is L1's `ACT_DOWN`.
+ *   ALLOW_EXEMPT     out of scope by construction — allowed, and evaluation STOPS here. L1's
+ *                    `ACT_EXEMPT`.
+ *   ALLOW_FAIL_OPEN  state could not be established, so nothing was judged. Keeping this distinct
+ *                    from ALLOW is the entire point of the type: a fail-open allow and a real allow
+ *                    that look identical make it impossible to tell whether the guards are protecting
+ *                    anything or quietly abstaining. It used to be a `' (fail-open)'` SUBSTRING on the
+ *                    reason field, which is exactly why the abstentions were never countable.
+ *   BLOCK_AI_CURE    blocked, and the printed cure is a command the AI can run itself.
+ *   BLOCK_HUMAN      blocked, and it needs a human decision — or a delegation (spawn a subagent) that
+ *                    the blocked agent cannot perform for itself.
+ *
+ * Hard cut, per CLAUDE.md: `'BLOCK'` is GONE rather than aliased, so every construction site fails to
+ * compile and has to say which kind of block it is. Before, that question had exactly one wrong
+ * answer available — silence.
+ */
+export type Verdict = 'ALLOW' | 'ALLOW_EXEMPT' | 'ALLOW_FAIL_OPEN' | 'BLOCK_AI_CURE' | 'BLOCK_HUMAN';
+
+/**
+ * WHICH ROW of WHICH layer's decision table produced this line. Data-only → a class, per CLAUDE.md.
+ *
+ * `row` is the row NUMBER from the layer's row array (`L1_ROWS[i].num`, `LMINUS1_ROWS[i].num`) — the
+ * same number the generated doc prints, because the doc is rendered from that same array. So a log
+ * line joins to its matrix row BY NUMBER, and checking observed behaviour against the documented use
+ * cases becomes a lookup rather than an investigation. `'-'` for a layer with no row array yet (L2).
+ */
+export class MatrixRef {
+    constructor(readonly layer: string, readonly row: string) {}
+}
+
+/**
+ * The layer tokens. `row` is `'-'` for a layer with no row array YET (L2 is the un-converted one, and
+ * L0's faults are a table of letters rather than numbered rows) — but the LAYER is always named, so
+ * `grep layer=L2` works today and the row fills in when L2 converts.
+ *
+ * These are REQUIRED at the constructor, not defaulted: a defaulted `MatrixRef` would make the
+ * uncited case reachable by doing nothing and impossible to grep — the same defect this file's own
+ * docblock argues against for `'BLOCK'`, where silence was the one wrong answer available.
+ */
+export const MATRIX_L0 = new MatrixRef('L0', '-');
+export const MATRIX_L2 = new MatrixRef('L2', '-');
 
 // Data-only record of one guard decision (per CLAUDE.md: classes for data, not object literals).
 // `cache` summarizes the async-written main-sync-status.json that drove a feature-branch-guard
@@ -44,9 +87,11 @@ export class GuardDecision {
      * even while an S storm was blocking every call.
      */
     fault: string;
+    /** Which layer + row decided this. See MatrixRef — it is what joins a log line to the doc. */
+    matrix: MatrixRef;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string = L0_FAULT_NONE) {
+    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string, matrix: MatrixRef) {
         this.rule = rule;
         this.tool = tool;
         this.target = target;
@@ -55,13 +100,14 @@ export class GuardDecision {
         this.reason = reason;
         this.cache = cache;
         this.fault = fault;
+        this.matrix = matrix;
     }
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/logs/<stream>guard-sync-decisions.log`,
- * where <stream> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>-` prefix (empty when the
- * caller never identified renders as `unknown-coordinator-hook-` — there is no un-prefixed name).
+ * Append one tab-separated line per L2 decision to `.webpieces/logs/L2-decisions/<writer>.log`, where
+ * <writer> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>` key (a caller that never
+ * identified renders as `unknown-coordinator-hook` — there is no un-keyed name).
  * `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
@@ -70,16 +116,42 @@ export class GuardDecision {
  */
 // webpieces-disable no-function-outside-class -- the module-scope writer this log has always been, beside branchForLog/oneLine/rotateLogFile; it must stay callable from a tree too broken to build a DI container
 export function logGuardDecision(root: string, decision: GuardDecision): void {
+    appendDecision(root, L2_DECISIONS_STREAM, decision);
+}
+
+/**
+ * The L1 stream — `.webpieces/logs/L1-location/<writer>.log`.
+ *
+ * L1 had NO stream. Its three blocking paths wrote into L2's file under an implementation name
+ * (`force-to-root`, `coordinator-in-worktree`, `cd-must-be-first`), and its NON-blocking outcomes —
+ * the exempt row and the three hand-down rows — wrote nothing at all. So "L1 had no objection" was
+ * unobservable, and "show me every L1 decision" had no answer: L1 existed in the trail only as the
+ * `root=` / `projectDir=` / `tree=` columns stapled onto somebody else's line.
+ *
+ * A SIBLING rather than a `base` parameter on logGuardDecision, deliberately: that signature is what
+ * the process-wide `logStream` singleton exists to keep unchanged (see LogStream's docblock), and
+ * `INVOCATION_LOG_FILE` already establishes the pattern of a second stream owning its own name in
+ * this same module.
+ */
+// webpieces-disable no-function-outside-class -- sibling of logGuardDecision, same module-scope writer shape and same reason
+export function logL1Decision(root: string, decision: GuardDecision): void {
+    appendDecision(root, L1_LOCATION_STREAM, decision);
+}
+
+// The one appender both streams share. `streamDir` is the LAYER; the writer key inside it is
+// logStream's session/agent/hook, which is what keeps one writer per file.
+// webpieces-disable no-function-outside-class -- the shared body of the two module-scope writers above
+function appendDecision(root: string, streamDir: string, decision: GuardDecision): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const timestamp = new Date().toISOString();
         // LOCAL scope: a guard decision belongs to the tree it judged. WHO made the call is answered
-        // by the filename, which logStream prefixes with session/agent/hook.
-        const logsDir = dotWebpieces.logs(root);
+        // by the filename, which logStream names with session/agent/hook.
+        const logsDir = dotWebpieces.logsFile(root, streamDir);
         fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
-        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
+        const logPath = path.join(logsDir, logStream.writerFile('.log'));
+        rotateLogFile(logPath, path.join(logsDir, logStream.writerFile('.1.log')));
 
         const line = [
             `[${timestamp}]`,
@@ -90,6 +162,11 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             decision.rule,
             oneLine(decision.reason),
             oneLine(decision.cache),
+            // WHICH ROW of WHICH table decided this. The directory already carries the layer, but a
+            // line quoted out of its file must still say what judged it — and `row=` is the join key
+            // to the generated doc, which is the point of the whole exercise.
+            `layer=${decision.matrix.layer}`,
+            `row=${decision.matrix.row}`,
             // The tree this decision was actually made against, and what Claude Code told the hook the
             // project was. Appended (never reordered) for the same reason as on the invocation line —
             // see ClaudeEnv: when these two disagree, that disagreement is the bug.
@@ -128,16 +205,16 @@ export class GuardInvocation {
 }
 
 /**
- * The per-INVOCATION stream — `.webpieces/logs/<stream>guard-invocations.log` (see LogStream for the
- * `<stream>` prefix), one line for EVERY guards-hook
- * call (allow or block, bash or file), unlike guard-sync-decisions.log which records only the calls a
+ * The per-INVOCATION stream — `.webpieces/logs/calls/<writer>.log` (see LogStream for the writer
+ * key), one line for EVERY guards-hook
+ * call (allow or block, bash or file), unlike `L2-decisions/` which records only the calls a
  * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
  * main-sync-status.json snapshot (branch / merged / fork-point / conflict), and — since this class
  * replaced a bare log-and-forget function — HOW THE CALL ENDED.
  *
  * WHY IT IS TWO CALLS. The line used to be written the moment the hook started, so it could not carry
  * a verdict: the decision had not been made yet. Answering "what happened to this call?" therefore
- * meant joining this file against guard-sync-decisions.log BY TIMESTAMP, which is exactly the kind of
+ * meant joining this file against the L2 decision stream BY TIMESTAMP, which is exactly the kind of
  * reconstruction a log exists to make unnecessary. So {@link begin} now only CAPTURES (including the
  * git/cache reads, which must still happen while the hook is running), and {@link finish} — called
  * from the hook's single terminal boundary, emitAllow/emitDeny — writes the whole line once the
@@ -175,7 +252,7 @@ export class InvocationLog {
      *
      * `rule` is the rule that blocked, or '-' when there is none; `fault` is the L0 fault code when this
      * call ended on one (S/C/Y — the JS-side faults), else '-'. FIELD ORDER IS APPEND-ONLY: the five
-     * original fields keep their positions (cleanup automation mines this file), and `verdict=` /
+     * original fields keep their positions (cleanup automation mines this file), and `guards=` /
      * `rule=` / … / `fault=` are added at the end.
      */
     finish(verdict: Verdict, rule: string, fault: string = L0_FAULT_NONE): void {
@@ -184,10 +261,10 @@ export class InvocationLog {
         if (invocation === null) return;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const logsDir = dotWebpieces.logs(invocation.root);
+            const logsDir = dotWebpieces.logsFile(invocation.root, CALLS_STREAM);
             fs.mkdirSync(logsDir, { recursive: true });
-            const logPath = path.join(logsDir, logStream.fileName(INVOCATION_LOG_FILE));
-            rotateLogFile(logPath, path.join(logsDir, logStream.fileName(INVOCATION_LOG_FILE_PREV)));
+            const logPath = path.join(logsDir, logStream.writerFile('.log'));
+            rotateLogFile(logPath, path.join(logsDir, logStream.writerFile('.1.log')));
 
             const line = [
                 `[${invocation.timestamp}]`,
@@ -195,7 +272,14 @@ export class InvocationLog {
                 invocation.target,
                 `branch=${invocation.branch}`,
                 invocation.sync,
-                `verdict=${verdict}`,
+                // `guards=`, NOT `verdict=`. This hook can only report on ITSELF. Claude Code runs all
+                // three PreToolUse hooks IN PARALLEL, so the L-1 `guarantee-root.sh` process may deny a
+                // call this one had no objection to, and neither can see the other's answer. Measured:
+                // `cd <repo>/packages && ls` was DENIED by L-1 and recorded here three times as
+                // `verdict=ALLOW`. The old field name promised an outcome it structurally cannot know;
+                // the TRUE final action is the JOIN of this stream with `L-1-cd/`, keyed by the
+                // identical writer name — which is what docs/tooling-logs.md now states.
+                `guards=${verdict}`,
                 `rule=${oneLine(rule) || '-'}`,
                 // The tree the guard ACTED in, next to what Claude Code said the project was. Both, on
                 // every line, because the diagnostic value is entirely in comparing them — see
@@ -207,7 +291,7 @@ export class InvocationLog {
                 // pointing at the primary is the straddle, without diffing two absolute paths.
                 `tree=${dotWebpieces.worktreeName(invocation.root) || 'primary'}`,
                 // WHICH L0 fault ended this call, in the same letters and the same field name the L0 sh
-                // shim uses (ai-hook-shim.log) — so ONE grep spans the whole trail.
+                // shim uses (the `L0-shim/` stream) — so ONE grep spans the whole trail.
                 `fault=${fault}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);

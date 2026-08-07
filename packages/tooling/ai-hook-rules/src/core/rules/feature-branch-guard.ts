@@ -15,7 +15,8 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
 
@@ -57,7 +58,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
 
         const branch = this.currentBranch(ctx.workspaceRoot);
         // Can't determine branch (e.g. not a git repo) → don't block. Fail-open.
-        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // State 1: on main — synchronous, no cache needed.
         if (branch === 'main') {
@@ -70,14 +71,14 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it
         // for the next call. Fail-open: never block on missing data.
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
         // BELT-AND-BRACES since the cache became branch-keyed: we looked this entry up BY `branch`, so
         // a mismatch now means the map's key and the entry's own `branch` field disagree — a shape bug,
         // not a normal state. Kept (rather than deleted) so such a bug degrades to an allow instead of
         // blocking on another branch's signals. Unreachable in normal operation.
-        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
 
         // State 2: this feature branch was already merged into main.
         if (status.branchAlreadyMerged) {
@@ -106,20 +107,35 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     // Log + return for the allow path. Centralizes the decision-log call so every exit of check()
     // is recorded with its reason + the async cache it read (this is the audit trail for "why didn't
     // the guard fire?"). `cache` is the summary of the main-sync-status.json that drove the decision.
+    /**
+     * The guard could not ESTABLISH the state it judges on, so it judged nothing.
+     *
+     * A sibling of allow() rather than a reason string passed to it, because the difference has to
+     * reach the LOG as a value: `ALLOW_FAIL_OPEN` vs `ALLOW`. It was previously a `' (fail-open)'`
+     * suffix on the free-text reason, which meant an abstention and a real approval were the same
+     * verdict and the abstentions could not be counted — so nobody could tell whether these guards
+     * were protecting anything or quietly standing down. Never block on data you could not
+     * establish; but say out loud, in a field, that you did not establish it.
+     */
+    private failOpen(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_FAIL_OPEN', reason, cache);
+        return [];
+    }
+
     private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'ALLOW', reason, cache);
         return [];
     }
 
     private block(ctx: FileContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
         return [new V(1, ctx.relativePath, message)];
     }
 
-    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+    private logDecision(ctx: FileContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),
+            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
         );
     }
 

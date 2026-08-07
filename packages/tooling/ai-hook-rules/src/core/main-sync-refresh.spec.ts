@@ -9,10 +9,15 @@ import { spawnerIdentity } from './sync-main';
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.
 import { LogStream, StreamIdentity } from './log-stream';
-function streamName(base: string): string { return new LogStream().fileName(base); }
+import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+// One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
+// real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
+function streamName(stream: string, suffix: string = '.log'): string {
+    return path.join(stream, new LogStream().writerFile(suffix));
+}
 
 
-const LOG_REL = `.webpieces/logs/${streamName('guard-async-work.log')}`;
+const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
 
 function spawnAttempts(root: string): number {
     const logPath = path.join(root, LOG_REL);
@@ -53,7 +58,7 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
 /**
  * The detached child is a SEPARATE node process with a fresh, unidentified `logStream`. Until the
  * identity was put on its argv, the parent logged SPAWN_ATTEMPT to its own prefixed stream while the
- * child logged START/FINISH/ERROR to the shared `unknown-coordinator-hook-guard-async-work.log` —
+ * child logged START/FINISH/ERROR to a shared, unidentified `unknown-coordinator-hook` writer —
  * one refresh cycle in two files, every agent's child appending to the same shared path (the PIPE_BUF
  * tearing LogStream exists to remove), and the documented "SPAWN_ATTEMPT with no START means the
  * child never launched" check reading as a false failure on every cycle.
@@ -76,14 +81,14 @@ describe('the detached refresher inherits its spawner`s stream identity', () => 
         const child = new LogStream();
         child.identify(spawnerIdentity(['/usr/bin/node', ...refresherArgv('/x.js', '/repo', 30, parent.identity())]));
 
-        expect(child.fileName('guard-async-work.log')).toBe(parent.fileName('guard-async-work.log'));
-        expect(child.fileName('guard-async-work.log')).not.toContain('unknown-coordinator-hook-');
+        expect(child.writerFile('.log')).toBe(parent.writerFile('.log'));
+        expect(child.writerFile('.log')).not.toContain('unknown-coordinator-hook');
     });
 
     it('still prefixes when the spawner never identified — a distinct stream, never a bare name', () => {
         const argv = refresherArgv('/x.js', '/repo', 30, new LogStream().identity());
         const child = new LogStream();
         child.identify(spawnerIdentity(['/usr/bin/node', ...argv]));
-        expect(child.fileName('guard-async-work.log')).toBe('unknown-coordinator-hook-guard-async-work.log');
+        expect(child.writerFile('.log')).toBe('unknown-coordinator-hook.log');
     });
 });

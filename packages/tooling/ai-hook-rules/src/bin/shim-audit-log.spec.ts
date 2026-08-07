@@ -6,9 +6,10 @@ import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/rules-config';
 
-import { renderShim, SHIM_LOG_FILE, SHIM_LOG_FILE_PREV, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RESOLVE_LOG_DIR_SH } from './shim';
+import { renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RESOLVE_LOG_DIR_SH } from './shim';
 import { L0_FAULTS, L0Fault } from '../core/l0-matrix';
 import { ShimTestkit } from './shim-testkit';
+import { L0_SHIM_STREAM } from '../core/log-streams';
 
 const kit = new ShimTestkit();
 
@@ -127,9 +128,12 @@ function bashPayloadFrom(cwd: string, command: string): string {
 // so specs LOCATE the stream rather than hard-coding a name. Finding exactly one file also asserts
 // the split did not accidentally fan a single writer across several.
 function readLog(logDir: string): string {
-    const hits = fs.readdirSync(logDir).filter((n: string): boolean => n.endsWith(SHIM_LOG_FILE));
-    if (hits.length !== 1) throw new Error(`expected 1 ${SHIM_LOG_FILE}, found ${hits.length}: ${hits.join()}`);
-    return fs.readFileSync(path.join(logDir, hits[0]), 'utf8');
+    // `logDir` is the tree's `logs/`; the L0 line lives one level in, under its layer directory.
+    const streamDir = path.join(logDir, L0_SHIM_STREAM);
+    // `.1.log` also ends in `.log` — the LIVE writer is the one that does not.
+    const hits = fs.readdirSync(streamDir).filter((n: string): boolean => n.endsWith('.log') && !n.endsWith('.1.log'));
+    if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
+    return fs.readFileSync(path.join(streamDir, hits[0]), 'utf8');
 }
 
 // Give `root` a guard bin that behaves however the test needs: exit 0 (allow), 2 (block), or 1 (crash).
@@ -183,7 +187,7 @@ describe('L0 audit log routing — per worktree, centralized under the primary',
             kit.runShim(repo.primary, 'wp-ai-guards-hook', bashPayloadFrom(repo.worktree, 'pnpm build'));
             const logDir = path.join(repo.primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature', 'logs');
             expect(readLog(logDir)).toContain('tree=wt-feature');
-            expect(fs.existsSync(path.join(repo.primary, '.webpieces', 'logs', SHIM_LOG_FILE))).toBe(false);
+            expect(fs.existsSync(path.join(repo.primary, '.webpieces', 'logs', L0_SHIM_STREAM))).toBe(false);
         } finally {
             repo.cleanup();
         }
@@ -294,15 +298,15 @@ describe('L0 audit log rotation — 512 KB into a .1.log sibling', () => {
         const root = kit.mktmp();
         installBin(root, 0);
         const logDir = path.join(root, '.webpieces', 'logs');
-        fs.mkdirSync(logDir, { recursive: true });
-        // Seed the stream the shim will actually write to — the name carries the prefix now.
-        const stream = `unknown-coordinator-wp-ai-guards-hook-${SHIM_LOG_FILE}`;
+        // Seed the writer the shim will actually append to, inside its LAYER directory.
+        fs.mkdirSync(path.join(logDir, L0_SHIM_STREAM), { recursive: true });
+        const stream = path.join(L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.log');
         fs.writeFileSync(path.join(logDir, stream), 'x'.repeat(SHIM_LOG_MAX_BYTES + 10));
 
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
 
-        // The sibling gets the identical prefix, so rotation stays within one stream.
-        const prev = `unknown-coordinator-wp-ai-guards-hook-${SHIM_LOG_FILE_PREV}`;
+        // The sibling keeps the identical writer key, so rotation stays within one stream.
+        const prev = path.join(L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.1.log');
         expect(fs.existsSync(path.join(logDir, prev))).toBe(true);
         const live = readLog(logDir);
         expect(live).toContain('PASS-BIN-ALLOW');
@@ -314,9 +318,10 @@ describe('L0 audit log rotation — 512 KB into a .1.log sibling', () => {
         installBin(root, 0);
         const logDir = path.join(root, '.webpieces', 'logs');
         fs.mkdirSync(logDir, { recursive: true });
-        fs.writeFileSync(path.join(logDir, SHIM_LOG_FILE), 'x'.repeat(1024));
+        fs.mkdirSync(path.join(logDir, L0_SHIM_STREAM), { recursive: true });
+        fs.writeFileSync(path.join(logDir, L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.log'), 'x'.repeat(1024));
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        expect(fs.existsSync(path.join(logDir, SHIM_LOG_FILE_PREV))).toBe(false);
+        expect(fs.existsSync(path.join(logDir, L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.1.log'))).toBe(false);
     });
 });
 

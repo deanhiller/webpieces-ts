@@ -44,16 +44,19 @@ clean() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_' \
 wp_cd_log() {              # $1 = verdict, $2 = destination (may be empty)
   {
     [ -n "$CLAUDE_PROJECT_DIR" ] || return 0
-    _d="$CLAUDE_PROJECT_DIR/.webpieces/logs"
+    _d="$CLAUDE_PROJECT_DIR/.webpieces/logs/L-1-cd"
     mkdir -p "$_d" 2>/dev/null || return 0
-    # Flat name, same scheme as LogStream.fileName(): <session>-<agent|coordinator>-guarantee-root-<base>
-    # ALWAYS prefixed; a missing session_id renders as 'unknown'. No bare-name branch anywhere.
-    _p="$(clean "${SID:-unknown}")-$(clean "${AID:-coordinator}")-guarantee-root-"
-    _f="$_d/${_p}cd-audit.log"
+    # The LAYER is the directory; this is the WRITER, keyed exactly like LogStream.writerFile():
+    # <session>-<agent|coordinator>-guarantee-root.log. ALWAYS keyed; a missing session_id renders as
+    # 'unknown'. No bare-name branch anywhere.
+    _p="$(clean "${SID:-unknown}")-$(clean "${AID:-coordinator}")-guarantee-root"
+    _f="$_d/${_p}.log"
     _sz="$(wc -c < "$_f" 2>/dev/null | tr -d ' ')"
     case "$_sz" in ''|*[!0-9]*) _sz=0 ;; esac
-    [ "$_sz" -gt 524288 ] && mv -f "$_f" "$_d/${_p}cd-audit.1.log" 2>/dev/null
-    printf '%s\t%s\tdest=%s\tcwd=%s\t%s\n' \
+    [ "$_sz" -gt 524288 ] && mv -f "$_f" "$_d/${_p}.1.log" 2>/dev/null
+    # fault=- is a constant here: L-1 detects no L0 fault. It is present so ONE grep spans every
+    # hook-written stream rather than needing a different field list per layer.
+    printf '%s\t%s\tfault=-\tdest=%s\tcwd=%s\t%s\n' \
       "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$1" "$2" "$CWD" "$CMD" >> "$_f"
   } 2>/dev/null || true
 }

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { run, runBash, runRead } from '../core/runner';
 import { AgentIdentity } from '../core/coordinator-worktree';
 import { logRejection, extractRuleNames } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog, invocationLog } from '../core/decision-log';
+import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0, MATRIX_L2 } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -14,7 +14,7 @@ import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVe
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream, StreamIdentity } from '../core/log-stream';
-import { L0_FAULT_SHIM_STALE } from '../core/l0-fault-codes';
+import { L0_FAULT_SHIM_STALE, L0_FAULT_NONE } from '../core/l0-fault-codes';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -28,7 +28,7 @@ export type { HookMode };
 const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 // Read-only tools carry NO guard or code rule, but the guards hook owns the per-invocation audit log
-// (guard-invocations.log). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
+// (the `calls/` stream). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
 // log-and-allow fast path records every file the AI opens — so a human can later inspect whether it
 // read a project's design.json BEFORE editing the project. Never blocked. Scoped to Read for now;
 // widen (Grep/Glob/NotebookRead) later if desired.
@@ -132,11 +132,14 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     const agent = agentIdentityOf(payload);
     const result = runBash(command, cwd, mode, agent);
     if (!result) { emitAllow(); }
-    // Persist the block + WHY. File-tool denies go to hook-rejection.log via logRejection, but a Bash
-    // deny had no audit trail — record it in guard-sync-decisions.log so "blocked and why" is complete
-    // for Bash too. `.webpieces` lives at the repo root, resolved from cwd. Best-effort; never blocks.
-    const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report, '-', result.fault));
+    // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
+    // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its
+    // row, L2's guards into `L2-decisions/` with their rule and cache, and emitDeny below stamps the
+    // call-level outcome onto `calls/`. So this was the THIRD line for one block, and the worst of the
+    // three: it re-resolved the root from `cwd` via RepoRootFinder, which is not necessarily the tree
+    // the guard actually judged, so a `cd`-relocated command scattered one block across two different
+    // `.webpieces` directories.
+    //
     // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
     // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
     emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'), result.fault);
@@ -185,7 +188,7 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
                 root,
-                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
+                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, MATRIX_L2),
             );
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
@@ -285,11 +288,11 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const target = payload.tool_input.command ?? payload.tool_input.file_path ?? '';
     logGuardDecision(
         root,
-        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE),
+        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE, MATRIX_L0),
     );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
-    // grep finds it here as in the sh half's ai-hook-shim.log.
+    // grep finds it here as in the sh half's `L0-shim/` stream.
     emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
 }
 
@@ -341,7 +344,7 @@ export async function runMain(mode: HookMode): Promise<void> {
             emitAllow();
         }
 
-        // Per-invocation guard log (guard-invocations.log): tool + command/file + live branch +
+        // Per-invocation guard log (the `calls/` stream): tool + command/file + live branch +
         // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-effort;
         // never blocks the call. (The committed shim is no longer silently healed here — a mismatch is
         // reported by the self-guard above, not rewritten out from under the AI.)

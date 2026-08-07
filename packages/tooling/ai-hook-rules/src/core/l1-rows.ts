@@ -44,6 +44,20 @@ export type L1ActionKind = 'exempt' | 'down' | 'block';
 export type L1BlockId = 'coordinator-in-worktree' | 'force-to-root';
 
 /**
+ * The row number for L1's PRE-STAGE — `misplacedCdBlock`, which decides from command TEXT before a
+ * tree has been resolved, and therefore cannot be classified over the five dimensions rows 1-6 use
+ * (asking L1_ROWS to classify it would need the very resolution its answer determines).
+ *
+ * ZERO rather than a seventh row, deliberately. It has to appear in the table — an L1 block the
+ * generated doc did not describe is precisely the drift the table exists to prevent, and it was
+ * carrying a `KNOWN GAP` comment saying so. But numbering it 7 would assert it sits in the same
+ * first-match scan as the others, which is the one thing that is not true about it. Row 0 says
+ * "decided before the scan" in the number itself. `renderL1Doc()` PRINTS this row above the six, so
+ * `row=0` in the L1 log joins to a line the reader can actually find.
+ */
+export const L1_PRESTAGE_ROW = '0';
+
+/**
  * One point in the five-dimensional space L1 classifies over. Data-only → a class, per CLAUDE.md.
  *
  * The dimensions are exactly the doc's legend: K (tree kind of the resolved target), A (coordinator or
@@ -196,7 +210,7 @@ export const L1_ROWS: readonly L1Row[] = [
             new L1UseCase(12,
                 'you are the **coordinator**, you ran `git worktree add ../wt`, and `cd ../wt && pnpm build` is blocked',
                 '`w` / `c` / `n` — row 3',
-                'BLOCK',
+                'BLOCK_AI_CURE',
                 'Option 1 (preferred): spawn a subagent bound to `<worktree>` — the Agent tool with worktree isolation, or have the subagent call `EnterWorktree` with `path: <worktree>` (it accepts a worktree you already created)<br>Do NOT: re-type the command, or conclude the harness ate your `cd` — it did not; your GUARDS did not follow it',
                 new L1Classification('w', true, false, false, false)),
         ]),
@@ -204,31 +218,31 @@ export const L1_ROWS: readonly L1Row[] = [
         new L1UseCase(5,
             '`ls` from `packages/http/` runs normally',
             '`pw` / `n` / - — row 4',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — force-to-root has no jurisdiction over non-git commands',
             new L1Classification('p', false, true, false, false)),
         new L1UseCase(6,
             '`pnpm test` from `packages/http/` runs normally',
             '`pw` / `n` / - — row 4',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — deliberately untouched, so package-local test runs stay natural',
             new L1Classification('p', false, false, false, false)),
         new L1UseCase(10,
             '`echo "cd sub && git push"` passes',
             '`pw` / `n` / `root` — row 4',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — the `cd` is inside quotes, so `ShellSegmentScan` never treats it as a scope escape',
             new L1Classification('p', false, false, false, true)),
         new L1UseCase(13,
             'the same command from a **subagent** runs normally',
             '`w` / `s` — row 3 does not match',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — a subagent pinned to a worktree is the correct pattern',
             new L1Classification('w', false, false, false, false)),
         new L1UseCase(14,
             'the coordinator\'s `cd <worktree> && ls`/`cat`/`grep` still runs',
             '`w` / `c` / `y` — row 3 does not match',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you',
             new L1Classification('w', true, true, false, false)),
     ]),
@@ -238,19 +252,19 @@ export const L1_ROWS: readonly L1Row[] = [
             new L1UseCase(7,
                 '`git status` from `packages/http/` is blocked',
                 '`pw` / `y` / `sub` — row 5',
-                'BLOCK',
+                'BLOCK_AI_CURE',
                 'Option 1 (preferred): `cd <root> && git status`',
                 new L1Classification('p', false, false, true, false)),
             new L1UseCase(8,
                 '`cd packages/http && git status` **typed from the root** is blocked',
                 '`pw` / `y` / `sub` — row 5',
-                'BLOCK',
+                'BLOCK_AI_CURE',
                 'Option 1 (preferred): `cd <root> && git status`<br>Do NOT: assume it is allowed because you started at the root — the predicate is `effectiveCwd === root`, i.e. the DESTINATION',
                 new L1Classification('p', false, false, true, false)),
             new L1UseCase(11,
                 '`cd <subdir> && git push` blocked with the force-to-root message, NOT the gated-flow one',
                 '`pw` / `y` / `sub` — row 5; force-to-root runs first',
-                'BLOCK',
+                'BLOCK_AI_CURE',
                 'Option 1 (preferred): `cd <root> && git push`, which then gets the push guard\'s real answer ← costs one extra turn by design; still blocked',
                 new L1Classification('p', false, false, true, false)),
         ]),
@@ -258,7 +272,7 @@ export const L1_ROWS: readonly L1Row[] = [
         new L1UseCase(9,
             '`cd <root> && git status` passes from anywhere',
             '`pw` / `y` / `root` — row 6',
-            '→ L2',
+            'ALLOW (handed to L2)',
             'none — this IS the prescribed cure',
             new L1Classification('p', false, false, true, true)),
     ]),

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { dotWebpieces } from '@webpieces/rules-config';
+import { ASYNC_REFRESH_STREAM } from './log-streams';
 
 import { toError } from './to-error';
 import { logStream } from './log-stream';
@@ -13,12 +14,14 @@ import { logStream } from './log-stream';
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
 // mid-run (START with no FINISH), or threw. Writes to
-// `.webpieces/logs/<stream>guard-async-work.log`, where <stream> is LogStream's
-// `<sessionId>-<agentId|coordinator>-<hook>-` prefix (see
-// LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside the non-log state in `hooks/`).
-const LOG_FILE = 'guard-async-work.log';
-const LOG_FILE_PREV = 'guard-async-work.1.log';
-const STDERR_FILE = 'guard-async-work.stderr.log';
+// `.webpieces/logs/async-refresh/<writer>.log`, where <writer> is LogStream's
+// `<sessionId>-<agentId|coordinator>-<hook>` key (see LOGS_STATE_DIR and ASYNC_REFRESH_STREAM).
+//
+// THE CHILD'S RAW STDIO GOES TO THIS SAME FILE. It used to have a `.stderr.log` sibling, which was
+// 0 bytes on every measured run — it is written to ONLY when the child dies before its own logging
+// (a module-load failure, say), and that is precisely the moment you want the crash output sitting
+// directly beneath the SPAWN_ATTEMPT that preceded it, in time order, rather than in a second file
+// you have to think to open. Same cycle, same writer, one file.
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors decision-log)
 const MAX_DETAIL_LEN = 300;
 
@@ -41,7 +44,7 @@ export class SyncLogEvent {
 
 /**
  * Append one tab-separated line per refresher event to
- * `.webpieces/logs/<stream>guard-async-work.log` (see LogStream for the prefix). `root` is
+ * `.webpieces/logs/async-refresh/<writer>.log` (see LogStream for the writer key). `root` is
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
@@ -51,11 +54,11 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
         const timestamp = new Date().toISOString();
         // LOCAL scope: this is the refresher's own lifecycle trace for THIS worktree. One writer per
         // log, so its appends cannot interleave with another agent's.
-        const logsDir = dotWebpieces.logs(root);
+        const logsDir = dotWebpieces.logsFile(root, ASYNC_REFRESH_STREAM);
         fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
-        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
+        const logPath = path.join(logsDir, logStream.writerFile('.log'));
+        rotateLogFile(logPath, path.join(logsDir, logStream.writerFile('.1.log')));
 
         const line = [
             `[${timestamp}]`,
@@ -71,12 +74,16 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
     }
 }
 
-// Absolute path the detached child's stdout/stderr are redirected to (opened with fs.openSync(p,'a')
-// by the spawner), so even a crash BEFORE our own logging runs — e.g. a module-load failure — is
+// The path the detached child's stdout/stderr are redirected to (opened with fs.openSync(p,'a') by
+// the spawner), so even a crash BEFORE our own logging runs — e.g. a module-load failure — is
 // captured instead of vanishing into /dev/null. Callers must ensure the log dir exists first
 // (logSyncEvent's mkdir, called for SPAWN_ATTEMPT, does that).
-export function syncStderrLogPath(root: string): string {
-    return dotWebpieces.logsFile(root, logStream.fileName(STDERR_FILE));
+//
+// This is THE SAME FILE logSyncEvent appends to — see the header. It is not a second stream and it
+// no longer has a name of its own.
+// webpieces-disable no-function-outside-class -- sibling of logSyncEvent in this module-scope writer; it must stay callable from a tree too broken to build a DI container
+export function refresherChildStdioPath(root: string): string {
+    return dotWebpieces.logsFile(root, ASYNC_REFRESH_STREAM, logStream.writerFile('.log'));
 }
 
 // Collapse newlines/tabs and cap length so one event is always one log line.

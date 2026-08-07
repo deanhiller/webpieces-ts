@@ -36,23 +36,30 @@ export class StreamIdentity {
  *     is absent for every one of them — so agent identity alone cannot tell them apart.
  *
  * `O_APPEND` is indivisible only under `PIPE_BUF`, which is **512 bytes on macOS**. Measured
- * 2026-08-06 across three repos: `guard-invocations.log` 208/3306 lines (6.3%) exceed it, max 608 B;
- * `guard-sync-decisions.log` 209/4097 (5.1%), max 625 B. So this tears TODAY, and the corrupted line
+ * 2026-08-06 across three repos: the invocation stream 208/3306 lines (6.3%) exceed it, max 608 B;
+ * the decision stream 209/4097 (5.1%), max 625 B. So this tears TODAY, and the corrupted line
  * is exactly the long one — the `recover=` line a human needs most.
  *
- * ─── The key: three dimensions, one FLAT filename ──────────────────────────────────────────────────
- *   <local>/logs/<sessionId>-<agentId | "coordinator">-<hook>-<file>.log
+ * ─── The key: the LAYER is the directory, the WRITER is the file ──────────────────────────────────
+ *   <local>/logs/<stream>/<sessionId>-<agentId | "coordinator">-<hook>.log
  *
- *   sessionId  separates concurrent Claude Code windows   (`session_id`, on every hook payload)
- *   agentId    separates subagents within one window      (`agent_id`, subagent-only — absent = coordinator)
- *   hook       separates the PARALLEL hooks               ('guards' | 'rules' | 'guarantee-root')
+ *   stream     separates the LAYERS                        ('L-1-cd' | 'L0-shim' | 'L1-location' | …)
+ *   sessionId  separates concurrent Claude Code windows    (`session_id`, on every hook payload)
+ *   agentId    separates subagents within one window       (`agent_id`, subagent-only — absent = coordinator)
+ *   hook       separates the PARALLEL hooks                ('guards' | 'rules' | 'guarantee-root')
  *
- * One writer per FILE, by construction, so appends cannot interleave and nothing needs a lock.
+ * This class owns the FILE half. One writer per file, by construction, so appends cannot interleave
+ * and nothing needs a lock — and all three identity dimensions must stay in the filename for that to
+ * hold. `hook` especially: Claude Code runs the guards and rules hooks as separate processes IN
+ * PARALLEL on one tool call, so folding `hook` into the directory would put two concurrent appenders
+ * on one path, which is the tearing measured above.
  *
- * DELIBERATELY FLAT, not `sessions/<id>/<agent>/<hook>/<file>`. A nested tree makes the common
- * question — "show me everything that happened, in time order" — into a directory walk, when it should
- * be one glob: `ls logs/` shows every stream at once, `logs/<sid>-*` is one window, `*-<agent>-*` is one
- * subagent, `*-guards-*` is one hook. Rotation is unchanged because `.1.log` is still a suffix.
+ * Nesting by STREAM is NOT the nesting this layout rejects. What it rejects is nesting by IDENTITY
+ * (`sessions/<id>/<agent>/…`), which turns every cross-session question into a directory walk. The
+ * layer is the one axis you almost always want to slice by first, and it was previously not
+ * expressible at all: L1 had no stream, so "show me every L1 decision" had no answer. Now
+ * `ls logs/L1-location/` is that answer, and a one-level wildcard recovers the flat view —
+ * `ls -t logs/[*]/<sid>-*` is still every layer at once, in time order.
  *
  * `transcript_path` is also unique per session, but it is a filesystem PATH — long, and full of
  * separators that would have to be flattened anyway — and `session_id` is its stable identifier, so
@@ -63,7 +70,7 @@ export class StreamIdentity {
  *
  * ─── There is no un-split path ─────────────────────────────────────────────────────────────────────
  * Every name is prefixed, always. A caller that never identifies renders as
- * `unknown-coordinator-hook-<base>` — a distinct, greppable stream, NOT the shared file. Keeping a
+ * `unknown-coordinator-hook.log` — a distinct, greppable writer, NOT a shared file. Keeping a
  * bare-name fallback would have meant two reachable spellings of one filename, with the tearing one
  * reached by doing nothing; that is the widening-as-absence this whole class exists to remove, so it
  * is not offered.
@@ -95,7 +102,7 @@ export class LogStream {
      * The detached main-sync refresher (main-sync-refresh.ts → sync-main.ts) is a separate node
      * process with a fresh, unidentified `logStream`. Before this existed the parent logged
      * SPAWN_ATTEMPT to its own prefixed stream while the child logged START/FINISH/ERROR to the
-     * shared `unknown-coordinator-hook-guard-async-work.log` — so ONE refresh cycle was split across
+     * shared, unidentified `unknown-coordinator-hook` writer — so ONE refresh cycle was split across
      * two files, every agent's child appended to that one shared file (the PIPE_BUF tearing this
      * class exists to remove, still live on that stream), and the documented
      * "SPAWN_ATTEMPT with no START means the child never launched" check read as a false failure on
@@ -106,14 +113,21 @@ export class LogStream {
     }
 
     /**
-     * This caller's name for `base` — `<sessionId>-<agentId|coordinator>-<hook>-<base>`, ALWAYS.
+     * This WRITER's file name within a stream directory —
+     * `<sessionId>-<agentId|coordinator>-<hook><suffix>`, ALWAYS.
      *
-     * Takes the WHOLE filename (`guard-invocations.log`, and separately `guard-invocations.1.log`) so
-     * the rotation sibling gets the identical prefix and rotation keeps working untouched.
+     * The three identity dimensions stay in the FILE while the stream moves to the DIRECTORY
+     * (see log-streams.ts), because they are what makes one writer per file true and the stream is not:
+     * `wp-ai-guards-hook` and `wp-ai-rules-hook` are separate processes that Claude Code launches in
+     * PARALLEL on the same tool call, so dropping `hook` here would put two concurrent appenders on
+     * one path — the exact tearing this class exists to remove, reintroduced by a rename.
+     *
+     * `suffix` carries the extension so the rotation sibling gets the identical writer key: pass
+     * `.log`, and separately `.1.log`.
      */
-    fileName(base: string): string {
+    writerFile(suffix: string): string {
         const agent = segment(this.agentId === '' ? 'coordinator' : this.agentId);
-        return `${segment(this.sessionId)}-${agent}-${segment(this.hook)}-${base}`;
+        return `${segment(this.sessionId)}-${agent}-${segment(this.hook)}${suffix}`;
     }
 }
 

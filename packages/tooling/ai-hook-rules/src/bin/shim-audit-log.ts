@@ -1,11 +1,12 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
+import { L0_SHIM_STREAM } from '../core/log-streams';
 
 import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
 
 // ---------------------------------------------------------------------------
 // THE L0 AUDIT LOG, in POSIX sh — the shim half of
-// `.webpieces/**/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`. The stream prefix is
-// the sh twin of ai-hook-rules' LogStream.fileName(): wp-ai-guards-hook and wp-ai-rules-hook are run
+// `.webpieces/**/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log`. The writer key is
+// the sh twin of ai-hook-rules' LogStream.writerFile(): wp-ai-guards-hook and wp-ai-rules-hook are run
 // IN PARALLEL by Claude Code on every file edit, so an unsplit name means two writers, one file, and
 // torn appends above PIPE_BUF. A payload with no session_id renders 'unknown', never a bare name —
 // there is no un-prefixed spelling on either side.
@@ -29,10 +30,6 @@ import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
 //     the L1 binary has used since the state-dir split;
 //   • it had NO rotation, on a file now written on EVERY tool call.
 // ---------------------------------------------------------------------------
-
-/** The audit log's filename, and the sibling a rotation renames it to. Mirrors decision-log.ts. */
-export const SHIM_LOG_FILE = 'ai-hook-shim.log';
-export const SHIM_LOG_FILE_PREV = 'ai-hook-shim.1.log';
 
 /**
  * Rotation threshold, in bytes — 512 KB, the SAME number and the same `.1.log` naming as
@@ -147,22 +144,25 @@ wp_clean() {                 # one path segment from an UNTRUSTED payload id —
 wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
   {
     [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
-    mkdir -p "$WP_LOG_DIR" 2>/dev/null || return 0
-    # Same flat scheme as LogStream.fileName(): <session>-<agent|coordinator>-<hook>-<base>. $BIN_NAME
+    # The LAYER is the directory and the WRITER is the file — same layout the TS writers use, spelled
+    # from the same constant so the two halves cannot drift apart.
+    _wp_sd="$WP_LOG_DIR/${L0_SHIM_STREAM}"
+    mkdir -p "$_wp_sd" 2>/dev/null || return 0
+    # Same writer key as LogStream.writerFile(): <session>-<agent|coordinator>-<hook>.log. $BIN_NAME
     # IS the hook discriminator here (wp-ai-guards-hook vs wp-ai-rules-hook), and Claude Code runs those
     # two IN PARALLEL on every file edit — without this prefix they append to ONE file and tear above
     # PIPE_BUF. An empty session id renders 'unknown' — this has no bare-name branch, matching
-    # LogStream.fileName(), which has none either.
+    # LogStream.writerFile(), which has none either.
     # ALWAYS prefixed - a missing session_id renders as 'unknown', never as the shared bare name.
     # Gating this on a non-empty id would drop both parallel hooks back onto one file, which is the
-    # torn-append case this exists to remove. Twin of LogStream.fileName(), which has no bare branch.
-    _wp_pfx="$(wp_clean "\${WP_SID:-unknown}")-$(wp_clean "\${WP_AID:-coordinator}")-$BIN_NAME-"
-    _wp_f="$WP_LOG_DIR/\${_wp_pfx}${SHIM_LOG_FILE}"
+    # torn-append case this exists to remove. Twin of LogStream.writerFile(), which has no bare branch.
+    _wp_pfx="$(wp_clean "\${WP_SID:-unknown}")-$(wp_clean "\${WP_AID:-coordinator}")-$BIN_NAME"
+    _wp_f="$_wp_sd/\${_wp_pfx}.log"
     # Rotate at the SAME 512 KB into the SAME .1.log sibling as every JS-side webpieces log. This runs
     # on every tool call, so it is one wc and no more; a size we cannot read counts as 0 (no rotation).
     _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
     case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
-    [ "$_wp_sz" -gt ${String(SHIM_LOG_MAX_BYTES)} ] && mv -f "$_wp_f" "$WP_LOG_DIR/\${_wp_pfx}${SHIM_LOG_FILE_PREV}" 2>/dev/null
+    [ "$_wp_sz" -gt ${String(SHIM_LOG_MAX_BYTES)} ] && mv -f "$_wp_f" "$_wp_sd/\${_wp_pfx}.1.log" 2>/dev/null
     printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }`;

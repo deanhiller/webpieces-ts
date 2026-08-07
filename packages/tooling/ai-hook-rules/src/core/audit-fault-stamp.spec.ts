@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { InvocationLog, logGuardDecision, GuardDecision } from './decision-log';
+import { InvocationLog, logGuardDecision, GuardDecision , MATRIX_L2 } from './decision-log';
 import { LogStream } from './log-stream';
 import { L0_FAULTS, L0Fault } from './l0-matrix';
 import { L0_JS_FAULT_CODES, L0_SH_FAULT_CODES, L0_FAULT_NONE } from './l0-fault-codes';
@@ -11,20 +11,24 @@ import { logRejection } from './rejection-log';
 import { run } from './runner';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 import { SHIM_LOG_FAULTS, renderShim } from '../bin/shim';
+import { L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
 
 function tmpRoot(): string {
     return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-faultstamp-')));
 }
 
-const INVOCATION_LOG = 'guard-invocations.log';
-const DECISION_LOG = 'guard-sync-decisions.log';
-const REJECTION_LOG = 'hook-rejection.log';
+// The three STREAM DIRECTORIES this fault stamp must reach. `fault=` spans them all — that is the
+// property under test — so they are named by stream, not by a historical flat filename.
+const INVOCATION_LOG = CALLS_STREAM;
+const DECISION_LOG = L2_DECISIONS_STREAM;
+const REJECTION_LOG = REJECTIONS_STREAM;
 
 // The filename LogStream actually writes — it prefixes every log with
 // <session>-<agent|coordinator>-<hook>-, which is how concurrent writers stay out of one file.
 function readLog(root: string, name: string): string {
-    const dir = path.join(root, '.webpieces', 'logs');
-    return fs.readFileSync(path.join(dir, new LogStream().fileName(name)), 'utf8');
+    // `name` selects the STREAM DIRECTORY now; the file inside it is this writer's key.
+    const dir = path.join(root, '.webpieces', 'logs', name);
+    return fs.readFileSync(path.join(dir, new LogStream().writerFile('.log')), 'utf8');
 }
 
 /**
@@ -71,10 +75,10 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
 
             const invocations = new InvocationLog();
             invocations.begin(root, 'Bash', 'pnpm build');
-            invocations.finish('BLOCK', 'some-rule', code);
+            invocations.finish('BLOCK_AI_CURE', 'some-rule', code);
             expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
-            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK', 'why', '-', code));
+            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code, MATRIX_L2));
             expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
             const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
@@ -122,10 +126,10 @@ describe('a log failure never throws', () => {
         const invocations = new InvocationLog();
         expect(() => {
             invocations.begin(root, 'Bash', 'ls');
-            invocations.finish('BLOCK', 'r', 'C');
+            invocations.finish('BLOCK_AI_CURE', 'r', 'C');
         }).not.toThrow();
 
-        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK', 'why', '-', 'C'))).not.toThrow();
+        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK_AI_CURE', 'why', '-', 'C', MATRIX_L2))).not.toThrow();
 
         const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
         expect(() => logRejection('Edit', input, new BlockedResult('[r] (x)\nno', 'C'), root)).not.toThrow();

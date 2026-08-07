@@ -5,7 +5,7 @@ import * as path from 'path';
 import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
-import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
+import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
 
 // Per-process latch for the spawn below. A hook process handles exactly one tool call, so this makes
@@ -36,14 +36,14 @@ export function refresherArgv(refresher: string, workspaceRoot: string, hangTime
  * the NEXT call. This is the first detached spawn in the codebase — every existing hook is synchronous.
  *
  * Observability: we log SPAWN_ATTEMPT here and the child logs START/FINISH/ERROR, all to
- * `.webpieces/logs/<stream>guard-async-work.log` (LogStream prefixes every name). The child's
+ * `.webpieces/logs/async-refresh/<writer>.log` (LogStream names every writer). The child's
  * stdout/stderr are redirected to a sibling file (not
- * /dev/null) so a crash before the child's own logging is still captured. If guard-async-work.log shows
+ * /dev/null) so a crash before the child's own logging is still captured. If the async-refresh stream shows
  * SPAWN_ATTEMPT but never START, the detached child was killed before it ran.
  *
  * THE IDENTITY GOES ON ARGV, and that is what makes the sentence above true. The child is a separate
  * node process whose `logStream` starts unidentified, so it used to write every line to the shared
- * `unknown-coordinator-hook-guard-async-work.log` while this parent wrote SPAWN_ATTEMPT to its own
+ * `unknown-coordinator-hook.log` while this parent wrote SPAWN_ATTEMPT to its own
  * prefixed stream. One cycle, two files — the SPAWN_ATTEMPT-without-START check then read as a
  * failure on every cycle even when the child ran perfectly — and every agent's child appending to
  * that one shared path is exactly the multi-writer tearing LogStream exists to remove. Passing
@@ -67,7 +67,7 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
 
         // Redirect the detached child's stdout+stderr to a file (not /dev/null) so an uncaught crash
         // before the child's own logging — e.g. a module-load failure — is still captured.
-        const errFd = fs.openSync(syncStderrLogPath(workspaceRoot), 'a');
+        const errFd = fs.openSync(refresherChildStdioPath(workspaceRoot), 'a');
         const child = spawn(process.execPath, refresherArgv(refresher, workspaceRoot, hangTimeoutMinutes, logStream.identity()), {
             detached: true,
             stdio: ['ignore', errFd, errFd],

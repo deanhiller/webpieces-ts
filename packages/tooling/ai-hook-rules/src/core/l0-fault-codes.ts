@@ -59,7 +59,7 @@ export const L0_SH_FAULT_CODES = [
 /**
  * The faults decided INSIDE the guard bin, in JS. These reached the audit trail with no fault label at
  * all until the JS emitters started stamping them: an `S` storm that blocked an agent for ~20 tool
- * calls left two lines in hook-rejection.log, both attributed to a downstream rule, and nothing
+ * calls left two lines in the `rejections/` stream, both attributed to a downstream rule, and nothing
  * anywhere identifying L0.
  */
 export const L0_JS_FAULT_CODES = [
