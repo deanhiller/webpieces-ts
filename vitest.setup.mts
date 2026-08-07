@@ -1,4 +1,7 @@
 import { expect, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /**
  * Per-file timeout budget: the `packages/tooling/**` suites get 120s, everything else keeps the 45s
@@ -64,4 +67,22 @@ const testPath = expect.getState().testPath ?? '';
 
 if (testPath.includes(TOOLING_PATH)) {
     vi.setConfig({ testTimeout: TOOLING_TIMEOUT_MS, hookTimeout: TOOLING_TIMEOUT_MS });
+    /**
+     * Point HOME at an EMPTY throwaway directory for every `packages/tooling/**` spec.
+     *
+     * The tooling code reads one machine-global file — `~/.webpieces/config.json` (HomeConfigService) — and
+     * it is OPTIONAL, so whether a developer happens to have one changes what these end-to-end specs
+     * observe. That is a test reading the developer's personal preferences: it passes on one machine and
+     * fails on the next, and CI (which has no such file) can never reproduce it. Measured, not theoretical —
+     * the runner/coordinator end-to-end specs went red on a machine that had opted into an experimental
+     * flag, for no reason connected to the code under test.
+     *
+     * An EMPTY directory is deliberately the right stand-in rather than a fixture: "no such file" is the
+     * state of essentially every consumer, so it is the state a default-path test should be asserting.
+     * Specs that care about a PRESENT file build their own fake home and pass it in explicitly.
+     *     */
+    const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-vitest-home-'));
+    process.env['HOME'] = isolatedHome;
+    // Windows' os.homedir() reads USERPROFILE; set both so the isolation is not platform-conditional.
+    process.env['USERPROFILE'] = isolatedHome;
 }

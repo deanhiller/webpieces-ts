@@ -120,9 +120,13 @@ the hook runs.
 
 Beyond the code rules, this layer holds **workflow guards** — `feature-branch-guard` (don't edit on
 `main`), `read-stale-guard` (don't reason about an already-merged branch), `merge-in-progress-guard`,
-`branch-creation-guard`, `pr-merge-guard`, `whole-repo-build-guard` (don't build the whole monorepo —
-run the affected build). These encode process, not syntax: an agent physically
-cannot start work in the wrong place. Configured under `hookGuards` in `webpieces.config.json`.
+`branch-creation-guard`, `pr-merge-guard`, and the EXPERIMENTAL `whole-repo-build-guard` (don't build
+the whole monorepo — run the affected build). These encode process, not syntax: an agent physically
+cannot start work in the wrong place. Configured under `hookGuards` in `webpieces.config.json` — except
+`whole-repo-build-guard`, which has no repo-config entry at all: it is switched per MACHINE from the
+optional `~/.webpieces/config.json` (`experimental.whole-repo-build-guard`), and is completely inert on
+a machine with no such file. That split is deliberate: a guard still under trial must not become
+something every consumer has to configure before their next command works.
 
 **Build time — `packages/tooling/code-rules/`.** ~30 validators run from `wp-ci`, which the affected
 build (`pnpm nx affected --target=ci --base=<fork point>`) invokes per project. This catches anything

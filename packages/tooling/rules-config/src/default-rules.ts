@@ -76,10 +76,11 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'merge-in-progress-guard': { mode: 'ON' },
     'pr-merge-guard': { mode: 'ON' },
     'redirect-how-to-merge-main': { mode: 'ON' },
-    // Ships ON: building the whole monorepo is never the right inner-loop move, and the guard's
-    // refusal hands over the affected-scoped command read from commands.pr-gate.buildCommand, so a
-    // repo that has a gate at all already has the replacement command configured.
-    'whole-repo-build-guard': { mode: 'ON' },
+    // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and
+    // HOOK_GUARD_NAMES with it. It is EXPERIMENTAL and switched only from the optional machine-local
+    // ~/.webpieces/config.json (`experimental.whole-repo-build-guard`). Adding it back here would make it
+    // a rule every consumer must configure — which is fault Y, i.e. every Bash call blocked on upgrade,
+    // which is exactly what it did the first time. See RETIRED_CONFIG_KEYS.
     // Phase 1 ships OFF on purpose. This guard blocks Read, the highest-blast-radius tool there is,
     // so it is opted into per-repo (webpieces.config.json → hookGuards) only AFTER the release
     // carrying it is published and installed. Flipping it ON here would arm it for every consumer

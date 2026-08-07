@@ -5,7 +5,7 @@ import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHo
 import { buildContexts, buildBashContext } from './build-context';
 import { AgentIdentity, CoordinatorWorktreeGuard, UNKNOWN_AGENT } from './coordinator-worktree';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
-import { loadRules, loadMatchRules, globMatches } from './load-rules';
+import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0, MATRIX_L2 } from './decision-log';
@@ -427,6 +427,23 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
     return new BlockedResult(report);
 }
 
+/**
+ * The EXPERIMENTAL bash guards, deliberately kept OUT of the config-driven rule set. They have no
+ * webpieces.config.json entry at all, so passing them through checkConfigSync would make every
+ * consumer's next Bash call a fault-Y block ("this rule has no entry") for a feature nobody opted into
+ * — which is exactly what whole-repo-build-guard did on its first release. Each one reads
+ * ~/.webpieces/config.json for itself and does nothing at all without it.
+ *
+ * They still honour excludePaths, and they do not run in `rules` mode (code-style-only hook).
+ */
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function experimentalBashRules(loaded: LoadedConfig, mode: HookMode, relativePath: string): readonly Rule[] {
+    if (mode === 'rules') return [];
+    return filterByExcludedPaths(
+        loadExperimentalBashRules(loaded.prGate.buildCommand), relativePath, loaded.excludePaths,
+    );
+}
+
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
 function runBashInternal(command: string, cwd: string, mode: HookMode, agent: AgentIdentity): BlockedResult | null {
     if (isL0CureCommand(command)) {
@@ -460,12 +477,12 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     // cwd sits under an excluded tree (e.g. repositories/**) drops the whole guard set — matching how
     // runInternal/runRead treat file paths. The relative path is '' when there is no `cd` (root), which
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
+    const relativeCwd = path.relative(workspaceRoot, tree.effectiveCwd);
     const rules = filterByExcludedPaths(
-        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode),
-        path.relative(workspaceRoot, tree.effectiveCwd),
-        loaded.excludePaths,
+        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode), relativeCwd, loaded.excludePaths,
     );
-    if (rules.length === 0) return null;
+    const experimental = experimentalBashRules(loaded, mode, relativeCwd);
+    if (rules.length === 0 && experimental.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
@@ -481,7 +498,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     maybeRefreshMainSync(rules, tree.root);
 
     const ctx = buildBashContext(command, tree);
-    const groups = runBashRules(rules, ctx);
+    const groups = runBashRules([...rules, ...experimental], ctx);
     if (groups.length === 0) {
         // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
         // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log

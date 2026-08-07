@@ -345,9 +345,12 @@ pnpm nx run-many -t ci -p a b        # a couple of projects, named explicitly
 ```
 
 `pnpm run build-all` (and `nx run-many` with no `-p`, `nx affected` with no `--base`, and a bare
-`pnpm exec vitest run`) is **blocked for the AI by `whole-repo-build-guard`**, which prints the
-affected command in its place. The `build-all` script stays in `package.json` on purpose — a human
-running it once is fine; an agent running it in a loop is the problem.
+`pnpm exec vitest run`) is what `whole-repo-build-guard` refuses, printing the affected command in its
+place. That guard is **EXPERIMENTAL and OFF unless this machine opts in** — its only switch is
+`experimental.whole-repo-build-guard` in the optional, untracked `~/.webpieces/config.json`; there is no
+`webpieces.config.json` entry for it. The rule above holds either way: run the affected build, guard or
+no guard. The `build-all` script stays in `package.json` on purpose — a human running it once is fine;
+an agent running it in a loop is the problem.
 
 ### Does `affected` cover the workspace-global validators?
 
@@ -666,4 +669,5 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
    backwards-compatible"). Delete it; the compile error is how callers get migrated.
 10. ❌ Building the whole monorepo (`pnpm run build-all`, `nx run-many` with no `-p`, `nx affected` with no
    `--base`, a bare `pnpm exec vitest run`). Run the affected build, or one project, or one spec file
-   (see "Build Verification"). `whole-repo-build-guard` blocks these and names the command to run instead.
+   (see "Build Verification"). `whole-repo-build-guard` names the command to run instead — when this
+   machine has opted into it via `~/.webpieces/config.json`.

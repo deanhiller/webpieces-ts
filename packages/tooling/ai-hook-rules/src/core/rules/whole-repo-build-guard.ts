@@ -1,10 +1,10 @@
 import { execSync } from 'child_process';
 
-import { WholeRepoBuildGuardConfig, DEFAULT_BUILD_COMMAND, HomeConfigService } from '@webpieces/rules-config';
+import { DEFAULT_BUILD_COMMAND, HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { BashRuleBase } from '../rule-base';
+import { BashRuleBase, EmptyRuleConfig } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
@@ -42,12 +42,29 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  * that reads like the guard's advice was wrong. Only `$(git …)` is expanded, and only read-only git;
  * anything else is left verbatim.
  *
- * ─── Two messages, chosen by ~/.webpieces/config.json ──────────────────────────────────────────────
- * With `experimental.buildGateLogCapture` ON, the pr-gate captures its build's full output to a log
- * file and hands the agent that path instead of a rebuild instruction — so the right advice is not
- * "build smaller", it is "do not build; stage ② already builds and you can READ the result". That flag
- * lives in the OPTIONAL machine-local `~/.webpieces/config.json`; absent (the state of essentially
- * every consumer) means the first message. `HomeConfigService` is the one reader of that file.
+ * ─── EXPERIMENTAL: the ONLY switch is ~/.webpieces/config.json ─────────────────────────────────────
+ * `experimental.whole-repo-build-guard` (a boolean) decides whether this guard blocks anything at all.
+ * There is NO webpieces.config.json entry — deliberately, and the reason is a live incident: this guard
+ * first shipped as an ordinary validated guard with `mode: 'ON'` by default AND a required entry under
+ * `hookGuards`, so every consumer that upgraded hit fault Y — EVERY Bash call blocked — for a feature
+ * they had never asked for. An experimental feature is opted into from a machine-local file whose absent
+ * state is byte-for-byte the old behaviour, or it is not experimental.
+ *
+ * Three states, and only three:
+ *   - the file does not exist (essentially every consumer) → this guard is INERT. It blocks nothing and
+ *     logs nothing, for every command, including the ones it would otherwise refuse.
+ *   - the file exists and defines the key → the key's value decides.
+ *   - the file exists and is unparseable, or does not define the key → HARD FAILURE naming the edit. A
+ *     file someone deliberately created must be correct, and `HomeConfigService` requires that key
+ *     precisely because guessing either way is wrong (see readRequiredBoolean). Editing that file is an
+ *     unconditional PASS in the guards, so the block is always self-curable.
+ *
+ * ─── Two messages, chosen by a DIFFERENT key ───────────────────────────────────────────────────────
+ * `experimental.buildGateLogCapture` is a separate feature (the pr-gate captures its build's full output
+ * to a log file and hands the agent that path instead of a rebuild instruction) and it is NOT this
+ * guard's switch. It only picks WHICH refusal is printed once the guard is on: with capture ON the right
+ * advice is not "build smaller", it is "do not build; stage ② already builds and you can READ the
+ * result". `HomeConfigService` is the one reader of both keys.
  *
  * ─── Humans are not affected, by construction ──────────────────────────────────────────────────────
  * This is a PreToolUse hook. It sees the AI's Bash tool calls and nothing else — a human typing
@@ -55,11 +72,21 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  * deliberately left in package.json for exactly that reason. The guard is about what the AI does in a
  * loop, not about the command being wrong for a person who chooses to run it once.
  */
-export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardConfig> {
-    constructor(config: WholeRepoBuildGuardConfig) { super(config, 'whole-repo-build-guard'); }
+export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
+    /**
+     * `affectedBuildCommand` is the project's gate command (`commands.pr-gate.buildCommand`), handed in
+     * by the runner off the loaded config. It is a CONSTRUCTOR ARGUMENT rather than a config field
+     * because this guard has no config entry to read one from — and that is the point.
+     */
+    constructor(private readonly affectedBuildCommand: string) {
+        super(new EmptyRuleConfig(), 'whole-repo-build-guard');
+    }
 
     private readonly scanner = new CommandScanner();
     private readonly homeConfig = new HomeConfigService();
+
+    /** Set by check() when the home config is unreadable, so the fix hint names the same repair. */
+    private homeConfigError = '';
 
     readonly description =
         'Block a whole-monorepo build (build-all, an unnarrowed nx run-many, nx affected with no ' +
@@ -74,6 +101,14 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
     private resolvedCommand = '';
 
     get fixHint(): FixHint {
+        if (this.homeConfigError !== '') {
+            return new FixHint(
+                '~/.webpieces/config.json exists but cannot be read.',
+                'Edit ~/.webpieces/config.json (editing it is always permitted, including right now), or ' +
+                'delete it outright — with no such file every webpieces command behaves exactly as it ' +
+                'does by default.',
+            );
+        }
         const command = this.resolvedCommand !== '' ? this.resolvedCommand : this.buildCommandTemplate();
         return new FixHint(
             'That command builds the WHOLE monorepo. Build only what your change affects.',
@@ -81,11 +116,24 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
             `  ${command}   # the gate's own build\n` +
             '  pnpm nx run <project>:ci   # one project\n' +
             '  pnpm exec vitest run <path>   # one suite\n' +
-            'Disable in webpieces.config.json under hookGuards → whole-repo-build-guard (mode OFF) if intentional.',
+            'Turn this guard off for this machine by setting "experimental": ' +
+            '{ "whole-repo-build-guard": false } in ~/.webpieces/config.json (there is no ' +
+            'webpieces.config.json entry for it).',
         );
     }
 
     check(ctx: BashContext): readonly Violation[] {
+        const home = this.loadHome();
+        // A file someone deliberately created must be correct — see the class docstring. Reported for
+        // whatever command happens to be running, because a broken opt-in file is not a build question.
+        if (home instanceof Error) return this.blockOnBrokenHomeConfig(ctx, home);
+
+        // THE EXPERIMENTAL GATE, and the state of essentially every consumer. Silent on purpose: no
+        // block, no log, no file touched — "no ~/.webpieces/config.json" must be indistinguishable from
+        // "this guard does not exist".
+        this.homeConfigError = '';
+        if (!home.wholeRepoBuildGuard) return [];
+
         // Blocklist-shaped, so match on commandCode: stripping heredocs and quoted prose can only ever
         // block LESS, and this repo's own commit messages are full of the command names above.
         const hit = new WholeRepoBuildScan(this.scanner, ctx.effectiveCwd === ctx.workspaceRoot)
@@ -94,13 +142,43 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
 
         // Resolved ONCE, here, and read by both the violation message and the fix hint.
         this.resolvedCommand = this.resolvedBuildCommand(ctx.workspaceRoot);
-        return this.block(ctx, hit, this.message());
+        return this.block(ctx, hit, this.message(home));
+    }
+
+    /**
+     * The home config, or the Error explaining why it is unusable. NOT a boolean: "absent" is already
+     * folded into the returned HomeConfig (all-defaults, guard off), so the only thing left to
+     * distinguish is "present and wrong", which must be reported rather than swallowed.
+     */
+    private loadHome(): HomeConfig | Error {
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: a rejected home config is converted
+        // into this guard's own block, which carries the loader's fix instruction verbatim
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return this.homeConfig.load();
+        } catch (err: unknown) {
+            const error = toError(err);
+            return error;
+        }
+    }
+
+    private blockOnBrokenHomeConfig(ctx: BashContext, error: Error): readonly Violation[] {
+        this.homeConfigError = error.message;
+        this.logDecision(ctx, 'BLOCK_AI_CURE', 'home-config-invalid');
+        return [new V(1, this.truncate(ctx.command), this.brokenHomeConfigMessage(error))];
+    }
+
+    private brokenHomeConfigMessage(error: Error): string {
+        const detail = error instanceof InformAiError
+            ? error.message
+            : `~/.webpieces/config.json could not be read: ${error.message}`;
+        return `Blocked: ~/.webpieces/config.json is present but unusable.\n\n${detail}`;
     }
 
     // The whole refusal. Short on purpose: it is read mid-task by an agent that needs the ONE command
     // to run next, and a guard message long enough to skim is a guard message that gets skimmed.
-    private message(): string {
-        if (this.captureEnabled()) {
+    private message(home: HomeConfig): string {
+        if (home.buildGateLogCapture) {
             return 'Blocked: that builds the WHOLE monorepo — and you should not be building at all.\n'
                 + '`pnpm wp-review-upsert-pr` (stage ②) runs the build for you, captures the full output to a\n'
                 + 'log file, and names that file if it fails. Read the file; do not rebuild.\n'
@@ -112,15 +190,13 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
     }
 
     /**
-     * The project's build command, unexpanded. ONE source: `commands.pr-gate.buildCommand`, injected
-     * into this guard's config by load-config exactly as the other guards' command hints are, falling
-     * back to the same DEFAULT_BUILD_COMMAND the gate itself falls back to. This guard never spells a
-     * build command of its own — a second copy is how a refusal starts teaching a command the gate
-     * does not run.
+     * The project's build command, unexpanded. ONE source: `commands.pr-gate.buildCommand`, handed to
+     * the constructor by the runner, falling back to the same DEFAULT_BUILD_COMMAND the gate itself
+     * falls back to. This guard never spells a build command of its own — a second copy is how a refusal
+     * starts teaching a command the gate does not run.
      */
     private buildCommandTemplate(): string {
-        const configured = this.config.affectedBuildCommand ?? '';
-        return configured.trim() === '' ? DEFAULT_BUILD_COMMAND : configured;
+        return this.affectedBuildCommand.trim() === '' ? DEFAULT_BUILD_COMMAND : this.affectedBuildCommand;
     }
 
     /**
@@ -148,22 +224,6 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
             const error = toError(err);
             void error;
             return null;
-        }
-    }
-
-    /**
-     * Is build-log capture on? The OPTIONAL `~/.webpieces/config.json` is absent for essentially every
-     * consumer, and absent means false, silently — so a broken or unreadable home config can never be
-     * the reason a Bash command is judged differently. Fail toward the ordinary message.
-     */
-    private captureEnabled(): boolean {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return this.homeConfig.load().buildGateLogCapture;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return false;
         }
     }
 

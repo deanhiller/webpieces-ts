@@ -30,20 +30,34 @@ import { toError } from './to-error';
  * targeting THIS path is an unconditional PASS in the hook guards (see `isHomeConfigPath`, wired into
  * ai-hook-rules' runner beside the webpieces.config.json pass), so an agent can always repair the file
  * the loader just rejected.
+ *
+ * ─── WHY AN EXPERIMENTAL FEATURE LIVES HERE AND NOT IN webpieces.config.json ──────────────────────────
+ * `whole-repo-build-guard` first shipped as an ordinary validated guard: `mode: 'ON'` by default AND an
+ * entry required under `hookGuards`. The consequence on upgrade was an outage — a consumer repo that had
+ * not yet added the entry hit fault Y, which blocks EVERY Bash call, for a feature nobody had opted into.
+ *
+ * The rule that buys back: an EXPERIMENTAL feature is switched from THIS file only, and its absent state
+ * is byte-for-byte the old behaviour. A repo-tracked config key cannot express that — an entry there is
+ * something every consumer must add, on a schedule set by whoever bumps the release.
  */
 export const HOME_CONFIG_DIR = '.webpieces';
 export const HOME_CONFIG_FILE = 'config.json';
 
-// The `experimental` section, and its one key. Named as constants because both the validator and its
-// error text must spell them identically — a validator whose message names a different key than the one
-// it checks is worse than no message.
+// The `experimental` section and its keys. Named as constants because both the validator and its error
+// text must spell them identically — a validator whose message names a different key than the one it
+// checks is worse than no message.
 export const HOME_EXPERIMENTAL_SECTION = 'experimental';
 export const HOME_KEY_BUILD_GATE_LOG_CAPTURE = 'buildGateLogCapture';
+// The on/off switch for `whole-repo-build-guard`. Spelled with the GUARD's own name, hyphens and all,
+// so `grep -rn whole-repo-build-guard` finds the switch beside the guard — and so nobody has to learn a
+// second name for one thing. It is a DIFFERENT key from buildGateLogCapture, which is #620's build-log
+// feature and merely selects WHICH refusal this guard prints.
+export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
 
 // The complete accepted shape. Anything not on these lists is an error, so adding a key means adding it
 // here — there is no place for an unvalidated key to hide.
 const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
-const ALLOWED_EXPERIMENTAL: readonly string[] = [HOME_KEY_BUILD_GATE_LOG_CAPTURE];
+const ALLOWED_EXPERIMENTAL: readonly string[] = [HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE];
 
 // Read errors that mean "the file is not there / not reachable" rather than "the file is wrong". Every
 // one of these resolves to the all-defaults config, silently. Widened deliberately past ENOENT: the
@@ -60,8 +74,20 @@ export class HomeConfig {
      */
     buildGateLogCapture: boolean;
 
-    constructor(buildGateLogCapture = false) {
+    /**
+     * EXPERIMENTAL. When true, `whole-repo-build-guard` BLOCKS a Bash command that would build the whole
+     * monorepo. False — and the all-defaults value for a machine with no such file — means the guard is
+     * completely inert: no block, no log, no message.
+     *
+     * This is the guard's ONLY switch. There is deliberately no webpieces.config.json entry for it (see
+     * RETIRED_CONFIG_KEYS): an experimental guard that every consumer must configure to avoid being
+     * blocked is a guard that ships an outage on upgrade, which is exactly what happened.
+     */
+    wholeRepoBuildGuard: boolean;
+
+    constructor(buildGateLogCapture = false, wholeRepoBuildGuard = false) {
         this.buildGateLogCapture = buildGateLogCapture;
+        this.wholeRepoBuildGuard = wholeRepoBuildGuard;
     }
 }
 
@@ -203,25 +229,56 @@ export class HomeConfigService {
         this.assertNotRetired(raw, file);
         this.assertKnownKeys(Object.keys(raw), ALLOWED_TOP_LEVEL, '', file);
         const section = raw[HOME_EXPERIMENTAL_SECTION];
-        if (section === undefined) return new HomeConfig();
-        if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+        if (section !== undefined && (typeof section !== 'object' || section === null || Array.isArray(section))) {
             throw new InformAiError(this.error(file, `"${HOME_EXPERIMENTAL_SECTION}" must be a JSON object.`));
         }
         // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
-        const experimental = section as Record<string, unknown>;
+        const experimental = (section ?? {}) as Record<string, unknown>;
         this.assertKnownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`, file);
-        return new HomeConfig(this.readBoolean(experimental, file));
+        return new HomeConfig(
+            this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file),
+            this.readRequiredBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file),
+        );
     }
 
     // An absent key is OFF — not setting a flag is not an error. A PRESENT key of the wrong type is.
     // webpieces-disable no-any-unknown -- see parse()
-    private readBoolean(experimental: Record<string, unknown>, file: string): boolean {
-        const value = experimental[HOME_KEY_BUILD_GATE_LOG_CAPTURE];
+    private readOptionalBoolean(experimental: Record<string, unknown>, key: string, file: string): boolean {
+        const value = experimental[key];
         if (value === undefined) return false;
+        return this.asBoolean(value, key, file, ' Remove the quotes, or delete the key.');
+    }
+
+    /**
+     * A key that MUST be spelled out once this file exists. `whole-repo-build-guard` decides whether tool
+     * calls are BLOCKED, and the two states are not equally recoverable: guessing OFF hides a feature the
+     * author asked for, guessing ON blocks their shell. So the file states it, or it fails naming the edit.
+     *
+     * The asymmetry with buildGateLogCapture is deliberate and is the whole lesson of #627: a flag that
+     * only changes what a message SAYS may default; a flag that decides whether a command RUNS may not.
+     */
+    // webpieces-disable no-any-unknown -- see parse()
+    private readRequiredBoolean(experimental: Record<string, unknown>, key: string, file: string): boolean {
+        const value = experimental[key];
+        if (value === undefined) {
+            throw new InformAiError(this.error(file,
+                `"${HOME_EXPERIMENTAL_SECTION}.${key}" is REQUIRED once this file exists, and it is not set. ` +
+                `Add it, e.g.:\n\n` +
+                `    { "${HOME_EXPERIMENTAL_SECTION}": { "${key}": false } }\n\n` +
+                `false = the guard never blocks anything (identical to having no such file); true = a Bash ` +
+                `command that would build the WHOLE monorepo is refused, with the affected-scoped command ` +
+                `printed in its place.`));
+        }
+        return this.asBoolean(value, key, file, ' Remove the quotes.');
+    }
+
+    // webpieces-disable no-any-unknown -- see parse()
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private asBoolean(value: unknown, key: string, file: string, fix: string): boolean {
         if (typeof value !== 'boolean') {
             throw new InformAiError(this.error(file,
-                `"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}" must be the boolean ` +
-                `true or false, not ${JSON.stringify(value)}. Remove the quotes, or delete the key.`));
+                `"${HOME_EXPERIMENTAL_SECTION}.${key}" must be the boolean ` +
+                `true or false, not ${JSON.stringify(value)}.${fix}`));
         }
         return value;
     }
@@ -256,7 +313,9 @@ export class HomeConfigService {
             if (allowed.includes(key)) continue;
             throw new InformAiError(this.error(file,
                 `"${prefix}${key}" is not a known key.${this.didYouMean(key, allowed, prefix)} ` +
-                `The only key this file accepts is "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}". ` +
+                `The only keys this file accepts are ` +
+                `"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_WHOLE_REPO_BUILD_GUARD}" and ` +
+                `"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}". ` +
                 `Fix the spelling or delete the key.`));
         }
     }

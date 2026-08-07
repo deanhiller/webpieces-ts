@@ -21,5 +21,4 @@ export const builtInRuleNames: readonly string[] = [
     'read-stale-guard',
     'merged-branch-bash-guard',
     'stale-main-bash-guard',
-    'whole-repo-build-guard',
 ];
