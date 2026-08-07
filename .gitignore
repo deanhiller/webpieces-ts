@@ -100,3 +100,16 @@ node_modules_*/
 # Webpieces tooling working dir: ai-hook-rules bootstrap/cache, instruct-ai docs,
 # and per-feature git workflow dirs (merge-/review-/pr-, 30-day retention)
 .webpieces/
+
+# Claude Code subagent worktrees — linked git worktrees, never committed.
+#
+# NOT `.claude/`: .claude/agents/** and .claude/review/** are TRACKED and define the
+# REQUIRED PR reviewers (backwards-compat-reviewer). Ignoring the whole directory would
+# drop the review gate out of the repo on the next clone, and the failure would look like
+# "the reviewer stopped being required" — which nobody notices quickly.
+#
+# This entry is load-bearing, not hygiene: nx honours .gitignore when it scans the
+# workspace, so without it nx walks into every worktree and finds a second and third copy
+# of all 27 project.json files. EVERY nx command on the primary clone then dies instantly
+# with MultipleProjectsWithSameNameError for as long as any agent worktree exists.
+.claude/worktrees/
