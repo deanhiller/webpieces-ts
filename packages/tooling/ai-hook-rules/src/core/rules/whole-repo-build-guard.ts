@@ -64,14 +64,25 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
         'Block a whole-monorepo build (build-all, an unnarrowed nx run-many, nx affected with no ' +
         '--base, a bare vitest run) and name the affected-scoped command to run instead.';
 
-    readonly fixHint = new FixHint(
-        'That command builds the WHOLE monorepo. Build only what your change affects.',
-        'Build the affected projects, or one project, or one spec file — never the workspace:\n' +
-        '  pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)   # the gate\'s own build\n' +
-        '  pnpm nx run <project>:ci                                                 # one project\n' +
-        '  pnpm exec vitest run <path>                                              # one suite\n' +
-        'Disable in webpieces.config.json under hookGuards → whole-repo-build-guard (mode OFF) if intentional.',
-    );
+    /**
+     * The command this rule last printed, so the fix hint and the violation message are one string and
+     * cannot disagree. Empty until check() runs (fixHint is also read without it), at which point the
+     * getter falls back to the configured TEMPLATE — never to a second literal, which is exactly the
+     * drift this guard's own docstring says a duplicated command string causes.
+     */
+    private resolvedCommand = '';
+
+    get fixHint(): FixHint {
+        const command = this.resolvedCommand !== '' ? this.resolvedCommand : this.buildCommandTemplate();
+        return new FixHint(
+            'That command builds the WHOLE monorepo. Build only what your change affects.',
+            'Build the affected projects, or one project, or one spec file — never the workspace:\n' +
+            `  ${command}   # the gate's own build\n` +
+            '  pnpm nx run <project>:ci   # one project\n' +
+            '  pnpm exec vitest run <path>   # one suite\n' +
+            'Disable in webpieces.config.json under hookGuards → whole-repo-build-guard (mode OFF) if intentional.',
+        );
+    }
 
     check(ctx: BashContext): readonly Violation[] {
         // Blocklist-shaped, so match on commandCode: stripping heredocs and quoted prose can only ever
@@ -80,12 +91,14 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
             .firstHit(ctx.commandCode);
         if (hit === null) return this.allow(ctx, 'not-a-whole-repo-build');
 
-        return this.block(ctx, hit, this.message(ctx));
+        // Resolved ONCE, here, and read by both the violation message and the fix hint.
+        this.resolvedCommand = this.resolvedBuildCommand(ctx.workspaceRoot);
+        return this.block(ctx, hit, this.message());
     }
 
     // The whole refusal. Short on purpose: it is read mid-task by an agent that needs the ONE command
     // to run next, and a guard message long enough to skim is a guard message that gets skimmed.
-    private message(ctx: BashContext): string {
+    private message(): string {
         if (this.captureEnabled()) {
             return 'Blocked: that builds the WHOLE monorepo — and you should not be building at all.\n'
                 + '`pnpm wp-review-upsert-pr` (stage ②) runs the build for you, captures the full output to a\n'
@@ -93,8 +106,20 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
                 + 'Need a check before then: pnpm exec vitest run <path>.';
         }
         return 'Blocked: that builds the WHOLE monorepo. Build only what your change affects:\n\n'
-            + `    ${this.resolvedBuildCommand(ctx.workspaceRoot)}\n\n`
+            + `    ${this.resolvedCommand}\n\n`
             + 'Narrower still: pnpm nx run <project>:ci, or pnpm exec vitest run <path>.';
+    }
+
+    /**
+     * The project's build command, unexpanded. ONE source: `commands.pr-gate.buildCommand`, injected
+     * into this guard's config by load-config exactly as the other guards' command hints are, falling
+     * back to the same DEFAULT_BUILD_COMMAND the gate itself falls back to. This guard never spells a
+     * build command of its own — a second copy is how a refusal starts teaching a command the gate
+     * does not run.
+     */
+    private buildCommandTemplate(): string {
+        const configured = this.config.affectedBuildCommand ?? '';
+        return configured.trim() === '' ? DEFAULT_BUILD_COMMAND : configured;
     }
 
     /**
@@ -103,8 +128,7 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
      * guard may degrade its own message, never fail the tool call it is judging.
      */
     private resolvedBuildCommand(workspaceRoot: string): string {
-        const configured = this.config.affectedBuildCommand ?? '';
-        const template = configured.trim() === '' ? DEFAULT_BUILD_COMMAND : configured;
+        const template = this.buildCommandTemplate();
         return template.replace(/\$\(([^()]*)\)/g, (match: string, inner: string): string => {
             const trimmed = inner.trim();
             if (!trimmed.startsWith('git ')) return match;

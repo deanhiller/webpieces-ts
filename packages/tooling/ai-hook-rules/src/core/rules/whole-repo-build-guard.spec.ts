@@ -180,6 +180,30 @@ describe('whole-repo-build-guard message', () => {
         expect(message).toContain('make ci-affected');
     });
 
+    /**
+     * ONE command string per block. The fix hint used to hard-code the affected command as a literal
+     * while the message read it from config, so a repo that configured a different build got two
+     * refusal texts that disagreed — the exact drift this guard's docstring says a duplicated command
+     * string causes.
+     */
+    it('prints the SAME command in the fix hint as in the message', () => {
+        const config = new WholeRepoBuildGuardConfig();
+        config.affectedBuildCommand = 'make ci-affected';
+        const rule = new WholeRepoBuildGuardRule(config);
+        const message = rule.check(ctx('pnpm run build-all'))[0].message ?? '';
+        expect(rule.fixHint.mainMessage).toContain('make ci-affected');
+        expect(rule.fixHint.mainMessage).not.toContain('nx affected --target=ci');
+        expect(message).toContain('make ci-affected');
+    });
+
+    // Read before check() has ever run (the report renders hints for rules that did not fire): the
+    // fallback is the configured TEMPLATE, never a second literal.
+    it('falls back to the configured template in the hint before any command is judged', () => {
+        const config = new WholeRepoBuildGuardConfig();
+        config.affectedBuildCommand = 'make ci-affected';
+        expect(new WholeRepoBuildGuardRule(config).fixHint.mainMessage).toContain('make ci-affected');
+    });
+
     // Absent config ⇒ the shipped default, which is the same string the pr-gate falls back to.
     it('falls back to the default affected command when the project configures none', () => {
         const message = new WholeRepoBuildGuardRule(new WholeRepoBuildGuardConfig())

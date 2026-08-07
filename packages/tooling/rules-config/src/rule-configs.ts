@@ -477,9 +477,11 @@ export class RedirectHowToMergeMainConfig extends BaseRuleConfig {
  * `nx run-many`, `nx affected` with no `--base`, a bare `vitest run`), and names the affected-scoped
  * command to run instead.
  *
- * `affectedBuildCommand` is normally left unset: load-config fills it from
- * `commands.pr-gate.buildCommand`, so the refusal quotes whatever THIS repo's gate actually runs and
- * follows it when that changes. Set it only to point the message somewhere else.
+ * `affectedBuildCommand` is NOT a knob to set — it is how the ONE command reaches this guard. A rule
+ * only ever sees its own config entry, so load-config injects `commands.pr-gate.buildCommand` here
+ * (exactly as it injects `upsertPrCommand` into pr-creation-or-push-guard and `mergeCompleteCommand`
+ * into merge-in-progress-guard), and the refusal then quotes whatever THIS repo's gate actually runs.
+ * Leave it out; setting it by hand is how a refusal starts naming a command the gate does not run.
  */
 export class WholeRepoBuildGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
