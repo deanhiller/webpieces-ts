@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, SHIM_MARKER, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 // The sh audit log now carries the same stream prefix as the JS side
@@ -306,7 +306,7 @@ describe('isShimCureCommand — only the three cures pass while the self-guard b
  * both hooks. The string must be JSON-safe — no `"` / `\` — since denyJson() serializes it.
  */
 describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () => {
-    const reason = shimStaleDenyReason('0.4.431');
+    const reason = shimStaleDenyReason('0.4.431', '', [SHIM_MARKER]);
 
     it('offers both cures, quoted EXACTLY, wp-upgrade-shim first and the cp last, with the version note', () => {
         expect(reason).toContain('installed version 0.4.431');
@@ -321,7 +321,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
     // prompt it cannot see, and reports the guard as a deadlock.
     it('warns off the installer, which prompts twice and hangs a non-interactive session', () => {
         expect(reason).toContain(`Do NOT use the bare '${INSTALL_HOOKS_CMD}' here`);
-        expect(reason).toContain('PROMPTING for a target twice');
+        expect(reason).toContain('PROMPTS for a hook target twice');
     });
 
     it('carries the no-chaining rule and states plainly it is NOT a deadlock', () => {
@@ -333,7 +333,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
     });
 
     it('omits the version note (no empty parens) when the installed version is unknown', () => {
-        const r = shimStaleDenyReason('');
+        const r = shimStaleDenyReason('', '', [SHIM_MARKER]);
         expect(r).not.toContain('installed version )');
         expect(r).not.toContain('()');
         expect(r).toContain(UPGRADE_SHIM_CMD); // the cure survives an unreadable version

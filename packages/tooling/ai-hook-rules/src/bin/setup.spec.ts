@@ -166,9 +166,11 @@ describe('applyHook', () => {
         expect(hasHook(settings, 'wp-ai-rules-hook')).toBe(true);
         const entry = settings.hooks!.PreToolUse![0];
         expect(entry.matcher).toBe('Write|Edit|MultiEdit');
-        // Project install points at the checked-in shim via $CLAUDE_PROJECT_DIR (so the hook
-        // resolves from any cwd — a subdir or a nested clone — instead of 127ing), passing the bin.
-        expect(entry.hooks[0].command).toBe('sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook');
+        // Project install points at the checked-in shim RELATIVELY, so the harness resolves it against
+        // the tool call's own cwd and each git tree runs its own release. The L-1 hook registered
+        // alongside the GUARDS hook is what stops a relative path ever failing to resolve.
+        expect(entry.hooks[0].command).toBe('sh ".claude/webpieces/ai-hook.sh" wp-ai-rules-hook');
+        expect(entry.hooks[0].command).not.toContain('$CLAUDE_PROJECT_DIR');
     });
 
     it('installs the guards hook globally with an absolute exact path (no bridge)', () => {

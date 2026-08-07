@@ -83,6 +83,19 @@ export function guaranteeRootPath(projectRoot: string): string {
     return path.join(projectRoot, '.claude', 'webpieces', 'guarantee-root.sh');
 }
 
+/**
+ * Write (or overwrite) the committed L-1 hook. Idempotent — the installer and `wp-upgrade-shim` both
+ * call it, and re-running either simply re-arms the file. Twin of setup.ts's writeShim().
+ */
+// webpieces-disable no-function-outside-class -- L-1 sibling of guaranteeRootPath(); this module is deliberately dependency-free module-scope functions
+export function writeGuaranteeRoot(projectRoot: string): void {
+    const target = guaranteeRootPath(projectRoot);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, renderGuaranteeRoot(), { mode: 0o755 });
+    // writeFileSync's mode is only applied when creating the file; force it on overwrite too.
+    fs.chmodSync(target, 0o755);
+}
+
 // Deny REASON constraint, inherited from the shim: the text is interpolated into a `REASON="…"` shell
 // assignment and then printf'd into a JSON string, so it may contain NO double quotes and NO
 // backslashes. Single quotes only — do not "improve" them.

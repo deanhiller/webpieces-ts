@@ -2,8 +2,10 @@ import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
 import {
     ADD_HOOK_PKG_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
-    RESTORE_SHIM_CMD, UPGRADE_SHIM_CMD, renderShim, shimStaleDenyReason,
+    RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim, shimStaleDenyReason,
 } from '../bin/shim';
+import { GUARANTEE_ROOT_MARKER } from '../bin/guarantee-root';
+import { REGISTRATION_SURFACE } from '../bin/hook-registration';
 import { toError } from './to-error';
 
 // ---------------------------------------------------------------------------
@@ -168,24 +170,29 @@ export const L0_FAULTS: readonly L0Fault[] = [
             'this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees '
             + 'the right version on disk and considers it installed; only the delete forces a rewrite')],
         renderShim()),
-    new L0Fault('S', 'committed .claude/webpieces/ai-hook.sh != renderShim()',
+    // S covers the WHOLE managed hook surface, not just the shim: the two committed .sh files AND the
+    // .claude/settings.json entries that register them. They only work as a set — a settings file left
+    // on the old two-absolute-hook form disables the L-1 hook and re-pins every worktree to the
+    // primary's release — and nothing validated the registration at all before it joined this fault.
+    new L0Fault('S', 'a webpieces-managed hook file or the .claude/settings.json registration does not match this release',
         'the guard bin', 'JS',
         [
-            // wp-upgrade-shim is the SURGICAL tool and therefore leads: upgrade-shim.ts writes
-            // renderShim() to .claude/webpieces/ai-hook.sh and touches nothing else — no config, no
-            // settings.json — and it imports only fs/path, so it runs on a tree too broken to load the
-            // rule engine. The INSTALLER is deliberately NOT a cure here: it also migrates the config
-            // and wires BOTH hooks, prompting for a target twice, which hangs a non-interactive agent.
+            // wp-upgrade-shim leads because it is now the ONLY cure that repairs all three, and it is
+            // still surgical: it rewrites the two .sh files and the registration and touches no config,
+            // and it imports only fs/path so it runs on a tree too broken to load the rule engine. The
+            // INSTALLER is deliberately NOT a cure here: it also migrates the config and prompts for a
+            // target twice, which hangs a non-interactive agent.
             bashCure(UPGRADE_SHIM_CMD, true,
-                'this fault fires at all — it regenerates the shim and NOTHING else (no config, no '
-                + 'settings.json); needs installed @webpieces/ai-hook-rules 0.4.408 or newer'),
+                'this fault fires at all — it is the only cure that repairs all three managed things '
+                + '(both .sh files and the settings.json registration) and it touches no config; needs '
+                + 'installed @webpieces/ai-hook-rules 0.4.408 or newer'),
             // 2026-07-21: the version gap below caused a real "command not found" deadlock.
             bashCure(RESTORE_SHIM_CMD, false,
                 'the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does '
-                + 'not exist yet — this works on every release, though Claude Code may ask you to '
-                + 'confirm the overwrite, and that prompt is NOT this guard'),
+                + 'not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade '
+                + '@webpieces afterwards and run Option 1 to finish'),
         ],
-        shimStaleDenyReason('')),
+        shimStaleDenyReason('', '', [SHIM_MARKER, GUARANTEE_ROOT_MARKER, REGISTRATION_SURFACE])),
     new L0Fault('C', `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
         [

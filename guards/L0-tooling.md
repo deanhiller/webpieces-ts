@@ -234,9 +234,27 @@ Observed live. `main` bumps the `@webpieces` pin to a newly published release:
    `0.4.545`'s `renderShim()`. Cure: `pnpm exec wp-upgrade-shim`.
 3. Guards re-armed.
 
-Two blocks, two one-line cures, no deadlock. Note the trap in step 2: the shim that matters is the one
-`settings.json` points at — `$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh`, i.e. **the primary
-clone**. Regenerating it inside a linked worktree re-arms the wrong copy and the fault keeps firing.
+Two blocks, two one-line cures, no deadlock.
+
+Step 2's cure is now bigger than its name suggests, and that is deliberate. Fault `S` covers the WHOLE
+managed hook surface — **three** things that only work as a set:
+
+| # | managed thing | registered |
+|---|---|---|
+| 1 | `.claude/webpieces/ai-hook.sh` | **relative**, once per guard bin, so each tree runs its own release |
+| 2 | `.claude/webpieces/guarantee-root.sh` (L-1) | **absolute**, matcher `Bash` |
+| 3 | the `.claude/settings.json` entries registering them | — |
+
+`pnpm exec wp-upgrade-shim` repairs all three, and it is the only cure that does: the older
+`cp …/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` fallback repairs **one of three** and its deny
+text now says so. Nothing validated the registration at all before it joined this fault, so a settings
+file left on the old two-absolute-hook form silently disabled L-1 and re-pinned every worktree to the
+primary's release, with no signal anywhere.
+
+The old trap here — "the shim that matters is the primary clone's, so regenerating it inside a linked
+worktree re-arms the wrong copy" — is **gone by construction**: the guard hooks are relative, so the
+shim that runs in a worktree IS that worktree's, and `governingShimRoot()` compares the tree the running
+binary came from. Cure the tree the deny's `root=` names.
 
 ## The audit log — checking observed behaviour against this document
 
@@ -275,9 +293,9 @@ derived from the payload's `cwd`. The line lands in **that tree's** log —
 `<primary>/.webpieces/worktrees/<name>/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`,
 or `<primary>/.webpieces/logs/` from
 the primary clone. Centralized under the primary on purpose: removing a worktree must not take its
-audit trail with it. Note the interaction with the trap in the worked example above — the shim runs
-from `$CLAUDE_PROJECT_DIR`, so `tree=` can name a worktree whose faults are being MEASURED against a
-different tree. That divergence is now visible in the log rather than inferred.
+audit trail with it. With the guard hooks now registered RELATIVE, `tree=` and the tree being measured
+are the SAME tree by construction — the divergence the previous version of this paragraph warned about
+is what the three-hook registration removed. The log still prints both, so a regression would show.
 
 Two properties this log must never trade away, both locked by `shim-audit-log.spec.ts`: it never
 writes to stdout (stdout is the PreToolUse decision channel — one stray byte corrupts allow/deny), and

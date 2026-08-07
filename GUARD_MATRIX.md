@@ -95,13 +95,23 @@ exit is a "non-blocking error. Execution continues; the action proceeds"** — i
 
 > **A hook that fails to launch is a silent ALLOW — not a block, not an error the AI sees.**
 
-Nothing in this repo produces that state deliberately. A bad hook **path** produces it every time, which
-is why the entry point in `.claude/settings.json` is `$CLAUDE_PROJECT_DIR`-absolute, and why the shim
-runs the binary as a CHILD and maps any `rc` outside `{0,2}` onto fault K rather than `exec`ing it
-(`ai-hook.sh:94-95, 151-177`) — `exec` on a missing target exits 127 and therefore allows.
+Nothing in this repo produces that state deliberately. A bad hook **path** produces it every time, and
+that is what shapes the registration: `.claude/settings.json` now carries **three** hooks, not two.
 
-Full treatment, including the proposal to move the real guards to relative per-tree hooks while keeping
-one absolute hook for exactly this reason: [decisions/0003](decisions/0003-three-hooks-per-tree-governance.md) §4,
+| hook | path | why |
+|---|---|---|
+| **L-1** `guarantee-root.sh` | **absolute** `$CLAUDE_PROJECT_DIR/…` | it must resolve from ANY cwd or it cannot fail closed. It refuses any `cd` that would park the shell where the other two cannot launch |
+| guards `ai-hook.sh wp-ai-guards-hook` | **relative** | so each git tree runs its own shim, its own binary and its own pin — `$CLAUDE_PROJECT_DIR` never moves, so an absolute hook pins every worktree to the primary's release forever |
+| rules `ai-hook.sh wp-ai-rules-hook` | **relative** | same |
+
+The relative pair is admissible *only* because L-1 exists. All three, plus the two committed `.sh`
+files, are compared against the installed release by fault `S`, and `pnpm exec wp-upgrade-shim`
+regenerates all three.
+
+The shim also runs the binary as a CHILD and maps any `rc` outside `{0,2}` onto fault K rather than
+`exec`ing it — `exec` on a missing target exits 127 and therefore allows.
+
+Full treatment: [decisions/0003](decisions/0003-three-hooks-per-tree-governance.md) §1 and §4,
 and [decisions/0001](decisions/0001-tree-identity-and-governance.md) §2.6.
 
 ## The global allowlist

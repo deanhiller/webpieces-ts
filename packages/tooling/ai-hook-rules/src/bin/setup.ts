@@ -7,10 +7,19 @@ import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MA
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
+import { GUARANTEE_ROOT_MARKER, guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
+import {
+    ClaudeSettings, HookCommand, HookEntry, HookRegistrationEntry, GUARANTEE_ROOT_ENTRY, GUARDS_BIN,
+    GUARDS_MATCHER, RULES_BIN, RULES_MATCHER, addHookEntry, readSettings, shimCommand, writeSettings,
+} from './hook-registration';
 
 // Re-exported for back-compat (setup.spec.ts + external callers). The shim body + path now live in
 // ./shim (shared with the runtime self-heal in hook-core). See shim.ts for the single source of truth.
 export { renderShim };
+// The settings.json reader lives in ./hook-registration (shared with wp-upgrade-shim, which must repair
+// the registration on a tree too broken to load the rule engine). Re-exported so there is still ONE
+// name to import it by.
+export { readSettings };
 
 const CONFIG_FILENAME = 'webpieces.config.json';
 const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
@@ -31,37 +40,15 @@ class HookSpec {
     ) {}
 
     // Absolute targets (global) need the exact path to this repo's bin — no ~/.webpieces bridge.
-    // Project (relative) targets point at the checked-in shim via $CLAUDE_PROJECT_DIR (the project
-    // root Claude Code exports to hooks). Using $CLAUDE_PROJECT_DIR — NOT a bare `./…` — means the
-    // hook resolves from ANY cwd (a monorepo subdir, or a nested clone under repositories/) instead
-    // of `command not found` (exit 127) silently skipping the guard. It stays portable (no hardcoded
-    // absolute path), and the shim still degrades gracefully when node_modules is absent. See
-    // writeShim(); the git-repo-boundary decision (foreign clone → allow) then happens in the binary.
+    // Project targets get the RELATIVE shim command (see hook-registration.ts for why relative is the
+    // whole point), and the L-1 hook registered beside them is what keeps a relative path from ever
+    // failing to resolve — which per the hooks reference would be a SILENT UNGUARDED ALLOW, not a block.
     commandFor(target: InstallTarget, projectRoot: string): string {
         if (target.absolute) {
             return `node ${path.join(projectRoot, 'node_modules', '.bin', this.bin)}`;
         }
         return shimCommand(this.bin);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Single checked-in shim (.claude/webpieces/ai-hook.sh). Both project hooks point at it, passing
-// their bin name as the first arg. settings.json points here (not at the bare bin) so a missing bin
-// (fresh clone, package removed) yields a friendly "run pnpm install" line instead of the raw
-// `sh: No such file or directory` on every Write/Edit/Bash tool call. The bin name rides along in
-// the command string, so `command.includes(bin)` still detects/uninstalls each hook (hasHook /
-// removeHook). `.claude` is committed, so the shim survives even when node_modules does not.
-// The shim body + path live in ./shim (shared with the runtime self-heal in hook-core); only the
-// settings.json command string is built here.
-// ---------------------------------------------------------------------------
-function shimCommand(bin: string): string {
-    // Invoke via `sh <file>` rather than executing the shim directly: `sh` reads a 0644 file fine, so
-    // a missing executable bit on the checked-in shim (fresh clone, a filesystem that drops the bit,
-    // git core.fileMode quirks) can NEVER break the hook with a raw `Permission denied` on every tool
-    // call. $CLAUDE_PROJECT_DIR (exported to hooks by Claude Code) = the project root, so the shim
-    // resolves from any cwd. Quoted to survive spaces in the path.
-    return `sh "$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${bin}`;
 }
 
 // Idempotent: re-running the installer overwrites the managed shim in place.
@@ -78,13 +65,54 @@ function removeShim(projectRoot: string): void {
     if (fs.existsSync(target)) fs.rmSync(target);
 }
 
-// The shim is shared by both hooks — only safe to delete once no project settings file references
-// it anymore (i.e. the other hook was moved to global or uninstalled too).
-function shimReferenced(targets: InstallTarget[]): boolean {
+// A managed .sh is shared by the project hooks — only safe to delete once no project settings file
+// references it anymore (i.e. the other hook was moved to global or uninstalled too).
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function markerReferenced(targets: InstallTarget[], marker: string): boolean {
     return targets.some((t: InstallTarget) => {
         const entries = readSettings(t.settingsPath).hooks?.PreToolUse ?? [];
-        return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(SHIM_MARKER)));
+        return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(marker)));
     });
+}
+
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function removeGuaranteeRootFile(projectRoot: string): void {
+    const target = guaranteeRootPath(projectRoot);
+    if (fs.existsSync(target)) fs.rmSync(target);
+}
+
+// Drop every PreToolUse command referencing the L-1 hook; returns true if anything was removed.
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function removeGuaranteeRootHook(settings: ClaudeSettings): boolean {
+    return removeHookByMarker(settings, GUARANTEE_ROOT_MARKER);
+}
+
+/**
+ * Install / move / uninstall the L-1 hook (guarantee-root.sh) alongside the GUARDS hook.
+ *
+ * It rides with the guards hook and not the rules hook because it judges `cd`, `cd` arrives on Bash,
+ * and `Bash` is in the guards matcher. It is registered ABSOLUTE while the guard hooks are RELATIVE —
+ * that asymmetry is the design, not an oversight (hook-registration.ts states it once).
+ *
+ * A GLOBAL (absolute) install gets none: those hooks name the bin path directly, so there is no
+ * relative path that could fail to resolve, which is the only thing L-1 protects against.
+ */
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function applyGuaranteeRoot(chosen: InstallTarget | null, targets: InstallTarget[], projectRoot: string): void {
+    const relative = chosen !== null && !chosen.absolute;
+    for (const target of targets) {
+        const settings = readSettings(target.settingsPath);
+        const removed = removeGuaranteeRootHook(settings);
+        if (relative && chosen.settingsPath === target.settingsPath) {
+            addHookEntry(settings, GUARANTEE_ROOT_ENTRY);
+            writeSettings(target.settingsPath, settings);
+            console.log(`  ✅ L-1 guarantee-root hook (keeps the shell where the relative guard hooks can launch) → ${target.label}`);
+        } else if (removed) {
+            writeSettings(target.settingsPath, settings);
+        }
+    }
+    if (relative) writeGuaranteeRoot(projectRoot);
+    else if (!markerReferenced(targets, GUARANTEE_ROOT_MARKER)) removeGuaranteeRootFile(projectRoot);
 }
 
 export class InstallTarget {
@@ -96,13 +124,11 @@ export class InstallTarget {
     ) {}
 }
 
-export const RULES_HOOK = new HookSpec('rules', 'Rules hook (code-style validation)', 'Write|Edit|MultiEdit', 'wp-ai-rules-hook');
-// Guards match Bash (git/PR guards), Write|Edit|MultiEdit (file-scoped guards like
-// feature-branch-guard), AND Read — Read carries no guard, but the guards hook owns the
-// per-invocation audit log (guard-invocations.log), so matching Read lets it record every file the
-// AI opens (log-and-allow fast path in hook-core.ts; a Read is never blocked). This is what lets a
-// human later see whether the AI read a project's design.json before editing it.
-export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch protection)', 'Write|Edit|MultiEdit|Bash|Read', 'wp-ai-guards-hook');
+// The matchers and bin names come from ./hook-registration, which is also what the drift check and
+// wp-upgrade-shim compare against — one spelling of the registration, or the installer and the
+// validator can disagree about what "installed" means.
+export const RULES_HOOK = new HookSpec('rules', 'Rules hook (code-style validation)', RULES_MATCHER, RULES_BIN);
+export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch protection)', GUARDS_MATCHER, GUARDS_BIN);
 
 // `homeDir` is injectable so tests can point the global target at a temp dir instead of the real
 // ~/.claude/settings.json (a unit test must never write the user's actual global settings).
@@ -403,45 +429,22 @@ function seedOrSyncConfig(projectRoot: string): void {
 // ---------------------------------------------------------------------------
 // Claude Code settings.json hook wiring.
 // ---------------------------------------------------------------------------
-interface HookCommand { type: string; command: string; }
-interface HookEntry { matcher: string; hooks: HookCommand[]; }
-interface ClaudeSettings {
-    hooks?: { PreToolUse?: HookEntry[] };
-    // webpieces-disable no-any-unknown -- opaque settings bag; arbitrary keys allowed
-    [key: string]: unknown;
-}
-
-export function readSettings(settingsPath: string): ClaudeSettings {
-    if (!fs.existsSync(settingsPath)) return {};
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    if (raw.trim() === '') return {};
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return JSON.parse(raw) as ClaudeSettings;
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new Error(`${settingsPath} has invalid JSON — fix it, then retry: ${error.message}`, { cause: error });
-    }
-}
-
-function writeSettings(settingsPath: string, settings: ClaudeSettings): void {
-    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
-}
-
 export function hasHook(settings: ClaudeSettings, bin: string): boolean {
     const entries = settings.hooks?.PreToolUse ?? [];
     return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(bin)));
 }
 
-// Drop every PreToolUse command referencing `bin`; returns true if anything was removed.
-function removeHook(settings: ClaudeSettings, bin: string): boolean {
+// Drop every PreToolUse command containing `marker` (a bin name, or a managed .sh path); returns true
+// if anything was removed. REMOVE-then-ADD is what keeps an upgrade from leaving the old absolute
+// spelling beside the new relative one — two spellings of one registration.
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function removeHookByMarker(settings: ClaudeSettings, marker: string): boolean {
     const entries = settings.hooks?.PreToolUse;
     if (!entries) return false;
     let changed = false;
     const kept: HookEntry[] = [];
     for (const entry of entries) {
-        const hooks = entry.hooks.filter((h: HookCommand) => !h.command.includes(bin));
+        const hooks = entry.hooks.filter((h: HookCommand) => !h.command.includes(marker));
         if (hooks.length !== entry.hooks.length) changed = true;
         if (hooks.length > 0) kept.push({ matcher: entry.matcher, hooks });
     }
@@ -449,21 +452,15 @@ function removeHook(settings: ClaudeSettings, bin: string): boolean {
     return changed;
 }
 
-function addHook(settings: ClaudeSettings, matcher: string, command: string): void {
-    if (!settings.hooks) settings.hooks = {};
-    if (!Array.isArray(settings.hooks.PreToolUse)) settings.hooks.PreToolUse = [];
-    settings.hooks.PreToolUse.push({ matcher, hooks: [{ type: 'command', command }] });
-}
-
 // Apply the chosen install for one hook: remove it from every target file, then add it back to the
 // chosen one (or nowhere, for uninstall). Writes only the files that changed.
 export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets: InstallTarget[], projectRoot: string): void {
     for (const target of targets) {
         const settings = readSettings(target.settingsPath);
-        const removed = removeHook(settings, hook.bin);
+        const removed = removeHookByMarker(settings, hook.bin);
         const isChosen = chosen !== null && chosen.settingsPath === target.settingsPath;
         if (isChosen) {
-            addHook(settings, hook.matcher, hook.commandFor(target, projectRoot));
+            addHookEntry(settings, new HookRegistrationEntry(hook.matcher, hook.commandFor(target, projectRoot)));
             writeSettings(target.settingsPath, settings);
             console.log(`  ✅ ${hook.label} → ${target.label}`);
         } else if (removed) {
@@ -474,9 +471,13 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
     // otherwise clean it up once neither hook references it anymore.
     if (chosen !== null && !chosen.absolute) {
         writeShim(projectRoot);
-    } else if (!shimReferenced(targets)) {
+    } else if (!markerReferenced(targets, SHIM_MARKER)) {
         removeShim(projectRoot);
     }
+    // The L-1 hook rides with the GUARDS hook (it judges `cd`, which arrives on Bash). Doing it here
+    // rather than at a separate call site means every existing caller of applyHook — the installer's
+    // interactive and --target paths, and every test — gets the three-hook form with no second step.
+    if (hook.bin === GUARDS_BIN) applyGuaranteeRoot(chosen, targets, projectRoot);
     if (chosen === null) console.log(`  ⛔ ${hook.label} not installed (removed from all locations).`);
 }
 

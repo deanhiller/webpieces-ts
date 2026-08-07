@@ -2,22 +2,35 @@
 import * as fs from 'fs';
 
 import { renderShim, shimPath, findShimRoot } from './shim';
+import { guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
+import { repairRegistrationAt } from './hook-registration';
 import { toError } from '../core/to-error';
 
 // ---------------------------------------------------------------------------
-// The `wp-upgrade-shim` entry point — the CURE for the committed-shim self-guard.
+// The `wp-upgrade-shim` entry point — the CURE for the managed-hook-surface self-guard (L0 fault S).
 //
-// The committed .claude/webpieces/ai-hook.sh is webpieces-MANAGED: generated from renderShim() and
-// checked in only so the hook has a stable entry point when node_modules is absent. When it is reverted
-// or hand-edited it no longer matches the installed template, and the shim's self-guard fails CLOSED
-// (blocking every tool call) because stale escape-hatch logic must not run silently. That guard allows
-// exactly ONE command through — this one — so the assistant can re-arm it without a deadlock.
+// WHAT IT REPAIRS, and why all three (2026-08-07). This used to write EXACTLY ONE FILE, ai-hook.sh,
+// and touch nothing else. That was correct while the installed surface WAS one file. It is now three:
 //
-// Deliberately imports only ./shim (fs + path) + toError, exactly like install-entry: the whole job is
-// to rewrite the committed shim, which never needed the rule engine, and must stay runnable on a tree
-// too broken to load it. We write renderShim() — the single source of truth — which the shipped template
-// (templates/ai-hook.sh, byte-identical to renderShim() by a unit test) equals, so the self-guard, which
-// compares the committed shim against that installed template, clears after this runs.
+//   1. .claude/webpieces/ai-hook.sh          the guard shim, registered RELATIVE so each git tree runs
+//                                            its own release, its own binary and its own pin
+//   2. .claude/webpieces/guarantee-root.sh   the L-1 hook, registered ABSOLUTE, which refuses any `cd`
+//                                            that would park the shell where the RELATIVE hooks cannot
+//                                            launch — an unresolvable hook exits 127, and per the hooks
+//                                            reference that is a NON-BLOCKING error, i.e. a SILENT
+//                                            UNGUARDED ALLOW
+//   3. the .claude/settings.json registration itself
+//
+// Leaving (2) and (3) out would have made the upgrade path silently useless: an upgrading consumer
+// would take the new shim, KEEP the old two-absolute-hook registration, never receive guarantee-root.sh
+// at all, and L-1 would never activate — with the drift check reporting nothing, because nothing
+// validated settings.json. A cure that fixes one of three is worse than no cure, because it reports
+// success. This bin is already the sanctioned cure named in fault S's message and already on the L0
+// allowlist, so extending it keeps the existing self-healing path working end to end.
+//
+// Deliberately imports only ./shim, ./guarantee-root and ./hook-registration (fs + path) + toError,
+// exactly like install-entry: the whole job is to rewrite webpieces-managed files, which never needed
+// the rule engine, and it must stay runnable on a tree too broken to load it.
 // ---------------------------------------------------------------------------
 const RED = '[31;1m';
 const RESET = '[0m';
@@ -39,12 +52,33 @@ export function runUpgradeShim(cwd: string): number {
         fs.writeFileSync(target, renderShim(), { mode: 0o755 });
         // writeFileSync's mode only applies on create; force it on overwrite too (matches writeShim).
         fs.chmodSync(target, 0o755);
-        console.log(`✅ @webpieces: regenerated the managed shim at ${target} — tool calls are re-armed.`);
-        console.log('  This file is generated + committed by webpieces; do not revert or hand-edit it.');
+        writeGuaranteeRoot(root);
+        const rewired = repairRegistrationAt(root);
+        reportRepairs(target, guaranteeRootPath(root), rewired);
         return 0;
     } catch (err: unknown) {
         const error = toError(err);
-        console.error(`${RED}🛑 @webpieces: could not write ${target}: ${error.message}${RESET}`);
+        console.error(`${RED}🛑 @webpieces: could not write under ${root}: ${error.message}${RESET}`);
         return 1;
     }
+}
+
+/**
+ * Say what was actually done, per managed thing. The old single line ("regenerated the managed shim")
+ * would now be a lie by omission on the two most important repairs — and an agent reading a cure's
+ * output is how it decides whether the cure worked.
+ */
+// webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
+function reportRepairs(shimFile: string, guaranteeFile: string, rewired: readonly string[]): void {
+    console.log(`✅ @webpieces: regenerated the managed shim at ${shimFile} — tool calls are re-armed.`);
+    console.log(`✅ @webpieces: regenerated the L-1 hook at ${guaranteeFile}.`);
+    if (rewired.length === 0) {
+        console.log('   .claude/settings.json hook registration already matches this release — no change.');
+    } else {
+        for (const file of rewired) {
+            console.log(`✅ @webpieces: rewrote the hook registration in ${file} to the three-hook form`);
+            console.log('   (L-1 absolute + the two guard hooks RELATIVE, so each git tree runs its own release).');
+        }
+    }
+    console.log('  These files are generated + committed by webpieces; do not revert or hand-edit them.');
 }

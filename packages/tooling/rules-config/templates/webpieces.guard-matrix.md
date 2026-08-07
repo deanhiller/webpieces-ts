@@ -16,7 +16,7 @@ reading this, one of the faults below fired and named this file.
 | `X` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
 | `U` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
-| `S` | committed .claude/webpieces/ai-hook.sh != renderShim() | the guard bin | JS |
+| `S` | a webpieces-managed hook file or the .claude/settings.json registration does not match this release | the guard bin | JS |
 | `C` | webpieces.config.json missing | the guard bin | JS |
 | `Y` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
 
@@ -46,10 +46,10 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 - **Option 1 (preferred)**: `rm -rf node_modules && pnpm install`  ← pick this when this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite
 
-### `S` — committed .claude/webpieces/ai-hook.sh != renderShim()
+### `S` — a webpieces-managed hook file or the .claude/settings.json registration does not match this release
 
-- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it regenerates the shim and NOTHING else (no config, no settings.json); needs installed @webpieces/ai-hook-rules 0.4.408 or newer
-- **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — this works on every release, though Claude Code may ask you to confirm the overwrite, and that prompt is NOT this guard
+- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs all three managed things (both .sh files and the settings.json registration) and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
+- **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish
 
 ### `C` — webpieces.config.json missing
 
