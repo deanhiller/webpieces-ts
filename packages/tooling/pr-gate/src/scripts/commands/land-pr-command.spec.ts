@@ -35,7 +35,7 @@ const BRANCH = 'dean/feature';
 const REMOTE = 'git@github.com:acme/widgets.git';
 // What `wp-finish-upsert-pr` publishes as the PR description, verbatim. See dashboard.renderPrBody and
 // pr-body-is-merge-body.spec.ts: this string IS both surfaces.
-const PR_DESCRIPTION = 'https://github.com/acme/widgets/pull/604 (for git log)\n\nRisk: green\n\nSummary.\n';
+const PR_DESCRIPTION = 'https://github.com/acme/widgets/pull/604\n\nRisk: green\n\nSummary.\n';
 
 let tmp = '';
 let primary = '';

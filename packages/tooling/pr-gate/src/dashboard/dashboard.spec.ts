@@ -252,7 +252,7 @@ describe('renderPrBody', () => {
         // ORDER is the point, not mere presence: the link is the FIRST line of the body, so `git log`
         // shows it directly under the subject. Assert with startsWith + index comparison — a `toContain`
         // pair would have passed just as happily with the link back at the bottom.
-        expect(body.startsWith('https://github.com/o/r/pull/42 (for git log)\n')).toBe(true);
+        expect(body.startsWith('https://github.com/o/r/pull/42\n')).toBe(true);
         expect(body.indexOf('https://github.com/o/r/pull/42')).toBeLessThan(body.indexOf('Risk: '));
         expect(body).toContain('20/100 🟢 (green)');
         expect(body).toContain('Flags: 🟢 all green');
@@ -262,14 +262,17 @@ describe('renderPrBody', () => {
     });
 
     /**
-     * The `(for git log)` label is load-bearing, not decoration. Read on the GitHub page the link is
-     * self-evidently the page you are already on, so without the label it reads as redundant noise
-     * somebody will helpfully delete — and in `git log`, where it is the ONLY route back to the PR, it
-     * would then be gone.
+     * The link is BARE — no caption. It used to read `<url> (for git log)`, a label aimed at a reader on
+     * the GitHub page (where the link is redundant, being the page they are on) to stop them deleting it.
+     * But this same string IS the squash-commit body, so that caption landed in `main`'s history verbatim
+     * on every single commit, forever, to serve one transient reading. In `git log` a bare URL is
+     * self-evidently the route back and explains itself. Asserting the ABSENCE of the old caption, not
+     * just the presence of the URL — the whole point is that the permanent surface stays clean.
      */
-    it('labels the link so nobody reading the PR page deletes it as redundant', () => {
-        const input = baseInput();
-        expect(renderPrBody(input, 'https://github.com/o/r/pull/42')).toContain('(for git log)');
+    it('leads with a bare URL and no caption, so git log carries no page-reader label', () => {
+        const body = renderPrBody(baseInput(), 'https://github.com/o/r/pull/42');
+        expect(body.startsWith('https://github.com/o/r/pull/42\n')).toBe(true);
+        expect(body).not.toContain('(for git log)');
     });
 
     /**
@@ -283,7 +286,7 @@ describe('renderPrBody', () => {
         expect(green).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
 
         const red = renderPrBody(baseInput({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), '');
-        expect(red).toContain('Flags (non-green):');
+        expect(red).toContain('Non-green Flags (full list in first comment to avoid large git logs)');
         expect(red).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
     });
 
@@ -347,7 +350,7 @@ describe('renderPrBody', () => {
     );
         const body = renderPrBody(input, '');
 
-        expect(body).toContain('Flags (non-green):');
+        expect(body).toContain('Non-green Flags (full list in first comment to avoid large git logs)');
         expect(body).toContain('- Build (nx affected): 🔴 Failed');
         expect(body).toContain('- Pattern Violations: 🟡 1 violation(s)');
         expect(body).toContain('- API Changed: 🟡 1 file(s)');
