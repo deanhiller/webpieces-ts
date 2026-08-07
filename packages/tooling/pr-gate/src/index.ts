@@ -13,6 +13,14 @@ export {
     ChecklistRow,
     DashboardInput,
     Dashboard,
+    DETAIL_COMMENT_MARKER,
 } from './dashboard/dashboard';
+// The 2nd PR comment's renderer — its own surface, its own class. A barrel is the surface too, so this
+// is exported alongside Dashboard rather than left reachable only by deep import.
+export {
+    ChecklistCommentRenderer,
+    CHECKLIST_COMMENT_MARKER,
+} from './dashboard/checklist-comment-renderer';
+export { PrCommentUpserter, PrCommentRequest, PrCommentResult } from './scripts/workflow/pr-comment-upserter';
 export { ChecklistDetector, TriggeredChecklist } from './scripts/workflow/checklist-detector';
 export { PrGateApp } from './scripts/pr-gate-app';

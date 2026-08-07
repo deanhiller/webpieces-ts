@@ -6,28 +6,46 @@ import {
     GateResult,
     DisableCounts,
     ChecklistRow,
-    CHECKLIST_COMMENT_MARKER,
 } from './dashboard';
 import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
+import { ChecklistCommentRenderer } from './checklist-comment-renderer';
 import { ChecklistCommentRow } from './checklist-comment-row';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] =>
     dash.computeGateResults(g, f);
 const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables(p);
-const renderDashboard = (i: DashboardInput): string => dash.renderDashboard(i);
-const renderCommitBody = (i: DashboardInput, url: string): string => dash.renderCommitBody(i, url);
+const renderDetailComment = (i: DashboardInput): string => dash.renderDetailComment(i);
+const renderPrBody = (i: DashboardInput, url: string): string => dash.renderPrBody(i, url);
 
 function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
     const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
     return Object.assign(base, overrides);
 }
 
+// The 2nd comment's renderer, used here only by the tests that contrast what the DASHBOARD row drops
+// against what the comment keeps. Its own behaviour is covered in checklist-comment-renderer.spec.ts.
+const checklistRenderer = new ChecklistCommentRenderer();
 const renderChecklistComment = (
     rows: ChecklistCommentRow[],
     verified: boolean,
     based = true,
-): string => dash.renderChecklistComment(rows, verified, based);
+): string => checklistRenderer.render(rows, verified, based);
+
+// A minimal all-green input, so a test about ONE property of the PR body does not restate ten
+// positional constructor arguments to get at it.
+function baseInput(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
+    return new DashboardInput(
+        'My PR',
+        computeGateResults([], []),
+        countAddedDisables(''),
+        true,
+        'aaaaaaaaaaaaaaaa',
+        'bbbbbbbbbbbbbbbb',
+        'cccccccccccccccc',
+        review(reviewOverrides),
+    );
+}
 
 // The four files every fixture roster was matched against, so "x of 4" is always honest.
 const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
@@ -75,120 +93,7 @@ function alwaysRow(subagent: string, status: string, detail = ''): ChecklistComm
     );
 }
 
-describe('renderChecklistComment — roll-up + full roster', () => {
-    it('rolls up X defined / N ran / colors / skipped, and lists EVERY checklist as a checkbox', () => {
-        const rows = [
-            ranRow('db-reviewer', CK_PASS, 'migrations are reversible'),
-            alwaysRow('api-reviewer', CK_WARN, 'adds a route with no rate limit'),
-            ranRow('secrets-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
-            skippedRow('a11y-reviewer'),
-            skippedRow('i18n-reviewer'),
-        ];
-        const md = renderChecklistComment(rows, true);
-        expect(md).toContain(CHECKLIST_COMMENT_MARKER);
-        expect(md).toContain('— 5 defined · 3 ran (🟢 1 · 🟡 1 · 🟠 1) · 2 skipped ✅');
-        expect(md).toContain('### Checklists (all 5)');
-        expect(md).toContain('- [x] 🟢 **db-reviewer** — passed');
-        expect(md).toContain('- [x] 🟡 **api-reviewer** — passed with concerns');
-        expect(md).toContain('- [x] 🟠 **secrets-reviewer** — OVERRIDDEN');
-        expect(md).toContain(
-            '- [ ] ⚪ **a11y-reviewer** — skipped, not applicable to this diff (expected ✅)',
-        );
-        expect(md).toContain('- [ ] ⚪ **i18n-reviewer** — skipped');
-    });
 
-    it('says WHY each one matched — the fired globs and the files they hit', () => {
-        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok')], true);
-        expect(md).toContain('matched `**/*.sql` → 1 of 4 changed file(s): db/003.sql');
-    });
-
-    it('says why a SKIPPED one did not match, and never claims the whole diff was in its scope', () => {
-        const md = renderChecklistComment([skippedRow('a11y-reviewer')], true);
-        expect(md).toContain('`apps/web/**`, `**/*.tsx` matched 0 of 4 changed file(s)');
-        expect(md).not.toContain('ALWAYS RUNS');
-    });
-
-    it('distinguishes a PATTERNLESS checklist from a skipped one (both fired zero globs)', () => {
-        const md = renderChecklistComment([alwaysRow('api-reviewer', CK_PASS, 'ok')], true);
-        expect(md).toContain('ALWAYS RUNS (no patterns)');
-        expect(md).toContain('whole diff in scope, 4 changed file(s)');
-        expect(md).not.toContain('matched 0 of');
-        // The line states the fact and stops. Patternless is a deliberate configuration, so the row must
-        // NOT tell the repo to "add `patterns` if that is not intended" — that nags every repo that meant
-        // it, on every PR, forever.
-        expect(md).not.toContain('if that is not intended');
-    });
-
-    it('refuses to report an unresolvable diff base as an all-clear', () => {
-        const md = renderChecklistComment(
-            [skippedRow('a11y-reviewer'), skippedRow('i18n-reviewer')],
-            true,
-            false,
-        );
-        expect(md).toContain('⚠️ NOT EVALUATED (2 defined)');
-        expect(md).toContain('not** an all-clear');
-        expect(md).not.toContain('skipped ✅');
-        expect(md).not.toContain('all passed');
-    });
-});
-
-describe('renderChecklistComment — reviewer sections', () => {
-    it('gives each reviewer that RAN a section with its output verbatim, exceptions first', () => {
-        const rows = [
-            ranRow('db-reviewer', CK_PASS, 'migrations are reversible'),
-            alwaysRow('api-reviewer', CK_WARN, 'adds a route with no rate limit'),
-            ranRow('secrets-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
-        ];
-        const md = renderChecklistComment(rows, true);
-        expect(md).toContain('### Reviews that ran');
-        expect(md).toContain(
-            '#### 🟠 secrets-reviewer — OVERRIDDEN — shipped with a stated justification',
-        );
-        expect(md).toContain('#### 🟡 api-reviewer — passed with concerns');
-        expect(md).toContain('#### 🟢 db-reviewer — passed');
-        expect(md).toContain('adds a route with no rate limit');
-        // Overridden → warned → passed: a reader meets what needs attention before the wall of green.
-        const sections = md.slice(md.indexOf('### Reviews that ran'));
-        expect(sections.indexOf('secrets-reviewer')).toBeLessThan(sections.indexOf('api-reviewer'));
-        expect(sections.indexOf('api-reviewer')).toBeLessThan(sections.indexOf('db-reviewer'));
-    });
-
-    it('gives NO section (and makes no provenance claim) when nothing had to run', () => {
-        const md = renderChecklistComment(
-            [skippedRow('a11y-reviewer'), skippedRow('i18n-reviewer')],
-            true,
-        );
-        expect(md).toContain('— 2 defined · 0 ran · 2 skipped ✅');
-        expect(md).toContain('No reviewer had to run on this diff');
-        expect(md).not.toContain('### Reviews that ran');
-        expect(md).not.toContain('verified from the Claude Code harness');
-    });
-
-    it('reflects provenance: verified vs unverified', () => {
-        const rows = [ranRow('db-reviewer', CK_PASS, 'ok')];
-        expect(renderChecklistComment(rows, true)).toContain(
-            'verified from the Claude Code harness',
-        );
-        expect(renderChecklistComment(rows, false)).toContain('provenance was NOT verified');
-    });
-
-    it('truncates the LONGEST body to fit the cap, keeping every heading AND the whole roster', () => {
-        const rows = [
-            ranRow('short-reviewer', CK_PASS, 'tiny note'),
-            ranRow('huge-reviewer', CK_PASS, 'x'.repeat(70000)),
-            skippedRow('a11y-reviewer'),
-        ];
-        const md = renderChecklistComment(rows, true);
-        expect(md.length).toBeLessThanOrEqual(65000);
-        expect(md).toContain('#### 🟢 short-reviewer — passed');
-        expect(md).toContain('tiny note'); // short body untouched
-        expect(md).toContain('#### 🟢 huge-reviewer — passed');
-        expect(md).toContain('truncated to fit'); // long body was cut
-        // The roster lives in the header, so no roster line can be the thing an oversize comment drops.
-        expect(md).toContain('- [ ] ⚪ **a11y-reviewer** — skipped');
-        expect(md).toContain('- [x] 🟢 **huge-reviewer** — passed');
-    });
-});
 
 describe('computeGateResults', () => {
     it('matches glob patterns and reports matched files', () => {
@@ -231,7 +136,7 @@ describe('countAddedDisables', () => {
     });
 });
 
-describe('renderDashboard', () => {
+describe('renderDetailComment', () => {
     it('renders the RISK section, yellow gates, and build status', () => {
         const gates = computeGateResults(
             [new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')],
@@ -248,7 +153,7 @@ describe('renderDashboard', () => {
             'cccccccccccc',
             review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }),
         );
-        const md = renderDashboard(input);
+        const md = renderDetailComment(input);
 
         expect(md).toContain('🚦 PR Gate Dashboard');
         expect(md).toContain('**Risk Score:**');
@@ -281,15 +186,38 @@ describe('renderDashboard', () => {
                 violations: ['boundary crossed', 'naming'],
             }),
         );
-        const md = renderDashboard(input);
+        const md = renderDetailComment(input);
 
         expect(md).toContain('**DB Schema Changed:** 🔴 Yes (1 file(s))');
         expect(md).toContain('**Risk Level:** 🔴 **red**');
         expect(md).toContain('**Pattern Violations:** 🟡 Yes (2 violation(s))');
     });
+
+    /**
+     * The footer names the tooling by REPO URL, so a reader who lands on a generated comment in any
+     * consumer repo can find what produced it. It no longer claims "build ran via nx affected" — that was
+     * hard-coded and wrong wherever buildCommand is not nx, and the honest version of that claim now
+     * lives in the PR body, naming the real command.
+     */
+    it('footers with the webpieces repo URL, not the old hard-coded nx claim', () => {
+        const md = renderDetailComment(baseInput());
+        expect(md).toContain('Generated by https://github.com/deanhiller/webpieces-ts  wp-finish-upsert-pr');
+        expect(md).not.toContain('not self-attested');
+    });
+
+    /**
+     * This comment is where the long form belongs — the whole summary, not the 4-sentence abstract the PR
+     * body carries. A reader following the pointer must get MORE than they already saw.
+     */
+    it('carries the FULL summary, where the PR body carries only its first sentences', () => {
+        const long = 'S1. S2. S3. S4. S5. S6.';
+        const input = baseInput({ summary: long });
+        expect(renderDetailComment(input)).toContain(long);
+        expect(renderPrBody(input, 'https://github.com/o/r/pull/42')).not.toContain('S5.');
+    });
 });
 
-describe('renderCommitBody', () => {
+describe('renderPrBody', () => {
     it('leads with the PR link, then the risk score, omitting green rows', () => {
         const input = new DashboardInput(
             'My PR',
@@ -306,18 +234,78 @@ describe('renderCommitBody', () => {
                 summary: 'One thing. Two thing. Three thing.',
             }),
         );
-        const body = renderCommitBody(input, 'https://github.com/o/r/pull/42');
+        const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
 
         // ORDER is the point, not mere presence: the link is the FIRST line of the body, so `git log`
         // shows it directly under the subject. Assert with startsWith + index comparison — a `toContain`
         // pair would have passed just as happily with the link back at the bottom.
-        expect(body.startsWith('https://github.com/o/r/pull/42\n')).toBe(true);
+        expect(body.startsWith('https://github.com/o/r/pull/42 (for git log)\n')).toBe(true);
         expect(body.indexOf('https://github.com/o/r/pull/42')).toBeLessThan(body.indexOf('Risk: '));
         expect(body).toContain('20/100 🟢 (green)');
         expect(body).toContain('Flags: 🟢 all green');
         expect(body).toContain('One thing. Two thing. Three thing.');
         // The old `PR: <url>` label is gone — the bare URL leads instead.
         expect(body).not.toContain('PR: ');
+    });
+
+    /**
+     * The `(for git log)` label is load-bearing, not decoration. Read on the GitHub page the link is
+     * self-evidently the page you are already on, so without the label it reads as redundant noise
+     * somebody will helpfully delete — and in `git log`, where it is the ONLY route back to the PR, it
+     * would then be gone.
+     */
+    it('labels the link so nobody reading the PR page deletes it as redundant', () => {
+        const input = baseInput();
+        expect(renderPrBody(input, 'https://github.com/o/r/pull/42')).toContain('(for git log)');
+    });
+
+    /**
+     * The pointer to the comments, on EVERY body including the all-green one. Without it the compact body
+     * reads as the complete record, and a reader of main's history never learns that the green rows, the
+     * full summary and each reviewer's output are one click away.
+     */
+    it('always ends the flag list with the pointer to the comments — green case included', () => {
+        const green = renderPrBody(baseInput(), 'https://github.com/o/r/pull/42');
+        expect(green).toContain('Flags: 🟢 all green');
+        expect(green).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
+
+        const red = renderPrBody(baseInput({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), '');
+        expect(red).toContain('Flags (non-green):');
+        expect(red).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
+    });
+
+    /**
+     * The footer NAMES the build command from config. It used to hard-code "build ran via nx affected",
+     * which was simply false on any repo whose buildCommand is not nx — and this line lands in permanent
+     * history, so a false claim there is permanent too.
+     */
+    it('names the configured build command in the footer, with no markdown', () => {
+        const input = baseInput();
+        input.buildCommand = 'pnpm turbo run ci';
+        const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
+        expect(body).toContain('Generated by webpieces-ts wp-finish-upsert-pr (pnpm turbo run ci run locally)');
+        // `git log` renders in a terminal, where a backtick is literal punctuation, not formatting.
+        expect(body).not.toContain('`');
+        expect(body).not.toContain('nx affected — not self-attested');
+    });
+
+    it('omits the parenthetical entirely when no buildCommand is configured', () => {
+        const body = renderPrBody(baseInput(), 'https://github.com/o/r/pull/42');
+        expect(body).toContain('Generated by webpieces-ts wp-finish-upsert-pr');
+        expect(body).not.toContain('run locally');
+    });
+
+    /**
+     * Everything the OLD PR description carried that a squash commit must not: the risk TABLE, the
+     * per-row green statuses, the 3-point hash points. Those moved to the 1st comment. This is the
+     * pollution guard — the whole reason the two surfaces were swapped.
+     */
+    it('carries none of the long-form dashboard that used to pollute git log', () => {
+        const body = renderPrBody(baseInput(), 'https://github.com/o/r/pull/42');
+        expect(body).not.toContain('## 🚦 PR Gate Dashboard');
+        expect(body).not.toContain('3-Point Hash Points');
+        expect(body).not.toContain('**Risk Score:**');
+        expect(body).not.toContain('🟢 No');
     });
 
     it('lists every non-green flag (build, gates, violations, disables)', () => {
@@ -342,7 +330,7 @@ describe('renderCommitBody', () => {
             'c',
             review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }),
         );
-        const body = renderCommitBody(input, '');
+        const body = renderPrBody(input, '');
 
         expect(body).toContain('Flags (non-green):');
         expect(body).toContain('- Build (nx affected): 🔴 Failed');
@@ -366,7 +354,7 @@ describe('renderCommitBody', () => {
             'c',
             review({ summary: 'S1. S2. S3. S4. S5. S6.' }),
         );
-        const body = renderCommitBody(input, '');
+        const body = renderPrBody(input, '');
 
         expect(body).toContain('S1. S2. S3. S4.');
         expect(body).not.toContain('S5.');
@@ -386,7 +374,7 @@ describe('renderCommitBody', () => {
                     'Edits dependencies.json and runtime-graph.ts under src/lib. Bumps to 0.4.447 cleanly.',
             }),
         );
-        const body = renderCommitBody(input, '');
+        const body = renderPrBody(input, '');
 
         // Both real sentences survive intact — the dotted tokens are NOT treated as sentence breaks and
         // no prose is silently discarded.
@@ -413,10 +401,10 @@ function dashboardWith(rows: ChecklistRow[]): string {
         review(),
         rows,
     );
-    return renderDashboard(input);
+    return renderDetailComment(input);
 }
 
-describe('renderDashboard checklists — ONE rolled-up row', () => {
+describe('renderDetailComment checklists — ONE rolled-up row', () => {
     // Nobody looked is NOT an all-clear. A green row (or, as before, no row at all) reads as "checked and
     // clean"; ⚪ says no reviewer was involved, which is precisely what a reader must be able to tell apart.
     it('renders a SKIPPED ⚪ row — never green, never nothing — when no checklist ran', () => {
@@ -430,7 +418,7 @@ describe('renderDashboard checklists — ONE rolled-up row', () => {
             'c',
             review(),
         );
-        const md = renderDashboard(input);
+        const md = renderDetailComment(input);
         expect(md).toContain(
             '**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment',
         );
@@ -511,7 +499,7 @@ describe('renderDashboard checklists — ONE rolled-up row', () => {
     });
 });
 
-describe('renderDashboard checklists — the detail still lives in the comment', () => {
+describe('renderDetailComment checklists — the detail still lives in the comment', () => {
     // The roll-up row is a SUMMARY, not a replacement: the comment is unchanged and still carries every
     // reviewer's verbatim output, which is exactly why the PR body no longer needs to.
     it('leaves the comment carrying the full override prose the dashboard dropped', () => {
@@ -553,7 +541,7 @@ describe('renderDashboard checklists — the detail still lives in the comment',
             review(),
             rows,
         );
-        const body = renderCommitBody(input, '');
+        const body = renderPrBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
         expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
     });
@@ -567,72 +555,3 @@ describe('renderDashboard checklists — the detail still lives in the comment',
  * "no verdict" state as a review that was never relevant, and rendering the two identically would let a PR
  * that skipped every optional review read as fully covered.
  */
-describe('renderChecklistComment — optional checklists', () => {
-    // Applied to the diff (so `ran` is true in the "this checklist matched" sense) but carrying no verdict:
-    // the human was offered this review and said no.
-    function declinedRow(subagent: string): ChecklistCommentRow {
-        const row = ranRow(subagent, CK_MISSING);
-        row.required = false;
-        return row;
-    }
-
-    function optionalRanRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-        const row = ranRow(subagent, status, detail);
-        row.required = false;
-        return row;
-    }
-
-    it('tags optional checklists so a reader can tell skippable from simply passed', () => {
-        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), optionalRanRow('fe-reviewer', CK_PASS, 'ok')], true);
-        expect(md).toContain('**fe-reviewer** _(optional)_');
-        expect(md).not.toContain('**db-reviewer** _(optional)_');
-    });
-
-    it('renders a declined optional review as NOT RUN — unchecked, and never as passed', () => {
-        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer')], true);
-        expect(md).toContain('- [ ] ⚪ **fe-reviewer** _(optional)_ — OPTIONAL — applied to this diff but was NOT run');
-        expect(md).toContain('- [x] 🟢 **db-reviewer**');
-    });
-
-    // "Not applicable" is the diff's doing; "not run" is a person's. Reporting the second as the first
-    // would quietly credit a review nobody performed.
-    it('does not call a declined review "skipped, not applicable"', () => {
-        const md = renderChecklistComment([declinedRow('fe-reviewer')], true);
-        expect(md).not.toContain('not applicable to this diff');
-    });
-
-    it('counts declined reviews separately from skipped ones, and without a ✅', () => {
-        const md = renderChecklistComment(
-            [ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer'), skippedRow('ops-reviewer')], true);
-        expect(md).toContain('3 defined · 1 ran');
-        expect(md).toContain('1 skipped ✅');
-        expect(md).toContain('1 optional not run');
-        expect(md).not.toContain('2 skipped');
-    });
-
-    // It has no `output` to publish, so a section for it would be an empty heading claiming a review.
-    it('gives a declined review no reviewer section', () => {
-        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer')], true);
-        expect(md.indexOf('### Reviews that ran')).toBeGreaterThan(0);
-        expect(md.slice(md.indexOf('### Reviews that ran'))).not.toContain('fe-reviewer');
-    });
-
-    // THE false all-clear. This exact sentence used to be unconditional.
-    it('never claims "none of them applied" when an optional one applied and was declined', () => {
-        const md = renderChecklistComment([declinedRow('fe-reviewer'), skippedRow('ops-reviewer')], true);
-        expect(md).not.toContain('none of them applied');
-        expect(md).toContain('1 OPTIONAL checklist(s) DID apply to this diff and were not run');
-    });
-
-    it('keeps the original all-clear wording when nothing was declined', () => {
-        const md = renderChecklistComment([skippedRow('ops-reviewer')], true);
-        expect(md).toContain('every configured checklist was evaluated and none of them applied');
-    });
-
-    // An optional reviewer that RAN is an ordinary reviewer: its verdict counts, and is published in full.
-    it('publishes a red verdict from an optional reviewer exactly like any other', () => {
-        const md = renderChecklistComment([optionalRanRow('fe-reviewer', CK_FAIL, 'unbounded list render')], true);
-        expect(md).toContain('- [x] 🔴 **fe-reviewer** _(optional)_ — FAILED review');
-        expect(md).toContain('unbounded list render');
-    });
-});

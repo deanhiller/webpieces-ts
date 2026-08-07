@@ -1,0 +1,62 @@
+# Webpieces PR gate — the SERVER-SIDE half of the gate.
+#
+# WHY: locally, pr-creation-or-push-guard blocks `gh pr create` / manual `git push`, so wp-finish-upsert-pr
+# is the sole PR opener FOR HOOKED developers. The gap is UNHOOKED teammates who push + open a PR in the
+# GitHub web UI — nothing local stops them. This required check closes that gap: wp-finish-upsert-pr writes
+# HMAC(prGate.gateSalt, HEAD_sha) into the PR body, and this job recomputes it from the committed salt and
+# the PR head sha. A PR opened outside the gated flow carries no valid token and fails here.
+#
+# TO ENABLE (client repo):
+#   1. Copy this file to .github/workflows/webpieces-pr-gate.yml and commit it.
+#   2. Set a committed "gateSalt" under the pr-gate section of webpieces.config.json (any non-empty string).
+#   3. In branch-protection for `main`, mark THIS WORKFLOW'S JOB required:
+#        Webpieces PR Gate / Verify webpieces gate token
+#      That is the ONE required check — there is deliberately nothing else to pick. (Only a repo admin
+#      can set required checks; webpieces cannot do it for you.)
+#
+# NOTE if you are upgrading: earlier versions ALSO posted a `webpieces/pr-gate` commit status, and told
+# you to require THAT instead of the job. It is gone. It only existed to recover from a race where
+# wp-finish-upsert-pr pushed before writing the PR body — the body is now written FIRST, so the race
+# cannot happen and the job is safe to require on its own. If you had `webpieces/pr-gate` marked required
+# in branch protection, REPOINT it at the job above, or that context sits Pending forever and blocks
+# every PR.
+#
+# NOTE: the salt is committed/obscurity-grade — it stops unhooked teammates, but a determined reader can
+# read it and forge. It is deliberately not cryptographically sound; see RESPONSE-pr-gate-ci-enforcement.
+#
+# CONCURRENCY: do NOT add `concurrency: cancel-in-progress: true` scoped only to the PR — two runs a few
+# seconds apart would let the cancellation policy decide pass/fail. If you scope concurrency, include the
+# event name in the group.
+
+name: Webpieces PR Gate
+on:
+  pull_request:
+    # `synchronize` is the primary trigger and catches an unhooked teammate pushing over a gated PR. The
+    # gated flow pushes exactly ONCE per cycle (from wp-finish-upsert-pr, after the PR body is written),
+    # so the synchronize run always reads the correct token.
+    #
+    # `edited` is the BODY-TAMPER guard: the token lives in the PR body, so an edit that strips it must
+    # re-run this check rather than leave a stale green. Keep it. Note it fires on wp-finish's body write,
+    # a beat BEFORE that push — so its run can briefly resolve the OLD head sha and go red. Harmless: that
+    # red is keyed to a sha that is no longer the PR head, and branch protection evaluates the current
+    # head, where the synchronize run lands green.
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  webpieces-pr-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify webpieces gate token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WP_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm wp-check-pr

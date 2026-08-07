@@ -191,16 +191,18 @@ flow are not interchangeable.
 5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `review.json` (its `title`
    becomes the PR title) and every reviewer's verdict, then pushes and creates/updates the PR. It re-runs
    the build gate ONLY if HEAD moved since stage ②, so the three stages still cost one build.
-6. **`pnpm wp-land-pr`** — squash-merge THIS branch's already-posted PR into main **with the compact
-   risk/flags commit body** stage ③ rendered, then archive the pre-squash tip and reap the landed
-   worktree. Use it INSTEAD of a bare `gh pr merge` or the GitHub Merge button, because neither can write
-   that body: a UI merge takes its subject from the repo's `squash_merge_commit_title` and its body from
-   `squash_merge_commit_message`, and on `PR_BODY` that pastes the ENTIRE dashboard — risk table, hash
-   points, gate token — into `git log`. Only an explicit `gh pr merge --subject --body-file` avoids it,
-   which is what this command is. It is NOT gated on `pr-gate.mergeMode`: running it IS the intent to
-   merge, so a `mergeMode: NONE` repo keeps its "a human decides when" policy and still gets a readable
-   history. It runs no build gate and re-renders nothing — the bytes that land are the bytes stage ③
-   produced.
+6. **`pnpm wp-land-pr`** — squash-merge THIS branch's already-posted PR into main with the gated commit
+   body, then archive the pre-squash tip and reap the landed worktree. It runs no build gate and
+   re-renders nothing — the bytes that land are the bytes stage ③ produced. NOT gated on
+   `pr-gate.mergeMode`: running it IS the intent to merge, so it works on a `mergeMode: NONE` repo whose
+   policy is "a human decides when".
+
+   **The commit body is the PR DESCRIPTION**, which stage ③ writes as one compact string (PR link, risk,
+   non-green flags, short summary, build-command footer) and reuses verbatim as its `--body-file`. The
+   full dashboard and the reviewer output live in the PR's 1st and 2nd comments so they stay out of
+   `git log`. So with `squash_merge_commit_title: PR_TITLE` and `squash_merge_commit_message: PR_BODY` set
+   on the repo, this command, a bare `gh pr merge`, and the GitHub Merge button all produce identical
+   history — prefer this one for the archiving and worktree cleanup, not because the others are wrong.
 7. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
    backup of a merged branch, or no commits of their own). Run it after the merge lands, or any time the
    branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the

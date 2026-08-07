@@ -39,16 +39,18 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
         return new FixHint(
             'Land the PR with `pnpm wp-land-pr`, never a hand-rolled `gh pr merge`.',
             [
-                'A bare `gh pr merge` writes the WRONG commit message into main. GitHub then falls back to',
-                'the repo\'s squash_merge_commit_title/message settings, which commonly means the internal',
-                '"Squash merge of <branch>" subject — and NEVER the compact risk/flags body, because no',
-                'value of those settings can produce it. Only an explicit `--subject`/`--body-file` can,',
-                'and `pnpm wp-land-pr` passes exactly the pair that `wp-finish-upsert-pr` already rendered:',
+                'A bare `gh pr merge` leaves the commit message to the repo\'s squash_merge_commit_title/',
+                'message settings. On a repo set to PR_TITLE + PR_BODY that now happens to be RIGHT — the',
+                'PR description IS the gated commit body — but on any other combination it is wrong, and',
+                'commonly means the internal "Squash merge of <branch>" subject. `pnpm wp-land-pr` passes',
+                '`--subject`/`--body-file` explicitly, so it is right on EVERY repo regardless of settings:',
                 '',
                 '  pnpm wp-land-pr',
                 '',
                 'It squash-merges when the PR is mergeable, and enables auto-merge with the same',
-                'subject/body when the checks are still running. Then clean up:',
+                'subject/body when the checks are still running. It also does the two things a raw merge',
+                'never does: archive the pre-squash tip as archive/<date>/<branch>, and reap the landed',
+                'worktree. Then clean up:',
                 '',
             ]
                 .concat(this.recovery.cleanupSteps(this.treeKind, this.currentBranch, this.worktreePath))

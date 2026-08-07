@@ -89,6 +89,14 @@
                     "level": 1
                 },
                 {
+                    "id": "ChecklistCommentRenderer",
+                    "className": "ChecklistCommentRenderer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/dashboard/checklist-comment-renderer.ts",
+                    "level": 2
+                },
+                {
                     "id": "ChecklistDetector",
                     "className": "ChecklistDetector",
                     "kind": "class",
@@ -377,6 +385,14 @@
                     "level": 5
                 },
                 {
+                    "id": "PrCommentUpserter",
+                    "className": "PrCommentUpserter",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-comment-upserter.ts",
+                    "level": 2
+                },
+                {
                     "id": "PrContextWriter",
                     "className": "PrContextWriter",
                     "kind": "class",
@@ -398,6 +414,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ProvenanceEnforcer",
+                    "className": "ProvenanceEnforcer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/provenance-enforcer.ts",
                     "level": 2
                 },
                 {
@@ -446,7 +470,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-provenance.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ReviewReport",
@@ -534,7 +558,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/subagent-provenance.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "WorktreeCleanupSection",
@@ -969,6 +993,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "ChecklistCommentRenderer",
+                    "injection": "type",
+                    "token": "ChecklistCommentRenderer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/dashboard/checklist-comment-renderer.ts#ChecklistCommentRenderer",
+                    "paramName": "checklistComment",
+                    "paramType": "ChecklistCommentRenderer"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "ChecklistScanner",
                     "injection": "type",
                     "token": "ChecklistScanner",
@@ -1041,12 +1074,30 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "PrCommentUpserter",
+                    "injection": "type",
+                    "token": "PrCommentUpserter",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-comment-upserter.ts#PrCommentUpserter",
+                    "paramName": "commentUpserter",
+                    "paramType": "PrCommentUpserter"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "PrMerger",
                     "injection": "type",
                     "token": "PrMerger",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts#PrMerger",
                     "paramName": "prMerger",
                     "paramType": "PrMerger"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ProvenanceEnforcer",
+                    "injection": "type",
+                    "token": "ProvenanceEnforcer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/provenance-enforcer.ts#ProvenanceEnforcer",
+                    "paramName": "provenanceEnforcer",
+                    "paramType": "ProvenanceEnforcer"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1065,15 +1116,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
-                    "to": "ReviewProvenanceService",
-                    "injection": "type",
-                    "token": "ReviewProvenanceService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/review-provenance.ts#ReviewProvenanceService",
-                    "paramName": "provenanceRecord",
-                    "paramType": "ReviewProvenanceService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1101,15 +1143,6 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reviewer-verdict-gate.ts#ReviewerVerdictGate",
                     "paramName": "verdictGate",
                     "paramType": "ReviewerVerdictGate"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
-                    "to": "SubagentProvenanceService",
-                    "injection": "type",
-                    "token": "SubagentProvenanceService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/subagent-provenance.ts#SubagentProvenanceService",
-                    "paramName": "provenance",
-                    "paramType": "SubagentProvenanceService"
                 },
                 {
                     "from": "ForkPoint",
@@ -1605,6 +1638,51 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "ReviewProvenanceService",
+                    "injection": "type",
+                    "token": "ReviewProvenanceService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-provenance.ts#ReviewProvenanceService",
+                    "paramName": "provenanceRecord",
+                    "paramType": "ReviewProvenanceService"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "ReviewerInstructionsService",
+                    "injection": "type",
+                    "token": "ReviewerInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/reviewer-instructions.ts#ReviewerInstructionsService",
+                    "paramName": "reviewerInstructions",
+                    "paramType": "ReviewerInstructionsService"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "SubagentProvenanceService",
+                    "injection": "type",
+                    "token": "SubagentProvenanceService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/subagent-provenance.ts#SubagentProvenanceService",
+                    "paramName": "provenance",
+                    "paramType": "SubagentProvenanceService"
                 },
                 {
                     "from": "PushDevCommand",

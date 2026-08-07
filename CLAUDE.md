@@ -571,11 +571,17 @@ stage ③ skips its own build when HEAD has not moved — three stages, one buil
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
-**Merge with `pnpm wp-land-pr`, never a bare `gh pr merge` and never the GitHub Merge button.** Only an
-explicit `gh pr merge --subject --body-file` can write the compact risk/flags commit body stage ③
-rendered; every other route takes its body from the repo's `squash_merge_commit_message`, which on
-`PR_BODY` pastes the ENTIRE dashboard — risk table, hash points, gate token — into `git log`. It is not
-gated on `pr-gate.mergeMode`, so it is the right command on a `mergeMode: NONE` repo too.
+**The PR description IS the squash-commit body.** Stage ③ renders one compact string — PR link, risk,
+non-green flags, a 4-sentence summary, the build-command footer — and uses it as *both* the PR
+description and the `--body-file` it merges with. The full dashboard and each reviewer's output go into
+the PR's 1st and 2nd comments, so they never reach `git log`.
+
+That makes every landing route agree, provided the repo carries two settings:
+`squash_merge_commit_title: PR_TITLE` and `squash_merge_commit_message: PR_BODY`. With those, clicking
+Merge in the GitHub UI, a bare `gh pr merge`, `pnpm wp-land-pr`, and stage ③'s own auto-merge all write
+identical bytes. **Prefer `pnpm wp-land-pr` from the CLI** — it also archives the pre-squash tip and reaps
+the landed worktree — but the UI button is no longer wrong, which is the point: correctness stopped
+depending on anyone remembering a command.
 
 Once the PR merges, clean up. Pick the form for the tree you are in — `git checkout main` fatals in a
 linked worktree (`main is already checked out at <primary clone>`), so the two forms are not

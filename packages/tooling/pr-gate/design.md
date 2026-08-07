@@ -22,6 +22,7 @@ graph TD
     BuildAffected["BuildAffected"]
     BuildArtifactGate["BuildArtifactGate"]
     CheckPrCommand["CheckPrCommand"]
+    ChecklistCommentRenderer["ChecklistCommentRenderer"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
@@ -58,9 +59,11 @@ graph TD
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
     PrBodyStore["PrBodyStore"]
+    PrCommentUpserter["PrCommentUpserter"]
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
+    ProvenanceEnforcer["ProvenanceEnforcer"]
     PushDevCommand["PushDevCommand"]
     PushDevStateStore["PushDevStateStore"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
@@ -126,6 +129,7 @@ graph TD
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
+    FinishUpsertPrCommand --> ChecklistCommentRenderer
     FinishUpsertPrCommand --> ChecklistScanner
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> FinishBanner
@@ -134,14 +138,14 @@ graph TD
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeBodyFiler
     FinishUpsertPrCommand --> MergeState
+    FinishUpsertPrCommand --> PrCommentUpserter
     FinishUpsertPrCommand --> PrMerger
+    FinishUpsertPrCommand --> ProvenanceEnforcer
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
-    FinishUpsertPrCommand --> ReviewProvenanceService
     FinishUpsertPrCommand --> ReviewStageReceiptService
     FinishUpsertPrCommand --> ReviewerInstructionsService
     FinishUpsertPrCommand --> ReviewerVerdictGate
-    FinishUpsertPrCommand --> SubagentProvenanceService
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder
@@ -197,6 +201,11 @@ graph TD
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    ProvenanceEnforcer --> AiBranchName
+    ProvenanceEnforcer --> ReviewJsonService
+    ProvenanceEnforcer --> ReviewProvenanceService
+    ProvenanceEnforcer --> ReviewerInstructionsService
+    ProvenanceEnforcer --> SubagentProvenanceService
     PushDevCommand --> DevDeployRefs
     PushDevCommand --> DevDeployWatchHints
     PushDevCommand --> DevResolveRunner

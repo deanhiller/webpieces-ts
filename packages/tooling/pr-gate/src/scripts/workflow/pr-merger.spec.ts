@@ -258,13 +258,22 @@ describe('mergeMode NONE — "a human clicks merge" repos', () => {
         expect(outcome.message).toContain('My PR title (#7)');
     });
 
-    // The half that used to go unsaid. A UI merge substitutes the BODY too, and on a repo whose
-    // squash_merge_commit_message is PR_BODY that means the whole dashboard lands in `git log` — which
-    // is what happened to two consumer repos. The remedy has to be NAMED here, not merely available.
-    it('names the BODY substitution and points at wp-land-pr, not just the subject', () => {
+    /**
+     * Names BOTH repo settings a UI merge reads, because on a mergeMode=NONE repo a UI merge is the
+     * NORMAL path and it is now the correct one: the PR description is the compact git-log body, so
+     * `squash_merge_commit_message: PR_BODY` copies exactly the right text.
+     *
+     * One release ago this same message said the opposite — "PR_BODY pastes the whole dashboard, use
+     * wp-land-pr instead" — which was true only while the description held the long dashboard. Asserting
+     * both setting names, not the advice, is what keeps this test honest across that inversion.
+     */
+    it('names both squash_merge_commit_* settings a UI merge depends on', () => {
         const [outcome] = mergeIn([0], true, MERGE_MODE_NONE);
-        expect(outcome.message).toContain('squash_merge_commit_message');
+        expect(outcome.message).toContain('squash_merge_commit_title=PR_TITLE');
+        expect(outcome.message).toContain('squash_merge_commit_message=PR_BODY');
+        // Offered as the CLI alternative, never as a correction to clicking Merge.
         expect(outcome.message).toContain('pnpm wp-land-pr');
+        expect(outcome.message).not.toContain('whole dashboard');
     });
 });
 
