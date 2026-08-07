@@ -244,7 +244,16 @@ function async saveData(data: any) {
 }
 ```
 
-**Why no XPromise?** In Java, ThreadLocal doesn't propagate across `CompletableFuture` boundaries, so WebPieces needed `XFuture` to manually copy context. In TypeScript, `AsyncLocalStorage` handles this automatically for **all** Promises, callbacks, and async/await. Just use native Promise!
+**Why no XFuture?** In Java, ThreadLocal doesn't propagate across `CompletableFuture` boundaries, so WebPieces needed `XFuture` to manually copy context. In TypeScript, `AsyncLocalStorage` handles this automatically for **all** Promises, callbacks, and async/await. Just use native Promise!
+
+The one case it does not cover is work whose async chain was **broken and re-rooted** somewhere else — a job pushed onto an in-memory queue during a request and drained later by a background loop, a batch flushed on a scheduler tick, a listener fired from a socket the request does not own. There, capture at hand-off and restore at execution:
+
+```typescript
+const captured = RequestContext.copyContext();          // where the work is enqueued
+queue.push(() => RequestContext.runWithContext(captured, () => doWork()));  // where it runs
+```
+
+`copyContext()` is the ONLY way to obtain a `CapturedContext`, and it is the only thing the restore side accepts. That is deliberate: a restored context legitimately contains **trusted** values, so its contents can't be type-checked — making the payload opaque is what stops a hand-assembled `Map` from forging one.
 
 ## Testing Without HTTP
 

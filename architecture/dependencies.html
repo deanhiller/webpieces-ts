@@ -507,7 +507,7 @@
 <p>Shared API contract for the client-server service: <code>SaveApi</code>/<code>PublicApi</code> abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.</p>
 <h5>In Scope</h5>
 <ul>
-<li>Abstract API classes (<code>SaveApi</code>, <code>PublicApi</code>) decorated with <code>@ApiPath</code>, <code>@Endpoint</code>, <code>@Authentication</code></li>
+<li>Abstract API classes (<code>SaveApi</code>, <code>PublicApi</code>) decorated with <code>@ApiPath</code>, <code>@Endpoint</code>, and an auth decorator (<code>@Public</code> / <code>@AuthJwt*</code>)</li>
 <li>Request/response DTO interfaces shared between server and clients</li>
 <li>The contract that <code>client-server</code> implements and <code>angular-site</code> calls via generated clients</li>
 </ul>
@@ -552,16 +552,33 @@
 </ul>
 <h5>Notes (optional)</h5>
 <p>Three-tier header system: WebpiecesCoreHeaders → CompanyHeaders → AppHeaders. Api packages deliberately do not know about these; servers bind them and the Angular client builds a HeaderRegistry from the same class.</p></div></details>
-<details class="wp-resp-card" data-node="core-context"><summary><span class="wp-resp-level">L1</span> <strong>core-context</strong> — AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and copy/restore key-value data automatically across async boundaries.</summary><div class="wp-resp-body"><h4>Responsibilities — core-context</h4>
-<p>AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and copy/restore key-value data automatically across async boundaries.</p>
+<details class="wp-resp-card" data-node="core-context"><summary><span class="wp-resp-level">L1</span> <strong>core-context</strong> — AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and to capture/restore a whole scope (as an opaque `CapturedContext`) for work that leaves the request's async chain.</summary><div class="wp-resp-body"><h4>Responsibilities — core-context</h4>
+<p>AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and to capture/restore a whole scope (as an opaque <code>CapturedContext</code>) for work that leaves the request's async chain.</p>
 <h5>In Scope</h5>
 <ul>
 <li>The <code>RequestContext</code> singleton wrapping Node <code>AsyncLocalStorage</code> for request-scoped storage.</li>
-<li><code>run()</code>/<code>runWithContext()</code> to establish a context at request start.</li>
-<li>Key/value accessors: <code>put</code>, <code>get</code>, <code>remove</code>, <code>clear</code>, <code>has</code>, <code>getAll</code>, <code>isActive</code>.</li>
-<li>Header-typed accessors (<code>getHeader</code>/<code>putHeader</code>/<code>hasHeader</code>/<code>getHeaders</code>) keyed via the <code>Header</code> abstraction.</li>
-<li><code>copyContext()</code>/<code>setContext()</code> for preserving context across async hops (e.g. XPromise).</li>
+<li><code>run()</code> to establish THE context at request start (nesting throws — one scope per request).</li>
+<li>Raw string accessors (<code>put</code>, <code>get</code>, <code>remove</code>, <code>has</code>) for the framework's own reserved, UNREGISTERED</li>
 </ul>
+<p>slots; they REJECT any name belonging to a registered <code>ContextKey</code>, so they cannot be used to read or</p>
+<p>forge a trusted value. Plus <code>clear</code> and <code>isActive</code>.</p>
+<ul>
+<li>Trust-typed accessors (<code>getTrusted</code>/<code>getUntrusted</code>/<code>putTrusted</code>/<code>putUntrusted</code>, plus <code>getAny</code> for</li>
+</ul>
+<p>framework serialization and <code>hasKey</code>/<code>removeKey</code>) keyed by a <code>ContextKey</code>. The verb states whether the</p>
+<p>value was PROVEN or merely asserted, and the wrong kind of key does not compile.</p>
+<ul>
+<li><code>PendingWireTrust</code> — the holding pen for inbound wire values of TRUSTED keys, admitted or rejected by</li>
+</ul>
+<p><code>AuthFilter</code> once the route's auth mode says whether the caller itself was verified.</p>
+<ul>
+<li><code>CapturedContext</code> plus <code>copyContext()</code>/<code>restoreContext()</code>/<code>runWithContext()</code> for work whose async</li>
+</ul>
+<p>chain was BROKEN and re-rooted elsewhere (a queued job drained by a background loop, a batch flushed</p>
+<p>on a timer, an event listener fired from a socket the request does not own). AsyncLocalStorage</p>
+<p>follows <code>await</code> and callbacks by itself, so nothing else needs these. The snapshot is OPAQUE — its</p>
+<p>constructor is private and <code>copyContext()</code> is its only producer — so the restore side cannot be</p>
+<p>handed a hand-assembled map, which would forge whatever trusted values it contained.</p>
 <h5>Out of Scope</h5>
 <ul>
 <li>The <code>Header</code>/<code>ContextKey</code> type definitions themselves — those live in <code>core-util</code> (lowest-level package).</li>
@@ -569,7 +586,7 @@
 <li>Generic utility/error helpers — belong in <code>core-util</code>.</li>
 </ul>
 <h5>Notes (optional)</h5>
-<p>Depends only on Node built-ins plus the <code>Header</code> interface from <code>core-util</code>, deliberately keeping it below <code>http-api</code> to avoid circular dependencies. <code>put</code>/<code>setContext</code> throw if no context is active.</p></div></details>
+<p>Depends only on Node built-ins plus the <code>Header</code> interface from <code>core-util</code>, deliberately keeping it below <code>http-api</code> to avoid circular dependencies. <code>put</code>/<code>restoreContext</code> throw if no context is active; <code>copyContext()</code> does not — it returns an empty snapshot.</p></div></details>
 <details class="wp-resp-card" data-node="eslint-rules"><summary><span class="wp-resp-level">L1</span> <strong>eslint-rules</strong> — Custom ESLint plugin exporting WebPieces lint rules — architecture dependency boundaries, exception/catch-error patterns, method/file size limits, no-JsonProperty-primitive, and Angular template rules — consumed by the shared eslint config and the nx-webpieces build validators.</summary><div class="wp-resp-body"><h4>Responsibilities — eslint-rules</h4>
 <p>Custom ESLint plugin exporting WebPieces lint rules — architecture dependency boundaries, exception/catch-error patterns, method/file size limits, no-JsonProperty-primitive, and Angular template rules — consumed by the shared eslint config and the nx-webpieces build validators.</p>
 <h5>In Scope</h5>
@@ -616,7 +633,7 @@
 <ul>
 <li>Bin commands shipped from <code>src/scripts/*</code>: <code>wp-start-upsert-pr</code>, <code>wp-finish-upsert-pr</code>, <code>wp-start-update</code> (update from main; clean → finalizes, conflict → hand off), <code>wp-finish-update</code> (finalize after resolving conflicts). The full-update composition (<code>runUpdateFromMain</code>), the build gate (<code>runBuildAffected</code>), and 3-point merge-info gathering (<code>gatherInfo</code>) are internal <code>workflow/</code> functions, not bins.</li>
 <li>The 3-point squash-merge / merge-validation gate workflow (<code>src/scripts/workflow</code>).</li>
-<li>The red/yellow/green PR dashboard (<code>src/dashboard/dashboard.ts</code>): <code>computeGateResults</code>, <code>countAddedDisables</code>, <code>renderDashboard</code>, and its <code>GateResult</code>/<code>DisableCounts</code>/<code>DashboardInput</code> data classes.</li>
+<li>The red/yellow/green PR dashboard (<code>src/dashboard/dashboard.ts</code>): <code>computeGateResults</code>, <code>countAddedDisables</code>, and its <code>GateResult</code>/<code>DisableCounts</code>/<code>DashboardInput</code> data classes. THREE renderings, one per surface: <code>renderPrBody</code> (the PR description, which is byte-identical to the squash-merge commit body — see <code>pr-body-is-merge-body.spec.ts</code>), <code>renderDetailComment</code> (the 1st PR comment: full dashboard, all rows, hash points), and <code>ChecklistCommentRenderer.render</code> in its own file (the 2nd comment: per-reviewer output). Both comments are upserted by hidden marker via <code>PrCommentUpserter</code>. <code>SquashSettingsEnforcer</code> keeps GitHub's <code>squash_merge_commit_title</code>/<code>squash_merge_commit_message</code> pinned to <code>PR_TITLE</code>/<code>PR_BODY</code> so a UI merge copies the description into <code>git log</code> — server-side settings no config key can express, repaired on every stage ③ run.</li>
 </ul>
 <h5>Out of Scope</h5>
 <ul>
@@ -630,7 +647,7 @@
 <p>Shared API contract for server2: the <code>Server2Api</code> abstract class (fetchValue) plus its request/response DTOs, annotated with webpieces routing/auth decorators. Implemented by <code>server2</code> and consumed by <code>client-server</code> as an HTTP client.</p>
 <h5>In Scope</h5>
 <ul>
-<li><code>Server2Api</code> abstract class with <code>@ApiPath</code>/<code>@Endpoint</code>/<code>@Authentication</code></li>
+<li><code>Server2Api</code> abstract class with <code>@ApiPath</code>/<code>@Endpoint</code>/<code>@Public</code></li>
 <li><code>FetchValueRequest</code>/<code>FetchValueResponse</code> DTOs shared across the hop</li>
 <li>The contract that makes client-server → server2 a real HTTP call</li>
 </ul>
@@ -699,136 +716,228 @@
 <p><strong>webpieces.config.json is never released backwards-compatible.</strong> When a key moves, is renamed, or is deleted, the loader REJECTS the old shape with an error naming the destination — no fallback, no alias applied before validation, no &quot;still accepted until every consumer migrates&quot;. Every reader of this file is a coding agent: it is handed the exact edit and applies it in one pass, so the upgrade is seamless without a compatibility layer. Retirements live in exactly one place, <code>RETIRED_CONFIG_KEYS</code> in <code>src/retired-config-keys.ts</code>, and <code>retired-config-keys.spec.ts</code> plus the end-to-end loop in <code>load-config.spec.ts</code> assert each one actually fails the load.</p>
 <p>Do not add a fallback because rejection &quot;would deadlock the consumer&quot; — it cannot. Editing <code>webpieces.config.json</code> is permitted even while it is invalid, and <code>pnpm install</code> is always permitted, so a rejected config is always repairable in place.</p>
 <p>Note this is about config SHAPE, not release ordering: published validators still lag local source by a release, so a new key and the config that uses it must ship in separate PRs (see CLAUDE.md, &quot;Published vs local source&quot;).</p></div></details></section>
-    <script>/*
- * Browser-side script for architecture/dependencies.html (inlined into a <script>
- * tag by graph-visualizer.ts, which replaces the "digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/tooling/rules-config/design.html\", target=\"_blank\", label=\"rules-config\\n(L0 · [node] · designed-lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L1 · [node] · lib)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/code-rules/design.html\", target=\"_blank\", label=\"code-rules\\n(L1 · [node] · app)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L1 · [node] · lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/pr-gate/design.html\", target=\"_blank\", label=\"pr-gate\\n(L1 · [node] · app)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, URL=\"../packages/http/http-client-browser/design.html\", target=\"_blank\", label=\"http-client-browser\\n(L2 · [browser] · designed-lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"nx-webpieces-rules\\n(L2 · [node] · bundle)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, URL=\"../apps/app-example/angular-site/design.html\", target=\"_blank\", label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/cloud/cloudtasks-client/design.html\", target=\"_blank\", label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-client-node/design.html\", target=\"_blank\", label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-routing/design.html\", target=\"_blank\", label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/client-server/design.html\", target=\"_blank\", label=\"client-server\\n(L6 · [express] · server)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/server2/design.html\", target=\"_blank\", label=\"server2\\n(L6 · [express] · server)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n\n  { rank=same; \"core-mock\"; \"core-util\"; \"rules-config\"; }\n  { rank=same; \"ai-hook-rules\"; \"client-server-api\"; \"code-rules\"; \"company-core\"; \"core-context\"; \"eslint-rules\"; \"http-client-core\"; \"pr-gate\"; \"server2-api\"; }\n  { rank=same; \"bunyan\"; \"gcp-identity\"; \"http-client-browser\"; \"nx-webpieces-rules\"; \"winston\"; }\n  { rank=same; \"angular-site\"; \"cloudtasks-client\"; \"http-client-node\"; \"http-routing\"; }\n  { rank=same; \"http-server\"; }\n  { rank=same; \"company-svc-core\"; }\n  { rank=same; \"client-server\"; \"legacy-server\"; \"server2\"; }\n  { rank=same; \"app-example-e2e\"; }\n\n  \"ai-hook-rules\" -> \"rules-config\";\n  \"client-server-api\" -> \"core-util\";\n  \"code-rules\" -> \"rules-config\";\n  \"company-core\" -> \"core-util\";\n  \"core-context\" -> \"core-util\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"http-client-core\" -> \"core-util\";\n  \"pr-gate\" -> \"rules-config\";\n  \"server2-api\" -> \"core-util\";\n  \"bunyan\" -> \"core-context\";\n  \"gcp-identity\" -> \"core-context\";\n  \"http-client-browser\" -> \"http-client-core\";\n  \"nx-webpieces-rules\" -> \"ai-hook-rules\";\n  \"nx-webpieces-rules\" -> \"code-rules\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"nx-webpieces-rules\" -> \"pr-gate\";\n  \"winston\" -> \"core-context\";\n  \"angular-site\" -> \"client-server-api\";\n  \"angular-site\" -> \"company-core\";\n  \"angular-site\" -> \"http-client-browser\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"http-client-core\";\n  \"http-routing\" -> \"gcp-identity\";\n  \"http-server\" -> \"http-routing\";\n  \"company-svc-core\" -> \"company-core\";\n  \"company-svc-core\" -> \"http-server\";\n  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9];\n  \"client-server\" -> \"company-svc-core\";\n  \"client-server\" -> \"core-mock\";\n  \"client-server\" -> \"http-client-node\";\n  \"client-server\" -> \"server2-api\";\n  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9];\n  \"legacy-server\" -> \"company-svc-core\";\n  \"legacy-server\" -> \"http-client-node\";\n  \"legacy-server\" -> \"server2-api\";\n  \"server2\" -> \"company-svc-core\";\n  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9];\n  \"app-example-e2e\" -> \"client-server\";\n  \"app-example-e2e\" -> \"server2\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n" placeholder with the
- * JSON-encoded Graphviz DOT). Kept as a plain .js asset — NOT a TypeScript
- * template literal — so the dim/highlight/lock logic can define ordinary browser
- * functions without tripping the TypeScript lint rules that scan .ts template
- * strings. Copied into dist by the build's assets glob and read via readFileSync.
+    <script>"use strict";
+/*
+ * Browser-side script for architecture/dependencies.html.
  *
- * After Viz renders the SVG, wireHoverHighlight indexes nodes/edges and:
- *   - hovering a box dims the rest and lights its full ancestor+descendant chain;
- *   - the #wp-lock dropdown LOCKS one box's chain (dim persists on mouse-leave)
- *     and filters the responsibilities cards below the graph to just that chain.
- *     "All" (empty value) clears the lock and shows every card.
+ * graph-visualizer.ts reads this file's COMPILED output with readFileSync, substitutes the DOT
+ * placeholder (see viz-client-globals.d.ts) with the JSON-encoded Graphviz DOT, and inlines the result into a <script> tag. So it
+ * runs in a browser, never in node — but it is ordinary TypeScript, compiled in place by tsc exactly
+ * like the package's bin entry points, and linted like every other file here.
+ *
+ * IT USED TO BE A COMMITTED .js ASSET, exempted from `no-js-files`, and its own header said why: so the
+ * dim/highlight/lock logic "can define ordinary browser functions without tripping the TypeScript lint
+ * rules". That is a file existing to dodge the rules — the same anti-pattern as the bin shims this repo
+ * deleted, and the same cure applies. The logic is a CLASS now, which is what `no-function-outside-class`
+ * was asking for all along; nothing needed a disable.
+ *
+ * Behaviour, unchanged: after Viz renders the SVG, hovering a box dims the rest and lights its full
+ * ancestor+descendant chain; the #wp-lock dropdown PINS one box's chain (the dim survives mouse-leave)
+ * and filters the responsibilities cards below the graph to just that chain. "All" clears the lock.
  */
-(function () {
-    var dot = "digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/tooling/rules-config/design.html\", target=\"_blank\", label=\"rules-config\\n(L0 · [node] · designed-lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L1 · [node] · lib)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/code-rules/design.html\", target=\"_blank\", label=\"code-rules\\n(L1 · [node] · app)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L1 · [node] · lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/pr-gate/design.html\", target=\"_blank\", label=\"pr-gate\\n(L1 · [node] · app)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, URL=\"../packages/http/http-client-browser/design.html\", target=\"_blank\", label=\"http-client-browser\\n(L2 · [browser] · designed-lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"nx-webpieces-rules\\n(L2 · [node] · bundle)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, URL=\"../apps/app-example/angular-site/design.html\", target=\"_blank\", label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/cloud/cloudtasks-client/design.html\", target=\"_blank\", label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-client-node/design.html\", target=\"_blank\", label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-routing/design.html\", target=\"_blank\", label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/client-server/design.html\", target=\"_blank\", label=\"client-server\\n(L6 · [express] · server)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/server2/design.html\", target=\"_blank\", label=\"server2\\n(L6 · [express] · server)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n\n  { rank=same; \"core-mock\"; \"core-util\"; \"rules-config\"; }\n  { rank=same; \"ai-hook-rules\"; \"client-server-api\"; \"code-rules\"; \"company-core\"; \"core-context\"; \"eslint-rules\"; \"http-client-core\"; \"pr-gate\"; \"server2-api\"; }\n  { rank=same; \"bunyan\"; \"gcp-identity\"; \"http-client-browser\"; \"nx-webpieces-rules\"; \"winston\"; }\n  { rank=same; \"angular-site\"; \"cloudtasks-client\"; \"http-client-node\"; \"http-routing\"; }\n  { rank=same; \"http-server\"; }\n  { rank=same; \"company-svc-core\"; }\n  { rank=same; \"client-server\"; \"legacy-server\"; \"server2\"; }\n  { rank=same; \"app-example-e2e\"; }\n\n  \"ai-hook-rules\" -> \"rules-config\";\n  \"client-server-api\" -> \"core-util\";\n  \"code-rules\" -> \"rules-config\";\n  \"company-core\" -> \"core-util\";\n  \"core-context\" -> \"core-util\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"http-client-core\" -> \"core-util\";\n  \"pr-gate\" -> \"rules-config\";\n  \"server2-api\" -> \"core-util\";\n  \"bunyan\" -> \"core-context\";\n  \"gcp-identity\" -> \"core-context\";\n  \"http-client-browser\" -> \"http-client-core\";\n  \"nx-webpieces-rules\" -> \"ai-hook-rules\";\n  \"nx-webpieces-rules\" -> \"code-rules\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"nx-webpieces-rules\" -> \"pr-gate\";\n  \"winston\" -> \"core-context\";\n  \"angular-site\" -> \"client-server-api\";\n  \"angular-site\" -> \"company-core\";\n  \"angular-site\" -> \"http-client-browser\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"http-client-core\";\n  \"http-routing\" -> \"gcp-identity\";\n  \"http-server\" -> \"http-routing\";\n  \"company-svc-core\" -> \"company-core\";\n  \"company-svc-core\" -> \"http-server\";\n  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9];\n  \"client-server\" -> \"company-svc-core\";\n  \"client-server\" -> \"core-mock\";\n  \"client-server\" -> \"http-client-node\";\n  \"client-server\" -> \"server2-api\";\n  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9];\n  \"legacy-server\" -> \"company-svc-core\";\n  \"legacy-server\" -> \"http-client-node\";\n  \"legacy-server\" -> \"server2-api\";\n  \"server2\" -> \"company-svc-core\";\n  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9];\n  \"app-example-e2e\" -> \"client-server\";\n  \"app-example-e2e\" -> \"server2\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n";
-    // @viz-js/viz v3: instance() resolves the WASM-backed renderer (v2 used `new Viz()`), and
-    // renderSVGElement is then SYNCHRONOUS (v2's returned a promise) — hence the element is used
-    // directly inside this then() rather than chained through another one.
-    Viz.instance()
-        .then(function (viz) {
-            var element = viz.renderSVGElement(dot);
-            document.getElementById('graph').appendChild(element);
-            wireHoverHighlight(element);
-        })
-        .catch(function (err) {
-            console.error(err);
-            document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>';
-        });
-
-    function wireHoverHighlight(svg) {
-        var nodeByName = new Map();
-        svg.querySelectorAll('g.node').forEach(function (g) {
-            var t = g.querySelector('title');
-            if (t) nodeByName.set(t.textContent.trim(), g);
-        });
-        // Directed adjacency: in* = entering (up/ancestors), out* = leaving (down/deps).
-        var inEdges = new Map(), outEdges = new Map(), inNodes = new Map(), outNodes = new Map();
-        function ensure(map, key) {
-            var v = map.get(key);
-            if (!v) { v = new Set(); map.set(key, v); }
-            return v;
-        }
-        svg.querySelectorAll('g.edge').forEach(function (edge) {
-            var t = edge.querySelector('title');
-            if (!t) return;
-            var idx = t.textContent.indexOf('->');
-            if (idx < 0) return;
-            var from = t.textContent.slice(0, idx).trim();
-            var to = t.textContent.slice(idx + 2).trim();
-            ensure(outEdges, from).add(edge);
-            ensure(inEdges, to).add(edge);
-            ensure(outNodes, from).add(to);
-            ensure(inNodes, to).add(from);
-        });
-        function clear() {
-            svg.classList.remove('wp-dim');
-            svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach(function (el) {
-                el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
-            });
-        }
-        function highlight(name, focusEl) {
-            clear();
-            svg.classList.add('wp-dim');
-            focusEl.classList.add('wp-focus');
-            // Transitively light ancestors (up) then descendants (down): edges
-            // reached -> wp-hl, boxes -> wp-neighbor. visited guards cycles.
-            [[inNodes, inEdges], [outNodes, outEdges]].forEach(function (dir) {
-                var visited = new Set();
-                var stack = [name];
-                while (stack.length) {
-                    var cur = stack.pop();
-                    (dir[1].get(cur) || []).forEach(function (e) { e.classList.add('wp-hl'); });
-                    (dir[0].get(cur) || []).forEach(function (next) {
-                        if (visited.has(next)) return;
-                        visited.add(next);
-                        stack.push(next);
-                        var g = nodeByName.get(next);
-                        if (g) g.classList.add('wp-neighbor');
-                    });
-                }
-            });
-        }
-        // locked = the box the dropdown pinned (or null). Hover still works on top
-        // of a lock; leaving a box restores the locked view instead of clearing, so
-        // the pinned subgraph stays visible as you scroll to its responsibilities.
-        var locked = null;
-        function relight() {
-            if (locked) {
-                var lg = nodeByName.get(locked);
-                if (lg) highlight(locked, lg);
-            } else {
-                clear();
+// The DOT placeholder and the `Viz` global are declared once in viz-client-globals.d.ts — both
+// scripts share a global scope, so they cannot each declare them. Do NOT spell the placeholder token
+// in a comment: the inliner is a blind split/join, so every literal occurrence gets the whole DOT.
+/** One traversal direction: the edges to light, and the nodes to walk on to. */
+class Direction {
+    nodes;
+    edges;
+    constructor(nodes, edges) {
+        this.nodes = nodes;
+        this.edges = edges;
+    }
+}
+/**
+ * Indexes the rendered SVG and drives the dim/highlight/lock interaction.
+ *
+ * The adjacency is DIRECTED and kept as two maps per axis: `in*` is what points AT a node (ancestors,
+ * walked upward) and `out*` is what it points to (dependencies, walked downward). Highlighting walks
+ * both, so a hovered box lights its entire chain in both directions rather than just its neighbours.
+ */
+class GraphHighlighter {
+    svg;
+    nodeByName = new Map();
+    inEdges = new Map();
+    outEdges = new Map();
+    inNodes = new Map();
+    outNodes = new Map();
+    /**
+     * The box the dropdown pinned, or null. Hover still works on top of a lock — leaving a box
+     * restores the LOCKED view instead of clearing, so the pinned subgraph stays visible while you
+     * scroll down to its responsibility cards.
+     */
+    locked = null;
+    constructor(svg) {
+        this.svg = svg;
+    }
+    /** Index the SVG, then wire hover and the lock dropdown. */
+    wire() {
+        this.indexNodes();
+        this.indexEdges();
+        this.wireHover();
+        this.wireLock();
+    }
+    indexNodes() {
+        this.svg.querySelectorAll('g.node').forEach((g) => {
+            const title = g.querySelector('title');
+            if (title !== null && title.textContent !== null) {
+                this.nodeByName.set(title.textContent.trim(), g);
             }
-        }
-        nodeByName.forEach(function (g, name) {
-            g.addEventListener('mouseenter', function () { highlight(name, g); });
-            g.addEventListener('mouseleave', relight);
         });
-
-        // Filter the responsibilities cards to the locked box's chain by reading the
-        // .wp-focus/.wp-neighbor classes highlight() just set — no second graph walk.
-        var lockSelect = document.getElementById('wp-lock');
-        function filterCards() {
-            var lit = new Set();
-            if (locked) {
-                svg.querySelectorAll('.wp-focus, .wp-neighbor').forEach(function (el) {
-                    var t = el.querySelector('title');
-                    if (t) lit.add(t.textContent.trim());
-                });
+    }
+    indexEdges() {
+        this.svg.querySelectorAll('g.edge').forEach((edge) => {
+            const title = edge.querySelector('title');
+            const text = title === null ? null : title.textContent;
+            if (text === null)
+                return;
+            const idx = text.indexOf('->');
+            if (idx < 0)
+                return;
+            const from = text.slice(0, idx).trim();
+            const to = text.slice(idx + 2).trim();
+            this.ensureEdges(this.outEdges, from).add(edge);
+            this.ensureEdges(this.inEdges, to).add(edge);
+            this.ensureNodes(this.outNodes, from).add(to);
+            this.ensureNodes(this.inNodes, to).add(from);
+        });
+    }
+    ensureEdges(map, key) {
+        const existing = map.get(key);
+        if (existing !== undefined)
+            return existing;
+        const created = new Set();
+        map.set(key, created);
+        return created;
+    }
+    ensureNodes(map, key) {
+        const existing = map.get(key);
+        if (existing !== undefined)
+            return existing;
+        const created = new Set();
+        map.set(key, created);
+        return created;
+    }
+    clear() {
+        this.svg.classList.remove('wp-dim');
+        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach((el) => {
+            el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
+        });
+    }
+    /**
+     * Dim everything, then transitively light ancestors and descendants of `name`: edges reached get
+     * `wp-hl`, boxes get `wp-neighbor`. The `visited` set is what makes a cyclic graph terminate.
+     */
+    highlight(name, focusEl) {
+        this.clear();
+        this.svg.classList.add('wp-dim');
+        focusEl.classList.add('wp-focus');
+        const directions = [
+            new Direction(this.inNodes, this.inEdges),
+            new Direction(this.outNodes, this.outEdges),
+        ];
+        for (const dir of directions)
+            this.walk(name, dir);
+    }
+    walk(start, dir) {
+        const visited = new Set();
+        const stack = [start];
+        while (stack.length > 0) {
+            const cur = stack.pop();
+            const edges = dir.edges.get(cur);
+            if (edges !== undefined) {
+                edges.forEach((e) => { e.classList.add('wp-hl'); });
             }
-            document.querySelectorAll('.wp-resp-card').forEach(function (card) {
-                var nm = card.getAttribute('data-node');
-                card.classList.toggle('wp-hidden', !(!locked || lit.has(nm)));
-            });
-        }
-        if (lockSelect) {
-            lockSelect.addEventListener('change', function () {
-                locked = lockSelect.value || null;
-                if (locked) {
-                    var g = nodeByName.get(locked);
-                    if (g) highlight(locked, g);
-                } else {
-                    clear();
-                }
-                filterCards();
+            const next = dir.nodes.get(cur);
+            if (next === undefined)
+                continue;
+            next.forEach((name) => {
+                if (visited.has(name))
+                    return;
+                visited.add(name);
+                stack.push(name);
+                const g = this.nodeByName.get(name);
+                if (g !== undefined)
+                    g.classList.add('wp-neighbor');
             });
         }
     }
-})();
-</script>
+    /** Leaving a box restores the locked view rather than clearing it outright. */
+    relight() {
+        if (this.locked === null) {
+            this.clear();
+            return;
+        }
+        const g = this.nodeByName.get(this.locked);
+        if (g !== undefined)
+            this.highlight(this.locked, g);
+    }
+    wireHover() {
+        this.nodeByName.forEach((g, name) => {
+            g.addEventListener('mouseenter', () => { this.highlight(name, g); });
+            g.addEventListener('mouseleave', () => { this.relight(); });
+        });
+    }
+    wireLock() {
+        const lockSelect = document.getElementById('wp-lock');
+        if (lockSelect === null)
+            return;
+        lockSelect.addEventListener('change', () => {
+            this.locked = lockSelect.value === '' ? null : lockSelect.value;
+            if (this.locked === null) {
+                this.clear();
+            }
+            else {
+                const g = this.nodeByName.get(this.locked);
+                if (g !== undefined)
+                    this.highlight(this.locked, g);
+            }
+            this.filterCards();
+        });
+    }
+    /**
+     * Filter the responsibility cards to the locked box's chain by READING BACK the
+     * `.wp-focus`/`.wp-neighbor` classes highlight() just set — so there is no second graph walk and
+     * the cards can never disagree with the picture.
+     */
+    filterCards() {
+        const lit = new Set();
+        if (this.locked !== null) {
+            this.svg.querySelectorAll('.wp-focus, .wp-neighbor').forEach((el) => {
+                const title = el.querySelector('title');
+                if (title !== null && title.textContent !== null)
+                    lit.add(title.textContent.trim());
+            });
+        }
+        document.querySelectorAll('.wp-resp-card').forEach((card) => {
+            const name = card.getAttribute('data-node');
+            const visible = this.locked === null || (name !== null && lit.has(name));
+            card.classList.toggle('wp-hidden', !visible);
+        });
+    }
+}
+/** Renders the DOT and hands the SVG to the highlighter. Reports a failure into the page, not just the console. */
+class GraphPage {
+    render() {
+        Viz.instance()
+            .then((viz) => {
+            const element = viz.renderSVGElement("digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/tooling/rules-config/design.html\", target=\"_blank\", label=\"rules-config\\n(L0 · [node] · designed-lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L1 · [node] · lib)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/code-rules/design.html\", target=\"_blank\", label=\"code-rules\\n(L1 · [node] · app)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L1 · [node] · lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, URL=\"../packages/tooling/pr-gate/design.html\", target=\"_blank\", label=\"pr-gate\\n(L1 · [node] · app)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, URL=\"../packages/http/http-client-browser/design.html\", target=\"_blank\", label=\"http-client-browser\\n(L2 · [browser] · designed-lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"nx-webpieces-rules\\n(L2 · [node] · bundle)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, URL=\"../apps/app-example/angular-site/design.html\", target=\"_blank\", label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/cloud/cloudtasks-client/design.html\", target=\"_blank\", label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-client-node/design.html\", target=\"_blank\", label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-routing/design.html\", target=\"_blank\", label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/client-server/design.html\", target=\"_blank\", label=\"client-server\\n(L6 · [express] · server)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/server2/design.html\", target=\"_blank\", label=\"server2\\n(L6 · [express] · server)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n\n  { rank=same; \"core-mock\"; \"core-util\"; \"rules-config\"; }\n  { rank=same; \"ai-hook-rules\"; \"client-server-api\"; \"code-rules\"; \"company-core\"; \"core-context\"; \"eslint-rules\"; \"http-client-core\"; \"pr-gate\"; \"server2-api\"; }\n  { rank=same; \"bunyan\"; \"gcp-identity\"; \"http-client-browser\"; \"nx-webpieces-rules\"; \"winston\"; }\n  { rank=same; \"angular-site\"; \"cloudtasks-client\"; \"http-client-node\"; \"http-routing\"; }\n  { rank=same; \"http-server\"; }\n  { rank=same; \"company-svc-core\"; }\n  { rank=same; \"client-server\"; \"legacy-server\"; \"server2\"; }\n  { rank=same; \"app-example-e2e\"; }\n\n  \"ai-hook-rules\" -> \"rules-config\";\n  \"client-server-api\" -> \"core-util\";\n  \"code-rules\" -> \"rules-config\";\n  \"company-core\" -> \"core-util\";\n  \"core-context\" -> \"core-util\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"http-client-core\" -> \"core-util\";\n  \"pr-gate\" -> \"rules-config\";\n  \"server2-api\" -> \"core-util\";\n  \"bunyan\" -> \"core-context\";\n  \"gcp-identity\" -> \"core-context\";\n  \"http-client-browser\" -> \"http-client-core\";\n  \"nx-webpieces-rules\" -> \"ai-hook-rules\";\n  \"nx-webpieces-rules\" -> \"code-rules\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"nx-webpieces-rules\" -> \"pr-gate\";\n  \"winston\" -> \"core-context\";\n  \"angular-site\" -> \"client-server-api\";\n  \"angular-site\" -> \"company-core\";\n  \"angular-site\" -> \"http-client-browser\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"http-client-core\";\n  \"http-routing\" -> \"gcp-identity\";\n  \"http-server\" -> \"http-routing\";\n  \"company-svc-core\" -> \"company-core\";\n  \"company-svc-core\" -> \"http-server\";\n  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9];\n  \"client-server\" -> \"company-svc-core\";\n  \"client-server\" -> \"core-mock\";\n  \"client-server\" -> \"http-client-node\";\n  \"client-server\" -> \"server2-api\";\n  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9];\n  \"legacy-server\" -> \"company-svc-core\";\n  \"legacy-server\" -> \"http-client-node\";\n  \"legacy-server\" -> \"server2-api\";\n  \"server2\" -> \"company-svc-core\";\n  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9];\n  \"app-example-e2e\" -> \"client-server\";\n  \"app-example-e2e\" -> \"server2\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n");
+            const host = document.getElementById('graph');
+            if (host === null)
+                return;
+            host.appendChild(element);
+            new GraphHighlighter(element).wire();
+        })
+            // webpieces-disable no-any-unknown -- a promise rejection reason is untyped BY THE LANGUAGE (any value can be thrown), and this browser script cannot import the repo's toError helper; it is stringified, never dereferenced
+            .catch((err) => {
+            console.error(err);
+            const host = document.getElementById('graph');
+            if (host !== null)
+                host.innerHTML = '<pre>' + String(err) + '</pre>';
+        });
+    }
+}
+new GraphPage().render();
+//# sourceMappingURL=graph-visualizer.client.js.map</script>
 </body>
 </html>

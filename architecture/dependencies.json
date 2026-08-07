@@ -243,7 +243,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
-            "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and copy/restore key-value data automatically across async boundaries.",
+            "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and to capture/restore a whole scope (as an opaque `CapturedContext`) for work that leaves the request's async chain.",
             "responsibilitiesFile": "packages/core/core-context/responsibilities.md",
             "dependsOn": [
                 "core-util"

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { ContextKey, AnyContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
+import { CapturedContext, ContextCaptureAuthority } from './CapturedContext';
 
 /** Reserved context key under which the current HttpRequest is stored. */
 const HTTP_REQUEST_KEY = '__webpieces_http_request__';
@@ -53,17 +54,27 @@ class RequestContextImpl {
     }
 
     /**
-     * Run a function with a specific context — the restore half of {@link copyContext}, used to carry
-     * a context across an async boundary (XPromise).
+     * Open a NEW scope pre-loaded with a snapshot — the restore half of {@link copyContext}, for work
+     * whose async chain was broken and re-rooted elsewhere (a queued job drained by a background loop,
+     * a batch flushed on a timer, an event listener fired from a socket the request does not own). See
+     * {@link CapturedContext} for the full list and for why the payload is opaque.
      *
-     * FRAMEWORK-INTERNAL. Unlike the raw string accessors, this deliberately CANNOT be guarded against
-     * registered key names: a restored context legitimately contains trusted values, since restoring
-     * them is the entire purpose. So the guarantee here is narrower and worth stating plainly — the
-     * Map must be one this class produced via `copyContext()`, never one assembled by hand. Handing it
-     * a hand-built Map forges whatever it contains, and no type or check will stop you.
+     * A restored context legitimately contains TRUSTED values — reinstating what the original scope
+     * proved is the entire point — so this cannot type-check its contents the way the trust verbs do.
+     * The guarantee instead comes from the PAYLOAD: a {@link CapturedContext} can only be produced by
+     * {@link copyContext}, so there is no hand-assembled Map to hand it and no way to forge one.
+     *
+     * The snapshot is copied into a fresh store, so writes inside `fn` stay inside `fn` and the
+     * snapshot stays reusable.
+     *
+     * Deliberately NOT guarded against nesting the way {@link run} is. `run`'s guard exists because a
+     * second EMPTY scope shadowing the first is always a bug; here the inner scope is a faithful copy
+     * of a real one, which is the whole point — a worker that restores a snapshot inside a scope it
+     * opened per job is correct, not a mistake. Prefer this over {@link restoreContext} unless you
+     * specifically need the CURRENT scope overwritten in place.
      */
-    runWithContext<T>(context: Map<string, any>, fn: () => T): T {
-        return this.storage.run(context, fn);
+    runWithContext<T>(captured: CapturedContext, fn: () => T): T {
+        return this.storage.run(captured.toFreshStore(ContextCaptureAuthority.INTERNAL), fn);
     }
 
     /**
@@ -349,41 +360,47 @@ class RequestContextImpl {
     }
 
     /**
-     * Copy the current context to a new Map.
-     * Used by XPromise to preserve context across async boundaries.
-     */
-    copyContext(): Map<string, any> {
-        const store = this.storage.getStore();
-        if (!store) {
-            return new Map();
-        }
-        return new Map(store);
-    }
-
-    /**
-     * Set the entire context from a Map. Used by XPromise to restore context.
+     * Snapshot this scope so the work you are about to hand off keeps its request id, log fields and
+     * proven identity. The ONLY producer of a {@link CapturedContext} — which is what makes the
+     * restore side unforgeable, since there is no other way to obtain the payload it accepts.
      *
-     * Same FRAMEWORK-INTERNAL caveat as {@link runWithContext}: the Map must have come from
-     * `copyContext()`. It cannot be trust-checked, because a faithful restore has to reinstate the
-     * trusted values the original scope had proven.
+     * Outside a `run(...)` block this returns an EMPTY snapshot rather than throwing: capturing "no
+     * context" is a legitimate thing for a background caller to do, and restoring it simply installs
+     * nothing.
+     *
+     * The snapshot is a defensive COPY — writes to this context after capturing do not reach it.
      */
-    setContext(context: Map<string, any>): void {
+    copyContext(): CapturedContext {
         const store = this.storage.getStore();
-        if (!store) {
-            throw new Error('No context available. Did you call Context.run() first?');
-        }
-        store.clear();
-        context.forEach((value, key) => {
-            store.set(key, value);
-        });
+        return CapturedContext.capture(ContextCaptureAuthority.INTERNAL, store ?? new Map());
     }
 
     /**
-     * Get all context entries.
+     * Overwrite the ACTIVE scope with a snapshot. The in-place twin of {@link runWithContext}, and the
+     * one you almost never want: prefer `runWithContext`, which gives the restored work its OWN scope
+     * and cannot disturb the caller's. Reach for this only when something else owns the scope and it
+     * must be re-pointed in place.
+     *
+     * OVERWRITE, not merge — `clear()` runs first, so every entry the active scope holds and the
+     * snapshot does not is DROPPED. That includes the empty case: `restoreContext(copyContext())`
+     * taken outside a scope wipes the request id and every proven identity from a live request, and
+     * says nothing. That is faithful (a snapshot restores exactly what it captured) but it is the
+     * sharp edge of this method and the reason `runWithContext` is the default.
+     *
+     * Takes only a {@link CapturedContext} for the reason spelled out there — the DELETED Map-taking
+     * form let `new Map([['userId','victim']])` forge a proven identity in one line.
+     *
+     * @throws Error when no RequestContext is active.
      */
-    getAll(): Map<string, any> {
+    restoreContext(captured: CapturedContext): void {
         const store = this.storage.getStore();
-        return store ? new Map(store) : new Map();
+        if (!store) {
+            throw new Error(
+                'No context available to restore into. Either open one with RequestContext.run(...) ' +
+                'first, or use RequestContext.runWithContext(captured, fn), which opens its own.',
+            );
+        }
+        captured.restoreInto(ContextCaptureAuthority.INTERNAL, store);
     }
 
     /**
