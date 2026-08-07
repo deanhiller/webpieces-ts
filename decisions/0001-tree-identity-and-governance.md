@@ -277,7 +277,7 @@ directory stops encoding it.
 
 
 Key is the primary clone's absolute path with `/` → `-`, the same scheme Claude Code uses for its own
-scratchpad (`-Users-deanhiller-workspace-onetablet-monorepo-nx1`). Rationale: both file-scoped guards
+scratchpad (`-Users-deanhiller-workspace-acme-consumer-monorepo1`). Rationale: both file-scoped guards
 open with `if (ctx.relativePath.startsWith('..')) return []`
 (`feature-branch-guard.ts:56`, `read-stale-guard.ts:98`), so a path outside the workspace root is not
 fail-open — the guard **never acquires jurisdiction**, before any `git rev-parse` runs. That is the
@@ -294,7 +294,7 @@ clone. That store is GONE — GitHub holds the merge body now, see
 [0005](0005-the-pr-description-is-the-merge-body.md) — and with it the only artifact that was ever keyed
 by anything other than the tree. D2 governs clone state and nothing else contests it.)*
  Basenames collide (`api`, `web`,
-`monorepo`, and `monorepo-nx` vs `monorepo-nx1`). A collision means two repos sharing
+`monorepo`, and `consumer-monorepo` vs `consumer-monorepo1`). A collision means two repos sharing
 `merged-branches.json` and `main-sync-status.json` — precisely the "N divergent truths" failure
 `state-dir.ts:59-66` was written to kill, inverted. Not the git remote URL either: two clones of one
 repo have different branches and worktrees and must not share.

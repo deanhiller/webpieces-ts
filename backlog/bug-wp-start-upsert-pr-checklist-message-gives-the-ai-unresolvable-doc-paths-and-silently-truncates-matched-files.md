@@ -2,7 +2,7 @@
 
 **Package:** `@webpieces/pr-gate` (`start-upsert-pr-command.ts`), `@webpieces/rules-config` (`review-json.ts`)
 **Version seen:** `0.4.479`
-**Reported from:** `ctoteachings/monorepo` — real session, 7 checklists, 1 triggered
+**Reported from:** `acme-edu/consumer-repo` — real session, 7 checklists, 1 triggered
 **Severity:** Medium — the gate still gates. But this message *is* the AI's entire instruction set for
 the review step, and three of its fields are wrong or lossy in ways the AI cannot detect: a doc path
 that resolves to nothing, a file list truncated with no indication, and a subagent name nothing has

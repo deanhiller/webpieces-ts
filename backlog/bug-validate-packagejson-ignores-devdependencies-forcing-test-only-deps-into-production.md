@@ -81,7 +81,7 @@ for (const depType of ['dependencies', 'peerDependencies']) {
 
 ### Consuming-repo status (context)
 
-`ctoteachings/monorepo3` cannot apply the real fix while this stands, so each server's Dockerfile now
+`acme-edu/consumer-repo3` cannot apply the real fix while this stands, so each server's Dockerfile now
 deletes the package from the runtime image after the relink step:
 
 ```dockerfile

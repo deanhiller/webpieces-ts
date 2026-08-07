@@ -15,9 +15,9 @@ production 500 to its own logs.
 
 ## What happened
 
-Consuming repo: **`/Users/deanhiller/workspace/ctoteachings/monorepo1`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme-edu/consumer-repo1`** (an AI can read it directly).
 
-A learner on `language.ctoteachings.com/onboarding` clicked Next on the placement step and got a red
+A learner on `learn.example.com/onboarding` clicked Next on the placement step and got a red
 inline `Internal Server Error`. Nothing else — no correlation id, no dialog, no Sentry event. The
 webpieces `actionId` (`WebpiecesCoreHeaders.ACTION_ID`, minted browser-side and ridden out on every
 call of the action) exists precisely so one grep pulls the whole server-side trace of that click, and

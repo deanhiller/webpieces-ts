@@ -99,7 +99,7 @@ export class WebpiecesExpressRouter {
     /**
      * The "Svr Ready!!" ASCII banner, LOCAL DEV ONLY (skipped on Cloud Run, where `K_SERVICE` is set and
      * every line becomes its own structured log entry — a multi-line banner there is pure noise). Copied
-     * verbatim from the trytami service so a familiar splash marks "the server is up and reachable".
+     * verbatim from the production service it was ported from, so a familiar splash marks "the server is up and reachable".
      */
     private logStartupBanner(port: number): void {
         if (process.env['K_SERVICE']) {

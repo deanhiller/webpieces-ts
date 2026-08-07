@@ -13,7 +13,7 @@ consumer computes a confidently incorrect URL.
 Distinct from [`bug-api-scanner-silently-drops-services-without-tsconfig-paths`](./bug-api-scanner-silently-drops-services-without-tsconfig-paths.md)
 (that one is about project resolution; this one is about decorator argument resolution).
 
-Found upgrading `mealco-internal/monorepo-nx` 0.4.487 -> 0.4.490 (their PR #757).
+Found upgrading `acme-internal/consumer-monorepo` 0.4.487 -> 0.4.490 (their PR #757).
 
 ## The bug
 
@@ -60,7 +60,7 @@ An absent key is detectable; a consumer iterating `apiContracts` simply never se
 
 ```json
 "WhatsAppTestApi": {
-  "owner": "@mealco-internal/whatsapp-api",
+  "owner": "@acme-internal/whatsapp-api",
   "apiKind": "rpc",
   "methods": [ { "name": "test", "path": "/test", … } ]
 }

@@ -40,11 +40,11 @@ One file in `.webpieces/pr-review/<branch>/` keeps one generation of history. It
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 Two occurrences on 2026-08-01, both on a patternless BLOCK checklist
-(`morpheus-wrapper-linear-required`), both losing a verdict that had genuinely refused a PR:
+(`ticket-key-required`), both losing a verdict that had genuinely refused a PR:
 
-1. Branch `dean/morpheus-wrapper-rename`. First run: `status:"red"` — the PR title named no Linear
+1. Branch `dean/ticket-key-checklist-rename`. First run: `status:"red"` — the PR title named no Linear
    ticket, and `wp-finish-upsert-pr` correctly refused to open a PR. A ticket was then created and
    the title corrected; the reviewer re-ran and wrote `status:"green"` **to the same path**. The red
    verdict, including the reviewer's reasoning, no longer exists anywhere in the repo. The PR body

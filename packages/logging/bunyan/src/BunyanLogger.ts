@@ -22,7 +22,7 @@ function normalizeError(err: Error): LoggedError {
  * name, created as a bunyan child carrying `loggerName`). On every call it reads
  * the logged HeaderRegistry keys DIRECTLY from the active {@link RequestContext}
  * (secured values masked) into the bunyan fields object, and normalizes an optional
- * Error into `err: { name, message, stack }` — matching the tested trytami AppLogger.
+ * Error into `err: { name, message, stack }` — matching a production-tested AppLogger.
  * The GCP stream then serializes those fields into the structured log payload.
  *
  * This context-reading is INLINED here (and duplicated in the winston logger) on

@@ -14,7 +14,7 @@ Companion to [`bug-tree-recovery-forbids-git-checkout-main-in-the-primary-clone-
 
 ## Observed
 
-Controlled pairs from one session on `mealco-internal/monorepo-nx`. Only the shell decoration differs:
+Controlled pairs from one session on `acme-internal/consumer-monorepo`. Only the shell decoration differs:
 
 | Command | Result |
 |---|---|

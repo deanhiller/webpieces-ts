@@ -190,7 +190,7 @@ describe('BunyanConsoleFactory', () => {
  * NOT as a factory base field — so it appears the moment setInfo has run, is absent before, and
  * logging keeps working either way. This is the field GCP filters on.
  */
-describe('BunyanConsoleFactory local pretty line (trytami format)', () => {
+describe('BunyanConsoleFactory local pretty line (production-tested format)', () => {
     beforeEach(() => {
         ServiceInfo.clear();
         ServiceInfo.setInfo('test-svc', '9.9.9');

@@ -102,7 +102,7 @@ export class HttpUnauthorizedError extends HttpError {
 /**
  * HttpTooManyRequestsError - 429 Too Many Requests.
  *
- * The one member of the HttpError ladder that never made it over from trytami. Without it, apps are
+ * The one member of the HttpError ladder that never made it over from the production service this ladder was ported from. Without it, apps are
  * forced back to `err.code === 429` — the exact untyped pattern this ladder exists to replace.
  */
 export class HttpTooManyRequestsError extends HttpError {

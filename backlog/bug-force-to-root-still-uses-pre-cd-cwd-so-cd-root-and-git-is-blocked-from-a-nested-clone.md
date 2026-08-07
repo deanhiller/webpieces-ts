@@ -39,17 +39,17 @@ Three consumers of "where does this command run", two fixed, one missed.
 
 ## Repro (observed live)
 
-Shell cwd is `<root>/repositories/onetablet-ai-manager` (a nested clone) from a previous call. Run:
+Shell cwd is `<root>/repositories/acme-ai-manager` (a nested clone) from a previous call. Run:
 
 ```bash
-cd /abs/path/monorepo-nx && git push --dry-run origin some-branch
+cd /abs/path/consumer-monorepo && git push --dry-run origin some-branch
 ```
 
 **Expected:** the command runs at the governed root, so the normal guards apply — here
 `pr-creation-or-push-guard` should block it *on its own merits*.
 
-**Actual:** blocked by force-to-root instead, reporting `You are in: <root>/repositories/onetablet-ai-manager`
-and advising `cd /abs/path/monorepo-nx` — which is literally the first clause of the command that was
+**Actual:** blocked by force-to-root instead, reporting `You are in: <root>/repositories/acme-ai-manager`
+and advising `cd /abs/path/consumer-monorepo` — which is literally the first clause of the command that was
 just rejected.
 
 Confirmed the same session: issuing the bare `cd` as a standalone call and then the `git push` as a
@@ -78,6 +78,6 @@ and runs before, so the shadow is safe after that line.
 1. cwd = nested clone, command `cd <root> && git status` → NOT force-to-root blocked.
 2. cwd = nested clone, command `cd <root> && git push` → blocked by `pr-creation-or-push-guard`
    (right guard, not force-to-root).
-3. cwd = `<root>/libraries/kami`, command `git status` (no `cd`) → still force-to-root blocked (no regression).
+3. cwd = `<root>/libraries/db`, command `git status` (no `cd`) → still force-to-root blocked (no regression).
 4. cwd = `<root>`, command `git status` → allowed (no regression).
 5. cwd = nested clone, command `git push` (no `cd`) → allowed as foreign repo (no regression from #493).

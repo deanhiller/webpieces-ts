@@ -58,10 +58,10 @@ describe('@externalSystem JSDoc tag on a wrapped vendor contract', () => {
 
     it('keeps a multi-word label intact', () => {
         const info = scanContract(`
-            /** @externalSystem database Postgres (kami) */
-            export interface KamiApi { get(): Promise<void>; }
+            /** @externalSystem database Postgres (db) */
+            export interface DbApi { get(): Promise<void>; }
         `);
-        expect(info?.externalSystem?.label).toBe('Postgres (kami)');
+        expect(info?.externalSystem?.label).toBe('Postgres (db)');
     });
 
     it('IGNORES an unrecognised kind rather than defaulting it', () => {

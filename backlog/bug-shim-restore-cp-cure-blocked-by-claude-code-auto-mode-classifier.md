@@ -12,7 +12,7 @@ is a **field confirmation** of that fix, plus the precise reason it must not be 
 
 ## Where reproduced (consuming monorepo)
 
-Full path: **`/Users/deanhiller/workspace/ctoteachings/monorepo1`** (an AI can read it directly).
+Full path: **`/Users/deanhiller/workspace/acme-edu/consumer-repo1`** (an AI can read it directly).
 Relevant artifacts there:
 - `.claude/webpieces/ai-hook.sh` — the committed, version-agnostic shim that emits the deny.
 - `pnpm-workspace.yaml` → `&wp` catalog anchor (bumped `0.4.417 → 0.4.425 → 0.4.426` in this session).
@@ -115,7 +115,7 @@ added on the in-progress branch (shim.ts line ~404) directly addresses this; con
 
 ## Acceptance check
 
-In `/Users/deanhiller/workspace/ctoteachings/monorepo1`, from a committed shim one minor behind installed:
+In `/Users/deanhiller/workspace/acme-edu/consumer-repo1`, from a committed shim one minor behind installed:
 after `pnpm install`, the shim-stale deny an auto-mode Claude Code assistant sees **lists a cure it can
 actually run first** (`pnpm exec wp-upgrade-shim`), the assistant runs it **itself** (no hand-off to the
 human), tool calls re-arm, and the `cp` form is documented as the `< 0.4.408` fallback.

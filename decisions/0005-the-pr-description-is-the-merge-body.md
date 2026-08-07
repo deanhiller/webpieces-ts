@@ -55,7 +55,7 @@ personal:deanhiller/webpieces-ts.git          # "personal" is an ~/.ssh/config H
 
 $ find ~/.webpieces/prs -maxdepth 3 -type d
 ~/.webpieces/prs/personal/deanhiller/webpieces-ts
-~/.webpieces/prs/github.com/mealco-internal/monorepo-nx
+~/.webpieces/prs/github.com/acme-internal/consumer-monorepo
 ```
 
 So two clones of ONE repo whose `origin` is spelled differently — ssh alias vs full host, ssh vs https,

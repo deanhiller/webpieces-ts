@@ -5,8 +5,8 @@
 **Version seen:** `@webpieces/*` **0.4.566** installed in the consuming repo; webpieces-ts at
 `156b23b` (`Squash merge of guard/cd-must-be-first-and-literal`).
 **Reporter context:** hit live **2026-08-06**, 06:21–07:16 UTC, in the consuming repo
-`/Users/deanhiller/workspace/onetablet/monorepo-nx1` (git `mealco-internal/monorepo-nx`). Two
-independent `morpheus-wrapper-linear-required` reviewer subagents hit it on two different tickets
+`/Users/deanhiller/workspace/acme/consumer-monorepo1` (git `acme-internal/consumer-monorepo`). Two
+independent `ticket-key-required` reviewer subagents hit it on two different tickets
 (ONE-2380 and ONE-2383) in the same morning.
 **Severity:** High — it blocks **every reviewer subagent on every PR** from writing the verdict file
 the gate then reads, and it is **non-deterministic**: whether a given reviewer is blocked depends on
@@ -40,13 +40,13 @@ From `.webpieces/logs/guard-sync-decisions.log` in the consuming repo — lines 
 ONE-2380:
 
 ```
-[06:21:09.130Z] ALLOW Write .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-morpheus-wrapper-linear-required.json
+[06:21:09.130Z] ALLOW Write .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-ticket-key-required.json
                 dean/one-2376-t7-dataform  feature-branch-guard  clean-feature-branch
-                root=/Users/deanhiller/workspace/onetablet/monorepo-nx1  tree=primary
+                root=/Users/deanhiller/workspace/acme/consumer-monorepo1  tree=primary
 
-[06:36:15.455Z] BLOCK Write .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-morpheus-wrapper-linear-required.json
+[06:36:15.455Z] BLOCK Write .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-ticket-key-required.json
                 main                       feature-branch-guard  on-main
-                root=/Users/deanhiller/workspace/onetablet/monorepo-nx1  tree=primary
+                root=/Users/deanhiller/workspace/acme/consumer-monorepo1  tree=primary
 ```
 
 Read the branch column. The write was allowed while the primary sat on `dean/one-2376-t7-dataform`,
@@ -62,10 +62,10 @@ the agent is bound to `.claude/worktrees/agent-ad0ce1739f5923910`.
 `.webpieces/hooks/2026-08-06/writeInfo-1785998175519.md`:
 
 ```
-❌ webpieces ai-hooks blocked this write: .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-morpheus-wrapper-linear-required.json
+❌ webpieces ai-hooks blocked this write: .webpieces/worktrees/agent-ad0ce1739f5923910/pr-review/dean-one-2380-t8-docs/review-ticket-key-required.json
 
 [feature-branch-guard] (1 violation)
-  L1: ...review-morpheus-wrapper-linear-required.json
+  L1: ...review-ticket-key-required.json
     → You should not be working on main.
 Do a `git pull origin main` to get latest, then create a feature branch...
 ```
@@ -168,7 +168,7 @@ tree-naming path that produces `tree=primary` above can yield a degenerate name.
 
 ## 8. Evidence locations
 
-All in the consuming repo `/Users/deanhiller/workspace/onetablet/monorepo-nx1`:
+All in the consuming repo `/Users/deanhiller/workspace/acme/consumer-monorepo1`:
 
 | What | Path |
 |---|---|

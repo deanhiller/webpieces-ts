@@ -345,12 +345,12 @@ describe('spared-branch classification (Part 5)', () => {
     }
 
     it('SUPERSEDED — PR closed unmerged, later PRs have merged since', () => {
-        world.localBranches = ['main', 'feature/ONE-2209-morpheus-gate'];
-        world.allPrs = [{ number: 752, headRefName: 'feature/ONE-2209-morpheus-gate', state: 'CLOSED' }];
-        world.mergedPrs = [{ number: 754, headRefName: 'feature/ONE-2209-morpheus-final' }];
-        world.commitsAhead = { 'feature/ONE-2209-morpheus-gate': 4 };
+        world.localBranches = ['main', 'feature/ONE-2209-checklist-gate'];
+        world.allPrs = [{ number: 752, headRefName: 'feature/ONE-2209-checklist-gate', state: 'CLOSED' }];
+        world.mergedPrs = [{ number: 754, headRefName: 'feature/ONE-2209-checklist-final' }];
+        world.commitsAhead = { 'feature/ONE-2209-checklist-gate': 4 };
 
-        const entry = spared('feature/ONE-2209-morpheus-gate');
+        const entry = spared('feature/ONE-2209-checklist-gate');
 
         expect(entry.classification).toBe(CLASSIFICATION_SUPERSEDED);
         expect(entry.commits).toBe(4);

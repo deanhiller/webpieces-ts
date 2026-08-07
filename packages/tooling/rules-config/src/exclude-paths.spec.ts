@@ -13,8 +13,8 @@ describe('isPathExcluded', () => {
     });
 
     it('matches glob patterns against the full relative path', () => {
-        expect(isPathExcluded('libraries/pino-logger-config-mealco/index.d.ts', EXCLUDES)).toBe(true);
-        expect(isPathExcluded('libraries/internal-graphql-client-mealco/codegen.ts', EXCLUDES)).toBe(true);
+        expect(isPathExcluded('libraries/pino-logger-config-acme/index.d.ts', EXCLUDES)).toBe(true);
+        expect(isPathExcluded('libraries/internal-graphql-client-acme/codegen.ts', EXCLUDES)).toBe(true);
         expect(isPathExcluded('packages/foo/jest.config.ts', EXCLUDES)).toBe(true);
     });
 

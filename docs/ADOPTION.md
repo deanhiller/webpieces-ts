@@ -14,8 +14,8 @@ This is a real framework running real products, not a proof of concept.
 
 - **Java WebPieces** — the original framework — has been used in production at companies including
   **Orderly Health** (since acquired) and others, across **multiple teams**.
-- **webpieces-ts** (this repository) — the TypeScript port — is in production at **TryTami**,
-  **OneTablet**, and others.
+- **webpieces-ts** (this repository) — the TypeScript port — is in production at multiple
+  companies shipping commercial products.
 
 Both the Java original and this TypeScript port have been exercised by real teams shipping real
 features — the design decisions in [`docs/architecture/`](./architecture/README.md) are hardened by

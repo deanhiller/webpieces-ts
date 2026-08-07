@@ -148,7 +148,7 @@ describe('describeUnclassifiedApiDep', () => {
         expect(message).toContain('decorators erased');
         expect(message).toContain("tsconfig.base.json 'paths'");
         expect(message).toContain('ReportsDispatcherRoutes.ts:15');
-        // The advice that cost monorepo-nx2 a month of a rotted graph must NOT reappear.
+        // The advice that cost consumer-monorepo2 a month of a rotted graph must NOT reappear.
         expect(message).not.toContain('If the dependency is unused, remove');
         expect(message).not.toContain('add a controller and register it');
     });

@@ -1,6 +1,6 @@
 # FEATURE: publish checklist verdicts as ONE PR comment — the reviewer's verdict currently reaches nobody
 
-> **REVISED 2026-07-29 after running this end-to-end on `monorepo-nx2` #740 against `0.4.475`.**
+> **REVISED 2026-07-29 after running this end-to-end on `consumer-monorepo2` #740 against `0.4.475`.**
 > The original filing proposed one comment **per** checklist. Having watched it run, the
 > recommendation is now **one combined comment** with a section per checklist — see
 > "Suggested design" below. The reasoning is recorded there rather than silently swapped.
@@ -58,10 +58,10 @@ Two consequences:
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`**,
-[PR #740](https://github.com/mealco-internal/monorepo-nx/pull/740).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`**,
+[PR #740](https://github.com/acme-internal/consumer-monorepo/pull/740).
 
-The `envvars` BLOCK checklist triggered on 12 changed Dockerfiles. A `morpheus-reviewer` subagent ran
+The `envvars` BLOCK checklist triggered on 12 changed Dockerfiles. A `checklist-reviewer` subagent ran
 **twice** (independently verified from the harness both times) and produced a substantial review — it
 established that a single clean-context container build generalises to all 12 services, verified
 `.npmrc` cannot reach any final image, interrogated whether a committed HMAC salt belongs in Secret
@@ -75,8 +75,8 @@ Every word of that is on one laptop. The entire trace on the PR:
 **Checklist — Env / deploy config:** 🟢 BLOCK — passed
 ```
 
-The repo owner's reaction on seeing it — *"if this PR enabled morpheus and all of those gates, why do I
-see no morpheus here?"* — is the bug report.
+The repo owner's reaction on seeing it — *"if this PR enabled the checklists and all of those gates, why do I
+see no checklist output here?"* — is the bug report.
 
 ## Suggested design
 
@@ -89,17 +89,17 @@ emitting a single comment:
 <!-- webpieces-checklists v1 -->
 ## 🔍 Company review checklists — 🔴 1 of 3 failed
 
-### 🔴 morpheus-migrations — FAILED
-_`morpheus-migrations` · independent run verified from harness_
+### 🔴 checklist-migrations — FAILED
+_`checklist-migrations` · independent run verified from harness_
 
 <output verbatim>
 
-### 🟢 morpheus-envvars — passed
-_`morpheus-envvars` · independent run verified from harness_
+### 🟢 checklist-envvars — passed
+_`checklist-envvars` · independent run verified from harness_
 
 <output verbatim>
 
-### 🟢 morpheus-graphql — passed
+### 🟢 checklist-graphql — passed
 …
 ```
 
@@ -113,7 +113,7 @@ trusting the comment needs to tell a harness-verified independent run from an un
 **Why combined, having now run it.** The original filing said one comment per checklist. Four reasons
 to prefer one:
 
-- A single repo can define **six** checklists (monorepo-nx2 does). Six comments per PR, each re-edited
+- A single repo can define **six** checklists (consumer-monorepo2 does). Six comments per PR, each re-edited
   on every push, buries the human conversation. One comment keeps a single canonical place to look.
 - These are GitHub **issue** comments, which are not resolvable or threadable like review comments —
   so the main argument for splitting (independent resolution) does not actually exist.
@@ -150,7 +150,7 @@ problem above entirely.
 `finish-upsert-pr-command.ts:163-168` builds rows as
 `new ChecklistRow(req.title, req.severity, verdict.status, verdict.detail)` — **title only**. Under the
 combined-comment design the marker no longer needs an id, but each SECTION still does: the heading
-should name the reviewer (`morpheus-envvars`), which under the `{ doc }` manifest IS the id. Add `id`
+should name the reviewer (`checklist-envvars`), which under the `{ doc }` manifest IS the id. Add `id`
 to `ChecklistRow`; it also lets the dashboard line and the comment refer to the same thing.
 
 ### 4. Fix `detail` on CK_FAIL, and correct the doc comment

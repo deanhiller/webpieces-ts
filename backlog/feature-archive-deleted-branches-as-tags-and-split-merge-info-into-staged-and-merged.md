@@ -17,7 +17,7 @@ Depends on nothing; pairs with
 
 `*PreMerge` branches exist for a real reason: after a squash merge you sometimes need the original
 pre-merge history to debug. The current answer is to keep the branch, so they accumulate forever. In
-`mealco-internal/monorepo-nx` this reached 6 parked branches against a cap of 5 and wedged a session.
+`acme-internal/consumer-monorepo` this reached 6 parked branches against a cap of 5 and wedged a session.
 
 A tag solves the same problem strictly better. Verified by hand:
 
@@ -116,8 +116,8 @@ repo that covered three genuinely different situations:
 
 | Branch | Actual state |
 |---|---|
-| `feature/ONE-2209-morpheus-gate` | PR #752 **closed unmerged** — superseded by #754 |
-| `feature/ONE-2209-morpheus-every-pr` | PR #740 **closed unmerged** — superseded by #749 |
+| `feature/ONE-2209-checklist-gate` | PR #752 **closed unmerged** — superseded by #754 |
+| `feature/ONE-2209-checklist-every-pr` | PR #740 **closed unmerged** — superseded by #749 |
 | `dean/webpieces-0-3-322` | **never had a PR**; 3 unmerged commits, 200 behind main |
 | `dean/fix-cd-checklist-docs-missing-in-container` | **never had a PR**; 3 unmerged commits |
 | `dean/ONE-1787-…-auditPreMerge` / `…-auditwp2` | **never had a PR** |

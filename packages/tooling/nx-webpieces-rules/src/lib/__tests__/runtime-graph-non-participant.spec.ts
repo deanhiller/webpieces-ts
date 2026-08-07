@@ -9,7 +9,7 @@
  *  - it is still a NODE in runtime-dependencies.json with role:'server', so this is a hide and not
  *    the silent deletion #542 removed. checkServersPresent must stay green on it.
  *
- * The shape modelled here is real (monorepo-nx2): eight NestJS integrations with no webpieces
+ * The shape modelled here is real (consumer-monorepo2): eight NestJS integrations with no webpieces
  * package at all, alongside crm-manager which declares none ITSELF but gets http-routing from a
  * shared bootstrap library — the case that makes the closure walk load-bearing.
  */

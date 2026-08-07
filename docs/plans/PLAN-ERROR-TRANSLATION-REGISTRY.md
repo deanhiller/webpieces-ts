@@ -15,7 +15,7 @@ Both are **hard-coded `switch`/`instanceof` ladders over the built-in `HttpError
 application-defined error has no seam:
 
 - `translateError`'s `default` branch returns a **plain `new Error("could not translate
-  statusCode=460")`** — an app's custom exception (e.g. Mealco's `HttpAiBadRequestError` at HTTP
+  statusCode=460")`** — an app's custom exception (e.g. a consumer app's `HttpAiBadRequestError` at HTTP
   **460**) is lost on the client; `err instanceof HttpAiBadRequestError` can never be true after an
   RPC hop, so callers can't distinguish it.
 - `handleError` sends `res.status(error.code)` generically, but can't serialize app-specific fields
@@ -24,7 +24,7 @@ application-defined error has no seam:
 **Goal:** let an app register, once at startup (server **and** browser), an `ErrorTranslation` with
 two directions (exception→JSON, JSON→exception). Registered translations are consulted **first**;
 if none match, we **fall through to the generic webpieces translation**. This means an app can both
-**add** new error types and **override** built-in ones. The concrete driver: the Mealco monorepo
+**add** new error types and **override** built-in ones. The concrete driver: a consumer monorepo
 needs to inject its custom `HttpAiBadRequestError` (460) so the RPC client reconstructs it.
 
 ## Design
@@ -163,7 +163,7 @@ call `ClientRegistry.addMapping(...)` today:
   and `ClientRegistry` are browser-safe core-util, the identical translation object works in both
   environments — the client `fromWire` path is what the browser exercises.
 
-### 6. Downstream consumer example (the Mealco 460 driver)
+### 6. Downstream consumer example (the 460 driver)
 
 In the consuming monorepo (defines `HttpAiBadRequestError extends HttpError` at code 460):
 

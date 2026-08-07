@@ -119,7 +119,7 @@ In a repo where a browser client uses a company-wide api implemented by every se
 
 ### Consuming-repo status (context)
 
-`ctoteachings/monorepo3` currently works AROUND this. An app server cannot bind a `WarmupApi` client to
+`acme-edu/consumer-repo3` currently works AROUND this. An app server cannot bind a `WarmupApi` client to
 warm its data server, because doing so trips the false cycle and fails the build. Instead each fsdb
 contract declares its own `ping` endpoint and the app server forwards over the fsdb client it already
 holds — chosen because that contract has exactly one implementer, so the resulting edge is true. That

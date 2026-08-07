@@ -104,7 +104,7 @@ describe('ClientRegistry resolution chain', () => {
     });
 });
 
-/** A custom app error at HTTP 460 — the concrete driver (mirrors Mealco's HttpAiBadRequestError). */
+/** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's HttpAiBadRequestError). */
 class AiBadRequestError extends HttpError {
     constructor(message: string) {
         super(message, 460);

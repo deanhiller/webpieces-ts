@@ -358,7 +358,8 @@
 <ul>
 <li>Server routing decorators: <code>Controller</code>, <code>NotController</code>, and Inversify helpers <code>provideSingleton</code>/<code>provideSingletonDefaultForApi</code>/<code>provideTransient</code></li>
 <li>Route/app metadata contracts: <code>WebAppMeta</code>, <code>Routes</code>, <code>RouteBuilder</code>, <code>RouteDefinition</code>, <code>FilterDefinition</code>, <code>RouteBuilderImpl</code></li>
-<li>Turning API decorators into invokable routes (<code>ApiRoutingFactory</code>, <code>RouteHandler</code>, <code>MethodMeta</code>)</li>
+<li>Turning API decorators into invokable routes (<code>ApiRoutingFactory</code>, <code>RouteHandler</code>, <code>MethodMeta</code>) — including SKIPPING an <code>@AuthLocalOnly</code> route entirely when <code>RuntimeLocality</code> says this process is not a developer machine, so the endpoint does not exist off-local</li>
+<li>Enforcing every auth mode at request time (<code>AuthFilter</code>: <code>@Public</code>, <code>@AuthJwt</code>, <code>@AuthOidc</code>, <code>@AuthSharedSecret</code>, <code>@AuthLocalOnly</code>), and declaring the process's locality at startup from <code>RuntimeSetupOptions.locality</code></li>
 <li>Matching filters to routes by controller filepath glob (<code>FilterMatcher</code>, <code>minimatch</code>)</li>
 <li>Request-scoped context reading and server config types (<code>RequestContextReader</code>, <code>WebpiecesConfig</code>)</li>
 </ul>
@@ -398,7 +399,7 @@
 <li>Depends only on <code>@webpieces/core-util</code> (plus bunyan + @google-cloud/logging-bunyan).</li>
 <li><code>BunyanGcpFactory</code> sends to the Cloud Logging API and needs GCP ADC on the instance,</li>
 </ul>
-<p>matching the tested <code>trytami</code> service.</p></div></details>
+<p>matching a production-tested GCP service.</p></div></details>
 <details class="wp-resp-card" data-node="gcp-identity"><summary><span class="wp-resp-level">L2</span> <strong>gcp-identity</strong> — GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.</summary><div class="wp-resp-body"><h4>Responsibilities — gcp-identity</h4>
 <p>GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.</p>
 <h5>In Scope</h5>
@@ -485,7 +486,7 @@
 <li>Depends only on <code>@webpieces/core-util</code> (plus winston / logform / safe-stable-stringify).</li>
 <li>GCP output is stdout JSON scraped by the Cloud Run agent — deliberately no <code>@google-cloud</code></li>
 </ul>
-<p>transport — matching the tested <code>onetablet/monorepo-nx1</code> logger.</p></div></details>
+<p>transport — matching a production-tested GCP logger.</p></div></details>
 <details class="wp-resp-card" data-node="ai-hook-rules"><summary><span class="wp-resp-level">L1</span> <strong>ai-hook-rules</strong> — Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.</summary><div class="wp-resp-body"><h4>Responsibilities — ai-hook-rules</h4>
 <p>Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.</p>
 <h5>In Scope</h5>
@@ -507,7 +508,7 @@
 <p>Shared API contract for the client-server service: <code>SaveApi</code>/<code>PublicApi</code> abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.</p>
 <h5>In Scope</h5>
 <ul>
-<li>Abstract API classes (<code>SaveApi</code>, <code>PublicApi</code>) decorated with <code>@ApiPath</code>, <code>@Endpoint</code>, and an auth decorator (<code>@Public</code> / <code>@AuthJwt*</code>)</li>
+<li>Abstract API classes (<code>SaveApi</code>, <code>PublicApi</code>) decorated with <code>@ApiPath</code>, <code>@Endpoint</code>, and exactly one auth decorator (<code>@Public</code> / <code>@AuthJwt</code> / <code>@AuthOidc</code> / <code>@AuthSharedSecret</code> / <code>@AuthLocalOnly</code>)</li>
 <li>Request/response DTO interfaces shared between server and clients</li>
 <li>The contract that <code>client-server</code> implements and <code>angular-site</code> calls via generated clients</li>
 </ul>
@@ -579,6 +580,27 @@
 <p>follows <code>await</code> and callbacks by itself, so nothing else needs these. The snapshot is OPAQUE — its</p>
 <p>constructor is private and <code>copyContext()</code> is its only producer — so the restore side cannot be</p>
 <p>handed a hand-assembled map, which would forge whatever trusted values it contained.</p>
+<ul>
+<li><code>CapturedContext.withTrusted()</code> / <code>.withoutTrusted()</code> — NON-MUTATING transforms producing the</li>
+</ul>
+<p><code>RestorableContext</code> that <code>runWithContext</code>/<code>restoreContext</code> accept. A bare capture is NOT accepted by</p>
+<p>either, so every call site states whether the proven identity travels (<code>withTrusted</code>, the faithful</p>
+<p>re-root) or is deliberately dropped (<code>withoutTrusted</code>: a background job keeps <code>requestId</code>/<code>actionId</code></p>
+<p>so it stays greppable and loses <code>userId</code>/<code>orgId</code>/roles because it runs as the system). A method pair</p>
+<p>rather than a <code>keepTrusted</code> flag so neither intent is shorter to type and both are greppable;</p>
+<p><code>withoutTrusted</code> needs no capability token, because it only ever REMOVES entries and dropping cannot</p>
+<p>forge. What survives a drop is exactly &quot;registered as an UNTRUSTED ContextKey&quot; — the framework's</p>
+<p>unregistered reserved slots go too.</p>
+<ul>
+<li><code>runDetachedScope()</code> — the OPPOSITE case: a fresh, EMPTY, nestable scope that inherits nothing, for</li>
+</ul>
+<p>work whose context was reconstructed from OUTSIDE this process (a browser-log line whose context the</p>
+<p>browser captured; one batch spans several user actions, so inheriting the shipping request's</p>
+<p><code>actionId</code> would be wrong). Values are written INSIDE the closure with the trust verbs — no container</p>
+<p>crosses the boundary, so code fed by a source that PROVES nothing (a browser) cannot fabricate a</p>
+<p>trusted value. That is a limit on the source, not on the key: <code>putTrusted</code> inside a detached scope is</p>
+<p>correct when the caller HAS proven the value. <code>runWithContext</code> PRESERVES a real context;</p>
+<p><code>runDetachedScope</code> DISCARDS the ambient one.</p>
 <h5>Out of Scope</h5>
 <ul>
 <li>The <code>Header</code>/<code>ContextKey</code> type definitions themselves — those live in <code>core-util</code> (lowest-level package).</li>
@@ -618,7 +640,7 @@
 </ul>
 <h5>Out of Scope</h5>
 <ul>
-<li>Reading the magic context → the <code>OutboundHeaders</code> abstraction in <code>core-util</code>, implemented by <code>RequestContextHeaders</code> (node) and <code>ContextMgr</code> (browser)</li>
+<li>Reading the magic context → the abstract <code>ProxyClient.outboundContextHeaders(destination)</code> hook, answered by <code>RequestContextHeaders</code> (node, via <code>core-context</code>) and <code>ContextMgr</code> (browser, in <code>core-util</code>). This package only DERIVES the <code>DestinationTrust</code> from the route's <code>AuthMode</code> and passes it down, so trusted context keys never ride to an endpoint that cannot authenticate the caller</li>
 <li>Deciding a base URL from a Cloud Run service name → <code>gcp-identity</code>, used by <code>http-client-node</code></li>
 <li>Minting OIDC tokens → <code>gcp-identity</code>; this package only accepts an <code>IdTokenMinter</code> seam</li>
 <li>Any DI wiring → <code>http-client-node</code> (inversify) or the app's own DI (<code>http-client-browser</code>)</li>
@@ -626,7 +648,7 @@
 <li>Server-side routing to controllers → <code>http-routing</code></li>
 </ul>
 <h5>Notes</h5>
-<p>Depends only on <code>@webpieces/core-util</code> (browser + node), which is what lets it stay isomorphic. The <code>IdTokenMinter</code> and <code>OutboundHeaders</code> seams exist precisely so no Node-only import (<code>async_hooks</code>, <code>gcp-identity</code>, <code>inversify</code>) can reach a browser bundle. It is the &quot;contract → HTTP request&quot; direction; <code>http-routing</code> is the mirror &quot;contract → handler&quot; direction.</p></div></details>
+<p>Depends only on <code>@webpieces/core-util</code> (browser + node), which is what lets it stay isomorphic. The <code>IdTokenMinter</code> and <code>outboundContextHeaders</code> seams exist precisely so no Node-only import (<code>async_hooks</code>, <code>gcp-identity</code>, <code>inversify</code>) can reach a browser bundle. It is the &quot;contract → HTTP request&quot; direction; <code>http-routing</code> is the mirror &quot;contract → handler&quot; direction.</p></div></details>
 <details class="wp-resp-card" data-node="pr-gate"><summary><span class="wp-resp-level">L1</span> <strong>pr-gate</strong> — Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.</summary><div class="wp-resp-body"><h4>Responsibilities — pr-gate</h4>
 <p>Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.</p>
 <h5>In Scope</h5>
@@ -634,6 +656,9 @@
 <li>Bin commands shipped from <code>src/scripts/*</code>: <code>wp-start-upsert-pr</code>, <code>wp-finish-upsert-pr</code>, <code>wp-start-update</code> (update from main; clean → finalizes, conflict → hand off), <code>wp-finish-update</code> (finalize after resolving conflicts). The full-update composition (<code>runUpdateFromMain</code>), the build gate (<code>runBuildAffected</code>), and 3-point merge-info gathering (<code>gatherInfo</code>) are internal <code>workflow/</code> functions, not bins.</li>
 <li>The 3-point squash-merge / merge-validation gate workflow (<code>src/scripts/workflow</code>).</li>
 <li>The red/yellow/green PR dashboard (<code>src/dashboard/dashboard.ts</code>): <code>computeGateResults</code>, <code>countAddedDisables</code>, and its <code>GateResult</code>/<code>DisableCounts</code>/<code>DashboardInput</code> data classes. THREE renderings, one per surface: <code>renderPrBody</code> (the PR description, which is byte-identical to the squash-merge commit body — see <code>pr-body-is-merge-body.spec.ts</code>), <code>renderDetailComment</code> (the 1st PR comment: full dashboard, all rows, hash points), and <code>ChecklistCommentRenderer.render</code> in its own file (the 2nd comment: per-reviewer output). Both comments are upserted by hidden marker via <code>PrCommentUpserter</code>. <code>SquashSettingsEnforcer</code> keeps GitHub's <code>squash_merge_commit_title</code>/<code>squash_merge_commit_message</code> pinned to <code>PR_TITLE</code>/<code>PR_BODY</code> so a UI merge copies the description into <code>git log</code> — server-side settings no config key can express, repaired on every stage ③ run.</li>
+</ul>
+<ul>
+<li>EXPERIMENTAL and NOT a supported knob: build-gate log capture (<code>BuildGateLog</code>), gated on <code>HomeConfigService</code> (<code>@webpieces/rules-config</code>). The DEFAULT and normal state is off, and off is the pre-existing gate byte-for-byte — no log file, no new message, nothing. When it is on, the ONE shared gate (<code>BuildAffected.runBuildGate</code>, used by stage ② and stage ③ alike) <code>tee</code>s the build's full stdout+stderr into <code>.webpieces/logs/build-gate-&lt;stage&gt;-&lt;branch&gt;-&lt;shortSha&gt;.log</code> while still streaming it to the terminal, and on FAILURE replaces the &quot;run this command to reproduce&quot; text with a three-line pointer at that file. The motivation is agent compute: the old text is an instruction an AI obeys, so a red gate cost a SECOND full build of the repo purely to reprint errors the first build already printed and discarded. Under test — do not document it as a feature or prompt anyone to enable it.</li>
 </ul>
 <h5>Out of Scope</h5>
 <ul>
@@ -684,6 +709,8 @@
 <li><code>toError(unknown)</code> — normalizes any thrown value into a real <code>Error</code> (enforced by the catch-error-pattern ESLint rule).</li>
 <li>The <code>Header</code> interface (<code>getHeaderName()</code>) — the minimal header/context-key abstraction placed here to avoid circular deps.</li>
 <li><code>ContextKey</code> — typed key for non-HTTP context values stored in RequestContext.</li>
+<li>The five auth-mode decorators on an api contract — <code>@Public</code>, <code>@AuthJwt</code>, <code>@AuthOidc</code>, <code>@AuthSharedSecret</code>, <code>@AuthLocalOnly</code> — and the <code>AuthMode</code> discriminated union every reader switches on.</li>
+<li><code>RuntimeLocality</code> — the startup-declared <code>'local' | 'deployed'</code> token that <code>@AuthLocalOnly</code> enforcement reads. A SEAM, not a detector: the framework never reads <code>process.env</code> and never names a cloud provider's variable; undeclared reads as <code>'deployed'</code> so the answer fails safe.</li>
 <li>Small, dependency-free helpers usable in both browser and Node.</li>
 </ul>
 <h5>Out of Scope</h5>

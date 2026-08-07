@@ -102,13 +102,13 @@ the set while governing the construct most likely to be legitimately unavoidable
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 
 ```json
 "no-file-import-cycles": {
   "mode": "RUN_EVERY_TIME",
   "ignoreTypeOnly": false,
-  "excludePackages": ["@mealco-internal/kami"],
+  "excludePackages": ["@acme-internal/db"],
   "ignoreModifiedUntilEpoch": 1785016799
 }
 ```
@@ -116,9 +116,9 @@ Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI 
 That epoch is **2026-07-25 21:59:59 UTC**; as of 2026-07-28 the rule is live and strict.
 
 ```
-$ nx run @mealco-internal/fuji-part1-api:validate-no-file-import-cycles
+$ nx run @acme-internal/fuji-part1-api:validate-no-file-import-cycles
 
-❌ Found 2 circular import cycle(s) in @mealco-internal/fuji-part1-api:
+❌ Found 2 circular import cycle(s) in @acme-internal/fuji-part1-api:
   1. src/modules/item/item.responses.dto.ts → src/modules/category/category.responses.dto.ts → src/modules/item/item.responses.dto.ts
   2. src/modules/item/item.responses.dto.ts → src/modules/modifier/modifier.responses.dto.ts → src/modules/item/item.responses.dto.ts
 ```
@@ -151,7 +151,7 @@ ItemDto`), the developer **used** it, and the cycle is required by the API contr
 to say "this pair is known and handled."
 
 `excludePackages` cannot help: `item`, `category` and `modifier` are directories inside the single
-package `@mealco-internal/fuji-part1-api`, which is the package being checked.
+package `@acme-internal/fuji-part1-api`, which is the package being checked.
 
 Options actually available to the consumer today, none of which is the one wanted:
 

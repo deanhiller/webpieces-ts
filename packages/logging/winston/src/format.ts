@@ -1,8 +1,7 @@
 /**
  * The winston format layers that turn a raw webpieces log call into a
  * Cloud-Logging-ready structured record. Ported verbatim (behaviourally) from
- * the tested-in-GCP logger at
- * onetablet/monorepo-nx1 libraries/core-context/src/logger/format.ts, with the
+ * a production-tested GCP logger's format module, with the
  * one webpieces adaptation: context is read from the webpieces HeaderRegistry +
  * a ContextReader (rather than a hard-coded PLATFORM_HEADERS enum), so the exact
  * set of logged fields is whatever the app registered.
@@ -152,7 +151,7 @@ const LOCAL_STRUCTURAL_KEYS = new Set<string>([
 /**
  * Local-only human format:
  * `[LEVEL][time][Controller.method][loggerName][ctx tags]: message { …extra }` + Error Details block.
- * Level FIRST, then time (the ordering the trytami format was tuned for). `controller`/`method` render
+ * Level FIRST, then time (the ordering the production-tested format was tuned for). `controller`/`method` render
  * as a compact bracket, `loggerName` as its own bracket, every other registered context key as a
  * `key:value` tag, and anything else the caller attached as trailing JSON. Byte-identical to the bunyan
  * backend for the same record + `fields`.
@@ -219,7 +218,7 @@ export function localPrettyFormat(fields?: string[]): Format {
         let line = `[${levelName}][${time}]${controllerMethod}${loggerBracket}[${tagStr}]: ${info.message}${restStr}`;
 
         // Multi-line error block, byte-identical to the bunyan backend. WinstonLogger spreads an Error
-        // into errName/errMessage/errStack; render them the same way trytami's writeConsole did.
+        // into errName/errMessage/errStack; render them the same way the production-tested logger's writeConsole did.
         if (info['errName'] != null || info['errMessage'] != null || info['errStack'] != null) {
             line += `\nError Details:`;
             line += `\n  Message: ${String(info['errMessage'] ?? '')}`;

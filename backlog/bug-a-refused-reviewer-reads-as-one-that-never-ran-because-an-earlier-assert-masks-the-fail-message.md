@@ -80,18 +80,18 @@ deliberate refusal by a BLOCK checklist lands here.
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 
-That repo runs a patternless checklist, `morpheus-wrapper-linear-required`, that refuses any PR whose
+That repo runs a patternless checklist, `ticket-key-required`, that refuses any PR whose
 title does not name an in-cycle Linear ticket. Observed twice on 2026-07-31/08-01:
 
-1. PR branch `dean/morpheus-wrapper-rename`, deliberately opened with no ticket key. The reviewer
-   wrote `review-morpheus-wrapper-linear-required.json` with `status: "red"`, `override: ""`, and an
+1. PR branch `dean/ticket-key-checklist-rename`, deliberately opened with no ticket key. The reviewer
+   wrote `review-ticket-key-required.json` with `status: "red"`, `override: ""`, and an
    `output` naming gate 1 and quoting the offending title.
 2. `pnpm wp-finish-upsert-pr` printed `⛔ NO PR — … have no passing verdict yet` followed by
    `You MUST run these 1 reviewer subagent(s)`, listing the verdict file the reviewer had **already
    written**, with no mention of red, no mention of a refusal, and none of the reviewer's text.
-3. `gh pr list --head dean/morpheus-wrapper-rename` → `[]`. The refusal itself worked correctly; only
+3. `gh pr list --head dean/ticket-key-checklist-rename` → `[]`. The refusal itself worked correctly; only
    the reporting was wrong.
 
 The second occurrence was a genuine (not staged) refusal on an unmet acceptance criterion, with the

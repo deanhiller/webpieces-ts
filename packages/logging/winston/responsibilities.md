@@ -24,4 +24,4 @@ pretty) and a `WinstonGcpFactory` (Cloud Run stdout JSON with a level→severity
 
 - Depends only on `@webpieces/core-util` (plus winston / logform / safe-stable-stringify).
 - GCP output is stdout JSON scraped by the Cloud Run agent — deliberately no `@google-cloud`
-  transport — matching the tested `onetablet/monorepo-nx1` logger.
+  transport — matching a production-tested GCP logger.

@@ -99,7 +99,7 @@ ORDER=(
     # trusted publishing (OIDC + --provenance) cannot CREATE a brand-new scoped package — only
     # publish to a name that already exists — so the first-ever publish 404'd and aborted the
     # whole release. Once the name was bootstrapped on npm by an authenticated manual publish,
-    # CI can keep it in sync like every other package. Consumers (e.g. trytami) were cloning it
+    # CI can keep it in sync like every other package. Consumers were cloning it
     # by hand while it was unpublished; see issue #429's sibling report.
     packages/core/core-mock
     packages/cloud/gcp-identity

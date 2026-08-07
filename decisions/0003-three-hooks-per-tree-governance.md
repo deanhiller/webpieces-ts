@@ -105,7 +105,7 @@ destination we must allow has one:
 So there is **no `excludePaths` logic in H1 at all**. It cannot read config (it is `sh`, pre-config,
 pre-binary) and it does not need to.
 
-**The one deliberate divergence**, measured on monorepo-nx2 (`excludePaths: ["repositories/**",
+**The one deliberate divergence**, measured on consumer-monorepo2 (`excludePaths: ["repositories/**",
 "tools/**"]`): `repositories/portal-v2` has its own `.git` → allowed, agreeing with `excludePaths`;
 `tools/` does **not** → blocked, where `excludePaths` would exempt. That is *correct for H1's purpose* —
 the real hooks genuinely cannot launch in `tools/`, and we genuinely want them to. `excludePaths`
@@ -296,11 +296,11 @@ This replaces an earlier estimate that surveyed only this repo's `package.json` 
 
 | repo | Bash calls | leading `cd …` | |
 |---|---|---|---|
-| `onetablet/monorepo-nx2` | 953 | **296 (31.1%)** | the real client monorepo |
+| `acme/consumer-monorepo2` | 953 | **296 (31.1%)** | the real client monorepo |
 | `personal/webpieces-ts30` | 990 | 153 (15.5%) | mostly `cd <worktree-root>` — already fine |
-| `ctoteachings/monorepo2` | 291 | 34 (11.7%) | mostly `cd <tree-root>` — already fine |
+| `acme-edu/consumer-repo2` | 291 | 34 (11.7%) | mostly `cd <tree-root>` — already fine |
 
-Of monorepo-nx2's **128** `cd`s landing under the tree root:
+Of consumer-monorepo2's **128** `cd`s landing under the tree root:
 
 | | count | H1's correct verdict |
 |---|---|---|

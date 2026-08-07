@@ -454,12 +454,12 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
     // The bug this row replaced: six checklists meant six rows, each repeating the SAME override paragraph.
     it('collapses six overridden checklists into ONE orange row with a count and NO override prose', () => {
         const ids = [
-            'morpheus-envvars',
-            'morpheus-frontend',
-            'morpheus-db',
-            'morpheus-api',
-            'morpheus-infra',
-            'morpheus-a11y',
+            'checklist-envvars',
+            'checklist-frontend',
+            'checklist-db',
+            'checklist-api',
+            'checklist-infra',
+            'checklist-a11y',
         ];
         const md = dashboardWith(
             ids.map(
@@ -468,8 +468,8 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
         );
 
         expect(md).toContain(
-            '**Checklists:** 🟠 6 ran — 6 overridden (morpheus-envvars, morpheus-frontend, ' +
-                'morpheus-db, morpheus-api +2 more) · per-checklist detail in the checklist comment',
+            '**Checklists:** 🟠 6 ran — 6 overridden (checklist-envvars, checklist-frontend, ' +
+                'checklist-db, checklist-api +2 more) · per-checklist detail in the checklist comment',
         );
         expect(md.match(/\*\*Checklists:\*\*/g)).toHaveLength(1);
         expect(md).not.toContain('HUMAN-APPROVED OVERRIDE');
@@ -530,7 +530,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
     it('leaves the comment carrying the full override prose the dashboard dropped', () => {
         const rows = [
             new ChecklistCommentRow(
-                'morpheus-envvars',
+                'checklist-envvars',
                 CK_OVERRIDDEN,
                 OVERRIDE_PROSE,
                 true,
@@ -544,7 +544,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
 
         expect(md).toContain(OVERRIDE_PROSE);
         expect(md).toContain(
-            '#### 🟠 morpheus-envvars — OVERRIDDEN — shipped with a stated justification',
+            '#### 🟠 checklist-envvars — OVERRIDDEN — shipped with a stated justification',
         );
         expect(md).not.toContain('**Checklists:** '); // the dashboard row belongs to the PR body only
     });

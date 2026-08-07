@@ -23,12 +23,12 @@ Dean's explicit instruction: **treat this as a claim to be challenged, get a 2nd
 
 ```
 these reviewer subagents did not run on this branch (spawn each as its OWN subagent —
-do not self-certify): morpheus-wrapper-linear-required
+do not self-certify): ticket-key-required
 ```
 
-…despite the `morpheus-wrapper-linear-required` reviewer running as a **separate subagent and returning GREEN on all four attempts**, with genuine tool-call evidence (real `mcp__Linear__get_issue`/`list_cycles` calls in its transcript — not a fabricated verdict, not self-certification).
+…despite the `ticket-key-required` reviewer running as a **separate subagent and returning GREEN on all four attempts**, with genuine tool-call evidence (real `mcp__Linear__get_issue`/`list_cycles` calls in its transcript — not a fabricated verdict, not self-certification).
 
-Branch: `dean/one-2406-mealco-api-auth-observe-header-constant` (Linear **ONE-2406**), head `b398c8b`.
+Branch: `dean/one-2406-acme-api-auth-observe-header-constant` (Linear **ONE-2406**), head `b398c8b`.
 Nothing was pushed; no PR exists — `wp-finish` fails before the push step.
 
 ## Root cause (first-hand evidence)
@@ -43,26 +43,26 @@ return this.stripWp(gitBranch) === this.stripWp(branch);              // stripWp
 ```
 
 The reviewer subagent's record-0 (read directly from
-`~/.claude/projects/-Users-deanhiller-workspace-onetablet-monorepo-nx3/8ae9e533-fea8-4f17-aa26-0254b1454c39/subagents/agent-adc00ee641f48ce4d.jsonl`):
+`~/.claude/projects/-Users-deanhiller-workspace-acme-consumer-monorepo3/8ae9e533-fea8-4f17-aa26-0254b1454c39/subagents/agent-adc00ee641f48ce4d.jsonl`):
 
 | field | value | correct? |
 |---|---|---|
 | `isSidechain` | `true` | ✅ |
 | `sessionId` | `8ae9e533-…` | ✅ |
-| `cwd` | `/Users/deanhiller/workspace/onetablet/monorepo-nx3/.claude/worktrees/agent-a6c10e673cc1469de` | ✅ (this worktree IS on `dean/one-2406-…`) |
+| `cwd` | `/Users/deanhiller/workspace/acme/consumer-monorepo3/.claude/worktrees/agent-a6c10e673cc1469de` | ✅ (this worktree IS on `dean/one-2406-…`) |
 | **`gitBranch`** | **`worktree-agent-a54887200e40eb956`** | ❌ **an unrelated, still-live worktree's scaffold branch** |
 
-meta (`agent-adc00ee641f48ce4d.meta.json`): `agentType: morpheus-wrapper-linear-required`, `spawnDepth: 2`, `parentAgentId: a6c10e673cc1469de`.
+meta (`agent-adc00ee641f48ce4d.meta.json`): `agentType: ticket-key-required`, `spawnDepth: 2`, `parentAgentId: a6c10e673cc1469de`.
 
 So **the harness wrote a `gitBranch` that contradicts the record's own `cwd`.** `git worktree list` confirms:
-- `…/worktrees/agent-a6c10e673cc1469de  b398c8b [dean/one-2406-mealco-api-auth-observe-header-constant] locked`  ← the reviewer's actual cwd/branch
+- `…/worktrees/agent-a6c10e673cc1469de  b398c8b [dean/one-2406-acme-api-auth-observe-header-constant] locked`  ← the reviewer's actual cwd/branch
 - `…/worktrees/agent-a54887200e40eb956  580ae25 [worktree-agent-a54887200e40eb956]`  ← the branch that was wrongly stamped (a *different*, completed agent's leftover worktree)
 
-The mis-stamp is **deterministic**: every attempt (#2/#3/#4) recorded the same wrong `worktree-agent-a54887200e40eb956`, regardless of concurrency. The parent (mealco-api-auth) agent's own top-level record likewise showed `gitBranch: "main"` while its `cwd` was correctly its worktree — so whatever computes `gitBranch` for a Task-spawned subagent is **not** reading `git branch --show-current` from that subagent's `cwd`.
+The mis-stamp is **deterministic**: every attempt (#2/#3/#4) recorded the same wrong `worktree-agent-a54887200e40eb956`, regardless of concurrency. The parent (acme-api-auth) agent's own top-level record likewise showed `gitBranch: "main"` while its `cwd` was correctly its worktree — so whatever computes `gitBranch` for a Task-spawned subagent is **not** reading `git branch --show-current` from that subagent's `cwd`.
 
 `stripWp` (only strips `-wpN`) cannot bridge `worktree-agent-a54887200e40eb956` → `dean-one-2406-…`, so the reviewer is never credited → `provenance.json` `reviewers: []`, `provenanceStatus: "missing"` → **BLOCK**.
 
-Provenance record: `.webpieces/worktrees/agent-a6c10e673cc1469de/pr-review/dean-one-2406-mealco-api-auth-observe-header-constant/provenance.json` (`branch` stored **dash-form** `dean-one-2406-…`; git branch is **slash-form** `dean/one-2406-…`).
+Provenance record: `.webpieces/worktrees/agent-a6c10e673cc1469de/pr-review/dean-one-2406-acme-api-auth-observe-header-constant/provenance.json` (`branch` stored **dash-form** `dean-one-2406-…`; git branch is **slash-form** `dean/one-2406-…`).
 
 ## Candidate fixes (for you to weigh)
 
@@ -78,10 +78,10 @@ Provenance record: `.webpieces/worktrees/agent-a6c10e673cc1469de/pr-review/dean-
 
 ## Paths for your investigation
 
-- Project (repo root): `/Users/deanhiller/workspace/onetablet/monorepo-nx3`
-- Main session transcript: `/Users/deanhiller/.claude/projects/-Users-deanhiller-workspace-onetablet-monorepo-nx3/8ae9e533-fea8-4f17-aa26-0254b1454c39.jsonl`
+- Project (repo root): `/Users/deanhiller/workspace/acme/consumer-monorepo3`
+- Main session transcript: `/Users/deanhiller/.claude/projects/-Users-deanhiller-workspace-acme-consumer-monorepo3/8ae9e533-fea8-4f17-aa26-0254b1454c39.jsonl`
 - Reviewer subagent transcript + meta: `…/8ae9e533-…/subagents/agent-adc00ee641f48ce4d.jsonl` (+ `.meta.json`)
-- Provenance record: `<repo>/.webpieces/worktrees/agent-a6c10e673cc1469de/pr-review/dean-one-2406-mealco-api-auth-observe-header-constant/provenance.json`
+- Provenance record: `<repo>/.webpieces/worktrees/agent-a6c10e673cc1469de/pr-review/dean-one-2406-acme-api-auth-observe-header-constant/provenance.json`
 - Service source: `<repo>/node_modules/@webpieces/rules-config/src/subagent-provenance.js` (`sidechainOnBranch`, `findMatchingAgentId`, `verifyDistinct`, `stripWp`)
 - The code the blocked PR carries sits committed (not pushed) at head `b398c8b` in worktree `…/worktrees/agent-a6c10e673cc1469de`.
 
@@ -120,7 +120,7 @@ the worktree's whole life, so time-drift cannot explain a difference:
 **The mis-stamp is the majority case, 4:1.** A parallel investigation counted **65** mis-stamps across the
 same corpus under a wider match. The report's exact record is in that set —
 `worktree-agent-a54887200e40eb956` stamped on a reviewer whose cwd was on
-`dean/one-2406-mealco-api-auth-observe-header-constant`, appearing **three times** (the retried attempts),
+`dean/one-2406-acme-api-auth-observe-header-constant`, appearing **three times** (the retried attempts),
 plus a fourth variant `worktree-agent-a448cb06e6d153d66`. Observed wrong stamps include an unrelated live
 worktree's scaffold branch, the parent's branch, `main`, a stale feature branch, and the literal `HEAD`.
 It is a structural property of how the field is stamped. The reporter's read of the root cause is correct.

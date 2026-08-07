@@ -5,7 +5,7 @@ import { createConsoleStream } from './streams';
  * BunyanConsoleFactory - the LOCAL developer backend. Human-readable, greppable
  * text to stdout (`[LEVEL][time][Controller.method][loggerName][ctx tags]: message`) with the
  * registered context keys as tags — same enrichment as the GCP backend, different rendering. Mirrors
- * the tested trytami local console stream.
+ * a production-tested local console stream.
  *
  * `consoleFields`, when given, is the app-chosen ordered ALLOW-LIST of context keys to render in the
  * console line (hides local noise like `requestPath`); GCP still receives every logged key.

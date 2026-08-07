@@ -62,9 +62,9 @@ failure mode, because it is **silent**: a repo can believe it has a BLOCK gate a
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 
-The repo adopted checklists in PR #720 (2026-07-28 09:19), pointing at `.claude/review/morpheus-*.md`.
+The repo adopted checklists in PR #720 (2026-07-28 09:19), pointing at `.claude/review/checklist-*.md`.
 They were removed 82 minutes later in PR #728 (10:41) for an unrelated reason — `loadAndValidate()`
 ran inside `nx build` in containers that do not copy `.claude/`, so all 12 service builds went red.
 
@@ -81,7 +81,7 @@ a diff that would have triggered the `envvars` checklist under the #720 config. 
 green. Nothing anywhere indicated that a review process had silently stopped existing.
 
 That is the shape of the problem: the difference between "configured and satisfied" and "not
-configured at all" is invisible in the output. And the repo's *other* two morpheus triggers had
+configured at all" is invisible in the output. And the repo's *other* two checklist triggers had
 failed the same silent way months earlier — `.claude/hooks/pr-quality-gate.sh` became unreachable
 dead code the moment `pr-creation-or-push-guard` started blocking `gh pr create`, and nobody noticed
 because nothing reports "a gate you configured did not run."

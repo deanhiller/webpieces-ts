@@ -21,8 +21,8 @@ This is a design/organization report, not a proven defect. Dean wants you to **d
   ai-hooks/
   local-modules/
   prs/                      # per-PR body reporting for wp-land-pr
-    github.com/mealco-internal/monorepo-nx      # <- unwanted host segment
-    personal/ctoteachings/monorepo
+    github.com/acme-internal/consumer-monorepo      # <- unwanted host segment
+    personal/acme-edu/consumer-repo
     personal/deanhiller/webpieces-ts
   # NO logs/ here  <-- Dean expects ~/.webpieces/logs
 ```
@@ -95,7 +95,7 @@ Forcing one uniform key onto both is what makes every option feel wrong.
 ```
 ~/.webpieces/{token}/{repo}/{clonedDirName}/logs/****
 ```
-- `{clonedDirName}` = basename of the working dir (`monorepo-nx3` for the primary tree, `agent-<id>` for a worktree, the clone's dir name for a fresh clone) — **human-recognizable, matches `git worktree list`**, so logs are easy to locate and evaluate.
+- `{clonedDirName}` = basename of the working dir (`consumer-monorepo3` for the primary tree, `agent-<id>` for a worktree, the clone's dir name for a fresh clone) — **human-recognizable, matches `git worktree list`**, so logs are easy to locate and evaluate.
 - Open questions for the webpieces AI:
   1. Is `{clonedDirName}` **stable & unique enough** within a `{token}/{repo}`? (worktree ids + the primary dir are unique; two *fresh clones* could in principle pick the same dir name — need a disambiguation rule, e.g. suffix, or fall back to `{sessionId}-{agentId}` in the filename.)
   2. Under a clone, do individual runs get `logs/{sessionId}-{agentId}-hook.log` filenames so multiple agents sharing a clone stay distinct?
@@ -113,8 +113,8 @@ Two fixes fall out regardless of the final shape:
 ## Paths for your investigation
 
 - Home root: `/Users/deanhiller/.webpieces/` (`ai-hooks/`, `local-modules/`, `prs/`)
-- Repo root: `/Users/deanhiller/workspace/onetablet/monorepo-nx3/.webpieces/` and `.../.claude/webpieces/`
-- Provenance source: `~/.claude/projects/-Users-deanhiller-workspace-onetablet-monorepo-nx3/<sessionId>/subagents/`
+- Repo root: `/Users/deanhiller/workspace/acme/consumer-monorepo3/.webpieces/` and `.../.claude/webpieces/`
+- Provenance source: `~/.claude/projects/-Users-deanhiller-workspace-acme-consumer-monorepo3/<sessionId>/subagents/`
 - Related report in this dir: `BUG-subagent-provenance-gitbranch-mismatch.md` (the provenance audit data is one of the "review data" artifacts this reorg should give a stable home).
 
 ---
@@ -137,7 +137,7 @@ repo" — is amended in place and marked REVERSED, with the argument recorded th
 | the report said | verdict |
 |---|---|
 | "Logs are supposed to live at `~/.webpieces/logs`, but that dir does not exist" | **REFUTED.** In-repo is the intended and now-confirmed home. `find ~/.webpieces -name '*.log'` returns zero, and it should. |
-| "`~/.webpieces/prs/` has an unwanted `{host}` segment" | **REFUTED as stated.** The first segment is not consistently a hostname — the observed values were `github.com`, `personal` and `mealco-internal`, i.e. a mix of host and org. So the fix is not "drop the host level"; the whole store is being removed, which makes the keying question moot. |
+| "`~/.webpieces/prs/` has an unwanted `{host}` segment" | **REFUTED as stated.** The first segment is not consistently a hostname — the observed values were `github.com`, `personal` and `acme-internal`, i.e. a mix of host and org. So the fix is not "drop the host level"; the whole store is being removed, which makes the keying question moot. |
 | "`pr-info/` and `~/.webpieces/prs` are a confusing split" | **STALE.** `pr-info/` was renamed to `pr-review` (`rules-config/src/constants.ts`); no writer for `pr-info/` exists in source. The directories still on disk in several repos are residue. |
 | "Home-vs-repo placement looks accidental" | **PARTLY FAIR, and now moot.** There is exactly one tier: `{repo}/.webpieces/`, split by `DotWebpieces.shared()` (repo-wide facts) vs `.local()` (one tree). Nothing is in `$HOME`. |
 | "no coherent home for logs / auditing / pr-info / review data" | **ADDRESSED**, in place rather than by relocation — see below. |
