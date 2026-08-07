@@ -1,4 +1,4 @@
-import { L1Row, L1UseCase, L1_ROWS, allL1UseCases } from './l1-rows';
+import { L1Row, L1UseCase, L1_ROWS, L1_PRESTAGE_ROW, allL1UseCases } from './l1-rows';
 
 // ---------------------------------------------------------------------------
 // guards/L1-location.md, rendered from L1_ROWS.
@@ -177,6 +177,12 @@ function renderTable(): string[] {
         '',
         '| # | K | A | R | G | P | act | why |',
         '|---|---|---|---|---|---|---|---|',
+        // Row 0 is the PRE-STAGE (`misplacedCdBlock`). It decides from command TEXT before a tree is
+        // resolved, so it cannot be classified over the five dimensions rows 1-6 share — but it IS an
+        // L1 block, and an L1 block the table did not describe is exactly the drift this table exists
+        // to prevent. It is numbered 0, not 7, because it does not sit in the first-match scan; and it
+        // is PRINTED because `row=0` in the L1 log has to join to something.
+        `| ${L1_PRESTAGE_ROW} | – | – | – | – | – | 4 block | a \`cd\` that is not leading + literal, judged before any tree is resolved |`,
         ...L1_ROWS.map(tableRow),
         '',
         'Rows 3 and 5 are the two structural blocks, and they run as ONE step (`l1LocationBlock` in `runner.ts`)',

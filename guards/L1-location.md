@@ -106,6 +106,7 @@ hatch uses (allowlisted viewers/searchers only, no redirects, no `sed -i`).
 
 | # | K | A | R | G | P | act | why |
 |---|---|---|---|---|---|---|---|
+| 0 | – | – | – | – | – | 4 block | a `cd` that is not leading + literal, judged before any tree is resolved |
 | 1 | `f` | - | - | - | - | 2 exempt | different git repo — hands off |
 | 2 | `o` | - | - | - | - | → L2 | see "Not done" below |
 | 3 | `w` | `c` | `n` | - | - | 4 block | the coordinator's guards do not follow its `cd` — delegate to a subagent bound to the worktree |
@@ -131,16 +132,16 @@ section head (neither the shell's cwd nor a `cd`'s persistence can be assumed).
 | 2 | Edit `repositories/vendored/foo.ts` allowed even on stale main | filter — the path is in `excludePaths` | ALLOW_EXEMPT | none needed |
 | 3 | Edit `packages/http/foo.ts` blocked on stale main | filter keeps the rules → L2 fires | BLOCK (at L2) | that is L2's write-on-main verdict, not L1's — follow the L2 message |
 | 4 | Edit `packages/http/foo.ts` judged even though the shell is in `/tmp` | filter, on the TARGET path | → L2 | none — for file tools the cwd is irrelevant; do NOT `cd` anywhere to "fix" it |
-| 5 | `ls` from `packages/http/` runs normally | `pw` / `n` / - — row 4 | → L2 | none — force-to-root has no jurisdiction over non-git commands |
-| 6 | `pnpm test` from `packages/http/` runs normally | `pw` / `n` / - — row 4 | → L2 | none — deliberately untouched, so package-local test runs stay natural |
-| 7 | `git status` from `packages/http/` is blocked | `pw` / `y` / `sub` — row 5 | BLOCK | Option 1 (preferred): `cd <root> && git status` |
-| 8 | `cd packages/http && git status` **typed from the root** is blocked | `pw` / `y` / `sub` — row 5 | BLOCK | Option 1 (preferred): `cd <root> && git status`<br>Do NOT: assume it is allowed because you started at the root — the predicate is `effectiveCwd === root`, i.e. the DESTINATION |
-| 9 | `cd <root> && git status` passes from anywhere | `pw` / `y` / `root` — row 6 | → L2 | none — this IS the prescribed cure |
-| 10 | `echo "cd sub && git push"` passes | `pw` / `n` / `root` — row 4 | → L2 | none — the `cd` is inside quotes, so `ShellSegmentScan` never treats it as a scope escape |
-| 11 | `cd <subdir> && git push` blocked with the force-to-root message, NOT the gated-flow one | `pw` / `y` / `sub` — row 5; force-to-root runs first | BLOCK | Option 1 (preferred): `cd <root> && git push`, which then gets the push guard's real answer ← costs one extra turn by design; still blocked |
-| 12 | you are the **coordinator**, you ran `git worktree add ../wt`, and `cd ../wt && pnpm build` is blocked | `w` / `c` / `n` — row 3 | BLOCK | Option 1 (preferred): spawn a subagent bound to `<worktree>` — the Agent tool with worktree isolation, or have the subagent call `EnterWorktree` with `path: <worktree>` (it accepts a worktree you already created)<br>Do NOT: re-type the command, or conclude the harness ate your `cd` — it did not; your GUARDS did not follow it |
-| 13 | the same command from a **subagent** runs normally | `w` / `s` — row 3 does not match | → L2 | none — a subagent pinned to a worktree is the correct pattern |
-| 14 | the coordinator's `cd <worktree> && ls`/`cat`/`grep` still runs | `w` / `c` / `y` — row 3 does not match | → L2 | none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you |
+| 5 | `ls` from `packages/http/` runs normally | `pw` / `n` / - — row 4 | ALLOW (handed to L2) | none — force-to-root has no jurisdiction over non-git commands |
+| 6 | `pnpm test` from `packages/http/` runs normally | `pw` / `n` / - — row 4 | ALLOW (handed to L2) | none — deliberately untouched, so package-local test runs stay natural |
+| 7 | `git status` from `packages/http/` is blocked | `pw` / `y` / `sub` — row 5 | BLOCK_AI_CURE | Option 1 (preferred): `cd <root> && git status` |
+| 8 | `cd packages/http && git status` **typed from the root** is blocked | `pw` / `y` / `sub` — row 5 | BLOCK_AI_CURE | Option 1 (preferred): `cd <root> && git status`<br>Do NOT: assume it is allowed because you started at the root — the predicate is `effectiveCwd === root`, i.e. the DESTINATION |
+| 9 | `cd <root> && git status` passes from anywhere | `pw` / `y` / `root` — row 6 | ALLOW (handed to L2) | none — this IS the prescribed cure |
+| 10 | `echo "cd sub && git push"` passes | `pw` / `n` / `root` — row 4 | ALLOW (handed to L2) | none — the `cd` is inside quotes, so `ShellSegmentScan` never treats it as a scope escape |
+| 11 | `cd <subdir> && git push` blocked with the force-to-root message, NOT the gated-flow one | `pw` / `y` / `sub` — row 5; force-to-root runs first | BLOCK_AI_CURE | Option 1 (preferred): `cd <root> && git push`, which then gets the push guard's real answer ← costs one extra turn by design; still blocked |
+| 12 | you are the **coordinator**, you ran `git worktree add ../wt`, and `cd ../wt && pnpm build` is blocked | `w` / `c` / `n` — row 3 | BLOCK_AI_CURE | Option 1 (preferred): spawn a subagent bound to `<worktree>` — the Agent tool with worktree isolation, or have the subagent call `EnterWorktree` with `path: <worktree>` (it accepts a worktree you already created)<br>Do NOT: re-type the command, or conclude the harness ate your `cd` — it did not; your GUARDS did not follow it |
+| 13 | the same command from a **subagent** runs normally | `w` / `s` — row 3 does not match | ALLOW (handed to L2) | none — a subagent pinned to a worktree is the correct pattern |
+| 14 | the coordinator's `cd <worktree> && ls`/`cat`/`grep` still runs | `w` / `c` / `y` — row 3 does not match | ALLOW (handed to L2) | none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you |
 | 15 | the coordinator's `cd <worktree> && pnpm install` still runs while row 3 is live | L0 allowlist, ahead of L1 | ALLOW | none — a cure must stay reachable from every tree |
 
 Row 8 is the one that changed. It used to be ALLOWED, because the predicate was

@@ -4,7 +4,7 @@
 with the logs the webpieces *tooling* writes about itself (guard decisions, hook invocations, blocked
 writes, branch mutations). Those live in `.webpieces/**/logs/` and are documented in
 [`docs/tooling-logs.md`](./docs/tooling-logs.md) — that is the file to open when you are looking for
-`guard-invocations.log`, `hook-rejection.log` or `branch-mutations.log`.
+the `calls/`, `rejections/` or `L1-location/` streams, or `branch-mutations.log`.
 
 The two were previously easy to confuse, because this file said only "logging" and named neither
 subject.
