@@ -214,14 +214,14 @@ directory stops encoding it.
 
 **D1 — State moves out of the repo, to `~/.webpieces/<flattened-absolute-primary-path>/`.**
 
-> **STATUS: PARTIALLY IMPLEMENTED (2026-08-07) — PR MERGE BODIES ONLY.** The first thing webpieces
-> writes outside a repo is the gated squash-commit body, at
-> `~/.webpieces/prs/<host>/<owner>/<repo>/<prNumber>/merge-commit-body.md`, written by
-> `wp-finish-upsert-pr` and read by `wp-land-pr`. `MachineStateHome` implements D3 in full (full
-> override, degrade-never-throw) and is the resolver every later mover must use. Everything else —
-> `merged-branches.json`, the main-sync pair, `merge-info/`, `pr-review/`, the logs — is still inside the
-> clone under `DotWebpieces`. See [0004](0004-pr-artifacts-are-machine-global.md) for why this artifact
-> went first and why its key is NOT D2's flattened clone path.
+> **STATUS: NOT IMPLEMENTED — the one thing that shipped under it has been REVERTED (2026-08-07).**
+> Briefly, the gated squash-commit body was written outside the repo at
+> `~/.webpieces/prs/<host>/<owner>/<repo>/<prNumber>/merge-commit-body.md`. That store is DELETED, and
+> so is the `MachineStateHome` resolver that located it — see
+> [0005](0005-the-pr-description-is-the-merge-body.md). **There is no machine-global resolver to reuse;
+> a future mover would have to write one.** Everything webpieces writes — `merged-branches.json`, the
+> main-sync pair, `merge-info/`, `pr-review/`, the logs, and now the merge body's temp file — is inside
+> the clone under `DotWebpieces`.
 
 
 Key is the primary clone's absolute path with `/` → `-`, the same scheme Claude Code uses for its own
@@ -236,12 +236,11 @@ this guard writes itself, not source that upstream has moved past"*).
 Secondary wins: `git clean -xdf` stops destroying in-flight merge state; consumers stop needing a
 `.gitignore` entry; state survives `git worktree remove`.
 
-**D2 — The key is the flattened path, NOT the repo basename.** *(Scope note added 2026-08-07: D2 governs
-CLONE state — facts about branches, worktrees and in-flight merges, which two clones must NOT share. It
-does not govern an artifact whose identity is bigger than a clone. The PR merge body is keyed by the
-REMOTE, nested rather than flattened, precisely because sharing across clones is its requirement. Same
-underlying rule — key an artifact by the scope of the fact it describes — applied to a different scope.
-See [0004](0004-pr-artifacts-are-machine-global.md).)*
+**D2 — The key is the flattened path, NOT the repo basename.** *(Scope note, revised 2026-08-07: the PR
+merge body was briefly keyed by the REMOTE instead, as the one artifact whose identity was bigger than a
+clone. That store is GONE — GitHub holds the merge body now, see
+[0005](0005-the-pr-description-is-the-merge-body.md) — and with it the only artifact that was ever keyed
+by anything other than the tree. D2 governs clone state and nothing else contests it.)*
  Basenames collide (`api`, `web`,
 `monorepo`, and `monorepo-nx` vs `monorepo-nx1`). A collision means two repos sharing
 `merged-branches.json` and `main-sync-status.json` — precisely the "N divergent truths" failure
@@ -251,7 +250,24 @@ repo have different branches and worktrees and must not share.
 Flattening also has to be computable in POSIX `sh` for the shim twin — `tr '/' '-'` is; portable
 hashing is not (`shasum` / `sha1sum` / `cksum` availability varies).
 
-**D3 — `WEBPIECES_STATE_HOME` is a full override, not a prefix.** Point it at a directory and that
+**D3 — `WEBPIECES_STATE_HOME` is a full override, not a prefix.**
+
+> **WITHDRAWN (2026-08-07). The env var, `MachineStateHome` and `StateHome` are DELETED — there is no
+> code left that could read an override.** See [0005](0005-the-pr-description-is-the-merge-body.md).
+>
+> D3 was never a decision in its own right; it was the *escape hatch* for D1's move out of the repo, and
+> it only ever shipped for one artifact — the gated PR merge body. That artifact now lives on the PR,
+> which means there is nothing outside `{repo}/.webpieces` to redirect, so an override would be a knob
+> with no reachable effect. Every reason D3 gave for existing (a sandbox with no writable `$HOME`,
+> "put it back in the tree") is now the DEFAULT rather than an opt-out: state is in the tree.
+>
+> Its two implementation findings are worth keeping if anything ever moves out again: read `$HOME` from
+> the ENVIRONMENT before `os.homedir()` (on macOS `os.homedir()` falls back to the password database, so
+> preferring it both ignores a deliberately scrubbed environment and makes `HOME=<tmp>` untestable), and
+> probe writability by actually creating the directory and writing a marker (a read-only mount, a
+> sandbox denial and a permission error all present differently in `stat` and identically to a write).
+
+*Original text, for the record:* Point it at a directory and that
 directory *is* the state root for that repo, with no `<key>` nesting. Needed as the escape for
 containers/sandboxes with no writable `$HOME`, and as "put it back in the tree" for anyone who wants
 that. Fall back to `<primary>/.webpieces` when `$HOME` is missing or unwritable — this is on the hook's
@@ -332,14 +348,16 @@ D1 lands.
 longer exists. Gets strictly better than today — one sweep covers every repo, including ones you can
 no longer `cd` into.
 
-> **PARTIALLY ADDRESSED (2026-08-07), and the marker half is already in.** Each PR dir carries the
-> planned `origin.json` (naming the posting tree AND its primary clone), and `cleanTmp` now sweeps
-> `~/.webpieces/prs/` with the SAME 30-day policy it applies to `.webpieces/`, from the same
-> implementation — `AgedTreeSweeper`, extracted so the two roots cannot drift apart. What is NOT yet
-> done is the age-INDEPENDENT half: reaping a key whose primary clone no longer exists. Age alone is
-> sufficient for PR bodies (a landed PR's body is never rewritten, so it ages out; an open PR's is
-> re-stamped by every `wp-finish-upsert-pr`, so it is never reaped mid-flight) and it is NOT sufficient
-> for the state D1 has yet to move, some of which is rewritten indefinitely.
+> **MOOT again as of 2026-08-07 — nothing is orphaned, because nothing is written outside a repo.**
+> This was briefly live: each PR dir under `~/.webpieces/prs/` carried the planned `origin.json`, and
+> `cleanTmp` swept that root on the same 30-day policy. Both are DELETED with the store itself (the
+> gated merge body is the PR's own description now — see
+> [0005](0005-the-pr-description-is-the-merge-body.md)), so `{repo}/.webpieces` is the only root and it
+> dies with the clone that owns it. `AgedTreeSweeper` stays extracted, with one caller.
+>
+> O3 becomes live again the moment anything moves out of the repo, and the age-INDEPENDENT half — reap a
+> key whose primary clone no longer exists — is still the unsolved part. Age alone was sufficient for PR
+> bodies specifically; it is NOT sufficient for state that is rewritten indefinitely.
 
 **O4 — `.claude/worktrees/` distribution (§2.4).** Should the ignore rule be committed rather than
 living in `.git/info/exclude`? Affects consumers, not this repo.

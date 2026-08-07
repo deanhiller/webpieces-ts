@@ -4,7 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 /**
  * How long a file survives an AGED-TREE SWEEP without being rewritten — the policy `cleanTmp` applies
- * to `<clone>/.webpieces` and to `~/.webpieces/prs`, from this one number so the two roots cannot drift.
+ * to `{repo}/.webpieces`, which is the only root webpieces writes state under.
  *
  * NOT the same knob as `DEFAULT_RETENTION_DAYS` in review-provenance.ts, which happens to be 30 as well.
  * That one is a CONFIGURABLE ceiling on reviewer transcripts, overridable per repo in settings; this one
@@ -36,11 +36,11 @@ export class SweepCount {
 /**
  * The 30-day depth-first reap, as ONE implementation.
  *
- * It was written inside `CleanTmp` for `<primary>/.webpieces`, and the machine-global PR-body store
- * (`PrBodyStore`) needs exactly the same policy for exactly the same reason — those directories
- * accumulate forever, and after `rm -rf <clone>` there is no clone left to delete them with
- * (`decisions/0001` § O3). A second copy of a deletion loop is the last thing this repo needs, so the
- * loop lives here and both callers pass their own root and their own reporter.
+ * It was written inside `CleanTmp` for `<primary>/.webpieces`, and extracted here when a second root
+ * (the machine-global PR-body store) needed the identical policy. That second root is gone — the gated
+ * merge body is the PR's own description now, see `decisions/0005` — so today there is one caller. The
+ * loop stays extracted anyway: it is the sweep policy, testable on its own root, and `CleanTmp` reads
+ * as the command it is rather than as a deletion algorithm.
  *
  * `onDelete` is a reporter, not a policy hook: it is told what was removed AFTER the decision, so a
  * caller can print a line and cannot change the outcome.

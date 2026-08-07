@@ -14,7 +14,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/aged-tree-sweep.ts",
-                    "level": 6
+                    "level": 5
                 },
                 {
                     "id": "AiBranchName",
@@ -313,19 +313,11 @@
                     "level": 2
                 },
                 {
-                    "id": "MachineStateHome",
-                    "className": "MachineStateHome",
+                    "id": "MergeBodyTempFile",
+                    "className": "MergeBodyTempFile",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/machine-state-home.ts",
-                    "level": 6
-                },
-                {
-                    "id": "MergeBodyFiler",
-                    "className": "MergeBodyFiler",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-body-filer.ts",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-body-temp-file.ts",
                     "level": 2
                 },
                 {
@@ -375,14 +367,6 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts",
                     "level": 2
-                },
-                {
-                    "id": "PrBodyStore",
-                    "className": "PrBodyStore",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/pr-body-store.ts",
-                    "level": 5
                 },
                 {
                     "id": "PrCommentUpserter",
@@ -776,15 +760,6 @@
                 },
                 {
                     "from": "CleanTmp",
-                    "to": "PrBodyStore",
-                    "injection": "type",
-                    "token": "PrBodyStore",
-                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
-                    "paramName": "prBodies",
-                    "paramType": "PrBodyStore"
-                },
-                {
-                    "from": "CleanTmp",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
@@ -1064,12 +1039,12 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
-                    "to": "MergeBodyFiler",
+                    "to": "MergeBodyTempFile",
                     "injection": "type",
-                    "token": "MergeBodyFiler",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-body-filer.ts#MergeBodyFiler",
-                    "paramName": "mergeBodyFiler",
-                    "paramType": "MergeBodyFiler"
+                    "token": "MergeBodyTempFile",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-body-temp-file.ts#MergeBodyTempFile",
+                    "paramName": "mergeBodyFile",
+                    "paramType": "MergeBodyTempFile"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1289,21 +1264,21 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "MergeBodyTempFile",
+                    "injection": "type",
+                    "token": "MergeBodyTempFile",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-body-temp-file.ts#MergeBodyTempFile",
+                    "paramName": "bodyFile",
+                    "paramType": "MergeBodyTempFile"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "MergeInfoIndex",
                     "injection": "type",
                     "token": "MergeInfoIndex",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-info-index.ts#MergeInfoIndex",
                     "paramName": "mergeInfoIndex",
                     "paramType": "MergeInfoIndex"
-                },
-                {
-                    "from": "LandPrCommand",
-                    "to": "PrBodyStore",
-                    "injection": "type",
-                    "token": "PrBodyStore",
-                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
-                    "paramName": "prBodies",
-                    "paramType": "PrBodyStore"
                 },
                 {
                     "from": "LandPrCommand",
@@ -1331,24 +1306,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
-                },
-                {
-                    "from": "MergeBodyFiler",
-                    "to": "DotWebpieces",
-                    "injection": "type",
-                    "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
-                    "paramName": "dotDir",
-                    "paramType": "DotWebpieces"
-                },
-                {
-                    "from": "MergeBodyFiler",
-                    "to": "PrBodyStore",
-                    "injection": "type",
-                    "token": "PrBodyStore",
-                    "tokenKey": "class:packages/tooling/rules-config/src/pr-body-store.ts#PrBodyStore",
-                    "paramName": "prBodies",
-                    "paramType": "PrBodyStore"
                 },
                 {
                     "from": "MergeEnd",
@@ -1484,33 +1441,6 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
-                },
-                {
-                    "from": "PrBodyStore",
-                    "to": "AgedTreeSweeper",
-                    "injection": "type",
-                    "token": "AgedTreeSweeper",
-                    "tokenKey": "class:packages/tooling/rules-config/src/aged-tree-sweep.ts#AgedTreeSweeper",
-                    "paramName": "sweeper",
-                    "paramType": "AgedTreeSweeper"
-                },
-                {
-                    "from": "PrBodyStore",
-                    "to": "DotWebpieces",
-                    "injection": "type",
-                    "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
-                    "paramName": "dotDir",
-                    "paramType": "DotWebpieces"
-                },
-                {
-                    "from": "PrBodyStore",
-                    "to": "MachineStateHome",
-                    "injection": "type",
-                    "token": "MachineStateHome",
-                    "tokenKey": "class:packages/tooling/rules-config/src/machine-state-home.ts#MachineStateHome",
-                    "paramName": "stateHome",
-                    "paramType": "MachineStateHome"
                 },
                 {
                     "from": "PrContextWriter",

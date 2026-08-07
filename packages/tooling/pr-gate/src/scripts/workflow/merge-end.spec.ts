@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-    AgedTreeSweeper, MachineStateHome, PrBodyStore, RepoRootFinder, WEBPIECES_STATE_HOME_ENV,
-} from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder } from '@webpieces/rules-config';
 import { MergeEnd, MergeEndOptions } from './merge-end';
 import { MergeContext } from './merge-start';
 import { MergeState } from './merge-state';
@@ -33,9 +31,8 @@ class TestMergeEnd extends MergeEnd {
     constructor(private readonly fakeGit: FakeGitExec, private readonly backupExists: boolean) {
         super(
             new BranchNaming(),
-            // A fresh MachineStateHome so the machine-global sweep lands in this spec's temp
-            // WEBPIECES_STATE_HOME, never the developer's real ~/.webpieces.
-            new CleanTmp(new RepoRootFinder(), new PrBodyStore(new MachineStateHome()), new AgedTreeSweeper()),
+            // One root only: `{repo}/.webpieces`. There is no machine-global state left to sweep.
+            new CleanTmp(new RepoRootFinder(), new AgedTreeSweeper()),
             fakeGit,
             new MergeState());
     }
@@ -52,20 +49,12 @@ class TestMergeEnd extends MergeEnd {
 
 let repoRoot = '';
 
-let stateHome = '';
-const savedStateHome = process.env[WEBPIECES_STATE_HOME_ENV];
-
 beforeEach((): void => {
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-end-'));
-    stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-end-home-'));
-    process.env[WEBPIECES_STATE_HOME_ENV] = stateHome;
 });
 
 afterEach((): void => {
-    if (savedStateHome === undefined) delete process.env[WEBPIECES_STATE_HOME_ENV];
-    else process.env[WEBPIECES_STATE_HOME_ENV] = savedStateHome;
     fs.rmSync(repoRoot, { recursive: true, force: true });
-    fs.rmSync(stateHome, { recursive: true, force: true });
 });
 
 const ctx = (): MergeContext => new MergeContext('dean/feat', 'dean/featSquash', 'dean/featPreMerge1', '7');
