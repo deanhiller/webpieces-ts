@@ -571,19 +571,25 @@ stage ③ skips its own build when HEAD has not moved — three stages, one buil
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
+**Merge with `pnpm wp-land-pr`, never a bare `gh pr merge` and never the GitHub Merge button.** Only an
+explicit `gh pr merge --subject --body-file` can write the compact risk/flags commit body stage ③
+rendered; every other route takes its body from the repo's `squash_merge_commit_message`, which on
+`PR_BODY` pastes the ENTIRE dashboard — risk table, hash points, gate token — into `git log`. It is not
+gated on `pr-gate.mergeMode`, so it is the right command on a `mergeMode: NONE` repo too.
+
 Once the PR merges, clean up. Pick the form for the tree you are in — `git checkout main` fatals in a
 linked worktree (`main is already checked out at <primary clone>`), so the two forms are not
 interchangeable:
 
 - in the primary clone:
   ```bash
-  gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup
+  pnpm wp-land-pr && git checkout main && git pull origin main && pnpm wp-cleanup
   ```
-- in a linked worktree — merge, then reap the now-dead worktree **from the primary clone**, always
+- in a linked worktree — land, then reap the now-dead worktree **from the primary clone**, always
   prune → remove → delete in that order (git refuses to delete a branch a worktree still holds, so
   `wp-cleanup` deliberately spares it):
   ```bash
-  gh pr merge --squash
+  pnpm wp-land-pr
   git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
   ```
   That `git branch -D` is the one sanctioned use of it: for **branches**, still `pnpm wp-cleanup`,
