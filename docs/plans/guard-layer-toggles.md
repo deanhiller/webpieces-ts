@@ -36,7 +36,7 @@ Goal, stated twice by the requester: **simpler, and LESS configuration.** 9 → 
 |---|---|---|
 | `branch-state` | L2 | one switch over the four cache-driven guards; makes the half-policy state unrepresentable |
 | `branch-cleanup` | L3 | 1:1 rename of `branch-creation-guard` — already one class, one policy |
-| `pr-lifecycle` | L4 | one gated flow (`wp-start` → `wp-review` → `wp-finish`), one switch |
+| `pr-lifecycle` | L4 | one gated flow (`wp-start-upsert-pr` → `wp-review-upsert-pr` → `wp-finish-upsert-pr`), one switch |
 
 ```json
 "hookGuards": {
