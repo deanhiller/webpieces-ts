@@ -161,16 +161,20 @@ export type JwtRequirement = JwtRoles & { [field: string]: unknown };
  * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
  *                     `callers` is the allow-list of caller SAs ('self' = this service's SA)
  * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
+ * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
+ *                     {@link RuntimeLocality} says this process is deployed. Authenticates NOBODY —
+ *                     it is a deployment gate, not a credential.
  */
 export type AuthMode =
     | { kind: 'public' }
     | { kind: 'jwt'; requirement: JwtRequirement }
     | { kind: 'oidc'; callers: string[] }
-    | { kind: 'shared-secret'; secretKey: string };
+    | { kind: 'shared-secret'; secretKey: string }
+    | { kind: 'local-only' };
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret) — one per credential kind.
+ * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthLocalOnly) — one per credential kind.
  *
  * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose
  * `authenticated`/`roles` getters "for back-compat with readers that only understand the user-JWT
@@ -371,7 +375,7 @@ export function Public(): ClassDecorator & MethodDecorator {
  *
  * It absorbed the former `@Auth(requirement)` — same argument, same AuthMode, so two spellings of one
  * decision. One decorator per credential kind now: `@Public` / `@AuthJwt` / `@AuthOidc` /
- * `@AuthSharedSecret`.
+ * `@AuthSharedSecret` / `@AuthLocalOnly`.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function AuthJwt(requirement: JwtRequirement): ClassDecorator & MethodDecorator {
@@ -410,6 +414,37 @@ export function AuthOidc(...callers: string[]): ClassDecorator & MethodDecorator
  */
 export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator {
     return defineAuthMode({ kind: 'shared-secret', secretKey: key });
+}
+
+/**
+ * @AuthLocalOnly() - this endpoint exists ONLY on a developer's machine. Off-local it is not
+ * registered as a route at all, and if it is somehow reached it 404s. Class- or method-level.
+ *
+ * ```typescript
+ * @AuthLocalOnly()
+ * @Endpoint('/logs', 'rpc')
+ * sendBatch(request: SendLogBatchRequest): Promise<SendLogBatchResponse> { ... }
+ * ```
+ *
+ * WHY IT IS AN AUTH MODE AND NOT A ROUTE-MODULE `if`. Apps hand-rolled this in TWO places kept in
+ * sync by a comment: a route module that registered the route only locally, PLUS a
+ * `if (env !== 'local') throw new HttpForbiddenError(...)` at the top of the handler. Neither half
+ * was visible on the CONTRACT, so nothing reading the api — a human, a generated client, or an
+ * agent — could tell this endpoint from a `@Public` one. Both halves are the framework's job now,
+ * driven by this ONE declaration on the contract, which is where every other "who may call this"
+ * fact already lives.
+ *
+ * It is DELIBERATELY a peer of @Public / @AuthJwt / @AuthOidc / @AuthSharedSecret rather than an
+ * option on one of them: one decorator per credential kind, and "local-only" is a different kind of
+ * gate — it authenticates nobody, it excludes an entire environment.
+ *
+ * HOW "local" IS DECIDED: {@link RuntimeLocality}, declared once at startup (a REQUIRED input to
+ * `RuntimeSetupOptions`). Undeclared means DEPLOYED, so a forgotten wiring call refuses the endpoint
+ * rather than exposing it.
+ */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function AuthLocalOnly(): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'local-only' });
 }
 
 // ============================================================
@@ -532,7 +567,7 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
  */
 export const MISSING_AUTH_DECORATOR_FIX =
     "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
-    '@AuthOidc(...callers) / @AuthSharedSecret(key) to the class or method.';
+    '@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthLocalOnly() to the class or method.';
 
 /**
  * Fail-fast at wiring time if any endpoint lacks an auth mode. Both the server
@@ -553,130 +588,6 @@ export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
     }
 }
 
-// ============================================================
-// API kind (RPC vs PubSub/Cloud Tasks) + queue naming
-// ============================================================
-
-/**
- * API kind. 'rpc' = synchronous request/response (http-client ↔ ApiRoutingFactory).
- * 'pubsub' = fire-and-forget cloud task; the enqueue client (cloudtasks-client)
- * schedules a Cloud Task that is later delivered to the SAME controller endpoint.
- */
-export type ApiKind = 'rpc' | 'pubsub';
-
-/**
- * @Rpc() - marks an API class as synchronous request/response (the default kind).
- * Present mostly for symmetry/readability; an undecorated API is treated as 'rpc'.
- */
-export function Rpc(): ClassDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any) => {
-        Reflect.defineMetadata(METADATA_KEYS.API_KIND, 'rpc' as ApiKind, target);
-    };
-}
-
-/**
- * @PubSub() - marks an API class as fire-and-forget over Cloud Tasks. Every method
- * MUST return Promise<void> (a compile-time contract on the abstract API). The
- * enqueue client and the controller share this one class, exactly like RPC.
- */
-export function PubSub(): ClassDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any) => {
-        Reflect.defineMetadata(METADATA_KEYS.API_KIND, 'pubsub' as ApiKind, target);
-    };
-}
-
-/**
- * @Queue(name) - override the Cloud Tasks queue name for a @PubSub method. Default
- * (no decorator) is `${ApiClassName}-${methodName}`, matched 1:1 by Terraform.
- */
-export function Queue(name: string): MethodDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
-        const metadataTarget = typeof target === 'function' ? target : target.constructor;
-        const overrides: Record<string, string> =
-            Reflect.getMetadata(METADATA_KEYS.QUEUE_OVERRIDE, metadataTarget) || {};
-        overrides[propertyKey as string] = name;
-        Reflect.defineMetadata(METADATA_KEYS.QUEUE_OVERRIDE, overrides, metadataTarget);
-    };
-}
-
-/**
- * Get the API kind. Defaults to 'rpc' when neither @Rpc nor @PubSub is present.
- */
-export function getApiKind(apiClass: Function): ApiKind {
-    return (Reflect.getMetadata(METADATA_KEYS.API_KIND, apiClass) as ApiKind) ?? 'rpc';
-}
-
-/**
- * Assert the API class is of the expected kind (used by the clients: the RPC
- * client rejects a @PubSub api and vice-versa).
- * @throws Error if the kind doesn't match.
- */
-export function assertApiKind(apiClass: Function, expected: ApiKind): void {
-    const actual = getApiKind(apiClass);
-    if (actual !== expected) {
-        const apiName = apiClass.name || 'Unknown';
-        throw new Error(
-            `API ${apiName} is @${actual === 'pubsub' ? 'PubSub' : 'Rpc'} but a ` +
-            `${expected === 'pubsub' ? '@PubSub (cloud task)' : '@Rpc'} API was required here.`,
-        );
-    }
-}
-
-/**
- * Which {@link EndpointKind}s each {@link ApiKind} may declare. A @PubSub contract is delivered
- * asynchronously by definition, so `rpc` is meaningless on it; an @Rpc contract has no queue, so
- * `cloudtasks`/`cron` on it would name a queue/schedule nothing could ever deliver to. `external`
- * is legal on both — a webhook posts synchronously, a push subscription does not.
- *
- * Shared so the wiring-time assert below and the build-time architecture scan enforce ONE rule.
- */
-export const ENDPOINT_KINDS_BY_API_KIND: Record<ApiKind, readonly EndpointKind[]> = {
-    rpc: ['rpc', 'external'],
-    pubsub: ['cloudtasks', 'cron', 'external'],
-};
-
-/**
- * Validate @PubSub conventions at wiring time: the class must be @ApiPath + @PubSub, declare at
- * least one endpoint, and every endpoint must declare a kind this api kind can actually deliver.
- * (Return-type is Promise<void>, a compile-time contract — TS erases types at runtime so it cannot
- * be re-checked here.)
- * @throws Error if conventions are violated.
- */
-export function assertPubSubConventions(apiClass: Function): void {
-    assertApiKind(apiClass, 'pubsub');
-    const apiName = apiClass.name || 'Unknown';
-    if (!isApiPath(apiClass)) {
-        throw new Error(`@PubSub API ${apiName} must also be decorated with @ApiPath()`);
-    }
-    const endpoints = getEndpoints(apiClass) || {};
-    if (Object.keys(endpoints).length === 0) {
-        throw new Error(`@PubSub API ${apiName} declares no @Endpoint methods`);
-    }
-    const allowed = ENDPOINT_KINDS_BY_API_KIND.pubsub;
-    const kinds = getEndpointKinds(apiClass);
-    for (const methodName of Object.keys(endpoints)) {
-        const kind = kinds[methodName];
-        if (kind !== undefined && allowed.includes(kind)) continue;
-        throw new Error(
-            `@PubSub API ${apiName}.${methodName} declares @Endpoint(..., '${kind ?? 'missing'}') — a ` +
-            `@PubSub contract is delivered through a queue, so it must be one of: ${allowed.join(' | ')}.`,
-        );
-    }
-}
-
-/**
- * Resolve the Cloud Tasks queue name for a @PubSub method: the @Queue override if
- * present, else `${ApiClassName}-${methodName}`.
- */
-export function getQueueName(apiClass: Function, methodName: string): string {
-    const overrides: Record<string, string> =
-        Reflect.getMetadata(METADATA_KEYS.QUEUE_OVERRIDE, apiClass) || {};
-    return overrides[methodName] ?? `${apiClass.name || 'Unknown'}-${methodName}`;
-}
-
 /**
  * Validate that a class/method doesn't have conflicting auth decorators.
  * @throws Error if multiple auth decorators are found on the same target.
@@ -691,8 +602,8 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
         throw new Error(
             `Conflicting auth decorator on ${location}. ` +
-            `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) ` +
-            `is allowed per target.`
+            `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) / ` +
+            `@AuthLocalOnly() is allowed per target.`
         );
     }
 }

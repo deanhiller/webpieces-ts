@@ -29,8 +29,12 @@ const loggerFactory = process.env.K_SERVICE
     ? new BunyanGcpFactory()
     : new BunyanConsoleFactory();
 
-// Typically you pass loggerFactory to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...)),
-// which calls HeaderRegistry.configure(...) then LogManager.setFactory(loggerFactory) for you.
+// Typically you pass loggerFactory to
+// setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', 'deployed', loggerFactory, ...)),
+// which calls ServiceInfo.setInfo(...), RuntimeLocality.declare(...), HeaderRegistry.configure(...)
+// then LogManager.setFactory(loggerFactory) for you. The 3rd argument is WHERE this process runs
+// ('local' | 'deployed'); it decides whether @AuthLocalOnly endpoints exist, and it is required so
+// no server can boot without saying.
 ```
 
 Both factories read the magic context **directly** from `RequestContext` on each line, so

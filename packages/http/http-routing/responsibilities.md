@@ -6,7 +6,8 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 
 - Server routing decorators: `Controller`, `NotController`, and Inversify helpers `provideSingleton`/`provideSingletonDefaultForApi`/`provideTransient`
 - Route/app metadata contracts: `WebAppMeta`, `Routes`, `RouteBuilder`, `RouteDefinition`, `FilterDefinition`, `RouteBuilderImpl`
-- Turning API decorators into invokable routes (`ApiRoutingFactory`, `RouteHandler`, `MethodMeta`)
+- Turning API decorators into invokable routes (`ApiRoutingFactory`, `RouteHandler`, `MethodMeta`) — including SKIPPING an `@AuthLocalOnly` route entirely when `RuntimeLocality` says this process is not a developer machine, so the endpoint does not exist off-local
+- Enforcing every auth mode at request time (`AuthFilter`: `@Public`, `@AuthJwt`, `@AuthOidc`, `@AuthSharedSecret`, `@AuthLocalOnly`), and declaring the process's locality at startup from `RuntimeSetupOptions.locality`
 - Matching filters to routes by controller filepath glob (`FilterMatcher`, `minimatch`)
 - Request-scoped context reading and server config types (`RequestContextReader`, `WebpiecesConfig`)
 

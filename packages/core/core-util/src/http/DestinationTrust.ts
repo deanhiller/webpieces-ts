@@ -39,8 +39,8 @@ export class DestinationTrust {
     private static readonly VERIFIES_CALLER = new DestinationTrust(true);
 
     /**
-     * The destination cannot tell us from a browser with curl (@AuthJwt / @Public / an endpoint with
-     * no declared mode), so trusted keys are omitted. Untrusted keys still travel.
+     * The destination cannot tell us from a browser with curl (@AuthJwt / @Public / @AuthLocalOnly /
+     * an endpoint with no declared mode), so trusted keys are omitted. Untrusted keys still travel.
      */
     private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false);
 
@@ -62,6 +62,11 @@ export class DestinationTrust {
                 return DestinationTrust.VERIFIES_CALLER;
             case 'jwt':
             case 'public':
+            // @AuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
+            // credential — so a browser with curl on the same laptop is indistinguishable from us.
+            // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to
+            // AuthMode is a compile error here rather than a silent permissive fallthrough.)
+            case 'local-only':
                 return DestinationTrust.CANNOT_VERIFY_CALLER;
         }
     }

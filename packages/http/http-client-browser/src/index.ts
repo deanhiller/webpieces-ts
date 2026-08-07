@@ -60,6 +60,7 @@ export {
     AuthJwt,
     AuthOidc,
     AuthSharedSecret,
+    AuthLocalOnly,
     Rpc,
     PubSub,
     Queue,

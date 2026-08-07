@@ -1,7 +1,7 @@
 import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, PendingWireTrust, PendingTrustedValue, RequestContext } from '@webpieces/core-context';
-import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
+import { AuthMode, EndpointNotFoundError, HttpUnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from '../AuthConfig';
@@ -49,6 +49,9 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
  *                    a logged-out page still knows who is logged in; never fails.
+ *  - local-only    → serve only when {@link RuntimeLocality} says this process is a developer's
+ *                    machine; otherwise 404, indistinguishable from the route not existing (which,
+ *                    off-local, it does not — `ApiRoutingFactory` never registered it).
  *
  * Zero wiring = OIDC just works; an app only binds the hooks it actually uses.
  */
@@ -97,12 +100,46 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             case 'shared-secret':
                 this.enforceSharedSecret(this.credential(authHeader, SHARED_SECRET_SCHEME), mode.secretKey);
                 break;
+            case 'local-only':
+                this.enforceLocalOnly(meta);
+                break;
         }
-        // OIDC and shared-secret both authenticate the CALLER ITSELF, so an internal service is on
-        // the other end and the trusted context it forwarded may be believed. A user JWT proves only
-        // who the USER is — the sender is still whoever holds the token, i.e. a browser.
-        this.reconcileWireTrust(/*callerVerified*/ mode.kind === 'oidc' || mode.kind === 'shared-secret');
+        this.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
         return nextFilter.invoke(meta);
+    }
+
+    /**
+     * Does this mode authenticate the CALLER ITSELF (as opposed to a user, or nobody)? The INBOUND
+     * twin of {@link DestinationTrust.forAuthMode}, and deliberately the same question: the client
+     * omits trusted keys for a destination that cannot verify it, and the server rejects trusted keys
+     * on a route that cannot verify the sender. One rule, two ends — if they disagreed, every call
+     * would fail with a 401 that looks like a framework bug.
+     *
+     * - `oidc` / `shared-secret` → TRUE. An internal service is on the other end and the trusted
+     *   context it forwarded may be believed. This is what makes cross-service identity propagation
+     *   work.
+     * - `jwt` / `public` → FALSE. A user JWT proves who the USER is; the SENDER is still whoever
+     *   holds the token, i.e. a browser.
+     * - `local-only` → FALSE. It verifies WHERE WE ARE RUNNING, not who is calling — anything on
+     *   localhost reaches it, and it has no authenticator, so nothing can ever vouch for an inbound
+     *   trusted header. Any such header therefore rejects the request, which is exactly right.
+     *
+     * An exhaustive switch with NO `default`, returning on every branch: a sixth AuthMode kind is a
+     * COMPILE error here (TS7030, no ending return) rather than silently landing on one posture. The
+     * boolean expression this replaced defaulted every future mode to "not verified" — the safe
+     * answer, but arrived at by accident rather than by decision.
+     */
+    // webpieces-disable no-function-outside-class -- static pure mapping from the AuthMode union, kept beside its only caller (mirrors DestinationTrust.forAuthMode)
+    private static verifiesCaller(mode: AuthMode): boolean {
+        switch (mode.kind) {
+            case 'oidc':
+            case 'shared-secret':
+                return true;
+            case 'jwt':
+            case 'public':
+            case 'local-only':
+                return false;
+        }
     }
 
     /**
@@ -161,6 +198,37 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         throw new HttpUnauthorizedError(
             `Header '${item.key.httpHeader}' cannot be supplied by the caller on this endpoint`,
         );
+    }
+
+    /**
+     * `@AuthLocalOnly`: serve only on a developer's machine, and off-local behave EXACTLY as if the
+     * endpoint did not exist.
+     *
+     * WHY 404 AND NOT THE 403 APPS HAND-ROLLED. Off-local the route is not registered at all
+     * (`ApiRoutingFactory` skips it), so the ordinary way to reach this path already answers 404. A
+     * 403 from here would be a DIFFERENT answer from the same framework for the same endpoint, and
+     * the difference is itself the leak: 403 confirms "this path exists in production, you merely
+     * lack permission", which is a map of the dev-only surface for anyone probing. A local-only
+     * endpoint should not admit it exists. Both gates therefore return the same 404, and this one is
+     * the backstop for routes registered by hand through `RouteBuilder` rather than by
+     * `ApiRoutingFactory`.
+     *
+     * The log line names WHICH reason applies, because "you are deployed" and "nobody declared a
+     * locality" have completely different fixes and both look like a bare 404 from outside.
+     */
+    private enforceLocalOnly(meta: MethodMeta): void {
+        if (RuntimeLocality.isLocalDevelopment()) {
+            return;
+        }
+        log.warn(
+            `Refusing @AuthLocalOnly endpoint ${meta.routeMeta.path}: ` +
+            (RuntimeLocality.isDeclared()
+                ? 'this process declared itself DEPLOYED.'
+                : 'no startup declared a RuntimeLocality, so this process is treated as DEPLOYED. ' +
+                  'Pass the locality into RuntimeSetupOptions if this really is a developer machine.'),
+        );
+        // Same shape as an unregistered route — see the method doc for why this is not a 403.
+        throw new EndpointNotFoundError(`No endpoint at ${meta.routeMeta.path}`);
     }
 
     private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
