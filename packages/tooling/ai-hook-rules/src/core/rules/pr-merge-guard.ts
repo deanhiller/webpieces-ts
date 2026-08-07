@@ -63,6 +63,21 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
      * cannot undo. `pnpm wp-land-pr` is the way through; its own `gh pr merge` runs as a child
      * process this hook never sees, exactly like the other gated commands.
      *
+     * ─── Why a CORRECT-LOOKING `gh pr merge --auto --subject --body-file` is still blocked ──────────
+     * Full reasoning, and what was rejected: `decisions/0004-pr-artifacts-are-machine-global.md` § 8.
+     * It was re-examined when the gated body moved to its machine-global home, and the block stands. A
+     * `--body-file` proves a file was passed, never that it holds the GATED bytes: the guard sees a
+     * command string, cannot know the PR number, and so cannot check the path against
+     * `~/.webpieces/prs/<host>/<owner>/<repo>/<n>/merge-commit-body.md`. Allowing the shape would let any
+     * file at all — including a hand-written one, or the PR description — land as the reviewed body,
+     * with nothing to distinguish it afterwards.
+     *
+     * Two things now depend on that. `wp-land-pr --fallback-title-only` is a HUMAN opt-in that stamps
+     * "this is a fallback" into the commit; a permitted hand-rolled merge would be the same degraded
+     * outcome with no stamp and no opt-in. And landing now DECIDES whether the archive/merge-info/reap
+     * bookkeeping belongs to this tree, using the provenance filed beside the body — a hand-rolled merge
+     * skips that decision silently, which is how a landed worktree becomes a corpse.
+     *
      * The tree kind still decides which cleanup steps the hint prints: in a linked worktree
      * `git checkout main` FATALS, so demanding it there would be demanding an impossible command.
      */

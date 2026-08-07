@@ -1,36 +1,35 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DotWebpieces, dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
+import {
+    AgedTreeSweeper, DotWebpieces, PrBodyStore, RETENTION_DAYS, RepoRootFinder, SweepCount, dotWebpieces,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
-const CUTOFF_DAYS = 30;
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// Result of one sweep: how many files were reaped for age, and how many now-empty dirs were pruned.
-class SweepResult {
-    constructor(
-        public files: number,
-        public dirs: number,
-    ) {}
-}
-
 /**
- * 30-day garbage collection of the whole `.webpieces` tree.
+ * 30-day garbage collection of the whole `.webpieces` tree, AND of the machine-global PR-body store.
  *
- * Runs at the end of every merge/PR flow (see merge-end.ts). It walks `.webpieces` depth-first and:
- *   1. deletes ANY file whose mtime is older than the cutoff, anywhere in the tree, and
- *   2. removes ANY directory that is left empty afterwards (including dirs that were already empty).
+ * Runs at the end of every merge/PR flow (see merge-end.ts). Both roots get the identical policy from
+ * the identical implementation (`AgedTreeSweeper`): any file older than the cutoff is deleted, and any
+ * directory left empty afterwards is pruned. Neither root itself is ever removed.
  *
- * The `.webpieces` root itself is never removed. Everything the tooling still needs is rewritten on
- * each run under a fresh mtime (instruct-ai/ docs, the active hooks/ logs, the *-status.json state
- * files), and every writer `mkdirSync(..., { recursive: true })`s its target first — so pruning a
- * stale home dir is harmless; the next write recreates it. Stale per-feature merge-info/pr-review
- * subdirs and the retired legacy flat layout all fall out of this single pass with no special-casing.
+ * Everything the tooling still needs is rewritten on each run under a fresh mtime (instruct-ai/ docs,
+ * the active logs, the *-status.json state files, and an open PR's merge body), and every writer
+ * `mkdirSync(..., { recursive: true })`s its target first — so pruning a stale home dir is harmless;
+ * the next write recreates it.
+ *
+ * The SECOND root is the one with no other owner. `~/.webpieces/prs/<host>/<owner>/<repo>/<n>/` survives
+ * `rm -rf <clone>`, so if this sweep did not reap it nothing ever would (`decisions/0001` § O3). It is
+ * swept from here — the one command that already runs at the end of every flow — rather than from a new
+ * mechanism, because a retention policy nobody runs is not a retention policy.
  */
 @injectable(bindingScopeValues.Singleton)
 export class CleanTmp {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
+        private readonly prBodies: PrBodyStore,
+        private readonly sweeper: AgedTreeSweeper,
         private readonly dotDir: DotWebpieces = dotWebpieces,
     ) {}
 
@@ -40,73 +39,35 @@ export class CleanTmp {
         // never sweep the repo-wide dir, whose entries (merged-branches.json, the main-sync status and
         // its lock) belong to every worktree at once.
         const tmpBase = this.dotDir.local(repoRoot);
+        const prsRoot = this.prBodies.prsRoot(repoRoot);
+        if (!fs.existsSync(tmpBase) && !fs.existsSync(prsRoot)) return;
 
-        if (!fs.existsSync(tmpBase)) {
-            return;
-        }
-
-        process.stdout.write('\n');
-        process.stdout.write(SEP);
-        process.stdout.write('🧹 Garbage-Collecting .webpieces\n');
-        process.stdout.write(SEP);
-        process.stdout.write('\n');
+        process.stdout.write('\n' + SEP + '🧹 Garbage-Collecting .webpieces\n' + SEP + '\n');
         process.stdout.write(`Location: ${tmpBase}\n`);
-        process.stdout.write(`Retention: ${CUTOFF_DAYS} days (older files reaped; empty dirs pruned)\n`);
-        process.stdout.write('\n');
+        process.stdout.write(`          ${prsRoot}  (machine-global PR merge bodies)\n`);
+        process.stdout.write(`Retention: ${RETENTION_DAYS} days (older files reaped; empty dirs pruned)\n\n`);
 
-        const cutoffMs = CUTOFF_DAYS * 24 * 60 * 60 * 1000;
-        const now = Date.now();
+        const cutoffMs = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+        const total = new SweepCount();
+        total.add(this.sweeper.sweep(tmpBase, cutoffMs, this.reporter(tmpBase)));
+        total.add(this.prBodies.sweep(repoRoot, this.reporter(prsRoot)));
 
-        // `true` => this is the root, which is swept into but never itself removed. This generic
-        // depth-first sweep needs NO knowledge of the merge-info layout — including the new
-        // staged/<feature> and merged/<feature> split, which sits one level deeper than the old
-        // per-feature dirs. That is precisely why it replaced the per-home special-casing.
-        const result = this.sweep(tmpBase, tmpBase, now, cutoffMs, true);
-
-        if (result.files === 0 && result.dirs === 0) {
-            process.stdout.write(`  ✅ Nothing older than ${CUTOFF_DAYS} days; no empty directories\n`);
+        if (total.empty) {
+            process.stdout.write(`  ✅ Nothing older than ${RETENTION_DAYS} days; no empty directories\n`);
         } else {
-            const fileWord = result.files === 1 ? 'file' : 'files';
-            const dirWord = result.dirs === 1 ? 'directory' : 'directories';
-            process.stdout.write('\n');
-            process.stdout.write(`  ✅ Reaped ${result.files} old ${fileWord} and pruned ${result.dirs} empty ${dirWord}\n`);
+            const fileWord = total.files === 1 ? 'file' : 'files';
+            const dirWord = total.dirs === 1 ? 'directory' : 'directories';
+            process.stdout.write(`\n  ✅ Reaped ${total.files} old ${fileWord} and pruned ${total.dirs} empty ${dirWord}\n`);
         }
 
-        process.stdout.write('\n');
-        process.stdout.write(SEP);
-        process.stdout.write('\n');
+        process.stdout.write('\n' + SEP + '\n');
     }
 
-    // Depth-first, post-order sweep of `dir` (rooted at `tmpBase`, only used for tidy relative logging).
-    // Files older than the cutoff are deleted; a directory left empty once its children are processed is
-    // pruned — except the root, which is kept even when empty so `.webpieces/` itself survives.
-    private sweep(dir: string, tmpBase: string, now: number, cutoffMs: number, isRoot: boolean): SweepResult {
-        let files = 0;
-        let dirs = 0;
-
-        for (const entry of fs.readdirSync(dir)) {
-            const fullPath = path.join(dir, entry);
-            // lstat, not stat: a symlink is treated as a leaf (aged out like a file), never followed —
-            // so we can never wander outside `.webpieces` or delete a link target elsewhere.
-            const stat = fs.lstatSync(fullPath);
-            if (stat.isDirectory()) {
-                const nested = this.sweep(fullPath, tmpBase, now, cutoffMs, false);
-                files += nested.files;
-                dirs += nested.dirs;
-            } else if (now - stat.mtimeMs >= cutoffMs) {
-                process.stdout.write(`  🗑️  file:  ${path.relative(tmpBase, fullPath)}\n`);
-                fs.rmSync(fullPath, { force: true });
-                files += 1;
-            }
-        }
-
-        // Post-order: prune this dir if reaping its children (or nothing) left it empty.
-        if (!isRoot && fs.readdirSync(dir).length === 0) {
-            process.stdout.write(`  🗑️  dir:   ${path.relative(tmpBase, dir)}/\n`);
-            fs.rmdirSync(dir);
-            dirs += 1;
-        }
-
-        return new SweepResult(files, dirs);
+    // One line per removal, relative to the root it came from, so the two roots read as one report.
+    private reporter(base: string): (removed: string, isDir: boolean) => void {
+        return (removed: string, isDir: boolean): void => {
+            const label = isDir ? 'dir:  ' : 'file: ';
+            process.stdout.write(`  🗑️  ${label} ${path.relative(base, removed)}${isDir ? '/' : ''}\n`);
+        };
     }
 }

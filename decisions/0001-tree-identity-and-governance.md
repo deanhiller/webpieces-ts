@@ -213,6 +213,17 @@ directory stops encoding it.
 ### Taken
 
 **D1 — State moves out of the repo, to `~/.webpieces/<flattened-absolute-primary-path>/`.**
+
+> **STATUS: PARTIALLY IMPLEMENTED (2026-08-07) — PR MERGE BODIES ONLY.** The first thing webpieces
+> writes outside a repo is the gated squash-commit body, at
+> `~/.webpieces/prs/<host>/<owner>/<repo>/<prNumber>/merge-commit-body.md`, written by
+> `wp-finish-upsert-pr` and read by `wp-land-pr`. `MachineStateHome` implements D3 in full (full
+> override, degrade-never-throw) and is the resolver every later mover must use. Everything else —
+> `merged-branches.json`, the main-sync pair, `merge-info/`, `pr-review/`, the logs — is still inside the
+> clone under `DotWebpieces`. See [0004](0004-pr-artifacts-are-machine-global.md) for why this artifact
+> went first and why its key is NOT D2's flattened clone path.
+
+
 Key is the primary clone's absolute path with `/` → `-`, the same scheme Claude Code uses for its own
 scratchpad (`-Users-deanhiller-workspace-onetablet-monorepo-nx1`). Rationale: both file-scoped guards
 open with `if (ctx.relativePath.startsWith('..')) return []`
@@ -225,7 +236,13 @@ this guard writes itself, not source that upstream has moved past"*).
 Secondary wins: `git clean -xdf` stops destroying in-flight merge state; consumers stop needing a
 `.gitignore` entry; state survives `git worktree remove`.
 
-**D2 — The key is the flattened path, NOT the repo basename.** Basenames collide (`api`, `web`,
+**D2 — The key is the flattened path, NOT the repo basename.** *(Scope note added 2026-08-07: D2 governs
+CLONE state — facts about branches, worktrees and in-flight merges, which two clones must NOT share. It
+does not govern an artifact whose identity is bigger than a clone. The PR merge body is keyed by the
+REMOTE, nested rather than flattened, precisely because sharing across clones is its requirement. Same
+underlying rule — key an artifact by the scope of the fact it describes — applied to a different scope.
+See [0004](0004-pr-artifacts-are-machine-global.md).)*
+ Basenames collide (`api`, `web`,
 `monorepo`, and `monorepo-nx` vs `monorepo-nx1`). A collision means two repos sharing
 `merged-branches.json` and `main-sync-status.json` — precisely the "N divergent truths" failure
 `state-dir.ts:59-66` was written to kill, inverted. Not the git remote URL either: two clones of one
@@ -314,6 +331,15 @@ D1 lands.
 `origin.json` marker per key dir naming the primary path, and `cleanTmp` reaps keys whose primary no
 longer exists. Gets strictly better than today — one sweep covers every repo, including ones you can
 no longer `cd` into.
+
+> **PARTIALLY ADDRESSED (2026-08-07), and the marker half is already in.** Each PR dir carries the
+> planned `origin.json` (naming the posting tree AND its primary clone), and `cleanTmp` now sweeps
+> `~/.webpieces/prs/` with the SAME 30-day policy it applies to `.webpieces/`, from the same
+> implementation — `AgedTreeSweeper`, extracted so the two roots cannot drift apart. What is NOT yet
+> done is the age-INDEPENDENT half: reaping a key whose primary clone no longer exists. Age alone is
+> sufficient for PR bodies (a landed PR's body is never rewritten, so it ages out; an open PR's is
+> re-stamped by every `wp-finish-upsert-pr`, so it is never reaped mid-flight) and it is NOT sufficient
+> for the state D1 has yet to move, some of which is rewritten indefinitely.
 
 **O4 — `.claude/worktrees/` distribution (§2.4).** Should the ignore rule be committed rather than
 living in `.git/info/exclude`? Affects consumers, not this repo.
