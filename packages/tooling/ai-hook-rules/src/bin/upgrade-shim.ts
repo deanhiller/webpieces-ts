@@ -119,7 +119,7 @@ function verifyRepaired(root: string): number {
  *
  * `runMain` from @webpieces/rules-config is the repo-wide wrapper and is deliberately NOT used here:
  * this bin must load with fs+path only (see the header) so it still runs on the broken tree it exists
- * to repair. `main()` is the sanctioned exit site instead, and `upgrade-shim-process.spec.ts` spawns
+ * to repair. `main()` is the sanctioned exit site instead, and `bin-process-entry.spec.ts` spawns
  * this file as a process so a future refactor cannot silently drop the launcher again.
  */
 // webpieces-disable no-function-outside-class -- bin entry point in this deliberately dependency-free module; see header

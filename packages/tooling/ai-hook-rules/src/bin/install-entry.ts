@@ -114,8 +114,8 @@ export async function runInstaller(cwd: string): Promise<number> {
  * `runMain` from @webpieces/rules-config is deliberately NOT used: this module must load with fs+path
  * only (see the header) so it survives the corrupt node_modules it is meant to recover from, and
  * importing the wrapper would reintroduce the require-time crash. `main()` is the sanctioned single
- * exit site instead, and `install-entry-process.spec.ts` SPAWNS this file so the launcher cannot be
- * dropped again without a red test.
+ * exit site instead, and `bin-process-entry.spec.ts` SPAWNS this file (with the lazily-required
+ * `./setup` stubbed, so the launcher is what is under test) so it cannot be dropped again silently.
  */
 // webpieces-disable no-function-outside-class -- bin entry point: this module MUST load with only fs+path (see header). A DI-managed class would pull the container in and reintroduce the exact require-time crash being fixed.
 export async function main(): Promise<void> {
