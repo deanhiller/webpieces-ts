@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 
+import { L0_FAULT_NONE } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
 
@@ -36,8 +37,16 @@ export class GuardDecision {
     verdict: Verdict;
     reason: string;
     cache: string;
+    /**
+     * The L0 fault this decision IS, in the codebook's letter (core/l0-fault-codes.ts), or `-` for an
+     * ordinary rule decision. The `sh` shim has always stamped `fault=` on its own stream; the three
+     * JS-side faults (S/C/Y) reached this one with no label at all, so `grep fault=S` found nothing
+     * even while an S storm was blocking every call.
+     */
+    fault: string;
 
-    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-') {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string = L0_FAULT_NONE) {
         this.rule = rule;
         this.tool = tool;
         this.target = target;
@@ -45,6 +54,7 @@ export class GuardDecision {
         this.verdict = verdict;
         this.reason = reason;
         this.cache = cache;
+        this.fault = fault;
     }
 }
 
@@ -58,12 +68,13 @@ export class GuardDecision {
  * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
  * block or fail a hook.
  */
+// webpieces-disable no-function-outside-class -- the module-scope writer this log has always been, beside branchForLog/oneLine/rotateLogFile; it must stay callable from a tree too broken to build a DI container
 export function logGuardDecision(root: string, decision: GuardDecision): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const timestamp = new Date().toISOString();
-        // LOCAL scope: a guard decision belongs to the tree it judged, and a per-worktree log has one
-        // writer, so appends cannot interleave with another agent's.
+        // LOCAL scope: a guard decision belongs to the tree it judged. WHO made the call is answered
+        // by the filename, which logStream prefixes with session/agent/hook.
         const logsDir = dotWebpieces.logs(root);
         fs.mkdirSync(logsDir, { recursive: true });
 
@@ -88,6 +99,9 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             // derivation as the L0 shim log's `tree=` (shim-audit-log.ts), so one grep spans both
             // streams: L0 carries tree without projectDir, L1 now carries both.
             `tree=${dotWebpieces.worktreeName(root) || 'primary'}`,
+            // APPEND-ONLY, same spelling as the invocation line and the L0 shim log: which L0 fault
+            // this was, or `-`.
+            `fault=${decision.fault}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {
@@ -101,6 +115,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
  * Data-only (per CLAUDE.md: classes for data, explicit construction).
  */
 export class GuardInvocation {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         public readonly root: string,
         public readonly timestamp: string,
@@ -158,11 +173,12 @@ export class InvocationLog {
      * 'rules' hook, or a terminal boundary reached before begin()), and it clears the pending entry so
      * a second emit cannot double-log.
      *
-     * `rule` is the rule that blocked, or '-' when there is none. FIELD ORDER IS APPEND-ONLY: the five
+     * `rule` is the rule that blocked, or '-' when there is none; `fault` is the L0 fault code when this
+     * call ended on one (S/C/Y — the JS-side faults), else '-'. FIELD ORDER IS APPEND-ONLY: the five
      * original fields keep their positions (cleanup automation mines this file), and `verdict=` /
-     * `rule=` are added at the end.
+     * `rule=` / … / `fault=` are added at the end.
      */
-    finish(verdict: Verdict, rule: string): void {
+    finish(verdict: Verdict, rule: string, fault: string = L0_FAULT_NONE): void {
         const invocation = this.pending;
         this.pending = null;
         if (invocation === null) return;
@@ -190,6 +206,9 @@ export class InvocationLog {
                 // projectDir reads as healthy at a glance and `tree=<worktree>` beside a projectDir
                 // pointing at the primary is the straddle, without diffing two absolute paths.
                 `tree=${dotWebpieces.worktreeName(invocation.root) || 'primary'}`,
+                // WHICH L0 fault ended this call, in the same letters and the same field name the L0 sh
+                // shim uses (ai-hook-shim.log) — so ONE grep spans the whole trail.
+                `fault=${fault}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);
         } catch (err: unknown) {

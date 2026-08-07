@@ -3,6 +3,9 @@ import * as path from 'path';
 
 import { CONFIG_FILENAME, claudeEnv } from '@webpieces/rules-config';
 
+import {
+    L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_DRIFT, L0_FAULT_UNDECLARED,
+} from '../core/l0-fault-codes';
 import { toError } from '../core/to-error';
 import {
     L0_ALLOW_ERE_SH, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
@@ -296,10 +299,10 @@ WP_CWD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"
 // read-stale-guard does not run. In JS the same entry falls through and it does. See isAllowed().
 const TRIAGE_SH = `# WHICH of the guards/L0-tooling.md faults fired, in the doc's own letters. Only the four sh-side
 # codes can be decided here; S/C/Y live in the binary, which never got to run on this path.
-WP_FAULT=X                                            # X — bin missing (fresh clone, new worktree)
-[ -z "\$WP_HOOK_PKG_DECLARED" ] && WP_FAULT=U          # U — X, but nothing declares the package: install is a no-op
-[ -n "\$DRIFT_PKG" ] && WP_FAULT=D                     # D — version drift; D and K are mutually exclusive
-[ -n "\$BROKEN_BIN" ] && WP_FAULT=K                    # K — bin present but CRASHED (corrupt node_modules)
+WP_FAULT=${L0_FAULT_BIN_MISSING}                                            # X — bin missing (fresh clone, new worktree)
+[ -z "\$WP_HOOK_PKG_DECLARED" ] && WP_FAULT=${L0_FAULT_UNDECLARED}          # U — X, but nothing declares the package: install is a no-op
+[ -n "\$DRIFT_PKG" ] && WP_FAULT=${L0_FAULT_DRIFT}                     # D — version drift; D and K are mutually exclusive
+[ -n "\$BROKEN_BIN" ] && WP_FAULT=${L0_FAULT_BIN_BROKEN}                    # K — bin present but CRASHED (corrupt node_modules)
 DENY_LABEL="DENY"
 [ -z "\$WP_HOOK_PKG_DECLARED" ] && DENY_LABEL="DENY-UNDECLARED"  # nothing in package.json asks for the package
 [ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
