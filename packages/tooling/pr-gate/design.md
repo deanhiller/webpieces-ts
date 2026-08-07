@@ -50,15 +50,13 @@ graph TD
     GitStatusParser["GitStatusParser"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
-    MachineStateHome["MachineStateHome"]
-    MergeBodyFiler["MergeBodyFiler"]
+    MergeBodyTempFile["MergeBodyTempFile"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
     MergeStart["MergeStart"]
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
-    PrBodyStore["PrBodyStore"]
     PrCommentUpserter["PrCommentUpserter"]
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
@@ -105,7 +103,6 @@ graph TD
     ChecklistScanner --> ReviewJsonService
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
-    CleanTmp --> PrBodyStore
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchReaper
@@ -137,7 +134,7 @@ graph TD
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
-    FinishUpsertPrCommand --> MergeBodyFiler
+    FinishUpsertPrCommand --> MergeBodyTempFile
     FinishUpsertPrCommand --> MergeState
     FinishUpsertPrCommand --> PrCommentUpserter
     FinishUpsertPrCommand --> PrMerger
@@ -162,13 +159,11 @@ graph TD
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
     LandPrCommand --> LandedWorktreeReaper
+    LandPrCommand --> MergeBodyTempFile
     LandPrCommand --> MergeInfoIndex
-    LandPrCommand --> PrBodyStore
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
     LandedWorktreeReaper --> WorktreeService
-    MergeBodyFiler --> DotWebpieces
-    MergeBodyFiler --> PrBodyStore
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -184,9 +179,6 @@ graph TD
     MergedBranchesService --> DotWebpieces
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
-    PrBodyStore --> AgedTreeSweeper
-    PrBodyStore --> DotWebpieces
-    PrBodyStore --> MachineStateHome
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand

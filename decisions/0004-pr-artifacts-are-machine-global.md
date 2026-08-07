@@ -1,6 +1,28 @@
 # 0004 — An artifact belongs to the scope of the fact it describes
 
-**Status:** taken and implemented (PR merge bodies)
+> ## ⚠️ SUPERSEDED by [0005](0005-the-pr-description-is-the-merge-body.md)
+>
+> **Everything below describes a mechanism that no longer exists.** `MachineStateHome`, `PrBodyStore`,
+> `WEBPIECES_STATE_HOME`, `~/.webpieces/prs/`, `origin.json` and `wp-land-pr --fallback-title-only` are
+> all DELETED. `wp-land-pr` reads the merge body from the PR itself (`gh pr view --json body`) and
+> re-derives the tree-ownership check from `headRefOid`. webpieces writes state only under
+> `{repo}/.webpieces`.
+>
+> Two things overturned it, both recorded in 0005:
+>
+> 1. **§ 4.1 below inverted.** PR #611 made the PR DESCRIPTION the compact commit body and moved the
+>    dashboard into the PR's comments — so "never put the description in a commit" stopped being true
+>    the same day, and the store became a local cache of a fact GitHub owns.
+> 2. **§ 3's key was never stable.** The first path segment is not a host, it is the host-position token
+>    of however `origin` is spelled, so an ssh alias and a full hostname key one repo to two directories
+>    (measured; see 0005 § 1a).
+>
+> **The RULE this doc records — *key an artifact by the scope of the fact it describes* — survives and
+> is still the right rule.** It is the reason the body lives on the PR now. What was retired is this
+> implementation of it. The document is kept because § 2's reasoning, and the rejected options in § 9,
+> are what a future reader will otherwise re-derive.
+
+**Status:** SUPERSEDED (2026-08-07) by [0005](0005-the-pr-description-is-the-merge-body.md) — was: taken and implemented (PR merge bodies)
 **Measured:** 2026-08-07, macOS (darwin 25.3.0), git 2.x
 **Implements:** [0001](0001-tree-identity-and-governance.md) § D1 (partially), § D3 (in full), § O3 (partially)
 **Where:** `packages/tooling/rules-config/src/machine-state-home.ts`,

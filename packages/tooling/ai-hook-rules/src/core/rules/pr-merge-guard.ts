@@ -66,19 +66,17 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
      * process this hook never sees, exactly like the other gated commands.
      *
      * ─── Why a CORRECT-LOOKING `gh pr merge --auto --subject --body-file` is still blocked ──────────
-     * Full reasoning, and what was rejected: `decisions/0004-pr-artifacts-are-machine-global.md` § 8.
-     * It was re-examined when the gated body moved to its machine-global home, and the block stands. A
-     * `--body-file` proves a file was passed, never that it holds the GATED bytes: the guard sees a
-     * command string, cannot know the PR number, and so cannot check the path against
-     * `~/.webpieces/prs/<host>/<owner>/<repo>/<n>/merge-commit-body.md`. Allowing the shape would let any
-     * file at all — including a hand-written one, or the PR description — land as the reviewed body,
-     * with nothing to distinguish it afterwards.
+     * Full reasoning, and what was rejected: `decisions/0005-the-pr-description-is-the-merge-body.md`
+     * § "pr-merge-guard stays blocking" (which supersedes `0004` § 8). It has now been re-examined
+     * twice — once when the gated body moved out of the worktree, and again when it moved onto the PR
+     * itself — and the block stands. A `--body-file` proves a file was passed, never that it holds the
+     * GATED bytes: the guard sees a command string and cannot read the file, so any file at all — a
+     * hand-written one, an older run's — could land as the reviewed body with nothing to distinguish it
+     * afterwards.
      *
-     * Two things now depend on that. `wp-land-pr --fallback-title-only` is a HUMAN opt-in that stamps
-     * "this is a fallback" into the commit; a permitted hand-rolled merge would be the same degraded
-     * outcome with no stamp and no opt-in. And landing now DECIDES whether the archive/merge-info/reap
-     * bookkeeping belongs to this tree, using the provenance filed beside the body — a hand-rolled merge
-     * skips that decision silently, which is how a landed worktree becomes a corpse.
+     * One more thing depends on that: landing DECIDES whether the archive/merge-info/reap bookkeeping
+     * belongs to this tree, by comparing this tree's branch tip against the PR's `headRefOid`. A
+     * hand-rolled merge skips that decision silently, which is how a landed worktree becomes a corpse.
      *
      * The tree kind still decides which cleanup steps the hint prints: in a linked worktree
      * `git checkout main` FATALS, so demanding it there would be demanding an impossible command.

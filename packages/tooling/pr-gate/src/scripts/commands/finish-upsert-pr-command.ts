@@ -17,7 +17,7 @@ import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
-import { MergeBodyFiler, MergeBodyRequest } from '../workflow/merge-body-filer';
+import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { ProvenanceEnforcer, ProvenanceReport } from '../workflow/provenance-enforcer';
 import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
@@ -134,9 +134,9 @@ export class FinishUpsertPrCommand {
         // that genuinely never ran, so no other code path in this command can print it at a refusal.
         private readonly receipts: ReviewStageReceiptService,
         private readonly banner: FinishBanner,
-        // The MACHINE-GLOBAL home for the one artifact whose scope is bigger than this tree: the gated
-        // squash-commit body, which `wp-land-pr` must find from any tree (see MergeBodyFiler).
-        private readonly mergeBodyFiler: MergeBodyFiler,
+        // `gh pr merge --body-file` takes a path, so the bytes just published as the PR description are
+        // spilled to a throwaway file for the length of one `gh` call. Nothing durable — the PR holds it.
+        private readonly mergeBodyFile: MergeBodyTempFile,
         // ONE marker-keyed upsert, shared by both PR comments (the full dashboard and the checklist).
         private readonly commentUpserter: PrCommentUpserter,
         // Pins the two GitHub repo settings that decide whether a UI merge writes the body we just
@@ -495,16 +495,10 @@ export class FinishUpsertPrCommand {
         const finalBody = this.dashboard.renderPrBody(input, ref.url) + request.tokenSuffix;
         if (finalBody !== request.body) this.backfillPrBody(ref.number, bodyFile, finalBody);
 
-        // MACHINE-GLOBAL, keyed by the PR's identity, so `wp-land-pr` finds it from ANY tree — see
-        // MergeBodyFiler for the incident that moved it out of this worktree's pr-review/ dir.
-        const bodyRequest = new MergeBodyRequest();
-        bodyRequest.treeRoot = repoRoot;
-        bodyRequest.branch = baseBranch;
-        bodyRequest.feature = this.aiBranchName.getFeatureName();
-        bodyRequest.prNumber = ref.number;
-        bodyRequest.prUrl = ref.url;
-        bodyRequest.body = finalBody + '\n';
-        const mergeBodyFile = this.mergeBodyFiler.file(bodyRequest);
+        // The DURABLE copy of these bytes is the PR description published above; this is a throwaway
+        // file because `--body-file` takes a path. `wp-land-pr` reads the description back from GitHub,
+        // so nothing here has to survive the process (see decisions/0005).
+        const mergeBodyFile = this.mergeBodyFile.write(finalBody + '\n');
         // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
         // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
         // REQUIRED config — no default here on purpose. A missing value (an older published

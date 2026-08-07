@@ -20,14 +20,12 @@ export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
 export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR, LOGS_STATE_DIR, HOOKS_STATE_DIR } from './state-dir';
 export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
-// MACHINE-GLOBAL state — the scope ABOVE the clone. Used only for artifacts whose identity is bigger
-// than a clone (today: the gated squash body, keyed by the PR's global identity). See pr-body-store.ts.
-export { MachineStateHome, machineStateHome, StateHome, WEBPIECES_STATE_HOME_ENV } from './machine-state-home';
+// There is NO machine-global state root. `MachineStateHome`/`StateHome`/`WEBPIECES_STATE_HOME` and the
+// `PrBodyStore` that used them are DELETED: the one artifact that needed a scope above the clone was the
+// gated squash body, and GitHub holds it now (it IS the PR description). Every `.webpieces` path a
+// webpieces tool writes is `{repo}/.webpieces`, resolved through `DotWebpieces` above. See
+// `decisions/0005-the-pr-description-is-the-merge-body.md`.
 export { AgedTreeSweeper, SweepCount, RETENTION_DAYS } from './aged-tree-sweep';
-export {
-    PrBodyStore, PrBodyLocation, PrBodyOrigin, RepoSlug,
-    PRS_STATE_DIR, MERGE_BODY_FILE, PR_ORIGIN_FILE,
-} from './pr-body-store';
 export { ClaudeEnv, claudeEnv, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from './claude-env';
 export { AtomicFile } from './atomic-file';
 // The ONE formatter for a remedy that must run in a named directory: `cd '<root>' && <command>`.

@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-    AgedTreeSweeper, MachineStateHome, PrBodyStore, RepoRootFinder, WEBPIECES_STATE_HOME_ENV, WEBPIECES_TMP_DIR,
-} from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { CleanTmp } from './cleanTmp';
 
 // Pin the repo root to our temp dir so cleanTmp() sweeps a tree we fully control.
@@ -21,9 +19,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 let repoRoot = '';
 let tmpBase = '';
-// The machine-global root, pointed at a temp dir for the whole spec. Without this the sweep would run
-// over the developer's REAL ~/.webpieces/prs — a test that deletes a human's files is not a test.
-let stateHome = '';
 
 // Create a file and force its mtime to `ageDays` in the past (0 => fresh).
 const writeAged = (relPath: string, ageDays: number): string => {
@@ -36,36 +31,18 @@ const writeAged = (relPath: string, ageDays: number): string => {
 };
 
 const run = async (): Promise<void> => {
-    const finder = new FixedRepoRootFinder(repoRoot);
-    // A FRESH MachineStateHome per run: it caches its resolution, and each test points the env var at a
-    // different temp directory.
-    const store = new PrBodyStore(new MachineStateHome());
-    await new CleanTmp(finder, store, new AgedTreeSweeper()).cleanTmp();
+    await new CleanTmp(new FixedRepoRootFinder(repoRoot), new AgedTreeSweeper()).cleanTmp();
 };
 
 beforeEach((): void => {
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cleantmp-'));
     tmpBase = path.join(repoRoot, WEBPIECES_TMP_DIR);
     fs.mkdirSync(tmpBase, { recursive: true });
-    stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cleantmp-home-'));
-    process.env[WEBPIECES_STATE_HOME_ENV] = stateHome;
 });
 
 afterEach((): void => {
-    delete process.env[WEBPIECES_STATE_HOME_ENV];
     fs.rmSync(repoRoot, { recursive: true, force: true });
-    fs.rmSync(stateHome, { recursive: true, force: true });
 });
-
-// A file under the MACHINE-GLOBAL prs/ root, aged the same way.
-const writeAgedPr = (relPath: string, ageDays: number): string => {
-    const full = path.join(stateHome, 'prs', relPath);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, 'x');
-    const when = new Date(Date.now() - ageDays * DAY_MS);
-    fs.utimesSync(full, when, when);
-    return full;
-};
 
 describe('CleanTmp.cleanTmp — 30-day whole-tree GC', () => {
     it('is a no-op when .webpieces does not exist', async (): Promise<void> => {
@@ -123,26 +100,31 @@ describe('CleanTmp.cleanTmp — 30-day whole-tree GC', () => {
         expect(fs.existsSync(path.join(tmpBase, 'instruct-ai', 'stale'))).toBe(false);
     });
 
-    // decisions/0001 § O3: nothing else will ever delete these — `rm -rf <clone>` leaves them behind.
-    it('reaps an aged merge body from the MACHINE-GLOBAL prs/ root and prunes it back to prs/', async (): Promise<void> => {
-        const old = writeAgedPr('github.com/acme/widgets/41/merge-commit-body.md', 45);
+    /**
+     * The sweep has exactly ONE root, and this is the test that says so by name.
+     *
+     * `CleanTmp` used to sweep a second, machine-global root as well — `~/.webpieces/prs/...`, the
+     * gated merge-body store — because nothing else would ever reap it (`rm -rf <clone>` left it
+     * behind). That store is deleted: the merge body is the PR's own description now, held by GitHub.
+     * So webpieces writes state in exactly one place, and a re-introduced second root would make this
+     * assertion fail rather than quietly resurrect a machine-global directory.
+     */
+    it('sweeps ONLY {repo}/.webpieces — nothing outside the repo', async (): Promise<void> => {
+        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cleantmp-outside-'));
+        const stale = path.join(outside, 'prs', 'github.com', 'acme', 'widgets', '41', 'merge-commit-body.md');
+        fs.mkdirSync(path.dirname(stale), { recursive: true });
+        fs.writeFileSync(stale, 'x');
+        const when = new Date(Date.now() - 99 * DAY_MS);
+        fs.utimesSync(stale, when, when);
+
         await run();
-        expect(fs.existsSync(old)).toBe(false);
-        expect(fs.existsSync(path.join(stateHome, 'prs', 'github.com'))).toBe(false);
-        // The namespace root itself survives an empty sweep, exactly like `.webpieces/`.
-        expect(fs.existsSync(path.join(stateHome, 'prs'))).toBe(true);
+
+        expect(fs.existsSync(stale)).toBe(true);
+        fs.rmSync(outside, { recursive: true, force: true });
     });
 
-    it('keeps the merge body of a PR that is still being pushed to', async (): Promise<void> => {
-        const fresh = writeAgedPr('github.com/acme/widgets/42/merge-commit-body.md', 3);
-        await run();
-        expect(fs.existsSync(fresh)).toBe(true);
-    });
-
-    it('sweeps prs/ even when this clone has no .webpieces at all', async (): Promise<void> => {
+    it('is a no-op when the repo has no .webpieces, with no second root to fall back to', async (): Promise<void> => {
         fs.rmSync(tmpBase, { recursive: true, force: true });
-        const old = writeAgedPr('github.com/acme/widgets/43/merge-commit-body.md', 99);
-        await run();
-        expect(fs.existsSync(old)).toBe(false);
+        await expect(run()).resolves.toBeUndefined();
     });
 });

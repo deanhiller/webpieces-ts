@@ -1,59 +1,50 @@
 import { execSync, spawnSync } from 'child_process';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import {
-    prDirFor, InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
-    BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP,
-    MERGE_BODY_FILE, PrBodyLocation, PrBodyStore, WEBPIECES_STATE_HOME_ENV, atRoot,
+    InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
+    BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { LandedWorktreeReaper, WorktreeReapHandoff } from '../workflow/landed-worktree-reaper';
+import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
 import { MergeIntent, PrMerger } from '../workflow/pr-merger';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-/** The `--fallback-title-only` opt-in. Data-only, per CLAUDE.md. */
-export class LandPrOptions {
-    /**
-     * Land with a commit body built from the PR TITLE and LINK alone, because the gated body rendered by
-     * `wp-finish-upsert-pr` is not on this machine. A HUMAN decision — see
-     * {@link LandPrCommand.fallbackBody} for why the PR description is deliberately not an option.
-     */
-    fallbackTitleOnly = false;
-}
-
 /**
  * `wp-land-pr`: squash-merge THIS branch's already-posted PR into main with the compact commit body.
  *
- * It exists because a merge clicked in the GitHub UI cannot produce that body. A UI merge is limited
- * to the repo's squash_merge_commit_title/message settings, and none of their values yields the
- * shortened risk/flags summary — only an explicit `gh pr merge --subject --body-file` does. So when a
- * merge has to happen outside `wp-finish-upsert-pr` (a mergeMode=NONE repo, or a PR whose checks were
- * still running when finish ran), this is the command that keeps main's history consistent.
+ * It exists because a merge clicked in the GitHub UI cannot set the squash SUBJECT to `<title> (#N)`
+ * and cannot archive the pre-squash tip. So when a merge has to happen outside `wp-finish-upsert-pr`
+ * (a mergeMode=NONE repo, or a PR whose checks were still running when finish ran), this is the command
+ * that keeps main's history consistent and finishes the branch's bookkeeping.
  *
- * It deliberately does NOT re-run the build gate or re-render the dashboard: `wp-finish-upsert-pr`
- * already did both and filed `merge-commit-body.md` under the PR's identity. Landing is a separate,
- * later act, and rebuilding here would mean a second authoritative gate whose result nobody reads. THE
- * BYTES THAT LAND ARE THE BYTES FINISH PRODUCED — that invariant survives everything below.
+ * ─── Where the bytes come from: THE PR ITSELF ──────────────────────────────────────────────────────
+ * `wp-finish-upsert-pr` renders ONE string and publishes it as the PR DESCRIPTION, and the full
+ * dashboard lives in the PR's comments (see `pr-body-is-merge-body.spec.ts`, which pins that the
+ * description and the merge body are one renderer's output). So the description IS the gated squash
+ * body, held by GitHub, and landing reads it back with `gh pr view --json body`.
+ *
+ * THE BYTES THAT LAND ARE THE BYTES FINISH PRODUCED — that invariant is unchanged; what changed is that
+ * GitHub, not this machine, is the thing holding them. That removes the whole machine-global receipt
+ * store: a cache of a fact the remote already owns, which could only ever be missing, stale, or on the
+ * wrong computer. Landing from a second clone, a fresh clone, or another machine entirely now just
+ * works. See `decisions/0005-the-pr-description-is-the-merge-body.md`.
+ *
+ * It still deliberately does NOT re-render the body: re-deriving it at land time would be a second
+ * authoritative gate whose result nobody reads, and it could silently disagree with what was reviewed.
  *
  * ─── Two scopes, and only one of them is the tree's ────────────────────────────────────────────────
- * This command does two different things, and they belong to different scopes:
- *
- *  1. THE MERGE, which belongs to the PR. The receipt is read from PrBodyStore —
- *     `~/.webpieces/prs/<host>/<owner>/<repo>/<n>/` — so landing works from the primary clone, from any
- *     linked worktree, and from a SECOND CLONE of the same repo, as long as the PR was posted from this
- *     machine. It used to be read out of this worktree's own `pr-review/<branch>/`, and the day the
- *     gated flow ran in the primary clone while landing happened in a worktree, it printed "Nothing to
- *     land" at a perfectly good PR.
+ *  1. THE MERGE, which belongs to the PR — and is therefore reachable from anywhere.
  *  2. THE BOOKKEEPING — archiving the pre-squash tip as `archive/<date>/<branch>`, promoting merge-info,
- *     and reaping the landed worktree. That half genuinely belongs to the tree that holds the branch,
- *     and it must NOT be attempted from anywhere else: another clone's `<branch>` is a different commit,
- *     so archiving it there would tag the wrong objects under the right name. When we are not that tree,
- *     the merge still happens and the bookkeeping is SKIPPED OUT LOUD, naming the tree that owes it.
+ *     and reaping the landed worktree. That half belongs to the tree whose `<branch>` really is the
+ *     commit being squashed, and it must NOT be attempted from anywhere else: another clone's
+ *     `<branch>` is a different commit, so archiving it there would tag the wrong objects under the
+ *     right name. {@link LandPrCommand.bookkeeping} tests that by comparing this tree's `<branch>`
+ *     against the PR's own `headRefOid`, and when they disagree the merge still happens and the
+ *     bookkeeping is SKIPPED OUT LOUD.
  */
 @injectable(bindingScopeValues.Singleton)
 export class LandPrCommand {
@@ -66,31 +57,30 @@ export class LandPrCommand {
         private readonly archiver: BranchArchiver,
         private readonly mergeInfoIndex: MergeInfoIndex,
         private readonly landedWorktree: LandedWorktreeReaper,
-        private readonly prBodies: PrBodyStore,
+        private readonly bodyFile: MergeBodyTempFile,
     ) {}
 
-    async run(opts: LandPrOptions = new LandPrOptions()): Promise<void> {
+    async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const base = this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
-        // The PR is resolved FIRST now, because its NUMBER is the key the body is filed under. That
-        // ordering is the whole change: the body is no longer a fact of this tree to be looked up by
-        // branch name, it is a fact of PR #N.
-        const ref = this.prNumberAndTitle(base);
+        const ref = this.readPr(base);
         if (ref === null) {
             throw new InformAiError(
                 '\n' + SEP + '❌ No open PR found for this branch\n' + SEP + '\n' +
                 `No open PR has head branch "${base}". Nothing to land.\n` +
-                'If the PR is already merged, run `pnpm wp-cleanup`.\n' + SEP,
+                'If the PR is already merged, run `pnpm wp-cleanup`.\n' +
+                'If it was never posted, run the gated flow — it posts the PR AND writes the description\n' +
+                'that becomes this commit body:\n' +
+                '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP,
             );
         }
-
-        const stored = this.prBodies.read(repoRoot, ref.number);
-        if (stored === null && !opts.fallbackTitleOnly) throw this.notOnThisMachine(repoRoot, ref);
+        if (ref.body === '') throw this.emptyDescription(ref);
+        const unfit = this.notFitForGitLog(ref.body);
+        if (unfit !== '') throw this.descriptionUnfitForGitLog(ref, unfit);
 
         process.stdout.write('\n' + SEP + `🚀 Landing PR #${ref.number}\n` + SEP + '\n');
-        const mergeBodyFile = stored !== null ? stored.bodyFile : this.writeFallbackBody(ref);
-        if (stored === null) process.stdout.write(this.fallbackNotice(ref));
+        const mergeBodyFile = this.bodyFile.write(ref.body);
 
         const config = loadAndValidate(repoRoot).prGate;
         const policy = config.mergeMode;
@@ -107,7 +97,7 @@ export class LandPrCommand {
         );
 
         const bookkeeping = outcome.merged
-            ? this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention, stored)
+            ? this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention)
             : '';
         process.stdout.write(
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
@@ -121,125 +111,106 @@ export class LandPrCommand {
     }
 
     /**
-     * The refusal when this machine holds no gated body for the PR.
+     * The refusal when the PR exists but its description is empty.
      *
-     * It says MACHINE, not "branch" and not "worktree", because that is now the true scope: the receipt
-     * is filed under the PR's global identity, so the only way to be missing it is to be on a different
-     * computer from the one that posted the PR (or to be looking before finish ever ran).
+     * This is the ONE remaining "no gated body" case, and it is now a property of the PR rather than of
+     * this machine — which is why the cure is a single command with no human judgement call attached.
+     * There is deliberately no `--fallback-title-only` escape any more: that flag existed because the
+     * bytes could be on a DIFFERENT COMPUTER from the one landing, which cannot happen when GitHub holds
+     * them. Re-running finish is always available, always correct, and lands the reviewed bytes.
      */
-    private notOnThisMachine(repoRoot: string, ref: PrIdentity): InformAiError {
-        const home = this.prBodies.home(repoRoot);
-        const degraded = home.degraded
-            ? `\n⚠️  This machine's webpieces state is DEGRADED to ${home.root}\n` +
-              `    (${home.reason}), so the body is only visible from this clone. Set\n` +
-              `    ${WEBPIECES_STATE_HOME_ENV} to a writable directory to make it machine-global.\n`
-            : '';
+    private emptyDescription(ref: PrIdentity): InformAiError {
         return new InformAiError(
-            '\n' + SEP + `❌ PR #${ref.number} was not found on this machine\n` + SEP + '\n' +
-            `Expected the gated squash-commit body at:\n  ${path.join(this.prBodies.dirFor(repoRoot, ref.number), MERGE_BODY_FILE)}\n\n` +
-            'That file is written by `pnpm wp-finish-upsert-pr` ON THE MACHINE THAT POSTED THE PR, and it\n' +
-            'is never regenerated here: it is the gate\'s receipt, and re-deriving it at land time would\n' +
-            'be a second authoritative gate whose result nobody reads.\n' +
-            degraded +
-            this.legacySignpost(repoRoot) +
-            '\nSo either:\n\n' +
-            '  A. finish has not run on this branch — run the gated flow, which also posts the PR:\n' +
-            '       pnpm wp-start-upsert-pr     # update from main (3-point merge). No push, no build gate.\n' +
-            '       pnpm wp-review-upsert-pr    # validate the merge, build gate, extract the diff, brief reviewers\n' +
-            '       # write review.json at the path wp-review-upsert-pr prints\n' +
-            '       pnpm wp-finish-upsert-pr    # build gate, dashboard, create/update the PR\n' +
-            '     Then re-run `pnpm wp-land-pr`. This is the right answer almost every time.\n\n' +
-            '  B. the PR was posted from a DIFFERENT machine. Land it from there, or re-run\n' +
-            '     `pnpm wp-finish-upsert-pr` here so this machine renders its own receipt.\n\n' +
-            '  C. A HUMAN may choose to land it WITHOUT the gated body:\n' +
-            '       pnpm wp-land-pr --fallback-title-only\n' +
-            '     That writes a commit body of the PR TITLE + LINK and a line saying the gated body was\n' +
-            '     unavailable. It is a degraded commit message and it says so in main\'s history forever.\n' +
-            '     DO NOT run it on your own initiative — ask the human, and let them decide.\n' + SEP,
+            '\n' + SEP + `❌ PR #${ref.number} has an EMPTY description\n` + SEP + '\n' +
+            'The PR description IS the squash-commit body — `pnpm wp-finish-upsert-pr` renders one string\n' +
+            'and publishes it as the description, and landing reads it straight back with\n' +
+            '`gh pr view --json body`. An empty description means the gated flow never published one\n' +
+            '(or a human cleared it), so there is nothing reviewed to land.\n\n' +
+            'Re-run the gated flow — it re-renders the description and re-posts it to this same PR:\n' +
+            '  pnpm wp-start-upsert-pr     # update from main (3-point merge). No push, no build gate.\n' +
+            '  pnpm wp-review-upsert-pr    # validate the merge, build gate, extract the diff, brief reviewers\n' +
+            '  # write review.json at the path wp-review-upsert-pr prints\n' +
+            '  pnpm wp-finish-upsert-pr    # build gate, dashboard, create/update the PR\n' +
+            'Then re-run `pnpm wp-land-pr`.\n' + SEP,
         );
     }
 
     /**
-     * The ONE-TIME signpost for a body written by the PREVIOUS release into this tree's `pr-review/`.
+     * '' when the description is a compact gated body; otherwise the marker that proves it is not.
      *
-     * LOUD, and never read — the RETIRED_CONFIG_KEYS pattern applied to an artifact. A silent fallback
-     * to the old path is exactly the shim CLAUDE.md forbids: it would re-create two homes for the
-     * receipt, and the stale one wins precisely when finish and land ran in different trees, which is
-     * the bug this whole change removes. Re-running finish re-files it under the PR's identity, which
-     * costs one command and leaves one home.
+     * This reads the SAME invariant `pr-body-is-merge-body.spec.ts` asserts from the other end: the
+     * compact body "contains nothing a plain-text git log cannot carry" — no markdown heading, no table
+     * pipe. It is therefore not a heuristic about what a dashboard looks like; it is the renderer's own
+     * pinned property, checked against bytes that arrived from outside this process.
+     *
+     * WHY IT IS NEEDED, and why it is not a compatibility fallback: a PR posted by a release OLDER than
+     * the surface swap still has the FULL DASHBOARD as its description. Measured on this repo,
+     * 2026-08-07 — PR #613 (posted after the swap) has a description byte-identical to its squash body,
+     * while PR #614 (still open, posted minutes before) begins `## 🚦 PR Gate Dashboard`. Landing that
+     * one would dump a risk table into main, which is precisely the defect
+     * `decisions/0004` § 4.1 warned about. So this REFUSES and names the one command that fixes it. It
+     * never falls back, never rewrites, and never reaches for a second source of bytes.
+     *
+     * It keeps earning its place after the transition: nothing stops a human editing a PR description
+     * in GitHub's textarea, and this is the only point between that edit and main's history.
      */
-    private legacySignpost(repoRoot: string): string {
-        const legacy = path.join(prDirFor(repoRoot, this.aiBranchName.getFeatureName()), MERGE_BODY_FILE);
-        if (!fs.existsSync(legacy)) return '';
-        return '\n⚠️  A body written by an OLDER webpieces release is sitting at:\n' +
-            `      ${legacy}\n` +
-            '    It is deliberately NOT read. That path is per-worktree, so it is only correct while the\n' +
-            '    branch never changes trees — the assumption that broke. Re-run `pnpm wp-finish-upsert-pr`\n' +
-            '    to re-file it under this PR\'s identity, then land. (The stale file self-clears in 30 days.)\n';
+    private notFitForGitLog(body: string): string {
+        if (body.includes('##')) return '##  (a markdown heading)';
+        if (body.includes('|')) return '|   (a markdown table)';
+        return '';
     }
 
     /**
-     * The explicitly-degraded commit body: PR TITLE + LINK + a line saying what is missing. NEVER the PR
-     * DESCRIPTION.
-     *
-     * That exclusion is the point of this method, not an oversight. In a real consuming repo the PR
-     * description IS the full PR Gate Dashboard, and GitHub's default
-     * `squash_merge_commit_message=PR_BODY` dumping that dashboard into the commit is precisely the ugly
-     * git log this whole mechanism exists to prevent. A fallback that reached for the description would
-     * produce a WORSE commit than doing nothing, while looking more complete.
-     *
-     * It also announces itself in main's history, so an incomplete commit is self-identifying: anyone
-     * reading `git log` later can tell at a glance that this one did not carry a gate receipt.
+     * The refusal when the description is not the compact gated body — almost always an OLD PR posted
+     * before the surface swap, whose description is still the full dashboard.
      */
-    private fallbackBody(ref: PrIdentity): string {
-        return `${ref.url === '' ? `PR #${ref.number}` : ref.url}\n\n` +
-            '⚠️  FALLBACK COMMIT BODY — the gated risk/flags body rendered by `pnpm wp-finish-upsert-pr`\n' +
-            'was not available on this machine, and a human chose to land anyway with\n' +
-            '`pnpm wp-land-pr --fallback-title-only`. This commit carries the PR title and link only.\n' +
-            'The PR description is deliberately NOT included here.\n';
-    }
-
-    private writeFallbackBody(ref: PrIdentity): string {
-        const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-land-fallback-')), MERGE_BODY_FILE);
-        fs.writeFileSync(file, this.fallbackBody(ref));
-        return file;
-    }
-
-    private fallbackNotice(ref: PrIdentity): string {
-        return `   ⚠️  --fallback-title-only: no gated body for PR #${ref.number} on this machine, so this\n` +
-            '       commit gets the PR title + link and a line saying the gated body was unavailable.\n\n';
+    private descriptionUnfitForGitLog(ref: PrIdentity, marker: string): InformAiError {
+        return new InformAiError(
+            '\n' + SEP + `❌ PR #${ref.number}'s description is not a git-log commit body\n` + SEP + '\n' +
+            `It contains ${marker}, which the compact body rendered by \`pnpm wp-finish-upsert-pr\` never\n` +
+            'does — so these bytes are not the gated summary, and landing them would put a PR Gate\n' +
+            'Dashboard (or hand-written markdown) into main\'s history permanently.\n\n' +
+            'The usual cause is a PR posted by a webpieces release OLDER than the one that made the\n' +
+            'description the commit body. The dashboard now lives in the PR\'s 1st comment instead.\n\n' +
+            'Re-run finish — it re-renders the description in the compact form and re-posts it to this\n' +
+            'same PR, then landing works:\n' +
+            '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP,
+        );
     }
 
     /**
-     * The landed branch's post-merge bookkeeping — but ONLY when this tree is the one that owes it.
+     * The landed branch's post-merge bookkeeping — but ONLY when this tree's `<branch>` IS the commit
+     * that was squashed.
      *
-     * `origin.json` (written beside the body by finish) names the tree that posted the PR. When that is
-     * not the tree we are standing in, every step below would act on the wrong objects: `<branch>` in a
-     * second clone is a different commit, so `archive/<date>/<branch>` would tag the wrong tip under the
-     * right name; `merge-info/staged/<feature>` lives in the posting tree's state, not ours; and the
-     * worktree to reap is not this one. So the merge stands and the bookkeeping is declined ALOUD.
+     * The fact being tested is "does this working tree hold the objects the PR merged", and the PR
+     * answers it authoritatively: `headRefOid` is the tip GitHub squashed. A second clone's `<branch>`
+     * is a different commit, so `archive/<date>/<branch>` there would tag the wrong tip under the right
+     * name; `merge-info/staged/<feature>` lives in the posting tree's state, not ours; and the worktree
+     * to reap is not this one. So the merge stands and the bookkeeping is declined ALOUD.
      *
-     * No origin at all (the `--fallback-title-only` path) means we have nothing that says otherwise, and
-     * we ARE standing in the tree holding the branch — `base` came from this tree's HEAD. That is the
-     * pre-existing behaviour and it stays.
+     * This used to be read out of an `origin.json` sidecar recording which tree posted the PR. Comparing
+     * SHAs is strictly better: it is a fact rather than a recorded claim, it needs no stored state, and
+     * it is more precise in both directions — a second clone sitting on the SAME commit can safely
+     * archive it, and a tree that has committed further work since finish ran correctly declines.
      */
-    private bookkeeping(repoRoot: string, base: string, ref: PrIdentity, retention: string, stored: PrBodyLocation | null): string {
-        const owner = stored?.origin?.treeRoot ?? '';
-        if (owner !== '' && path.resolve(owner) !== path.resolve(repoRoot)) {
-            return this.foreignTreeNotice(owner, base);
+    private bookkeeping(repoRoot: string, base: string, ref: PrIdentity, retention: string): string {
+        const local = this.revParse(repoRoot, base);
+        if (ref.headRefOid !== '' && local !== '' && local !== ref.headRefOid) {
+            return this.notTheLandedTipNotice(base, local, ref);
         }
         return this.archiveAndPromote(repoRoot, base, ref, retention) + this.nextStep(repoRoot, base);
     }
 
-    /** What was skipped, why, and the exact command that finishes it — in the tree that owes it. */
-    private foreignTreeNotice(ownerTree: string, base: string): string {
-        return '\n   ⚠️  Archive + worktree cleanup SKIPPED — this PR was posted from a different tree:\n' +
-            `         ${ownerTree}\n` +
-            '       The pre-squash tip, the merge-info record and (if any) the worktree holding\n' +
-            `       ${base} all live THERE, and "${base}" here is a different commit, so archiving it\n` +
-            '       from this tree would tag the wrong objects under the right name.\n' +
-            '       Finish the bookkeeping there:\n' +
-            `         ${atRoot(ownerTree, 'pnpm wp-cleanup')}\n`;
+    /** What was skipped, why, and what the two SHAs are — so the reader can tell WHICH cause it was. */
+    private notTheLandedTipNotice(base: string, local: string, ref: PrIdentity): string {
+        return '\n   ⚠️  Archive + worktree cleanup SKIPPED — this tree\'s branch is not the commit that landed:\n' +
+            `         ${base} here → ${local}\n` +
+            `         PR #${ref.number} squashed → ${ref.headRefOid}\n` +
+            '       Archiving from here would tag the wrong objects under the right name, and the\n' +
+            `       merge-info record and (if any) the worktree holding ${base} live with the other tip.\n` +
+            '       Either this is a second clone of the repo — finish the bookkeeping in the tree that\n' +
+            '       posted the PR with `pnpm wp-cleanup` — or this tree has commits made after\n' +
+            '       `pnpm wp-finish-upsert-pr` ran, which the PR does not contain.\n';
     }
 
     /**
@@ -307,30 +278,69 @@ export class LandPrCommand {
         return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 
-    // The open PR's number, title and URL for this head branch, or null when there is none. The TITLE
-    // comes from the PR itself, not review.json, so the squash subject matches what a reviewer approved
-    // even if review.json was edited afterwards. The URL is only used by the fallback body.
-    private prNumberAndTitle(baseBranch: string): PrIdentity | null {
+    /**
+     * Everything landing needs about the PR, in ONE `gh` read: number, title, URL, DESCRIPTION and the
+     * head sha GitHub is squashing. `null` when there is no open PR for this head branch.
+     *
+     * The TITLE comes from the PR itself, not review.json, so the squash subject matches what a reviewer
+     * approved even if review.json was edited afterwards. The BODY is the gated commit body (see the
+     * class doc). `headRefOid` is read BEFORE the merge, because it is what the bookkeeping check
+     * compares against and the merge is what makes the branch's fate uninteresting to GitHub.
+     */
+    private readPr(baseBranch: string): PrIdentity | null {
         const result = spawnSync(
-            'gh', ['pr', 'view', baseBranch, '--json', 'number,title,url', '--jq', '"\\(.number)\\t\\(.title)\\t\\(.url)"'],
+            'gh', ['pr', 'view', baseBranch, '--json', 'number,title,url,body,headRefOid'],
             { encoding: 'utf8' },
         );
         if (result.status !== 0) return null;
-        const parts = (result.stdout ?? '').trim().split('\t');
-        if ((parts[0] ?? '') === '') return null;
-        return new PrIdentity(parts[0] ?? '', parts[1] ?? '', parts[2] ?? '');
+        return this.parsePr(result.stdout ?? '');
+    }
+
+    // `gh --json` output → PrIdentity. Malformed/absent JSON reads as "no PR", which the caller turns
+    // into the same refusal a missing PR gets: both mean nothing here can be landed.
+    private parsePr(stdout: string): PrIdentity | null {
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: unparseable gh output means "no PR", never a crash
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // webpieces-disable no-any-unknown -- gh's JSON is opaque until narrowed field-by-field below
+            const raw = JSON.parse(stdout) as Record<string, unknown>;
+            const number = typeof raw['number'] === 'number' ? String(raw['number']) : this.str(raw['number']);
+            if (number === '') return null;
+            // GitHub stores descriptions with CRLF. A commit body must not carry them, and the bytes are
+            // otherwise identical to what finish rendered, so the line endings are normalized back here.
+            const body = this.str(raw['body']).replace(/\r\n/g, '\n').trim();
+            return new PrIdentity(
+                number, this.str(raw['title']), this.str(raw['url']), body === '' ? '' : body + '\n',
+                this.str(raw['headRefOid']),
+            );
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
+    }
+
+    // webpieces-disable no-any-unknown -- one opaque JSON field, narrowed to string
+    private str(value: unknown): string {
+        return typeof value === 'string' ? value : '';
     }
 }
 
-// The open PR's number, title and web URL, as read back from GitHub.
+// The open PR as GitHub holds it: its number, title, web URL, DESCRIPTION (= the gated commit body) and
+// the head commit being squashed.
 class PrIdentity {
     number: string;
     title: string;
     url: string;
+    body: string;
+    headRefOid: string;
 
-    constructor(number: string, title: string, url: string) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(number: string, title: string, url: string, body: string, headRefOid: string) {
         this.number = number;
         this.title = title;
         this.url = url;
+        this.body = body;
+        this.headRefOid = headRefOid;
     }
 }

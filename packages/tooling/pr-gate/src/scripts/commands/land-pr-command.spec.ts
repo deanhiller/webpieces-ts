@@ -3,15 +3,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-    BranchArchiver, InformAiError, MachineStateHome, PrBodyOrigin, PrBodyStore, RepoRootFinder,
-    WEBPIECES_STATE_HOME_ENV, WorktreeService, toError,
-} from '@webpieces/rules-config';
+import { BranchArchiver, InformAiError, RepoRootFinder, WorktreeService, toError } from '@webpieces/rules-config';
 
-import { LandPrCommand, LandPrOptions } from './land-pr-command';
+import { LandPrCommand } from './land-pr-command';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
+import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { MergeInfoIndex } from '../workflow/merge-info-index';
 import { MergeState } from '../workflow/merge-state';
 import { PrMerger } from '../workflow/pr-merger';
@@ -24,24 +22,29 @@ import { PrMerger } from '../workflow/pr-merger';
  * about this command: what exactly reached main's history. Nothing here touches the network, and no
  * merge is ever performed.
  *
- * The scenarios are the ones the incident produced: finish ran in the primary clone, landing happened
- * somewhere else.
+ * ─── What changed, and why the old scenarios are gone ──────────────────────────────────────────────
+ * The gated body used to be a file on THIS MACHINE (`~/.webpieces/prs/<host>/<owner>/<repo>/<n>/`), so
+ * the interesting cases were all "which tree/clone/machine is looking". Since the PR DESCRIPTION became
+ * the compact merge body, GitHub holds the bytes, and every one of those cases collapses into "ask the
+ * PR". So the machine-global scenarios are DELETED rather than ported: they were tests of a store that
+ * no longer exists. What survives is the invariant they protected — the bytes that land are the bytes
+ * finish produced — plus the bookkeeping decision, which is now re-derived from `headRefOid`.
  */
 
 const BRANCH = 'dean/feature';
 const REMOTE = 'git@github.com:acme/widgets.git';
-const GATED_BODY = 'risk: green\nflags: none\nhttps://github.com/acme/widgets/pull/604\n';
-// What a real consuming repo's PR description looks like, and what must NEVER reach a commit body.
-const PR_DESCRIPTION_MARKER = 'PR Gate Dashboard';
+// What `wp-finish-upsert-pr` publishes as the PR description, verbatim. See dashboard.renderPrBody and
+// pr-body-is-merge-body.spec.ts: this string IS both surfaces.
+const PR_DESCRIPTION = 'https://github.com/acme/widgets/pull/604 (for git log)\n\nRisk: green\n\nSummary.\n';
 
 let tmp = '';
-let stateHome = '';
 let primary = '';
 let ghLog = '';
 let ghBodyCapture = '';
 let savedCwd = '';
+let prBody = PR_DESCRIPTION;
+let prHeadOid = '';
 const savedPath = process.env['PATH'];
-const savedOverride = process.env[WEBPIECES_STATE_HOME_ENV];
 
 function git(cwd: string, ...args: string[]): string {
     return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -89,12 +92,9 @@ function makeClone(name: string): string {
 }
 
 /**
- * A real `gh` on PATH. It answers the reads this flow makes and records every invocation, and for
- * `pr merge` it copies `--body-file`'s CONTENT to a capture file — so the spec asserts the exact bytes
- * that would have reached main, not the path they came from.
- *
- * Its "PR description" answer exists purely so the fallback test can prove those bytes never appear in
- * a commit body even when they are one `gh` call away.
+ * A real `gh` on PATH. It answers `pr view --json ...` from a JSON file this spec rewrites per test —
+ * so "what GitHub says" is a first-class knob — and for `pr merge` it copies `--body-file`'s CONTENT to
+ * a capture file, so the spec asserts the exact bytes that would have reached main.
  */
 function installFakeGh(): void {
     const bin = path.join(tmp, 'bin');
@@ -105,9 +105,9 @@ function installFakeGh(): void {
         `echo "$@" >> "${ghLog}"`,
         'if [ "$1 $2" = "pr view" ]; then',
         '  case "$*" in',
-        "    *number,title,url*) printf '604\\tLand the thing\\thttps://github.com/acme/widgets/pull/604\\n' ;;",
+        `    *headRefOid*) cat "${path.join(tmp, 'pr.json')}" ;;`,
         "    *mergeable*) printf 'MERGEABLE\\tCLEAN\\tOPEN\\n' ;;",
-        `    *) printf '## ${PR_DESCRIPTION_MARKER}\\n| build | ok |\\n' ;;`,
+        "    *) printf '{}\\n' ;;",
         '  esac',
         '  exit 0',
         'fi',
@@ -124,6 +124,25 @@ function installFakeGh(): void {
     ].join('\n'));
     fs.chmodSync(gh, 0o755);
     process.env['PATH'] = `${bin}${path.delimiter}${savedPath ?? ''}`;
+}
+
+// Publish what `gh pr view --json number,title,url,body,headRefOid` should answer.
+function ghPrSays(body: string, headRefOid: string): void {
+    fs.writeFileSync(path.join(tmp, 'pr.json'), JSON.stringify({
+        number: 604,
+        title: 'Land the thing',
+        url: 'https://github.com/acme/widgets/pull/604',
+        body,
+        headRefOid,
+    }));
+}
+
+// No open PR for this head branch: `gh` exits non-zero, exactly as it does in real life.
+function ghHasNoPr(): void {
+    fs.rmSync(path.join(tmp, 'pr.json'), { force: true });
+    const gh = path.join(tmp, 'bin', 'gh');
+    fs.writeFileSync(gh, ['#!/bin/sh', `echo "$@" >> "${ghLog}"`, 'exit 1'].join('\n'));
+    fs.chmodSync(gh, 0o755);
 }
 
 class FixedRepoRootFinder extends RepoRootFinder {
@@ -148,13 +167,13 @@ function build(treeRoot: string): LandPrCommand {
         new BranchArchiver(),
         new MergeInfoIndex(new MergeState()),
         new LandedWorktreeReaper(new WorktreeService()),
-        new PrBodyStore(new MachineStateHome()),
+        new MergeBodyTempFile(),
     );
 }
 
 // Runs the command from `treeRoot`, capturing stdout. `git branch --show-current` and PrMerger both
 // read process.cwd(), so the tree we claim to be landing from has to really be the cwd.
-async function land(treeRoot: string, opts: LandPrOptions = new LandPrOptions()): Promise<string> {
+async function land(treeRoot: string): Promise<string> {
     let out = '';
     const write = process.stdout.write.bind(process.stdout);
     // webpieces-disable no-any-unknown -- stubbing node's write signature for the duration of one run
@@ -163,7 +182,7 @@ async function land(treeRoot: string, opts: LandPrOptions = new LandPrOptions())
         return true;
     }) as unknown as typeof process.stdout.write;
     process.chdir(treeRoot);
-    return build(treeRoot).run(opts).then(
+    return build(treeRoot).run().then(
         (): string => {
             process.stdout.write = write;
             process.chdir(savedCwd);
@@ -186,149 +205,198 @@ async function refusalMessage(treeRoot: string): Promise<string> {
     return thrown?.message ?? '';
 }
 
-// Simulate what `wp-finish-upsert-pr` left behind, from `treeRoot`. (MergeBodyFiler's own spec proves
-// this is the shape finish really writes.)
-function finishRanIn(treeRoot: string): void {
-    const origin = new PrBodyOrigin();
-    origin.treeRoot = treeRoot;
-    origin.primaryRoot = treeRoot;
-    origin.branch = BRANCH;
-    origin.feature = 'dean-feature';
-    origin.prNumber = '604';
-    origin.prUrl = 'https://github.com/acme/widgets/pull/604';
-    origin.writtenAt = new Date().toISOString();
-    expect(new PrBodyStore(new MachineStateHome()).write(treeRoot, '604', GATED_BODY, origin)).not.toBeNull();
-}
-
 function landedBody(): string {
     return fs.existsSync(ghBodyCapture) ? fs.readFileSync(ghBodyCapture, 'utf8') : '';
-}
-
-function fallback(): LandPrOptions {
-    const opts = new LandPrOptions();
-    opts.fallbackTitleOnly = true;
-    return opts;
 }
 
 beforeEach((): void => {
     savedCwd = process.cwd();
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-land-pr-'));
-    stateHome = path.join(tmp, 'state');
-    process.env[WEBPIECES_STATE_HOME_ENV] = stateHome;
     ghLog = path.join(tmp, 'gh.log');
     ghBodyCapture = path.join(tmp, 'landed-body.md');
     installFakeGh();
     primary = makeClone('primary');
+    prBody = PR_DESCRIPTION;
+    prHeadOid = git(primary, 'rev-parse', BRANCH);
+    ghPrSays(prBody, prHeadOid);
 });
 
 afterEach((): void => {
     process.chdir(savedCwd);
     if (savedPath === undefined) delete process.env['PATH'];
     else process.env['PATH'] = savedPath;
-    if (savedOverride === undefined) delete process.env[WEBPIECES_STATE_HOME_ENV];
-    else process.env[WEBPIECES_STATE_HOME_ENV] = savedOverride;
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-describe('wp-land-pr — the gated body is found by the PR, not by the tree', () => {
-    it('lands from the same clone with the EXACT bytes finish produced', async (): Promise<void> => {
-        finishRanIn(primary);
-
+describe('wp-land-pr — the commit body comes from the PR description', () => {
+    it('lands the EXACT bytes GitHub holds as the description', async (): Promise<void> => {
         const out = await land(primary);
 
-        expect(landedBody()).toBe(GATED_BODY);
+        expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).toContain('Landing PR #604');
         expect(out).toContain('Landed');
     });
 
-    // The incident, reproduced: finish in the primary clone, land from a linked worktree.
-    it('lands from a LINKED WORKTREE that did not render the body', async (): Promise<void> => {
-        finishRanIn(primary);
-        const worktree = path.join(tmp, 'wt-a');
-        git(primary, 'worktree', 'add', '-q', '--detach', worktree);
-        // Move the branch into the worktree — git forbids two trees holding it, which is exactly why a
-        // per-tree home for a per-branch artifact could never be right.
-        git(primary, 'checkout', '-q', 'main');
-        git(worktree, 'checkout', '-q', BRANCH);
-        writeConfig(worktree);
-
-        await land(worktree);
-
-        expect(landedBody()).toBe(GATED_BODY);
-    });
-
-    // The stronger claim: a completely different clone of the same repo on this machine.
-    it('lands from a DIFFERENT CLONE of the same repo, and declines that clone\'s bookkeeping', async (): Promise<void> => {
-        finishRanIn(primary);
+    /**
+     * The whole point of the change: no local receipt is consulted, so no local receipt can be missing.
+     * A clone that has NEVER run `pnpm wp-finish-upsert-pr` lands the reviewed bytes just the same.
+     */
+    it('lands from a clone that never rendered anything — nothing local is read', async (): Promise<void> => {
         const second = makeClone('second-clone');
 
-        const out = await land(second);
+        await land(second);
 
-        expect(landedBody()).toBe(GATED_BODY);
-        expect(out).toContain('Archive + worktree cleanup SKIPPED');
-        expect(out).toContain(primary);
-        // The wrong-objects rail: no archive tag was created in the clone that does not own the branch.
-        expect(git(second, 'tag', '--list', 'archive/*')).toBe('');
+        expect(landedBody()).toBe(PR_DESCRIPTION);
     });
 
-    it('DOES archive when the landing tree is the one that posted the PR', async (): Promise<void> => {
-        finishRanIn(primary);
+    /** GitHub stores descriptions with CRLF; a commit body must not carry them. */
+    it('normalizes CRLF out of the description before it becomes a commit body', async (): Promise<void> => {
+        ghPrSays('line one\r\nline two\r\n', prHeadOid);
 
+        await land(primary);
+
+        expect(landedBody()).toBe('line one\nline two\n');
+    });
+
+    /** The body is never re-rendered here — landing has no dashboard, no review.json, no gate. */
+    it('never regenerates the body: whatever the PR says is what lands', async (): Promise<void> => {
+        ghPrSays('BYTES ONLY THE PR COULD KNOW\n', prHeadOid);
+
+        await land(primary);
+
+        expect(landedBody()).toBe('BYTES ONLY THE PR COULD KNOW\n');
+    });
+});
+
+describe('wp-land-pr — the bookkeeping half is re-derived from headRefOid', () => {
+    it('DOES archive when this tree\'s branch is the commit the PR squashed', async (): Promise<void> => {
         const out = await land(primary);
 
         expect(out).not.toContain('SKIPPED');
         expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
     });
+
+    /**
+     * A second clone's `<branch>` is a different commit. Archiving there would tag the wrong objects
+     * under the right name — the exact defect the old `origin.json` treeRoot check existed to prevent,
+     * now caught by a fact rather than by a recorded claim.
+     */
+    it('declines the bookkeeping OUT LOUD when this tree holds a different commit', async (): Promise<void> => {
+        const second = makeClone('second-clone');
+
+        const out = await land(second);
+
+        expect(landedBody()).toBe(PR_DESCRIPTION);
+        expect(out).toContain('Archive + worktree cleanup SKIPPED');
+        expect(out).toContain(prHeadOid);
+        expect(out).toContain(git(second, 'rev-parse', BRANCH));
+        // The wrong-objects rail: no archive tag in the clone that does not hold the landed commit.
+        expect(git(second, 'tag', '--list', 'archive/*')).toBe('');
+    });
+
+    /**
+     * The case `origin.json` got WRONG and the sha check gets right: a linked worktree of the SAME
+     * clone shares git's refs, so its `<branch>` really is the landed commit and archiving from there
+     * is correct. The old check declined it purely because a different directory string was recorded.
+     */
+    it('archives from a LINKED WORKTREE of the same clone, which holds the same commit', async (): Promise<void> => {
+        const worktree = path.join(tmp, 'wt-a');
+        git(primary, 'worktree', 'add', '-q', '--detach', worktree);
+        git(primary, 'checkout', '-q', 'main');
+        git(worktree, 'checkout', '-q', BRANCH);
+        writeConfig(worktree);
+
+        const out = await land(worktree);
+
+        expect(landedBody()).toBe(PR_DESCRIPTION);
+        expect(out).not.toContain('SKIPPED');
+        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+    });
 });
 
-describe('wp-land-pr — nothing on this machine', () => {
-    it('refuses clearly, names the machine, and does NOT merge', async (): Promise<void> => {
+describe('wp-land-pr — refusals', () => {
+    it('refuses when there is no open PR, and does NOT merge', async (): Promise<void> => {
+        ghHasNoPr();
+
         const message = await refusalMessage(primary);
 
-        expect(message).toContain('PR #604 was not found on this machine');
+        expect(message).toContain('No open PR found for this branch');
         expect(message).toContain('wp-finish-upsert-pr');
-        expect(message).toContain('--fallback-title-only');
         expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
         expect(landedBody()).toBe('');
     });
 
-    it('signposts a body left by an OLDER release, loudly, and still does not read it', async (): Promise<void> => {
-        const legacy = path.join(primary, '.webpieces', 'pr-review', 'dean-feature');
-        fs.mkdirSync(legacy, { recursive: true });
-        fs.writeFileSync(path.join(legacy, 'merge-commit-body.md'), 'STALE BODY FROM THE OLD LOCATION\n');
+    it('refuses an EMPTY description rather than landing a blank commit body', async (): Promise<void> => {
+        ghPrSays('', prHeadOid);
 
         const message = await refusalMessage(primary);
 
-        expect(message).toContain('OLDER webpieces release');
-        expect(message).toContain(path.join(legacy, 'merge-commit-body.md'));
+        expect(message).toContain('has an EMPTY description');
+        expect(message).toContain('pnpm wp-finish-upsert-pr');
+        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
         expect(landedBody()).toBe('');
     });
-});
 
-describe('wp-land-pr --fallback-title-only', () => {
-    it('lands with the PR title + link, and NEVER the PR description', async (): Promise<void> => {
-        const out = await land(primary, fallback());
+    /**
+     * The TRANSITION hazard, and the reason this refusal exists at all.
+     *
+     * A PR posted by a release older than the surface swap still carries the FULL DASHBOARD as its
+     * description. Measured on this repo on 2026-08-07: PR #613 (posted after the swap) has a
+     * description byte-identical to its squash-commit body, while PR #614 — open, posted four minutes
+     * earlier — still began `## 🚦 PR Gate Dashboard`. Landing that one would put a risk table in main
+     * forever, which is exactly what `decisions/0004` § 4.1 warned against.
+     *
+     * The check is not a guess about what a dashboard looks like: it is the property
+     * `pr-body-is-merge-body.spec.ts` already pins on the renderer ("contains nothing a plain-text git
+     * log cannot carry"), read from the other end against bytes that came from outside the process.
+     */
+    it('refuses a description that is still the OLD full dashboard', async (): Promise<void> => {
+        ghPrSays('## 🚦 PR Gate Dashboard\n\n**Risk Score:** 20/100\n', prHeadOid);
 
-        const body = landedBody();
-        expect(body).toContain('https://github.com/acme/widgets/pull/604');
-        expect(body).toContain('FALLBACK COMMIT BODY');
-        // The whole reason the description was rejected as a fallback source: a PR Gate Dashboard in a
-        // squash commit is the ugly git log this mechanism exists to prevent.
-        expect(body).not.toContain(PR_DESCRIPTION_MARKER);
-        expect(out).toContain('--fallback-title-only');
+        const message = await refusalMessage(primary);
+
+        expect(message).toContain('is not a git-log commit body');
+        expect(message).toContain('markdown heading');
+        expect(message).toContain('pnpm wp-finish-upsert-pr');
+        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
+        expect(landedBody()).toBe('');
     });
 
-    it('is the ONLY way past a missing body — the flag is required, never inferred', async (): Promise<void> => {
-        expect(await refusalMessage(primary)).toContain('not found on this machine');
-        expect(await land(primary, fallback())).toContain('Landed');
+    it('refuses a description carrying a markdown TABLE, which a squash commit cannot render', async (): Promise<void> => {
+        ghPrSays('Summary\n\n| gate | result |\n|---|---|\n| build | ok |\n', prHeadOid);
+
+        const message = await refusalMessage(primary);
+
+        expect(message).toContain('markdown table');
+        expect(landedBody()).toBe('');
     });
 
-    it('is NOT used when a gated body exists — the gated bytes always win', async (): Promise<void> => {
-        finishRanIn(primary);
+    /** It must not fire on the real thing — the compact body is what finish actually publishes. */
+    it('does NOT refuse the compact gated body', async (): Promise<void> => {
+        await land(primary);
 
-        await land(primary, fallback());
+        expect(landedBody()).toBe(PR_DESCRIPTION);
+    });
 
-        expect(landedBody()).toBe(GATED_BODY);
-        expect(landedBody()).not.toContain('FALLBACK');
+    /**
+     * The DELETED escape hatch, asserted by absence.
+     *
+     * `--fallback-title-only` existed for exactly one situation: the gated bytes were on a different
+     * COMPUTER. That is unreachable now, so per the repo's no-backwards-compatibility rule the flag,
+     * its `LandPrOptions`, and the degraded body it wrote are gone rather than deprecated — and the
+     * refusal above must not teach them either (shim shape #6).
+     */
+    it('never mentions the removed --fallback-title-only escape', async (): Promise<void> => {
+        ghPrSays('', prHeadOid);
+
+        const message = await refusalMessage(primary);
+
+        expect(message).not.toContain('fallback-title-only');
+        expect(message).not.toContain('not found on this machine');
+        expect(message).not.toContain('WEBPIECES_STATE_HOME');
+    });
+
+    it('takes no options at all — `run()` is nullary, so there is nothing left to opt into', (): void => {
+        expect(build(primary).run.length).toBe(0);
     });
 });
