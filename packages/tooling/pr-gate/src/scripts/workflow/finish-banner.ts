@@ -187,11 +187,11 @@ export class FinishBanner {
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
             return '   Nothing else is owed by the tooling — a person merges it. You can stop here.\n' +
                 '\n' +
-                '   ℹ️  Clicking Merge in the GitHub UI is CORRECT here and produces the right history, as\n' +
-                '       long as this repo has both settings: squash_merge_commit_title=PR_TITLE and\n' +
-                '       squash_merge_commit_message=PR_BODY. The PR description IS the commit body this\n' +
-                '       flow rendered — compact, non-green flags only, with the PR link on top — so PR_BODY\n' +
-                '       copies exactly the right text into main.\n' +
+                '   ℹ️  Clicking Merge in the GitHub UI is CORRECT here and produces the right history. The\n' +
+                '       PR description IS the commit body this flow rendered — compact, non-green flags\n' +
+                '       only, with the PR link on top — and this flow keeps the two repo settings that copy\n' +
+                '       it into main pinned itself (squash_merge_commit_title=PR_TITLE,\n' +
+                '       squash_merge_commit_message=PR_BODY). There is nothing for you to configure.\n' +
                 '       (`pnpm wp-land-pr` lands the identical bytes from the CLI, and also archives the\n' +
                 '       pre-squash tip and reaps the worktree. Either route is fine.)\n';
         }

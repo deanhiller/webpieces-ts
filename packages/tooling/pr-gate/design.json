@@ -529,6 +529,14 @@
                     "level": 2
                 },
                 {
+                    "id": "SquashSettingsEnforcer",
+                    "className": "SquashSettingsEnforcer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/squash-settings-enforcer.ts",
+                    "level": 2
+                },
+                {
                     "id": "StartUpdateCommand",
                     "className": "StartUpdateCommand",
                     "kind": "class",
@@ -1134,6 +1142,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reviewer-verdict-gate.ts#ReviewerVerdictGate",
                     "paramName": "verdictGate",
                     "paramType": "ReviewerVerdictGate"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "SquashSettingsEnforcer",
+                    "injection": "type",
+                    "token": "SquashSettingsEnforcer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/squash-settings-enforcer.ts#SquashSettingsEnforcer",
+                    "paramName": "squashSettings",
+                    "paramType": "SquashSettingsEnforcer"
                 },
                 {
                     "from": "ForkPoint",

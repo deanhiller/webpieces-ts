@@ -267,13 +267,17 @@ describe('mergeMode NONE — "a human clicks merge" repos', () => {
      * wp-land-pr instead" — which was true only while the description held the long dashboard. Asserting
      * both setting names, not the advice, is what keeps this test honest across that inversion.
      */
-    it('names both squash_merge_commit_* settings a UI merge depends on', () => {
+    it('names both squash_merge_commit_* settings, as pinned rather than as homework', () => {
         const [outcome] = mergeIn([0], true, MERGE_MODE_NONE);
         expect(outcome.message).toContain('squash_merge_commit_title=PR_TITLE');
         expect(outcome.message).toContain('squash_merge_commit_message=PR_BODY');
         // Offered as the CLI alternative, never as a correction to clicking Merge.
         expect(outcome.message).toContain('pnpm wp-land-pr');
         expect(outcome.message).not.toContain('whole dashboard');
+        // SquashSettingsEnforcer repairs both on every run, so this must not read as a chore for the
+        // reader. "both must be set" was true for exactly one release; it is homework nobody owes now.
+        expect(outcome.message).not.toContain('both must be');
+        expect(outcome.message).toContain('Nothing to set up');
     });
 });
 

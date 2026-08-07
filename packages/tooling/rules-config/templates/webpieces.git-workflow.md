@@ -200,9 +200,15 @@ flow are not interchangeable.
    **The commit body is the PR DESCRIPTION**, which stage ③ writes as one compact string (PR link, risk,
    non-green flags, short summary, build-command footer) and reuses verbatim as its `--body-file`. The
    full dashboard and the reviewer output live in the PR's 1st and 2nd comments so they stay out of
-   `git log`. So with `squash_merge_commit_title: PR_TITLE` and `squash_merge_commit_message: PR_BODY` set
-   on the repo, this command, a bare `gh pr merge`, and the GitHub Merge button all produce identical
-   history — prefer this one for the archiving and worktree cleanup, not because the others are wrong.
+   `git log`. This command, a bare `gh pr merge`, and the GitHub Merge button therefore all produce
+   identical history — prefer this one for the archiving and worktree cleanup, not because the others are
+   wrong.
+
+   **You do not have to set anything up for that.** It relies on two GitHub repo settings
+   (`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`), and stage ③ checks and
+   repairs them on every run. They are server-side — not in `webpieces.config.json`, not on disk — so
+   there is no key to configure and nothing for you to remember; if your token lacks repo-admin rights,
+   stage ③ prints the single `gh api` command to hand to an owner.
 7. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
    backup of a merged branch, or no commits of their own). Run it after the merge lands, or any time the
    branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the

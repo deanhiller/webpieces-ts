@@ -197,16 +197,17 @@ const PR_GATE_MERGE_MODES = ['AUTO', 'NONE'] as const;
 
 // Spelled out because the choice is a POLICY decision with a consequence the chooser cannot see:
 // only the AUTO path can put the compact risk/flags body in main's history, because a UI merge is
-// limited to the repo's squash_merge_commit_title/message settings and no setting produces it.
+// composed from the repo's squash_merge_commit_title/message settings, which the tooling pins.
 const MERGE_MODE_HELP = (
         `Must be one of: ${PR_GATE_MERGE_MODES.join(', ')}.\n` +
         `  "AUTO" — wp-finish-upsert-pr lands the PR: it squash-merges when mergeable, else enables\n` +
         `           GitHub auto-merge, both with an explicit --subject/--body-file so main's history\n` +
         `           gets the PR title + the compact risk/flags body. Needs allow_auto_merge on the repo\n` +
         `           (gh api repos/{owner}/{repo} --jq .allow_auto_merge).\n` +
-        `  "NONE" — wp-finish-upsert-pr only opens/updates the PR; a human merges it. The compact body\n` +
-        `           is then impossible, so set the repo's squash_merge_commit_title to PR_TITLE or\n` +
-        `           commits land as the internal "Squash merge of <branch>" subject.`
+        `  "NONE" — wp-finish-upsert-pr only opens/updates the PR; a human merges it, and that still\n` +
+        `           lands the compact body: the PR DESCRIPTION *is* that body, and stage \u2462 keeps the repo's\n` +
+        `           squash_merge_commit_title/message pinned to PR_TITLE/PR_BODY so a UI merge copies it\n` +
+        `           verbatim (SquashSettingsEnforcer). Nothing to set by hand.`
 );
 
 // Copy-paste example for the top-level `pr-gate` block (sibling of `rules`). Kept inline rather

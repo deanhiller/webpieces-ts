@@ -195,10 +195,10 @@ export class PrMerger {
             // a mergeMode=NONE repo to stop using the UI is not, since using it is the whole policy.
             return new MergeOutcome(false, false,
                 `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
-                `      A UI merge takes the commit message from this repo's own settings, and both must be\n` +
-                `      set for main's history to read well: squash_merge_commit_title=PR_TITLE (else the\n` +
-                `      subject is not "${subject}") and squash_merge_commit_message=PR_BODY (which copies\n` +
-                `      the gated description verbatim — that IS the commit body this flow rendered).\n` +
+                `      Clicking Merge is fine and writes the right history: this flow keeps\n` +
+                `      squash_merge_commit_title=PR_TITLE and squash_merge_commit_message=PR_BODY pinned on\n` +
+                `      the repo, so the subject becomes "${subject}" and the body is the gated description\n` +
+                `      verbatim. Nothing to set up.\n` +
                 `      \`pnpm wp-land-pr\` lands the same bytes from the CLI if you would rather not click.`,
                 MERGE_RESULT_LEFT_TO_HUMAN);
         }

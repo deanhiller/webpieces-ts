@@ -36,8 +36,9 @@ function input(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
  * points and gate token in every single squash commit.
  *
  * Making them the same string is what removes the discrepancy, and it removes it WITHOUT requiring anyone
- * to remember a command: two repo settings (`squash_merge_commit_title: PR_TITLE` +
- * `squash_merge_commit_message: PR_BODY`) and the default path is correct.
+ * to remember a command OR to configure anything: it rests on two GitHub repo settings
+ * (`squash_merge_commit_title: PR_TITLE` + `squash_merge_commit_message: PR_BODY`) that
+ * SquashSettingsEnforcer pins on every stage ③ run, so the default path is simply correct.
  *
  * So this file exists to fail the moment the two renderings drift apart again. It is deliberately a
  * separate spec rather than one more case in dashboard.spec.ts: this is not a property of the renderer,
