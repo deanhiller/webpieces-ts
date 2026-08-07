@@ -117,8 +117,14 @@ export class DashboardInput {
     /**
      * `commands.pr-gate.buildCommand` VERBATIM, named in the PR-body footer so `git log` records WHICH
      * command vouched for the commit. Read from config rather than hard-coded because the footer used to
-     * assert "build ran via nx affected" on every repo, including those whose buildCommand is not nx at
-     * all. '' renders the footer without the parenthetical.
+     * assert "build ran via nx affected" on every repo, including those whose buildCommand is not nx.
+     *
+     * REQUIRED, with no default, and `checklists` lost its `= []` for the same reason. A defaulted
+     * `buildCommand: string = ''` let every pre-existing 9-argument construction keep compiling while
+     * silently rendering a footer that claims nothing — an absence that quietly means "no build was
+     * named", which is the widening-by-omission the compatibility policy calls out. Making it required
+     * means every caller states what vouched for the commit, and the empty string stays available for a
+     * repo that genuinely has no build command, but only when someone writes it down.
      */
     buildCommand: string;
 
@@ -132,8 +138,8 @@ export class DashboardInput {
         featureHead: string,
         mainHead: string,
         review: ReviewJson,
-        checklists: ChecklistRow[] = [],
-        buildCommand: string = '',
+        checklists: ChecklistRow[],
+        buildCommand: string,
     ) {
         this.title = title;
         this.gateResults = gateResults;

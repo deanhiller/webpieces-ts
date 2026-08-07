@@ -144,7 +144,6 @@ graph TD
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
     FinishUpsertPrCommand --> ReviewStageReceiptService
-    FinishUpsertPrCommand --> ReviewerInstructionsService
     FinishUpsertPrCommand --> ReviewerVerdictGate
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState

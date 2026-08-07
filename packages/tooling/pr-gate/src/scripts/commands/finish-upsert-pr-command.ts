@@ -3,11 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
-    writeTemplate, RepoRootFinder, ReviewJsonService,
-    GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
-    ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
-    ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
-    ReviewerInstructionsService,
+    writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
     InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -132,7 +128,6 @@ export class FinishUpsertPrCommand {
         private readonly gateTokenService: GateTokenService,
         // Owns the reviewer-provenance integrity check and its audit record — see ProvenanceEnforcer.
         private readonly provenanceEnforcer: ProvenanceEnforcer,
-        private readonly reviewerInstructions: ReviewerInstructionsService,
         // NOTE: ChecklistInstructionsService is deliberately NOT injected here any more. Its "You MUST run
         // these N reviewer subagent(s)" block is now rendered by ReviewerVerdictGate and ONLY for checklists
         // that genuinely never ran, so no other code path in this command can print it at a refusal.
@@ -432,9 +427,8 @@ export class FinishUpsertPrCommand {
      * Posted on EVERY run of a repo that defines checklists — including one where nothing matched, because
      * "all five were evaluated and none applied" is the good news the old comment could not deliver. The
      * guard is `scan.defined.length`, deliberately NOT the number of rows that ran: a repo with no
-     * checklists configured must still see no comment at all (see ChecklistNotice / renderDashboard).
+     * checklists configured must still see no comment at all (see ChecklistCommentRenderer).
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
     // eslint-disable-next-line @typescript-eslint/max-params
     private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): void {
         if (prNumber === '' || scan.defined.length === 0) return;

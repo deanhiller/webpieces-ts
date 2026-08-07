@@ -1128,15 +1128,6 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
-                    "to": "ReviewerInstructionsService",
-                    "injection": "type",
-                    "token": "ReviewerInstructionsService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/reviewer-instructions.ts#ReviewerInstructionsService",
-                    "paramName": "reviewerInstructions",
-                    "paramType": "ReviewerInstructionsService"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
                     "to": "ReviewerVerdictGate",
                     "injection": "type",
                     "token": "ReviewerVerdictGate",
