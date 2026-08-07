@@ -512,3 +512,36 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         expect(result).toBeInstanceOf(BlockedResult);
     });
 });
+
+/**
+ * The unconditional Write/Edit PASS for `~/.webpieces/config.json`, beside the one webpieces.config.json
+ * already has.
+ *
+ * That home file is OPTIONAL, but when it exists it is STRICTLY validated (HomeConfigService), so a bad
+ * key in it makes a `wp-*` command fail with an instruction to go and edit it. Without this pass a guard
+ * could block that edit, wedging the agent inside the failure it was told to repair — the exact wedge
+ * webpieces.config.json is immune to. The CONTROL case is what makes this non-vacuous: byte-identical
+ * content at an ordinary path is still judged.
+ */
+describe('run — the ~/.webpieces/config.json carve-out', () => {
+    // `axios` trips the shipped no-fetch match-rule, so this content is provably judged somewhere.
+    const offending = 'import axios from "axios";\n';
+    let homeRoot = '';
+
+    beforeAll(() => {
+        homeRoot = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-homepass-')));
+        initRepo(homeRoot);
+        writeGuardConfig(homeRoot, []);
+    });
+
+    it('passes a Write to ~/.webpieces/config.json unconditionally', () => {
+        const home = nodePath.join(os.homedir(), '.webpieces', 'config.json');
+        const input = new NormalizedToolInput(home, [new NormalizedEdit('', offending)]);
+        expect(run('Write', input, homeRoot, 'rules')).toBeNull();
+    });
+
+    it('CONTROL — the same content at an ordinary path is still judged', () => {
+        const input = new NormalizedToolInput(nodePath.join(homeRoot, 'src', 'x.ts'), [new NormalizedEdit('', offending)]);
+        expect(run('Write', input, homeRoot, 'rules')).toBeInstanceOf(BlockedResult);
+    });
+});

@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { AgentIdentity, CoordinatorWorktreeGuard, UNKNOWN_AGENT } from './coordinator-worktree';
@@ -104,6 +104,16 @@ function runInternal(
 
     // Always allow edits to webpieces.config.json — it's the fix target when out of sync
     if (path.resolve(input.filePath) === path.resolve(loaded.configPath)) {
+        return null;
+    }
+
+    // …and the same unconditional PASS for the OPTIONAL machine-local `~/.webpieces/config.json`, for the
+    // identical reason. That file is strictly validated when it exists (HomeConfigService), so a bad key
+    // in it makes a `wp-*` command fail with an instruction to edit it — and a guard that then blocked
+    // that edit would wedge the agent inside the failure. webpieces.config.json is immune to exactly this
+    // because of the pass above; the home config gets the same immunity rather than a different answer.
+    // Matches the absolute, `~/`, `$HOME/` and `${HOME}/` spellings alike (see isHomeConfigPath).
+    if (new HomeConfigService().isHomeConfigPath(input.filePath)) {
         return null;
     }
 

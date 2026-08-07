@@ -21,6 +21,7 @@ graph TD
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
     BuildArtifactGate["BuildArtifactGate"]
+    BuildGateLog["BuildGateLog"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistCommentRenderer["ChecklistCommentRenderer"]
     ChecklistDetector["ChecklistDetector"]
@@ -48,6 +49,7 @@ graph TD
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
+    HomeConfigService["HomeConfigService"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MergeBodyTempFile["MergeBodyTempFile"]
@@ -88,6 +90,8 @@ graph TD
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
+    BuildAffected --> BuildGateLog
+    BuildAffected --> HomeConfigService
     BuildArtifactGate --> BuildAffected
     BuildArtifactGate --> GeneratedArtifactRegistry
     BuildArtifactGate --> GitExec
@@ -127,6 +131,7 @@ graph TD
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
+    FinishUpsertPrCommand --> BuildGateLog
     FinishUpsertPrCommand --> ChecklistCommentRenderer
     FinishUpsertPrCommand --> ChecklistScanner
     FinishUpsertPrCommand --> Dashboard
