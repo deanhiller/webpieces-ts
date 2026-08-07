@@ -73,7 +73,9 @@ produced the inconsistencies documented there.
 | 5 | `BLOCK_HUMAN` | blocked; needs a human decision |
 
 Keeping 3 distinct from 1 is the point: a fail-open allow and a real allow must not look identical in
-the logs, or nobody can tell whether the guards are protecting anything or quietly abstaining. Today
+the logs, or nobody can tell whether the guards are protecting anything or quietly abstaining.
+(**Where those logs are:** [`docs/tooling-logs.md`](./docs/tooling-logs.md) — one directory per git
+tree, one file per concurrent writer.) Today
 that distinction is a **string suffix** (`… (fail-open)`) rather than a typed verdict, which is why the
 abstentions are not countable.
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 
-import { LogStream } from './log-stream';
+import { LogStream, StreamIdentity } from './log-stream';
 import { dotWebpieces } from '@webpieces/rules-config';
 
 /**
@@ -15,7 +15,7 @@ const ROOT = path.join('/tmp', 'wp-log-stream-root');
 // The full path of one log file for this identity — that is what must be unique per writer.
 function dirOf(sessionId: string, agentId: string, hook: string): string {
     const s = new LogStream();
-    s.identify(sessionId, agentId, hook);
+    s.identify(new StreamIdentity(sessionId, agentId, hook));
     return path.join(dotWebpieces.logs(ROOT), s.fileName('guard-invocations.log'));
 }
 
@@ -59,7 +59,7 @@ describe('LogStream keeps every concurrent writer in its own directory', () => {
     // The whole point of flat over nested: one glob answers each question.
     it('keeps every stream in ONE directory so a glob can select any slice', () => {
         const s = new LogStream();
-        s.identify('sess1', 'agentA', 'guards');
+        s.identify(new StreamIdentity('sess1', 'agentA', 'guards'));
         expect(s.fileName('guard-invocations.log')).toBe('sess1-agentA-guards-guard-invocations.log');
     });
 
@@ -67,7 +67,7 @@ describe('LogStream keeps every concurrent writer in its own directory', () => {
     // is passed through fileName(), not just a stem.
     it('gives the rotation sibling the same prefix', () => {
         const s = new LogStream();
-        s.identify('sess1', '', 'guards');
+        s.identify(new StreamIdentity('sess1', '', 'guards'));
         expect(s.fileName('guard-invocations.1.log')).toBe('sess1-coordinator-guards-guard-invocations.1.log');
     });
 });
@@ -86,13 +86,13 @@ describe('LogStream has NO un-split path', () => {
 
     it('never returns the historical bare filename to anyone', () => {
         const s = new LogStream();
-        s.identify('', '', '');
+        s.identify(new StreamIdentity('', '', ''));
         expect(s.fileName('guard-invocations.log')).not.toBe('guard-invocations.log');
     });
 
     it('puts every stream in the ONE shared logs directory', () => {
         const s = new LogStream();
-        s.identify('s1', 'a1', 'guards');
+        s.identify(new StreamIdentity('s1', 'a1', 'guards'));
         expect(path.dirname(path.join(dotWebpieces.logs(ROOT), s.fileName('x.log')))).toBe(dotWebpieces.logs(ROOT));
     });
 });
@@ -115,13 +115,13 @@ describe('LogStream treats payload ids as UNTRUSTED path input', () => {
 
     it('caps a hostile length', () => {
         const s = new LogStream();
-        s.identify('x'.repeat(500), '', 'guards');
+        s.identify(new StreamIdentity('x'.repeat(500), '', 'guards'));
         expect(s.fileName('a.log').split('-')[0].length).toBeLessThanOrEqual(64);
     });
 
     it('never produces an empty field', () => {
         const s = new LogStream();
-        s.identify('///', '', 'guards');
+        s.identify(new StreamIdentity('///', '', 'guards'));
         expect(s.fileName('a.log').startsWith('-')).toBe(false);
     });
 });

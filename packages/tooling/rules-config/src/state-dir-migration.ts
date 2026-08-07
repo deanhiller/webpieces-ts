@@ -79,48 +79,6 @@ export class StateDirMigrator {
     }
 
     /**
-     * Relocate every `*.log` FILE sitting directly in `hooksDir` into `logsDir` — the hooks/ → logs/
-     * split (see LOGS_STATE_DIR). Same shape and the same safety rule as {@link migrate}: `rename`
-     * first, an occupied destination is LEFT ALONE and reported, nothing is ever deleted or
-     * overwritten. Deliberately NON-recursive and extension-scoped, because the rest of `hooks/` is
-     * not log data — the dated `hooks/<YYYY-MM-DD>/writeInfo-*.md` rejection details stay exactly
-     * where they are, and a recursive sweep would drag them along.
-     *
-     * `hooksDir` normally still exists after this (it holds those dated dirs); it is removed only if
-     * draining the logs left it genuinely empty.
-     */
-    migrateLogFiles(hooksDir: string, logsDir: string): StateMigrationReport {
-        const report = new StateMigrationReport();
-        if (path.resolve(hooksDir) === path.resolve(logsDir)) return report;
-
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            if (!this.isRealDirectory(hooksDir)) return report;
-            const logs = fs.readdirSync(hooksDir, { withFileTypes: true })
-                .filter((entry: fs.Dirent): boolean => entry.isFile() && entry.name.endsWith('.log'));
-            if (logs.length === 0) return report;
-
-            fs.mkdirSync(logsDir, { recursive: true });
-            for (const entry of logs) {
-                const destination = path.join(logsDir, entry.name);
-                if (fs.existsSync(destination)) {
-                    report.kept.push(entry.name);
-                    continue;
-                }
-                this.relocate(path.join(hooksDir, entry.name), destination, entry.name, report);
-            }
-            this.removeIfEmpty(hooksDir);
-        } catch (err: unknown) {
-            const error = toError(err);
-            this.warn(`could not move logs from ${hooksDir} into ${logsDir}: ${error.message}`);
-            return report;
-        }
-
-        this.announce(hooksDir, logsDir, report);
-        return report;
-    }
-
-    /**
      * Move everything under `<legacyRoot>/<relative>` to `<targetRoot>/<relative>`.
      *
      * A whole subtree whose destination is free moves in ONE `rename` — which is what keeps an

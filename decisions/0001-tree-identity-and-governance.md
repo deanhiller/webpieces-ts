@@ -179,6 +179,18 @@ agents stepping on each other.
 
 Neither change alone satisfies the requirement. They compose.
 
+> **AS SHIPPED (2026-08-07) — the row above overstated what the state move contributed.** The
+> requirement is satisfied WITHOUT moving anything out of the repo, because the discriminator that
+> matters is `session_id` + `agent_id` in the FILENAME, and "one place" is already true of
+> `<primary>/.webpieces/**/logs/` — the state dir is anchored at the primary clone, so a worktree's
+> logs are not scattered and they outlive `git worktree remove`. What #602 shipped, and what stands
+> after D1 was reversed, is `LogStream`'s FLAT name in that in-repo directory:
+> `<sessionId>-<agentId|coordinator>-<hook>-<base>.log`. Flat rather than the nested
+> `logs/sessions/<id>/<agent>/` sketched below, so "everything that happened, in time order" is one
+> `ls` instead of a directory walk. A third dimension the sketch missed — the two PreToolUse hooks
+> Claude Code runs IN PARALLEL on every edit — is in there too. See
+> [`docs/tooling-logs.md`](../docs/tooling-logs.md).
+
 ### 3.1 `agent_id` alone is NOT enough — four coordinators collide
 
 `agent_id` is present **only inside a subagent**; its absence is exactly how `AgentIdentity.coordinator`
@@ -214,14 +226,54 @@ directory stops encoding it.
 
 **D1 — State moves out of the repo, to `~/.webpieces/<flattened-absolute-primary-path>/`.**
 
-> **STATUS: NOT IMPLEMENTED — the one thing that shipped under it has been REVERTED (2026-08-07).**
-> Briefly, the gated squash-commit body was written outside the repo at
-> `~/.webpieces/prs/<host>/<owner>/<repo>/<prNumber>/merge-commit-body.md`. That store is DELETED, and
-> so is the `MachineStateHome` resolver that located it — see
-> [0005](0005-the-pr-description-is-the-merge-body.md). **There is no machine-global resolver to reuse;
-> a future mover would have to write one.** Everything webpieces writes — `merged-branches.json`, the
-> main-sync pair, `merge-info/`, `pr-review/`, the logs, and now the merge body's temp file — is inside
-> the clone under `DotWebpieces`.
+> ## ⛔ D1 IS REVERSED (2026-08-07). State STAYS in `{repo}/.webpieces/`.
+>
+> Taken 2026-08-06, landed as one artifact by `5cdd497` (#602), never implemented beyond that, and
+> now abandoned. **The original text is kept below verbatim** — an ADR is a historical record, and
+> the reasoning that led here is worth being able to re-read. It is no longer the direction.
+>
+> The machine-global tier was deleted outright, not just left unused. #616 removed `MachineStateHome`,
+> `PrBodyStore` and the `~/.webpieces/prs/<host>/<owner>/<repo>/<prNumber>/merge-commit-body.md` layout,
+> superseded [0004](0004-pr-artifacts-are-machine-global.md) and removed D3's `WEBPIECES_STATE_HOME`
+> override — see [0005](0005-the-pr-description-is-the-merge-body.md). **So there is no machine-global
+> resolver left to reuse: a future mover would have to write one from scratch.** Everything webpieces
+> writes — `merged-branches.json`, the main-sync pair, `merge-info/`, `pr-review/`, the logs, and now
+> the merge body's temp file — is inside the clone, under `DotWebpieces`.
+>
+> **D1's premise does not hold.** Its whole structural argument was jurisdiction: both file-scoped
+> guards declare `files = ['**/*']` (`read-stale-guard.ts:81`, `feature-branch-guard.ts:39`) and
+> exempt only `webpieces.config.json`, so a write into `.webpieces/pr-review/**` is judged like any
+> other write. D1 read that as a defect to be routed around by relocating the files.
+>
+> It is not a defect. Verified against the real rejection detail (2026-08-07): the observed block on a
+> reviewer's verdict write was `feature-branch-guard` reporting a genuine STALE FORK POINT — main had
+> moved and touched five files the branch also changed — and it refused every write in that session,
+> `.webpieces` and `packages/**` and `backlog/**` alike. `.webpieces` was never singled out. Blocking
+> that write is the most valuable of the three, because **a reviewer verdict written from a stale fork
+> point is a review of the wrong diff**; letting it through would file an authoritative-looking GREEN
+> for code that no longer matches main. The cure is to merge main in, which is what the guard says.
+>
+> (The Bash-side scanner does carry a `.webpieces/` carve-out — `content-read-scan.ts:154` — and the
+> file-scoped guards do not. That difference is deliberate and long-standing: the two guards answer
+> different questions and correctly have different exemptions. It is not an open defect and nothing
+> here proposes changing it.)
+>
+> **Where a review that must not be subject to this clone's branch state goes instead**, in Dean's
+> words: *"we are keeping it in the repo AND use another claude in another repo to review in that repo
+> instead."* The reviewing session runs in a SEPARATE clone, so its guards are evaluated against THAT
+> clone's branch and sync state. This is the actual working pattern here — several clones of this repo
+> (`webpieces-ts30`, `-ts40`, `-ts50`) already run side by side — not a hypothetical.
+>
+> **Why the OTHER motivation evaporated.** The concrete thing that drove state out of the repo first
+> was landing a PR from a tree that had not rendered its merge body. #611 (`884a384`) solved that
+> differently: the PR description IS the squash-commit body, so `gh pr view <n> --json body` is
+> authoritative and no local receipt is needed anywhere.
+>
+> **What D1 did leave behind, and which stands.** The 12-agent analysis in § 3 is independent of where
+> the state root sits — it is about the FILENAME, not the directory. It shipped in #602 as
+> `LogStream`'s flat `<sessionId>-<agentId|coordinator>-<hook>-<base>` scheme inside
+> `{repo}/.webpieces/**/logs/`, and it is the reason 12 concurrent agents no longer tear one file. See
+> [`docs/tooling-logs.md`](../docs/tooling-logs.md).
 
 
 Key is the primary clone's absolute path with `/` → `-`, the same scheme Claude Code uses for its own
@@ -273,7 +325,10 @@ containers/sandboxes with no writable `$HOME`, and as "put it back in the tree" 
 that. Fall back to `<primary>/.webpieces` when `$HOME` is missing or unwritable — this is on the hook's
 blocking path and must never throw.
 
-**D4 — Hard cut, no compatibility reads.** Per CLAUDE.md § "webpieces.config.json is NEVER released
+**D4 — Hard cut, no compatibility reads.** *(MOOT 2026-08-07 — D4, D2 and D6 exist only to serve D1's
+relocation, and D1 is reversed. Nothing relocates, so there is no destination to signpost, no key to
+flatten and no identity for the shim to derive. The general principle D4 states — one location, never
+a compatibility read — is unaffected and is CLAUDE.md's, not D1's.)* Per CLAUDE.md § "webpieces.config.json is NEVER released
 backwards-compatible", the new location is the only location. **But not silent:** if
 `<primary>/.webpieces/` still exists, fail loudly once naming the destination ("state moved to
 `~/.webpieces/<key>` — move or delete `<primary>/.webpieces/`"). Never read it, never merge it. That is
@@ -343,7 +398,10 @@ artifact half. Explicitly out of scope for D1 — writes to
 `<primary>/.claude/worktrees/agent-X/src/foo.ts` are still judged against the primary's branch after
 D1 lands.
 
-**O3 — Orphaned state dirs.** After D1, `rm -rf <clone>` no longer reaps its state. Plan: an
+**O3 — Orphaned state dirs.** *(CLOSED 2026-08-07 as a consequence of the D1 reversal: state never
+leaves the clone, so `rm -rf <clone>` reaps it again, which is what O3 wanted to preserve. The
+`~/.webpieces/prs/` half described in the note below goes away with the machine-global tier — see the
+sibling PR that supersedes [0004](0004-pr-artifacts-are-machine-global.md).)* After D1, `rm -rf <clone>` no longer reaps its state. Plan: an
 `origin.json` marker per key dir naming the primary path, and `cleanTmp` reaps keys whose primary no
 longer exists. Gets strictly better than today — one sweep covers every repo, including ones you can
 no longer `cd` into.
@@ -369,7 +427,7 @@ living in `.git/info/exclude`? Affects consumers, not this repo.
 | option | why not |
 |---|---|
 | **Co-locate artifacts inside the agent's git worktree** (option 3 of the backlog bug) | Makes tooling output source-adjacent, needs a `.gitignore` *there*, and deepens the two-directories-called-worktree ambiguity instead of removing it. |
-| **Exempt `.webpieces/**` inside each guard** | Correct and ~30 lines, but it is a carve-out every future file-scoped guard must remember to honour — and the family already has four. D1 makes it structural. Kept in mind as the fallback if D1 stalls. |
+| **Exempt `.webpieces/**` inside each guard** | Correct and ~30 lines, but it is a carve-out every future file-scoped guard must remember to honour — and the family already has four. D1 makes it structural. Kept in mind as the fallback if D1 stalls. *(2026-08-07, with D1 reversed: still not taken, and no longer wanted. The blocks this was meant to relieve turned out to be correct stale-fork-point verdicts — see the D1 reversal block — so exempting `.webpieces/**` would suppress a true finding rather than a false one.)* |
 | **A symlink `<worktree>/.webpieces` → the real dir** | Already rejected once, for reasons that still hold — see `state-dir.ts:68-76`. `rename(2)` acts on the path, not the link, so atomic writes silently replace the symlink with a real file and diverge. |
 | **Key state by git remote URL** | Merges two clones of the same repo, which have different branches, worktrees and in-flight merges. |
 | **`cd … && pwd -P` to normalise git dirs in the shim** | Resolves symlinks; `path.resolve()` in the TS twin does not. Would re-introduce sh/TS divergence on symlinked repo paths. |

@@ -89,9 +89,18 @@ export class BranchMutationLog {
      * logs in the same directory: Claude Code runs every matching PreToolUse hook IN PARALLEL, and
      * several agents and sessions can share one tree, so a per-worktree name there had several
      * concurrent writers. Those names now carry a `<sessionId>-<agentId|coordinator>-<hook>-` prefix
-     * (ai-hook-rules' LogStream). This file keeps a bare name deliberately — LogStream lives in
-     * ai-hook-rules, which DEPENDS on rules-config, so the import direction forbids reusing it here.
-     * If this log ever gains a second concurrent writer, it needs its own stream identity first.
+     * (ai-hook-rules' LogStream), and the rejection DETAIL files sit in a directory of that same name.
+     *
+     * This file keeps a bare name deliberately, for TWO independent reasons, and neither has gone away
+     * (re-checked 2026-08-07). First, LogStream lives in ai-hook-rules, which DEPENDS on rules-config,
+     * so the import direction forbids reusing it here. Second — and this is the one that would still
+     * bite after moving the class down — the `wp-*` bins that write this file have NO session or agent
+     * identity to prefix with: those ids reach a PreToolUse hook on its JSON payload and a plain Bash
+     * tool call never sees them. Routing this through LogStream today would therefore produce
+     * `unknown-coordinator-hook-branch-mutations.log`: one shared file, exactly as now, under a longer
+     * name, plus a rename of a log people already grep. If this log ever gains a second concurrent
+     * writer, it needs a real stream identity FIRST — the prefix is only worth having when it
+     * discriminates.
      *
      * Nothing is lost by keeping it local: under the `worktrees/<name>/` layout the log lives in the
      * PRIMARY clone, so it survives `git worktree remove`, and the whole history is one glob —
