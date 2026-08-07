@@ -5,7 +5,8 @@ import { dotWebpieces } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // EXPERIMENTAL (opt-in via `~/.webpieces/config.json` → experimental.buildGateLogCapture). Nothing in this
-// file runs for a user who has not created that file — see UserWebpiecesConfigReader.
+// file runs for a user who has not created that OPTIONAL file — see `HomeConfigService`
+// (`@webpieces/rules-config`), which returns all-defaults silently when it is absent.
 //
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
 // The build gate already builds everything. When it fails, the pre-existing message says "run THIS exact
