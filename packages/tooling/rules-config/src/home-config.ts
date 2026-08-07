@@ -85,9 +85,22 @@ export class HomeConfig {
      */
     wholeRepoBuildGuard: boolean;
 
-    constructor(buildGateLogCapture = false, wholeRepoBuildGuard = false) {
+    // BOTH required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
+    // typechecks with a changed meaning is exactly the shim this repo does not ship. The absent-file
+    // state has ONE construction point: allDefaults().
+    constructor(buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean) {
         this.buildGateLogCapture = buildGateLogCapture;
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
+    }
+
+    /**
+     * The config of a machine with NO `~/.webpieces/config.json` — every flag off, every behaviour the
+     * one it had before this file existed. Named, because "all defaults" is a real state this codebase
+     * asserts about, and because it is the one place a new flag's absent value is decided.
+     */
+    static allDefaults(): HomeConfig {
+        return new HomeConfig(false, false);
     }
 }
 
@@ -150,7 +163,7 @@ export class HomeConfigService {
      */
     load(homeDir: string = os.homedir()): HomeConfig {
         const raw = this.readIfPresent(this.configPath(homeDir));
-        if (raw === null) return new HomeConfig();
+        if (raw === null) return HomeConfig.allDefaults();
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
 
