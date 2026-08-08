@@ -268,11 +268,6 @@
             "mode": "ON",
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
-        },
-        "whole-repo-build-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
         }
     },
     "commands": {
