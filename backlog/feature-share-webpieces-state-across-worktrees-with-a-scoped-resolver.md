@@ -147,5 +147,13 @@ Over **real git repos with real linked worktrees** (`worktree-reaper.spec.ts` an
 - only ONE refresher runs when several worktrees start at once, and a stale lock is recoverable
 - a legacy per-worktree `.webpieces/` migrates without losing an in-flight `merge-info/`
 
-Run `pnpm run build-all` with **`NX_PARALLEL=1`** — under parallel agent load vitest's reporter RPC
-starves and yields `Timeout calling "onTaskUpdate"` on runs where every test passed.
+Verify with the affected build — `pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)`.
+
+This paragraph used to prescribe `pnpm run build-all` with **`NX_PARALLEL=1`**, on the theory that vitest's
+reporter RPC starves under parallel agent load. Both halves are now wrong and it is removed rather than
+softened. `NX_PARALLEL=1` was never measured to work — every agent that tried it found it did not, and it
+ran 2.3× slower (see
+[`bug-parallel-subagents-in-worktrees-collapse-the-build-gate`](./bug-parallel-subagents-in-worktrees-collapse-the-build-gate.md) §5).
+The starvation it was meant to dodge was upstream bug vitest-dev/vitest#8164 and is fixed in vitest 4.1.6+,
+which this repo has been on since #535. `build-all` is separately the wrong command here — CLAUDE.md's
+"Build Verification" requires the affected build, which is what the PR gate itself runs.
