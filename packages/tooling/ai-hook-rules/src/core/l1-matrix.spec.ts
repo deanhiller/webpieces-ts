@@ -195,7 +195,8 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
         expect(row.num).toBe(8);
         expect(row.cure?.runnable).toBe(false);
         const skew = stageSkew();
-        const tree = new EffectiveTree(skew.main, skew.worktree, skew.worktree, skew.main, 'worktree');
+        const tree = new EffectiveTree(
+            skew.main, skew.worktree, skew.worktree, skew.main, skew.main, 'worktree');
         const report = new VersionSyncGuard().block('pnpm build', tree);
         expect(report).not.toBeNull();
         expect(report).toContain(row.cure?.denyMention);
@@ -242,11 +243,16 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
             ['ls -la', 'worktree', skew],       // skewed worktree, inspection -> allow
             ['pnpm build', 'worktree', same],   // aligned worktree -> allow
             ['pnpm build', 'primary', skew],    // main tree is never this guard's business
+            // The RESIDENT agent: cwd IS the worktree, so the worktree's own tracked config governs it.
+            // K is still `w` (git's answer), and the comparison is still against the main clone.
+            ['pnpm build', 'resident', skew],
+            ['ls -la', 'resident', skew],
         ];
         for (const [command, kind, dirs] of cases) {
+            const governed = kind === 'resident' ? dirs.worktree : dirs.main;
             const tree = new EffectiveTree(
-                dirs.main, dirs.worktree, dirs.worktree, dirs.main,
-                kind === 'worktree' ? 'worktree' : 'primary',
+                dirs.main, dirs.worktree, dirs.worktree, governed, dirs.main,
+                kind === 'primary' ? 'primary' : 'worktree',
             );
             const blocked = guard.block(command, tree) !== null;
             const classification = L1Classification.forEnforcement(
@@ -318,9 +324,14 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
  *
  * THIS IS THE TEST THAT WAS MISSING, and its absence is why a guard bypass shipped. Every other
  * assertion in this file hand-constructs its input (`new EffectiveTree('/repo', '/wt', '/wt', '/repo',
- * 'worktree')`), so the whole matrix passed while `classify()` never emitted `'worktree'` for the only
- * worktree layout the harness produces — it emitted `'foreign'`, which row 1 exempts. A matrix spec that
- * builds its own inputs can never catch an input bug. Do not "simplify" these back to literals.
+ * '/repo', 'worktree')`), so the whole matrix passed while `classify()` never emitted `'worktree'` for the
+ * only worktree layout the harness produces — it emitted `'foreign'`, which row 1 exempts. A matrix spec
+ * that builds its own inputs can never catch an input bug. Do not "simplify" these back to literals.
+ *
+ * It happened a SECOND time for the same reason (2026-08-10): `classify()` answered `'primary'` whenever
+ * the judged tree also owned the config — which is every worktree an agent LIVES in — so row 8 was
+ * unreachable for exactly those agents. `rowForFrom()` below drives the resolver from the worktree's own
+ * cwd, which is the input shape the hand-built cases could not express.
  */
 describe('L1 end to end — a REAL linked worktree, resolved and then classified', () => {
     let primary: string;
@@ -351,7 +362,16 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
 
     // The runner's own translation, reproduced so the chain under test is resolver → classification → row.
     function rowFor(command: string, versionsSkewed: boolean): number {
-        const tree = new EffectiveTreeResolver().resolve(command, primary, primary);
+        return rowForFrom(primary, primary, command, versionsSkewed);
+    }
+
+    /**
+     * The same chain for an agent that LIVES in the tree: cwd is the worktree, and `governedRoot` is the
+     * worktree too, because a worktree carries its own tracked `webpieces.config.json`.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params -- cwd + governed root + the two rowFor inputs
+    function rowForFrom(cwd: string, governedRoot: string, command: string, versionsSkewed: boolean): number {
+        const tree = new EffectiveTreeResolver().resolve(command, cwd, governedRoot);
         return firstMatchingL1Row(L1Classification.forEnforcement(
             tree.kind,
             versionsSkewed,
@@ -363,6 +383,16 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
 
     it('an in-repo `.claude/worktrees/**` tree reaches ROW 8 when skewed, never row 1', () => {
         expect(rowFor(`cd ${agentTree} && pnpm build`, true)).toBe(8);
+    });
+
+    /**
+     * THE MEASURED HOLE: the agent is INSIDE the worktree and the worktree governs itself. This used to
+     * classify `p`, so row 8 (`w`) could not match and the skewed tree worked on unblocked.
+     */
+    it('an agent whose cwd IS the worktree reaches ROW 8 too — self-governance is not primacy', () => {
+        expect(rowForFrom(agentTree, agentTree, 'pnpm build', true)).toBe(8);
+        // …and it is still handed DOWN when the versions agree, exactly like the `cd`-in form.
+        expect(rowForFrom(agentTree, agentTree, 'pnpm build', false)).toBe(4);
     });
 
     it('…and is handed DOWN for a subagent — governed, not exempt (row 1 would mean every guard off)', () => {
