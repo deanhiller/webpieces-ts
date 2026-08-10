@@ -1,3 +1,56 @@
+> # ✅ RESOLVED — re-vetted **2026-08-10**, does not reproduce. Kept as a forensic record only.
+>
+> Both mechanisms this report describes were fixed by the two PRs that landed immediately after it was
+> filed. Nothing below is actionable; the numbers and transcripts are retained because they are the
+> measurement that justified those fixes, and because §5's debunking of `NX_PARALLEL=1` is still the
+> reason nobody should re-add it.
+>
+> **The §1 mechanism (the 60 s `onTaskUpdate` deadline) is gone — it was an upstream bug, not load.**
+> `63d1027` (#535) upgraded `vitest` `3.2.4` → `4.1.10`. The report's premise — *"`DEFAULT_TIMEOUT = 6e4`
+> … with **no config knob**"* — was correct but incomplete: vitest's `forks.ts` passed the `node:v8`
+> module in as birpc options, `v8` has no `timeout` property, so birpc silently fell back to the 60 s
+> default (vitest-dev/vitest#8164). Upstream #8297 passes `timeout: -1`, shipped in `4.1.6`. The deadline
+> no longer exists at any wall time, which retires recommendations **B.4, B.5, B.6, B.7, C.10** — every
+> one of them bought headroom under a limit that is no longer there. `vitest.config.mts` carries the full
+> reasoning and the "do not downgrade below 4.1.6" note; that comment block is the durable fix.
+>
+> **Re-measured under the exact reported condition.** 2026-08-10, 16-core Mac, **three concurrent linked
+> worktrees** off one `.git` with sibling agents running their own suites, 5–10 concurrent `vitest`
+> processes:
+>
+> ```
+> $ pnpm nx run-many -t test -p rules-config pr-gate --skip-nx-cache
+>  Test Files  39 passed (39)
+>       Tests  452 passed (452)
+>    Duration  161.88s
+>  NX   Successfully ran target test for 2 projects
+> ```
+>
+> **161.88 s — 2.7× past the 60 s cliff this report identifies as the binding constraint — exit 0, zero
+> `Timeout calling "onTaskUpdate"`.** These are the same two projects §1 measured at 60.5 s and 73.8 s and
+> called the only two that ever failed. Under the old deadline this run could not have passed.
+>
+> **The §7 shared-state mechanism is gone too.** `925962c` (#533) — which is, note, the very commit this
+> report lists as its "Version seen" — introduced `DotWebpieces` (`rules-config/src/state-dir.ts`), the
+> single resolver with two explicit scopes: `shared()` → `<primary>/.webpieces`, `local()` →
+> `<primary>/.webpieces/worktrees/<git worktree name>/`. `3f7a93d` (#632) then made tree identity come
+> from git's own `--git-dir` / `--git-common-dir` rather than a derived path. Audited 2026-08-10: exactly
+> three paths are `shared()` — `merged-branches.json`, `main-sync-status.json`, `main-sync.lock.json`,
+> all repo-wide facts by design — and everything else is `local()`, including the build-gate log, the
+> merge-info state, `pr-review/`, `instruct-ai/` and every log stream. No gate state is keyed by anything
+> two worktrees can collide on.
+>
+> **The nx-discovery hazard is closed.** `de6c0ac` (#625) added the narrow `.claude/worktrees/` entry at
+> `.gitignore:115` — narrow on purpose, since `.claude/agents/**` and `.claude/review/**` are tracked and
+> define the required reviewer. Verified with three live worktrees: `nx show projects` returns 28 with
+> zero duplicates, so nx is not walking the nested checkouts.
+>
+> **What was NOT a code defect and remains true:** the workflow findings in **A.1–A.3** (cap concurrent
+> agents, never propagate an unmeasured workaround, no unattended retry loops) and §6's self-inflicted
+> waste. Those are orchestrator and prompt concerns, not repo code, and no PR can close them.
+>
+> The remaining §7 observations were each filed as their own backlog entries and are tracked there.
+
 # BUG: eight parallel subagents in worktrees collapse the build gate — a green test suite exits non-zero, and every agent reads it as "I broke something"
 
 **Package:** `vitest@3.2.4` (worker→reporter RPC) + `@webpieces/pr-gate` (`wp-review-upsert-pr` build gate)
