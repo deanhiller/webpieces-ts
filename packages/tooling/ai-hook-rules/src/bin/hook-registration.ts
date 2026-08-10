@@ -39,9 +39,10 @@ import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
  * Nothing is lost that was ever delivered — but the case relative registration WANTED to handle (a tree
  * that genuinely needs a different @webpieces) is now DETECTED instead of silently mis-governed:
  * `VersionSyncGuard` (L1 row 8) blocks when a worktree's pin disagrees with the main tree's, and
- * prescribes either aligning the pins (same git hash → same tracked pin → one install in the main tree)
- * or using a separate CLONE, which — unlike a worktree — really does get its own node_modules and its
- * own governance.
+ * prescribes either aligning the pins (same git hash → same tracked pin → install in each tree that has
+ * a node_modules) or using a separate CLONE, which — unlike a worktree — gets its own GOVERNANCE. Note
+ * what that does NOT say: a worktree may perfectly well have its own node_modules, and usually does the
+ * moment anything installs in it. What it may not have is a DIFFERENT @webpieces version.
  *
  * ─── Why the registration is a DRIFT SURFACE, not just an install step ─────────────────────────────
  * Nothing used to validate `.claude/settings.json` at all, so a settings file left on a superseded form

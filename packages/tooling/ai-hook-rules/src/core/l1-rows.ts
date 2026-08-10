@@ -225,14 +225,14 @@ export const L1_ROWS: readonly L1Row[] = [
     // re-point every historical reference. Its replacement is row 8.
     new L1Row(8, 'w', 'n', 'n', '-', '-', ACT_BLOCK,
         'this worktree pins a DIFFERENT @webpieces than the main tree that governs it',
-        new L1Cure('align the pins (same git hash -> same tracked pin -> one install in the main tree), work in the main tree, or use a separate clone',
+        new L1Cure('align the pins (same git hash -> same tracked pin -> install in each tree), work in the main tree, or use a separate clone',
             '@webpieces version SKEW', false),
         'trinary-version-skew', [
             new L1UseCase(12,
                 'a worktree on an older branch pins `0.4.612` while the main tree runs `0.4.616`, and `cd <wt> && pnpm build` is blocked',
                 '`w` / `n` / `n` — row 8',
                 'BLOCK_AI_CURE',
-                'Option 1 (preferred): `git pull` BOTH trees onto the same main, then ONE `pnpm install` in the MAIN tree — the pin is tracked, so the same commit gives the same version and a worktree needs no install of its own<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a different version, use a separate CLONE — a clone gets its own node_modules and its own governance; a worktree borrows the main tree\'s and cannot<br>Do NOT: lower the MAIN tree\'s pin to match — that downgrades every tree, including this session\'s own governor',
+                'Option 1 (preferred): `git pull` BOTH trees onto the same main, then `pnpm install` in each tree that has a node_modules — the pin is tracked, so the same commit gives both trees the same version<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a DIFFERENT version, use a separate CLONE — a clone gets its own governance. That is the answer to "I need a different version", never to "I need to install here": a worktree MAY have its own node_modules (nx, vitest and the eslint plugin all load from it), it just may not hold a different @webpieces version<br>Do NOT: lower the MAIN tree\'s pin to match — that downgrades every tree, including this session\'s own governor',
                 new L1Classification('w', true, false, false, false)),
             new L1UseCase(16,
                 'a SUBAGENT hits the same block inside `.claude/worktrees/agent-XXXX`',

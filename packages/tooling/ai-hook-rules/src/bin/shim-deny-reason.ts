@@ -39,6 +39,22 @@ import { NO_CHAINING_RULE, SHIM_MARKER } from './shim';
 // these two fields is what sent a real agent chasing the wrong mechanism for four cures. Same field
 // names on purpose, so the deny text and the log lines grep together.
 //
+// THE MESSAGE DIET IS PART OF THE CONTRACT, and this deny is where it regresses. main landed a
+// deliberate L0 message diet (384cdae) and blocks grow straight back into a wall of text when each new
+// finding argues its case here; at eleven sections this one was ~4,000 chars, and `denyBudget` in
+// shim-deny-reason.spec.ts now fails the build if it climbs back. Keep what CHANGES what the reader
+// types (the two exact commands, that it is not a deadlock, the no-chaining rule, root=/projectDir=);
+// cut what merely argues. What was cut and why:
+//   - the "up to and including 0.4.588 OPTION 1 was inert, so EMPTY OUTPUT means it did not run"
+//     paragraph. It was UNREACHABLE by construction: this text and `wp-upgrade-shim` ship in the SAME
+//     package at the SAME version, so a binary new enough to print this sentence necessarily has the
+//     process entry point 0.4.589 added. The incident is still recorded where it can bite —
+//     bin-process-entry.spec.ts, which asserts the entry point exists.
+//   - the "registered ABSOLUTE / a worktree borrows by walking up" aside. That is the DRIFT fault's
+//     subject (WP_BORROW_NOTE in shim.ts) and it is restated in the guard-matrix doc this deny points at.
+//   - "they are GENERATED and committed ... must NOT be reverted by hand", which said twice over what
+//     the closing sentence already says once.
+//
 // CONSTRAINT: the returned string must contain no `"` and no `\` — it is JSON-serialized by denyJson()
 // (a stray quote/backslash would corrupt the PreToolUse decision payload, not just the text). That is an
 // INVARIANT, not a hope, so every interpolated path is STRIPPED of both rather than trusted — a
@@ -47,11 +63,33 @@ import { NO_CHAINING_RULE, SHIM_MARKER } from './shim';
 //
 // `inSubagent` comes from the PreToolUse payload's `agent_id`, which Claude Code delivers on stdin and
 // populates ONLY off the main loop (main falls back to the session id, so the field is absent there).
-// `agent_type` is NOT usable for this — it is always populated and discriminates nothing. A subagent
-// needs one extra sentence, because the hooks that are blocking it resolve through $CLAUDE_PROJECT_DIR,
-// which names the MAIN tree: a cure run only in its own worktree cannot lift the block. It is a
+// `agent_type` is NOT usable for this — it is always populated and discriminates nothing. It is a
 // REQUIRED parameter for the same reason `drifted` is — an optional flag would let a caller keep
 // emitting the main-loop text from a subagent, which is the case that most needs the extra line.
+//
+// THE SUBAGENT SENTENCE REASONS FROM root= vs projectDir=, IT DOES NOT ASSERT A FIXED CONCLUSION. It
+// used to say flatly "the hooks resolve through CLAUDE_PROJECT_DIR, which names the MAIN tree, so a cure
+// run only here CANNOT lift this block". That is a POST-FLIP fact stated during the PRE-FLIP window, and
+// it is FALSE exactly when it fires: measured 2026-08-10, a worktree subagent hit fault S, ran OPTION 1
+// in ITS OWN worktree, and the block lifted — because the registration still in force was the RELATIVE
+// three-hook form, so the worktree's own ai-hook.sh ran against the worktree's own node_modules. The
+// deny's own `root=` field named the worktree while the sentence insisted otherwise.
+// WHICH tree to cure is already answered, for BOTH windows, by the root=/projectDir= verdict above:
+// committedShimStale compares shimPath(root) and `root` is the tree the RUNNING binary came from, so
+// repairing the root= tree clears the fault whichever registration form is live, and the cure is
+// cd-anchored there. Telling an agent its cure cannot work, while it demonstrably can, costs more than
+// saying nothing.
+//
+// SO THE SUBAGENT SENTENCE CARRIES THE PART THAT IS ACTUALLY SUBAGENT-SPECIFIC: there are TWO real
+// cures and they fix different things. A — run the printed cure here; it works, and it makes THIS tree
+// work NOW. B — a subagent cannot reach the main clone, so aligning the two trees is an ESCALATION
+// ("ask the coordinator to run pnpm install in the main tree"), and that is what stops the trees
+// disagreeing. Doing only A leaves the repo with two trees on two @webpieces releases — the live state
+// on 2026-08-10, main clone on 0.4.616 while origin/main and three worktrees were on 0.4.624. And the
+// rule it states is deliberately NOT "do not install in a worktree": a worktree NEEDS its own
+// node_modules (nx, vitest and the eslint plugin all execute there and load from it). The rule is that
+// its @webpieces must EQUAL the main tree's — the older WP_BORROW_NOTE wording got this backwards in
+// both directions at different times.
 // webpieces-disable no-function-outside-class -- pure string builder over exported constants; the single source of the self-guard deny text now that the sh copy is gone.
 export function shimStaleDenyReason(installedVersion: string, root: string, drifted: readonly string[], inSubagent: boolean): string {
     const verNote = installedVersion ? ` (installed version ${installedVersion})` : '';
@@ -66,15 +104,18 @@ export function shimStaleDenyReason(installedVersion: string, root: string, drif
     // guard was rewritten to make unconstructible, so it gets said out loud rather than left to inference.
     const verdict = safeRoot === projectDir
         ? 'These two AGREE, so this is the ordinary case - the tree you are in is the tree being judged.'
-        : 'These two DISAGREE - the tree being judged is NOT the one CLAUDE_PROJECT_DIR names, so cure the root= tree specifically and do not assume your current directory is it.';
-    const rootNote = safeRoot === '' ? '' : ` WHERE THIS WAS MEASURED: root=${safeRoot} (the tree the RUNNING guard binary itself came from - that is the tree whose shim must change), projectDir=${projectDir} (CLAUDE_PROJECT_DIR as this process sees it; <unset> means the variable is absent, which is not the same as set-but-empty). ${verdict}`;
+        : 'These two DISAGREE - the tree being judged is NOT the one CLAUDE_PROJECT_DIR names, so cure the root= tree and do not assume your cwd is it.';
+    const rootNote = safeRoot === '' ? '' : ` WHERE THIS WAS MEASURED: root=${safeRoot} (the tree whose shim was compared - the one to repair), projectDir=${projectDir} (CLAUDE_PROJECT_DIR as this process sees it; <unset> = absent, not set-but-empty). ${verdict}`;
     const upgrade = cdOk ? `cd ${safeRoot} && ${UPGRADE_SHIM_CMD}` : UPGRADE_SHIM_CMD;
     // OPTION 2 is a relative-path `cp`, so it is even MORE cwd-sensitive than OPTION 1 — anchor it too.
     const restore = cdOk ? `cd ${safeRoot} && ${RESTORE_SHIM_CMD}` : RESTORE_SHIM_CMD;
     // The subagent sentence goes BEFORE the options, so it is read before a cure is chosen rather than
-    // after one has already been run in the wrong tree.
+    // after one has already been run in the wrong tree. WHICH tree is already answered by `verdict`
+    // above, from root= vs projectDir=; this adds only what is specific to a subagent — that A and B are
+    // BOTH real and fix different things, and that B is an ESCALATION because a subagent cannot reach
+    // the main clone.
     const subagentNote = inSubagent
-        ? ' YOU ARE RUNNING IN A SUBAGENT: the hooks blocking you resolve through CLAUDE_PROJECT_DIR, which names the MAIN tree and not yours, so a cure run only here CANNOT lift this block - the MAIN tree is where pnpm install and the repair have to happen, because the hooks execute the release INSTALLED IN THAT TREE, not the one in this worktree. Running the repair in THIS worktree afterwards is also correct and is the aligned end state: it is what makes this tree right once its own branch is the one being judged.'
+        ? ' YOU ARE RUNNING IN A SUBAGENT, so TWO cures are real and they fix DIFFERENT things: A makes THIS tree work now, B stops the two trees disagreeing. A - run the OPTION below exactly as printed; it is already anchored to the tree that must change, and running it from here DOES lift this block (measured), so never conclude a local cure cannot work. B - you cannot reach the main clone, so ESCALATE: ask the coordinator to run pnpm install in the main tree so both trees are on the same @webpieces version. A worktree NEEDS its own node_modules (nx, vitest and the eslint plugin all load from it); the rule is not no-install-here, it is that this tree @webpieces must EQUAL the main tree.'
         : '';
-    return `❌ webpieces-managed hook surface was changed: ${what} no longer matches what the INSTALLED @webpieces/ai-hook-rules${verNote} expects (reverted, hand-edited, or predating this binary - a settings.json still on an OLDER form, including the three-hook RELATIVE form with guarantee-root.sh, reports here too).${rootNote} webpieces manages THREE things together and they only work as a set: ${SHIM_MARKER} (the guard shim, registered ABSOLUTE via $CLAUDE_PROJECT_DIR so the MAIN tree governs every tree - a worktree never had its own binary anyway, it borrows the main tree's by walking up), the .claude/settings.json entries that register it, and the .claude/settings.json env entry ${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} (which pins the Bash cwd to the project root, identically for every subagent because settings env is inherited). They are GENERATED and committed by webpieces - they must NOT be reverted or edited by hand, and the fail-closed logic cannot be trusted while any of them differs. Every OTHER tool call is blocked until all three match again. ${subagentNote} THIS IS NOT A DEADLOCK: both options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred, and the ONLY option that repairs all three - it regenerates the shim, rewrites the settings.json registration to the two-hook ABSOLUTE form (removing any older entries, including the retired guarantee-root.sh hook), AND sets the managed env entry; it touches no config, and it imports only fs/path so it runs on a broken tree) - run EXACTLY this command: '${upgrade}'. HOW TO TELL OPTION 1 WORKED, because up to and including 0.4.588 it silently did NOTHING (it had no process entry point, so it printed nothing and exited 0 - which is why this guard could look like a deadlock): a working OPTION 1 PRINTS a line per repaired surface and re-checks all three afterwards, exiting NON-ZERO and naming whatever still differs. So EMPTY OUTPUT means the cure did not run at all - do not re-run it in a loop; upgrade @webpieces/ai-hook-rules, use OPTION 2 for the shim, and say plainly that OPTION 1 is inert in this release. OPTION 2 (a PARTIAL fallback - it repairs ONE of the three, ${SHIM_MARKER}, and nothing else; pick it only when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408 so wp-upgrade-shim does not exist yet, then upgrade @webpieces and run OPTION 1 to finish the job. Claude Code's own permission prompt may ask you to confirm the file overwrite, and that prompt is NOT this guard) - run EXACTLY this command: '${restore}'. Do NOT use the bare '${INSTALL_HOOKS_CMD}' here: it also migrates your config and PROMPTS for a hook target twice, which hangs a non-interactive session. ${NO_CHAINING_RULE} Do NOT revert these files again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
+    return `❌ webpieces-managed hook surface was changed: ${what} no longer matches what the INSTALLED @webpieces/ai-hook-rules${verNote} expects (reverted, hand-edited, or predating this binary).${rootNote} webpieces manages THREE things and they only work as a set: ${SHIM_MARKER} (the guard shim), the .claude/settings.json entries that register it, and the .claude/settings.json env entry ${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} (which pins the Bash cwd to the project root, identically for every subagent because settings env is inherited). Every OTHER tool call is blocked until all three match again.${subagentNote} THIS IS NOT A DEADLOCK: both options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - the only one that repairs all three, and it runs on a broken tree) - run EXACTLY this command: '${upgrade}'. OPTION 2 (PARTIAL - repairs ${SHIM_MARKER} only; pick it ONLY when the installed @webpieces/ai-hook-rules is older than 0.4.408, where OPTION 1 does not exist yet, then upgrade and run OPTION 1) - run EXACTLY this command: '${restore}'. Do NOT use the bare '${INSTALL_HOOKS_CMD}' here: it also migrates your config and PROMPTS for a hook target twice, which hangs a non-interactive session. ${NO_CHAINING_RULE} If you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json rather than reverting these files.`;
 }

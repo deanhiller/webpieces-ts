@@ -230,15 +230,28 @@ describe('VersionSyncGuard — the message', () => {
     });
 
     /** The cure is a GIT cure: the pin is tracked, so the same hash gives the same version. */
-    it('leads with the git cure and ONE install in the main tree', () => {
+    it('leads with the git cure and installs in each tree that has a node_modules', () => {
         const report = reportFor();
         expect(report).toContain('git -C');
         expect(report).toContain('pnpm install');
-        expect(report).toContain('A worktree needs no install of its own');
+        expect(report).toContain('A worktree MAY have its');
+        expect(report).toContain('what it may not have is a DIFFERENT @webpieces version');
     });
 
-    it('offers the CLONE escape hatch, which a worktree structurally cannot provide', () => {
-        expect(reportFor()).toContain('separate CLONE');
+    /**
+     * THE CLONE IS THE ANSWER TO A DIFFERENT QUESTION, and this report used to conflate the two. It said
+     * "a worktree needs no install of its own" and "a clone gets its own node_modules ...; a worktree
+     * cannot" — both false. nx, vitest and the eslint plugin all execute in the worktree and load from
+     * ITS node_modules, and `pnpm add <anything>` creates one. Measured 2026-08-10: an agent was told by
+     * the DRIFT guard to install in its worktree, did, and worked — while this report told it the
+     * opposite, which is the multi-cure straddle the L0 deny text exists to end. What a clone gets that a
+     * worktree does not is its own GOVERNANCE, i.e. permission to be on a different version.
+     */
+    it('offers the CLONE only as the different-version escape, never as "do not install here"', () => {
+        const report = reportFor();
+        expect(report).toContain('separate CLONE');
+        expect(report).toContain('installing here is fine');
+        expect(report).not.toContain('a worktree cannot');
     });
 
     /** A subagent cannot fix the main tree — it must escalate, not attempt a local fix. */
