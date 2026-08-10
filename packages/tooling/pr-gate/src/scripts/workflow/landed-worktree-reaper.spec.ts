@@ -38,6 +38,7 @@ vi.mock('child_process', () => ({
 import { WorktreeService } from '@webpieces/rules-config';
 
 import { LandedWorktreeReaper, WorktreeReapHandoff } from './landed-worktree-reaper';
+import { ReapOutcomeSignal, REAP_OUTCOME_REFUSED, REAP_OUTCOME_REMOVED } from './reap-outcome';
 
 const PRIMARY = '/Users/dev/webpieces-ts';
 const LINKED = '/Users/dev/webpieces-ts-feature';
@@ -66,7 +67,7 @@ class UnbuiltReaper extends LandedWorktreeReaper {
 }
 
 function built(): LandedWorktreeReaper {
-    return new BuiltReaper(new WorktreeService());
+    return new BuiltReaper(new WorktreeService(), new ReapOutcomeSignal());
 }
 
 beforeEach(() => {
@@ -119,7 +120,7 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
      * do NOT spawn anything, and print the #512 notice naming the exact directory to run cleanup from.
      */
     it('keeps the manual notice, and spawns nothing, when the reap entry point is missing', () => {
-        const reaper = new UnbuiltReaper(new WorktreeService());
+        const reaper = new UnbuiltReaper(new WorktreeService(), new ReapOutcomeSignal());
 
         const handoff = reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff;
 
@@ -147,7 +148,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
     // A successful reap deletes the directory the SHELL is sitting in. Saying so is not politeness:
     // every following relative path in that shell is an unexplained ENOENT until the human moves.
     it('tells the caller their cwd no longer exists after a successful reap', () => {
-        world.childStdout = '  ✓ removed\n';
+        world.childStdout = `  ✓ removed\n${new ReapOutcomeSignal().line(REAP_OUTCOME_REMOVED)}`;
         const reaper = built();
 
         const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
@@ -155,6 +156,8 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         expect(out).toContain('NO LONGER EXISTS');
         expect(out).toContain(`cd '${PRIMARY}'`);   // quoted for the same reason as the manual notice
         expect(out).toContain('✓ removed');
+        // The wire format is for the parent, not the reader — it must never surface in a recap.
+        expect(out).not.toContain('WP_REAP_OUTCOME');
     });
 
     /**
@@ -173,6 +176,47 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         expect(out).toContain('Nothing was forced');
         expect(out).toContain(`cd '${PRIMARY}' && pnpm wp-cleanup`);
         expect(out).not.toContain('--force');
+    });
+
+    /**
+     * THE EXIT-CODE-ONLY BUG. The child exits 0 on a REFUSAL on purpose — it runs after a PR has already
+     * merged, and a non-zero exit there would report a landed PR as a failed command. So `exit 0` means
+     * "the child ran", never "the worktree is gone", and a parent that reads only the status announces a
+     * removal that was explicitly refused: it prints "NO LONGER EXISTS" about a directory still on disk
+     * and drops the one instruction — `pnpm wp-cleanup` from the primary clone — that would finish the job.
+     */
+    it('does not announce a removal when the child exited 0 but refused the reap', () => {
+        world.childStatus = 0;
+        world.childStdout = `\n   ⚠️  ${LINKED} is not provably dead: never had a PR; holds 3 unique commit(s)\n`
+            + '       Refusing to remove a worktree that may still hold unmerged work.\n'
+            + new ReapOutcomeSignal().line(REAP_OUTCOME_REFUSED);
+        const reaper = built();
+
+        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+
+        expect(out).toContain('not provably dead');           // the child's own words survive
+        expect(out).not.toContain('NO LONGER EXISTS');        // …and are not contradicted
+        expect(out).toContain('The worktree was NOT removed');
+        expect(out).toContain("the child reported 'refused'");
+        expect(out).toContain(`cd '${PRIMARY}' && pnpm wp-cleanup`);
+        expect(out).not.toContain('WP_REAP_OUTCOME');
+    });
+
+    /**
+     * A child that dies before it can state an outcome — killed, or crashed after printing — is not
+     * evidence of a removal either. The safe reading of silence is "still on disk", because the cost of
+     * being wrong the other way is telling a human their live worktree is gone.
+     */
+    it('treats a child that reported no outcome as a worktree still on disk', () => {
+        world.childStatus = 0;
+        world.childStdout = '  some output that never got to the point\n';
+        const reaper = built();
+
+        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+
+        expect(out).not.toContain('NO LONGER EXISTS');
+        expect(out).toContain('without reporting an outcome');
+        expect(out).toContain(`cd '${PRIMARY}' && pnpm wp-cleanup`);
     });
 
     // The primary clone is never the thing being removed — it is the thing being removed FROM. Nothing

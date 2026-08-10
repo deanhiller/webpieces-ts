@@ -8,6 +8,13 @@ import {
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
+import {
+    ReapOutcomeSignal,
+    REAP_OUTCOME_FAILED,
+    REAP_OUTCOME_REFUSED,
+    REAP_OUTCOME_REMOVED,
+} from '../workflow/reap-outcome';
+
 import { WorktreeCleanupSection } from './worktree-cleanup';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -37,25 +44,46 @@ export class ReapWorktreeCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly worktreeSection: WorktreeCleanupSection,
+        private readonly signal: ReapOutcomeSignal,
     ) {}
 
+    /**
+     * Every exit from here states an OUTCOME, because the exit code cannot: refusals exit 0 (see
+     * `resolveTarget`), so a parent with only a status has no way to tell "removed" from "declined to
+     * remove". The token is the last thing written, and LandedWorktreeReaper strips it before printing.
+     */
     async run(args: string[]): Promise<void> {
         await Promise.resolve();
         const request = this.parse(args);
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
 
         const target = this.resolveTarget(repoRoot, request);
-        if (target === null) return;
+        if (target === null) {
+            process.stdout.write(this.signal.line(REAP_OUTCOME_REFUSED));
+            return;
+        }
 
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
         const result = this.worktreeSection.reap(repoRoot, 'wp-land-pr', [target], retention);
         process.stdout.write(this.render(result));
+        process.stdout.write(this.signal.line(this.outcomeOf(result)));
+    }
+
+    /**
+     * `reaped` is the only entry that means the DIRECTORY is gone. A tree that reached the reaper and
+     * came back in neither list was spared by one of WorktreeReaper's own rails (it is the cwd, it is
+     * the primary clone) — nothing was attempted, which is a refusal, not a failure.
+     */
+    private outcomeOf(result: WorktreeReapResult): string {
+        if (result.reaped.length > 0) return REAP_OUTCOME_REMOVED;
+        return result.failed.length > 0 ? REAP_OUTCOME_FAILED : REAP_OUTCOME_REFUSED;
     }
 
     /**
      * The verdict for the requested path, or null after printing WHY it is not reapable. Refusals are
      * printed rather than thrown: the PR they follow is already merged, and exiting non-zero after a
-     * successful landing would report a landed PR as a failed command.
+     * successful landing would report a landed PR as a failed command. That is exactly why `run` also
+     * emits a ReapOutcomeSignal — the caller must be able to tell this exit 0 from a successful one.
      */
     private resolveTarget(repoRoot: string, request: ReapRequest): DeletableWorktree | null {
         const wanted = path.resolve(request.worktreePath);

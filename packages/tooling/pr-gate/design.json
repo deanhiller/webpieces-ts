@@ -441,6 +441,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ReapOutcomeSignal",
+                    "className": "ReapOutcomeSignal",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/reap-outcome.ts",
+                    "level": 3
+                },
+                {
                     "id": "ReapWorktreeCommand",
                     "className": "ReapWorktreeCommand",
                     "kind": "class",
@@ -1343,6 +1351,15 @@
                 },
                 {
                     "from": "LandedWorktreeReaper",
+                    "to": "ReapOutcomeSignal",
+                    "injection": "type",
+                    "token": "ReapOutcomeSignal",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reap-outcome.ts#ReapOutcomeSignal",
+                    "paramName": "signal",
+                    "paramType": "ReapOutcomeSignal"
+                },
+                {
+                    "from": "LandedWorktreeReaper",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
@@ -1727,6 +1744,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotWebpieces",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReapWorktreeCommand",
+                    "to": "ReapOutcomeSignal",
+                    "injection": "type",
+                    "token": "ReapOutcomeSignal",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reap-outcome.ts#ReapOutcomeSignal",
+                    "paramName": "signal",
+                    "paramType": "ReapOutcomeSignal"
                 },
                 {
                     "from": "ReapWorktreeCommand",
