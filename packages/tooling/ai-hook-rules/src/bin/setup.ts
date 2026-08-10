@@ -7,17 +7,12 @@ import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MA
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
-import { GUARANTEE_ROOT_MARKER, guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
 import {
-    ClaudeSettings, HookCommand, HookEntry, HookRegistrationEntry, GUARANTEE_ROOT_ENTRY, GUARDS_BIN,
+    ClaudeSettings, HookCommand, HookEntry, HookRegistrationEntry, GUARDS_BIN, LEGACY_GUARANTEE_ROOT_MARKER,
     GUARDS_MATCHER, RULES_BIN, RULES_MATCHER, addHookEntry, applyManagedEnv, readSettings, shimCommand,
     writeSettings,
 } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
-
-// Re-exported for back-compat (setup.spec.ts + external callers). The shim body + path now live in
-// ./shim (shared with the runtime self-heal in hook-core). See shim.ts for the single source of truth.
-export { renderShim };
 
 const CONFIG_FILENAME = 'webpieces.config.json';
 // The seeded buildCommand comes from @webpieces/rules-config, NOT from a copy here. This file used to
@@ -30,9 +25,9 @@ const DEFAULT_MERGE_COMPLETE = 'pnpm wp-finish-upsert-pr';
 // ---------------------------------------------------------------------------
 // The two independently-installable GUARD hooks. Each can land in a different settings file (see
 // InstallTarget) so a team can ship the guards while a developer keeps the code-style rules local
-// while iterating. The L-1 hook is a third registration but is NOT independently installable — it
-// rides with the guards hook (applyGuaranteeRoot), because it exists to protect the RELATIVE
-// resolution of these two and is meaningless without them.
+// while iterating. Both are registered ABSOLUTE via $CLAUDE_PROJECT_DIR, so the MAIN tree governs every
+// tree. There used to be a third — the L-1 hook, which existed only to keep a RELATIVE registration
+// resolvable; it is retired, and purgeRetiredGuaranteeRoot() removes anything left of it.
 // ---------------------------------------------------------------------------
 class HookSpec {
     constructor(
@@ -43,9 +38,9 @@ class HookSpec {
     ) {}
 
     // Absolute targets (global) need the exact path to this repo's bin — no ~/.webpieces bridge.
-    // Project targets get the RELATIVE shim command (see hook-registration.ts for why relative is the
-    // whole point), and the L-1 hook registered beside them is what keeps a relative path from ever
-    // failing to resolve — which per the hooks reference would be a SILENT UNGUARDED ALLOW, not a block.
+    // Project targets get the ABSOLUTE shim command, `$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh`
+    // (see hook-registration.ts for why): it resolves from ANY cwd, so a hook can never fail to launch —
+    // which per the hooks reference would be exit 127, a SILENT UNGUARDED ALLOW rather than a block.
     commandFor(target: InstallTarget, projectRoot: string): string {
         if (target.absolute) {
             return `node ${path.join(projectRoot, 'node_modules', '.bin', this.bin)}`;
@@ -78,44 +73,29 @@ function markerReferenced(targets: InstallTarget[], marker: string): boolean {
     });
 }
 
-// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
-function removeGuaranteeRootFile(projectRoot: string): void {
-    const target = guaranteeRootPath(projectRoot);
-    if (fs.existsSync(target)) fs.rmSync(target);
-}
-
-// Drop every PreToolUse command referencing the L-1 hook; returns true if anything was removed.
-// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
-function removeGuaranteeRootHook(settings: ClaudeSettings): boolean {
-    return removeHookByMarker(settings, GUARANTEE_ROOT_MARKER);
-}
-
 /**
- * Install / move / uninstall the L-1 hook (guarantee-root.sh) alongside the GUARDS hook.
+ * Remove every trace of the RETIRED L-1 hook (`guarantee-root.sh`) — the file and any PreToolUse entry
+ * still pointing at it. REMOVAL ONLY: nothing here can ever write one back.
  *
- * It rides with the guards hook and not the rules hook because it judges `cd`, `cd` arrives on Bash,
- * and `Bash` is in the guards matcher. It is registered ABSOLUTE while the guard hooks are RELATIVE —
- * that asymmetry is the design, not an oversight (hook-registration.ts states it once).
- *
- * A GLOBAL (absolute) install gets none: those hooks name the bin path directly, so there is no
- * relative path that could fail to resolve, which is the only thing L-1 protects against.
+ * L-1 existed to guarantee a RELATIVE guard-hook path resolved, by refusing any `cd` that would park the
+ * shell in a subdirectory. The guard hooks are ABSOLUTE now (`$CLAUDE_PROJECT_DIR/...`), so they resolve
+ * from any cwd and the guarantee is structural — there is nothing left to police, and the subdirectory
+ * denial that used to pay for it is gone with it.
  */
 // webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
-function applyGuaranteeRoot(chosen: InstallTarget | null, targets: InstallTarget[], projectRoot: string): void {
-    const relative = chosen !== null && !chosen.absolute;
+function purgeRetiredGuaranteeRoot(targets: InstallTarget[], projectRoot: string): void {
     for (const target of targets) {
         const settings = readSettings(target.settingsPath);
-        const removed = removeGuaranteeRootHook(settings);
-        if (relative && chosen.settingsPath === target.settingsPath) {
-            addHookEntry(settings, GUARANTEE_ROOT_ENTRY);
+        if (removeHookByMarker(settings, LEGACY_GUARANTEE_ROOT_MARKER)) {
             writeSettings(target.settingsPath, settings);
-            console.log(`  ✅ L-1 guarantee-root hook (keeps the shell where the relative guard hooks can launch) → ${target.label}`);
-        } else if (removed) {
-            writeSettings(target.settingsPath, settings);
+            console.log(`  🗑️  removed the retired L-1 guarantee-root hook from ${target.label}`);
         }
     }
-    if (relative) writeGuaranteeRoot(projectRoot);
-    else if (!markerReferenced(targets, GUARANTEE_ROOT_MARKER)) removeGuaranteeRootFile(projectRoot);
+    const legacyFile = path.join(projectRoot, LEGACY_GUARANTEE_ROOT_MARKER);
+    if (fs.existsSync(legacyFile)) {
+        fs.rmSync(legacyFile, { force: true });
+        console.log('  🗑️  deleted the retired .claude/webpieces/guarantee-root.sh');
+    }
 }
 
 export class InstallTarget {
@@ -450,8 +430,9 @@ export function hasHook(settings: ClaudeSettings, bin: string): boolean {
 }
 
 // Drop every PreToolUse command containing `marker` (a bin name, or a managed .sh path); returns true
-// if anything was removed. REMOVE-then-ADD is what keeps an upgrade from leaving the old absolute
-// spelling beside the new relative one — two spellings of one registration.
+// if anything was removed. REMOVE-then-ADD is what keeps an upgrade from leaving a superseded spelling
+// (a relative command, or the retired L-1 entry) beside the current one — two spellings of one
+// registration is the compatibility shim the backwards-compat reviewer rejects.
 // webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
 function removeHookByMarker(settings: ClaudeSettings, marker: string): boolean {
     const entries = settings.hooks?.PreToolUse;
@@ -477,10 +458,10 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
         if (isChosen) {
             addHookEntry(settings, new HookRegistrationEntry(hook.matcher, hook.commandFor(target, projectRoot)));
             // The managed `env` entry goes into the SAME file the hooks go into, on every path that
-            // writes hooks — interactive or `--target=`. It pins the Bash cwd to the project root, which
-            // is what keeps the RELATIVE guard hooks resolvable (an unresolvable hook exits 127, and per
-            // the hooks reference that is a SILENT UNGUARDED ALLOW), and settings `env` is inherited, so
-            // every subagent gets the identical cwd and therefore the identical guard verdict. See
+            // writes hooks — interactive or `--target=`. It pins the Bash cwd to the project root, so a
+            // guard's answer depends on the command rather than on where an earlier `cd` left the shell,
+            // and settings `env` is inherited, so every subagent gets the identical cwd and therefore the
+            // identical guard verdict. (It no longer has a RESOLUTION job — the hooks are absolute.) See
             // hook-registration.ts for the full argument; `wp-upgrade-shim` self-heals it afterwards.
             if (applyManagedEnv(settings)) {
                 console.log(`  ✅ env.${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} → ${target.label} (pins the Bash cwd to the project root, for this session and every subagent)`);
@@ -498,10 +479,10 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
     } else if (!markerReferenced(targets, SHIM_MARKER)) {
         removeShim(projectRoot);
     }
-    // The L-1 hook rides with the GUARDS hook (it judges `cd`, which arrives on Bash). Doing it here
-    // rather than at a separate call site means every existing caller of applyHook — the installer's
-    // interactive and --target paths, and every test — gets the three-hook form with no second step.
-    if (hook.bin === GUARDS_BIN) applyGuaranteeRoot(chosen, targets, projectRoot);
+    // The RETIRED L-1 hook rode with the GUARDS hook, so its removal does too. Doing it here rather than
+    // at a separate call site means every existing caller of applyHook — the installer's interactive and
+    // --target paths, and every test — converges on the two-hook absolute form with no second step.
+    if (hook.bin === GUARDS_BIN) purgeRetiredGuaranteeRoot(targets, projectRoot);
     if (chosen === null) console.log(`  ⛔ ${hook.label} not installed (removed from all locations).`);
 }
 

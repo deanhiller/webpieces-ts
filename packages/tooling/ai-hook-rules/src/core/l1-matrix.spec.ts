@@ -5,7 +5,7 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { isAllowed } from '../bin/shim';
-import { AgentIdentity, CoordinatorWorktreeGuard } from './coordinator-worktree';
+import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { MissingDirectoryGuard } from './missing-directory';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
@@ -29,10 +29,10 @@ const BOOLS: readonly boolean[] = [false, true];
 function everyClassification(): readonly L1Classification[] {
     const all: L1Classification[] = [];
     for (const kind of KINDS) {
-        for (const coordinator of BOOLS) {
+        for (const versionsSkewed of BOOLS) {
             for (const readOnly of BOOLS) {
                 for (const git of BOOLS) {
-                    for (const at of BOOLS) all.push(new L1Classification(kind, coordinator, readOnly, git, at));
+                    for (const at of BOOLS) all.push(new L1Classification(kind, versionsSkewed, readOnly, git, at));
                 }
             }
         }
@@ -41,7 +41,7 @@ function everyClassification(): readonly L1Classification[] {
 }
 
 function label(c: L1Classification): string {
-    return `K=${c.kind} A=${c.coordinator ? 'c' : 's'} R=${c.readOnly ? 'y' : 'n'} G=${c.git ? 'y' : 'n'} P=${c.atRoot ? 'root' : 'sub'}`;
+    return `K=${c.kind} V=${c.versionsSkewed ? 'n' : 'y'} R=${c.readOnly ? 'y' : 'n'} G=${c.git ? 'y' : 'n'} P=${c.atRoot ? 'root' : 'sub'}`;
 }
 
 /**
@@ -51,10 +51,27 @@ function label(c: L1Classification): string {
  * not a defect and is pinned separately below, because it is the doc's own sentence — "row 3 is the ONE
  * place `p` and `w` separate" — turned into a test.
  */
+/**
+ * A real main tree + linked-worktree pair whose pnpm-workspace.yaml catalogs disagree (or agree, when a
+ * version is passed). REAL FILES on purpose: VersionSyncGuard reads manifests off disk, so a fabricated
+ * path would silently read nothing, come back "in sync", and make every assertion here vacuous.
+ */
+function stageSkew(worktreeVersion = '0.4.612'): { main: string; worktree: string } {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-skew-'));
+    const main = path.join(base, 'main');
+    const worktree = path.join(base, 'wt');
+    for (const dir of [main, worktree]) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(main, 'pnpm-workspace.yaml'), "catalog:\n  '@webpieces/nx-webpieces-rules': 0.4.616\n");
+    fs.writeFileSync(path.join(worktree, 'pnpm-workspace.yaml'), `catalog:\n  '@webpieces/nx-webpieces-rules': ${worktreeVersion}\n`);
+    return { main, worktree };
+}
+
 describe('L1 matrix — every classification lands on exactly one verdict', () => {
     it('has seven rows with unique numbers, in doc order', () => {
         expect(L1_ROWS).toHaveLength(7);
-        expect(L1_ROWS.map((r: L1Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+        // Row 3 is RETIRED (coordinator-in-worktree) and its number is never reused — row numbers are
+        // identity: they are printed in denies, logged as `row=`, and cited in guards/L1-location.md.
+        expect(L1_ROWS.map((r: L1Row): number => r.num)).toEqual([1, 2, 8, 4, 5, 6, 7]);
     });
 
     it('answers all 80 classifications — no classification falls through the table', () => {
@@ -68,25 +85,25 @@ describe('L1 matrix — every classification lands on exactly one verdict', () =
 
     it('makes every row reachable as a first match — no row is dead', () => {
         const reached = new Set(everyClassification().map((c: L1Classification): number => firstMatchingL1Row(c).num));
-        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([1, 2, 4, 5, 6, 7, 8]);
     });
 
     // The ONLY overlap in the table, and it is the one the doc calls out by name. Pinned so that a new
     // row whose cells accidentally overlap an existing one shows up here rather than as a silent
     // reordering hazard.
-    it('overlaps on exactly one shape: a coordinator, in a worktree, not inspecting (row 3 over rows 4/5/6)', () => {
+    it('overlaps on exactly one shape: a SKEWED worktree, not inspecting (row 8 over rows 4/5/6)', () => {
         for (const c of everyClassification()) {
             const matches = L1_ROWS.filter((r: L1Row): boolean => r.matches(c));
-            const isRow3Shape = c.kind === 'w' && c.coordinator && !c.readOnly;
-            expect(matches.length, label(c)).toBe(isRow3Shape ? 2 : 1);
-            if (isRow3Shape) expect(matches[0].num, label(c)).toBe(3);
+            const isRow8Shape = c.kind === 'w' && c.versionsSkewed && !c.readOnly;
+            expect(matches.length, label(c)).toBe(isRow8Shape ? 2 : 1);
+            if (isRow8Shape) expect(matches[0].num, label(c)).toBe(8);
         }
     });
 
-    it('blocks on rows 3, 5 and 7 only, and only those rows carry a cure and a blockId', () => {
+    it('blocks on rows 8, 5 and 7 only, and only those rows carry a cure and a blockId', () => {
         for (const row of L1_ROWS) {
             const blocking = row.action.kind === 'block';
-            expect(blocking, `row ${row.num}`).toBe(row.num === 3 || row.num === 5 || row.num === 7);
+            expect(blocking, `row ${row.num}`).toBe(row.num === 8 || row.num === 5 || row.num === 7);
             expect(row.cure !== null, `row ${row.num} cure`).toBe(blocking);
             expect(row.blockId !== null, `row ${row.num} blockId`).toBe(blocking);
         }
@@ -173,11 +190,13 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
         expect(isAllowed('Bash', atRoot('/repo', 'git push'), '')).toBeNull();
     });
 
-    it('row 3: the cure is prose, and the guard names it verbatim in the deny', () => {
+    it('row 8: the cure is prose, and the guard names it verbatim in the deny', () => {
         const row = L1_ROWS[2];
+        expect(row.num).toBe(8);
         expect(row.cure?.runnable).toBe(false);
-        const tree = new EffectiveTree('/repo', '/wt', '/wt', '/repo', 'worktree');
-        const report = new CoordinatorWorktreeGuard().block('pnpm build', tree, new AgentIdentity('', ''));
+        const skew = stageSkew();
+        const tree = new EffectiveTree(skew.main, skew.worktree, skew.worktree, skew.main, 'worktree');
+        const report = new VersionSyncGuard().block('pnpm build', tree);
         expect(report).not.toBeNull();
         expect(report).toContain(row.cure?.denyMention);
     });
@@ -192,7 +211,7 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
      * This makes "an L1 block builder never calls bare atRoot" fail the build instead of a review.
      */
     it('no L1 block builder formats its remedy with bare atRoot() — only remedyAtRoot()', () => {
-        for (const file of ['force-to-root.ts', 'missing-directory.ts', 'coordinator-worktree.ts']) {
+        for (const file of ['force-to-root.ts', 'missing-directory.ts', 'version-sync.ts']) {
             // Comment lines are dropped first — these docblocks NAME `atRoot()` to explain the rule,
             // and a check that forbade saying the word would just get the explanation deleted.
             const code = fs.readFileSync(path.join(__dirname, file), 'utf8')
@@ -214,23 +233,26 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
  * while the builder it names returns null and the block silently disappears.
  */
 describe('L1 rows agree with the predicates the guards enforce', () => {
-    it('row 3 matches exactly when CoordinatorWorktreeGuard blocks', () => {
-        const guard = new CoordinatorWorktreeGuard();
-        const coordinator = new AgentIdentity('', '');
-        const subagent = new AgentIdentity('a1', 'general-purpose');
-        const cases: readonly [string, string, AgentIdentity][] = [
-            ['pnpm build', 'worktree', coordinator],
-            ['ls -la', 'worktree', coordinator],
-            ['pnpm build', 'worktree', subagent],
-            ['pnpm build', 'primary', coordinator],
+    it('row 8 matches exactly when VersionSyncGuard blocks', () => {
+        const guard = new VersionSyncGuard();
+        const skew = stageSkew();
+        const same = stageSkew('0.4.616');
+        const cases: readonly [string, string, { main: string; worktree: string }][] = [
+            ['pnpm build', 'worktree', skew],   // skewed worktree, real work -> BLOCK
+            ['ls -la', 'worktree', skew],       // skewed worktree, inspection -> allow
+            ['pnpm build', 'worktree', same],   // aligned worktree -> allow
+            ['pnpm build', 'primary', skew],    // main tree is never this guard's business
         ];
-        for (const [command, kind, agent] of cases) {
-            const tree = new EffectiveTree('/repo', '/wt', '/wt', '/repo', kind === 'worktree' ? 'worktree' : 'primary');
-            const blocked = guard.block(command, tree, agent) !== null;
-            const classification = L1Classification.forEnforcement(
-                tree.kind, agent.coordinator, command === 'ls -la', false, false,
+        for (const [command, kind, dirs] of cases) {
+            const tree = new EffectiveTree(
+                dirs.main, dirs.worktree, dirs.worktree, dirs.main,
+                kind === 'worktree' ? 'worktree' : 'primary',
             );
-            expect(firstMatchingL1Row(classification).blockId === 'coordinator-in-worktree', `${command} / ${kind}`)
+            const blocked = guard.block(command, tree) !== null;
+            const classification = L1Classification.forEnforcement(
+                tree.kind, guard.skewed(tree), command === 'ls -la', false, false,
+            );
+            expect(firstMatchingL1Row(classification).blockId === 'trinary-version-skew', `${command} / ${kind}`)
                 .toBe(blocked);
         }
     });
@@ -328,19 +350,19 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
     });
 
     // The runner's own translation, reproduced so the chain under test is resolver → classification → row.
-    function rowFor(command: string, coordinator: boolean): number {
+    function rowFor(command: string, versionsSkewed: boolean): number {
         const tree = new EffectiveTreeResolver().resolve(command, primary, primary);
         return firstMatchingL1Row(L1Classification.forEnforcement(
             tree.kind,
-            coordinator,
+            versionsSkewed,
             new ReadOnlyInspectionScan().isReadOnlyInspection(command),
             isGitOrGhCommand(command),
             path.resolve(tree.effectiveCwd) === path.resolve(tree.root),
         )).num;
     }
 
-    it('an in-repo `.claude/worktrees/**` tree reaches ROW 3 for the coordinator, never row 1', () => {
-        expect(rowFor(`cd ${agentTree} && pnpm build`, true)).toBe(3);
+    it('an in-repo `.claude/worktrees/**` tree reaches ROW 8 when skewed, never row 1', () => {
+        expect(rowFor(`cd ${agentTree} && pnpm build`, true)).toBe(8);
     });
 
     it('…and is handed DOWN for a subagent — governed, not exempt (row 1 would mean every guard off)', () => {

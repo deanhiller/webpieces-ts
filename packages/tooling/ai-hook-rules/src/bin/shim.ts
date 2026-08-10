@@ -13,7 +13,6 @@ import {
     ADD_HOOK_PKG_CMD, HOOK_PKG,
 } from './l0-allowlist';
 import { WP_LOG_SH } from './shim-audit-log';
-import { GUARANTEE_ROOT_MARKER } from './guarantee-root';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 // The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
@@ -204,7 +203,7 @@ WP_INSTALL_CMD="pnpm install"
 WP_BORROW_NOTE=""
 if [ "$BIN_ROOT" != "$ROOT" ]; then
   WP_INSTALL_CMD="cd $ROOT && pnpm install"
-  WP_BORROW_NOTE=" NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up - which is only correct while the two agree on the version. Run the install HERE, in this tree, so it gets its own node_modules at its own pin."
+  WP_BORROW_NOTE=" NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up. For a linked WORKTREE that is the DESIGNED state, not a gap - the guard hooks are registered absolute, so the main tree governs every tree and a worktree needs no install of its own. What matters is that the two trees agree on the VERSION, and because the pin is tracked in git the reliable way to get that is the same git hash in both, then ONE 'pnpm install' in the main tree. Installing HERE is legitimate too (adding a dependency does it), but then this tree's own @webpieces must match the main tree's. If you genuinely need a DIFFERENT version, use a separate clone rather than a worktree."
 fi`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
@@ -438,8 +437,8 @@ export function renderShim(): string {
 # the hook has a stable entry point even when node_modules is absent. Safe to delete along with the
 # matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
 #
-# Usage (wired into .claude/settings.json, RELATIVE so each git tree runs its own copy):
-#   sh ".claude/webpieces/ai-hook.sh" <bin-name>
+# Usage (wired into .claude/settings.json, ABSOLUTE so the MAIN tree governs every tree):
+#   sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 BIN_NAME="$1"
 shift
 # Resolve the tree relative to THIS script (…/<root>/.claude/webpieces/ai-hook.sh → <root>), not the

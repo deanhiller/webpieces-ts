@@ -7,8 +7,8 @@
  * either a suffix on a flat name or, for L1, nothing at all.
  *
  * These live in ai-hook-rules beside LogStream, because all FOUR writers are here of this layout and
- * only two of them are TypeScript: the L-1 `guarantee-root.sh` and the L0 `ai-hook.sh` are POSIX sh
- * rendered from `bin/guarantee-root.ts` and `bin/shim-audit-log.ts`, and they must spell these
+ * not all of them are TypeScript: the L0 `ai-hook.sh` is POSIX sh
+ * rendered from `bin/shim-audit-log.ts`, and it must spell these
  * directories identically or the layers scatter. One constant, four consumers — the same reason
  * LogStream itself lives here.
  *
@@ -23,7 +23,6 @@
  * wildcard recovers the flat view here — `ls -t logs/[star]/<sid>-*` is still every stream in time
  * order, across every layer at once.
  */
-export const LMINUS1_CD_STREAM = 'L-1-cd';
 export const L0_SHIM_STREAM = 'L0-shim';
 export const L1_LOCATION_STREAM = 'L1-location';
 export const L2_DECISIONS_STREAM = 'L2-decisions';
@@ -37,6 +36,19 @@ export const REJECTIONS_STREAM = 'rejections';
  * a doc sentence.
  */
 export const ALL_LOG_STREAMS: readonly string[] = [
-    LMINUS1_CD_STREAM, L0_SHIM_STREAM, L1_LOCATION_STREAM, L2_DECISIONS_STREAM,
+    L0_SHIM_STREAM, L1_LOCATION_STREAM, L2_DECISIONS_STREAM,
     CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM,
 ];
+
+/**
+ * Stream directories an OLDER release wrote and this one never will. Kept beside the live list because a
+ * directory that is in neither is invisible to every sweep, so its files would sit on disk forever.
+ *
+ * `SWEEPABLE_LOG_STREAMS` — live + retired — is what retention and the layout specs must enumerate;
+ * `ALL_LOG_STREAMS` stays the answer to "what may be WRITTEN". Keeping the two separate is what stops a
+ * retired name from quietly becoming a writable one again.
+ */
+export const RETIRED_LOG_STREAMS: readonly string[] = ['L-1-cd'];
+
+/** Every directory retention may reap: what this release writes, plus what older ones left behind. */
+export const SWEEPABLE_LOG_STREAMS: readonly string[] = [...ALL_LOG_STREAMS, ...RETIRED_LOG_STREAMS];

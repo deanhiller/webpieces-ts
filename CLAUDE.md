@@ -422,6 +422,17 @@ Almost everything else runs the **published** copy:
   valid, your pin is behind) never reaches that message: the version-drift guard catches it first and
   prescribes its own cure, so `pnpm install` is not the answer to a validation error.
 
+**A linked worktree does not get its own release — there is ONE governor per repo.** `git worktree add`
+copies no `node_modules`, so a worktree resolves `@webpieces/*` by walking up to the MAIN tree's install
+and runs the MAIN tree's binary. Both PreToolUse hooks are registered with an absolute
+`$CLAUDE_PROJECT_DIR/…` path for the same reason: the governance is the main tree's either way, so
+saying so is cheaper than pretending otherwise. The consequence you will meet: if a worktree's
+`@webpieces` pin disagrees with the main tree's, the guards **BLOCK** (`trinary-version-skew`) rather
+than silently governing it with a release it never pinned. The pin is TRACKED, so the same git hash
+gives the same pin — `git pull` both trees onto the same main and run ONE `pnpm install` in the MAIN
+tree, or just work in the main tree. If a tree genuinely needs a different version, use a separate
+CLONE: a clone gets its own `node_modules` and its own governance; a worktree borrows and cannot.
+
 ### No bin shims — every `bin` lives in `publishConfig.bin`
 
 **RULE: a package declares its executables in `publishConfig.bin`, pointing at compiled TypeScript

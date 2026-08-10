@@ -48,7 +48,7 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 ### `S` — a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release
 
-- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs all four managed things (both .sh files, the settings.json registration and its managed env entry) and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
+- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs all three managed things (ai-hook.sh, the settings.json registration and its managed env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
 - **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish
 
 ### `C` — webpieces.config.json missing

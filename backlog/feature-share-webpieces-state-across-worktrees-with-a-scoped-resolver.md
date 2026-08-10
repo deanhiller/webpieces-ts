@@ -1,3 +1,40 @@
+> # ✅ RESOLVED — shipped by [#533](https://github.com/deanhiller/webpieces-ts/pull/533). Kept as the design record only.
+>
+> This is the **specification** for what is now
+> `packages/tooling/rules-config/src/state-dir.ts` (`DotWebpieces`), and it has been implemented as
+> written. Re-verified on `main` at the time of closing:
+>
+> - `shared(startDir)` → `<primary>/.webpieces`; `local(startDir)` → `<primary>/.webpieces/worktrees/<name>`
+>   for a linked worktree and `<primary>/.webpieces` for the primary clone — the two **named** methods
+>   the design insisted on, not a boolean and not a symlink.
+> - **The scope table was honoured exactly.** `merged-branches.json` (`merged-branches.ts:188`) and
+>   `main-sync-status.json` + `main-sync.lock.json` (`main-sync-status.ts:92,110`) are the *only*
+>   `sharedFile()` call sites in the repo. Everything else — logs incl. `branch-mutations.log`,
+>   `merge-info/`, `pr-review/`, `instruct-ai/` — goes through `local()`/`logs()` (17 call sites).
+> - Worktree detection is `--git-dir` vs `--git-common-dir`, memoized, with the namespace key taken
+>   from git's own worktree name — exactly as §"Detecting a worktree" prescribed, and it fails CLOSED
+>   to `<treeRoot>/.webpieces` when git cannot answer.
+> - `webpieces.config.json` stays **per-worktree**. `DotWebpieces` reads no config; the boundary the
+>   design called "must not be blurred" is intact.
+> - Migration of a legacy `<worktree>/.webpieces/` is `StateDirMigrator`, invoked once per tree per
+>   process from `local()`.
+> - Tests: `state-dir.spec.ts` and `state-dir-migration.spec.ts`.
+>
+> **Two deltas from the spec, both deliberate.** The log directory converged on `logs/` alone —
+> `hooks/` is gone entirely, so the design's `worktrees/{name}/hooks/branch-mutations.log` is now
+> `worktrees/{name}/logs/branch-mutations.log`. And the lock file is `main-sync.lock.json`, not
+> `main-sync.lock`.
+>
+> **The one paragraph here that is still LIVE and load-bearing is §"Worth knowing"** — Claude Code
+> loads hooks from the *session's* project directory, so a subagent working in a linked worktree may
+> fire the **primary clone's** hooks and `node_modules`. That is not a state-dir concern; it is the
+> subject of
+> [`bug-l1-prescribes-a-subagent-remedy-that-cannot-be-launched-and-would-not-fix-the-governance-split-anyway`](./bug-l1-prescribes-a-subagent-remedy-that-cannot-be-launched-and-would-not-fix-the-governance-split-anyway.md),
+> where it is being verified empirically rather than assumed.
+>
+> A previous edit removed only one harmful paragraph (the `NX_PARALLEL=1` / `build-all` advice, still
+> struck through at the end of this file). The rest of the file was already history; this banner closes it.
+
 # FEATURE: give every worktree its own `.webpieces/` state under the primary clone, via a scoped resolver
 
 **Package:** `@webpieces/rules-config`, `@webpieces/ai-hook-rules`, `@webpieces/pr-gate`

@@ -1,11 +1,28 @@
 # 0002 — The shim cannot follow the tree
 
-**Status:** SOLVED in principle by [0003](0003-three-hooks-per-tree-governance.md) — read that first
+**Status:** ⛔ **SUPERSEDED 2026-08-10 — the problem was ACCEPTED rather than solved.** This doc was
+briefly "solved in principle" by [0003](0003-three-hooks-per-tree-governance.md); 0003 is now reversed.
 **Raised:** 2026-08-06, while attempting D7 of [0001](0001-tree-identity-and-governance.md)
 **Supersedes:** 0001 D7 (withdrawn)
-**Superseded by:** 0003 (three relative/absolute hooks). Option A (the bridge) is DEAD — killed by
-adversarial review; see 0003 §6 for the three confirmed kills. This doc remains the **problem
+**Superseded by:** the one-governor model — see 0003's superseded banner. Option A (the bridge) is DEAD,
+killed by adversarial review; see 0003 §6 for the three confirmed kills. This doc remains the **problem
 statement** and the record of what was rejected.
+
+> ## ⛔ The answer, 2026-08-10: the shim cannot follow the tree, so nothing tries to
+>
+> §1's diagnosis is CORRECT and permanent, and 0003's relative-hook cure did not change it. Measured
+> 2026-08-10: a linked worktree has no `node_modules`, so the relative shim's upward walk executed the
+> MAIN tree's binary regardless — a worktree ran its own script and config but never its own release.
+>
+> So the model is now explicit rather than aspirational: **ONE governor per repo, the main tree's.**
+> Both hooks are registered ABSOLUTE (`$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh`), the L-1 `cd`
+> guard that the relative form required is deleted, and a worktree whose `@webpieces` pin disagrees with
+> the main tree's is BLOCKED by L1 row 8 `trinary-version-skew` instead of being silently governed by a
+> release it did not pin. A tree that genuinely needs its own release needs its own CLONE.
+>
+> The rest of this document stands as the measurement of why. The two-tree straddle it describes is
+> real; the conclusion drawn from it has changed from "make the shim follow the tree" to "stop pretending
+> it can, and block the skew".
 
 > **Correction to §1.1 below.** `INVARIANT-1TREE` is stated too strongly. Where the shim and binary
 > physically SIT does not matter; what matters is that the shim's logic and the running binary MATCH
@@ -180,12 +197,20 @@ Ship the state/log relocation and the identity fixes, and leave version governan
 Answering the question directly, because it de-risks the separable half of this work.
 
 **Yes.** The PreToolUse payload carries `agent_id` and `agent_type`, present **only** when the hook
-fires inside a subagent (absent for the main agent — which is exactly how `AgentIdentity.coordinator`
-is derived). Documented in the hooks reference, and already parsed:
-`packages/tooling/ai-hook-rules/src/adapters/hook-core.ts:42-43, 112-114`.
+fires inside a subagent (absent for the main agent — which was exactly how the since-deleted
+`AgentIdentity.coordinator` was derived). Documented in the hooks reference, and already parsed:
+`packages/tooling/ai-hook-rules/src/adapters/hook-core.ts`.
 
 So **logging can be keyed per agent rather than per worktree today**, with no dependency on anything
-in this document. That matters because the two are otherwise conflated:
+in this document. That is still true and is what `LogStream` does.
+
+> **But identity is trustworthy for NAMING A LOG FILE only — never for "which tree am I in"**
+> (measured 2026-08-10, reproduced twice): a worktree-isolated agent whose tree is auto-reaped at a turn
+> boundary silently resumes with its cwd on the primary clone, still carrying the same `agent_id`. That
+> is why `CoordinatorWorktreeGuard` and L1's coordinator-in-worktree row are deleted, and why the L1
+> matrix dimension `A` (coordinator/subagent) was replaced by `V` (versions in sync / skewed).
+
+That matters because the two identities are otherwise conflated:
 
 | identity | needed for | available? |
 |---|---|---|

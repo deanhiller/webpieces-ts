@@ -37,7 +37,6 @@ gone; nothing reads or writes it.
 
 | stream directory | layer | what it records |
 |---|---|---|
-| `L-1-cd/` | L-1 | every `cd` the launch guard judged |
 | `L0-shim/` | L0 | the sh shim's verdict on every tool call |
 | `L1-location/` | L1 | every location decision, WITH its matrix row |
 | `L2-decisions/` | L2 | every branch-state judgement and why |
@@ -63,7 +62,7 @@ the flat view: `ls -t logs/*/<sid>-*` is still every layer at once, in time orde
 |---|---|---|
 | `sessionId` | concurrent Claude Code windows | `session_id`, on every hook payload |
 | `agentId`   | subagents within one window   | `agent_id` — absent for the coordinator |
-| `hook`      | the hooks that run in PARALLEL | `guards` / `rules` / `guarantee-root` / the bin name |
+| `hook`      | the hooks that run in PARALLEL | `guards` / `rules` / the bin name |
 
 One writer per FILE, by construction, so nothing needs a lock. This matters because `O_APPEND` is
 indivisible only under `PIPE_BUF` — **512 bytes on macOS** — and measured across three repos, 6.3% of
@@ -99,7 +98,6 @@ See `LogStream` (`packages/tooling/ai-hook-rules/src/core/log-stream.ts`) for th
 | `async-refresh/` | `main-sync-log.ts` + the child's raw stdio | the detached refresher's lifecycle, and any crash before its own logging |
 | `rejections/` | `rejection-log.ts` | one line per blocked write, pointing at its detail file |
 | `L0-shim/` | `templates/ai-hook.sh` (L0) | the sh shim's own audit of every tool call |
-| `L-1-cd/` | `templates/guarantee-root.sh` (L-1) | every `cd` the launch guard judged |
 | `branch-mutations.log` | `rules-config/src/branch-mutation-log.ts` | every workflow verb that renames, moves or deletes a branch |
 
 The refresher's raw stdio has **no stream of its own**. It was a `.stderr.log` sibling that measured 0
@@ -116,19 +114,17 @@ Each `<writer>.log` rotates at 512 KB into a `<writer>.1.log` sibling with the i
 
 ## A `guards=` line is not the call's outcome
 
-`calls/` records `guards=<action>` — **this hook's own answer, and nothing more.** Claude Code runs
-all three PreToolUse hooks in PARALLEL, so no one of them can see another's verdict. Measured: a
-`cd <repo>/packages && ls` DENIED by L-1 appears in `calls/` as `guards=ALLOW`, correctly, because the
-guards binary had no objection to it.
+`calls/` records `guards=<action>` — **this hook's own answer, and nothing more.** Claude Code runs the
+two PreToolUse hooks in PARALLEL, so neither can see the other's verdict, and the harness can still
+refuse a call both allowed.
 
-**The true final action is the JOIN of `L-1-cd/` with `calls/`,** keyed by the identical
-`<sid>-<agent>-<hook>` writer name and the command text. A `DENY` in `L-1-cd/` overrides. That is the
-one fact a reader has to bring; nothing in a single stream can supply it.
-
-`L-1-cd/` always lives at `$CLAUDE_PROJECT_DIR/.webpieces/logs/`, even for a call made inside a linked
-worktree whose other streams sit under `worktrees/<name>/`. L-1 resolves no worktree on purpose: doing
-so costs a `git rev-parse` subprocess on every Bash call, paid by the one layer whose whole guarantee
-is that it reads no config, spawns no binary and touches no network.
+For a `Bash` call there is nonetheless **no join to perform**: only the guards hook judges `Bash`, so
+`calls/` plus the per-layer streams are the whole record of what webpieces decided. This used to be
+untrue — a third, absolute `guarantee-root.sh` hook (L-1) judged every `cd` and wrote a `L-1-cd/`
+stream, so a `cd <repo>/packages && ls` it DENIED still appeared in `calls/` as `guards=ALLOW` and a
+reader had to join the two by writer name and command text to learn the real outcome. That hook, that
+stream and that join are **gone**: both remaining hooks are registered ABSOLUTE, so they resolve from
+any cwd and nothing has to police `cd` to keep them launchable.
 
 ## The verdict vocabulary is the matrix codebook
 

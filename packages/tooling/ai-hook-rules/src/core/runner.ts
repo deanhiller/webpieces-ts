@@ -3,7 +3,7 @@ import * as path from 'path';
 import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
-import { AgentIdentity, CoordinatorWorktreeGuard, UNKNOWN_AGENT } from './coordinator-worktree';
+import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
 import { gitFromSubdirBlock } from './force-to-root';
 import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches } from './load-rules';
@@ -149,13 +149,19 @@ function runInternal(
     return new BlockedResult(report);
 }
 
-// `agent` defaults to UNKNOWN_AGENT — NOT the coordinator. Only the Claude Code adapter can read
-// agent_id/agent_type off the payload; every other caller (the openclaw adapter, library consumers,
-// the existing specs) genuinely does not know, and a caller who does not know must not be guessed
-// into a coordinator-only block. See UNKNOWN_AGENT.
+// SINGLETON, deliberately: WebpiecesVersions memoizes per root, and the same two roots are asked for on
+// every Bash call. A fresh instance per call would spawn `git worktree list` and re-read two manifests
+// on the hook's blocking path each time.
+const VERSION_SYNC = new VersionSyncGuard();
+
+// There is deliberately NO agent parameter. It existed only for CoordinatorWorktreeGuard, which asked
+// WHO was calling; that guard is gone and its replacement asks WHICH TREE the command acts on. Agent
+// identity was measured untrustworthy for that question anyway — a worktree-isolated agent auto-reaped
+// at a turn boundary silently resumes with its cwd on the primary clone — so a guard must never infer
+// a tree from who is asking.
 // webpieces-disable no-function-outside-class -- sibling of run()/runRead() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-export function runBash(command: string, cwd: string, mode: HookMode = 'all', agent: AgentIdentity = UNKNOWN_AGENT): BlockedResult | null {
-    return runBashInternal(command, cwd, mode, agent);
+export function runBash(command: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
+    return runBashInternal(command, cwd, mode);
 }
 
 // The name of the ONLY rule permitted to block a Read. Reads are the highest-blast-radius tool
@@ -278,12 +284,12 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
     }
 }
 
-// Coordinator-in-worktree: the coordinator's governance is anchored at session start and does NOT
-// follow a `cd`, so a coordinator working inside a linked worktree has its filesystem in one tree and
-// its guards in another. L1 row 3 — guards/L1-location.md carries the table and the incident.
+// Version skew: this worktree pins a different @webpieces than the MAIN tree that governs it. The guard
+// hooks are absolute, so the main tree's binary judges every tree — which is fine until the two trees
+// disagree about which release that should be. L1 row 8; guards/L1-location.md carries the table.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
-    const report = new CoordinatorWorktreeGuard().block(command, tree, agent);
+function versionSkewBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+    const report = VERSION_SYNC.block(command, tree);
     return report === null ? null : new BlockedResult(report);
 }
 
@@ -291,18 +297,18 @@ function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent:
 // world is translated into the matrix's vocabulary — see L1Classification.forEnforcement for why
 // TreeKind 'outside' currently classifies as `p`.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity): L1Classification {
+function l1Classify(command: string, tree: EffectiveTree): L1Classification {
     return L1Classification.forEnforcement(
         tree.kind,
-        agent.coordinator,
+        VERSION_SYNC.skewed(tree),
         new ReadOnlyInspectionScan().isReadOnlyInspection(command),
         isGitOrGhCommand(command),
         path.resolve(tree.effectiveCwd) === path.resolve(tree.root),
     );
 }
 
-// The structural L1 blocks, in order: the misplaced-`cd` PRE-STAGE, then coordinator-in-worktree
-// (row 3), then force-to-root (row 5). None is a configurable rule — they are decided from the command
+// The structural L1 blocks, in order: the misplaced-`cd` PRE-STAGE, then version skew
+// (row 8), then force-to-root (row 5). None is a configurable rule — they are decided from the command
 // text, the resolved tree and the caller, so they run as one step here rather than as three
 // near-identical stanzas in runBashInternal.
 //
@@ -329,25 +335,25 @@ function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity):
 // hand-downs wrote nothing at all, which is why "L1 had no objection" could not be observed and
 // "show me every L1 decision" had no answer. The three block helpers no longer log for themselves.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
+function l1LocationBlock(command: string, tree: EffectiveTree): BlockedResult | null {
     const misplacedCd = misplacedCdBlock(command, tree);
     if (misplacedCd !== null) {
         logL1(tree, command, 'BLOCK_AI_CURE', L1_PRESTAGE_ROW, 'cd-must-be-first', 'cd not leading/literal');
         return misplacedCd;
     }
 
-    const row = firstMatchingL1Row(l1Classify(command, tree, agent));
+    const row = firstMatchingL1Row(l1Classify(command, tree));
     const rowNum = String(row.num);
     if (row.blockId === null) {
         // ALLOW_EXEMPT stops here; ALLOW means "no objection, handed down to L2". Recording the
         // difference is the point — see Verdict. Neither is a claim that the call actually ran: the
-        // parallel L-1 hook may still have denied it.
+        // other parallel hook may still have denied it.
         logL1(tree, command, row.action.kind === 'exempt' ? 'ALLOW_EXEMPT' : 'ALLOW', rowNum, '-', row.why);
         return null;
     }
     logL1(tree, command, 'BLOCK_AI_CURE', rowNum, row.blockId, row.why);
     if (row.blockId === 'missing-directory') return missingDirectoryBlock(command, tree);
-    if (row.blockId === 'coordinator-in-worktree') return coordinatorInWorktreeBlock(command, tree, agent);
+    if (row.blockId === 'trinary-version-skew') return versionSkewBlock(command, tree);
     return gitFromSubdirBlock(command, tree, isGitOrGhCommand(command));
 }
 
@@ -372,7 +378,7 @@ function logL1(tree: EffectiveTree, command: string, verdict: Verdict, row: stri
  * finds out. Two PRs of increasingly precise near-miss wording (#596, #597) still left the fact in a
  * paragraph appended to an unrelated block; the rule is simpler stated as a rule.
  *
- * FIRST in the L1 chain deliberately. coordinator-in-worktree and force-to-root both reason from the
+ * FIRST in the L1 chain deliberately. version skew and force-to-root both reason from the
  * resolved tree, and if the `cd` did not resolve, that tree is not the one the agent thinks they are
  * in — so their remedies would be steering from a location the command does not actually run in.
  */
@@ -411,7 +417,7 @@ function experimentalBashRules(loaded: LoadedConfig, mode: HookMode, relativePat
 }
 
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-function runBashInternal(command: string, cwd: string, mode: HookMode, agent: AgentIdentity): BlockedResult | null {
+function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     if (isL0CureCommand(command)) {
         logL0CureBypass(command, cwd);
         return null;
@@ -453,7 +459,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
 
-    const locationBlock = l1LocationBlock(command, tree, agent);
+    const locationBlock = l1LocationBlock(command, tree);
     if (locationBlock) return locationBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs

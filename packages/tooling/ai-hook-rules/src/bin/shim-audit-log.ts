@@ -163,6 +163,17 @@ wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
     _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
     case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
     [ "$_wp_sz" -gt ${String(SHIM_LOG_MAX_BYTES)} ] && mv -f "$_wp_f" "$_wp_sd/\${_wp_pfx}.1.log" 2>/dev/null
-    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
+    # shim= and bin= are the two facts this log could not previously answer, and they are the ones that
+    # decide whether a tree was governed by its OWN release or a borrowed one:
+    #   shim= WHICH COPY OF ai-hook.sh RAN — $ROOT, resolved from $0. The file is TRACKED, so every
+    #         worktree carries the version at ITS commit; settings.json registers it ABSOLUTE, so the copy
+    #         that runs is the SESSION ROOT's. Logged rather than assumed.
+    #   bin=  WHICH TREE SUPPLIED THE BINARY — $BIN_ROOT, the upward walk's answer. A fresh linked
+    #         worktree has no node_modules, so this is normally the PRIMARY even when shim= is not:
+    #         per-tree governance is the script and the config, never the enforcement code.
+    # Until these existed, no log at any layer recorded either (L-1 logged neither, L0 logged neither,
+    # only L1 logged root=/projectDir=), so "which hook governed this call" had to be inferred. Compare
+    # shim= against bin= to see a borrow, and either against the tree to see a straddle.
+    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "shim=$ROOT" "bin=$BIN_ROOT" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }`;

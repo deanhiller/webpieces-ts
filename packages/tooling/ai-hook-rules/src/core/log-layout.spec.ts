@@ -13,7 +13,7 @@ import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream, StreamIdentity, logStream } from './log-stream';
-import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM, ALL_LOG_STREAMS } from './log-streams';
+import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM, ALL_LOG_STREAMS, SWEEPABLE_LOG_STREAMS, RETIRED_LOG_STREAMS } from './log-streams';
 import { L0_FAULT_NONE } from './l0-fault-codes';
 // One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
 // real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
@@ -103,7 +103,22 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
 
         const entries = fs.readdirSync(path.join(root, '.webpieces', LOGS_STATE_DIR), { withFileTypes: true });
         expect(entries.every((e: fs.Dirent): boolean => e.isDirectory()), 'a loose file under logs/').toBe(true);
-        for (const e of entries) expect(ALL_LOG_STREAMS, `${e.name} is not a declared stream`).toContain(e.name);
+        // SWEEPABLE, not ALL: a directory an OLDER release wrote (the retired `L-1-cd`) may still be on
+        // disk in a real repo, and it is not a layout violation — it is something retention should reap.
+        // Asserting against ALL_LOG_STREAMS would turn "you upgraded" into a failure.
+        for (const e of entries) expect(SWEEPABLE_LOG_STREAMS, `${e.name} is not a declared stream`).toContain(e.name);
+    });
+
+    /**
+     * A retired stream must stay RECOGNISED but never WRITABLE. If a name ever appears in both lists, a
+     * dead stream has quietly become a live one again — which is how the L-1 audit trail would come back
+     * without anyone deciding to bring it back.
+     */
+    it('keeps retired streams out of the writable list while still sweeping them', () => {
+        for (const retired of RETIRED_LOG_STREAMS) {
+            expect(ALL_LOG_STREAMS, `${retired} must not be writable`).not.toContain(retired);
+            expect(SWEEPABLE_LOG_STREAMS, `${retired} must still be sweepable`).toContain(retired);
+        }
     });
 
     it('puts each rejection DETAIL in a directory named exactly like the log that indexes it', () => {

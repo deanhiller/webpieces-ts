@@ -1,7 +1,9 @@
 # Guard layer toggles — `hookGuards` 9 keys → 3
 
-> **Status: PLAN, not implemented.** Written after the L-1/L0/L1 audit-trail work (#626). The layer
-> names here are the ones the log streams already use, so the two vocabularies stay in step.
+> **Status: PLAN, not implemented.** Written after the L0/L1 audit-trail work (#626), which at the time
+> also covered a layer called L-1. **L-1 is deleted** (both guard hooks are registered absolute now, so
+> nothing has to police `cd` to keep them launchable) and this file has been corrected to match. The
+> layer names here are the ones the log streams already use, so the two vocabularies stay in step.
 
 ## Context
 
@@ -72,20 +74,27 @@ Goal, stated twice by the requester: **simpler, and LESS configuration.** 9 → 
 `BUILT_IN_RULE_MAP` (`ai-hook-rules/src/core/load-rules.ts`) constructs several classes from one
 layer config.
 
-## L-1, L0 and L1 get NO key — this is the load-bearing half
+## L0 and L1 get NO key — this is the load-bearing half
 
-The audit trail covers **four** layers; the config covers **three**, and the missing three are not an
-oversight. They have no key today and must not gain one.
+The audit trail covers **three** layers; the config covers **three** of its own, and the two missing
+here are not an oversight. They have no key today and must not gain one.
 
 | layer | proposed name | verdict | reasoning |
 |---|---|---|---|
-| **L-1** | `cd-usage` | **no key, ever** | `guarantee-root.sh` is POSIX sh that runs before any binary: *"Three tests, no config, no binary, no network."* It exists because the guard hooks are registered RELATIVE so each tree runs its own release; a relative hook that cannot resolve exits 127, which the harness treats as a non-blocking error and lets the call **proceed unguarded**. Turning L-1 off does not disable one guard — it makes every later call silently unguarded, with no block, no error and nothing the agent sees. L0's argument applies with MORE force: L0-off fails loud, L-1-off fails silent. A key would also force JSON parsing into a script whose entire safety property is that it parses nothing. |
 | **L0** | `webpieces-binary` | **no key** | Settled in `GUARD_MATRIX.md`: *"If L0 is off, nothing downstream can be trusted — you would be configuring the guards with a config file the validator could not check."* |
 | **L1** | `location` | **no key** | It has **none today**, so adding one ADDS a knob in a fewer-knobs change. And top-level `excludePaths` already IS L1's per-path off switch (`filterByExcludedPaths` in `runner.ts`; `guards/L1-location.md` calls it "the filter"), so a `location` key would be a second spelling of a decision that already has one — CLAUDE.md shim shape #1. |
 
-**The rule this expresses: L-1, L0 and L1 are STRUCTURAL; L2, L3 and L4 are POLICY. Only policy gets
-a switch — and you audit what you cannot turn off.** That asymmetry is why #626 built the `L-1-cd/`
-and `L0-shim/` streams: they are the only visibility into layers with no knob.
+**The rule this expresses: L0 and L1 are STRUCTURAL; L2, L3 and L4 are POLICY. Only policy gets
+a switch — and you audit what you cannot turn off.** That asymmetry is why #626 built the `L0-shim/`
+and `L1-location/` streams: they are the only visibility into layers with no knob.
+
+The launch guarantee itself is no longer a layer at all, and therefore not a candidate for a key. It is
+a property of the registration: both hooks are registered with an ABSOLUTE
+`$CLAUDE_PROJECT_DIR/…` path, so they resolve from any cwd. The relative registration they replaced was
+what forced a whole extra guard into existence — a relative hook that cannot resolve exits 127, which
+the harness treats as a non-blocking error and lets the call **proceed unguarded** — and it bought
+nothing, because a linked worktree has no `node_modules` and always executed the MAIN tree's binary
+anyway (measured 2026-08-10).
 
 ## What becomes unreachable
 
@@ -146,7 +155,7 @@ new RetiredConfigKey(
 | `runner.ts` | `checkConfigSync` compares `rule.name` against configured keys — it must compare CONFIG KEYS or all nine rules report unconfigured and fault Y fires on every call. See Risks. |
 | `rules/*-guard.ts` (nine) | constructor param type only; no behaviour change. |
 
-**Docs** — `GUARD_MATRIX.md` (config-key column; add L-1 to the "no key on purpose" paragraph),
+**Docs** — `GUARD_MATRIX.md` (config-key column; the "no key on purpose" paragraph),
 `guards/L1-location.md` (**generated** — edit `l1-doc.ts`, then `pnpm guards:generate`; never hand-edit),
 `guards/L2-branch-state.md`, `guards/L3-branch-cleanup.md`, `guards/L4-pr-lifecycle.md`.
 
@@ -198,7 +207,7 @@ Nothing outside `hookGuards` changes.
 | alternative | why |
 |---|---|
 | **Four keys — add `location` for L1** | L1 has no key today, so this ADDS a knob; `excludePaths` is already its off switch. |
-| **Seven keys — one per layer including L-1/L0/L1** | A hook that fails to launch is a silent ALLOW. See the table above. |
+| **Six keys — one per layer including L0/L1** | A hook that fails to launch is a silent ALLOW, and the two structural layers are what make every later verdict trustworthy. See the table above. |
 | **Two keys — fold L3 into L4** | `branch-cleanup` carries `autoReapMergedBranches` — unattended branch deletion, which each consumer should answer once, not inherit from a PR-flow switch. |
 | **One key — `hookGuards: { mode }`** | Collapses work-here policy with PR flow; a repo with a different PR workflow would have to disable staleness protection to opt out of the gate. |
 | **Keep nine, document the combinations** | The documentation already exists and the incoherent combination shipped anyway. Representability is the fix; prose is not. |
