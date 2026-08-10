@@ -170,6 +170,50 @@ describe('EffectiveTreeResolver — a worktree INSIDE the governed root (the age
 });
 
 /**
+ * K IS GIT'S ANSWER, NOT THE CONFIG'S. The second bug of the same family (measured 2026-08-10).
+ *
+ * `governedRoot` is walked UP from the payload cwd to the nearest `webpieces.config.json`, and that file
+ * is TRACKED — so a linked worktree owns one. classify() used to add `|| sameDir(treeRoot, governedRoot)`
+ * to its primary test, which meant an agent whose cwd IS the worktree saw its own tree classified
+ * `primary`. Row 8 matches on `w`, so VersionSyncGuard was dead code for exactly the agents it protects:
+ * a worktree ran 0.4.624 with its own node_modules while the main clone stayed on 0.4.616, for a whole
+ * session, silently. In the SAME tool call the `.webpieces/` log resolver — which asks git — stamped the
+ * worktree's name. Two resolvers, one process, opposite answers.
+ */
+describe('EffectiveTreeResolver — the agent LIVES in the worktree (self-governed, still a worktree)', () => {
+
+    it('is `worktree` when the worktree governs ITSELF — placement, cwd and config are all irrelevant', () => {
+        const tree = resolver().resolve('pnpm build', agentWorktree, agentWorktree);
+        expect(tree.kind).toBe('worktree');
+        expect(tree.root).toBe(agentWorktree);
+        expect(tree.governedRoot).toBe(agentWorktree);
+        // Nothing is redirected — the agent is standing where the command runs. The skew is real anyway.
+        expect(tree.redirected).toBe(false);
+    });
+
+    it('carries `mainRoot` — the PRIMARY clone, whose node_modules supplies the judging binary', () => {
+        expect(resolver().resolve('pnpm build', agentWorktree, agentWorktree).mainRoot).toBe(primary);
+        expect(resolver().resolve(`cd ${worktree} && pnpm build`, primary, primary).mainRoot).toBe(primary);
+        // In the primary clone the two coincide, which is what makes "work in the main tree" an escape.
+        const home = resolver().resolve('pnpm build', primary, primary);
+        expect(home.mainRoot).toBe(primary);
+        expect(home.mainRoot).toBe(home.root);
+    });
+
+    it('a SIBLING worktree governing itself is `worktree` as well — in-repo placement was never the test', () => {
+        const tree = resolver().resolve('pnpm build', worktree, worktree);
+        expect(tree.kind).toBe('worktree');
+        expect(tree.mainRoot).toBe(primary);
+    });
+
+    it('a nested CLONE the agent stands in is still foreign — this did not widen jurisdiction', () => {
+        // The config walk-up deliberately climbs PAST a nested clone's `.git` to the outer config, so
+        // this is the real shape: cwd inside the clone, governed by the repo around it.
+        expect(resolver().resolve('git push', nestedClone, primary).kind).toBe('foreign');
+    });
+});
+
+/**
  * A block's remedy must not leave its own condition true.
  *
  * The force-to-root remedy was built as `cd '<root>' && <the ORIGINAL command>`. When the original
@@ -417,6 +461,95 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         // Single-quoted, so it stays one runnable line under a path containing a space.
         expect(report).toContain(`cd '${e2eWorktree}' && git status`);
         expect(report).not.toContain(`&& cd ${sub}`);
+    });
+});
+
+/**
+ * THE 2026-08-10 RUN, reproduced end to end through runBash().
+ *
+ * A worktree bumped its `@webpieces` pin to 0.4.624 and ran its OWN `pnpm install`, while the main clone
+ * stayed on 0.4.616. The agent lived in the worktree, so its cwd — and the `webpieces.config.json` walked
+ * up from it — were both the worktree. Row 8 never fired, and two trees of one repo built on two
+ * different releases for a whole session.
+ *
+ * Everything here is REAL: a real `git worktree add`, real `pnpm-workspace.yaml` catalogs, a real
+ * `node_modules/@webpieces/nx-webpieces-rules/package.json` in each tree. The guard reads files, so a
+ * fabricated path would read nothing, come back "in sync", and make the assertions vacuous.
+ */
+describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the measured hole)', () => {
+    const PKG = '@webpieces/nx-webpieces-rules';
+
+    function writePin(root: string, version: string): void {
+        fs.writeFileSync(nodePath.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': ${version}\n`);
+    }
+
+    function writeInstalled(root: string, version: string): void {
+        const dir = nodePath.join(root, 'node_modules', PKG);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(nodePath.join(dir, 'package.json'), JSON.stringify({ name: PKG, version }));
+    }
+
+    /**
+     * A main clone on 0.4.616 and a resident agent worktree on `worktreeVersion`, each with its own
+     * install. The config and the pin are COMMITTED before the worktree is added, so the worktree checks
+     * out its own copy of both — which is the whole reason `governedRoot` is the worktree.
+     */
+    function stage(worktreeVersion: string): { main: string; resident: string } {
+        const home = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-resident-')));
+        const main = nodePath.join(home, 'primary');
+        initRepo(main);
+        writeGuardConfig(main);
+        writePin(main, '0.4.616');
+        gitIn(main, 'add', '-A');
+        gitIn(main, 'commit', '-m', 'config + pin');
+        const resident = nodePath.join(main, '.claude', 'worktrees', 'agent-abfdc0aaf1f981f3f');
+        gitIn(main, 'worktree', 'add', resident, '-b', 'agent-resident');
+        writeInstalled(main, '0.4.616');
+        // What the agent did: bump the pin on its own branch, then install it HERE.
+        writePin(resident, worktreeVersion);
+        writeInstalled(resident, worktreeVersion);
+        return { main, resident };
+    }
+
+    it('BLOCKS real work — the agent is in the worktree, and both trees are named with their versions', () => {
+        const dirs = stage('0.4.624');
+        const result = runBash('pnpm build', dirs.resident, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        const report = (result as BlockedResult).report;
+        expect(report).toContain('version SKEW');
+        expect(report).toContain('0.4.616');
+        expect(report).toContain('0.4.624');
+        expect(report).toContain(dirs.main);
+        expect(report).toContain(dirs.resident);
+    });
+
+    it('the config the agent is governed by is the WORKTREE\'s, and it is blocked anyway', () => {
+        const dirs = stage('0.4.624');
+        // The premise of the old bug: the worktree really does own the config walked up from the cwd.
+        expect(fs.existsSync(nodePath.join(dirs.resident, 'webpieces.config.json'))).toBe(true);
+        expect(resolver().resolve('pnpm build', dirs.resident, dirs.resident).governedRoot)
+            .toBe(dirs.resident);
+        expect(runBash('pnpm build', dirs.resident, 'guards')).toBeInstanceOf(BlockedResult);
+    });
+
+    it('ALLOWS everything once the two trees agree — the block is the skew, not the worktree', () => {
+        const dirs = stage('0.4.616');
+        expect(runBash('pnpm build', dirs.resident, 'guards')).toBeNull();
+        expect(runBash('pnpm test', dirs.resident, 'guards')).toBeNull();
+    });
+
+    it('never blocks the look or the cure, so the resident agent is never deadlocked', () => {
+        const dirs = stage('0.4.624');
+        for (const command of ['ls -la', 'cat pnpm-workspace.yaml', 'git status', 'pnpm install']) {
+            expect(runBash(command, dirs.resident, 'guards'), command).toBeNull();
+        }
+        // …and the cure aimed at the MAIN tree passes from inside the worktree too.
+        expect(runBash(`git -C ${dirs.main} pull`, dirs.resident, 'guards')).toBeNull();
+    });
+
+    it('the MAIN tree is never blocked by this guard, however skewed the worktree is', () => {
+        const dirs = stage('0.4.624');
+        expect(runBash('pnpm build', dirs.main, 'guards')).toBeNull();
     });
 });
 

@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import { EffectiveTree } from './effective-tree';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces-versions';
@@ -33,6 +35,15 @@ import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces
  *   2. EDIT THE MANIFESTS — `pnpm-workspace.yaml` / `package.json` edits are carved out in the runner
  *      the same way `webpieces.config.json` already is, so the cure is typable from inside the block.
  * Reads and read-only inspection are never blocked either, so an agent can always look before it fixes.
+ *
+ * ─── The MAIN tree is `tree.mainRoot`, never `tree.governedRoot` ───────────────────────────────────
+ * The two differ for exactly the reader this guard is for. `governedRoot` is walked up from the payload
+ * cwd to the nearest `webpieces.config.json`, and that file is TRACKED — a linked worktree has its own.
+ * So for an agent resident in a worktree `governedRoot` IS the worktree, and comparing it against
+ * `tree.root` compared the tree with ITSELF: trivially in sync, guard silent. `mainRoot` is git's
+ * `<git-common-dir>/..`, i.e. the clone whose `node_modules` actually supplies the judging binary, and
+ * it is the same answer from every checkout. Measured 2026-08-10: a worktree on 0.4.624 with its own
+ * install, a main clone on 0.4.616, and not one word from this guard.
  */
 export class VersionSyncGuard {
     private readonly inspection = new ReadOnlyInspectionScan();
@@ -44,13 +55,13 @@ export class VersionSyncGuard {
      * lands in the audit log even when nothing blocks.
      */
     skewed(tree: EffectiveTree): boolean {
-        if (tree.kind !== 'worktree') return false;
+        if (!this.applies(tree)) return false;
         return !this.quartetFor(tree).inSync;
     }
 
     /** The deny report, or null to allow. */
     block(command: string, tree: EffectiveTree): string | null {
-        if (tree.kind !== 'worktree') return null;
+        if (!this.applies(tree)) return null;
         if (this.inspection.isReadOnlyInspection(command)) return null;
         if (this.isCureOrLook(command)) return null;
         const quartet = this.quartetFor(tree);
@@ -85,9 +96,23 @@ export class VersionSyncGuard {
         return (head === 'pnpm' || head === 'npm') && (sub === 'install' || sub === 'i');
     }
 
+    /**
+     * Is there a cross-tree comparison to make at all? TWO cheap conditions, no file read behind either:
+     *
+     *   • K is `worktree` — git's `--git-dir ≠ --git-common-dir`, so a repo with no linked worktrees can
+     *     never reach the manifests. (In the primary clone this is also structural escape #1: "do the
+     *     work in the main tree" needs no allowlist entry to keep working.)
+     *   • the two roots are DIFFERENT directories — a tree compared with itself is not a skew, it is the
+     *     single-tree pin-vs-install question the L0 drift guard already owns.
+     */
+    private applies(tree: EffectiveTree): boolean {
+        return tree.kind === 'worktree'
+            && path.resolve(tree.mainRoot) !== path.resolve(tree.root);
+    }
+
     /** Public so the runner can log all four versions on ALLOW as well as on BLOCK (audit, not just deny). */
     quartetFor(tree: EffectiveTree): VersionQuartet {
-        return this.versions.quartet(tree.governedRoot, tree.root);
+        return this.versions.quartet(tree.mainRoot, tree.root);
     }
 
     // Short on purpose — L0 ran a deliberate message diet and these blocks regress into a wall of text
@@ -103,8 +128,8 @@ export class VersionSyncGuard {
             `   linted, validated and built by a release its own manifest does not ask for.`,
             '',
             `   FIX (usually just git — the pin is TRACKED, so the same commit gives the same version):`,
-            `     1. \`git -C ${tree.governedRoot} pull\` and \`git -C ${tree.root} pull\` onto the same main,`,
-            `        then ONE \`cd '${tree.governedRoot}' && pnpm install\`. A worktree needs no install of its own.`,
+            `     1. \`git -C ${tree.mainRoot} pull\` and \`git -C ${tree.root} pull\` onto the same main,`,
+            `        then ONE \`cd '${tree.mainRoot}' && pnpm install\`. A worktree needs no install of its own.`,
             `     2. Or work in the MAIN tree instead — it is never blocked by this guard.`,
             `     3. Or, if this tree genuinely needs a different version, use a separate CLONE, not a`,
             `        worktree: a clone gets its own node_modules and its own governance; a worktree cannot.`,
@@ -123,8 +148,8 @@ export class VersionSyncGuard {
     // "this one is absent" from "I forgot to look".
     private versionLines(tree: EffectiveTree, quartet: VersionQuartet): readonly string[] {
         const lines = [
-            `   main pin       ${this.show(quartet.main.pinned)}   ${tree.governedRoot}/pnpm-workspace.yaml`,
-            `   main installed ${this.show(quartet.main.installed)}   ${tree.governedRoot}/node_modules/${UMBRELLA_PACKAGE}`,
+            `   main pin       ${this.show(quartet.main.pinned)}   ${tree.mainRoot}/pnpm-workspace.yaml`,
+            `   main installed ${this.show(quartet.main.installed)}   ${tree.mainRoot}/node_modules/${UMBRELLA_PACKAGE}`,
             `                  ^ the binary judging this very call`,
             `   this worktree  ${this.show(quartet.worktree.pinned)}   ${tree.root}/pnpm-workspace.yaml`,
         ];
@@ -132,7 +157,7 @@ export class VersionSyncGuard {
             lines.push(`   its installed  ${this.show(quartet.worktree.installed)}   ${tree.root}/node_modules/${UMBRELLA_PACKAGE}`);
             lines.push('                  ^ what nx, vitest and eslint load IN this tree');
         }
-        const others = this.versions.otherWorktrees(tree.governedRoot, tree.root);
+        const others = this.versions.otherWorktrees(tree.mainRoot, tree.root);
         if (others.length > 0) {
             lines.push(`   NOTE ${others.length} other worktree(s) exist and are governed the same way — if they are`);
             lines.push('        skewed too, their agents are already mis-governed. Consider clones, or');

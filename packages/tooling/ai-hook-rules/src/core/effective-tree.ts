@@ -52,8 +52,27 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  *   3. WHICH CHECKOUT? `--show-toplevel` from `effectiveCwd`. A LINKED WORKTREE of the governed repo is
  *      MANAGED — it is the same project, just another checkout — so guards run, keyed on THAT tree's
  *      branch and its own state.
- *   4. PRIMARY OR LINKED? `gitDir !== commonDir`, git's own canonical test. The governed root itself is
- *      always `primary`: it is home, whether the session was started in the clone or in a worktree.
+ *   4. PRIMARY OR LINKED? `gitDir !== commonDir`, git's own canonical test — AND NOTHING ELSE. Where
+ *      `webpieces.config.json` happened to be found does not enter into it (see below).
+ *   5. WHICH TREE GOVERNS THE INSTALL? `<git-common-dir>/..` — the PRIMARY clone, carried as `mainRoot`.
+ *      It is the tree whose `node_modules` supplies the binary judging the call, from any checkout.
+ *
+ * GOVERNANCE IS NOT IDENTITY EITHER — the second half of the same lesson, and the second bug. classify()
+ * used to answer `primary` for ANY tree that also owned the `webpieces.config.json` it was judged
+ * against (`sameDir(treeRoot, governedRoot)`). `governedRoot` is walked UP from the payload cwd, and a
+ * linked worktree has its own TRACKED config, so for an agent whose cwd IS the worktree — the common
+ * case, and the only one the harness creates for a worktree-isolated subagent — its own tree read as
+ * `primary`. Row 8 (VersionSyncGuard) matches on `w`, so it could not fire for exactly the agents it
+ * exists to protect: measured 2026-08-10, a worktree bumped its pin to 0.4.624 and ran its own
+ * `pnpm install` while the main clone stayed on 0.4.616, and nothing said a word. In the SAME tool call
+ * the `.webpieces/` log resolver — which asks git — correctly stamped `tree=agent-abfdc0aaf1f981f3f`.
+ * Two resolvers in one process disagreeing at the same instant is the shape this module exists to make
+ * impossible, so K is now git's answer and ONLY git's answer.
+ *
+ * That leaves `governedRoot` meaning what its name says (whose config and excludePaths apply) and adds
+ * `mainRoot` for the question VersionSyncGuard actually asks (whose `node_modules` is judging this
+ * call). Those were never the same value, and conflating them made the guard compare a worktree
+ * against ITSELF, which is trivially in sync.
  *
  * PLACEMENT IS NOT IDENTITY, and assuming it was is the bug this shape exists to prevent. classify()
  * used to short-circuit on "is `effectiveCwd` inside the governed root?" and never ask git anything
@@ -76,6 +95,8 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
 // them alike — guards/L1-location.md writes them as one value, `pw`. Exactly ONE guard separates them,
 // and on a dimension read OFF the tree itself: VersionSyncGuard blocks work in a linked worktree whose
 // @webpieces pin disagrees with the MAIN tree's, because the main tree's binary is what judges it.
+// 'worktree' is git's answer (`--git-dir` ≠ `--git-common-dir`) for the tree the command ACTS ON — it
+// does not depend on where the agent was launched, nor on which tree owns the config.
 //
 // 'outside' is produced below (git has no answer for the directory) and consumed NOWHERE, so a command in no git repo is
 // judged against governedRoot — a repo it is not in. guards/L1-location.md's "Not done" section explains why
@@ -97,15 +118,34 @@ export class EffectiveTree {
     readonly root: string;
     /** The root that owns webpieces.config.json — where config and excludePaths come from. */
     readonly governedRoot: string;
+    /**
+     * The PRIMARY clone's root — git's `<git-common-dir>/..`, the same answer from every checkout of the
+     * repo, and equal to `root` in the primary clone itself.
+     *
+     * NOT `governedRoot`. A linked worktree owns its own TRACKED `webpieces.config.json`, so for an agent
+     * resident in one the governed root is the WORKTREE — while the `node_modules` (and therefore the
+     * binary judging the call, the nx executors and the eslint plugin) still resolves by walking up to
+     * the primary clone. This field is that walk-up, asked of git instead of inferred.
+     */
+    readonly mainRoot: string;
     readonly kind: TreeKind;
     /** The command acts on a tree other than the shell's own — messages must steer with `cd <root> &&`. */
     readonly redirected: boolean;
 
-    constructor(shellCwd: string, effectiveCwd: string, root: string, governedRoot: string, kind: TreeKind) {
+    // eslint-disable-next-line @typescript-eslint/max-params -- five resolved paths plus the kind decided from them
+    constructor(
+        shellCwd: string,
+        effectiveCwd: string,
+        root: string,
+        governedRoot: string,
+        mainRoot: string,
+        kind: TreeKind,
+    ) {
         this.shellCwd = shellCwd;
         this.effectiveCwd = effectiveCwd;
         this.root = root;
         this.governedRoot = governedRoot;
+        this.mainRoot = mainRoot;
         this.kind = kind;
         this.redirected = path.resolve(root) !== path.resolve(shellCwd);
     }
@@ -121,7 +161,8 @@ export class EffectiveTreeResolver {
     resolve(command: string, shellCwd: string, governedRoot: string): EffectiveTree {
         const effectiveCwd = this.effectiveCwd(command, shellCwd);
         const kindAndRoot = this.classify(effectiveCwd, governedRoot);
-        return new EffectiveTree(shellCwd, effectiveCwd, kindAndRoot.root, governedRoot, kindAndRoot.kind);
+        return new EffectiveTree(
+            shellCwd, effectiveCwd, kindAndRoot.root, governedRoot, kindAndRoot.mainRoot, kindAndRoot.kind);
     }
 
     /**
@@ -240,32 +281,35 @@ export class EffectiveTreeResolver {
         // governed root — with a remedy that `cd`s straight back into the deleted path. One statSync,
         // ahead of the git calls, keeps them apart. The root is the GOVERNED root because that is the
         // only tree left to steer anyone to.
-        if (!fs.existsSync(effectiveCwd)) return new TreeClassification('missing', governedRoot);
+        if (!fs.existsSync(effectiveCwd)) return new TreeClassification('missing', governedRoot, governedRoot);
 
         const dirs = dotWebpieces.gitDirs(effectiveCwd);
         // Not a git repo at all. Inside the governed tree that can only be a directory git declined to
         // answer for, so it stays `primary` exactly as before; outside it is the `cd /tmp && …` case.
         if (dirs === null) {
             return this.isInside(effectiveCwd, governedRoot)
-                ? new TreeClassification('primary', governedRoot)
-                : new TreeClassification('outside', governedRoot);
+                ? new TreeClassification('primary', governedRoot, governedRoot)
+                : new TreeClassification('outside', governedRoot, governedRoot);
         }
 
         const treeRoot = dotWebpieces.treeRoot(effectiveCwd) ?? governedRoot;
+        // `<git-common-dir>/..`, off the SAME memoized rev-parse pair `gitDirs` just answered with — so
+        // this costs no extra process, which matters on the hook's blocking path.
+        const mainRoot = dotWebpieces.primaryRoot(effectiveCwd);
         const ours = dotWebpieces.gitDirs(governedRoot);
         // ONE test for "is this our repo": the shared git dir. It is identical for every checkout of one
         // repo and different for a nested clone, wherever either happens to sit on disk.
         if (ours === null || !sameDir(dirs.commonDir, ours.commonDir)) {
-            return new TreeClassification('foreign', treeRoot);
+            return new TreeClassification('foreign', treeRoot, mainRoot);
         }
 
-        // Home is `primary` whether the session was started in the clone or in a worktree — the split
-        // VersionSyncGuard exists to catch is acting on a tree OTHER than the one that governs
-        // you, and there is no split when they are the same directory.
-        if (!dirs.isLinkedWorktree || sameDir(treeRoot, governedRoot)) {
-            return new TreeClassification('primary', treeRoot);
-        }
-        return new TreeClassification('worktree', treeRoot);
+        // GIT DECIDES, and nothing else. `isLinkedWorktree` is `--git-dir !== --git-common-dir`, an
+        // answer about the CHECKOUT — so a worktree is `worktree` whether the command was typed from the
+        // primary clone (`cd <wt> && …`) or by an agent living in it. The old extra clause
+        // (`|| sameDir(treeRoot, governedRoot)`) made a resident agent's OWN tree read `primary`,
+        // silently retiring row 8 for every worktree-isolated subagent — see this module's header.
+        if (!dirs.isLinkedWorktree) return new TreeClassification('primary', treeRoot, mainRoot);
+        return new TreeClassification('worktree', treeRoot, mainRoot);
     }
 
     /** Is `dir` the directory `root` itself, or somewhere beneath it? Pure path math, no filesystem. */
@@ -300,14 +344,17 @@ const VARIABLE_TARGET = /[$`]|^~/;
 // `cd`. `&&`, `||`, `;` and a bare newline are the shapes CommandScanner splits a leading run on.
 const LEADING_SEPARATOR = /^\s*(?:&&|\|\||;|\n)\s*/;
 
-/** Data-only carrier for the two values classify() decides together. */
+/** Data-only carrier for the three values classify() decides together. */
 class TreeClassification {
     readonly kind: TreeKind;
     readonly root: string;
+    /** The primary clone behind `root` — see EffectiveTree.mainRoot for why it is not `governedRoot`. */
+    readonly mainRoot: string;
 
-    constructor(kind: TreeKind, root: string) {
+    constructor(kind: TreeKind, root: string, mainRoot: string) {
         this.kind = kind;
         this.root = root;
+        this.mainRoot = mainRoot;
     }
 }
 

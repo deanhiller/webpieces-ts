@@ -47,8 +47,22 @@ function pair(mainPin: string, wtPin: string): { main: string; wt: string } {
     return { main, wt };
 }
 
+/**
+ * The command was typed FROM THE MAIN TREE at a worktree (`cd <wt> && …`), so the main tree owns the
+ * config as well as the install: governedRoot and mainRoot coincide.
+ */
 function worktreeTree(main: string, wt: string): EffectiveTree {
-    return new EffectiveTree(main, wt, wt, main, 'worktree');
+    return new EffectiveTree(main, wt, wt, main, main, 'worktree');
+}
+
+/**
+ * THE COMMON CASE, and the one that was silently exempt: the agent LIVES in the worktree. Its cwd is the
+ * worktree, and the worktree has its own TRACKED webpieces.config.json — so `governedRoot` is the
+ * WORKTREE, not the main clone. Only `mainRoot` still points at the tree whose node_modules judges the
+ * call.
+ */
+function residentTree(main: string, wt: string): EffectiveTree {
+    return new EffectiveTree(wt, wt, wt, wt, main, 'worktree');
 }
 
 describe('VersionSyncGuard — when it fires', () => {
@@ -71,8 +85,58 @@ describe('VersionSyncGuard — when it fires', () => {
      */
     it('never fires on the MAIN tree, however skewed anything else is', () => {
         const dirs = pair('0.4.616', '0.4.612');
-        const primary = new EffectiveTree(dirs.main, dirs.main, dirs.main, dirs.main, 'primary');
+        const primary = new EffectiveTree(dirs.main, dirs.main, dirs.main, dirs.main, dirs.main, 'primary');
         expect(new VersionSyncGuard().block('pnpm build', primary)).toBeNull();
+    });
+
+    /**
+     * THE HOLE THIS SPEC EXISTS FOR (measured 2026-08-10). A resident agent's worktree owns its own
+     * TRACKED config, so `governedRoot` is the WORKTREE — and the guard used to compare `governedRoot`
+     * with `root`, i.e. the tree with itself. Two trees of one repo ran different releases for a whole
+     * session and row 8 never fired. The comparison is against `mainRoot` now.
+     */
+    it('FIRES for an agent whose cwd IS the worktree — governedRoot is the worktree, mainRoot is not', () => {
+        const dirs = pair('0.4.616', '0.4.624');
+        writeInstalled(dirs.wt, '0.4.624');
+        const guard = new VersionSyncGuard();
+        const tree = residentTree(dirs.main, dirs.wt);
+        expect(tree.governedRoot).toBe(dirs.wt);
+        expect(guard.skewed(tree)).toBe(true);
+        const report = guard.block('pnpm build', tree);
+        expect(report).not.toBeNull();
+        expect(report).toContain('0.4.616');
+        expect(report).toContain('0.4.624');
+        // The cure has to name the MAIN clone, not the worktree the agent is standing in.
+        expect(report).toContain(`git -C ${dirs.main} pull`);
+    });
+
+    it('stays silent for a resident agent once the two trees agree', () => {
+        const dirs = pair('0.4.616', '0.4.616');
+        writeInstalled(dirs.wt, '0.4.616');
+        expect(new VersionSyncGuard().block('pnpm build', residentTree(dirs.main, dirs.wt))).toBeNull();
+    });
+
+    it('a resident agent can still look, and still run the cure, from inside the block', () => {
+        const dirs = pair('0.4.616', '0.4.624');
+        writeInstalled(dirs.wt, '0.4.624');
+        const guard = new VersionSyncGuard();
+        const tree = residentTree(dirs.main, dirs.wt);
+        for (const command of ['ls -la', 'cat pnpm-workspace.yaml', 'git status', 'git pull', 'pnpm install']) {
+            expect(guard.block(command, tree), command).toBeNull();
+        }
+    });
+
+    /**
+     * A tree compared with ITSELF is not a skew. If git cannot name a separate primary clone the roots
+     * coincide, and the pin-vs-install question that remains belongs to the L0 drift guard — this one
+     * must not invent a cross-tree verdict out of one tree's two numbers.
+     */
+    it('never fires when mainRoot and root are the same directory', () => {
+        const dirs = pair('0.4.616', '0.4.612');
+        writeInstalled(dirs.wt, '0.4.500');
+        const selfTree = new EffectiveTree(dirs.wt, dirs.wt, dirs.wt, dirs.wt, dirs.wt, 'worktree');
+        expect(new VersionSyncGuard().skewed(selfTree)).toBe(false);
+        expect(new VersionSyncGuard().block('pnpm build', selfTree)).toBeNull();
     });
 
     it('never fires on read-only inspection — you can always look before you fix', () => {
