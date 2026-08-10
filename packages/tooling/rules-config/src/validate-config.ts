@@ -10,6 +10,7 @@ import { recommendedSeedModeFor, isGradualMode } from './seed-entry';
 import { MODIFIED_CODE_MODES } from './rule-configs';
 import { validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
 import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
+import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
 export { validateChecklistsSection };
@@ -72,22 +73,38 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     return out;
 }
 
-// A config key under rules/hookGuards that the RUNNING validator has no schema for (and no rulesDir is
-// set to supply custom rules). Two very different causes, so the message leads with the common one:
-//   1. Version skew (most common — happens right after a dep bump): webpieces.config.json references a
-//      rule a NEWER @webpieces release added, but the installed guard is OLDER and doesn't know it yet.
-//      Fix = `pnpm install` (NOT deleting the key — the key is valid, the validator is just stale).
-//   2. A genuinely removed/renamed rule left behind, or a typo. Fix = remove the key.
-// Do NOT tell the AI to delete first — that destroys valid config in case 1 (the trap that made the AI
-// gut a working config instead of running `pnpm install`). The banner in load-config.ts spells out the
-// ordered "run pnpm install, THEN edit only if it persists" fix.
+/**
+ * A config key under rules/hookGuards that the RUNNING validator has no schema for (and no rulesDir is set
+ * to supply custom rules). THE FALLBACK: it fires for any name the table in retired-config-keys.ts does not
+ * know, which very much includes RETIRED names on a tree whose validator predates the retirement — the
+ * ordinary linked-worktree layout, where the worktree is on one release and the parent checkout that
+ * supplies the hook's resolution is on an older one. So this text has to be useful with NO table entry.
+ *
+ * DELETION LEADS, and it is not a hedge. A key the running validator has no schema for controls nothing:
+ * every code path that would read it is keyed off the schema. Leaving it is dead config that reads as live
+ * config, and for a retired key deleting it is the entire fix.
+ *
+ * This message used to lead with `pnpm install` instead, on the theory that the key might be valid and the
+ * validator merely stale. Two things are wrong with that. First, it CONTRADICTED the banner this error is
+ * printed inside, which states outright that `pnpm install` cannot help — one output, two opposite orders.
+ * Second, the premise is already handled upstream: the shim's version-drift guard compares the pin against
+ * the installed version and denies every tool call BEFORE exec'ing this validator, with its own message and
+ * its own cure. If this text is on screen, that guard found no drift. The pin therefore appears here only as
+ * a secondary note, so a valid-but-newer key is never dropped without the reader being told the case exists.
+ */
 function unknownRuleError(ruleName: string): string {
     return (
         `[${ruleName}] Unknown rule — the running @webpieces validator has no schema for it, and no ` +
-        `"rulesDir" is configured to supply custom rules. Most often this means your installed guard is a ` +
-        `release BEHIND this webpieces.config.json: run \`pnpm install\` first (see the fix steps below) so ` +
-        `the validator learns "${ruleName}". Only if it is STILL unknown after a fresh install is it a ` +
-        `removed/renamed rule or a typo — then remove the "${ruleName}" key from webpieces.config.json.`
+        `"rulesDir" is configured to supply custom rules. A key no validator knows controls NOTHING, so ` +
+        `DELETE the "${ruleName}" key from webpieces.config.json — run \`${PRUNE_UNKNOWN_COMMAND}\` to ` +
+        `strip it (and every other unknown key) mechanically. It may be RETIRED: a newer release can move ` +
+        `a setting out of this file entirely, in which case deleting the key here is the WHOLE fix. ` +
+        `MACHINE-LOCAL settings in particular now live in ~/.webpieces/config.json under "experimental" — ` +
+        `an optional file tracked by no repo, whose absence is the default behaviour — so if ` +
+        `"${ruleName}" is one of those, delete it here and set it there. Secondary, and rare: a key is ` +
+        `valid-but-unlearned when package.json pins an @webpieces OLDER than this config was written for, ` +
+        `and the version-drift guard reports THAT separately with its own cure (bump the pin) before this ` +
+        `validator ever runs — so it is not what you are looking at.`
     );
 }
 
@@ -130,9 +147,10 @@ export function validateWebpiecesConfig(
     for (const [ruleName, entry] of Object.entries(rawRules)) {
         const schema = RULE_SCHEMAS[ruleName];
         if (!schema) {
-            // A name we KNOW is retired beats the unknown-rule message, which leads with "run `pnpm
-            // install`, your validator may be stale" — precisely the wrong advice for a dead name. It
-            // fires even when a rulesDir is set, because a custom rule must not reuse a retired name.
+            // A name we KNOW is retired beats the generic unknown-rule message, because only the table
+            // knows WHERE the setting went — a rename carries its value over, and a bare "delete it"
+            // would throw that value away. It fires even when a rulesDir is set, because a custom rule
+            // must not reuse a retired name.
             const retired = retiredRuleFor(ruleName);
             if (retired) {
                 errors.push(retiredKeyError(retired));

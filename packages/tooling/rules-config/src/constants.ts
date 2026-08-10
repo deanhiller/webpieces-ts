@@ -79,6 +79,18 @@ export const PUSH_DEV_STATE_FILE = 'push-dev-in-progress.json';
 export const MERGE_EXPLANATION_FILE = 'merge-explanation.md';
 
 /**
+ * The command that MECHANICALLY strips every unknown key from webpieces.config.json.
+ *
+ * An unknown key controls nothing, so deleting it is the cure — but "delete it" is a judgement call made
+ * while the guard denies every Bash call, which is exactly when a reader is least able to make one. This
+ * command turns that judgement into one keystroke, and every message that reports an unknown key names it.
+ *
+ * Lives in this leaf module (no imports) so both the banner and the validators can name it without
+ * importing the pruner and re-creating an import cycle.
+ */
+export const PRUNE_UNKNOWN_COMMAND = 'pnpm wp-prune-unknown-config';
+
+/**
  * Fast predicate: does this text carry a webpieces-disable for the given rule?
  * Line-agnostic — the caller decides which line(s) or block of text to feed it.
  * This is the cheap substring form used by code-rules detection and pr-gate's

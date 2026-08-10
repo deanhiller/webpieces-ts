@@ -24,7 +24,8 @@
     "publishConfig": {
         "bin": {
             "wp-validate-code": "./src/cli.js",
-            "wp-ci": "./src/wp-ci.js"
+            "wp-ci": "./src/wp-ci.js",
+            "wp-prune-unknown-config": "./src/prune-unknown-config.js"
         },
         "access": "public"
     }

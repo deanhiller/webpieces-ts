@@ -88,9 +88,10 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 5 | git pull / git fetch - merge is NOT on the list | ALLOW |
 | 6 | pnpm exec wp-upgrade-shim | ALLOW |
 | 7 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 8 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 9 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
-| 10 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 8 | pnpm wp-prune-unknown-config | ALLOW |
+| 9 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
+| 10 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 11 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

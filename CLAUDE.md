@@ -416,8 +416,11 @@ Almost everything else runs the **published** copy:
   `validate-architecture-unchanged` stays green after you changed graph-producing code, the likely
   reason is that the executors ran the OLD published plugin — not that your change was a no-op. Look at
   `node_modules/@webpieces/<pkg>` before concluding anything.
-- If a validator rejects config keys that look correct, the fix is **`pnpm install`** (the validator is
-  stale), not deleting the keys.
+- If a validator rejects a config key as UNKNOWN, **delete the key** — that is the primary cure, and
+  `pnpm wp-prune-unknown-config` does it mechanically. A key no running validator has a schema for
+  controls nothing, and for a RETIRED key deletion is the whole fix. The stale-validator case (the key is
+  valid, your pin is behind) never reaches that message: the version-drift guard catches it first and
+  prescribes its own cure, so `pnpm install` is not the answer to a validation error.
 
 ### No bin shims — every `bin` lives in `publishConfig.bin`
 
@@ -566,8 +569,12 @@ unnecessary.
 
 A hard rejection can never wedge a repo, which is what makes this safe:
 - editing `webpieces.config.json` is **always** permitted, even while the config is invalid,
-- `pnpm install` is **always** permitted (installer bypass), and it fixes the far more common cause of a
-  validation failure — a validator lagging the config by a release.
+- `pnpm wp-prune-unknown-config` is an **L0 cure**, so the mechanical deletion of keys no validator knows
+  runs from inside the block as well.
+
+`pnpm install` is permitted too (installer bypass), but it is **not** the cure for a validation error — the
+version-drift guard denies every tool call before the validator runs, so a validation error on screen means
+the pin and `node_modules` already agree.
 
 So **"rejecting it would deadlock the consumer" is not a reason to add a fallback.** It is not true, and it
 is the exact argument that licensed the fallbacks which then kept this repo's own config on dead shapes for

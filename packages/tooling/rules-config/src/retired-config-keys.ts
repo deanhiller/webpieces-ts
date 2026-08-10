@@ -17,10 +17,18 @@
  * A hard rejection here is always self-recoverable, which is what makes it safe to do:
  *   - editing webpieces.config.json is ALWAYS permitted, even while the config is invalid (see the banner
  *     in config-file.ts and the guard matrix — a Write/Edit targeting this file is an unconditional PASS),
- *   - `pnpm install` is ALWAYS permitted (installer bypass), which fixes the far more common cause of a
- *     validation failure: an installed validator lagging the config by a release.
+ *   - and `PRUNE_UNKNOWN_COMMAND` is an L0 CURE, so the mechanical cleanup of keys no validator knows runs
+ *     from inside the block too.
  * So rejecting an old shape can never wedge a repo. "It would deadlock the consumer" is not a reason to add
  * a fallback; it is not true.
+ *
+ * NOT `pnpm install`. This paragraph used to offer it as the escape hatch that "fixes the far more common
+ * cause of a validation failure: an installed validator lagging the config by a release". It is permitted
+ * (installer bypass), but it is not the cure for anything you can read here: the shim's version-drift guard
+ * compares the pin against the installed version and denies every tool call BEFORE the validator runs, so a
+ * validation error on screen is proof that package.json and node_modules already agree. The banner from this
+ * same package now says "Do NOT run `pnpm install` — it cannot help", and a docstring teaching the opposite
+ * is how that advice leaked back out.
  *
  * ## Adding an entry
  *
@@ -34,6 +42,7 @@
  */
 
 import { RETIRED_KEY_MARKER } from './config-error-banner';
+import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
 // A retired key is matched one of two ways, because config keys live at two very different levels.
 // RULE — a rule/guard NAME, which may sit under either `rules` or `hookGuards`, so it is matched by bare
@@ -53,14 +62,27 @@ export class RetiredConfigKey {
     instruction: string;
     // Bracketed label leading the error, matching the `[rule-name]` / `[section]` convention in this package.
     label: string;
+    /**
+     * True when DELETING the key from webpieces.config.json is the entire edit — nothing in THIS file
+     * replaces it, so `PRUNE_UNKNOWN_COMMAND` may strip it mechanically. `whole-repo-build-guard` is the
+     * worked example: its switch moved OUT of the repo config into `~/.webpieces/config.json`, so the
+     * value has nowhere to go here.
+     *
+     * False for a rename or an in-file move: deleting those would DISCARD a value the reader still needs,
+     * so they keep their migration instruction and the pruner leaves them alone. Required, not defaulted —
+     * a defaulted `false` would let a future deletion-only retirement silently opt out of the mechanical
+     * cure and land back in "the reader decides while every Bash call is blocked".
+     */
+    prunable: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(scope: string, key: string, movedTo: string, instruction: string, label: string) {
+    constructor(scope: string, key: string, movedTo: string, instruction: string, label: string, prunable: boolean) {
         this.scope = scope;
         this.key = key;
         this.movedTo = movedTo;
         this.instruction = instruction;
         this.label = label;
+        this.prunable = prunable;
     }
 }
 
@@ -76,20 +98,20 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
     new RetiredConfigKey(
         RETIRED_SCOPE_RULE, 'pr-merge-cleanup', 'pr-merge-guard',
         'Rename the key to "pr-merge-guard". Its value carries over unchanged.',
-        '[pr-merge-cleanup]',
+        '[pr-merge-cleanup]', false,
     ),
     new RetiredConfigKey(
         RETIRED_SCOPE_RULE, 'pr-creation-guard', 'pr-creation-or-push-guard',
         'Rename the key to "pr-creation-or-push-guard" — the guard grew a second blocked action (a manual ' +
         'git push), so it is no longer only about PR creation. Its value carries over unchanged.',
-        '[pr-creation-guard]',
+        '[pr-creation-guard]', false,
     ),
     new RetiredConfigKey(
         RETIRED_SCOPE_RULE, 'main-stale-guard', 'read-stale-guard',
         'Rename the key to "read-stale-guard" — the guard grew a second blocked state (an already-merged ' +
         'feature branch), so it is no longer about `main` at all; it is THE guard that can block a Read. ' +
         'Its value carries over unchanged.',
-        '[main-stale-guard]',
+        '[main-stale-guard]', false,
     ),
 
     // --- The two flat guard-hint strings, superseded by commands.guardHints so that every guard-facing
@@ -98,13 +120,13 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
         RETIRED_SCOPE_KEY, 'upsertPr', 'commands.guardHints.prCreationOrPush',
         'Move the value to "guardHints": { "prCreationOrPush": <value> } inside the same "commands" ' +
         'section, then delete "upsertPr".',
-        '[commands]',
+        '[commands]', false,
     ),
     new RetiredConfigKey(
         RETIRED_SCOPE_KEY, 'mergeComplete', 'commands.guardHints.mergeInProgress',
         'Move the value to "guardHints": { "mergeInProgress": <value> } inside the same "commands" ' +
         'section, then delete "mergeComplete".',
-        '[commands]',
+        '[commands]', false,
     ),
 
     // --- The two-list excludePaths object. The split never earned its keep (every consumer set both lists
@@ -116,7 +138,7 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
         'both lists, de-duplicated — e.g. "excludePaths": ["repositories/**"]. A path is governed by ' +
         'webpieces or it is not, so there is no longer a per-engine split. To exclude a path from one rule ' +
         'only, use that rule\'s own "excludePaths" inside its config block instead.',
-        '[excludePaths]',
+        '[excludePaths]', false,
     ),
 
     // --- whole-repo-build-guard, retired as a REPO-CONFIG key one release after it was added. It shipped
@@ -132,7 +154,7 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
         'YOUR machine only, put {"experimental": {"whole-repo-build-guard": true}} in ' +
         '~/.webpieces/config.json — that file is optional, is tracked by no repo, and every webpieces ' +
         'command behaves exactly as it does by default when it does not exist.',
-        '[whole-repo-build-guard]',
+        '[whole-repo-build-guard]', true,
     ),
 ];
 
@@ -148,13 +170,19 @@ export function retiredKeyError(entry: RetiredConfigKey): string {
     const destination = entry.movedTo === ''
         ? 'It was removed with no replacement.'
         : `It moved to "${entry.movedTo}".`;
-    return `${entry.label} "${entry.key}" ${RETIRED_KEY_MARKER}. ${destination} ${entry.instruction}`;
+    // Deletion-only retirements get the mechanical cure named right here, so the reader never has to
+    // decide whether removing a key is safe while the guard is denying every Bash call.
+    const mechanical = entry.prunable
+        ? ` Deleting it is the WHOLE fix — \`${PRUNE_UNKNOWN_COMMAND}\` does it for you.`
+        : '';
+    return `${entry.label} "${entry.key}" ${RETIRED_KEY_MARKER}. ${destination} ${entry.instruction}${mechanical}`;
 }
 
 /**
  * The retired entry for a rule/guard NAME, or null. Callers must consult this BEFORE reporting a name as an
- * unknown rule: the unknown-rule message leads with "run `pnpm install`, your validator may be stale", which
- * is exactly the wrong advice for a name we know is dead.
+ * unknown rule: the generic unknown-rule message can only say "delete it", while this table knows WHERE the
+ * setting went — a rename that must carry its value over, or a move to `~/.webpieces/config.json`. The
+ * destination is the whole product, and a bare "delete it" would throw it away.
  */
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this package
 export function retiredRuleFor(ruleName: string): RetiredConfigKey | null {

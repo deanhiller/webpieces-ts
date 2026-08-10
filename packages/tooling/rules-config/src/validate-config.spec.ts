@@ -51,12 +51,19 @@ describe('validateWebpiecesConfig', () => {
         expect(errors.some(e => e.includes('[no-shell-substitution]') && e.includes('Unknown rule'))).toBe(true);
     });
 
-    it('leads the unknown-rule fix with `pnpm install` (version skew), not with deleting the key', () => {
-        // The common cause is a stale install (config newer than the running validator). Deleting the
-        // flagged key would gut valid config, so the message must point at `pnpm install` first.
+    /**
+     * INVERTED, deliberately. This used to assert the message led with `pnpm install` and only mentioned
+     * removal as a last resort. Two things were wrong with that. The install advice CONTRADICTED the
+     * banner the error is printed inside ("Do NOT run `pnpm install` — it cannot help"), and the premise
+     * is handled upstream anyway: the shim's version-drift guard denies every tool call before this
+     * validator is exec'd, so reaching this message proves the pin and node_modules already agree.
+     * See config-pruner.spec.ts for the full case-by-case pinning.
+     */
+    it('leads the unknown-rule fix with DELETING the key, and never prescribes `pnpm install`', () => {
         const [msg] = validateWebpiecesConfig({ 'brand-new-rule': { mode: 'ON' } });
-        expect(msg).toContain('pnpm install');
-        expect(msg.indexOf('pnpm install')).toBeLessThan(msg.indexOf('remove'));
+        expect(msg).not.toContain('pnpm install');
+        expect(msg).toContain('DELETE the "brand-new-rule" key');
+        expect(msg.indexOf('DELETE')).toBeLessThan(msg.indexOf('Secondary'));
     });
 
     it('allows an unknown rule key when a rulesDir is configured (may be a custom rule)', () => {

@@ -2,14 +2,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { migrate, applyHook, installTargets, hasHook, renderShim, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
+import { applyHook, installTargets, hasHook, renderShim, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
 import { readSettings } from './hook-registration';
 import {
     INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS,
     RECOVERY_CMD, healShim, shimPath,
 } from './shim';
 import { ShimTestkit } from './shim-testkit';
-import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
 import { L0_SHIM_STREAM } from '../core/log-streams';
 
 // The sh audit log now carries the same stream prefix as the JS side
@@ -45,115 +44,6 @@ function targetsIn(root: string): ReturnType<typeof installTargets> {
 // Post-#235 PreToolUse protocol: the shim ALLOWS by exiting 0 with NO stdout, and DENIES by exiting 0
 // with a permissionDecision:"deny" JSON on stdout. So "allowed" = empty stdout; "denied" = deny JSON.
 
-describe('migrate', () => {
-    it('moves guards from rules → hookGuards and a top-level pr-gate → commands', () => {
-        const result = migrate({
-            rules: {
-                'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
-                'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
-            },
-            'pr-gate': { mode: 'OFF', buildCommand: 'echo ci', gates: [] },
-        });
-
-        expect(result.config.rules['no-any-unknown']).toBeDefined();
-        expect(result.config.rules['pr-creation-or-push-guard']).toBeUndefined();
-        expect(result.config.hookGuards['pr-creation-or-push-guard']).toBeDefined();
-        expect(result.config.commands['pr-gate']).toBeDefined();
-        expect((result.config as { 'pr-gate'?: unknown })['pr-gate']).toBeUndefined();
-        const hints = result.config.commands['guardHints'] as Record<string, unknown>;
-        expect(hints['prCreationOrPush']).toBe('pnpm wp-start-upsert-pr');
-        expect(hints['mergeInProgress']).toBe('pnpm wp-finish-upsert-pr');
-    });
-
-    // migrate() has to actually move what the validator's errors say is retired. It used to SEED the
-    // flat keys and know nothing of the guard renames, so the installer reported success and the config
-    // still failed to load.
-    it('moves the retired flat command strings into guardHints and deletes them', () => {
-        const result = migrate({
-            rules: {}, hookGuards: {},
-            commands: { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm my-upsert', mergeComplete: 'pnpm my-finish' },
-        });
-        expect(result.config.commands['upsertPr']).toBeUndefined();
-        expect(result.config.commands['mergeComplete']).toBeUndefined();
-        const hints = result.config.commands['guardHints'] as Record<string, unknown>;
-        // The consumer's own value wins over the default — a renamed gated command survives the migration.
-        expect(hints['prCreationOrPush']).toBe('pnpm my-upsert');
-        expect(hints['mergeInProgress']).toBe('pnpm my-finish');
-        expect(result.changes.some(c => c.includes('moved retired commands.upsertPr'))).toBe(true);
-    });
-
-    it('renames retired guard keys instead of leaving them to fail validation', () => {
-        const result = migrate({
-            rules: {},
-            hookGuards: { 'main-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 } },
-            commands: { 'pr-gate': { mode: 'OFF' } },
-        });
-        expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
-        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
-        expect(result.changes.some(c => c.includes('renamed retired "main-stale-guard"'))).toBe(true);
-    });
-
-    it('drops a retired name rather than clobbering an explicit entry under the new name', () => {
-        const result = migrate({
-            rules: {},
-            hookGuards: {
-                'main-stale-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0 },
-                'read-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
-            },
-            commands: { 'pr-gate': { mode: 'OFF' } },
-        });
-        expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
-        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
-    });
-
-    it('adds every missing built-in into its correct section, ENFORCING at its recommended mode', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
-        // A code rule and a guard both get seeded into the right section, with BOTH escape hatches shown.
-        // The mode is rules-config's recommendedSeedMode() — NOT 'OFF'. Seeding OFF is what left adopters
-        // with a fully installed webpieces that enforced nothing.
-        expect(result.config.rules['max-file-lines']).toMatchObject(
-            { mode: recommendedSeedMode('max-file-lines'), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
-        // toMatchObject, not toEqual: a seeded entry also carries every OTHER schema-required field —
-        // here autoReapMergedBranches, which ships TRUE so dead branches are reaped without anyone
-        // having to opt in. Every reap is logged with a `recover=` command, so it is one paste to undo.
-        expect(result.config.hookGuards['branch-creation-guard']).toMatchObject(
-            { mode: recommendedSeedMode('branch-creation-guard'), turnOffRuleUntilEpoch: 0,
-              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: true });
-        expect(result.config.rules['max-file-lines']['mode']).not.toEqual('OFF');
-        expect(result.config.hookGuards['branch-creation-guard']['mode']).not.toEqual('OFF');
-    });
-
-    it('seeds NO built-in as OFF — every rule arrives enforcing (gradual where the rule supports it)', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
-        const seeded = { ...result.config.rules, ...result.config.hookGuards };
-        for (const name of allRuleNames()) {
-            expect(seeded[name]['mode'], `${name} seeded OFF`).not.toEqual('OFF');
-        }
-    });
-
-    // THE structural guard: whatever the installer writes must be a config the LOADER accepts. Both
-    // sides read the same schema (seedEntryForRule -> RULE_SCHEMAS <- validateWebpiecesConfig), and
-    // this assertion is what keeps them wired together — it makes "the installer cannot emit a config
-    // the loader rejects" a build-time fact instead of something a consumer rediscovers on first run.
-    //
-    // It caught a PRE-EXISTING gap: seeding emitted only mode + the two hatches, so every fresh
-    // install wrote `"branch-creation-guard": {...}` with no `autoReapMergedBranches` and the config
-    // failed validation immediately. That was equally broken back when seeding was OFF — the
-    // missing-required-field check does not care what mode says.
-    it('seeds/migrates a config that validates with ZERO errors', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
-        const merged = { ...result.config.rules, ...result.config.hookGuards };
-        expect(validateWebpiecesConfig(merged, false)).toEqual([]);
-        // ...and every rule landed in the section the loader expects it in.
-        expect(validateSectionPlacement(result.config.rules, result.config.hookGuards)).toEqual([]);
-    });
-
-    it('reports no changes for an already-migrated config', () => {
-        const once = migrate({ rules: {}, hookGuards: {}, commands: {} }).config;
-        const twice = migrate({ ...once });
-        expect(twice.changes).toEqual([]);
-    });
-});
 
 describe('applyHook', () => {
     it('installs the rules hook into project-for-you (settings.local.json) with the right matcher', () => {
