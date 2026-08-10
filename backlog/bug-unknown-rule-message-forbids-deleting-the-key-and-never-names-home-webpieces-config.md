@@ -1,3 +1,42 @@
+> # ✅ RESOLVED — fixed **2026-08-10** by #637. Kept as a forensic record only.
+>
+> Four of the five asks reproduced against local source and are fixed; ask 2 shipped under a different
+> name than the report proposed; ask 4 was **already fixed** before this report was written. Each
+> verdict below was established by driving the real exported functions and capturing their output,
+> *before* any code was changed.
+>
+> | Ask | Verdict | Evidence |
+> |---|---|---|
+> | 1 — "Do NOT delete" is backwards | **REPRODUCED**, fixed | Banner emitted `Do NOT delete a key just because it is reported unknown — that is how valid config gets gutted.` Note it lives in `config-error-banner.ts`, **not** `load-config.ts`, which only delegates |
+> | 2 — no mechanical cleanup | **REPRODUCED**, fixed | 17 `wp-*` bins, none pruned config; grep for `prune-unknown\|--fix\|stripUnknown` hit only *worktree* pruning |
+> | 3 — fallback never says RETIRED / `~/.webpieces` | **REPRODUCED**, fixed | For an unknown `brand-new-rule` the message named neither |
+> | 4 — name `~/.webpieces/config.json` when it fails | **ALREADY FIXED — no change** | All four failure modes already print `[~/.webpieces/config.json]` plus a resolved `File:` path, and never mention the repo config. A drafted wording tweak was reverted; regression tests pin it instead |
+> | 5 — one run says both things about `pnpm install` | **REPRODUCED**, fixed | The `brand-new-rule` banner contained both strings ~4 lines apart |
+>
+> **The fix.** Deletion is now the primary cure, named in the banner and in `unknownRuleError`, and made
+> mechanical by a new `wp-prune-unknown-config` bin (`ConfigPruner` in `rules-config`, CLI in
+> `code-rules`). It ships as a dedicated bin rather than the report's proposed `--fix` /
+> `--prune-unknown` flag because a flag on `wp-validate-code` would have to run *before* config load —
+> the whole point is operating on a file that fails validation.
+>
+> **What resolved ask 5 is worth recording, because it is not obvious.** The two `pnpm install`
+> instructions were not merely inconsistent; one of them was unreachable. The shim's version-drift guard
+> denies every tool call *before* the validator runs, so a validation error appearing on screen is itself
+> proof that the pin and `node_modules` already agree. The positive "run `pnpm install` first" was
+> therefore always wrong at the moment it could be read, and was deleted; the banner's
+> "Do NOT run `pnpm install`" is the correct survivor. The stale-pin case is demoted to a secondary note
+> that explains *why the reader is not in it*.
+>
+> **A latent installer bug this work uncovered.** `migrateRetiredRuleNames` treated every rule-scope
+> retirement as a rename, so `wp-install-ai-hooks` would have "cured" `whole-repo-build-guard` by
+> creating a `hookGuards` key literally named `~/.webpieces/config.json → experimental.whole-repo-build-guard`
+> — a fresh unknown rule on the next run. `RetiredConfigKey.prunable` is now the discriminator, shared by
+> the migrator and the pruner.
+>
+> **And the fix's own cure was blocked by the guard that prescribes it** — `wp-prune-unknown-config` had
+> to ship as an L0 cure-allowlist entry in the same change. A prescribed remedy that the guard denies is
+> its own defect class, and worth checking for whenever a guard message names a new command.
+
 # BUG: the "Unknown rule" message FORBIDS deleting the key (it should force deletion) and never names `~/.webpieces/config.json` — so a retired machine-local guard reads as a repo-config error with no valid exit
 
 **Package:** `@webpieces/rules-config` (message text), with `@webpieces/ai-hook-rules` as the amplifier
