@@ -1,10 +1,15 @@
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 import { isAllowed } from '../bin/shim';
 import { AgentIdentity, CoordinatorWorktreeGuard } from './coordinator-worktree';
-import { EffectiveTree, atRoot } from './effective-tree';
+import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
+import { MissingDirectoryGuard } from './missing-directory';
+import { ReadOnlyInspectionScan } from './read-only-inspection';
+import { isGitOrGhCommand } from './runner';
 import { renderL1Doc } from './l1-doc';
 import {
     L1Classification, L1Kind, L1Row, L1UseCase, L1_ROWS, L1_UNROWED_USE_CASES,
@@ -14,12 +19,13 @@ import {
 // The generated doc, and the runner that must keep saying what the rows claim it says.
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const L1_DOC = path.join(REPO_ROOT, 'guards', 'L1-location.md');
-const RUNNER_SRC = fs.readFileSync(path.join(__dirname, 'runner.ts'), 'utf8');
+// Row 5's deny text lives with its guard, not in the runner — see force-to-root.ts.
+const FORCE_TO_ROOT_SRC = fs.readFileSync(path.join(__dirname, 'force-to-root.ts'), 'utf8');
 
-const KINDS: readonly L1Kind[] = ['f', 'o', 'p', 'w'];
+const KINDS: readonly L1Kind[] = ['f', 'm', 'o', 'p', 'w'];
 const BOOLS: readonly boolean[] = [false, true];
 
-/** Every point in the five-dimensional space the matrix classifies over — 4 × 2 × 2 × 2 × 2 = 64. */
+/** Every point in the five-dimensional space the matrix classifies over — 5 × 2 × 2 × 2 × 2 = 80. */
 function everyClassification(): readonly L1Classification[] {
     const all: L1Classification[] = [];
     for (const kind of KINDS) {
@@ -46,14 +52,14 @@ function label(c: L1Classification): string {
  * place `p` and `w` separate" — turned into a test.
  */
 describe('L1 matrix — every classification lands on exactly one verdict', () => {
-    it('has six rows with unique numbers, in doc order', () => {
-        expect(L1_ROWS).toHaveLength(6);
-        expect(L1_ROWS.map((r: L1Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 6]);
+    it('has seven rows with unique numbers, in doc order', () => {
+        expect(L1_ROWS).toHaveLength(7);
+        expect(L1_ROWS.map((r: L1Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     });
 
-    it('answers all 64 classifications — no classification falls through the table', () => {
+    it('answers all 80 classifications — no classification falls through the table', () => {
         const all = everyClassification();
-        expect(all).toHaveLength(64);
+        expect(all).toHaveLength(80);
         for (const c of all) {
             const row = firstMatchingL1Row(c);
             expect(L1_ROWS, label(c)).toContain(row);
@@ -62,7 +68,7 @@ describe('L1 matrix — every classification lands on exactly one verdict', () =
 
     it('makes every row reachable as a first match — no row is dead', () => {
         const reached = new Set(everyClassification().map((c: L1Classification): number => firstMatchingL1Row(c).num));
-        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     });
 
     // The ONLY overlap in the table, and it is the one the doc calls out by name. Pinned so that a new
@@ -77,10 +83,10 @@ describe('L1 matrix — every classification lands on exactly one verdict', () =
         }
     });
 
-    it('blocks on rows 3 and 5 only, and only those rows carry a cure and a blockId', () => {
+    it('blocks on rows 3, 5 and 7 only, and only those rows carry a cure and a blockId', () => {
         for (const row of L1_ROWS) {
             const blocking = row.action.kind === 'block';
-            expect(blocking, `row ${row.num}`).toBe(row.num === 3 || row.num === 5);
+            expect(blocking, `row ${row.num}`).toBe(row.num === 3 || row.num === 5 || row.num === 7);
             expect(row.cure !== null, `row ${row.num} cure`).toBe(blocking);
             expect(row.blockId !== null, `row ${row.num} blockId`).toBe(blocking);
         }
@@ -129,10 +135,10 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
 
     // The filter and the L0 allowlist are not rows, so their use cases carry no classification — but
     // they are still L1 use cases and still numbered in the one table.
-    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..15', () => {
+    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..19', () => {
         for (const useCase of L1_UNROWED_USE_CASES) expect(useCase.classification, `use case ${useCase.num}`).toBeNull();
         expect(allL1UseCases().map((u: L1UseCase): number => u.num))
-            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
     });
 });
 
@@ -177,7 +183,7 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
     });
 
     it('row 5: the deny text the row names is the one runner.ts emits', () => {
-        expect(RUNNER_SRC).toContain(L1_ROWS[4].cure?.denyMention);
+        expect(FORCE_TO_ROOT_SRC).toContain(L1_ROWS[4].cure?.denyMention);
     });
 });
 
@@ -222,10 +228,11 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
         expect(firstMatchingL1Row(new L1Classification('o', false, false, true, false)).num).toBe(2);
     });
 
-    it('maps the other three tree kinds straight through', () => {
+    it('maps the other tree kinds straight through', () => {
         expect(L1Classification.forEnforcement('foreign', false, false, false, false).kind).toBe('f');
         expect(L1Classification.forEnforcement('worktree', false, false, false, false).kind).toBe('w');
         expect(L1Classification.forEnforcement('primary', false, false, false, false).kind).toBe('p');
+        expect(L1Classification.forEnforcement('missing', false, false, false, false).kind).toBe('m');
     });
 });
 
@@ -260,5 +267,88 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
         expect(doc).toContain('## Not done — `o` is not exempt yet');
         expect(doc).toContain('Ship the two together, or neither.');
         expect(doc).toContain('## Code anchors');
+    });
+});
+
+/**
+ * END TO END — the resolver's REAL output, driven through the matrix.
+ *
+ * THIS IS THE TEST THAT WAS MISSING, and its absence is why a guard bypass shipped. Every other
+ * assertion in this file hand-constructs its input (`new EffectiveTree('/repo', '/wt', '/wt', '/repo',
+ * 'worktree')`), so the whole matrix passed while `classify()` never emitted `'worktree'` for the only
+ * worktree layout the harness produces — it emitted `'foreign'`, which row 1 exempts. A matrix spec that
+ * builds its own inputs can never catch an input bug. Do not "simplify" these back to literals.
+ */
+describe('L1 end to end — a REAL linked worktree, resolved and then classified', () => {
+    let primary: string;
+    let agentTree: string;
+    let nestedClone: string;
+
+    function initRepo(dir: string): void {
+        fs.mkdirSync(dir, { recursive: true });
+        const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'pipe' }); };
+        git('init', '-b', 'main');
+        git('config', 'core.hooksPath', '/dev/null');
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'test');
+        fs.writeFileSync(path.join(dir, 'f.txt'), 'x');
+        git('add', '-A');
+        git('commit', '-m', 'init');
+    }
+
+    beforeAll(() => {
+        const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1-e2e-')));
+        primary = path.join(home, 'primary');
+        initRepo(primary);
+        agentTree = path.join(primary, '.claude', 'worktrees', 'agent-e2e');
+        execFileSync('git', ['worktree', 'add', agentTree, '-b', 'agent-e2e'], { cwd: primary, stdio: 'pipe' });
+        nestedClone = path.join(primary, 'repositories', 'vendored');
+        initRepo(nestedClone);
+    });
+
+    // The runner's own translation, reproduced so the chain under test is resolver → classification → row.
+    function rowFor(command: string, coordinator: boolean): number {
+        const tree = new EffectiveTreeResolver().resolve(command, primary, primary);
+        return firstMatchingL1Row(L1Classification.forEnforcement(
+            tree.kind,
+            coordinator,
+            new ReadOnlyInspectionScan().isReadOnlyInspection(command),
+            isGitOrGhCommand(command),
+            path.resolve(tree.effectiveCwd) === path.resolve(tree.root),
+        )).num;
+    }
+
+    it('an in-repo `.claude/worktrees/**` tree reaches ROW 3 for the coordinator, never row 1', () => {
+        expect(rowFor(`cd ${agentTree} && pnpm build`, true)).toBe(3);
+    });
+
+    it('…and is handed DOWN for a subagent — governed, not exempt (row 1 would mean every guard off)', () => {
+        expect(rowFor(`cd ${agentTree} && pnpm build`, false)).toBe(4);
+        expect(rowFor(`cd ${agentTree} && git push`, false)).toBe(6);
+    });
+
+    it('a nested clone still lands on row 1 (`f`, exempt) — the no-regression half', () => {
+        expect(rowFor(`cd ${nestedClone} && git push`, false)).toBe(1);
+    });
+
+    it('a genuine subdirectory of the primary still lands on row 5 (force-to-root)', () => {
+        const sub = path.join(primary, 'packages', 'http');
+        fs.mkdirSync(sub, { recursive: true });
+        expect(rowFor(`cd ${sub} && git status`, false)).toBe(5);
+    });
+
+    it('a DELETED tree lands on row 7, not row 5 — "gone", not "a subdirectory"', () => {
+        const dead = path.join(primary, '.claude', 'worktrees', 'agent-reaped');
+        expect(fs.existsSync(dead)).toBe(false);
+        expect(rowFor(`cd ${dead} && git fetch origin main`, false)).toBe(7);
+    });
+
+    it('row 7: the deny text the row names is the one MissingDirectoryGuard emits', () => {
+        const dead = path.join(primary, '.claude', 'worktrees', 'agent-reaped');
+        const command = `cd ${dead} && git fetch origin main`;
+        const tree = new EffectiveTreeResolver().resolve(command, primary, primary);
+        const report = new MissingDirectoryGuard().block(command, tree);
+        expect(report).not.toBeNull();
+        expect(report).toContain(L1_ROWS[6].cure?.denyMention);
     });
 });

@@ -55,6 +55,7 @@ const SUBAGENT = new AgentIdentity('agent-a3e4f752', 'general-purpose');
 
 let primary: string;
 let worktree: string;
+let agentWorktree: string;
 let nestedClone: string;
 let outside: string;
 
@@ -66,6 +67,9 @@ beforeAll(() => {
     writeAllGuardsOffConfig(primary);
     worktree = nodePath.join(home, 'wt-feature');
     gitIn(primary, 'worktree', 'add', worktree, '-b', 'feature-x');
+    // The layout the Claude Code harness actually creates — INSIDE the governed root.
+    agentWorktree = nodePath.join(primary, '.claude', 'worktrees', 'agent-a9d8eab30bdce959d');
+    gitIn(primary, 'worktree', 'add', agentWorktree, '-b', 'agent-branch');
     nestedClone = nodePath.join(primary, 'repositories', 'clone');
     initRepo(nestedClone);
     outside = nodePath.join(home, 'scratch');
@@ -126,6 +130,21 @@ describe('CoordinatorWorktreeGuard — the predicate', () => {
 
     it('a QUOTED cd cannot trigger it — prose about a worktree is not work in one', () => {
         expect(blockFor(`echo "cd ${worktree} && pnpm build"`, COORDINATOR)).toBeNull();
+    });
+
+    /**
+     * This guard was DEAD CODE for the only worktree layout the harness actually produces. Claude Code
+     * creates agent worktrees at `<repo>/.claude/worktrees/agent-XXXX` — inside the governed root —
+     * which classify() called `foreign`, and this guard requires `kind === 'worktree'`. Measured: the
+     * coordinator ran `cd <that worktree> && git status` and no guard fired at all.
+     */
+    it('the IN-REPO agent worktree blocks the coordinator too — it was unreachable here before', () => {
+        expect(treeFor(`cd ${agentWorktree} && pnpm build`).kind).toBe('worktree');
+        expect(blockFor(`cd ${agentWorktree} && pnpm build`, COORDINATOR)).not.toBeNull();
+    });
+
+    it('a SUBAGENT in the in-repo agent worktree is still ALLOWED — that is the whole point of them', () => {
+        expect(blockFor(`cd ${agentWorktree} && pnpm build`, SUBAGENT)).toBeNull();
     });
 });
 

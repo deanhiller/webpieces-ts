@@ -97,6 +97,14 @@ export class WorktreeService {
      * (a `gitdir:` pointer) where the primary clone has a `.git` DIRECTORY. This runs on the read
      * path, where reads vastly outnumber every other tool call, so the cost matters.
      *
+     * It is a CHEAP FAST PATH over the authoritative answer, not a second authority. The authority is
+     * `DotWebpieces.gitDirs` — `gitDir !== commonDir`, git's own canonical test, which also handles the
+     * layouts a `.git` stat cannot see (`--separate-git-dir`, submodules). This is NOT calling it,
+     * deliberately: that costs a `rev-parse` spawn per read. `worktree-identity.spec.ts` asserts the two
+     * agree for the primary clone, an in-repo `.claude/worktrees/**` worktree and a sibling worktree
+     * outside the repo — so if git ever changes the `.git` layout this fails there, not in the field.
+     * Anything that needs to be RIGHT rather than cheap (tree identity, state paths) asks `gitDirs`.
+     *
      * Returns FALSE on anything uncertain (no `.git` at all, unreadable, a submodule's `.git` file
      * in a non-worktree checkout). False is the fail-open direction here: callers then print both
      * forms rather than confidently printing the wrong one.

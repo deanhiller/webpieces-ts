@@ -3,9 +3,9 @@ import type { TreeKind } from './effective-tree';
 // ---------------------------------------------------------------------------
 // L1 — the LOCATION layer, as data.
 //
-// L1 answers three questions: do we govern this call at all, is the WRONG AGENT standing here, and is
-// the agent stranded away from the root? Drawn as a decision matrix that is SIX ordered rows over five
-// dimensions (K/A/R/G/P), first match wins.
+// L1 answers four questions: do we govern this call at all, does the directory still EXIST, is the
+// WRONG AGENT standing here, and is the agent stranded away from the root? Drawn as a decision matrix
+// that is SEVEN ordered rows over five dimensions (K/A/R/G/P), first match wins.
 //
 // This module holds those rows, and l1-doc.ts renders them into guards/L1-location.md — the doc a human
 // reads on GitHub. A unit test locks that file byte-identical to the renderer, and the guard itself
@@ -22,10 +22,10 @@ import type { TreeKind } from './effective-tree';
  * `p` and `w` are the same PROJECT and every rule-scoped guard treats them alike; the doc writes the
  * pair as `pw` in the row's MATCHER (below), which is a different vocabulary on purpose.
  */
-export type L1Kind = 'f' | 'o' | 'p' | 'w';
+export type L1Kind = 'f' | 'm' | 'o' | 'p' | 'w';
 
 /** The K value a ROW matches on. `pw` matches both `p` and `w`; `-` is the wildcard. */
-export type L1KindMatch = 'f' | 'o' | 'w' | 'pw' | '-';
+export type L1KindMatch = 'f' | 'm' | 'o' | 'w' | 'pw' | '-';
 
 /** R and G are yes/no, written `y`/`n` in the doc, with `-` for "does not matter". */
 export type L1Flag = 'y' | 'n' | '-';
@@ -41,7 +41,7 @@ export type L1ActionKind = 'exempt' | 'down' | 'block';
  * load-bearing rather than decorative: runner.l1LocationBlock looks the row up and switches on it,
  * so deleting a row from the array removes the block.
  */
-export type L1BlockId = 'coordinator-in-worktree' | 'force-to-root';
+export type L1BlockId = 'coordinator-in-worktree' | 'force-to-root' | 'missing-directory';
 
 /**
  * The row number for L1's PRE-STAGE — `misplacedCdBlock`, which decides from command TEXT before a
@@ -77,7 +77,7 @@ export class L1Classification {
      * The classification the RUNNER enforces on, built from the resolved tree and the caller.
      *
      * `'outside'` maps to `p`, and that is not a typo. TreeKind `'outside'` is produced by
-     * effective-tree.ts (`gitRoot === null`) and consumed NOWHERE, so a command in no git repo is
+     * effective-tree.ts (git has no answer for the directory) and consumed NOWHERE, so a command in no git repo is
      * judged against the governed repo exactly as if it stood in it. Row 2 (`o` → L2) describes what
      * SHOULD happen and is deliberately unreachable from here until the "Not done" fix in
      * guards/L1-location.md lands — exempting `o` alone opens a `cd /tmp &&` bypass of every L2 guard,
@@ -93,7 +93,9 @@ export class L1Classification {
         git: boolean,
         atRoot: boolean,
     ): L1Classification {
-        const kind: L1Kind = treeKind === 'foreign' ? 'f' : treeKind === 'worktree' ? 'w' : 'p';
+        const kind: L1Kind = treeKind === 'foreign' ? 'f'
+            : treeKind === 'missing' ? 'm'
+            : treeKind === 'worktree' ? 'w' : 'p';
         return new L1Classification(kind, coordinator, readOnly, git, atRoot);
     }
 }
@@ -187,11 +189,16 @@ function flagMatches(cell: L1Flag, value: boolean): boolean {
 }
 
 /**
- * THE six L1 rows, in first-match-wins order.
+ * THE seven L1 rows, in first-match-wins order.
  *
- * Rows 3 and 5 are the two structural blocks and they run as ONE step (runner.l1LocationBlock) so they
+ * Rows 3, 5 and 7 are the structural blocks and they run as ONE step (runner.l1LocationBlock) so they
  * can never be reordered by accident. Every other row is a hand-down or an exemption, i.e. "L1 has no
- * objection" — which is why only rows 3 and 5 carry a blockId.
+ * objection" — which is why only those three carry a blockId.
+ *
+ * Row 7 (`m`, the vanished directory) sits LAST only because row numbers are stable across releases —
+ * they are printed in the doc and logged as `row=`, so renumbering rows 1-6 to slot it in front would
+ * silently invalidate every existing reference. Position costs nothing here: `m` is matched by no other
+ * row, so first-match reaches it wherever it sits.
  */
 export const L1_ROWS: readonly L1Row[] = [
     new L1Row(1, 'f', '-', '-', '-', '-', ACT_EXEMPT, 'different git repo — hands off', null, null, [
@@ -212,6 +219,12 @@ export const L1_ROWS: readonly L1Row[] = [
                 '`w` / `c` / `n` — row 3',
                 'BLOCK_AI_CURE',
                 'Option 1 (preferred): spawn a subagent bound to `<worktree>` — the Agent tool with worktree isolation, or have the subagent call `EnterWorktree` with `path: <worktree>` (it accepts a worktree you already created)<br>Do NOT: re-type the command, or conclude the harness ate your `cd` — it did not; your GUARDS did not follow it',
+                new L1Classification('w', true, false, false, false)),
+            new L1UseCase(16,
+                'the same block for `cd .claude/worktrees/agent-XXXX && <work>` — the harness\'s OWN worktree layout',
+                '`w` / `c` / `n` — row 3; in-repo placement is still `w`',
+                'BLOCK_AI_CURE',
+                'Option 1 (preferred): same as case 12 — spawn a subagent bound to that worktree<br>Do NOT: expect it to be exempt because it sits under the repo — K is git\'s `--git-common-dir` answer, not a path test. This case used to read `f` (every guard silently off); if you are looking at an OLD release that is the difference',
                 new L1Classification('w', true, false, false, false)),
         ]),
     new L1Row(4, 'pw', '-', '-', 'n', '-', ACT_DOWN, 'force-to-root has no jurisdiction', null, null, [
@@ -267,6 +280,12 @@ export const L1_ROWS: readonly L1Row[] = [
                 'BLOCK_AI_CURE',
                 'Option 1 (preferred): `cd <root> && git push`, which then gets the push guard\'s real answer ← costs one extra turn by design; still blocked',
                 new L1Classification('p', false, false, true, false)),
+            new L1UseCase(17,
+                'the printed cure REPLACES your `cd`, it does not stack in front of it',
+                '`pw` / `y` / `sub` — row 5, on the cure itself',
+                'BLOCK_AI_CURE',
+                'Option 1 (preferred): run the printed line VERBATIM — `cd <root> && <the work>`, with your own leading `cd` dropped<br>Do NOT: paste `cd <root> && cd <subdir> && <work>`; `effectiveCwd` resolves the leading `cd`s left to right, so that lands in `<subdir>` again and re-fires this exact block',
+                new L1Classification('p', false, false, true, false)),
         ]),
     new L1Row(6, 'pw', '-', '-', 'y', 'root', ACT_DOWN, '', null, null, [
         new L1UseCase(9,
@@ -276,6 +295,23 @@ export const L1_ROWS: readonly L1Row[] = [
             'none — this IS the prescribed cure',
             new L1Classification('p', false, false, true, true)),
     ]),
+    new L1Row(7, 'm', '-', '-', '-', '-', ACT_BLOCK, 'the directory is GONE — nothing can run there',
+        new L1Cure('`cd <root> && <the work>`, never back through the dead path',
+            'no longer exists', true),
+        'missing-directory', [
+            new L1UseCase(18,
+                'every command from a worktree another agent REAPED mid-session is blocked',
+                '`m` — row 7',
+                'BLOCK_AI_CURE',
+                'Option 1 (preferred): run the printed `cd <root> && <the work>` line — it does NOT route back through the dead path<br>Do NOT: re-`cd` into the worktree, or `git worktree add` it back expecting your uncommitted work; that work is gone',
+                new L1Classification('m', false, false, true, false)),
+            new L1UseCase(19,
+                'the same block for a NON-git command there — `m` does not care about G',
+                '`m` — row 7; K alone decides it',
+                'BLOCK_AI_CURE',
+                'Option 1 (preferred): the same printed line. A vanished cwd is not a git question — nothing at all can run in a directory that does not exist',
+                new L1Classification('m', false, false, false, false)),
+        ]),
 ];
 
 /**
