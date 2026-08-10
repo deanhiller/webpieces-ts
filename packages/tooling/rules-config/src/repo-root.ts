@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -30,14 +29,25 @@ export class RepoRootFinder {
      * The repo root for `startDir`. Resolution order (first hit wins):
      *   1. Directory holding webpieces.config.json — the webpieces workspace root, and the exact
      *      anchor the hook runner already uses. Walks UP from startDir, so a subdir resolves to root.
-     *   2. git toplevel (`git rev-parse --show-toplevel`) — the repo root when no config is present
-     *      yet (e.g. the installer runs before webpieces.config.json exists).
+     *   2. git toplevel — the repo root when no config is present yet (e.g. the installer runs before
+     *      webpieces.config.json exists). Asked via `DotWebpieces.treeRoot`, which is the ONE
+     *      `git rev-parse` tree-root resolver in this repo (memoized, fails closed). This class used to
+     *      carry its own byte-identical `spawnSync` copy, with a comment claiming to "mirror"
+     *      runner.ts's — a mirror that had already drifted, since runner.ts had moved the call to
+     *      effective-tree.ts. There is one implementation now, so a mirror cannot drift.
      *   3. `startDir` — last resort (git unavailable / not a repo / no config). Best-effort only.
+     *
+     * Step 1 is deliberately FIRST and deliberately not identity: config walk-up climbs PAST a nested
+     * clone's `.git` to the outer webpieces root (repo-root.spec.ts pins that), and in a linked worktree
+     * it answers with the WORKTREE, because `webpieces.config.json` is TRACKED IN GIT and therefore part
+     * of the BRANCH — a branch may change its own rules. See state-dir.ts for that boundary, and
+     * `EffectiveTreeResolver` for the different question ("which tree is this, and is it ours") that
+     * must NOT be answered from the config file.
      */
     resolveRepoRoot(startDir: string): string {
         const configPath = findConfigFile(startDir);
         if (configPath !== null) return path.dirname(configPath);
-        const gitRoot = this.gitToplevel(startDir);
+        const gitRoot = this.dotDir.treeRoot(startDir);
         if (gitRoot !== null) return gitRoot;
         return startDir;
     }
@@ -62,13 +72,4 @@ export class RepoRootFinder {
         return this.instructAiDocPath(this.resolveRepoRoot(startDir), docName);
     }
 
-    // git repo root of `cwd`, or null when cwd is not in a git repo. `status !== 0` is the EXPECTED
-    // "not a repo" value (spawnSync does not throw on non-zero exit), so we never swallow a real
-    // failure with try/catch — a genuine git crash still surfaces. Mirrors runner.ts:gitToplevel.
-    private gitToplevel(cwd: string): string | null {
-        const r = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
-        if (r.status !== 0) return null;
-        const root = (r.stdout ?? '').trim();
-        return root !== '' ? root : null;
-    }
 }

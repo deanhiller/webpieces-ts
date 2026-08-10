@@ -224,7 +224,7 @@ function writeGuardConfig(root: string, guardsExclude: readonly string[]): void 
 }
 
 // End-to-end through runBash: the gate now judges the effective cwd. Real git repos so the
-// gitToplevel boundary check is exercised for real, not mocked.
+// same-repo boundary check (`--git-common-dir`, via DotWebpieces) is exercised for real, not mocked.
 describe('runBash — foreign-repo boundary and excludePaths on the bash path (defects 1 & 2)', () => {
     // The governed repo (outer) + a separate git clone nested under repositories/, plus a plain
     // (non-git) subdir also under repositories/. Built once; excludePaths are rewritten per test.

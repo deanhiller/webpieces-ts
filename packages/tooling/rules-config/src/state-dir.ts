@@ -127,6 +127,8 @@ export class DotWebpieces {
     // treeRoot → git's answer. One `git rev-parse` pair per root per process; every later path lookup
     // in that invocation is a Map hit.
     private readonly gitDirsByRoot = new Map<string, GitDirs | null>();
+    // startDir → `git rev-parse --show-toplevel`, cached on the same terms as gitDirsByRoot.
+    private readonly treeRootByDir = new Map<string, string | null>();
     // Roots whose legacy per-worktree `.webpieces/` has already been considered for migration.
     private readonly migrated = new Set<string>();
 
@@ -195,6 +197,49 @@ export class DotWebpieces {
     }
 
     /**
+     * git's two dir answers for `startDir`, memoized — null when it is not a git repo / git is
+     * unavailable.
+     *
+     * PUBLIC because TREE IDENTITY is decided from these two strings and nothing else. `commonDir`
+     * is the same for every checkout of ONE repo, so `commonDir(a) === commonDir(b)` is "same repo,
+     * different placement" — the test that tells a linked worktree (ours, wherever it sits, including
+     * inside the repo at `.claude/worktrees/**`) from a nested clone under `repositories/**` (not
+     * ours). `gitDirs.isLinkedWorktree` then separates primary from linked. See
+     * `EffectiveTreeResolver.classify`, the caller that runs this on the hook's blocking path, which is
+     * why it goes through this cache rather than spawning its own `rev-parse`.
+     */
+    gitDirs(startDir: string): GitDirs | null {
+        const cached = this.gitDirsByRoot.get(startDir);
+        if (cached !== undefined) return cached;
+
+        const gitDir = this.revParse(startDir, '--git-dir');
+        const commonDir = this.revParse(startDir, '--git-common-dir');
+        const dirs = gitDir === null || commonDir === null ? null : new GitDirs(gitDir, commonDir);
+        this.gitDirsByRoot.set(startDir, dirs);
+        return dirs;
+    }
+
+    /**
+     * The WORKING TREE root containing `startDir` (`git rev-parse --show-toplevel`), memoized, or null
+     * when `startDir` is not in a git repo. In a linked worktree this is the WORKTREE's own root, which
+     * is exactly what a caller judging "which checkout am I standing in" needs.
+     *
+     * THE ONE tree-root resolver. There used to be three byte-identical `spawnSync … --show-toplevel`
+     * copies — this one, `RepoRootFinder`'s and `effective-tree.ts`'s — each commenting that it
+     * "mirrors" one of the others, and one of those comments was already stale. Both copies are deleted;
+     * everything that needs a tree root calls this. Do not add a fourth.
+     */
+    treeRoot(startDir: string): string | null {
+        const cached = this.treeRootByDir.get(startDir);
+        if (cached !== undefined) return cached;
+        // `status !== 0` IS the expected "not a repo" answer (spawnSync does not throw on a non-zero
+        // exit), so nothing here swallows a real git crash.
+        const root = this.revParse(startDir, '--show-toplevel');
+        this.treeRootByDir.set(startDir, root);
+        return root;
+    }
+
+    /**
      * git's own name for this linked worktree — the basename of `<primary>/.git/worktrees/<name>`, and
      * the namespace key under `worktrees/`. Empty for the primary clone. git's name rather than the
      * directory's basename, so two worktrees checked out into same-named directories under different
@@ -232,27 +277,9 @@ export class DotWebpieces {
         // process spawn on the hook's blocking path for every single state-path lookup.
         if (this.migrated.has(startDir)) return;
         this.migrated.add(startDir);
-        const toplevel = this.gitToplevel(startDir);
+        const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
         this.migrator.migrate(this.legacyDir(toplevel), target);
-    }
-
-    // Both git dirs for `startDir`, cached, or null when this is not a git repo / git is unavailable.
-    // `status !== 0` IS the expected "not a repo" answer (spawnSync does not throw on a non-zero exit),
-    // so there is no try/catch here swallowing a real git crash. Mirrors RepoRootFinder.gitToplevel.
-    private gitDirs(startDir: string): GitDirs | null {
-        const cached = this.gitDirsByRoot.get(startDir);
-        if (cached !== undefined) return cached;
-
-        const gitDir = this.revParse(startDir, '--git-dir');
-        const commonDir = this.revParse(startDir, '--git-common-dir');
-        const dirs = gitDir === null || commonDir === null ? null : new GitDirs(gitDir, commonDir);
-        this.gitDirsByRoot.set(startDir, dirs);
-        return dirs;
-    }
-
-    private gitToplevel(startDir: string): string | null {
-        return this.revParse(startDir, '--show-toplevel');
     }
 
     // One `git rev-parse <flag>`, resolved to an absolute path (git prints a bare `.git`, relative to

@@ -4,8 +4,10 @@ import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHo
 
 import { buildContexts, buildBashContext } from './build-context';
 import { AgentIdentity, CoordinatorWorktreeGuard, UNKNOWN_AGENT } from './coordinator-worktree';
-import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
+import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
+import { gitFromSubdirBlock } from './force-to-root';
 import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches } from './load-rules';
+import { missingDirectoryBlock } from './missing-directory';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0, MATRIX_L2 } from './decision-log';
@@ -235,41 +237,6 @@ function l0FaultAllows(command: string): boolean {
     return L0_ALLOW_JS.test(command.trim());
 }
 
-// Force-to-root: git/gh commands must run from the repo root of the tree they act on, where the guards
-// can reason about git state coherently. L1 row 4 — see guards/L1-location.md for the table
-// and the use cases; change this predicate and that file is stale until you update it.
-//
-// ONE variable decides it: `tree.effectiveCwd` — the directory the command actually runs in, which is
-// the shell's cwd unless the command leads with `cd <dir> &&`. Root or not-root, nothing else.
-//
-// It used to be `shellAtRoot || cdsToRoot`, two variables OR'd, and that produced opposite verdicts for
-// the same destination: `git status` with the shell in packages/http/ was BLOCKED, while
-// `cd packages/http && git status` from the root was ALLOWED, because shellAtRoot short-circuited
-// before the destination was ever considered. The point of this guard is to keep the agent's git work
-// at the root — an agent that cd's INTO a subdir has the same broken mental model as one that is
-// stranded there, so it gets the same answer now.
-//
-// The remedy is emitted as ONE runnable line, `cd <root> && <the original command>`, rather than as
-// "cd first, then re-run". That advice is what made this guard print the very command it had just
-// rejected, and it is unreliable in both directions: a `cd` INTO this repo sticks (so the next call
-// may start somewhere unexpected), while a `cd` OUT of it is reset by the harness (so a separate
-// `cd <worktree>` call buys nothing). One self-contained line is correct either way.
-// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult | null {
-    const targetAtRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
-    if (!isGitOrGhCommand(command) || targetAtRoot) return null;
-    const report =
-        `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
-        `   Command runs in: ${tree.effectiveCwd}\n` +
-        `   Judged against: ${tree.root}\n` +
-        `   Run EXACTLY this instead, as ONE line (a bare \`cd\` in a separate call is not equivalent —\n` +
-        `   a \`cd\` inside this repo STICKS for later calls, and a \`cd\` out of it is reset by the harness):\n` +
-        `     ${atRoot(tree.root, command)}\n` +
-        `   A leading \`cd <path> &&\` is ACCEPTED by the guards — it cannot change what the command\n` +
-        `   does to the repo. (The webpieces guards evaluate the repo's git state at its root.)`;
-    return new BlockedResult(report);
-}
-
 // The L0 cure bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
 // (config-walk-up first, then git toplevel) is the authority for that, and it is correct in a linked
 // worktree because each worktree checks out its own webpieces.config.json. This runs BEFORE
@@ -313,19 +280,17 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
 
 // Coordinator-in-worktree: the coordinator's governance is anchored at session start and does NOT
 // follow a `cd`, so a coordinator working inside a linked worktree has its filesystem in one tree and
-// its guards in another. L1 row 3 — guards/L1-location.md carries the table and the incident; the
-// predicate and the message are CoordinatorWorktreeGuard's.
-// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+// its guards in another. L1 row 3 — guards/L1-location.md carries the table and the incident.
+// webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const report = new CoordinatorWorktreeGuard().block(command, tree, agent);
-    if (report === null) return null;
-    return new BlockedResult(report);
+    return report === null ? null : new BlockedResult(report);
 }
 
 // Where the command lands in L1's five dimensions (K/A/R/G/P). The ONE place the runner's view of the
 // world is translated into the matrix's vocabulary — see L1Classification.forEnforcement for why
 // TreeKind 'outside' currently classifies as `p`.
-// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+// webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity): L1Classification {
     return L1Classification.forEnforcement(
         tree.kind,
@@ -363,7 +328,7 @@ function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity):
 // is what finally records the outcomes that were previously invisible: the exempt row and the three
 // hand-downs wrote nothing at all, which is why "L1 had no objection" could not be observed and
 // "show me every L1 decision" had no answer. The three block helpers no longer log for themselves.
-// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+// webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const misplacedCd = misplacedCdBlock(command, tree);
     if (misplacedCd !== null) {
@@ -381,8 +346,9 @@ function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdent
         return null;
     }
     logL1(tree, command, 'BLOCK_AI_CURE', rowNum, row.blockId, row.why);
+    if (row.blockId === 'missing-directory') return missingDirectoryBlock(command, tree);
     if (row.blockId === 'coordinator-in-worktree') return coordinatorInWorktreeBlock(command, tree, agent);
-    return gitFromSubdirBlock(command, tree);
+    return gitFromSubdirBlock(command, tree, isGitOrGhCommand(command));
 }
 
 // One L1 line, into L1's OWN stream. `row` is the number the generated doc prints, so a reader who
@@ -410,7 +376,7 @@ function logL1(tree: EffectiveTree, command: string, verdict: Verdict, row: stri
  * resolved tree, and if the `cd` did not resolve, that tree is not the one the agent thinks they are
  * in — so their remedies would be steering from a location the command does not actually run in.
  */
-// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock(); the whole runner is module-scope functions
+// webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole runner is module-scope functions
 function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult | null {
     const reason = new EffectiveTreeResolver().misplacedCd(command);
     if (reason === null) return null;
