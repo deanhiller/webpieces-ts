@@ -4,6 +4,8 @@ import * as path from 'path';
 import { Worktree, WorktreeService, atRoot } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
+import { ReapOutcomeReport, ReapOutcomeSignal, REAP_OUTCOME_MISSING } from './reap-outcome';
+
 /**
  * The RE-EXEC half of `wp-land-pr`: reap the worktree the command is standing in, from a process that
  * is NOT standing in it.
@@ -73,7 +75,10 @@ export class WorktreeReapHandoff {
 
 @injectable(bindingScopeValues.Singleton)
 export class LandedWorktreeReaper {
-    constructor(private readonly worktrees: WorktreeService) {}
+    constructor(
+        private readonly worktrees: WorktreeService,
+        private readonly signal: ReapOutcomeSignal,
+    ) {}
 
     /**
      * Is there a worktree to reap at all, and can the hand-off run?
@@ -110,23 +115,45 @@ export class LandedWorktreeReaper {
      * stdin is `ignore` deliberately: the child must never be able to ask a question. A prompt printed
      * into a landing recap nobody is watching is not consent, and this reap is authorised by the merge
      * that just succeeded, not by an answer.
+     *
+     * THE EXIT CODE IS NOT THE ANSWER. The child refuses by PRINTING and exiting 0 on purpose — a
+     * non-zero exit after a successful merge would report a landed PR as a failed command. So `exit 0`
+     * only means "the child ran"; whether the DIRECTORY is gone is a separate statement it makes through
+     * ReapOutcomeSignal, and that is the one that gates the "your cwd no longer exists" notice.
      */
     handOff(handoff: WorktreeReapHandoff): string {
         const result = spawnSync(
             process.execPath, [handoff.entryScript, handoff.worktreePath, handoff.branch],
             { cwd: handoff.primaryPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
-        const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.trimEnd();
+        const report = this.signal.read(`${result.stdout ?? ''}${result.stderr ?? ''}`);
+        const output = report.text.trimEnd();
         const head = '\n' + SEP + `🌲 Reaping this worktree from ${handoff.primaryPath}\n` + SEP + '\n'
             + `   The branch just landed, so this directory is dead. The reap runs in a child process\n`
             + `   whose cwd is the primary clone — nothing deletes the directory it is standing in.\n\n`;
+        const body = head + (output !== '' ? output + '\n' : '');
 
-        if (result.status !== 0) {
-            return head + (output !== '' ? output + '\n' : '')
-                + `\n   ⚠️  The reap did not complete (exit ${String(result.status ?? -1)}). Nothing was forced.\n`
-                + this.manualNotice(handoff);
+        if (result.status !== 0 || !report.removed) {
+            return body + this.notRemoved(result.status, report) + this.manualNotice(handoff);
         }
-        return head + (output !== '' ? output + '\n' : '') + this.afterReap(handoff);
+        return body + this.afterReap(handoff);
+    }
+
+    /**
+     * WHY the directory is still there, distinguishing the two cases a single exit code conflated: the
+     * child broke (non-zero), versus the child worked perfectly and DECLINED (exit 0, outcome refused).
+     * `--force` is absent from both, and from every path below them: git refusing to remove a worktree
+     * holding untracked files is work no archive tag captured.
+     */
+    private notRemoved(status: number | null, report: ReapOutcomeReport): string {
+        if (status !== 0) {
+            return `\n   ⚠️  The reap did not complete (exit ${String(status ?? -1)}). Nothing was forced.\n`;
+        }
+        const why = report.outcome === REAP_OUTCOME_MISSING
+            ? 'the child ended without reporting an outcome'
+            : `the child reported '${report.outcome}'`;
+        return `\n   ⚠️  The worktree was NOT removed — ${why}. It is still on disk,\n`
+            + '       and this shell is still standing in it. Nothing was forced.\n';
     }
 
     /**

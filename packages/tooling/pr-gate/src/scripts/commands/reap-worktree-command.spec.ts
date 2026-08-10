@@ -52,6 +52,13 @@ import {
     branchMutationLogPath,
 } from '@webpieces/rules-config';
 
+import {
+    ReapOutcomeSignal,
+    REAP_OUTCOME_FAILED,
+    REAP_OUTCOME_REFUSED,
+    REAP_OUTCOME_REMOVED,
+} from '../workflow/reap-outcome';
+
 import { ReapWorktreeCommand } from './reap-worktree-command';
 import { WorktreeCleanupSection } from './worktree-cleanup';
 
@@ -78,7 +85,14 @@ class FakeRepoRootFinder extends RepoRootFinder {
 function build(): ReapWorktreeCommand {
     return new ReapWorktreeCommand(
         new FakeRepoRootFinder(),
-        new ScriptedSection(new MergedBranchesService(), new WorktreeReaper()));
+        new ScriptedSection(new MergedBranchesService(), new WorktreeReaper()),
+        new ReapOutcomeSignal());
+}
+
+// The outcome token the parent reads — asserted on every exit path, because it is the ONLY thing that
+// distinguishes this command's exit-0 refusals from its exit-0 successes.
+function outcome(report: string): string {
+    return new ReapOutcomeSignal().read(report).outcome;
 }
 
 function merged(): DeletableWorktree {
@@ -134,8 +148,9 @@ describe('ReapWorktreeCommand — the reap wp-land-pr hands off', () => {
      * works (archive before anything is destroyed; remove the directory before git will let the branch go).
      */
     it('archives, removes the worktree, then deletes the branch', async () => {
-        await run([linked, BRANCH]);
+        const report = await run([linked, BRANCH]);
 
+        expect(outcome(report)).toBe(REAP_OUTCOME_REMOVED);
         const ordered = destructiveCalls();
         expect(ordered.length).toBe(3);
         expect(ordered[0]).toMatch(new RegExp(`^tag archive/\\d{4}-\\d{2}-\\d{2}/${BRANCH} `));
@@ -169,6 +184,7 @@ describe('ReapWorktreeCommand — the reap wp-land-pr hands off', () => {
 
         const report = await run([linked, BRANCH]);
 
+        expect(outcome(report)).toBe(REAP_OUTCOME_FAILED);
         expect(report).toContain('contains modified or untracked files');
         expect(report).toContain('not forced');
         expect(world.calls.join('\n')).not.toContain('--force');
@@ -185,6 +201,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
     it('removes nothing when asked to reap the primary clone', async () => {
         const report = await run([primary, 'main']);
 
+        expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('not a removable worktree');
         expect(world.calls.join('\n')).not.toContain('worktree remove');
     });
@@ -197,6 +214,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
 
         const report = await run([linked, BRANCH]);
 
+        expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('not provably dead');
         expect(report).toContain('may still hold unmerged work');
         expect(world.calls.join('\n')).not.toContain('worktree remove');
@@ -210,6 +228,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
 
         const report = await run([linked, BRANCH]);
 
+        expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain("now holds 'dean/other'");
         expect(world.calls.join('\n')).not.toContain('worktree remove');
     });
@@ -223,6 +242,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
         const report = await run([primary, 'main']);
 
         expect(world.calls.join('\n')).not.toContain('worktree remove');
+        expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('Nothing removed');
     });
 

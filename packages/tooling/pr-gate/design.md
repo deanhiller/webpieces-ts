@@ -66,6 +66,7 @@ graph TD
     ProvenanceEnforcer["ProvenanceEnforcer"]
     PushDevCommand["PushDevCommand"]
     PushDevStateStore["PushDevStateStore"]
+    ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
@@ -168,6 +169,7 @@ graph TD
     LandPrCommand --> MergeInfoIndex
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
@@ -211,6 +213,7 @@ graph TD
     PushDevCommand --> PushDevStateStore
     PushDevCommand --> RepoRootFinder
     PushDevStateStore --> DotWebpieces
+    ReapWorktreeCommand --> ReapOutcomeSignal
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
     RepoRootFinder --> DotWebpieces
