@@ -58,14 +58,37 @@ location, or pick "none" to remove the hook from every target. L-1 follows the g
 `cd`, which arrives on `Bash`); a global install gets none, because those hooks name the bin path
 directly and have no relative path that could fail to resolve.
 
-### Keeping the three in step
+### Keeping the four in step
 
-The installed surface is three things — `.claude/webpieces/ai-hook.sh`,
-`.claude/webpieces/guarantee-root.sh`, and the `settings.json` entries registering them — and they only
-work as a set. The guards binary compares all three against the release it came from and fails closed
-on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** regenerates all three
+The installed surface is four things — `.claude/webpieces/ai-hook.sh`,
+`.claude/webpieces/guarantee-root.sh`, the `settings.json` entries registering them, and the
+`settings.json` `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` — and they only
+work as a set. The guards binary compares all four against the release it came from and fails closed
+on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** regenerates all four
 (rewriting an old absolute registration to the relative form rather than adding beside it) and is
-allowed through while that block is up.
+allowed through while that block is up. Its NAME is older than its job — it has not been shim-only
+since 2026-08-07 — and it is deliberately not renamed, because a rename with no functional change costs
+every consumer and buys nothing.
+
+#### Why webpieces manages `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`
+
+Set to `1`, Claude Code resets the shell's cwd to the project directory after every Bash call. That is
+guard integrity, not ergonomics:
+
+- the guard hooks are registered **relative** (`sh ".claude/webpieces/ai-hook.sh" <bin>`) so each git
+  worktree runs its own release, binary and pin. A relative hook that cannot resolve exits 127, and per
+  the Claude Code hooks reference any non-2 non-zero exit is a NON-BLOCKING error — a **silent unguarded
+  allow**. Pinning the cwd to the project root PREVENTS that drift; the L-1 hook, which refuses a `cd`
+  that would park the shell out of reach, is the cure after the fact;
+- settings `env` is **inherited**, so the main agent and every subagent run with the same cwd, hence the
+  same relative-hook resolution, hence the same guard verdict — instead of a verdict that depends on
+  whatever `cd` happened earlier in the session;
+- it mechanically enforces "never `cd` into a sub-package in Bash", rather than relying on memory.
+
+The trade, said out loud: with the flag on, the cwd reset is **silent and unconditional**, where without
+it the reset is conditional and prints a visible notice. A deliberate `cd` no longer persists across
+Bash calls — chain instead (`cd <dir> && <cmd>`). The installer writes the entry, and `wp-upgrade-shim`
+self-heals it; a settings file that registers no webpieces hooks is never touched.
 
 ### Disabling enforcement
 

@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { applyHook, installTargets, hasHook, renderShim, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
 import { readSettings } from './hook-registration';
+import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import {
     INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS,
     RECOVERY_CMD, healShim, shimPath,
@@ -87,6 +88,66 @@ describe('applyHook', () => {
         // Uninstall (choose none).
         applyHook(RULES_HOOK, null, targets, root);
         expect(hasHook(readSettings(targets[1].settingsPath), 'wp-ai-rules-hook')).toBe(false);
+    });
+});
+
+/**
+ * THE MANAGED `env` ENTRY, at INSTALL time.
+ *
+ * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` pins the Bash cwd to the project root after every Bash
+ * call. That is what keeps the RELATIVE guard hooks resolvable — an unresolvable hook exits 127, which
+ * per the hooks reference is a NON-BLOCKING error, i.e. a SILENT UNGUARDED ALLOW — and, because settings
+ * `env` is INHERITED, it puts every subagent on the same cwd and therefore the same guard verdict.
+ *
+ * Written by `applyHook`, so BOTH installer paths get it with no second step: the interactive chooser
+ * and the non-interactive `--target=` flag both funnel through here.
+ */
+describe('applyHook — the managed env entry', () => {
+    it('writes it into the settings file the hooks went into', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(GUARDS_HOOK, targets[0], targets, root);
+        expect(readSettings(targets[0].settingsPath).env).toEqual({ [BASH_CWD_ENV_KEY]: BASH_CWD_ENV_VALUE });
+    });
+
+    // Every location that WRITES hooks gets it, global included: the cwd pin is worth the same to a
+    // global install's subagents. What differs is only the drift check, which judges project (relative)
+    // installs alone — a global install names the bin path directly, so there is no relative resolution
+    // for it to protect. See envStale() in hook-registration.ts.
+    it('writes it for a global (absolute) install too', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(GUARDS_HOOK, targets[2], targets, root);
+        expect(readSettings(targets[2].settingsPath).env).toEqual({ [BASH_CWD_ENV_KEY]: BASH_CWD_ENV_VALUE });
+    });
+
+    it('installs both hooks into one file with a single env entry, and is idempotent', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(RULES_HOOK, targets[0], targets, root);
+        applyHook(GUARDS_HOOK, targets[0], targets, root);
+        applyHook(GUARDS_HOOK, targets[0], targets, root);   // re-run the installer
+        expect(readSettings(targets[0].settingsPath).env).toEqual({ [BASH_CWD_ENV_KEY]: BASH_CWD_ENV_VALUE });
+    });
+
+    // A user who set it to something else is not carrying a second, quieter spelling of the decision.
+    it('brings an existing user-set value to 1', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+        fs.writeFileSync(targets[0].settingsPath,
+            JSON.stringify({ env: { [BASH_CWD_ENV_KEY]: '0', OTHER: 'keep' } }, null, 4) + '\n');
+        applyHook(GUARDS_HOOK, targets[0], targets, root);
+        expect(readSettings(targets[0].settingsPath).env)
+            .toEqual({ [BASH_CWD_ENV_KEY]: BASH_CWD_ENV_VALUE, OTHER: 'keep' });
+    });
+
+    it('does not add it to a file it is not installing into', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(GUARDS_HOOK, targets[0], targets, root);
+        expect(fs.existsSync(targets[1].settingsPath)).toBe(false);
+        expect(readSettings(targets[2].settingsPath).env).toBeUndefined();
     });
 });
 

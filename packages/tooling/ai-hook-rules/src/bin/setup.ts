@@ -10,8 +10,10 @@ import { SHIM_MARKER, shimPath, renderShim } from './shim';
 import { GUARANTEE_ROOT_MARKER, guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
 import {
     ClaudeSettings, HookCommand, HookEntry, HookRegistrationEntry, GUARANTEE_ROOT_ENTRY, GUARDS_BIN,
-    GUARDS_MATCHER, RULES_BIN, RULES_MATCHER, addHookEntry, readSettings, shimCommand, writeSettings,
+    GUARDS_MATCHER, RULES_BIN, RULES_MATCHER, addHookEntry, applyManagedEnv, readSettings, shimCommand,
+    writeSettings,
 } from './hook-registration';
+import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 // Re-exported for back-compat (setup.spec.ts + external callers). The shim body + path now live in
 // ./shim (shared with the runtime self-heal in hook-core). See shim.ts for the single source of truth.
@@ -474,6 +476,15 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
         const isChosen = chosen !== null && chosen.settingsPath === target.settingsPath;
         if (isChosen) {
             addHookEntry(settings, new HookRegistrationEntry(hook.matcher, hook.commandFor(target, projectRoot)));
+            // The managed `env` entry goes into the SAME file the hooks go into, on every path that
+            // writes hooks — interactive or `--target=`. It pins the Bash cwd to the project root, which
+            // is what keeps the RELATIVE guard hooks resolvable (an unresolvable hook exits 127, and per
+            // the hooks reference that is a SILENT UNGUARDED ALLOW), and settings `env` is inherited, so
+            // every subagent gets the identical cwd and therefore the identical guard verdict. See
+            // hook-registration.ts for the full argument; `wp-upgrade-shim` self-heals it afterwards.
+            if (applyManagedEnv(settings)) {
+                console.log(`  ✅ env.${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} → ${target.label} (pins the Bash cwd to the project root, for this session and every subagent)`);
+            }
             writeSettings(target.settingsPath, settings);
             console.log(`  ✅ ${hook.label} → ${target.label}`);
         } else if (removed) {

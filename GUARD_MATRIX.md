@@ -125,8 +125,10 @@ that is what shapes the registration: `.claude/settings.json` carries **three** 
 | rules `ai-hook.sh wp-ai-rules-hook` | **relative** | same |
 
 The relative pair is admissible *only* because L-1 exists. All three, plus the two committed `.sh`
-files, are compared against the installed release by fault `S`, and `pnpm exec wp-upgrade-shim`
-regenerates all three.
+files and the `settings.json` `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` (which pins the
+Bash cwd to the project root, so those relative hooks always resolve — and, `env` being inherited, pins
+it identically for every subagent), are compared against the installed release by fault `S`, and
+`pnpm exec wp-upgrade-shim` regenerates all four.
 
 The shim also runs the binary as a CHILD and maps any `rc` outside `{0,2}` onto fault K rather than
 `exec`ing it — `exec` on a missing target exits 127 and therefore allows.
