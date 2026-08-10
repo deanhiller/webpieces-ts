@@ -1,5 +1,19 @@
 # BUG: every `.claude/worktrees/*` worktree is UNGOVERNED — `pr-creation-or-push-guard`, `whole-repo-build-guard` and every other bash guard are silently skipped inside the sandbox agents are told to use
 
+> **STATUS: FIXED in this same branch — do not implement the "Fix" section below as written.**
+> Everything from `## What is wrong` down is the ORIGINAL report, kept verbatim as the incident record
+> and in the present tense it was filed in. It describes code that no longer exists.
+>
+> What actually shipped, and why it DIVERGES from the proposed fix: the report proposes reordering
+> `owningWorktree()` (i.e. `git worktree list`) ahead of the lexical fast path. That was rejected —
+> `WorktreeService.listWorktrees` fails SOFT to `[]`, so a git hiccup on the hook's blocking path would
+> fail OPEN straight back into `foreign`, which IS this bypass. Tree identity is now decided from git's
+> own dirs instead: `--git-common-dir` is identical for every checkout of one repo (so a linked worktree
+> is ours wherever it sits, and a nested clone under `repositories/**` is not), and
+> `--git-dir !== --git-common-dir` separates linked from primary. See `EffectiveTreeResolver.classify`
+> and `DotWebpieces.gitDirs`. Test cases 1-5 below are all covered — see `effective-tree.spec.ts` and
+> the end-to-end block in `l1-matrix.spec.ts`.
+
 **Package:** `@webpieces/ai-hook-rules`
 **Severity:** **HIGH** — this is a guard BYPASS, not a usability wart.
 **Versions verified:** reproduced live on `0.4.614`; the code path is unchanged across `0.4.603`–`0.4.614`.

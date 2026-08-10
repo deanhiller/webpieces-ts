@@ -1,5 +1,17 @@
 # BUG: when a worktree is reaped out from under a live shell, L1 misdiagnoses the vanished cwd as "a subdirectory" and prescribes a remedy that `cd`s back into the deleted directory — compounding on every retry
 
+> **STATUS: FIXED in this same branch — do not implement the "Fix" section below as written.**
+> Everything from `## What is wrong` down is the ORIGINAL report, kept verbatim as the incident record
+> and in the present tense it was filed in. It describes code that no longer exists.
+>
+> What shipped: `TreeKind` gained `'missing'`, produced by an `fs.existsSync` check AHEAD of the git
+> calls in `EffectiveTreeResolver.classify`, with its own L1 row 7 and its own message
+> (`MissingDirectoryGuard`). Fix item 3 — the general invariant — shipped as a property test rather
+> than as an assertion about one guard: `EffectiveTreeResolver.remedyAtRoot` REPLACES a command's
+> leading `cd` run instead of prefixing another one, and `effective-tree.spec.ts` feeds every L1 block's
+> printed remedy back through the runner and asserts it never re-triggers the guard that printed it.
+> The "Related" section below is still OPEN: nothing here stops a live worktree being reaped.
+
 **Package:** `@webpieces/ai-hook-rules`
 **Severity:** MEDIUM-HIGH — a hard session deadlock with no in-band recovery. The agent cannot follow
 the instruction it is given, and each attempt makes the command worse.

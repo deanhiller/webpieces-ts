@@ -182,6 +182,27 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
         expect(report).toContain(row.cure?.denyMention);
     });
 
+    /**
+     * MECHANICAL, because a comment is not enforcement. `remedyAtRoot` is a strict superset of
+     * `atRoot`: identical when the command has no leading `cd`, and correct where `atRoot` is
+     * known-wrong (it prefixes a second `cd`, so the remedy re-fires the block that printed it —
+     * the compounding deadlock this layer shipped). `atRoot` stays because it is the lower-level
+     * QUOTING formatter with legitimate call sites, and the strip needs CommandScanner, which lives a
+     * package above rules-config — so the dangerous spelling is the shorter and more reachable one.
+     * This makes "an L1 block builder never calls bare atRoot" fail the build instead of a review.
+     */
+    it('no L1 block builder formats its remedy with bare atRoot() — only remedyAtRoot()', () => {
+        for (const file of ['force-to-root.ts', 'missing-directory.ts', 'coordinator-worktree.ts']) {
+            // Comment lines are dropped first — these docblocks NAME `atRoot()` to explain the rule,
+            // and a check that forbade saying the word would just get the explanation deleted.
+            const code = fs.readFileSync(path.join(__dirname, file), 'utf8')
+                .split('\n')
+                .filter((line: string): boolean => !/^\s*(?:\/\/|\*|\/\*)/.test(line))
+                .join('\n');
+            expect(code, `${file} must not call atRoot() directly`).not.toMatch(/\batRoot\(/);
+        }
+    });
+
     it('row 5: the deny text the row names is the one runner.ts emits', () => {
         expect(FORCE_TO_ROOT_SRC).toContain(L1_ROWS[4].cure?.denyMention);
     });
