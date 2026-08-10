@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
 import { GUARD_MATRIX_DOC, guardMatrixPointer } from '../core/l0-matrix';
+import { renderL1Doc } from '../core/l1-doc';
 import { shimStaleDenyReason } from './shim-deny-reason';
-import { INSTALL_HOOKS_CMD, NO_CHAINING_RULE, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD } from './shim';
+import { INSTALL_HOOKS_CMD, NO_CHAINING_RULE, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim } from './shim';
 import { ENV_SURFACE, REGISTRATION_SURFACE } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
@@ -132,4 +133,36 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
 
     // How the deny names the tree it judged (root= / projectDir=) lives in shim-governing-root.spec.ts,
     // beside the governingShimRoot tests it belongs with.
+});
+
+/**
+ * ONE ANSWER PER QUESTION, ACROSS EVERY SURFACE THAT ANSWERS IT.
+ *
+ * The question is "may a worktree have its own node_modules?" and the answer is YES — nx, vitest and the
+ * eslint plugin all execute in that tree and load from it, and `pnpm add <anything>` creates one. The
+ * only invariant is that its @webpieces version EQUALS the main tree's.
+ *
+ * This assertion exists because the repo answered it BOTH ways at once. The L0 deny and the drift note
+ * said "install here, that works"; L1 row 8, the L1 doc and CLAUDE.md said "a worktree needs no install
+ * of its own ... a worktree cannot". An agent that follows the first is then blocked by the second and
+ * ping-pongs between two cures — the multi-cure straddle these messages exist to end. Measured
+ * 2026-08-10: the drift guard told a worktree agent to install locally, it did, and the block lifted,
+ * while row 8 was telling it the opposite.
+ *
+ * It greps the RENDERED surfaces, not the source constants, so a new message inherits the ban for free.
+ */
+describe('no guard surface may tell an agent a worktree gets no node_modules of its own', () => {
+    const banned = ['needs no install of its own', 'a worktree cannot', 'a worktree borrows'];
+    const surfaces = new Map<string, string>([
+        ['L0 fault-S deny', shimStaleDenyReason('0.4.624', '/tmp/wp-root',
+            [SHIM_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], true)],
+        ['the rendered shim (D/X/U/K + WP_BORROW_NOTE)', renderShim()],
+        ['the L1 doc (row 8 remedy + the evaluation order)', renderL1Doc()],
+    ]);
+
+    for (const [name, text] of surfaces) {
+        it(`${name} states the version rule, not a no-install rule`, () => {
+            for (const phrase of banned) expect(text, `${name} still says: ${phrase}`).not.toContain(phrase);
+        });
+    }
 });

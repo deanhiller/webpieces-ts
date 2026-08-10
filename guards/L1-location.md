@@ -21,11 +21,12 @@ L1 answers four questions, and they are genuinely separate:
 2. **Does the directory still EXIST?** — row 7. A worktree reaped out from under a live shell leaves
    a cwd that names nothing, and that state needs its own name and its own message, because the
    remedy for "you are in a subdirectory" is a `cd` back into the very directory that is gone.
-3. **Is this tree governed by a release it did not ask for?** — row 8. The guard hooks are registered
-   ABSOLUTE, so the MAIN tree governs every tree. That is not new — a linked worktree has no
-   `node_modules`, so the shim's upward walk always ran the main tree's binary. It matters when the
-   two trees PIN different `@webpieces` versions: the worktree is then linted, validated and built by
-   a release its own manifest does not ask for. Asked of the PATH acted on, never of who is asking —
+3. **Is this tree governed by a release it did not ask for?** — row 8. A worktree MAY have its own
+   `node_modules` (nx, vitest and the eslint plugin all execute there and load from it), and when it
+   has none the shim's upward walk runs the main tree's binary. Either way the rule is the same and
+   holds whichever registration form — absolute or relative — is live in the consumer: the two trees
+   must PIN the same `@webpieces`, or the worktree is linted, validated and built by a release its
+   own manifest does not ask for. Asked of the PATH acted on, never of who is asking —
    agent identity was measured untrustworthy for tree detection (a worktree-isolated agent whose tree
    is auto-reaped at a turn boundary silently resumes on the primary clone).
 4. **Is the agent stranded away from the root?** — force-to-root, git/gh only. Agents forget where
@@ -148,7 +149,7 @@ section head (neither the shell's cwd nor a `cd`'s persistence can be assumed).
 | 9 | `cd <root> && git status` passes from anywhere | `pw` / `y` / `root` — row 6 | ALLOW (handed to L2) | none — this IS the prescribed cure |
 | 10 | `echo "cd sub && git push"` passes | `pw` / `n` / `root` — row 4 | ALLOW (handed to L2) | none — the `cd` is inside quotes, so `ShellSegmentScan` never treats it as a scope escape |
 | 11 | `cd <subdir> && git push` blocked with the force-to-root message, NOT the gated-flow one | `pw` / `y` / `sub` — row 5; force-to-root runs first | BLOCK_AI_CURE | Option 1 (preferred): `cd <root> && git push`, which then gets the push guard's real answer ← costs one extra turn by design; still blocked |
-| 12 | a worktree on an older branch pins `0.4.612` while the main tree runs `0.4.616`, and `cd <wt> && pnpm build` is blocked | `w` / `n` / `n` — row 8 | BLOCK_AI_CURE | Option 1 (preferred): `git pull` BOTH trees onto the same main, then ONE `pnpm install` in the MAIN tree — the pin is tracked, so the same commit gives the same version and a worktree needs no install of its own<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a different version, use a separate CLONE — a clone gets its own node_modules and its own governance; a worktree borrows the main tree's and cannot<br>Do NOT: lower the MAIN tree's pin to match — that downgrades every tree, including this session's own governor |
+| 12 | a worktree on an older branch pins `0.4.612` while the main tree runs `0.4.616`, and `cd <wt> && pnpm build` is blocked | `w` / `n` / `n` — row 8 | BLOCK_AI_CURE | Option 1 (preferred): `git pull` BOTH trees onto the same main, then `pnpm install` in each tree that has a node_modules — the pin is tracked, so the same commit gives both trees the same version<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a DIFFERENT version, use a separate CLONE — a clone gets its own governance. That is the answer to "I need a different version", never to "I need to install here": a worktree MAY have its own node_modules (nx, vitest and the eslint plugin all load from it), it just may not hold a different @webpieces version<br>Do NOT: lower the MAIN tree's pin to match — that downgrades every tree, including this session's own governor |
 | 13 | the same command from a **subagent** runs normally | `w` / `y` — row 8 does not match | ALLOW (handed to L2) | none — a subagent pinned to a worktree is the correct pattern |
 | 14 | inspection inside a SKEWED worktree still runs — `cd <worktree> && ls`/`cat`/`grep` | `w` / `n` / `y` — row 8 does not match | ALLOW (handed to L2) | none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you |
 | 15 | `cd <worktree> && pnpm install` still runs while row 8 is live — it is the CURE | L0 allowlist, ahead of L1 | ALLOW | none — a cure must stay reachable from every tree |

@@ -422,16 +422,18 @@ Almost everything else runs the **published** copy:
   valid, your pin is behind) never reaches that message: the version-drift guard catches it first and
   prescribes its own cure, so `pnpm install` is not the answer to a validation error.
 
-**A linked worktree does not get its own release — there is ONE governor per repo.** `git worktree add`
-copies no `node_modules`, so a worktree resolves `@webpieces/*` by walking up to the MAIN tree's install
-and runs the MAIN tree's binary. Both PreToolUse hooks are registered with an absolute
-`$CLAUDE_PROJECT_DIR/…` path for the same reason: the governance is the main tree's either way, so
-saying so is cheaper than pretending otherwise. The consequence you will meet: if a worktree's
-`@webpieces` pin disagrees with the main tree's, the guards **BLOCK** (`trinary-version-skew`) rather
-than silently governing it with a release it never pinned. The pin is TRACKED, so the same git hash
-gives the same pin — `git pull` both trees onto the same main and run ONE `pnpm install` in the MAIN
-tree, or just work in the main tree. If a tree genuinely needs a different version, use a separate
-CLONE: a clone gets its own `node_modules` and its own governance; a worktree borrows and cannot.
+**A linked worktree does not get its own RELEASE — there is ONE governor per repo.** `git worktree add`
+copies no `node_modules`, so until something installs there a worktree resolves `@webpieces/*` by walking
+up to the MAIN tree's install and runs the MAIN tree's binary.
+
+**That is about the RELEASE, not about `node_modules`.** A worktree may perfectly well have its own —
+nx, vitest and the eslint plugin all execute in that tree and load from it, and `pnpm add <anything>`
+creates one as a matter of course. Installing in a worktree is fine. The one invariant is that its
+`@webpieces` version must **EQUAL** the main tree's, and when it does not the guards **BLOCK**
+(`trinary-version-skew`) rather than silently governing the tree with a release it never pinned. The pin
+is TRACKED, so the same git hash gives the same pin — `git pull` both trees onto the same main, then
+`pnpm install` in each tree that has a `node_modules`, or just work in the main tree. A separate CLONE is
+the answer to "I genuinely need a DIFFERENT version" — never to "I need to install here".
 
 ### No bin shims — every `bin` lives in `publishConfig.bin`
 
