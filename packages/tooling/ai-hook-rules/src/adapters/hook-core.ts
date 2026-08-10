@@ -10,7 +10,8 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
-import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { governingShimRoot, isAllowed, installedShimRulesVersion } from '../bin/shim';
+import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream, StreamIdentity } from '../core/log-stream';
@@ -268,8 +269,10 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // not part of the judgement.
     const shimRoot = governingShimRoot();
     if (mode === 'rules') return;
-    // WHICH of the three managed things moved — the shim, the L-1 hook, or the settings.json
-    // registration. Nothing validated the registration before, so a settings file left on the old
+    // WHICH of the four managed things moved — the shim, the L-1 hook, the settings.json
+    // registration, or its managed env entry (the Bash-cwd pin that keeps the RELATIVE hooks
+    // resolvable; see hook-registration.ts). Nothing validated the registration before, so a file on the
+    // old
     // two-absolute-hook form silently reverted a repo to per-PRIMARY governance and disabled L-1
     // entirely: the one component whose whole job is failing closed, switched off with no signal.
     const drifted = managedSurfaceDrift(shimRoot);
@@ -293,7 +296,11 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
     // grep finds it here as in the sh half's `L0-shim/` stream.
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
+    // A subagent is discriminated by `agent_id`, which Claude Code populates on stdin only off the main
+    // loop (main falls back to the session id, so the field is absent). Its cure differs: the hooks
+    // blocking it resolve through CLAUDE_PROJECT_DIR, which names the MAIN tree.
+    const inSubagent = (payload.agent_id ?? '') !== '';
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted, inSubagent) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
 }
 
 /**

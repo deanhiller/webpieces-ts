@@ -4,7 +4,8 @@ import * as path from 'path';
 
 import { CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from '@webpieces/rules-config';
 
-import { renderShim, committedShimStale, governingShimRoot, isShimCureCommand, shimStaleDenyReason, SHIM_MARKER, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD } from './shim';
+import { renderShim, committedShimStale, governingShimRoot, isShimCureCommand, SHIM_MARKER, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD } from './shim';
+import { shimStaleDenyReason } from './shim-deny-reason';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -82,7 +83,7 @@ describe('governingShimRoot — the root resolves from the MODULE, never the cwd
  * only useful to a blocked agent if the message actually tells it which tree that was.
  */
 describe('shimStaleDenyReason — naming the governing tree it judged', () => {
-    const reason = shimStaleDenyReason('0.4.431', '', [SHIM_MARKER]);
+    const reason = shimStaleDenyReason('0.4.431', '', [SHIM_MARKER], false);
 
     // The cause list, not an assertion. "(it was reverted or hand-edited)" is frequently FALSE — the
     // ordinary case is a shim whose logic predates this binary — and that false certainty sent a real
@@ -96,7 +97,7 @@ describe('shimStaleDenyReason — naming the governing tree it judged', () => {
     // otherwise an AI whose cwd is a different tree cures the wrong tree forever (the straddle).
     it('names the governing root and prescribes a cd-anchored cure the L0 allowlist still accepts', () => {
         const root = '/tmp/wp-governing-tree';
-        const r = shimStaleDenyReason('0.4.560', root, [SHIM_MARKER]);
+        const r = shimStaleDenyReason('0.4.560', root, [SHIM_MARKER], false);
         expect(r).toContain(`root=${root}`);
         expect(r).toContain(`run EXACTLY this command: 'cd ${root} && ${UPGRADE_SHIM_CMD}'`);
         expect(isShimCureCommand(`cd ${root} && ${UPGRADE_SHIM_CMD}`)).toBe(true);
@@ -114,15 +115,15 @@ describe('shimStaleDenyReason — naming the governing tree it judged', () => {
         // webpieces-disable no-unmanaged-exceptions -- try/FINALLY only (no catch): a failing expect must not leak an env var into the rest of the suite.
         try {
             process.env[CLAUDE_PROJECT_DIR_ENV] = '/tmp/wp-session-root';
-            const disagree = shimStaleDenyReason('0.4.560', '/tmp/wp-other-tree', [SHIM_MARKER]);
+            const disagree = shimStaleDenyReason('0.4.560', '/tmp/wp-other-tree', [SHIM_MARKER], false);
             expect(disagree).toContain('projectDir=/tmp/wp-session-root');
             expect(disagree).toContain('These two DISAGREE');
 
-            const agree = shimStaleDenyReason('0.4.560', '/tmp/wp-session-root', [SHIM_MARKER]);
+            const agree = shimStaleDenyReason('0.4.560', '/tmp/wp-session-root', [SHIM_MARKER], false);
             expect(agree).toContain('These two AGREE');
 
             delete process.env[CLAUDE_PROJECT_DIR_ENV];
-            expect(shimStaleDenyReason('0.4.560', '/tmp/wp-other-tree', [SHIM_MARKER]))
+            expect(shimStaleDenyReason('0.4.560', '/tmp/wp-other-tree', [SHIM_MARKER], false))
                 .toContain(`projectDir=${CLAUDE_PROJECT_DIR_UNSET}`);   // absent != set-but-empty
         } finally {
             if (original === undefined) delete process.env[CLAUDE_PROJECT_DIR_ENV];
@@ -133,7 +134,7 @@ describe('shimStaleDenyReason — naming the governing tree it judged', () => {
     // JSON-safety must survive a HOSTILE path, not merely a tidy one: these two chars are stripped from
     // every interpolated path, so no directory name can corrupt the PreToolUse decision payload.
     it('stays JSON-safe even when the root itself carries a double-quote or backslash', () => {
-        const r = shimStaleDenyReason('0.4.560', '/tmp/we"ird\\path', [SHIM_MARKER]);
+        const r = shimStaleDenyReason('0.4.560', '/tmp/we"ird\\path', [SHIM_MARKER], false);
         expect(r).not.toContain('"');
         expect(r).not.toContain('\\');
         expect(r).toContain(UPGRADE_SHIM_CMD);          // the cure survives an unusable root

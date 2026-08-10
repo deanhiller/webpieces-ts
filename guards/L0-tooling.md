@@ -172,7 +172,7 @@ this table adds the symptom and the incident, not a second set of commands.
 | 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | Option 1 (preferred): `pnpm install` ← run it **HERE**, in this worktree; installing in the primary clone does nothing for this tree |
 | 4b | `…-hook not found` / `is NOT declared in package.json anywhere`, and `pnpm install` reports **"Lockfile is up to date"** and changes nothing | `U`; the package used to arrive as a TRANSITIVE dependency of another `@webpieces` package (and a hoisting node-linker put its bins in the root `.bin`). That edge was pruned as unused, so the package left the tree entirely | BLOCK | Option 1 (preferred): `pnpm add -D @webpieces/ai-hook-rules@<the version your other @webpieces deps are pinned to>` ← the deny infers that pin for you and prints the exact line<br>Do NOT: run `pnpm install` again — with nothing asking for the package it is a **no-op**, and repeating it converges to the same broken tree (2026-08-05: four identical installs, then the block was handed back to the human) |
 | 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | Option 1 (preferred): `rm -rf node_modules && pnpm install` ← a *bare* install SKIPS the corrupt package: pnpm sees the right version on disk and considers it installed<br>Do NOT: `pnpm install` on its own |
-| 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces` | `S`; **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm exec wp-upgrade-shim` ← the SURGICAL tool: it regenerates the shim and touches nothing else — no config, no settings.json — and imports only fs/path, so it runs on a broken tree (needs 0.4.408+)<br>Option 2: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408, where `wp-upgrade-shim` does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21); Claude Code's own permission prompt may ask you to confirm the overwrite, and that prompt is NOT this guard<br>Do NOT: `pnpm exec wp-install-ai-hooks` — this fault is shim-only, and the installer also migrates your config and wires both hooks, prompting twice, which hangs a non-interactive agent |
+| 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces`, or the deny names the settings.json registration / its managed `env` entry | `S`; **normal:** an upgrade brought new shim logic, or a new managed surface. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm exec wp-upgrade-shim` ← the SURGICAL tool: it regenerates all FOUR managed things (both `.sh` files, the settings.json registration and the `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`) and touches nothing else — no config — and imports only fs/path, so it runs on a broken tree (needs 0.4.408+). It has NOT been shim-only since 2026-08-07; the bin's name is older than its job and is deliberately not renamed<br>Option 2: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408, where `wp-upgrade-shim` does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21); it repairs ONE of the four; Claude Code's own permission prompt may ask you to confirm the overwrite, and that prompt is NOT this guard<br>Do NOT: `pnpm exec wp-install-ai-hooks` — the installer also migrates your config and wires both hooks, prompting twice, which hangs a non-interactive agent |
 | 7 | **any** complaint about `webpieces.config.json`: `not found` (`C`), `is out of sync` (`Y`), an N-error validation banner, or a parse error | `C`/`Y`/validation/syntax — one class, not four | BLOCK | Option 1 (preferred): edit `webpieces.config.json` so the reported errors go away — see "The config-validation invariant" above; that section is the authority and this row does not re-derive it<br>Do NOT: `pnpm install` (cannot help), and do NOT delete an unknown key on sight |
 | 8 | nothing — no fault | — | → L1 | — |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
@@ -236,20 +236,34 @@ Observed live. `main` bumps the `@webpieces` pin to a newly published release:
 
 Two blocks, two one-line cures, no deadlock.
 
-Step 2's cure is now bigger than its name suggests, and that is deliberate. Fault `S` covers the WHOLE
-managed hook surface — **three** things that only work as a set:
+Step 2's cure is now bigger than its name suggests, and that is deliberate — the bin is called
+`wp-upgrade-shim` for historical reasons and is deliberately NOT renamed. Fault `S` covers the WHOLE
+managed hook surface — **four** things that only work as a set:
 
 | # | managed thing | registered |
 |---|---|---|
 | 1 | `.claude/webpieces/ai-hook.sh` | **relative**, once per guard bin, so each tree runs its own release |
 | 2 | `.claude/webpieces/guarantee-root.sh` (L-1) | **absolute**, matcher `Bash` |
 | 3 | the `.claude/settings.json` entries registering them | — |
+| 4 | `.claude/settings.json` → `env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR = "1"` | — |
 
-`pnpm exec wp-upgrade-shim` repairs all three, and it is the only cure that does: the older
-`cp …/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` fallback repairs **one of three** and its deny
+Row 4 is what keeps row 1 resolvable. The guard hooks are **relative** so each tree runs its own
+release; a relative hook that cannot resolve exits 127, which per the hooks reference is a NON-BLOCKING
+error — a **silent unguarded allow**. Pinning the Bash cwd to the project root prevents the drift that
+L-1 otherwise has to catch after the fact, and because settings `env` is **inherited**, the main agent
+and every subagent resolve the same hooks and get the same verdict. The trade: the cwd reset becomes
+silent and unconditional, so a deliberate `cd` no longer persists between Bash calls — chain instead.
+
+`pnpm exec wp-upgrade-shim` repairs all four, and it is the only cure that does: the older
+`cp …/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` fallback repairs **one of four** and its deny
 text now says so. Nothing validated the registration at all before it joined this fault, so a settings
 file left on the old two-absolute-hook form silently disabled L-1 and re-pinned every worktree to the
 primary's release, with no signal anywhere.
+
+One more thing that cure cannot do for you: it repairs the tree it is RUN IN. H1 is absolute via
+`$CLAUDE_PROJECT_DIR`, which never leaves the primary clone, so a repair inside a linked worktree does
+not change what is governing the session. `wp-upgrade-shim` now says so when the two trees diverge, and
+prints the primary-tree command; running it in both trees is the aligned end state.
 
 The old trap here — "the shim that matters is the primary clone's, so regenerating it inside a linked
 worktree re-arms the wrong copy" — is **gone by construction**: the guard hooks are relative, so the

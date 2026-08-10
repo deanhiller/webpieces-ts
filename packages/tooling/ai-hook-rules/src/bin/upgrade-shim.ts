@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { renderShim, shimPath, findShimRoot } from './shim';
 import { guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
-import { repairRegistrationAt, managedSurfaceDrift } from './hook-registration';
+import { repairRegistrationAt, managedSurfaceDrift, SettingsRepair } from './hook-registration';
+import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { toError } from '../core/to-error';
 
 // ---------------------------------------------------------------------------
 // The `wp-upgrade-shim` entry point — the CURE for the managed-hook-surface self-guard (L0 fault S).
 //
-// WHAT IT REPAIRS, and why all three (2026-08-07). This used to write EXACTLY ONE FILE, ai-hook.sh,
-// and touch nothing else. That was correct while the installed surface WAS one file. It is now three:
+// WHAT IT REPAIRS, and why all four (2026-08-07, extended). This used to write EXACTLY ONE FILE,
+// ai-hook.sh, and touch nothing else. That was correct while the installed surface WAS one file. It is
+// now four (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
+// functional change is a cost with no payer; the prose is what gets corrected):
 //
 //   1. .claude/webpieces/ai-hook.sh          the guard shim, registered RELATIVE so each git tree runs
 //                                            its own release, its own binary and its own pin
@@ -20,6 +24,9 @@ import { toError } from '../core/to-error';
 //                                            reference that is a NON-BLOCKING error, i.e. a SILENT
 //                                            UNGUARDED ALLOW
 //   3. the .claude/settings.json registration itself
+//   4. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
+//      Bash cwd to the project root so the RELATIVE hooks in (1) always resolve — and, because settings
+//      `env` is inherited, pins it identically for every subagent (see hook-registration.ts)
 //
 // Leaving (2) and (3) out would have made the upgrade path silently useless: an upgrading consumer
 // would take the new shim, KEEP the old two-absolute-hook registration, never receive guarantee-root.sh
@@ -53,8 +60,11 @@ export function runUpgradeShim(cwd: string): number {
         // writeFileSync's mode only applies on create; force it on overwrite too (matches writeShim).
         fs.chmodSync(target, 0o755);
         writeGuaranteeRoot(root);
-        const rewired = repairRegistrationAt(root);
-        reportRepairs(target, guaranteeRootPath(root), rewired);
+        const repairs = repairRegistrationAt(root);
+        reportRepairs(target, guaranteeRootPath(root), repairs);
+        // ADVISORY ONLY, and deliberately after the ✅ lines: it never touches the exit code (see
+        // reportTreeDivergence).
+        reportTreeDivergence(root);
         return verifyRepaired(root);
     } catch (err: unknown) {
         const error = toError(err);
@@ -65,22 +75,95 @@ export function runUpgradeShim(cwd: string): number {
 
 /**
  * Say what was actually done, per managed thing. The old single line ("regenerated the managed shim")
- * would now be a lie by omission on the two most important repairs — and an agent reading a cure's
+ * would now be a lie by omission on the three most important repairs — and an agent reading a cure's
  * output is how it decides whether the cure worked.
+ *
+ * Each settings file reports the repairs IT needed, from the flags recorded before the rewrite. Printing
+ * "rewrote the hook registration" for a file whose hooks were already current and whose `env` entry was
+ * the only thing missing would be the same class of dishonesty one level down.
  */
 // webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
-function reportRepairs(shimFile: string, guaranteeFile: string, rewired: readonly string[]): void {
+function reportRepairs(shimFile: string, guaranteeFile: string, repairs: readonly SettingsRepair[]): void {
     console.log(`✅ @webpieces: regenerated the managed shim at ${shimFile} — tool calls are re-armed.`);
     console.log(`✅ @webpieces: regenerated the L-1 hook at ${guaranteeFile}.`);
-    if (rewired.length === 0) {
-        console.log('   .claude/settings.json hook registration already matches this release — no change.');
-    } else {
-        for (const file of rewired) {
-            console.log(`✅ @webpieces: rewrote the hook registration in ${file} to the three-hook form`);
+    if (repairs.length === 0) {
+        console.log('   .claude/settings.json (hook registration + managed env) already matches this release — no change.');
+    }
+    for (const repair of repairs) {
+        if (repair.registration) {
+            console.log(`✅ @webpieces: rewrote the hook registration in ${repair.settingsPath} to the three-hook form`);
             console.log('   (L-1 absolute + the two guard hooks RELATIVE, so each git tree runs its own release).');
+        }
+        if (repair.env) {
+            console.log(`✅ @webpieces: set env.${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} in ${repair.settingsPath}`);
+            console.log('   (pins the Bash cwd to the project root, so the RELATIVE guard hooks always resolve — for');
+            console.log('   this session and, because settings env is inherited, for every subagent it spawns).');
         }
     }
     console.log('  These files are generated + committed by webpieces; do not revert or hand-edit them.');
+}
+
+/**
+ * WAS THE REPAIRED TREE THE TREE THE HOOKS LAUNCH FROM — the second way this cure can report success
+ * while changing nothing the session is actually governed by.
+ *
+ * H1 is registered ABSOLUTE, `sh "$CLAUDE_PROJECT_DIR/…"`, and `$CLAUDE_PROJECT_DIR` never moves off the
+ * PRIMARY clone (the two-tree straddle recorded in shim.ts, and the whole reason H2/H3 are relative
+ * while H1 is not). So repairing a LINKED WORKTREE leaves the running session still loading the
+ * PRIMARY's files, the PRIMARY's binary and the PRIMARY's pin. Four green lines, and the block does not
+ * lift. Nothing printed above is false — but the question the reader has ("will the block lift?") went
+ * unanswered, which is the same failure this file's header exists to prevent, one level out.
+ *
+ * THE PREDICATE IS TREE DIVERGENCE, NOT "am I a subagent". There is no runtime subagent marker in the
+ * hook environment to read, and divergence is the more accurate question anyway: a MAIN agent in a
+ * linked worktree HAS this problem (a subagent test would miss it), and a SUBAGENT in the same tree does
+ * NOT (a subagent test would cry wolf). Both paths are realpath'd before comparing — a worktree path can
+ * arrive symlinked, and /tmp vs /private/tmp on darwin is a live case in this repo's own specs.
+ *
+ * SILENT when `$CLAUDE_PROJECT_DIR` is unset: a plain CLI run outside Claude Code has no second tree to
+ * talk about. And ADVISORY always — it must never turn a verified repair into a failure, so it returns
+ * nothing and `verifyRepaired()`'s contract (non-zero only when a surface in THIS tree still differs) is
+ * untouched.
+ */
+// webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
+function reportTreeDivergence(root: string): void {
+    const projectDir = process.env['CLAUDE_PROJECT_DIR'];
+    if (projectDir === undefined || projectDir === '') return;
+    if (sameTree(root, projectDir)) return;
+    console.log('');
+    console.log('⚠️  @webpieces: the tree just repaired is NOT the tree the hooks launch from.');
+    console.log(`     repaired:            ${root}`);
+    console.log(`     CLAUDE_PROJECT_DIR:  ${projectDir}`);
+    console.log('   The hooks governing this session resolve through CLAUDE_PROJECT_DIR (H1 is registered');
+    console.log('   absolute), so this repair has not changed what is currently enforcing — it made THIS');
+    console.log('   tree correct for when its own branch is the one being judged, which is not wasted work.');
+    console.log('   To change what is enforcing NOW, run the same repair in the primary tree, and install');
+    console.log('   there too — the hooks execute the INSTALLED release, not this tree\'s source:');
+    console.log(`     cd ${projectDir} && pnpm install && pnpm exec wp-upgrade-shim`);
+    console.log('   Repaired in BOTH trees is the aligned end state, and running it twice is safe.');
+}
+
+/**
+ * Do two paths name the same tree? realpath'd (symlinked worktrees, /tmp vs /private/tmp) and stripped
+ * of a trailing separator before comparing. A path that cannot be realpath'd falls back to `resolve`,
+ * so an absent CLAUDE_PROJECT_DIR directory reads as "different" rather than throwing inside a cure.
+ */
+// webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
+function sameTree(a: string, b: string): boolean {
+    return canonicalTree(a) === canonicalTree(b);
+}
+
+// webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
+function canonicalTree(dir: string): string {
+    // webpieces-disable no-unmanaged-exceptions -- realpath throws on a path that does not exist; the fallback IS the handling, and an advisory notice must never crash the cure it annotates.
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return path.resolve(fs.realpathSync(dir));
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error; // best-effort: an unresolvable path simply compares as itself
+        return path.resolve(dir);
+    }
 }
 
 /**
@@ -112,8 +195,8 @@ function verifyRepaired(root: string): number {
  *
  * Up to and including 0.4.588 this module ENDED at the closing brace above. `pnpm exec wp-upgrade-shim`
  * loaded it, defined two functions, and exited 0 having printed nothing and changed no file. Fault S
- * names this command as OPTION 1, the only option that repairs all three managed surfaces, so the
- * guard's own "THIS IS NOT A DEADLOCK" promise was false: OPTION 2 repairs one of three, and OPTION 1
+ * names this command as OPTION 1, the only option that repairs all four managed surfaces, so the
+ * guard's own "THIS IS NOT A DEADLOCK" promise was false: OPTION 2 repairs one of four, and OPTION 1
  * did nothing at all. Twenty-one unit tests missed it because every one of them called
  * `runUpgradeShim()` as a FUNCTION — the defect lived entirely in what the module does when SPAWNED.
  *

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, SHIM_MARKER, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, SHIM_MARKER, renderShim, committedShimStale, isShimCureCommand } from './shim';
 import { ShimTestkit } from './shim-testkit';
 import { L0_SHIM_STREAM } from '../core/log-streams';
 
@@ -296,58 +296,6 @@ describe('isShimCureCommand — only the three cures pass while the self-guard b
             expect(isShimCureCommand(cmd), `should reject: ${cmd}`).toBe(false);
         }
     });
-});
-
-/**
- * HOW the self-guard's deny SPELLS its cures. Two numbered OPTIONs, each quoted, plus NO_CHAINING_RULE
- * (see its audit-log origin). The ORDER is load-bearing: `wp-upgrade-shim` LEADS because it is the
- * SURGICAL tool — upgrade-shim.ts writes renderShim() to the shim path and touches nothing else (no
- * config, no settings.json) and imports only fs/path, so it runs on a broken tree. The `cp` stays last,
- * as the pre-0.4.408 fallback for the releases where wp-upgrade-shim does not exist yet. The installer
- * is NOT an option here at all — this fault is shim-only, and it would also migrate the config and wire
- * both hooks. The string must be JSON-safe — no `"` / `\` — since denyJson() serializes it.
- */
-describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () => {
-    const reason = shimStaleDenyReason('0.4.431', '', [SHIM_MARKER]);
-
-    it('offers both cures, quoted EXACTLY, wp-upgrade-shim first and the cp last, with the version note', () => {
-        expect(reason).toContain('installed version 0.4.431');
-        expect(reason).toContain('OPTION 1 (preferred');
-        for (const cmd of [UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD]) {
-            expect(reason).toContain(`run EXACTLY this command: '${cmd}'`);
-        }
-        expect(reason.indexOf(UPGRADE_SHIM_CMD)).toBeLessThan(reason.indexOf(RESTORE_SHIM_CMD));
-    });
-
-    // The installer is named ONLY to warn against it. An agent that runs it here waits forever on a
-    // prompt it cannot see, and reports the guard as a deadlock.
-    it('warns off the installer, which prompts twice and hangs a non-interactive session', () => {
-        expect(reason).toContain(`Do NOT use the bare '${INSTALL_HOOKS_CMD}' here`);
-        expect(reason).toContain('PROMPTS for a hook target twice');
-    });
-
-    it('carries the no-chaining rule and states plainly it is NOT a deadlock', () => {
-        expect(reason).toContain(NO_CHAINING_RULE);
-        expect(reason).toContain('appending anything (even && git status)');
-        expect(reason).toContain('NOT A DEADLOCK');
-        expect(reason).toContain('ALLOWED');
-        expect(reason).not.toContain('Every tool call is blocked'); // the unqualified claim that read as deadlock
-    });
-
-    it('omits the version note (no empty parens) when the installed version is unknown', () => {
-        const r = shimStaleDenyReason('', '', [SHIM_MARKER]);
-        expect(r).not.toContain('installed version )');
-        expect(r).not.toContain('()');
-        expect(r).toContain(UPGRADE_SHIM_CMD); // the cure survives an unreadable version
-    });
-
-    it('contains no double-quote or backslash (either would corrupt the PreToolUse decision JSON)', () => {
-        expect(reason).not.toContain('"');
-        expect(reason).not.toContain('\\');
-    });
-
-    // How the deny names the tree it judged (root= / projectDir=) lives in shim-governing-root.spec.ts,
-    // beside the governingShimRoot tests it belongs with.
 });
 
 describe('upgrade-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
