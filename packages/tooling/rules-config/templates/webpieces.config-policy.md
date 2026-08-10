@@ -35,15 +35,28 @@ A rejected config is always repairable from inside the failure:
 
 ## What to do when the config fails to load
 
-Do these in order. **Do not start by deleting keys** — that usually deletes valid config.
+**Edit `webpieces.config.json` and apply every error literally. That is the whole procedure.** Each error
+names the exact change to make, and editing this file is always allowed — including right now, while it is
+invalid.
 
-1. **`pnpm install`.** This is the most common cause by far: your installed `@webpieces` validator is a
-   release BEHIND this config (a dep bump updated the config and lockfile, but `node_modules` was never
-   re-installed), so the running validator does not recognise a legitimately newer key. Installing syncs
-   them.
-2. **Re-run your command.** If the errors are gone you are done — do not touch the config file.
-3. **Only if an error survives a fresh install** is it a genuine retired / renamed / typo'd key. Now edit
-   `webpieces.config.json`, applying each error's instruction literally.
+- **An UNKNOWN key: delete it.** A key the running validator has no schema for controls nothing — every
+  code path that would read it is keyed off that schema — so leaving it is dead config that reads as live
+  config to the next reader. When the key is RETIRED, deleting it is the *whole* fix.
+  `pnpm wp-prune-unknown-config` strips every unknown key for you, and it is on the guard's cure allowlist,
+  so it runs even while the invalid config is blocking everything else.
+- **A RETIRED key with a destination: apply the move.** A rename carries its value over, so delete-and-move
+  on is wrong there — the error tells you which case you are in.
+- **A MACHINE-LOCAL setting does not belong in this file.** Those live in `~/.webpieces/config.json` under
+  `experimental` — an optional file tracked by no repo, whose absence is the default behaviour.
+
+**Do NOT run `pnpm install` for a validation error.** It cannot help: the guards only run once package.json
+and node_modules already agree, so there is nothing out of date to install.
+
+The one case that *is* a stale install — your pinned `@webpieces` being a release BEHIND this config, so the
+running validator does not recognise a legitimately newer key — never reaches this banner. The
+version-drift guard compares the pin against the installed version *before* the validator runs, and denies
+every tool call with its own message and its own cure. So if you are reading a validation error, no drift
+was detected.
 
 ## Documenting your own config: the `*Why` convention
 

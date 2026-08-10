@@ -302,10 +302,24 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
         expect(msg).not.toContain('FIX ORDER');
     });
 
-    it('keeps the anti-destructive warning, aimed at the @webpieces PIN', () => {
+    /**
+     * END TO END, through the real loader: the advice a reader gets for an unknown key is DELETE IT, and
+     * the stale @webpieces PIN survives only as the secondary note. This assertion used to demand the
+     * opposite ("Do NOT delete a key just because it is reported unknown") — see config-pruner.spec.ts
+     * for why that inversion cost a consumer most of a day.
+     */
+    it('tells the reader to DELETE an unknown key, keeping the @webpieces PIN as the secondary note', () => {
         const msg = bannerFor('totally-made-up-rule');
-        expect(msg).toContain('Do NOT delete a key just because it is reported unknown');
+        expect(msg).toContain('DO delete any key reported as an unknown rule');
+        expect(msg).not.toContain('Do NOT delete a key just because it is reported unknown');
         expect(msg).toContain('package.json pins an @webpieces OLDER');
+    });
+
+    // The self-contradiction the report opened on: one output, two opposite orders about `pnpm install`.
+    it('never says both "run `pnpm install`" and "do NOT run `pnpm install`" in one output', () => {
+        const msg = bannerFor('totally-made-up-rule');
+        expect(msg.split('pnpm install')).toHaveLength(2);
+        expect(msg).toContain('Do NOT run `pnpm install`');
     });
 });
 
@@ -336,8 +350,9 @@ describe('loadAndValidate — retired guard names', () => {
         });
     }
 
-    // The unknown-rule message leads with "run `pnpm install`, your validator may be stale" — correct for a
-    // key the validator has not learned yet, and precisely wrong for a name we know is dead.
+    // The generic unknown-rule message can only say "delete it". For a RENAME that is destructive advice —
+    // the value has to carry over to the new key — so a name the retirement table knows must take the
+    // table's path and get the migration instruction instead.
     it('does not send a retired name down the "your validator is stale" path', () => {
         const sections = allRulesOff();
         const guards = sections['hookGuards'] as Record<string, unknown>;

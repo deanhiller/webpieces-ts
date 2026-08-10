@@ -10,6 +10,7 @@ export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
 // messages embed rather than re-type.
 export {
     formatConfigErrorsBanner,
+    CONFIG_POLICY_DOC,
     RETIRED_KEY_MARKER,
     RETIRED_TOP_LEVEL_MARKER,
     SECTION_PLACEMENT_MARKER,
@@ -43,6 +44,10 @@ export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFI
 // The retired-key table + the no-back-compat policy it enforces. Exported so the installer can migrate
 // what the errors instruct, and so consumers can enumerate retirements.
 export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConfigKey, isRetiredKey, retiredEntry, retiredKeyError, retiredKeyErrorsIn, retiredRuleFor } from './retired-config-keys';
+// The MECHANICAL cure the unknown-rule error and the banner both name: strip every key no validator has a
+// schema for, so cleanliness is one command rather than a judgement call made while every Bash call is
+// blocked. `PRUNE_UNKNOWN_COMMAND` (constants.ts) is the single spelling of that command.
+export { ConfigPruner, PruneResult, PrunedKey } from './config-pruner';
 export { validateChecklistDocs } from './checklist-docs-validator';
 // EXPERIMENTAL, and deliberately NOT an advertised knob. The OPTIONAL machine-local `~/.webpieces/config.json`:
 // absent (the normal state for every consumer) means all-defaults, silently; present means strictly validated,
@@ -91,6 +96,7 @@ export {
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
     PUSH_DEV_STATE_FILE,
+    PRUNE_UNKNOWN_COMMAND,
 } from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {

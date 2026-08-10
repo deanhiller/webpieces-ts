@@ -30,9 +30,31 @@ describe('config-error banner — one cure, stated once', () => {
         expect(banner.split('`pnpm install`')).toHaveLength(2);
     });
 
-    it('keeps the anti-destructive warning, re-aimed at the PIN rather than at node_modules', () => {
-        expect(banner).toContain('Do NOT delete a key just because it is reported unknown');
+    /**
+     * THE ADVICE USED TO BE INVERTED. This assertion previously demanded the opposite string — "Do NOT
+     * delete a key just because it is reported unknown" — on an anti-destructive theory that turned out
+     * to protect the rare case at the cost of the common one. A key the running validator has no schema
+     * for controls nothing, and for a RETIRED key deleting it is the entire fix, so the banner was telling
+     * the reader not to do the one thing that works. Deletion now leads, and it is mechanical.
+     */
+    it('names deletion as the PRIMARY cure, and the command that performs it', () => {
+        expect(banner).toContain('DO delete any key reported as an unknown rule');
+        expect(banner).toContain('pnpm wp-prune-unknown-config');
+        expect(banner).not.toContain('Do NOT delete a key just because it is reported unknown');
+    });
+
+    // The stale pin is real but secondary: it has its own guard, which denies tool calls BEFORE this
+    // validator runs. Keeping it in the banner is what stops delete-first from being destructive advice.
+    it('keeps the stale PIN as a secondary note, and says why you are not in that case', () => {
+        expect(banner).toContain('Secondary, and rare');
         expect(banner).toContain('package.json pins an @webpieces OLDER');
+        expect(banner).toContain('version-drift guard');
+    });
+
+    // Nothing pointed at the machine-local file during the incident, though a flag in it was the cause.
+    it('points machine-local settings at ~/.webpieces/config.json', () => {
+        expect(banner).toContain('~/.webpieces/config.json');
+        expect(banner).toContain('experimental');
     });
 
     it('never emits a retry step at all, and prints no ordered FIX list', () => {

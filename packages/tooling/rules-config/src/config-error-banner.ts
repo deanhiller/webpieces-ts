@@ -24,13 +24,25 @@
  *     longer exists, and the paragraph that offered it is gone with it: the banner names ONE action, and
  *     an optional second command is how a reader comes to believe there is a choice to make.
  *
- * ## Why the negative instructions are here
+ * ## Why the negative instruction is here
  *
  * The failure mode was not a missing instruction, it was a generic ordered list — which is exactly how
  * an agent picks the wrong step. So the banner states what NOT to do as plainly as what to do: do not
- * run `pnpm install`, and do not delete an unknown key on sight (check first whether package.json pins
- * an @webpieces OLDER than the config was written for — that anti-destructive warning is the one part
- * of the old banner worth keeping, re-aimed from node_modules at the PIN).
+ * run `pnpm install`. That is the only DO-NOT left, and it is the only one there was ever evidence for.
+ *
+ * ## The delete advice used to be INVERTED, and that inversion cost a consumer a day
+ *
+ * This banner used to say "Do NOT delete a key just because it is reported unknown", steering the reader
+ * at the stale-PIN case first. That is backwards. A key the running validator has no schema for controls
+ * NOTHING; leaving it in place is dead config that reads as live config to the next reader, and for a
+ * RETIRED key deleting it is the entire fix. The sentence told the reader not to do the one thing that
+ * works, for a key (`whole-repo-build-guard`) whose own retirement instruction is "DELETE this entry".
+ *
+ * So deletion is now the PRIMARY cure and it is MECHANICAL — `PRUNE_UNKNOWN_COMMAND` strips every unknown
+ * key — while the stale pin is a secondary note. The stale pin can afford to be secondary because it is
+ * not this banner's job at all: the version-drift guard in the shim compares the pin against the installed
+ * version BEFORE exec'ing the validator, and on drift it denies every tool call with its own message and
+ * its own cure. Reaching this banner is therefore evidence that no drift was detected.
  *
  * ## Nothing here is conditional
  *
@@ -43,6 +55,18 @@
  * phrase other code searches for cannot drift apart.
  */
 
+import { PRUNE_UNKNOWN_COMMAND } from './constants';
+
+/**
+ * The background doc this banner sends the reader to, named ONCE so the link, the installer that ships
+ * the file, and the spec that holds it to the banner's advice cannot drift apart.
+ *
+ * That drift is not hypothetical: the first cut of the delete-first rewrite fixed the banner and left
+ * this document still saying "Do not start by deleting keys" and prescribing `pnpm install` first — i.e.
+ * the message was cured and the page it cites went on teaching the thing that was removed.
+ */
+export const CONFIG_POLICY_DOC = 'webpieces.config-policy.md';
+
 /** `retiredKeyError` — every RETIRED_CONFIG_KEYS entry is one `migrate()` knows how to move/rename. */
 export const RETIRED_KEY_MARKER = 'is a RETIRED webpieces.config.json key';
 
@@ -53,10 +77,11 @@ export const RETIRED_TOP_LEVEL_MARKER = 'block is RETIRED';
 export const SECTION_PLACEMENT_MARKER = 'belongs in the';
 
 /**
- * Assemble the banner: the errors, then the ONE cure, then the two warnings. Nothing else belongs here —
+ * Assemble the banner: the errors, then the ONE cure, then the warnings. Nothing else belongs here —
  * see the module comment.
  */
 // webpieces-disable no-function-outside-class -- sibling string builder in this module
+// webpieces-disable max-lines-new-methods -- one contiguous string literal; splitting it hides the message
 export function formatConfigErrorsBanner(errors: readonly string[]): string {
     return (
         // No "then retry". Retrying is not a fix STEP — the old banner spent one of its four numbered
@@ -70,10 +95,18 @@ export function formatConfigErrorsBanner(errors: readonly string[]): string {
         `node_modules already agree, so there is nothing out of date to install. (Only exception: ` +
         `@webpieces deps pinned with a RANGE — ^ / ~ / workspace:* — which drift detection skips. This ` +
         `repo pins exact versions.)\n` +
-        `  • Do NOT delete a key just because it is reported unknown — that is how valid config gets ` +
-        `gutted. First check whether package.json pins an @webpieces OLDER than this config was written ` +
-        `for (a key copied from newer docs/branch); then the fix is to bump that pin, not to delete the ` +
-        `key.` +
-        `\n\nBackground: .webpieces/instruct-ai/webpieces.config-policy.md`
+        `  • DO delete any key reported as an unknown rule. A key the validator has no schema for controls ` +
+        `NOTHING — it is dead config that reads as live config to the next reader — and when the key is ` +
+        `RETIRED, deleting it is the WHOLE fix. Run \`${PRUNE_UNKNOWN_COMMAND}\` to strip every unknown key ` +
+        `mechanically, or delete them by hand; either way the file then validates.\n` +
+        `  • Secondary, and rare: a key can be valid-but-unlearned when package.json pins an @webpieces ` +
+        `OLDER than this config was written for. You are not in that case here — the version-drift guard ` +
+        `compares the pin against the installed version BEFORE this validator runs and denies every tool ` +
+        `call with its own message and its own cure (bump the pin), so reaching this banner means no drift ` +
+        `was detected.\n` +
+        `  • A MACHINE-LOCAL setting does not belong in this file at all. Those live in ` +
+        `~/.webpieces/config.json under "experimental" — an optional file tracked by no repo, whose absence ` +
+        `is the default behaviour. Delete the key here and put it there.` +
+        `\n\nBackground: .webpieces/instruct-ai/${CONFIG_POLICY_DOC}`
     );
 }

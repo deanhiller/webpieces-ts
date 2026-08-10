@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing, CONFIG_POLICY_DOC } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -266,16 +266,28 @@ function migrateGuardHints(commands: Json, changes: string[]): void {
 }
 
 /**
- * Apply the RETIRED rule/guard renames in place. These used to be rewritten silently at load time, so a
- * consumer's file kept the dead name forever; the loader now rejects it, which makes this the one command
- * that can fix the file. Skips a rename when the new name is already configured, so an explicit entry is
- * never clobbered by a stale one.
+ * Apply the RETIRED rule/guard retirements in place. These used to be rewritten silently at load time, so
+ * a consumer's file kept the dead name forever; the loader now rejects it, which makes this the one
+ * command that can fix the file. Skips a rename when the new name is already configured, so an explicit
+ * entry is never clobbered by a stale one.
+ *
+ * NOT EVERY RETIREMENT IS A RENAME, and treating them all as one produced garbage. `whole-repo-build-guard`
+ * moved OUT of webpieces.config.json entirely — its `movedTo` is the PROSE destination
+ * `~/.webpieces/config.json → experimental.whole-repo-build-guard`, not a sibling key — so the rename
+ * branch below would have created a hookGuards entry literally named that whole sentence, which no
+ * validator knows and which the next run reports as another unknown rule. `prunable` is the discriminator:
+ * when the entry says deleting is the whole fix, DELETE it, exactly as `ConfigPruner` does.
  */
 // webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
 function migrateRetiredRuleNames(section: Section, changes: string[]): void {
     for (const entry of RETIRED_CONFIG_KEYS) {
         if (entry.scope !== RETIRED_SCOPE_RULE) continue;
         if (!(entry.key in section)) continue;
+        if (entry.prunable) {
+            delete section[entry.key];
+            changes.push(`deleted retired "${entry.key}" (it moved to ${entry.movedTo})`);
+            continue;
+        }
         if (entry.movedTo in section) {
             delete section[entry.key];
             changes.push(`dropped retired "${entry.key}" ("${entry.movedTo}" is already configured)`);
@@ -562,7 +574,7 @@ export async function main(): Promise<void> {
     // Always refreshed: it explains why a retired key is rejected rather than accepted, and what to do
     // about it — which is exactly what an agent needs on the run where a migration just moved keys out
     // from under its config.
-    writeTemplate(projectRoot, 'webpieces.config-policy.md');
+    writeTemplate(projectRoot, CONFIG_POLICY_DOC);
 
     scaffoldCiGate(projectRoot);
 

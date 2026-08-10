@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { CONFIG_FILENAME } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
 
 // ---------------------------------------------------------------------------
 // THE L0 ALLOWLIST — the vocabulary (the named cure patterns, each an ERE+JS twin pair), the ONE union
@@ -195,6 +195,27 @@ export const UPGRADE_SHIM_ALLOW_JS =
 
 // The exact command we tell the assistant to run to regenerate a reverted/edited committed shim.
 export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
+
+// The CURE for a webpieces.config.json carrying keys no validator has a schema for: delete them.
+//
+// IT HAS TO BE ON THIS LIST OR IT IS NOT A CURE AT ALL. An invalid config denies every Bash call, which
+// is precisely the state the unknown-rule error and the validation banner are read in — so a cure those
+// messages name, but the guard rejects, is worse than naming nothing: it sends the reader in a circle.
+// That is the same reasoning that put the installer and wp-upgrade-shim here, and it is why the entry
+// ships in the SAME change as the messages that prescribe it.
+//
+// Safe as a cure by construction: the pruner only ever DELETES keys the running validator has no schema
+// for, refuses renames and in-file moves, and does nothing at all when a rulesDir is configured. Accepts
+// the realistic pnpm/npm/npx spellings, anchored at both ends with only a bare bin name so no shell
+// operator can ride along. Keep in sync with PRUNE_CONFIG_BODY_JS (locked by the twin unit test).
+const PRUNE_CONFIG_BODY_ERE = '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config';
+
+// JS-regex twin of PRUNE_CONFIG_BODY_ERE (POSIX `[[:space:]]` → `\s`).
+const PRUNE_CONFIG_BODY_JS = '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-prune-unknown-config';
+
+// The entry below spells the command as PRUNE_UNKNOWN_COMMAND, IMPORTED rather than re-typed: that
+// constant is the single spelling, and a second literal here is exactly the drift that would let a
+// message prescribe a command this allowlist does not match.
 
 // The PRIMARY, version-AGNOSTIC cure for the self-guard — and the reason this exists (hit 2026-07-21):
 // the self-guard's deny used to name ONLY `pnpm exec wp-upgrade-shim`, but that bin ships in
@@ -445,6 +466,11 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
     new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', true, RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
         new L0Call('Bash', RESTORE_SHIM_CMD, '')),
+    // The cure for unknown keys in webpieces.config.json — see PRUNE_CONFIG_BODY_ERE for why a cure the
+    // messages name must be reachable from inside the block those messages are read under.
+    new L0AllowEntry(PRUNE_UNKNOWN_COMMAND, 'allow', true, PRUNE_CONFIG_BODY_ERE, PRUNE_CONFIG_BODY_JS,
+        new L0Call('Bash', PRUNE_UNKNOWN_COMMAND, ''),
+        [new L0Call('Bash', 'pnpm exec wp-prune-unknown-config', '')]),
     new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', true, INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
         new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
         [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
