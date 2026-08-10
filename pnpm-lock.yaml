@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@webpieces/nx-webpieces-rules':
-      specifier: 0.4.614
-      version: 0.4.614
+      specifier: 0.4.616
+      version: 0.4.616
 
 importers:
 
@@ -125,7 +125,7 @@ importers:
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/nx-webpieces-rules':
         specifier: 'catalog:'
-        version: 0.4.614(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+        version: 0.4.616(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       eslint:
         specifier: 9.39.1
         version: 9.39.1(jiti@1.21.7)
@@ -3437,34 +3437,34 @@ packages:
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
 
-  '@webpieces/ai-hook-rules@0.4.614':
-    resolution: {integrity: sha512-mk5TYc5aGb+ZZyaXZ4mq1Az5RGlHswxaTMpz3ct4hm84VYIVxE7hS4ytzpIzLfgDpKO79cxYwCXK6X1Udzwb9w==}
+  '@webpieces/ai-hook-rules@0.4.616':
+    resolution: {integrity: sha512-ijjVT5IVhVTN2kqXmPWB/86fPo7xuIQ1cRtgt+UKQ/JnYyR3Ju8UThRvW/xbkV1lraWRWemkHIvj1L6VaPBUoA==}
     hasBin: true
 
-  '@webpieces/code-rules@0.4.614':
-    resolution: {integrity: sha512-BFU9+SKQ53unQMa798X40AD7DgOyMjFkRWD2DInyWrNQBe5ypkVHbdOT4DFssV4V+HMfnNx+5XI2F5+cTbS1Eg==}
+  '@webpieces/code-rules@0.4.616':
+    resolution: {integrity: sha512-1lHEYSWgk++55B6oIi6GNQhlqUWasBL4taETbMlAXZulNYyj06gN7zixtkCV9wSGe2vuQYWqpYHKVIilaQKB6g==}
     hasBin: true
 
   '@webpieces/core-util@0.2.104':
     resolution: {integrity: sha512-F9kWVtKNFAzVPl0r9cp6FttJpdTXH/+ybvDgZhAXHLuxkccOjokmRTuoNBDQggcNxKyspUX8RTGydJfiAJSdDw==}
 
-  '@webpieces/eslint-rules@0.4.614':
-    resolution: {integrity: sha512-BEJyClFnrMwv44cTvkOAK2eX7OP83Qp5+Id5q6hJzxIM2QWcylV5WfEV0ydtOtn4dEMM/VUQRL8qjxN+IkuZQw==}
+  '@webpieces/eslint-rules@0.4.616':
+    resolution: {integrity: sha512-SkZ+QvT97eEitoaGAq3b86r/pSKc5H4p1C+F8WzoF26giOZBHcvtPaXotNTMKZqbc2UAsUF4iFXUDEApXLWjRQ==}
     peerDependencies:
       eslint: '>=8.0.0'
 
-  '@webpieces/nx-webpieces-rules@0.4.614':
-    resolution: {integrity: sha512-OPxABpj4UlFt0Wk0TlCKAwX0oRJP+UUFIQCg9JLQnbamy5MmKtT7qA63xfR6wPXjtM6JfRSw6CWw1QVSQR1UfQ==}
+  '@webpieces/nx-webpieces-rules@0.4.616':
+    resolution: {integrity: sha512-l+sbZiJLx86vlGJmntVdU5pBRoY5Tdyx+TB2r1UjHI5hNebP9RvSPefTnx9AWKKCwyyVicrJctIUzqoX7V9IBg==}
     hasBin: true
     peerDependencies:
       '@nx/devkit': '>=18.0.0'
 
-  '@webpieces/pr-gate@0.4.614':
-    resolution: {integrity: sha512-Eiip3fcGoSabZwiOMUe/C4e6oWSMgQNZkPFOQ/RYUyVlR0bwEqSbPgC5M3X86JQibqw6OgeiA6+jxuyQu9b1zg==}
+  '@webpieces/pr-gate@0.4.616':
+    resolution: {integrity: sha512-lH/+6a959o5GCsaMAXdmElP0WSj9Dyl0FfJM8B428ijg/USCX/YxJNWubdYyaP8xRUYGS3GZhtaKyFv1P6Go7g==}
     hasBin: true
 
-  '@webpieces/rules-config@0.4.614':
-    resolution: {integrity: sha512-avJgyCtoAOIbW1rWDImMF8wnvwW9GtGLmoBfXLMJ7qLUGa28DvphWk9I7VL+jCLAS5J15RtcJvkI+qJ3LiId9Q==}
+  '@webpieces/rules-config@0.4.616':
+    resolution: {integrity: sha512-b7vvqC9DGCCaGLrTvi7wVHF4/CZ+hCzL5kVGD6JBvE43f7cTtrPnS6pfu2yIefLlhUcsIiQDIrEIYDg/EN8X/g==}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -11456,46 +11456,46 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
-  '@webpieces/ai-hook-rules@0.4.614':
+  '@webpieces/ai-hook-rules@0.4.616':
     dependencies:
-      '@webpieces/rules-config': 0.4.614
+      '@webpieces/rules-config': 0.4.616
 
-  '@webpieces/code-rules@0.4.614':
+  '@webpieces/code-rules@0.4.616':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/rules-config': 0.4.614
+      '@webpieces/rules-config': 0.4.616
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
 
   '@webpieces/core-util@0.2.104': {}
 
-  '@webpieces/eslint-rules@0.4.614(eslint@9.39.1(jiti@1.21.7))':
+  '@webpieces/eslint-rules@0.4.616(eslint@9.39.1(jiti@1.21.7))':
     dependencies:
-      '@webpieces/rules-config': 0.4.614
+      '@webpieces/rules-config': 0.4.616
       eslint: 9.39.1(jiti@1.21.7)
 
-  '@webpieces/nx-webpieces-rules@0.4.614(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
+  '@webpieces/nx-webpieces-rules@0.4.616(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
     dependencies:
       '@nx/devkit': 22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
-      '@webpieces/ai-hook-rules': 0.4.614
-      '@webpieces/code-rules': 0.4.614
-      '@webpieces/eslint-rules': 0.4.614(eslint@9.39.1(jiti@1.21.7))
-      '@webpieces/pr-gate': 0.4.614
-      '@webpieces/rules-config': 0.4.614
+      '@webpieces/ai-hook-rules': 0.4.616
+      '@webpieces/code-rules': 0.4.616
+      '@webpieces/eslint-rules': 0.4.616(eslint@9.39.1(jiti@1.21.7))
+      '@webpieces/pr-gate': 0.4.616
+      '@webpieces/rules-config': 0.4.616
       madge: 8.0.0(typescript@5.9.3)
     transitivePeerDependencies:
       - eslint
       - supports-color
       - typescript
 
-  '@webpieces/pr-gate@0.4.614':
+  '@webpieces/pr-gate@0.4.616':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/rules-config': 0.4.614
+      '@webpieces/rules-config': 0.4.616
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
 
-  '@webpieces/rules-config@0.4.614':
+  '@webpieces/rules-config@0.4.616':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
       inversify: 7.10.4(reflect-metadata@0.2.2)
