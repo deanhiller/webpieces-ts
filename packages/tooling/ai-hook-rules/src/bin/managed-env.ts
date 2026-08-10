@@ -9,20 +9,24 @@
  * `BASH_DEFAULT_TIMEOUT_MS` — which is what makes `.claude/settings.json` → `env` a supported home for
  * it rather than a guess.
  *
- * WHY WEBPIECES MANAGES IT — it is guard integrity, not ergonomics:
+ * WHY WEBPIECES MANAGES IT — it is VERDICT STABILITY, not ergonomics:
  *
- *   1. H2/H3 are registered RELATIVE on purpose (`sh ".claude/webpieces/ai-hook.sh" <bin>`, see the
- *      header of hook-registration.ts), so each git worktree runs its own release, binary and pin. A
- *      relative hook resolves against the tool call's cwd — and a relative hook that cannot resolve
- *      exits 127, which per the Claude Code hooks reference is a NON-BLOCKING error, i.e. a SILENT
- *      UNGUARDED ALLOW. Pinning the cwd to the project root means the relative pair always resolves.
- *      H1 (guarantee-root.sh) already refuses a `cd` that would park the shell where H2/H3 cannot
- *      launch — but that is a cure AFTER the fact; this PREVENTS the drift instead.
- *   2. Settings `env` is INHERITED, so the main agent and every subagent it spawns get the SAME cwd,
- *      hence the same relative-hook resolution, hence the same guard verdict — instead of a verdict
- *      that depends on whatever `cd` happened earlier in the session. Consistency is the point.
- *   3. It mechanically enforces the long-standing "never `cd` into a sub-package in Bash, it persists
- *      and blocks the global hook" rule, rather than relying on an agent remembering it.
+ *   1. A guard's answer must not depend on where an earlier, unrelated command left the shell. Every
+ *      location guard reasons about the tree a call acts on; with the cwd pinned, that is a function of
+ *      the COMMAND alone rather than of session history. Same command, same verdict, every time.
+ *   2. Settings `env` is INHERITED, so the main agent and every subagent it spawns share one cwd — and
+ *      therefore one verdict — instead of each carrying whatever `cd` happened earlier in its own
+ *      session. Consistency across agents is the point, and it is why this lives in settings rather
+ *      than in a shell profile.
+ *   3. It mechanically enforces the long-standing "do not `cd` into a sub-package and leave the shell
+ *      there" rule, rather than relying on an agent remembering it.
+ *
+ * WHAT IT NO LONGER HAS TO DO. This entry was originally justified by hook RESOLUTION: the guard hooks
+ * were registered RELATIVE, a relative hook that cannot resolve exits 127 (a NON-BLOCKING error, i.e. a
+ * SILENT UNGUARDED ALLOW), and pinning the cwd kept them resolvable. That job is gone — both hooks are
+ * registered ABSOLUTE via `$CLAUDE_PROJECT_DIR` now, so they resolve from any cwd by construction and
+ * the L-1 hook that policed the same hazard is deleted. The reasons above are what remain, and they are
+ * sufficient on their own; the entry is NOT load-bearing for guard integrity any more.
  *
  * THE TRADE, said out loud: with the flag ON the cwd reset is SILENT and UNCONDITIONAL, where without
  * it the reset is conditional and prints a notice. A deliberate `cd` therefore no longer persists

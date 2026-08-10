@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { applyHook, installTargets, hasHook, renderShim, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
+import { applyHook, installTargets, hasHook, RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget } from './setup';
+import { renderShim } from './shim';
 import { readSettings } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import {
@@ -60,8 +61,8 @@ describe('applyHook', () => {
         // Project install points at the checked-in shim RELATIVELY, so the harness resolves it against
         // the tool call's own cwd and each git tree runs its own release. The L-1 hook registered
         // alongside the GUARDS hook is what stops a relative path ever failing to resolve.
-        expect(entry.hooks[0].command).toBe('sh ".claude/webpieces/ai-hook.sh" wp-ai-rules-hook');
-        expect(entry.hooks[0].command).not.toContain('$CLAUDE_PROJECT_DIR');
+        expect(entry.hooks[0].command).toBe('sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook');
+        expect(entry.hooks[0].command).toContain('$CLAUDE_PROJECT_DIR');
     });
 
     it('installs the guards hook globally with an absolute exact path (no bridge)', () => {

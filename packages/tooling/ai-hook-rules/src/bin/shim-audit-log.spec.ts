@@ -355,23 +355,47 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
 });
 
 /**
- * THE LINE FORMAT itself — 7 tab-separated fields. Locked because the whole point of this log is that
+ * THE LINE FORMAT itself — 9 tab-separated fields. Locked because the whole point of this log is that
  * a human or an agent can reconcile it against guards/L0-tooling.md, and a format nobody agreed on cannot
  * be reconciled against anything.
+ *
+ * `shim=` and `bin=` were added between `tree=` and `fault=`, deliberately breaking any positional
+ * reader rather than appending where a stale parser would silently keep working. They are the two facts
+ * the log could not previously answer: WHICH COPY of ai-hook.sh ran (both `.claude/webpieces/*.sh` are
+ * tracked, so each worktree carries its own at its own commit, and settings.json registers them
+ * RELATIVE) and WHICH TREE supplied the binary (a fresh linked worktree has no node_modules, so the
+ * upward walk normally borrows the primary's). Before them, "which hook governed this call" was only
+ * answerable by inference.
  */
 describe('L0 audit log line format', () => {
-    it('emits exactly ts, bin, tool, tree=, fault=, verdict, command — tab separated', () => {
+    it('emits exactly ts, bin, tool, tree=, shim=, bin=, fault=, verdict, command — tab separated', () => {
         const root = kit.mktmp();
         installBin(root, 0);
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         const fields = logOf(root).trim().split('\t');
-        expect(fields).toHaveLength(7);
+        expect(fields).toHaveLength(9);
         expect(fields[1]).toBe('wp-ai-guards-hook');
         expect(fields[2]).toBe('Bash');
         expect(fields[3].startsWith('tree=')).toBe(true);
-        expect(fields[4].startsWith('fault=')).toBe(true);
-        expect(fields[5]).toBe('PASS-BIN-ALLOW');
-        expect(fields[6]).toBe('pnpm build');
+        expect(fields[4].startsWith('shim=')).toBe(true);
+        expect(fields[5].startsWith('bin=')).toBe(true);
+        expect(fields[6].startsWith('fault=')).toBe(true);
+        expect(fields[7]).toBe('PASS-BIN-ALLOW');
+        expect(fields[8]).toBe('pnpm build');
+    });
+
+    /**
+     * The two new fields must carry REAL paths, not empty strings — an empty `shim=` would read as "we
+     * do not know which copy ran", which is the state this change exists to end. In a plain root with
+     * its own node_modules the two agree; the borrow case (they differ) is what a linked worktree shows.
+     */
+    it('shim= and bin= name real trees, and agree when the tree has its own node_modules', () => {
+        const root = kit.mktmp();
+        installBin(root, 0);
+        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
+        const fields = logOf(root).trim().split('\t');
+        expect(fields[4]).toBe(`shim=${root}`);
+        expect(fields[5]).toBe(`bin=${root}`);
     });
 
     // The verdict stays immediately before the command, so the greps that predate the tree/fault

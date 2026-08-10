@@ -127,7 +127,7 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
  * Measured on the published 0.4.611: `git rev-parse --show-toplevel` answers with the WORKTREE, which
  * is not the governed root, so the fast path's nested-clone branch called it `foreign` — and `foreign`
  * is ALLOW_EXEMPT in runner.ts, i.e. every bash guard silently off for exactly the worktrees the
- * harness creates. CoordinatorWorktreeGuard, which requires `kind === 'worktree'`, was dead code there.
+ * harness creates. The worktree guard, which requires `kind === 'worktree'`, was dead code there.
  *
  * Placement is not tree identity. `--git-common-dir` is: it is identical for every checkout of one repo
  * and different for a nested clone, so it answers the same for both worktree placements.

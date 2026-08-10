@@ -25,7 +25,7 @@ const MAX_TARGET_LEN = 160;
  * The three distinctions this exists to make, none of which `'ALLOW' | 'BLOCK'` could:
  *
  *   ALLOW            no objection — the call was HANDED DOWN to the next layer. A layer saying ALLOW
- *                    is NOT saying the call ran: the layer below it, or the PARALLEL L-1 hook, may
+ *                    is NOT saying the call ran: the layer below it, or the OTHER parallel hook, may
  *                    still deny. This is L1's `ACT_DOWN`.
  *   ALLOW_EXEMPT     out of scope by construction — allowed, and evaluation STOPS here. L1's
  *                    `ACT_EXEMPT`.
@@ -47,7 +47,7 @@ export type Verdict = 'ALLOW' | 'ALLOW_EXEMPT' | 'ALLOW_FAIL_OPEN' | 'BLOCK_AI_C
 /**
  * WHICH ROW of WHICH layer's decision table produced this line. Data-only → a class, per CLAUDE.md.
  *
- * `row` is the row NUMBER from the layer's row array (`L1_ROWS[i].num`, `LMINUS1_ROWS[i].num`) — the
+ * `row` is the row NUMBER from the layer's row array (`L1_ROWS[i].num`) — the
  * same number the generated doc prints, because the doc is rendered from that same array. So a log
  * line joins to its matrix row BY NUMBER, and checking observed behaviour against the documented use
  * cases becomes a lookup rather than an investigation. `'-'` for a layer with no row array yet (L2).
@@ -123,7 +123,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
  * The L1 stream — `.webpieces/logs/L1-location/<writer>.log`.
  *
  * L1 had NO stream. Its three blocking paths wrote into L2's file under an implementation name
- * (`force-to-root`, `coordinator-in-worktree`, `cd-must-be-first`), and its NON-blocking outcomes —
+ * (`force-to-root`, `trinary-version-skew`, `cd-must-be-first`), and its NON-blocking outcomes —
  * the exempt row and the three hand-down rows — wrote nothing at all. So "L1 had no objection" was
  * unobservable, and "show me every L1 decision" had no answer: L1 existed in the trail only as the
  * `root=` / `projectDir=` / `tree=` columns stapled onto somebody else's line.
@@ -273,12 +273,12 @@ export class InvocationLog {
                 `branch=${invocation.branch}`,
                 invocation.sync,
                 // `guards=`, NOT `verdict=`. This hook can only report on ITSELF. Claude Code runs all
-                // three PreToolUse hooks IN PARALLEL, so the L-1 `guarantee-root.sh` process may deny a
-                // call this one had no objection to, and neither can see the other's answer. Measured:
-                // `cd <repo>/packages && ls` was DENIED by L-1 and recorded here three times as
-                // `verdict=ALLOW`. The old field name promised an outcome it structurally cannot know;
-                // the TRUE final action is the JOIN of this stream with `L-1-cd/`, keyed by the
-                // identical writer name — which is what docs/tooling-logs.md now states.
+                // its PreToolUse hooks IN PARALLEL, so another hook process may deny a call this one
+                // had no objection to, and neither can see the other's answer. Measured under the
+                // RETIRED three-hook form: `cd <repo>/packages && ls` was DENIED by L-1 and recorded
+                // here three times as `verdict=ALLOW`. The old field name promised an outcome it
+                // structurally cannot know, so the name stayed even though L-1 is gone: the two
+                // surviving hooks still run in parallel and still cannot see each other.
                 `guards=${verdict}`,
                 `rule=${oneLine(rule) || '-'}`,
                 // The tree the guard ACTED in, next to what Claude Code said the project was. Both, on

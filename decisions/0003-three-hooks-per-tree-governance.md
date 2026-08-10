@@ -1,10 +1,56 @@
 # 0003 — Three hooks: per-tree governance without a bridge
 
-**Status:** SHIPPED 2026-08-07 (see §4.9) — H1 exists and is wired, H2/H3 are relative, `BIN` walks up
-with a version check, and the upgrade path repairs all three managed things. Q1 (F12) remains unmeasured.
+**Status:** ⛔ **SUPERSEDED / REVERSED 2026-08-10.** Shipped 2026-08-07 (see §4.9), measured 2026-08-10,
+and undone: **there are TWO hooks now and both are registered ABSOLUTE.** H1 (`guarantee-root.sh`, the
+L-1 `cd` guard) is DELETED, along with its spec, its template and the `L-1-cd/` log stream.
 **Raised:** 2026-08-06
-**Resolves:** [0002](0002-the-shim-cannot-follow-the-tree.md) (the shim cannot follow the tree)
+**Resolves:** [0002](0002-the-shim-cannot-follow-the-tree.md) (the shim cannot follow the tree) — it does
+not, see the banner below
 **Replaces:** 0002 Option A (the bridge/trampoline) — killed by adversarial review, see §6
+
+> ## ⛔ What replaced this, and why
+>
+> **What replaced it.** `.claude/settings.json` registers exactly two hooks:
+>
+> ```
+> sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
+> sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
+> ```
+>
+> **Why. The premise of this ADR was measured false (2026-08-10): the relative registration never
+> delivered per-tree governance.** A linked worktree has NO `node_modules` of its own, so `ai-hook.sh`'s
+> upward walk always found — and executed — the MAIN tree's binary (`readlink -f` resolved a worktree
+> agent's bin to `<primary>/node_modules/@webpieces/ai-hook-rules`). A worktree ran its own SCRIPT and
+> its own CONFIG; it never ran its own RELEASE. Governance was always the primary's, which is exactly
+> the state §1 set out to end.
+>
+> **And the fiction was expensive.** A relative path only resolves at a tree root, and a hook that
+> cannot resolve exits 127 — a NON-BLOCKING error, i.e. a silent unguarded allow (0001 §2.6, which
+> stands). That is the *whole* reason H1 had to exist and had to deny every `cd` into a project
+> subdirectory. An absolute path resolves from any cwd, so the launch guarantee is structural, H1 has no
+> job left, and **`cd` into a subdirectory is now simply ALLOWED**. The managed surface is THREE things,
+> not four: `ai-hook.sh`, the `settings.json` registration, and the managed `env` entry
+> `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`.
+>
+> **The real problem got a real cure.** Version drift between trees is now caught where it lives, by
+> **L1 row 8, `trinary-version-skew`** (`core/version-sync.ts`, `core/webpieces-versions.ts`): a command
+> or file edit that targets a linked worktree whose `@webpieces` pin disagrees with the MAIN tree's
+> BLOCKS. It compares three versions always (main pin, worktree pin, main installed) and a fourth when
+> the worktree has grown its own `node_modules`. The cure is a GIT cure, because the pin is TRACKED and
+> the same hash gives the same pin: `git pull` both trees onto the same main, then ONE `pnpm install` in
+> the MAIN tree. Or work in the main tree. Or — if a tree genuinely needs a different version — use a
+> separate CLONE, which gets its own `node_modules` and its own governance. A worktree borrows and
+> cannot.
+>
+> `CoordinatorWorktreeGuard` and L1's coordinator-in-worktree row went with it: with ONE governor the
+> filesystem/governance split they policed is unconstructible. Agent identity was independently measured
+> untrustworthy for "which tree am I in" — a worktree-isolated agent whose tree is auto-reaped at a turn
+> boundary silently resumes with its cwd on the primary clone (reproduced twice).
+>
+> **The text below is kept verbatim as the historical record.** Everything it says about H1 and about
+> relative H2/H3 describes the world between 2026-08-07 and 2026-08-10, not the current one. Its
+> measurements of harness behaviour (§1.1's persisting `cd`, §2.6's silent ALLOW, §6's three kills of the
+> bridge) are unaffected and still hold.
 
 ---
 

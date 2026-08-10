@@ -1,7 +1,6 @@
 import * as path from 'path';
 
 import { run, runBash, runRead } from '../core/runner';
-import { AgentIdentity } from '../core/coordinator-worktree';
 import { logRejection, extractRuleNames } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0, MATRIX_L2 } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
@@ -41,8 +40,10 @@ interface ClaudeCodePayload {
     // Claude Code sends the session's current working directory (follows a persisted `cd`). Used to
     // scope guards to the git repo the AI is actually in — see runner git-repo-boundary governance.
     cwd?: string;
-    // Present ONLY when the hook fires inside a SUBAGENT. Absent = the coordinator (the main agent
-    // loop) — there is no positive coordinator field to read. See AgentIdentity.
+    // Present ONLY when the hook fires inside a SUBAGENT; absent = the coordinator. Used to NAME the log
+    // writer file and nothing else — never to decide which tree a call acts on, which is measured from
+    // the path (see core/version-sync.ts). A worktree-isolated agent was measured resuming on the primary
+    // clone after its tree was reaped, so identity cannot stand in for location.
     session_id?: string;
     agent_id?: string;
     agent_type?: string;
@@ -111,13 +112,6 @@ function normalizeToolInput(toolKind: ToolKind, toolInput: ClaudeCodeToolInput):
     return null;
 }
 
-// The caller behind this payload. Both fields are sent only inside a subagent, so BOTH absent (or
-// empty) is the coordinator — the one distinction CoordinatorWorktreeGuard turns on.
-// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
-function agentIdentityOf(payload: ClaudeCodePayload): AgentIdentity {
-    return new AgentIdentity(payload.agent_id ?? '', payload.agent_type ?? '');
-}
-
 // The rule name for a block's audit line: the FIRST rule the report cites, or `fallback` when the
 // report opens with no `[rule]` header (a hand-written guard message). Comma-joined when a report
 // cites several, so `rule=` never silently drops one.
@@ -130,8 +124,7 @@ function blockingRule(report: string, fallback: string): string {
 function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const command = payload.tool_input.command;
     if (!command || command.trim() === '') { emitAllow(); }
-    const agent = agentIdentityOf(payload);
-    const result = runBash(command, cwd, mode, agent);
+    const result = runBash(command, cwd, mode);
     if (!result) { emitAllow(); }
     // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
     // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its
@@ -269,12 +262,12 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // not part of the judgement.
     const shimRoot = governingShimRoot();
     if (mode === 'rules') return;
-    // WHICH of the four managed things moved — the shim, the L-1 hook, the settings.json
-    // registration, or its managed env entry (the Bash-cwd pin that keeps the RELATIVE hooks
-    // resolvable; see hook-registration.ts). Nothing validated the registration before, so a file on the
-    // old
-    // two-absolute-hook form silently reverted a repo to per-PRIMARY governance and disabled L-1
-    // entirely: the one component whose whole job is failing closed, switched off with no signal.
+    // WHICH of the three managed things moved — ai-hook.sh, the settings.json registration, or its
+    // managed env entry (the Bash-cwd pin that keeps a guard's verdict independent of where an earlier
+    // `cd` left the shell; see managed-env.ts). Nothing validated the registration before it joined this
+    // fault, so a settings file left on a superseded form silently changed WHO GOVERNS, with no signal
+    // anywhere — which is the whole reason the registration is a drift surface and not just an install
+    // step.
     const drifted = managedSurfaceDrift(shimRoot);
     if (drifted.length === 0) return;
     const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');

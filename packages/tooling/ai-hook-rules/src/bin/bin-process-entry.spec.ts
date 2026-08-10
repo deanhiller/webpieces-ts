@@ -5,7 +5,6 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { renderShim, shimPath, SHIM_MARKER } from './shim';
-import { guaranteeRootPath } from './guarantee-root';
 import { managedEntries, readSettings, writeSettings } from './hook-registration';
 
 /**
@@ -143,7 +142,6 @@ describe('wp-upgrade-shim, spawned as a process', () => {
         expect(run.stdout).toContain('regenerated the managed shim');
         // (b) the files really changed on disk, in the child process, not in ours.
         expect(fs.readFileSync(shimPath(root), 'utf8')).toBe(renderShim());
-        expect(fs.existsSync(guaranteeRootPath(root))).toBe(true);
         expect(managedEntries(readSettings(path.join(root, '.claude', 'settings.json'))).length).toBeGreaterThan(0);
         // (c) exit code 0 only on a verified repair.
         expect(run.status, run.stderr).toBe(0);

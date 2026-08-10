@@ -1,26 +1,16 @@
 {
-    "_comment": "The webpieces-managed PreToolUse wiring, for reference — install it with `wp-install-ai-hooks` (which lets you pick a location per hook) rather than copying this by hand. THREE hooks, and the asymmetry is the design: the Rules hook validates code-style on Write/Edit/MultiEdit and the Guards hook protects git/PR/branch — it matches Write|Edit|MultiEdit|Bash|Read so ALL guards run there (bash git/PR guards on Bash, file guards like feature-branch-guard on Write/Edit) plus a log-and-allow audit of Read (records opened files under .webpieces/logs; never blocks a read). Both are registered RELATIVE, `sh \".claude/webpieces/ai-hook.sh\" <bin>`, pointing at a checked-in shim that is generated and committed on purpose: relative means each git worktree runs its own release, its own binary and its own pin, and the shim turns a missing bin — fresh clone before `pnpm install`, or the package removed — into a friendly 'run pnpm install' line instead of a raw error on every tool call. The third hook, guarantee-root.sh, is registered ABSOLUTE via $CLAUDE_PROJECT_DIR because it is the one hook that must resolve from ANY cwd: a relative hook that cannot resolve exits 127, which per the hooks reference is a NON-BLOCKING error, i.e. a SILENT UNGUARDED ALLOW. It matches Bash alone, because only Bash can move the shell. A global ~/.claude/settings.json install instead uses the absolute `node <repoRoot>/node_modules/.bin/<bin>` and gets no L-1 hook, since it has no relative path that could fail to resolve.",
-    "_comment_env": "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1 is the FOURTH webpieces-managed thing, and it is guard integrity rather than ergonomics: it pins the Bash cwd back to the project root after every Bash call, so the RELATIVE hooks above always resolve, and because settings `env` is INHERITED it puts the main agent and every subagent on the same cwd — same hook resolution, same guard verdict. The trade, said out loud: the cwd reset becomes silent and unconditional, so a deliberate `cd` no longer persists between Bash calls — chain instead (`cd <dir> && <cmd>`). `pnpm exec wp-upgrade-shim` regenerates all four of these and reports which it changed.",
+    "_comment": "The webpieces PreToolUse hook wiring, plus the managed env entry. Install with `wp-install-ai-hooks` (which lets you pick a location per hook); this file just shows the shape. THREE managed surfaces are enforced together and `wp-upgrade-shim` repairs all three: (1) the committed .claude/webpieces/ai-hook.sh, (2) these registration entries, (3) the env entry below. The Rules hook validates code-style on Write/Edit/MultiEdit; the Guards hook protects git/PR/branch and matches Write|Edit|MultiEdit|Bash|Read - Read carries no guard but the guards hook owns the per-invocation audit log, and a Read is never blocked. BOTH hooks are registered ABSOLUTE via $CLAUDE_PROJECT_DIR, so the MAIN tree governs every tree. This replaced a three-hook RELATIVE form whose third hook (guarantee-root.sh, L-1) existed only to keep the relative path resolvable, and paid for it by denying every `cd` into a subdirectory; an absolute path resolves from any cwd, so that hook is deleted and `wp-upgrade-shim` removes any stale entry and the file. A linked worktree never had its own release anyway - it has no node_modules, so the shim's upward walk already ran the main tree's binary. When a worktree PINS a different @webpieces, L1 row 8 (trinary-version-skew) blocks and names the fix. CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR pins the Bash cwd to the project root so a verdict never depends on where an earlier cd left the shell; settings env is inherited, so every subagent gets the same cwd and the same verdict.",
     "env": {
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
     },
     "hooks": {
         "PreToolUse": [
             {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/guarantee-root.sh\""
-                    }
-                ]
-            },
-            {
                 "matcher": "Write|Edit|MultiEdit",
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "sh \".claude/webpieces/ai-hook.sh\" wp-ai-rules-hook"
+                        "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh\" wp-ai-rules-hook"
                     }
                 ]
             },
@@ -29,7 +19,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "sh \".claude/webpieces/ai-hook.sh\" wp-ai-guards-hook"
+                        "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh\" wp-ai-guards-hook"
                     }
                 ]
             }

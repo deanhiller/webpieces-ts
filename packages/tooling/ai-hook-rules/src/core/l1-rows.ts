@@ -30,8 +30,16 @@ export type L1KindMatch = 'f' | 'm' | 'o' | 'w' | 'pw' | '-';
 /** R and G are yes/no, written `y`/`n` in the doc, with `-` for "does not matter". */
 export type L1Flag = 'y' | 'n' | '-';
 
-/** A is the same one boolean wearing the doc's own letters: `c` the coordinator, `s` a subagent. */
-export type L1Agent = 'c' | 's' | '-';
+/**
+ * V is the same one boolean wearing the doc's own letters: `n` the webpieces versions do NOT agree
+ * between this worktree and the main tree, `y` they do.
+ *
+ * This dimension used to be A (`c` coordinator / `s` subagent). It was replaced rather than removed
+ * because agent identity was measured untrustworthy as a proxy for "which tree am I in" — a
+ * worktree-isolated agent auto-reaped at a turn boundary silently resumes on the primary clone. A
+ * version read off the PATH being acted on cannot lie in that way.
+ */
+export type L1VersionSync = 'y' | 'n' | '-';
 
 /** What L1 does with a row. The labels are the doc's own action codebook (see GUARD_MATRIX.md). */
 export type L1ActionKind = 'exempt' | 'down' | 'block';
@@ -41,7 +49,7 @@ export type L1ActionKind = 'exempt' | 'down' | 'block';
  * load-bearing rather than decorative: runner.l1LocationBlock looks the row up and switches on it,
  * so deleting a row from the array removes the block.
  */
-export type L1BlockId = 'coordinator-in-worktree' | 'force-to-root' | 'missing-directory';
+export type L1BlockId = 'trinary-version-skew' | 'force-to-root' | 'missing-directory';
 
 /**
  * The row number for L1's PRE-STAGE — `misplacedCdBlock`, which decides from command TEXT before a
@@ -60,14 +68,14 @@ export const L1_PRESTAGE_ROW = '0';
 /**
  * One point in the five-dimensional space L1 classifies over. Data-only → a class, per CLAUDE.md.
  *
- * The dimensions are exactly the doc's legend: K (tree kind of the resolved target), A (coordinator or
+ * The dimensions are exactly the doc's legend: K (tree kind of the resolved target), V (webpieces versions in sync or
  * subagent), R (provably read-only inspection), G (invokes git/gh), P (root or subdirectory).
  */
 export class L1Classification {
     // eslint-disable-next-line @typescript-eslint/max-params -- five dimensions is the matrix's shape
     constructor(
         readonly kind: L1Kind,
-        readonly coordinator: boolean,
+        readonly versionsSkewed: boolean,
         readonly readOnly: boolean,
         readonly git: boolean,
         readonly atRoot: boolean,
@@ -88,7 +96,7 @@ export class L1Classification {
     // webpieces-disable no-function-outside-class -- a named constructor for this data class, not a service: it takes the runner's TreeKind and returns the same class, so there is nothing to inject
     static forEnforcement(
         treeKind: TreeKind,
-        coordinator: boolean,
+        versionsSkewed: boolean,
         readOnly: boolean,
         git: boolean,
         atRoot: boolean,
@@ -96,7 +104,7 @@ export class L1Classification {
         const kind: L1Kind = treeKind === 'foreign' ? 'f'
             : treeKind === 'missing' ? 'm'
             : treeKind === 'worktree' ? 'w' : 'p';
-        return new L1Classification(kind, coordinator, readOnly, git, atRoot);
+        return new L1Classification(kind, versionsSkewed, readOnly, git, atRoot);
     }
 }
 
@@ -153,7 +161,7 @@ export class L1Row {
     constructor(
         readonly num: number,
         readonly k: L1KindMatch,
-        readonly a: L1Agent,
+        readonly a: L1VersionSync,
         readonly r: L1Flag,
         readonly g: L1Flag,
         readonly p: 'root' | 'sub' | '-',
@@ -167,7 +175,7 @@ export class L1Row {
 
     matches(c: L1Classification): boolean {
         if (!this.kindMatches(c.kind)) return false;
-        if (this.a !== '-' && (this.a === 'c') !== c.coordinator) return false;
+        if (this.a !== '-' && (this.a === 'n') !== c.versionsSkewed) return false;
         if (!flagMatches(this.r, c.readOnly)) return false;
         if (!flagMatches(this.g, c.git)) return false;
         return this.p === '-' || this.p === (c.atRoot ? 'root' : 'sub');
@@ -210,21 +218,27 @@ export const L1_ROWS: readonly L1Row[] = [
             new L1Classification('f', false, false, true, false)),
     ]),
     new L1Row(2, 'o', '-', '-', '-', '-', ACT_DOWN, 'see "Not done" below', null, null, []),
-    new L1Row(3, 'w', 'c', 'n', '-', '-', ACT_BLOCK,
-        'the coordinator\'s guards do not follow its `cd` — delegate to a subagent bound to the worktree',
-        new L1Cure('delegate to a subagent bound to the worktree', 'Spawn a subagent bound to that worktree', false),
-        'coordinator-in-worktree', [
+    // ROW 3 IS RETIRED — it was coordinator-in-worktree, deleted with CoordinatorWorktreeGuard when the
+    // guard hooks went ABSOLUTE (one governor, so the filesystem/governance split it policed became
+    // unconstructible). The NUMBER is never reused: row numbers are identity here — they are printed in
+    // denies, logged as `row=`, and cited in guards/L1-location.md — so renumbering would silently
+    // re-point every historical reference. Its replacement is row 8.
+    new L1Row(8, 'w', 'n', 'n', '-', '-', ACT_BLOCK,
+        'this worktree pins a DIFFERENT @webpieces than the main tree that governs it',
+        new L1Cure('align the pins (same git hash -> same tracked pin -> one install in the main tree), work in the main tree, or use a separate clone',
+            '@webpieces version SKEW', false),
+        'trinary-version-skew', [
             new L1UseCase(12,
-                'you are the **coordinator**, you ran `git worktree add ../wt`, and `cd ../wt && pnpm build` is blocked',
-                '`w` / `c` / `n` — row 3',
+                'a worktree on an older branch pins `0.4.612` while the main tree runs `0.4.616`, and `cd <wt> && pnpm build` is blocked',
+                '`w` / `n` / `n` — row 8',
                 'BLOCK_AI_CURE',
-                'Option 1 (preferred): spawn a subagent bound to `<worktree>` — the Agent tool with worktree isolation, or have the subagent call `EnterWorktree` with `path: <worktree>` (it accepts a worktree you already created)<br>Do NOT: re-type the command, or conclude the harness ate your `cd` — it did not; your GUARDS did not follow it',
+                'Option 1 (preferred): `git pull` BOTH trees onto the same main, then ONE `pnpm install` in the MAIN tree — the pin is tracked, so the same commit gives the same version and a worktree needs no install of its own<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a different version, use a separate CLONE — a clone gets its own node_modules and its own governance; a worktree borrows the main tree\'s and cannot<br>Do NOT: lower the MAIN tree\'s pin to match — that downgrades every tree, including this session\'s own governor',
                 new L1Classification('w', true, false, false, false)),
             new L1UseCase(16,
-                'the same block for `cd .claude/worktrees/agent-XXXX && <work>` — the harness\'s OWN worktree layout',
-                '`w` / `c` / `n` — row 3; in-repo placement is still `w`',
+                'a SUBAGENT hits the same block inside `.claude/worktrees/agent-XXXX`',
+                '`w` / `n` / `n` — row 8; in-repo placement is still `w`',
                 'BLOCK_AI_CURE',
-                'Option 1 (preferred): same as case 12 — spawn a subagent bound to that worktree<br>Do NOT: expect it to be exempt because it sits under the repo — K is git\'s `--git-common-dir` answer, not a path test. This case used to read `f` (every guard silently off); if you are looking at an OLD release that is the difference',
+                'A subagent CANNOT fix this alone — the main tree is outside its tree, and a worktree-isolated agent may not even still be in the tree it was launched in (measured: auto-reaped at a turn boundary, resumed on the primary). Report to the coordinator: "my worktree is on X, the main tree is on Y — one of us must move"<br>Do NOT: expect exemption because it sits under the repo — K is git\'s `--git-common-dir` answer, not a path test',
                 new L1Classification('w', true, false, false, false)),
         ]),
     new L1Row(4, 'pw', '-', '-', 'n', '-', ACT_DOWN, 'force-to-root has no jurisdiction', null, null, [
@@ -248,13 +262,13 @@ export const L1_ROWS: readonly L1Row[] = [
             new L1Classification('p', false, false, false, true)),
         new L1UseCase(13,
             'the same command from a **subagent** runs normally',
-            '`w` / `s` — row 3 does not match',
+            '`w` / `y` — row 8 does not match',
             'ALLOW (handed to L2)',
             'none — a subagent pinned to a worktree is the correct pattern',
             new L1Classification('w', false, false, false, false)),
         new L1UseCase(14,
-            'the coordinator\'s `cd <worktree> && ls`/`cat`/`grep` still runs',
-            '`w` / `c` / `y` — row 3 does not match',
+            'inspection inside a SKEWED worktree still runs — `cd <worktree> && ls`/`cat`/`grep`',
+            '`w` / `n` / `y` — row 8 does not match',
             'ALLOW (handed to L2)',
             'none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you',
             new L1Classification('w', true, true, false, false)),
@@ -339,7 +353,7 @@ export const L1_UNROWED_USE_CASES: readonly L1UseCase[] = [
         '→ L2',
         'none — for file tools the cwd is irrelevant; do NOT `cd` anywhere to "fix" it'),
     new L1UseCase(15,
-        'the coordinator\'s `cd <worktree> && pnpm install` still runs while row 3 is live',
+        '`cd <worktree> && pnpm install` still runs while row 8 is live — it is the CURE',
         'L0 allowlist, ahead of L1',
         'ALLOW',
         'none — a cure must stay reachable from every tree'),

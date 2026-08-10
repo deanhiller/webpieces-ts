@@ -7,11 +7,11 @@ import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 /**
  * HOW the self-guard's deny SPELLS its cures. Two numbered OPTIONs, each quoted, plus NO_CHAINING_RULE
  * (see its audit-log origin). The ORDER is load-bearing: `wp-upgrade-shim` LEADS because it is the only
- * cure that repairs ALL FOUR managed surfaces — both .sh files, the settings.json registration and the
- * managed env entry — while still touching NO config and importing only fs/path, so it runs on a broken
+ * cure that repairs ALL THREE managed surfaces — ai-hook.sh, the settings.json registration and the
+ * managed env entry — and it also deletes the retired guarantee-root.sh, while still touching NO config and importing only fs/path, so it runs on a broken
  * tree. (It has not been shim-only since 2026-08-07; the bin's NAME is older than its job and is
  * deliberately not renamed.) The `cp` stays last, as the pre-0.4.408 fallback for the releases where
- * wp-upgrade-shim does not exist yet, and it repairs ONE of the four. The installer is NOT an option
+ * wp-upgrade-shim does not exist yet, and it repairs ONE of the three. The installer is NOT an option
  * here at all — it would also migrate the config and prompt twice. The string must be JSON-safe — no
  * `"` / `\` — since denyJson() serializes it.
  */
@@ -56,12 +56,13 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
 
     // The deny must TEACH the surface it is judging, or a blocked agent repairs three of four and
     // reports success — the failure mode upgrade-shim.ts's header exists to prevent.
-    it('names all four managed things, including the env entry and why it exists', () => {
-        expect(reason).toContain('FOUR things');
+    it('names all three managed things, including the env entry and why it exists', () => {
+        expect(reason).toContain('THREE things');
+        expect(reason).not.toContain('FOUR things');
         expect(reason).toContain(`${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE}`);
         expect(reason).toContain('pins the Bash cwd to the project root');
         expect(reason).toContain('inherited');
-        expect(reason).toContain('repairs all four');
+        expect(reason).toContain('repairs all three');
     });
 
     /**

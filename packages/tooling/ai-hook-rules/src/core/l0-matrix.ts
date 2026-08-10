@@ -4,7 +4,6 @@ import {
     ADD_HOOK_PKG_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
     RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
 } from '../bin/shim';
-import { GUARANTEE_ROOT_MARKER } from '../bin/guarantee-root';
 import { ENV_SURFACE, REGISTRATION_SURFACE } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import {
@@ -175,22 +174,23 @@ export const L0_FAULTS: readonly L0Fault[] = [
             'this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees '
             + 'the right version on disk and considers it installed; only the delete forces a rewrite')],
         renderShim()),
-    // S covers the WHOLE managed hook surface, not just the shim: the two committed .sh files, the
+    // S covers the WHOLE managed hook surface, not just the shim: the committed ai-hook.sh, the
     // .claude/settings.json entries that register them AND the managed `env` entry that pins the Bash
-    // cwd so those RELATIVE entries always resolve. They only work as a set — a settings file left
-    // on the old two-absolute-hook form disables the L-1 hook and re-pins every worktree to the
+    // cwd so the hooks resolve identically for every subagent. They only work as a set — a settings file left
+    // on a superseded form silently changes who governs, re-pinning every tree to the
     // primary's release — and nothing validated the registration at all before it joined this fault.
     new L0Fault(L0_FAULT_SHIM_STALE, 'a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release',
         'the guard bin', 'JS',
         [
-            // wp-upgrade-shim leads because it is now the ONLY cure that repairs all four, and it is
-            // still surgical: it rewrites the two .sh files, the registration and the managed env entry
+            // wp-upgrade-shim leads because it is the ONLY cure that repairs all three, and it is
+            // still surgical: it rewrites ai-hook.sh, the registration and the managed env entry
             // and touches no config, and it imports only fs/path so it runs on a tree too broken to load
             // the rule engine. The INSTALLER is deliberately NOT a cure here: it also migrates the config
             // and prompts for a target twice, which hangs a non-interactive agent.
             bashCure(UPGRADE_SHIM_CMD, true,
-                'this fault fires at all — it is the only cure that repairs all four managed things '
-                + '(both .sh files, the settings.json registration and its managed env entry) and it '
+                'this fault fires at all — it is the only cure that repairs all three managed things '
+                + '(ai-hook.sh, the settings.json registration and its managed env entry), and it also '
+                + 'deletes the retired guarantee-root.sh and any entry still naming it, and it '
                 + 'touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer'),
             // 2026-07-21: the version gap below caused a real "command not found" deadlock.
             bashCure(RESTORE_SHIM_CMD, false,
@@ -198,7 +198,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
                 + 'not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade '
                 + '@webpieces afterwards and run Option 1 to finish'),
         ],
-        shimStaleDenyReason('', '', [SHIM_MARKER, GUARANTEE_ROOT_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], false)),
+        shimStaleDenyReason('', '', [SHIM_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], false)),
     new L0Fault(L0_FAULT_CONFIG_MISSING, `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
         [

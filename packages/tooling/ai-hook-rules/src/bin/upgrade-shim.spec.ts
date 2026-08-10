@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { runUpgradeShim } from './upgrade-shim';
 import { renderShim, shimPath } from './shim';
-import { GUARANTEE_ROOT_COMMAND, GUARDS_BIN, readSettings, shimCommand, writeSettings } from './hook-registration';
+import { GUARDS_BIN, readSettings, shimCommand, writeSettings } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 /**
@@ -77,13 +77,12 @@ describe('runUpgradeShim', () => {
         writeSettings(settingsPath, {
             hooks: {
                 PreToolUse: [
-                    { matcher: 'Bash', hooks: [{ type: 'command', command: GUARANTEE_ROOT_COMMAND }] },
                     { matcher: 'Write|Edit|MultiEdit|Bash|Read', hooks: [{ type: 'command', command: shimCommand(GUARDS_BIN) }] },
                 ],
             },
         });
-        // The guarantee-root hook is registered here, so its file must exist or a DIFFERENT surface
-        // (registered-but-missing) would be the one reporting drift.
+        // Only the env entry is missing here, so the registration must NOT be reported as repaired —
+        // that is the whole point of the assertion below.
         expect(runUpgradeShim(root)).toBe(0);
 
         expect(readSettings(settingsPath).env).toEqual({ [BASH_CWD_ENV_KEY]: BASH_CWD_ENV_VALUE });

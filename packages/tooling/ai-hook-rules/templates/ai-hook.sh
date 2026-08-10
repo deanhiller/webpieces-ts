@@ -7,8 +7,8 @@
 # the hook has a stable entry point even when node_modules is absent. Safe to delete along with the
 # matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
 #
-# Usage (wired into .claude/settings.json, RELATIVE so each git tree runs its own copy):
-#   sh ".claude/webpieces/ai-hook.sh" <bin-name>
+# Usage (wired into .claude/settings.json, ABSOLUTE so the MAIN tree governs every tree):
+#   sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 BIN_NAME="$1"
 shift
 # Resolve the tree relative to THIS script (…/<root>/.claude/webpieces/ai-hook.sh → <root>), not the
@@ -113,7 +113,7 @@ WP_INSTALL_CMD="pnpm install"
 WP_BORROW_NOTE=""
 if [ "$BIN_ROOT" != "$ROOT" ]; then
   WP_INSTALL_CMD="cd $ROOT && pnpm install"
-  WP_BORROW_NOTE=" NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up - which is only correct while the two agree on the version. Run the install HERE, in this tree, so it gets its own node_modules at its own pin."
+  WP_BORROW_NOTE=" NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up. For a linked WORKTREE that is the DESIGNED state, not a gap - the guard hooks are registered absolute, so the main tree governs every tree and a worktree needs no install of its own. What matters is that the two trees agree on the VERSION, and because the pin is tracked in git the reliable way to get that is the same git hash in both, then ONE 'pnpm install' in the main tree. Installing HERE is legitimate too (adding a dependency does it), but then this tree's own @webpieces must match the main tree's. If you genuinely need a DIFFERENT version, use a separate clone rather than a worktree."
 fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
@@ -187,7 +187,18 @@ wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
     _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
     case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
     [ "$_wp_sz" -gt 524288 ] && mv -f "$_wp_f" "$_wp_sd/${_wp_pfx}.1.log" 2>/dev/null
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
+    # shim= and bin= are the two facts this log could not previously answer, and they are the ones that
+    # decide whether a tree was governed by its OWN release or a borrowed one:
+    #   shim= WHICH COPY OF ai-hook.sh RAN — $ROOT, resolved from $0. The file is TRACKED, so every
+    #         worktree carries the version at ITS commit; settings.json registers it ABSOLUTE, so the copy
+    #         that runs is the SESSION ROOT's. Logged rather than assumed.
+    #   bin=  WHICH TREE SUPPLIED THE BINARY — $BIN_ROOT, the upward walk's answer. A fresh linked
+    #         worktree has no node_modules, so this is normally the PRIMARY even when shim= is not:
+    #         per-tree governance is the script and the config, never the enforcement code.
+    # Until these existed, no log at any layer recorded either (L-1 logged neither, L0 logged neither,
+    # only L1 logged root=/projectDir=), so "which hook governed this call" had to be inferred. Compare
+    # shim= against bin= to see a borrow, and either against the tree to see a straddle.
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "shim=$ROOT" "bin=$BIN_ROOT" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }
 BROKEN_BIN=""

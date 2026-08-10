@@ -30,7 +30,7 @@ export class StreamIdentity {
  *  1. **Parallel hooks.** The hooks reference says "when multiple PreToolUse hooks match a tool call,
  *     ALL matching hooks run in parallel". `wp-ai-rules-hook` and `wp-ai-guards-hook` both match
  *     Write/Edit/MultiEdit, so on every file edit TWO PROCESSES append to the same file at the same
- *     time. L-1's `guarantee-root.sh` makes it three.
+ *     time. (A retired third hook, L-1's `guarantee-root.sh`, once made it three.)
  *  2. **Subagents.** A subagent without worktree isolation shares the coordinator's tree.
  *  3. **Whole sessions.** Four Claude Code windows on one clone are four coordinators, and `agent_id`
  *     is absent for every one of them — so agent identity alone cannot tell them apart.
@@ -43,10 +43,10 @@ export class StreamIdentity {
  * ─── The key: the LAYER is the directory, the WRITER is the file ──────────────────────────────────
  *   <local>/logs/<stream>/<sessionId>-<agentId | "coordinator">-<hook>.log
  *
- *   stream     separates the LAYERS                        ('L-1-cd' | 'L0-shim' | 'L1-location' | …)
+ *   stream     separates the LAYERS                        ('L0-shim' | 'L1-location' | 'L2-decisions' | …)
  *   sessionId  separates concurrent Claude Code windows    (`session_id`, on every hook payload)
  *   agentId    separates subagents within one window       (`agent_id`, subagent-only — absent = coordinator)
- *   hook       separates the PARALLEL hooks                ('guards' | 'rules' | 'guarantee-root')
+ *   hook       separates the PARALLEL hooks                ('guards' | 'rules')
  *
  * This class owns the FILE half. One writer per file, by construction, so appends cannot interleave
  * and nothing needs a lock — and all three identity dimensions must stay in the filename for that to
@@ -87,7 +87,9 @@ export class LogStream {
 
     /**
      * Called once per invocation by the adapter that parsed the payload. `agentId` is empty for the
-     * coordinator — that absence IS the signal, see AgentIdentity — and renders as `coordinator`.
+     * coordinator — that absence IS the signal — and renders as `coordinator`. Naming the writer file is
+     * the ONLY thing this identity is used for; which tree a call acts on is measured from the path (see
+     * core/version-sync.ts), never from who is asking.
      * An empty `sessionId` renders as `unknown`: visible, never merged into another stream.
      */
     identify(identity: StreamIdentity): void {

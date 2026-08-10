@@ -31,18 +31,11 @@ openclaw plugins enable @webpieces/ai-hook-rules
 # Drop webpieces.config.json into any project you want checked
 ```
 
-## The three hooks (Claude Code)
+## The two hooks (Claude Code)
 
-`wp-install-ai-hooks` wires three `PreToolUse` hooks into the chosen `settings.json`:
+`wp-install-ai-hooks` wires two `PreToolUse` hooks into the chosen `settings.json`, **both registered
+with an absolute `$CLAUDE_PROJECT_DIR/` path** so they resolve from any cwd:
 
-- `guarantee-root.sh` — matcher `Bash`. The **L-1** hook, and the only one registered with an
-  **absolute** `$CLAUDE_PROJECT_DIR/` path. The two guard hooks below are registered **relative**, so
-  the harness resolves them against the tool call's own cwd and each git tree is governed by its own
-  installed release rather than the primary clone's forever. That is only safe if the relative path
-  always resolves — a hook that fails to launch exits 127, which the harness treats as a non-blocking
-  error and lets the tool call proceed UNGUARDED — so L-1 refuses any `cd` that would park the shell
-  somewhere the other two cannot launch. It reads no config, runs no binary, and a denied `cd` never
-  executes, so there is nothing to recover from.
 - `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit`. Runs the code-style rules.
 - `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash|Read`. Runs the git/PR/branch guards
   (`hookGuards` section): bash git/PR guards on `Bash`, and file guards like
@@ -54,18 +47,29 @@ openclaw plugins enable @webpieces/ai-hook-rules
 For each guard hook the setup command prompts for a target: project `.claude/settings.json`,
 personal `.claude/settings.local.json`, the global `~/.claude/settings.json` (this-repo-only),
 or **none** (= uninstall). Installing and uninstalling are the same operation — pick a
-location, or pick "none" to remove the hook from every target. L-1 follows the guards hook (it judges
-`cd`, which arrives on `Bash`); a global install gets none, because those hooks name the bin path
-directly and have no relative path that could fail to resolve.
+location, or pick "none" to remove the hook from every target.
 
-### Keeping the four in step
+**There is no third `cd` hook any more.** A `guarantee-root.sh` used to be registered alongside these
+two, denying any `cd` into a project subdirectory, because the two guard hooks were registered
+**relative** — the point being that each git tree would then be governed by its own installed release
+rather than the primary clone's — and a relative hook that fails to resolve exits 127, which the harness
+treats as a non-blocking error that lets the tool call proceed UNGUARDED. Measured 2026-08-10, the
+relative registration never delivered that: a linked worktree has no `node_modules`, so this script's
+upward walk always executed the MAIN tree's binary (`readlink -f` resolved a worktree agent's bin to
+`<primary>/node_modules/@webpieces/ai-hook-rules`). A worktree ran its own script and its own config,
+never its own release — governance was always the primary's. Both hooks are absolute now, the launch
+guarantee is structural, `cd` into a subdirectory is simply allowed, and version skew between trees is
+caught where it actually lives: the `trinary-version-skew` L1 row (`core/version-sync.ts`).
 
-The installed surface is four things — `.claude/webpieces/ai-hook.sh`,
-`.claude/webpieces/guarantee-root.sh`, the `settings.json` entries registering them, and the
-`settings.json` `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` — and they only
-work as a set. The guards binary compares all four against the release it came from and fails closed
-on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** regenerates all four
-(rewriting an old absolute registration to the relative form rather than adding beside it) and is
+### Keeping the three in step
+
+The installed surface is three things — `.claude/webpieces/ai-hook.sh`, the `settings.json` entries
+registering the two hooks, and the `settings.json` `env` entry
+`CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` — and they only
+work as a set. The guards binary compares all three against the release it came from and fails closed
+on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** regenerates all three
+(rewriting an old relative registration to the absolute form rather than adding beside it, and removing
+a leftover `guarantee-root.sh` registration) and is
 allowed through while that block is up. Its NAME is older than its job — it has not been shim-only
 since 2026-08-07 — and it is deliberately not renamed, because a rename with no functional change costs
 every consumer and buys nothing.
@@ -75,15 +79,18 @@ every consumer and buys nothing.
 Set to `1`, Claude Code resets the shell's cwd to the project directory after every Bash call. That is
 guard integrity, not ergonomics:
 
-- the guard hooks are registered **relative** (`sh ".claude/webpieces/ai-hook.sh" <bin>`) so each git
-  worktree runs its own release, binary and pin. A relative hook that cannot resolve exits 127, and per
-  the Claude Code hooks reference any non-2 non-zero exit is a NON-BLOCKING error — a **silent unguarded
-  allow**. Pinning the cwd to the project root PREVENTS that drift; the L-1 hook, which refuses a `cd`
-  that would park the shell out of reach, is the cure after the fact;
-- settings `env` is **inherited**, so the main agent and every subagent run with the same cwd, hence the
-  same relative-hook resolution, hence the same guard verdict — instead of a verdict that depends on
-  whatever `cd` happened earlier in the session;
-- it mechanically enforces "never `cd` into a sub-package in Bash", rather than relying on memory.
+- a `cd` that stays INSIDE the workspace otherwise PERSISTS to later calls, so a guard verdict would
+  depend on whatever `cd` happened earlier in the session — including one from an unrelated command
+  several turns ago. Resetting makes every call start from a known directory;
+- settings `env` is **inherited**, so the main agent and every subagent start each Bash call from the
+  same cwd, and therefore get the same verdict for the same command;
+- it keeps `$CLAUDE_PROJECT_DIR` and the shell's cwd in agreement by default, which is what makes the
+  `tree=` / `root=` columns in the audit log mean what a reader assumes they mean.
+
+(This entry once had a load-bearing safety job — the hooks were registered relative, and a relative
+path that cannot resolve exits 127, which the Claude Code hooks reference defines as a NON-BLOCKING
+error, i.e. a **silent unguarded allow**. Both hooks are absolute now, so that hazard is gone and this
+is about verdict stability, not launchability.)
 
 The trade, said out loud: with the flag on, the cwd reset is **silent and unconditional**, where without
 it the reset is conditional and prints a visible notice. A deliberate `cd` no longer persists across

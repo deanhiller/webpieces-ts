@@ -13,7 +13,10 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  * WHY it has to exist at all: the shell cwd a PreToolUse hook is handed does not tell you which tree
  * the command acts on. `cd` behaves TWO different ways, and both break a cwd-based guard:
  *
- *   - A `cd` that stays INSIDE the session's working directory PERSISTS to later calls. So the cwd
+ *   - IN THE MAIN SESSION ONLY, a `cd` that stays INSIDE the session's working directory PERSISTS to
+ *     later calls. Claude Code documents this as a main-session property and states that "subagent
+ *     sessions never carry over working directory changes" — measured true here, and the reason this
+ *     rule must not be stated unconditionally to a reader who may be a subagent. So the cwd
  *     can be a subdirectory of the governed root, left there by an unrelated command several turns
  *     earlier — a relative path then resolves somewhere other than the root while still being in the
  *     governed tree.
@@ -57,7 +60,7 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  * else — so an agent worktree, which Claude Code checks out INSIDE the repo at
  * `<repo>/.claude/worktrees/agent-XXXX`, took that path, disagreed with `--show-toplevel`, and read as
  * FOREIGN. `foreign` is ALLOW_EXEMPT in runner.ts: every bash guard silently off, and
- * CoordinatorWorktreeGuard (which requires `kind === 'worktree'`) dead code, for exactly the worktrees
+ * the worktree guard (which requires `kind === 'worktree'`) dead code, for exactly the worktrees
  * the harness creates. A common-dir comparison answers the same for both placements, so there is no
  * inside/outside case left to get wrong.
  *
@@ -71,9 +74,8 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  */
 // L1's K dimension. 'primary' and 'worktree' are the same PROJECT, so every rule-scoped guard treats
 // them alike — guards/L1-location.md writes them as one value, `pw`. Exactly ONE guard separates them,
-// and on a dimension that is not the tree at all: CoordinatorWorktreeGuard blocks the COORDINATOR
-// (never a subagent) from working inside a linked worktree, because the coordinator's governance is
-// anchored at session start and does not follow a `cd`.
+// and on a dimension read OFF the tree itself: VersionSyncGuard blocks work in a linked worktree whose
+// @webpieces pin disagrees with the MAIN tree's, because the main tree's binary is what judges it.
 //
 // 'outside' is produced below (git has no answer for the directory) and consumed NOWHERE, so a command in no git repo is
 // judged against governedRoot — a repo it is not in. guards/L1-location.md's "Not done" section explains why
@@ -258,7 +260,7 @@ export class EffectiveTreeResolver {
         }
 
         // Home is `primary` whether the session was started in the clone or in a worktree — the split
-        // CoordinatorWorktreeGuard exists to catch is standing in a tree OTHER than the one that governs
+        // VersionSyncGuard exists to catch is acting on a tree OTHER than the one that governs
         // you, and there is no split when they are the same directory.
         if (!dirs.isLinkedWorktree || sameDir(treeRoot, governedRoot)) {
             return new TreeClassification('primary', treeRoot);

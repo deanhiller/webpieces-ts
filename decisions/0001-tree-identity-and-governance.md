@@ -19,11 +19,18 @@ every conflation has produced a live incident.
 | 1 | **which tree the work touches** | primary / linked worktree / foreign / outside | `EffectiveTreeResolver` (`effective-tree.ts`) | the payload's `cwd` + a leading literal `cd` |
 | 2 | **which release governs it** | a `@webpieces/*` version | the L0 sh shim | `$ROOT` = `$CLAUDE_PROJECT_DIR`, fixed at session start |
 | 3 | **which state dir it reads/writes** | `<primary>/.webpieces[/worktrees/<name>]` | `DotWebpieces` (`state-dir.ts`) | git's `--git-dir` / `--git-common-dir` |
-| 4 | **who is calling** | coordinator / subagent `<agentId>` | `AgentIdentity` (`coordinator-worktree.ts`) | the PreToolUse payload's `agent_id` |
+| 4 | **who is calling** | coordinator / subagent `<agentId>` | `hook-core.ts` (the payload parse), consumed by `LogStream` | the PreToolUse payload's `agent_id` |
 
 They are genuinely different questions. #1 and #4 are orthogonal (a subagent may work in the primary;
 the coordinator may work in a worktree). #2 currently ignores #1 entirely. #3 ignores #4 entirely
 (PR #579 fixes that half).
+
+> **Correction, 2026-08-10.** #4 is now used for ONE thing — naming a log file — and no guard consults
+> it. `AgentIdentity` and `CoordinatorWorktreeGuard` (`coordinator-worktree.ts`) are DELETED: measured
+> and reproduced twice, a worktree-isolated agent whose tree is auto-reaped at a turn boundary silently
+> resumes with its cwd on the primary clone while keeping the same `agent_id`, so identity cannot answer
+> "which tree am I in". #2 no longer *tries* to follow #1 either — there is ONE governor, the main
+> tree's — and the skew that used to hide behind that is now BLOCKED by L1's `trinary-version-skew` row.
 
 ---
 
@@ -87,7 +94,11 @@ literally inside the primary clone.
 
 - **Nested (every subagent):** the worktree silently resolves the **primary's** `@webpieces` release,
   no matter what its own branch pins. No fault fires. Two trees on two releases is indistinguishable
-  from two trees on one — the drift is invisible rather than blocked.
+  from two trees on one — the drift is invisible rather than blocked. *(2026-08-10: still true of Node
+  resolution, no longer true of the tooling. The re-measurement extended this to SIBLING worktrees too —
+  `readlink -f` on a worktree agent's bin resolves to `<primary>/node_modules/@webpieces/ai-hook-rules`,
+  so the MAIN tree's binary runs either way — and the drift is now BLOCKED by L1's
+  `trinary-version-skew` row rather than being invisible.)*
 - **Sibling:** nothing resolves at all, so the very first tool call is fault **X** (bin missing), cured
   by `cd <worktree> && pnpm install`. This is the case `templates/ai-hook.sh:264-271` documents
   ("git does not copy node_modules into a new worktree… Run it HERE, in this worktree").
@@ -115,8 +126,9 @@ directory. Not for the drift check.
 
 Meanwhile L1 (the JS side, and L0's own S/C/Y faults) resolves the tree **per call** from the payload
 `cwd`. So the two halves of the same hook can disagree about which tree they are in, on the same call.
-That split is what burned five no-op installs in the incident recorded at
-`coordinator-worktree.ts:40-47`.
+That split is what burned five no-op installs in the incident recorded at the time in
+`coordinator-worktree.ts` (that file is deleted; the incident is why L1 now blocks pin skew outright
+rather than letting the two halves disagree).
 
 ### 2.4 `.claude/worktrees/` is hidden from git by a LOCAL, uncommitted rule
 
@@ -154,9 +166,12 @@ surfaced to the AI or the user. We never produce that state deliberately — `2`
 
 Two consequences that constrain every design in these docs:
 
-1. **The hook entry point must be unconditionally resolvable.** This is why the entry point is
-   `$CLAUDE_PROJECT_DIR`-absolute today, and why [0003](0003-three-hooks-per-tree-governance.md) keeps
-   one absolute hook even while moving the real work to relative ones — see 0003 §4.
+1. **The hook entry point must be unconditionally resolvable.** This is why BOTH hook entry points are
+   `$CLAUDE_PROJECT_DIR`-absolute. [0003](0003-three-hooks-per-tree-governance.md) briefly moved the
+   real work to RELATIVE hooks and bought the guarantee back with a third, absolute `cd` guard (L-1);
+   that is reversed as of 2026-08-10 — the relative form never delivered the per-tree governance it was
+   paying for, and an absolute path makes the guarantee structural with no guard at all. See 0003's
+   superseded banner.
 2. **`exec`ing another script from the shim is unsafe.** POSIX `exec` on a missing target exits 127 and
    therefore ALLOWS. The current shim deliberately runs the binary as a child, captures `rc`, and maps
    anything outside `{0,2}` onto fault K so it fails CLOSED (`ai-hook.sh:94-95, 151-177`). This is also
@@ -193,8 +208,8 @@ Neither change alone satisfies the requirement. They compose.
 
 ### 3.1 `agent_id` alone is NOT enough — four coordinators collide
 
-`agent_id` is present **only inside a subagent**; its absence is exactly how `AgentIdentity.coordinator`
-is derived (`coordinator-worktree.ts:14-25`). So **four independent Claude Code sessions on one clone
+`agent_id` is present **only inside a subagent**; its absence was exactly how the since-deleted
+`AgentIdentity.coordinator` was derived. So **four independent Claude Code sessions on one clone
 are four coordinators with no `agent_id` between them** — four processes appending to one file named
 `coordinator`. Real log lines exceed macOS's 512-byte `PIPE_BUF` (§2.5), so those appends tear.
 
@@ -442,5 +457,6 @@ living in `.git/info/exclude`? Affects consumers, not this repo.
 | tree resolution (#1) | `packages/tooling/ai-hook-rules/src/core/effective-tree.ts` |
 | release/version governance (#2) | `packages/tooling/ai-hook-rules/templates/ai-hook.sh` (`$ROOT`, lines 15-93), `src/bin/l0-allowlist.ts`, `src/core/l0-matrix.ts` |
 | state dir (#3) | `packages/tooling/rules-config/src/state-dir.ts`, `state-dir-migration.ts`, `constants.ts:53` |
-| agent identity (#4) | `packages/tooling/ai-hook-rules/src/core/coordinator-worktree.ts`, `src/adapters/hook-core.ts` |
+| agent identity (#4) | `packages/tooling/ai-hook-rules/src/adapters/hook-core.ts` (parse) → `src/core/log-stream.ts` (its only consumer) |
+| cross-tree version skew (#2 vs #1) | `packages/tooling/ai-hook-rules/src/core/version-sync.ts`, `src/core/webpieces-versions.ts` (L1 row 8 `trinary-version-skew`) |
 | the decision tables | `GUARD_MATRIX.md` → `guards/L0-tooling.md` … `guards/L4-pr-lifecycle.md` |

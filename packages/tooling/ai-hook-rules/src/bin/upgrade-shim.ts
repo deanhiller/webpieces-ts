@@ -3,39 +3,36 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { renderShim, shimPath, findShimRoot } from './shim';
-import { guaranteeRootPath, writeGuaranteeRoot } from './guarantee-root';
-import { repairRegistrationAt, managedSurfaceDrift, SettingsRepair } from './hook-registration';
+import { repairRegistrationAt, managedSurfaceDrift, SettingsRepair, LEGACY_GUARANTEE_ROOT_MARKER } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { toError } from '../core/to-error';
 
 // ---------------------------------------------------------------------------
 // The `wp-upgrade-shim` entry point — the CURE for the managed-hook-surface self-guard (L0 fault S).
 //
-// WHAT IT REPAIRS, and why all four (2026-08-07, extended). This used to write EXACTLY ONE FILE,
+// WHAT IT REPAIRS, and why all three (2026-08-07, extended). This used to write EXACTLY ONE FILE,
 // ai-hook.sh, and touch nothing else. That was correct while the installed surface WAS one file. It is
-// now four (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
+// now three (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
 // functional change is a cost with no payer; the prose is what gets corrected):
 //
-//   1. .claude/webpieces/ai-hook.sh          the guard shim, registered RELATIVE so each git tree runs
-//                                            its own release, its own binary and its own pin
-//   2. .claude/webpieces/guarantee-root.sh   the L-1 hook, registered ABSOLUTE, which refuses any `cd`
-//                                            that would park the shell where the RELATIVE hooks cannot
-//                                            launch — an unresolvable hook exits 127, and per the hooks
-//                                            reference that is a NON-BLOCKING error, i.e. a SILENT
-//                                            UNGUARDED ALLOW
-//   3. the .claude/settings.json registration itself
-//   4. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
-//      Bash cwd to the project root so the RELATIVE hooks in (1) always resolve — and, because settings
-//      `env` is inherited, pins it identically for every subagent (see hook-registration.ts)
+//   1. .claude/webpieces/ai-hook.sh          the guard shim, registered ABSOLUTE via $CLAUDE_PROJECT_DIR
+//                                            so the MAIN tree governs every tree
+//   2. the .claude/settings.json registration itself
+//   3. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
+//      Bash cwd to the project root — and, because settings `env` is inherited, pins it identically for
+//      every subagent, so a verdict never depends on where an earlier `cd` left the shell
 //
-// Leaving (2) and (3) out would have made the upgrade path silently useless: an upgrading consumer
-// would take the new shim, KEEP the old two-absolute-hook registration, never receive guarantee-root.sh
-// at all, and L-1 would never activate — with the drift check reporting nothing, because nothing
-// validated settings.json. A cure that fixes one of three is worse than no cure, because it reports
-// success. This bin is already the sanctioned cure named in fault S's message and already on the L0
-// allowlist, so extending it keeps the existing self-healing path working end to end.
+// It also DELETES the retired `.claude/webpieces/guarantee-root.sh` and any settings entry still naming
+// it. That file was the L-1 hook, which existed only to guarantee the once-RELATIVE shim path resolved;
+// an absolute path resolves from any cwd, so it has no job left. Removing the file without removing the
+// entry (or vice versa) is the worst possible half-state — a registered hook pointing at a missing file
+// exits 127, which per the hooks reference is a NON-BLOCKING error, i.e. a SILENT UNGUARDED ALLOW — so
+// both happen here, file first.
 //
-// Deliberately imports only ./shim, ./guarantee-root and ./hook-registration (fs + path) + toError,
+// A cure that fixes some of three is worse than no cure, because it reports success. This bin is the
+// sanctioned cure named in fault S's message and is on the L0 allowlist, so it must repair everything.
+//
+// Deliberately imports only ./shim and ./hook-registration (fs + path) + toError,
 // exactly like install-entry: the whole job is to rewrite webpieces-managed files, which never needed
 // the rule engine, and it must stay runnable on a tree too broken to load it.
 // ---------------------------------------------------------------------------
@@ -59,9 +56,16 @@ export function runUpgradeShim(cwd: string): number {
         fs.writeFileSync(target, renderShim(), { mode: 0o755 });
         // writeFileSync's mode only applies on create; force it on overwrite too (matches writeShim).
         fs.chmodSync(target, 0o755);
-        writeGuaranteeRoot(root);
+        // ORDER MATTERS, and it is registration-FIRST. The reverse leaves a window in which a settings
+        // entry still names a file that is gone — exit 127, which the hooks reference defines as a
+        // NON-BLOCKING error, i.e. a SILENT UNGUARDED ALLOW. This way round the transient state is an
+        // ORPHANED FILE that nothing references, which is inert. (An earlier draft of this function
+        // argued file-first was safer; it is not. repairRegistration() also early-returns when the file
+        // registers no guard bins, and the retired H1 command contains neither bin name, so a
+        // guarantee-root-ONLY settings file would have lost the file and kept the entry.)
         const repairs = repairRegistrationAt(root);
-        reportRepairs(target, guaranteeRootPath(root), repairs);
+        const removedLegacy = removeRetiredGuaranteeRoot(root);
+        reportRepairs(target, removedLegacy, repairs);
         // ADVISORY ONLY, and deliberately after the ✅ lines: it never touches the exit code (see
         // reportTreeDivergence).
         reportTreeDivergence(root);
@@ -83,20 +87,44 @@ export function runUpgradeShim(cwd: string): number {
  * the only thing missing would be the same class of dishonesty one level down.
  */
 // webpieces-disable no-function-outside-class -- sibling of runUpgradeShim in this deliberately dependency-free bin module
-function reportRepairs(shimFile: string, guaranteeFile: string, repairs: readonly SettingsRepair[]): void {
+/**
+ * Delete the RETIRED L-1 hook file, returning whether there was one. Removal-only, one way, no writer.
+ *
+ * This runs AFTER repairRegistrationAt(), which strips the stale H1 ENTRY from settings.json. Removing
+ * the entry first means the file is merely orphaned in between — inert, because nothing references it.
+ * File-first would instead leave a registered hook pointing at a missing file, and per the hooks
+ * reference a non-2 non-zero exit is a NON-BLOCKING error: every `cd` would go unjudged.
+ */
+// webpieces-disable no-function-outside-class -- module-scope like every other helper in this bin, which must load on a tree too broken to build a DI container
+function removeRetiredGuaranteeRoot(root: string): boolean {
+    // The path comes from LEGACY_GUARANTEE_ROOT_MARKER, never re-spelled here: a second literal is a
+    // second spelling, and when the expiry in hook-registration.ts fires the documented removal would
+    // miss this copy and the dead name would survive in a file nobody thought to grep.
+    const legacy = path.join(root, LEGACY_GUARANTEE_ROOT_MARKER);
+    if (!fs.existsSync(legacy)) return false;
+    fs.rmSync(legacy, { force: true });
+    return true;
+}
+
+// webpieces-disable no-function-outside-class -- module-scope like every other helper in this bin, which must load on a tree too broken to build a DI container
+function reportRepairs(shimFile: string, removedLegacy: boolean, repairs: readonly SettingsRepair[]): void {
     console.log(`✅ @webpieces: regenerated the managed shim at ${shimFile} — tool calls are re-armed.`);
-    console.log(`✅ @webpieces: regenerated the L-1 hook at ${guaranteeFile}.`);
+    if (removedLegacy) {
+        console.log('✅ @webpieces: deleted the RETIRED L-1 hook .claude/webpieces/guarantee-root.sh.');
+        console.log('   The guard hooks are ABSOLUTE now, so the launch guarantee it provided is structural.');
+    }
     if (repairs.length === 0) {
         console.log('   .claude/settings.json (hook registration + managed env) already matches this release — no change.');
     }
     for (const repair of repairs) {
         if (repair.registration) {
-            console.log(`✅ @webpieces: rewrote the hook registration in ${repair.settingsPath} to the three-hook form`);
-            console.log('   (L-1 absolute + the two guard hooks RELATIVE, so each git tree runs its own release).');
+            console.log(`✅ @webpieces: rewrote the hook registration in ${repair.settingsPath} to the two-hook form`);
+            console.log('   (both guard hooks ABSOLUTE via $CLAUDE_PROJECT_DIR, so the MAIN tree governs every tree;');
+            console.log('    any retired guarantee-root.sh entry was removed).');
         }
         if (repair.env) {
             console.log(`✅ @webpieces: set env.${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} in ${repair.settingsPath}`);
-            console.log('   (pins the Bash cwd to the project root, so the RELATIVE guard hooks always resolve — for');
+            console.log('   (pins the Bash cwd to the project root, so the guard hooks resolve identically for every subagent — for');
             console.log('   this session and, because settings env is inherited, for every subagent it spawns).');
         }
     }
@@ -195,8 +223,8 @@ function verifyRepaired(root: string): number {
  *
  * Up to and including 0.4.588 this module ENDED at the closing brace above. `pnpm exec wp-upgrade-shim`
  * loaded it, defined two functions, and exited 0 having printed nothing and changed no file. Fault S
- * names this command as OPTION 1, the only option that repairs all four managed surfaces, so the
- * guard's own "THIS IS NOT A DEADLOCK" promise was false: OPTION 2 repairs one of four, and OPTION 1
+ * names this command as OPTION 1, the only option that repairs all three managed surfaces, so the
+ * guard's own "THIS IS NOT A DEADLOCK" promise was false: OPTION 2 repairs one of three, and OPTION 1
  * did nothing at all. Twenty-one unit tests missed it because every one of them called
  * `runUpgradeShim()` as a FUNCTION — the defect lived entirely in what the module does when SPAWNED.
  *
