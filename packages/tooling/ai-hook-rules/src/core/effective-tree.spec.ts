@@ -294,6 +294,43 @@ describe('EffectiveTreeResolver.misplacedCd — the one legal shape, everything 
         expect(resolver().misplacedCd('pnpm build && pnpm test')).toBeNull();
     });
 
+    /**
+     * THE FALSE-POSITIVE-BY-WORDING CASE (2026-08-11). The verdict here is correct — `cd pintest` is
+     * mid-line and relative — but the line OPENS with a fully compliant `cd <abs literal> &&`. Told "a
+     * `cd` must come FIRST", a reader audits the front, finds a `cd` that is first and literal, and
+     * concludes the guard misfired. A human on that session did exactly that and began filing a bug
+     * against the rule. Quoting the offender AND naming the accepted one is the whole cure.
+     */
+    it('quotes the OFFENDING `cd`, and says the compliant leading one was accepted', () => {
+        const reason = resolver().misplacedCd(
+            `cd ${primary} && rm -rf pintest && mkdir pintest && cd pintest && npm pack @webpieces/ai-hook-rules`,
+        );
+        expect(reason).toContain('`cd pintest`');
+        expect(reason).toContain('at the FRONT');
+        expect(reason).toContain(`the leading \`cd ${primary}\` WAS accepted`);
+        expect(reason).toContain('this is a SECOND `cd`');
+    });
+
+    /** With no accepted `cd` at all there is nothing to reassure about — the note must stay off. */
+    it('adds no accepted-note when the command never had a compliant leading `cd`', () => {
+        const reason = resolver().misplacedCd(`git fetch && cd ${worktree} && git push`);
+        expect(reason).toContain(`\`cd ${worktree}\``);
+        expect(reason).not.toContain('WAS accepted');
+    });
+
+    /** More than one leading `cd` is legal, so the note counts them rather than naming a misleading one. */
+    it('counts the accepted run when several leading `cd`s were consumed', () => {
+        const reason = resolver().misplacedCd(`cd /a && cd ${worktree} && git push && cd /b`);
+        expect(reason).toContain('`cd /b`');
+        expect(reason).toContain('the leading 2 `cd`s WERE accepted');
+    });
+
+    /** The other two branches drop the token just as readily, and a reader needs it just as much. */
+    it('quotes the offender in the assignment and non-literal branches too', () => {
+        expect(resolver().misplacedCd(`WT=${worktree}; cd "$WT"; git push`)).toContain('`cd $WT`');
+        expect(resolver().misplacedCd('cd ~/repo && git push')).toContain('`cd ~/repo`');
+    });
+
     it('a HEREDOC is exempt — prose that merely CONTAINS a `cd` is not code', () => {
         // A commit message or doc body tokenizes like a command; rejecting it would block writing about
         // the very rule this implements. Skipping the rejection opens nothing: the location still falls

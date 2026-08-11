@@ -396,7 +396,10 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
         `   — not where you think it runs. That used to happen silently; this block is that silence, spoken.\n` +
         `   Fix Option 1: put the \`cd\` first, literal path, SAME command:  cd /abs/path && <the rest>\n` +
         `   Fix Option 2: drop the \`cd\` — ${tree.root} is where the command is judged anyway.\n` +
-        `   Fix Option 3: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
+        `   Fix Option 3: if the SECOND \`cd\` was there to point a tool at a directory, use that tool's own\n` +
+        `                 directory flag instead — \`git -C <dir>\`, \`tar -C <dir>\`, \`npm --prefix <dir>\`,\n` +
+        `                 \`npm pack --pack-destination <dir>\`, \`pnpm --dir <dir>\`. One \`cd\`, same result.\n` +
+        `   Fix Option 4: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
         `                 moves nothing the guards judge; see EffectiveTree on why cwd cannot be assumed).`;
     return new BlockedResult(report);
 }
