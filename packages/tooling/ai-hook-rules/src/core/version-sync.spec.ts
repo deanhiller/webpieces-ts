@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -28,6 +29,15 @@ function tmp(): string {
 function writePin(root: string, version: string): void {
     fs.mkdirSync(root, { recursive: true });
     fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': ${version}\n`);
+}
+
+/**
+ * A git command in a fixture repo. `core.hooksPath=/dev/null` is not optional: this machine installs
+ * GLOBAL hooks that reject commits, and without it these fixtures fail on the developer's box while
+ * passing in CI — the worst possible failure mode for a test about guard messages.
+ */
+function run(root: string, args: readonly string[]): void {
+    spawnSync('git', ['-C', root, '-c', 'core.hooksPath=/dev/null', ...args], { encoding: 'utf8' });
 }
 
 function writeInstalled(root: string, version: string): void {
@@ -270,9 +280,20 @@ describe('VersionSyncGuard — the message', () => {
         expect(report).not.toContain('a worktree cannot');
     });
 
-    /** A subagent cannot fix the main tree — it must escalate, not attempt a local fix. */
-    it('tells a subagent to report to its coordinator', () => {
-        expect(reportFor()).toContain('report to your');
+    /**
+     * A subagent cannot fix the main tree — it must escalate. But "report to your coordinator that one
+     * of you must move to the other's version" is not an escalation, it is a shrug: no command, no
+     * direction, nothing to forward. A real subagent hit this, diagnosed it correctly, escalated exactly
+     * as told, and handed its coordinator a request too vague to act on (2026-08-11). The deny has to
+     * carry the whole ask, because nobody can sit with every agent that hits it.
+     */
+    it('hands a subagent literal text to forward, with the versions already filled in', () => {
+        const report = reportFor();
+        expect(report).toContain('Forward this to your coordinator verbatim');
+        expect(report).toContain('My worktree');
+        expect(report).toContain('is on @webpieces 0.4.612');
+        expect(report).toContain('is on 0.4.616');
+        expect(report).toContain('I cannot reach that tree from here');
     });
 
     /** The obvious wrong fix: downgrade main so it matches. That breaks every other tree. */
@@ -280,8 +301,70 @@ describe('VersionSyncGuard — the message', () => {
         expect(reportFor()).toContain('Do NOT lower');
     });
 
+    /**
+     * The budget rose from 24 to 30 for the forwardable escalation block, and that is a trade made with
+     * eyes open: the 24-line version WAS read, and it still dead-ended, because the four lines it spent
+     * on "report to your coordinator" carried no ask. A diet is there so the message gets read, not so
+     * it stays short while omitting the part that ends the block.
+     */
     it('stays on the L0 message diet — short enough to be read, not skimmed', () => {
-        expect(reportFor().split('\n').length).toBeLessThanOrEqual(24);
+        expect(reportFor().split('\n').length).toBeLessThanOrEqual(30);
+    });
+});
+
+/**
+ * The skew a version-UPGRADE branch creates, which is the one shape the generic cure actively harms.
+ *
+ * A real repo fixture, because `isDeliberateBump` asks git whether this branch touched the manifest —
+ * a fabricated path answers "no", takes the generic branch, and makes every assertion here vacuous.
+ */
+describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () => {
+    const bumpReport = (): string => {
+        const base = tmp();
+        const main = path.join(base, 'main');
+        writePin(main, '0.4.634');
+        writeInstalled(main, '0.4.634');
+        const wt = path.join(base, 'wt');
+        fs.mkdirSync(wt, { recursive: true });
+        // A real repo with a real uncommitted bump — that dirty manifest IS the signal.
+        run(wt, ['init', '-q']);
+        writePin(wt, '0.4.634');
+        run(wt, ['add', '.']);
+        run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
+        writePin(wt, '0.4.638');
+        return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+    };
+
+    /** `pnpm install` moving a pin is the guess every agent makes here, and it is always wrong. */
+    it('says outright that neither tree can be installed out of this', () => {
+        const report = bumpReport();
+        expect(report).toContain('BUMPED THE PIN ON PURPOSE');
+        expect(report).toContain('0.4.634 → 0.4.638');
+        expect(report).toContain('an install materializes a pin, never moves one');
+    });
+
+    /** The generic cure would revert the deliverable, so it must not be printed at all here. */
+    it('does not offer the git-pull cure, which would undo the bump', () => {
+        expect(bumpReport()).not.toContain('onto the same main');
+    });
+
+    /** The other guess: drop node_modules so the 4th leg vanishes. It just swaps which guard blocks. */
+    it('closes the wipe-node_modules door explicitly', () => {
+        const report = bumpReport();
+        expect(report).toContain("Wiping this tree's node_modules");
+        expect(report).toContain('L0 drift guard blocks in this guard');
+    });
+
+    /** The forwarded ask must name the RIGHT cure — raising main's pin, not installing in main. */
+    it('escalates with the raise-main-pin ask, not the no-op install ask', () => {
+        const report = bumpReport();
+        expect(report).toContain("main's PIN has to move");
+        expect(report).toContain("raise main's catalog pin to 0.4.638");
+        expect(report).toContain('a version bump cannot be done in a worktree');
+    });
+
+    it('stays on the message diet in this branch too', () => {
+        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(30);
     });
 });
 
