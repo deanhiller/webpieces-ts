@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { DotWebpieces } from './state-dir';
 import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
@@ -24,6 +26,43 @@ describe('reviewJsonPath', () => {
     it('prDirFor returns the pr-review home for a feature', () => {
         const p = prDirFor('/repo', 'dean-feat');
         expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat'));
+    });
+});
+
+/**
+ * The one that matters in a worktree: review.json and every review-<id>.json are AUTHORED BY AN AGENT,
+ * and a worktree-isolated agent's write tool refuses any path under the shared checkout. So this dir
+ * rides on `aiWritable()` (the worktree's own root) rather than `local()` (the primary clone's
+ * per-worktree namespace) — otherwise the flow prints a path and then blocks the write to it.
+ */
+describe('reviewJsonPath in a LINKED worktree', () => {
+    it('lands inside the worktree, not in the primary clone', () => {
+        const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-wt-')));
+        const primary = path.join(tmp, 'primary');
+        const worktree = path.join(tmp, 'wt-feature');
+        fs.mkdirSync(primary, { recursive: true });
+        const git = (cmd: string): void => {
+            execSync(`git -c core.hooksPath=/dev/null ${cmd}`, { cwd: primary, stdio: 'pipe' });
+        };
+        git('init -q -b main');
+        git('config user.email test@example.com');
+        git('config user.name Test');
+        fs.writeFileSync(path.join(primary, 'webpieces.config.json'), '{}\n');
+        git('add -A');
+        git('commit -q -m init');
+        git(`worktree add -q -b feature ${worktree}`);
+
+        const svc = new ReviewJsonService(new DotWebpieces());
+
+        expect(svc.reviewJsonPath(worktree, 'feature'))
+            .toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review.json'));
+        // A verdict file sits beside it, so a reviewer subagent can write its own answer too.
+        expect(svc.checklistResultPath(svc.reviewJsonPath(worktree, 'feature'), 'backwards-compat-reviewer'))
+            .toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review-backwards-compat-reviewer.json'));
+        // And nothing about it is under the primary clone.
+        expect(svc.prDirFor(worktree, 'feature').startsWith(primary + path.sep)).toBe(false);
+
+        fs.rmSync(tmp, { recursive: true, force: true });
     });
 });
 

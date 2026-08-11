@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { WEBPIECES_TMP_DIR } from './constants';
+import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from './constants';
 import { StateDirMigrator } from './state-dir-migration';
 
 // The per-worktree namespace inside the primary clone's `.webpieces/`. A LINKED worktree's local state
@@ -27,6 +27,13 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // <sessionId>-<agentId|coordinator>-<hook>.log — because Claude Code runs all matching PreToolUse
 // hooks IN PARALLEL and subagents/windows share a tree, so writers must never share a file.
 export const LOGS_STATE_DIR = 'logs';
+
+// The leaves of `.webpieces/` that resolve through `aiWritable()` and therefore live in the WORKTREE's
+// own root rather than in the primary clone's namespace. Named here because TWO things must agree about
+// them: `aiWritable()`, which puts them there, and `StateDirMigrator`, which must NOT sweep them out
+// again (its whole job is draining `<worktree>/.webpieces` into the namespace, and these are the one
+// part of that directory that is live rather than legacy).
+export const AI_WRITABLE_STATE_DIRS: readonly string[] = [PR_REVIEW_DIR];
 
 
 // git prints the shared git dir as `<primary>/.git` for a conventional clone. Anything else (a bare
@@ -56,12 +63,14 @@ export class GitDirs {
 
 /**
  * WHERE a piece of `.webpieces/` state belongs — the ONE resolver every reader and writer must go
- * through, with TWO named methods because there are exactly two answers and a call site must DECLARE
+ * through, with THREE named methods because there are exactly three answers and a call site must DECLARE
  * which one it means.
  *
- *   dotWebpieces.shared(dir) → <primary>/.webpieces                       (repo-wide facts)
- *   dotWebpieces.local(dir)  → <primary>/.webpieces/worktrees/<name>      (this worktree only)
- *                            → <primary>/.webpieces                       (…in the primary clone)
+ *   dotWebpieces.shared(dir)     → <primary>/.webpieces                    (repo-wide facts)
+ *   dotWebpieces.local(dir)      → <primary>/.webpieces/worktrees/<name>   (this worktree only, tooling-written)
+ *                                → <primary>/.webpieces                    (…in the primary clone)
+ *   dotWebpieces.aiWritable(dir) → <worktree>/.webpieces                   (this worktree only, AI-WRITTEN)
+ *                                → <primary>/.webpieces                    (…in the primary clone)
  *
  * ─── The bug ───────────────────────────────────────────────────────────────────────────────────────
  * `.webpieces/` is gitignored, and it was anchored at the directory holding webpieces.config.json —
@@ -94,8 +103,35 @@ export class GitDirs {
  *     per-worktree log has exactly ONE writer and cannot tear, and under this layout it already
  *     survives the worktree's deletion — recovery is one glob over
  *     `<primary>/.webpieces/worktrees/＊/logs/branch-mutations.log`.
- *   • merge-info/staged|merged/<branch>/ and its index.json, pr-review/<branch>/, instruct-ai/, and
- *     every other per-tree scratch file.
+ *   • merge-info/staged|merged/<branch>/ and its index.json, instruct-ai/, and every other per-tree
+ *     scratch file that the TOOLING writes.
+ * aiWritable():
+ *   • pr-review/<branch>/ — and ONLY that, today. See the section below.
+ *
+ * ─── Why aiWritable() is a third scope and not a spelling of local() ──────────────────────────────
+ * `pr-review/<branch>/` is the one state directory a CODING AGENT writes into with its own file-write
+ * tool: `review.json` is authored by the agent running the flow, and `review-<id>.json` by each reviewer
+ * subagent. A worktree-isolated agent may write ONLY inside its own worktree — its harness refuses any
+ * Write/Edit whose path is under the shared checkout, with "This agent is isolated in the worktree …;
+ * edit the worktree copy of this file instead". That refusal is not ours to relax.
+ *
+ * So `local()` — correct for everything the tooling writes — is UNREACHABLE for the two files the flow
+ * asks an agent to write. Stage ② printed a `<primary>/.webpieces/worktrees/<name>/pr-review/…` path,
+ * the agent's Write was refused at exactly that path, and the only way through was `cp`/`>` from Bash
+ * (which is NOT blocked, so the refusal looks arbitrary rather than structural). Three separate agents
+ * hit it, each concluded the tooling was printing a path it did not use, and each invented its own
+ * workaround. Worse, the same refusal lands on every reviewer subagent's `review-<id>.json`, and
+ * `wp-finish-upsert-pr` REFUSES the PR while a required checklist has no verdict — so this was a
+ * correctness bug, not an ergonomics one.
+ *
+ * The invariant, stated once: ANY `.webpieces/` path an AI AGENT is instructed to WRITE must resolve
+ * inside that agent's own working tree. `aiWritable()` is that rule, made greppable. Do not add a
+ * fourth scope; do not route a tooling-written file through this one.
+ *
+ * What it costs is what `local()` bought: a `pr-review/` under the worktree dies with the worktree.
+ * That is the right trade for THIS directory and only this one — a review is spent the moment the PR is
+ * posted, and `pnpm wp-review-upsert-pr` regenerates the whole directory from git in one run. An
+ * in-flight `merge-info/staged/<branch>/` is not regenerable, which is exactly why it stays on local().
  *
  * ─── The boundary that must not be blurred ─────────────────────────────────────────────────────────
  * ONLY the gitignored `.webpieces/` STATE relocates. `webpieces.config.json` is TRACKED IN GIT and is
@@ -169,6 +205,26 @@ export class DotWebpieces {
     /** A path beneath this worktree's private state dir. */
     localFile(startDir: string, ...segments: string[]): string {
         return path.join(this.local(startDir), ...segments);
+    }
+
+    /**
+     * State an AI AGENT writes with its own file-write tool: `<worktree>/.webpieces` — the worktree's
+     * OWN root, which is the only place a worktree-isolated agent is permitted to write. Identical to
+     * `shared()`/`local()` in the primary clone, so nothing changes for a repo without worktrees.
+     *
+     * See the "Why aiWritable() is a third scope" section above before adding a call site: this is for
+     * files the flow ASKS AN AGENT TO WRITE, not for tooling output that an agent merely reads.
+     */
+    aiWritable(startDir: string): string {
+        const toplevel = this.treeRoot(startDir);
+        // Fails CLOSED to shared() when git cannot answer, on the same terms as every other path here.
+        if (toplevel === null) return this.shared(startDir);
+        return path.join(toplevel, WEBPIECES_TMP_DIR);
+    }
+
+    /** A path beneath the AI-writable state dir. */
+    aiWritableFile(startDir: string, ...segments: string[]): string {
+        return path.join(this.aiWritable(startDir), ...segments);
     }
 
     /**
@@ -279,7 +335,7 @@ export class DotWebpieces {
         this.migrated.add(startDir);
         const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
-        this.migrator.migrate(this.legacyDir(toplevel), target);
+        this.migrator.migrate(this.legacyDir(toplevel), target, AI_WRITABLE_STATE_DIRS);
     }
 
     // One `git rev-parse <flag>`, resolved to an absolute path (git prints a bare `.git`, relative to
