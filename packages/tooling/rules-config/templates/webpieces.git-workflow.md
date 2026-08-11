@@ -37,6 +37,33 @@ The tooling never commits for you (see the golden rule below), so **commit your 
 open a PR yet," or the build/tests are red. Otherwise, finishing the feature and posting the PR are the
 same step — do not treat them as separate, opt-in actions.
 
+### Delegated work: the agent that WRITES the code runs all three stages
+
+**RULE: whoever implemented the feature runs ①②③ to completion, in whatever tree it is standing in.
+Being a subagent does not change that. Being in a linked worktree does not change that.** The only agents
+that must NOT run the flow are the **reviewer** subagents stage ② names — they read the diff and write
+their own `review-<id>.json`, nothing else.
+
+Two roles, one job each:
+
+| role | runs the gate? |
+|---|---|
+| the **implementer** — you, or the subagent you handed the task to | YES — ①②③, ending with the PR posted |
+| a **reviewer** subagent spawned by stage ② | NO — write your `review-<id>.json` and stop |
+
+**A worktree agent CAN post the PR.** Every `wp-*` command is worktree-native (see "Worktrees" below):
+stage ③ pushes the branch and talks to GitHub, and needs nothing from the primary clone. No guard, harness
+rule or tooling limitation stops a worktree or a subagent from reaching stage ③ — if you were told
+otherwise, that instruction was invented by whoever briefed you, not read out of this file. Say so and run
+the flow.
+
+**If you are DELEGATING**, do not write "do not run `pnpm wp-finish-upsert-pr`, I will drive the gate" into the
+subagent's brief. Splitting the flow across two agents is the failure mode this rule exists to kill: the
+implementer stops at a green build, hands back a branch, and the PR waits on a human who was told the work
+was finished. Hand over the whole flow, or do the whole thing yourself. The sentence to inline instead is:
+*"Finish the job: commit, then ① `pnpm wp-start-upsert-pr` ② `pnpm wp-review-upsert-pr` (spawn the
+reviewers it names) ③ `pnpm wp-finish-upsert-pr`. Report the PR link."*
+
 ## Golden rule: the tooling NEVER commits your work for you
 
 Before running any `wp-*` PR/merge command, your working tree must be 100% clean:
@@ -334,6 +361,10 @@ Two rules keep you out of trouble inside a linked worktree:
 Once you are on the branch, both flows behave identically to the primary clone: `pnpm wp-start-update`
 → `/wp-merge` (if conflicts) → `pnpm wp-finish-update`, or `pnpm wp-start-upsert-pr` → `/wp-merge` →
 `pnpm wp-finish-upsert-pr` once a PR is open.
+
+**Including stage ③.** An agent working in a linked worktree posts its own PR — it does not detach HEAD
+and hand the branch back to whoever spawned it. See "Delegated work: the agent that WRITES the code runs
+all three stages" above.
 
 ### Two budgets: 5 branches, 5 worktrees
 

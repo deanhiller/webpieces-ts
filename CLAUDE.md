@@ -628,6 +628,14 @@ stage ③ skips its own build when HEAD has not moved — three stages, one buil
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
+**The agent that WRITES the code runs all three stages — subagent or not, worktree or not.** The only
+agents that must not run the flow are the **reviewer** subagents stage ② names; they write their own
+`review-<id>.json` and stop. Every `wp-*` command is worktree-native, stage ③ needs nothing from the
+primary clone, and no guard blocks a subagent from reaching it — so "the harness forbids worktree agents
+from posting the PR" is false wherever you read it. When you DELEGATE, hand over the whole flow ("commit,
+then ①②③, report the PR link"), never "stop after the build and I will drive the gate from here" — that
+split is exactly how a finished feature ends up sitting on a branch with no PR.
+
 **The PR description IS the squash-commit body.** Stage ③ renders one compact string — PR link, risk,
 non-green flags, a 4-sentence summary, the build-command footer — and uses it as *both* the PR
 description and the `--body-file` it merges with. The full dashboard and each reviewer's output go into
@@ -697,3 +705,6 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
    `--base`, a bare `pnpm exec vitest run`). Run the affected build, or one project, or one spec file
    (see "Build Verification"). `whole-repo-build-guard` names the command to run instead — when this
    machine has opted into it via `~/.webpieces/config.json`.
+11. ❌ Telling a delegated implementer to stop before `pnpm wp-finish-upsert-pr` "because the harness
+   forbids worktree agents from reaching the primary clone" — it does not, and that claim appears in no
+   webpieces file. The implementer runs ①②③; only stage ②'s reviewers don't.
