@@ -1,7 +1,9 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { L0_SHIM_STREAM } from '../core/log-streams';
 
-import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
+import {
+    L0_FAULT_NONE, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,
+} from '../core/l0-fault-codes';
 
 // ---------------------------------------------------------------------------
 // THE L0 AUDIT LOG, in POSIX sh — the shim half of
@@ -120,8 +122,9 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
 /**
  * Shell fragment: the audit-log writer itself — `wp_log <fault> <verdict>`, one tab-separated line.
  *
- * FORMAT (7 fields, tab-separated, append-only):
- *   <iso-ts>  <bin-name>  <tool>  tree=<name|primary>  fault=<D|X|K|->  <VERDICT>  <command>
+ * FORMAT (10 fields, tab-separated, append-only; 11 with the optional `bin=`):
+ *   <iso-ts>  <bin-name>  <tool>  tree=<name|primary>  layer=L0  row=<1|2|3>  shim=<root>
+ *   [bin=<root>]  fault=<D|X|U|K|->  <VERDICT>  <command>
  *
  * `tree=` and `fault=` are the two fields that make the file reconcilable against guards/L0-tooling.md:
  * the first says WHICH checkout produced the line (a shared log across seven worktrees is otherwise
@@ -137,6 +140,7 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
  */
 export const WP_LOG_SH = `WP_TREE=""
 WP_LOG_DIR=""
+WP_TAB="$(printf '\\t')"     # one real tab, so the OPTIONAL bin= field can carry its own separator
 ${RESOLVE_LOG_DIR_SH}
 wp_clean() {                 # one path segment from an UNTRUSTED payload id — twin of LogStream's segment()
   printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_' | sed -e 's/\\.\\{2,\\}/_/g' -e 's/^\\.\\{1,\\}/_/' | cut -c1-64
@@ -167,13 +171,32 @@ wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
     # decide whether a tree was governed by its OWN release or a borrowed one:
     #   shim= WHICH COPY OF ai-hook.sh RAN — $ROOT, resolved from $0. The file is TRACKED, so every
     #         worktree carries the version at ITS commit; settings.json registers it ABSOLUTE, so the copy
-    #         that runs is the SESSION ROOT's. Logged rather than assumed.
-    #   bin=  WHICH TREE SUPPLIED THE BINARY — $BIN_ROOT, the upward walk's answer. A fresh linked
-    #         worktree has no node_modules, so this is normally the PRIMARY even when shim= is not:
-    #         per-tree governance is the script and the config, never the enforcement code.
-    # Until these existed, no log at any layer recorded either (L-1 logged neither, L0 logged neither,
-    # only L1 logged root=/projectDir=), so "which hook governed this call" had to be inferred. Compare
-    # shim= against bin= to see a borrow, and either against the tree to see a straddle.
-    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "shim=$ROOT" "bin=$BIN_ROOT" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
+    #         that runs is the SESSION ROOT's. Logged rather than assumed, on EVERY line: compared against
+    #         tree= it is the STRADDLE detector (tree=agent-X shim=<repo> = standing in one tree, judged by
+    #         another), and that pair varies constantly.
+    #   bin=  WHICH TREE SUPPLIED THE BINARY — $BIN_ROOT, the upward walk's answer.
+    #
+    # bin= IS PRINTED ONLY WHEN IT DIFFERS FROM shim=, so its mere PRESENCE is the diagnostic ("the binary
+    # came from a different tree than the shim") instead of ~50 bytes repeated on every line. Measured
+    # across 549 logged lines: it differed on 39, every one a worktree agent's first few calls before it
+    # ran pnpm install — after that they matched for the rest of that agent's life. And since the hooks
+    # went ABSOLUTE, shim= is always the MAIN tree, so the two can now only differ when the main tree
+    # itself has no node_modules (a fresh clone before install). ~7% of lines then, near 0% going forward.
+    # A unit test asserts the field appears if and only if the roots differ, so it cannot quietly become
+    # unconditional noise again.
+    _wp_bin=""
+    [ "$BIN_ROOT" != "$ROOT" ] && _wp_bin="bin=$BIN_ROOT$WP_TAB"
+    # layer= and row= are the JOIN KEYS, and they are here so the join is REAL rather than promised.
+    # Every L0 deny now opens '[<guard>] (layer=L0 fault=<code> row=<n>)' and cites "the same coordinates
+    # the audit line carries" — which was true of the JS half (MATRIX_L0_BLOCK, via decision-log) and
+    # FALSE of this one, which carried 'fault=' alone. Fixing the message instead of the line would have
+    # left 'grep 'layer=L0 row=3'' finding one half of L0 and silently missing the other four faults.
+    #
+    # 'row=' is NOT a constant: it is the row of the three-row matrix this call actually took, read off
+    # the verdict — hand-down, allowlisted, or blocked — exactly as L1 logs 'row=' from L1_ROWS. That is
+    # what distinguishes it from the ~50 constant bytes 'bin=' used to spend above.
+    _wp_row=${L0_ROW_HANDED_DOWN}
+    case "$2" in ALLOW*) _wp_row=${L0_ROW_ALLOWLISTED} ;; DENY*) _wp_row=${L0_ROW_BLOCKED} ;; esac
+    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "layer=L0" "row=$_wp_row" "shim=$ROOT" "$_wp_bin" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }`;

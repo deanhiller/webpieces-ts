@@ -5,6 +5,7 @@ import { CONFIG_FILENAME, claudeEnv } from '@webpieces/rules-config';
 
 import {
     L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_DRIFT, L0_FAULT_UNDECLARED,
+    l0GuardHeader, l0MatrixCitation,
 } from '../core/l0-fault-codes';
 import { toError } from '../core/to-error';
 import {
@@ -116,6 +117,29 @@ fi`;
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
 // grep pattern is interpolated from INSTALLER_ALLOW_ERE (its value has no backslashes).
+// Shell fragment: the two JSON escapes the deny text is built from, plus the one shared "what is still
+// allowed" block. Hoisted to the TOP of the shim (it used to sit inside DENY_EMIT_SH's Bash branch,
+// i.e. AFTER every REASON was already assembled) because the deny text now needs the newline escape
+// while it is being BUILT, not only while it is being printed.
+//
+// THE MECHANISM IS THE ONE THE COLOUR ALREADY USED. `REASON` is interpolated into a `REASON="…"` shell
+// assignment and then printf'd into a JSON string literal, so it may contain no RAW double-quote and no
+// RAW backslash — and a RAW newline would be invalid JSON. That constraint is not "no newlines": it is
+// "no raw backslash", and `${BS}` produces the backslash at RUNTIME, so `${ESC}` (six chars: \ u 0 0 1 b)
+// and `${NL}` (two chars: \ n) both travel as legal JSON escapes that Claude Code's parser turns back
+// into a real ESC and a real newline. Verified end to end through /bin/sh in setup.spec.ts: the payload
+// still parses as JSON, the systemMessage still carries 31;1m, and the reason renders as many lines.
+//
+// WHY THE STRUCTURE MATTERS: every L1/L2 deny is rendered by formatReport() into a scannable shape —
+// header, `[guard-name] (N violations)`, indented offenders each with a one-line `→ why`, then numbered
+// `Fix Option N:` lines. L0 was the ONLY layer answering in one unbroken paragraph. It now uses the same
+// skeleton, which is what WP_STILL_ALLOWED exists for: one definition of that section for all four
+// sh-side faults, so they cannot drift into four different answers to the same question.
+const ESCAPES_SH = `BS='\\'                      # one literal backslash, so no \\u001b / \\n escape sits in this source
+ESC="\${BS}u001b"           # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
+NL="\${BS}n"                # the 2 chars: backslash n — parsed as a real newline inside the JSON string
+WP_STILL_ALLOWED="Still allowed while this block is up:\${NL}  - any Read\${NL}  - any Write/Edit whose target is ${CONFIG_FILENAME}\${NL}  - every command on the L0 allowlist, including the Fix Options below\${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."`;
+
 // Shell fragment: the version-drift guard (see its own block comment). Extracted to a module const so
 // renderShim() stays within the method-line budget; it is spliced back in verbatim, byte-for-byte.
 const VERSION_DRIFT_GUARD_SH = `# --- webpieces version-drift guard (pure sh — runs even when the installed guard bin is stale) -----
@@ -203,7 +227,7 @@ WP_INSTALL_CMD="pnpm install"
 WP_BORROW_NOTE=""
 if [ "$BIN_ROOT" != "$ROOT" ]; then
   WP_INSTALL_CMD="cd $ROOT && pnpm install"
-  WP_BORROW_NOTE=" NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up. TWO cures are real and they fix DIFFERENT things: A makes THIS tree work now, B stops the two trees disagreeing. A - run the command above HERE. That is legitimate and it does work; a worktree NEEDS its own node_modules anyway (nx, vitest and the eslint plugin all execute in this tree and load from it). B - get $BIN_ROOT onto the same @webpieces version: put both trees on the same git hash (the pin is tracked) and run ONE 'pnpm install' there. If you are a SUBAGENT you cannot reach that tree, so ESCALATE - ask the coordinator to run 'pnpm install' in the main tree so both trees are on the same @webpieces version. The rule is NOT no-install-here: it is that this tree's @webpieces must EQUAL $BIN_ROOT's, because doing only A leaves two trees on two releases (the trinary-version-skew guard then BLOCKS rather than letting it pass unnoticed). Adding an ordinary third-party dependency here changes none of that - only a differing @webpieces version does. If this tree genuinely needs a DIFFERENT version, use a separate clone rather than a worktree."
+  WP_BORROW_NOTE="\${NL}  NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up. TWO cures are real and they fix DIFFERENT things: A makes THIS tree work now, B stops the two trees disagreeing. A - run the command above HERE. That is legitimate and it does work; a worktree NEEDS its own node_modules anyway (nx, vitest and the eslint plugin all execute in this tree and load from it). B - get $BIN_ROOT onto the same @webpieces version: put both trees on the same git hash (the pin is tracked) and run ONE 'pnpm install' there. If you are a SUBAGENT you cannot reach that tree, so ESCALATE - ask the coordinator to run 'pnpm install' in the main tree so both trees are on the same @webpieces version. The rule is NOT no-install-here: it is that this tree's @webpieces must EQUAL $BIN_ROOT's, because doing only A leaves two trees on two releases (the trinary-version-skew guard then BLOCKS rather than letting it pass unnoticed). Adding an ordinary third-party dependency here changes none of that - only a differing @webpieces version does. If this tree genuinely needs a DIFFERENT version, use a separate clone rather than a worktree."
 fi`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
@@ -335,13 +359,19 @@ wp_log "\$WP_FAULT" "\$DENY_LABEL"  # every fail-closed block, with the fault th
 //   - Write/Edit/MultiEdit deny: permissionDecisionReason renders as a RED "Error:" block natively —
 //                 no systemMessage needed (a second line would be redundant).
 //   - NEVER exit 2 (stdout JSON ignored; stderr not reliably shown on a blocked Bash call).
-// The ESC is emitted as the literal 6-char JSON escape \\u001b (built via ${BS} so no raw ESC byte and
-// no \\uXXXX sits in this source); Claude Code's JSON parser turns \\u001b into ESC. The reason is a
-// single JSON string with no double-quotes/backslashes, so it stays valid JSON after ${BIN_NAME} subs.
+// The ESC and the newline escape are both built in ESCAPES_SH at the TOP of the shim (see its header):
+// ${ESC} is the literal 6-char JSON escape \\u001b and ${NL} the 2-char \\n, so no raw ESC byte, no raw
+// newline and no \\uXXXX sits in this source, and Claude Code's JSON parser turns both back. The reason
+// is a single JSON string with no RAW double-quotes/backslashes, so it stays valid JSON after the subs.
+//
+// ONLY THE HEADLINE IS RED, and that is deliberate — the same call redSystemMessage() makes on the JS
+// side. The reason is MULTI-LINE now, and a whole page in bold red is harder to read than the paragraph
+// it replaced: the indentation carrying the structure stops registering when every line shouts. So
+// \$WP_HEAD (each branch's own first line, kept in its own variable for exactly this) is wrapped in
+// [31;1m … [0m, and \${REASON#"\$WP_HEAD"} — POSIX prefix removal with a QUOTED pattern, so the
+// headline is matched literally and not as a glob — supplies the plain body after it.
 const DENY_EMIT_SH = `if [ "\$TOOL" = "Bash" ]; then
-  BS='\\'                     # one literal backslash, so the \\u001b escape never sits in this source
-  ESC="\${BS}u001b"          # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
-  printf '{"systemMessage":"%s🛑 %s%s","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\${ESC}[31;1m" "\$REASON" "\${ESC}[0m" "\$REASON"
+  printf '{"systemMessage":"%s🛑 %s%s%s","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\${ESC}[31;1m" "\$WP_HEAD" "\${ESC}[0m" "\${REASON#"\$WP_HEAD"}" "\$REASON"
 else
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
 fi
@@ -357,9 +387,11 @@ const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
   STAGING_N="\$(ls "\$BIN_ROOT/node_modules" 2>/dev/null | grep -Ec '_[0-9a-f]+_[0-9a-f]+\$' || true)"
   STAGING_NOTE=""
   if [ "\${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
-    STAGING_NOTE=" Also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."   # only when N > 0
+    STAGING_NOTE="\${NL}    → also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."   # only when N > 0
   fi
-  REASON="❌ webpieces guards are DOWN and every other call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must not be silently skipped. Run EXACTLY: '${RECOVERY_CMD}'. A bare 'pnpm install' will NOT fix this: pnpm sees the correct version on disk and skips the broken package.\${STAGING_NOTE} ${NO_CHAINING_RULE}"
+  # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
+  WP_HEAD="❌ webpieces ai-hooks blocked this call: the webpieces guards are DOWN."
+  REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_BIN_BROKEN, '1 violation')}\${NL}  \${BIN_NAME} (\$CRASH_MSG)\${NL}    → it is installed but CRASHED, so your node_modules is corrupt or partially written; the guards cannot run and they must not be silently skipped. Every OTHER tool call is BLOCKED until they can.\${STAGING_NOTE}\${NL}    → ${l0MatrixCitation(L0_FAULT_BIN_BROKEN)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) the only cure. A bare 'pnpm install' will NOT fix this, because pnpm sees the correct version on disk and skips the broken package\${NL}    run EXACTLY: '${RECOVERY_CMD}'\${NL}\${NL}${NO_CHAINING_RULE}"
 elif [ -n "\$DRIFT_PKG" ]; then
   # DECIDE THE DIRECTION, do not make the reader do it (2026-08-03). The detection is a plain !=, so it
   # fires BOTH ways, and the message used to carry OPTION 1/2/3 covering every direction at once — 3343
@@ -394,13 +426,17 @@ elif [ -n "\$DRIFT_PKG" ]; then
     if (ip == "" && dp != "") print "newer"
   }' 2>/dev/null)"
   if [ "\$DRIFT_DIR" = older ]; then
-    REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED - node_modules is OLDER, so the pin is what you want. Every other call is blocked until they agree. Run EXACTLY: '\$WP_INSTALL_CMD'.\${WP_BORROW_NOTE} ${NO_CHAINING_RULE}"
+    # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
+    WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin\${NL}    run EXACTLY: '\$WP_INSTALL_CMD'\${WP_BORROW_NOTE}\${NL}\${NL}${NO_CHAINING_RULE}"
   else
     # NEWER, or undecidable — the same three choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.
     DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to \$DRIFT_DECLARED"
     [ "\$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to \$DRIFT_DECLARED"
-    REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED - \$DRIFT_NOTE. That may be exactly what you want. Every other call is blocked until they agree. Pick one: - move forward to what origin pins: run 'git pull origin main', then 'pnpm install'. - stay on this code deliberately: run 'pnpm install' (the downgrade is the point). - on a feature branch: run 'pnpm install' (aligns to YOUR branch pin - usually right).\${WP_BORROW_NOTE} ${NO_CHAINING_RULE}"
+    # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
+    WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → \$DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) you are on main and want what origin pins - move forward: run 'git pull origin main', then 'pnpm install'\${NL}  Fix Option 2: you mean to stay on this code (the downgrade is the point), or you are on a feature branch and want YOUR branch pin - usually right\${NL}    run EXACTLY: 'pnpm install'\${WP_BORROW_NOTE}\${NL}\${NL}${NO_CHAINING_RULE}"
   fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
@@ -410,7 +446,7 @@ else
   # load-bearing: installing in the primary clone does nothing for this tree.
   WORKTREE_NOTE=""
   if [ -f "\$ROOT/.git" ]; then
-    WORKTREE_NOTE=" NOTE: \$ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run it HERE, in this worktree, not in the primary clone."
+    WORKTREE_NOTE="\${NL}    → \$ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run the Fix Option HERE, in this worktree, not in the primary clone."
   fi
   if [ -z "\$WP_HOOK_PKG_DECLARED" ]; then
     # FAULT U — the one shape where the X message is not merely unhelpful but actively WRONG. It asserted
@@ -421,9 +457,13 @@ else
     # prescribe the add — which is allowlist entry ADD_HOOK_PKG, so it is reachable while this block is up.
     WP_ADD_CMD="${ADD_HOOK_PKG_CMD}"
     [ -n "\$WP_PIN" ] && WP_ADD_CMD="\${WP_ADD_CMD}@\$WP_PIN"
-    REASON="❌ ${HOOK_PKG} is NOT declared in package.json anywhere, and is not installed (\${BIN_NAME} not found) - yet .claude/settings.json still runs its hooks, so every tool call is blocked. Do NOT run 'pnpm install': nothing asks for this package, so it is a NO-OP and repeating it converges to this same state. It normally arrives with @webpieces/nx-webpieces-rules, the umbrella that bundles the whole toolchain - so the durable fix is to upgrade that. To unblock yourself right now, declare it directly. Run EXACTLY: '\$WP_ADD_CMD'. ${NO_CHAINING_RULE} (If you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json instead.)"
+    # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
+    WP_HEAD="❌ webpieces ai-hooks blocked this call: the guard package is not declared anywhere."
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_UNDECLARED, '1 violation')}\${NL}  ${HOOK_PKG} is NOT declared in package.json anywhere, and is not installed (\${BIN_NAME} not found)\${NL}    → .claude/settings.json still runs its hooks, so every OTHER tool call is BLOCKED. Do NOT run 'pnpm install': nothing asks for this package, so it is a NO-OP and repeating it converges to this same state.\${NL}    → ${l0MatrixCitation(L0_FAULT_UNDECLARED)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) declare it directly, to unblock yourself right now\${NL}    run EXACTLY: '\$WP_ADD_CMD'\${NL}  Fix Option 2: the durable fix - ${HOOK_PKG} normally arrives with @webpieces/nx-webpieces-rules, the umbrella that bundles the whole toolchain, so upgrade that once you are unblocked.\${NL}  NOT an option: if you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json instead.\${NL}\${NL}${NO_CHAINING_RULE}"
   else
-    REASON="❌ ${HOOK_PKG} is declared in package.json but is not installed (\${BIN_NAME} not found). Run EXACTLY: 'pnpm install'.\${WORKTREE_NOTE} ${NO_CHAINING_RULE} (If you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json.)"
+    # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
+    WP_HEAD="❌ webpieces ai-hooks blocked this call: the webpieces guard bin is not installed."
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_BIN_MISSING, '1 violation')}\${NL}  ${HOOK_PKG} is declared in package.json but is not installed (\${BIN_NAME} not found)\${NL}    → the guards cannot run, so every OTHER tool call is BLOCKED until they can.\${WORKTREE_NOTE}\${NL}    → ${l0MatrixCitation(L0_FAULT_BIN_MISSING)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) the only cure - it materializes what package.json already asks for\${NL}    run EXACTLY: 'pnpm install'\${NL}  NOT an option: if you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json instead.\${NL}\${NL}${NO_CHAINING_RULE}"
   fi
 fi`;
 
@@ -444,6 +484,9 @@ shift
 # Resolve the tree relative to THIS script (…/<root>/.claude/webpieces/ai-hook.sh → <root>), not the
 # caller's cwd — the hook can be invoked from any directory (a subdir, or a nested clone).
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+# The JSON escapes every deny message below is assembled from (ANSI red, and the newlines that give the
+# deny the same scannable shape formatReport() gives every L1/L2 deny). See ESCAPES_SH's header.
+${ESCAPES_SH}
 # The BIN is resolved by walking UP from ROOT (as Node does), and BIN_ROOT records which tree supplied
 # it — the version-drift guard below compares THIS tree's pin against THAT tree's installed version.
 ${RESOLVE_BIN_SH}

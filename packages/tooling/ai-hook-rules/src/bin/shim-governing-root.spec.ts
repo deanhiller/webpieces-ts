@@ -99,7 +99,7 @@ describe('shimStaleDenyReason — naming the governing tree it judged', () => {
         const root = '/tmp/wp-governing-tree';
         const r = shimStaleDenyReason('0.4.560', root, [SHIM_MARKER], false);
         expect(r).toContain(`root=${root}`);
-        expect(r).toContain(`run EXACTLY this command: 'cd ${root} && ${UPGRADE_SHIM_CMD}'`);
+        expect(r).toContain(`run EXACTLY: 'cd ${root} && ${UPGRADE_SHIM_CMD}'`);
         expect(isShimCureCommand(`cd ${root} && ${UPGRADE_SHIM_CMD}`)).toBe(true);
         expect(isShimCureCommand(`cd ${root} && ${RESTORE_SHIM_CMD}`)).toBe(true);
         expect(r).not.toContain('"');

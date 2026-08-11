@@ -277,8 +277,23 @@ call** — every call, not only the broken ones — so what it actually did can 
 tables instead of inferred:
 
 ```
-<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  fault=<D|X|U|K|->  <VERDICT>  <command>
+<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  layer=L0  row=<1|2|3>  shim=<root>
+[bin=<root>]  fault=<D|X|U|K|->  <VERDICT>  <command>
 ```
+
+`layer=` and `row=` are the **join keys**, and they are why the diff above is a lookup rather than an
+investigation: every L0 deny opens `[<guard>] (layer=L0 fault=<code> row=3, …)` with the identical
+triple, and the generated `webpieces.guard-matrix.md` prints the same row. One grep of `fault=S` or of
+`layer=L0 row=3` lands you in all three. `row=` is the row of the three-row matrix this call actually
+took — 1 handed down, 2 allowlisted, 3 blocked — so it is not a constant.
+
+`shim=` is on every line: compared against `tree=` it is the STRADDLE detector (`tree=agent-X
+shim=<repo>` = standing in one tree, judged by another), and that pair varies constantly.
+
+`bin=` is **optional, and its presence IS the diagnostic** — it appears only when the binary came from a
+different tree than the shim. Measured across 549 real lines it differed on 39, every one a worktree
+agent's first calls before it ran `pnpm install`; and since the hooks went ABSOLUTE, `shim=` is always
+the main tree, so the two can now only differ when the MAIN tree has no `node_modules`.
 
 | verdict | means | maps to |
 |---|---|---|

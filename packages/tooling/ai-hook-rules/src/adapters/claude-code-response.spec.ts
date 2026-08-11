@@ -53,6 +53,31 @@ describe('denyJson', () => {
         expect(out.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);
     });
 
+    /**
+     * A MULTI-LINE deny reds ONLY the headline. Every deny that reaches here is multi-line now —
+     * formatReport()'s skeleton for L1/L2, and the same skeleton for L0 — and a whole page in bold red
+     * is harder to read than the paragraph it replaced: the indentation that carries the structure stops
+     * registering when every line shouts. So the escape opens and CLOSES on the first line, and every
+     * line after it is plain.
+     *
+     * The red itself is non-negotiable and is asserted here too: on a Bash deny the systemMessage is the
+     * ONLY field the human sees, so losing the colour makes the block invisible — the exact failure this
+     * whole path exists to prevent. Structure and colour are not in tension; this pins both at once.
+     */
+    it('reds ONLY the headline of a multi-line deny, and leaves the structured body plain', () => {
+        const reason = '❌ blocked this call: something\n\n[a-guard] (layer=L0 fault=S row=3, 1 violation)\n  Fix Option 1: run it';
+        const out = parse(denyJson(reason, 'Bash'));
+        const lines = out.systemMessage!.split('\n');
+        expect(lines).toHaveLength(4);
+        expect(lines[0].startsWith(`${ESC}[31`)).toBe(true);
+        expect(lines[0].endsWith(`${ESC}[0m`)).toBe(true);
+        for (const line of lines.slice(1)) expect(line.includes(ESC)).toBe(false);
+        // Still ONE line of valid JSON on the wire, and the model's copy stays plain end to end.
+        expect(denyJson(reason, 'Bash').includes('\n')).toBe(false);
+        expect(out.hookSpecificOutput.permissionDecisionReason).toBe(reason);
+        expect(out.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);
+    });
+
     // Write/Edit/MultiEdit render permissionDecisionReason as a red "Error:" block natively — a
     // systemMessage would just be a redundant second red line, so we omit it.
     it.each(['Write', 'Edit', 'MultiEdit'])('adds NO systemMessage on a %s deny', (tool: string) => {

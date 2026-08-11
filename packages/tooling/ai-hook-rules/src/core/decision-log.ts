@@ -5,7 +5,7 @@ import * as path from 'path';
 import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-streams';
 
-import { L0_FAULT_NONE } from './l0-fault-codes';
+import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
 
@@ -57,15 +57,23 @@ export class MatrixRef {
 }
 
 /**
- * The layer tokens. `row` is `'-'` for a layer with no row array YET (L2 is the un-converted one, and
- * L0's faults are a table of letters rather than numbered rows) — but the LAYER is always named, so
- * `grep layer=L2` works today and the row fills in when L2 converts.
+ * The layer tokens. `row` is `'-'` only for a layer with no row array YET (L2 is the un-converted one)
+ * — but the LAYER is always named, so `grep layer=L2` works today and the row fills in when L2 converts.
  *
  * These are REQUIRED at the constructor, not defaulted: a defaulted `MatrixRef` would make the
  * uncited case reachable by doing nothing and impossible to grep — the same defect this file's own
  * docblock argues against for `'BLOCK'`, where silence was the one wrong answer available.
+ *
+ * L0 NOW CITES ITS ROW TOO. It used to be `'-'` on the grounds that "L0's faults are a table of letters
+ * rather than numbered rows" — but L0 has BOTH: the letter says WHICH fault, and the numbered decision
+ * matrix (`renderGuardMatrixDoc`) says which of its three rows was taken. There is one ALLOW row and one
+ * BLOCK row, so the pair `row=` + `fault=` pins the decision exactly, and the deny an agent reads now
+ * carries the identical pair. That is the join: one grep spans the deny, the log line and the doc.
+ * Two constants, not one `MATRIX_L0`, because the two call sites are a cure-bypass ALLOW and an L0
+ * BLOCK — one token covering both is what made the row unciteable in the first place.
  */
-export const MATRIX_L0 = new MatrixRef('L0', '-');
+export const MATRIX_L0_ALLOW = new MatrixRef('L0', L0_ROW_ALLOWLISTED);
+export const MATRIX_L0_BLOCK = new MatrixRef('L0', L0_ROW_BLOCKED);
 export const MATRIX_L2 = new MatrixRef('L2', '-');
 
 // Data-only record of one guard decision (per CLAUDE.md: classes for data, not object literals).

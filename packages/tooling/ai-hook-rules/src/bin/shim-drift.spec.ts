@@ -65,7 +65,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
         // D#1 — the direction is DECIDED here (2026-08-03), not handed to the reader as OPTION 1/2/3.
         // node_modules is the older side, so there is exactly one instruction and no menu.
         expect(reason).toContain('node_modules is OLDER, so the pin is what you want');
-        expect(reason).toContain("Run EXACTLY: 'pnpm install'");
+        expect(reason).toContain("run EXACTLY: 'pnpm install'");
         expect(reason).not.toContain('OPTION');
         expect(reason).not.toContain('DOWNGRADE'); // the other direction's warning must not appear here
     });
@@ -586,10 +586,13 @@ describe('shim carries NO version stamp (so it does not drift per release)', () 
 // own, so the two can no longer disagree — there is nothing left here to disagree with.
 describe('the version-drift message does not contradict redirect-how-to-merge-main', () => {
     // Only the REASON lines the AI is shown — the surrounding shell comments discuss the old wording
-    // on purpose, and a whole-file scan would trip over that history.
+    // on purpose, and a whole-file scan would trip over that history. Each REASON is still ONE shell
+    // assignment even though the message it builds is multi-line: the newlines are `${NL}` escapes
+    // inside the string (see ESCAPES_SH), never real line breaks, because a raw newline in a
+    // `REASON="…"` assignment would also be a raw newline in the JSON string it is printf'd into.
     const reasonLines = renderShim()
         .split('\n')
-        .filter((l: string): boolean => l.includes('REASON="❌ webpieces version drift'));
+        .filter((l: string): boolean => l.includes('REASON="$WP_HEAD') && l.includes('[version-drift]'));
 
     it('renders one REASON per direction', () => {
         expect(reasonLines).toHaveLength(2);

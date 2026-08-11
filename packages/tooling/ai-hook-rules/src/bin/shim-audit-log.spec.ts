@@ -10,6 +10,9 @@ import { renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RES
 import { L0_FAULTS, L0Fault } from '../core/l0-matrix';
 import { ShimTestkit } from './shim-testkit';
 import { L0_SHIM_STREAM } from '../core/log-streams';
+import {
+    L0_FAULT_DRIFT, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,
+} from '../core/l0-fault-codes';
 
 const kit = new ShimTestkit();
 
@@ -355,47 +358,80 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
 });
 
 /**
- * THE LINE FORMAT itself — 9 tab-separated fields. Locked because the whole point of this log is that
- * a human or an agent can reconcile it against guards/L0-tooling.md, and a format nobody agreed on cannot
- * be reconciled against anything.
+ * THE LINE FORMAT itself — 8 tab-separated fields, or 9 when the OPTIONAL `bin=` is present. Locked
+ * because the whole point of this log is that a human or an agent can reconcile it against
+ * guards/L0-tooling.md, and a format nobody agreed on cannot be reconciled against anything.
  *
- * `shim=` and `bin=` were added between `tree=` and `fault=`, deliberately breaking any positional
- * reader rather than appending where a stale parser would silently keep working. They are the two facts
- * the log could not previously answer: WHICH COPY of ai-hook.sh ran (both `.claude/webpieces/*.sh` are
- * tracked, so each worktree carries its own at its own commit, and settings.json registers them
- * RELATIVE) and WHICH TREE supplied the binary (a fresh linked worktree has no node_modules, so the
- * upward walk normally borrows the primary's). Before them, "which hook governed this call" was only
- * answerable by inference.
+ * `shim=` is on EVERY line and `bin=` on almost none, and the asymmetry is the measurement, not a taste:
+ *
+ *   shim= WHICH COPY of ai-hook.sh ran. Compared against `tree=` it is the STRADDLE detector
+ *         (`tree=agent-X shim=<repo>` = standing in one tree, judged by another), and that pair varies
+ *         constantly, so it earns its bytes on every line.
+ *   bin=  WHICH TREE supplied the binary. Across 549 real logged lines it differed from `shim=` on 39 —
+ *         every one a worktree agent's first calls before it ran `pnpm install` — and once the hooks went
+ *         ABSOLUTE, `shim=` is always the main tree, so the two can only differ when the MAIN tree has no
+ *         node_modules. ~50 bytes of noise for a fact that is true ~7% of the time and heading to 0%.
+ *
+ * So it is printed ONLY when the roots differ, which makes its PRESENCE the entire diagnostic. The
+ * if-and-only-if below is what stops it quietly becoming unconditional noise again.
  */
 describe('L0 audit log line format', () => {
-    it('emits exactly ts, bin, tool, tree=, shim=, bin=, fault=, verdict, command — tab separated', () => {
+    it('emits ts, bin, tool, tree=, layer=, row=, shim=, fault=, verdict, command — no bin= when it agrees', () => {
         const root = kit.mktmp();
         installBin(root, 0);
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         const fields = logOf(root).trim().split('\t');
-        expect(fields).toHaveLength(9);
+        expect(fields).toHaveLength(10);
         expect(fields[1]).toBe('wp-ai-guards-hook');
         expect(fields[2]).toBe('Bash');
         expect(fields[3].startsWith('tree=')).toBe(true);
-        expect(fields[4].startsWith('shim=')).toBe(true);
-        expect(fields[5].startsWith('bin=')).toBe(true);
-        expect(fields[6].startsWith('fault=')).toBe(true);
-        expect(fields[7]).toBe('PASS-BIN-ALLOW');
-        expect(fields[8]).toBe('pnpm build');
+        expect(fields[4]).toBe('layer=L0');
+        expect(fields[5]).toBe(`row=${L0_ROW_HANDED_DOWN}`);   // healthy: no fault, handed down
+        expect(fields[6]).toBe(`shim=${root}`);   // a REAL path — an empty shim= would read as "unknown"
+        expect(fields[7].startsWith('fault=')).toBe(true);
+        expect(fields[8]).toBe('PASS-BIN-ALLOW');
+        expect(fields[9]).toBe('pnpm build');
     });
 
     /**
-     * The two new fields must carry REAL paths, not empty strings — an empty `shim=` would read as "we
-     * do not know which copy ran", which is the state this change exists to end. In a plain root with
-     * its own node_modules the two agree; the borrow case (they differ) is what a linked worktree shows.
+     * THE JOIN, from the LOG side. Every L0 deny opens `[<guard>] (layer=L0 fault=<code> row=<n>)` and
+     * says out loud that those are "the same coordinates the audit line carries". This makes that true
+     * for the sh half, which used to carry `fault=` alone — so `grep 'layer=L0 row=3'` finds ALL of L0
+     * rather than only the three faults the JS binary decides.
+     *
+     * `row=` is not a constant: it is which of the three-row matrix this call actually took.
      */
-    it('shim= and bin= name real trees, and agree when the tree has its own node_modules', () => {
-        const root = kit.mktmp();
-        installBin(root, 0);
-        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        const fields = logOf(root).trim().split('\t');
-        expect(fields[4]).toBe(`shim=${root}`);
-        expect(fields[5]).toBe(`bin=${root}`);
+    it('logs the matrix row the call took — handed down, allowlisted, or blocked', () => {
+        const drift = stageDriftRoot('0.3.272', '0.3.270');
+        kit.runShim(drift, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));      // fault, not allowed
+        expect(logOf(drift)).toContain(`layer=L0\trow=${L0_ROW_BLOCKED}\t`);
+        expect(logOf(drift)).toContain(`fault=${L0_FAULT_DRIFT}\tDENY-STALE`);
+
+        const cure = stageDriftRoot('0.3.272', '0.3.270');
+        kit.runShim(cure, 'wp-ai-guards-hook', kit.bashPayload('pnpm install'));     // fault, on the allowlist
+        expect(logOf(cure)).toContain(`layer=L0\trow=${L0_ROW_ALLOWLISTED}\t`);
+    });
+
+    /**
+     * THE IF-AND-ONLY-IF. Same shim, two trees: one owning its node_modules (roots agree → no `bin=`),
+     * one borrowing an ancestor's by the upward walk (roots differ → `bin=` names the lender). Asserting
+     * both directions in one test is what makes the field's PRESENCE meaningful.
+     */
+    it('prints bin= if and only if the binary came from a different tree than the shim', () => {
+        const owner = kit.mktmp();
+        installBin(owner, 0);
+        kit.runShim(owner, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
+        expect(logOf(owner)).not.toContain('bin=');
+
+        // A nested tree with NO node_modules of its own: the walk finds the ancestor's bin.
+        const borrower = path.join(owner, 'nested', 'worktree');
+        fs.mkdirSync(borrower, { recursive: true });
+        kit.runShim(borrower, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
+        const fields = logOf(borrower).trim().split('\t');
+        expect(fields).toHaveLength(11);
+        expect(fields[6]).toBe(`shim=${borrower}`);
+        expect(fields[7]).toBe(`bin=${owner}`);    // the lender, named because it is NOT the shim's tree
+        expect(fields[8].startsWith('fault=')).toBe(true);
     });
 
     // The verdict stays immediately before the command, so the greps that predate the tree/fault

@@ -8,6 +8,8 @@ import {
 import { ShimTestkit } from '../bin/shim-testkit';
 import { shimStaleRecoveryDecision } from '../adapters/hook-core';
 import { atRoot } from './effective-tree';
+import { L0_FAULT_NAMES, L0_JS_FAULT_CODES, L0_ROW_BLOCKED } from './l0-fault-codes';
+import { MATRIX_L0_BLOCK } from './decision-log';
 import { L0Cure, L0Fault, L0_FAULTS, GUARD_MATRIX_DOC, renderGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 
 const kit = new ShimTestkit();
@@ -294,6 +296,87 @@ describe('L0 accepts the remedy it emits, even when the repo path contains a spa
         // directory and short-circuits. Pinned so nobody "hardens" it into a denial by mistake and
         // re-breaks a legitimate path that happens to contain a `$`.
         expect(isAllowed('Bash', "cd '$(curl evil)' && pnpm install", '')).toBe('allow');
+    });
+});
+
+/**
+ * THE THREE-WAY JOIN — the deliverable, asserted rather than described.
+ *
+ * One L0 event produces THREE artifacts, and until now no coordinate was common to all of them:
+ *
+ *   1. THE DENY   the agent reads in the moment (`L0Fault.denyText`)
+ *   2. THE AUDIT LINE  `.webpieces/logs/**`, whose fields are `layer=` `row=` `fault=`
+ *   3. THE MATRIX DOC  webpieces.guard-matrix.md, rendered from these same arrays
+ *
+ * The deny named no guard, no fault letter and no row — so a transcript could not be debugged against
+ * the log after the fact, and a reader could not find the matrix row by eye. All three now carry the
+ * same `layer=L0` / `fault=<code>` / `row=3` triple and the same guard NAME, and all four strings come
+ * from ONE vocabulary (`core/l0-fault-codes.ts`), which is what makes this a structural guarantee
+ * rather than four things that currently happen to agree.
+ *
+ * The loop covers EVERY fault — the four decided in POSIX sh (whose denyText is the rendered shim, i.e.
+ * the same bytes the consumer runs) and the three decided in JS. A fault added without its coordinates
+ * fails here.
+ */
+describe('the deny, the audit line and the matrix row share one set of coordinates', () => {
+    it('gives every fault a guard NAME, and spells it identically in the deny and the doc', () => {
+        const doc = renderGuardMatrixDoc();
+        // No "has a name" assertion: L0_FAULT_NAMES is keyed by the L0FaultCode UNION, so a fault added
+        // without one fails to COMPILE. That is the check; a runtime expect here would be dead weight.
+        for (const fault of L0_FAULTS) {
+            const name = L0_FAULT_NAMES[fault.code];
+            expect(fault.denyText, `deny for ${fault.code} does not name its guard`).toContain(`[${name}]`);
+            expect(doc, `the matrix doc does not list guard ${name}`).toContain(`\`${name}\``);
+        }
+    });
+
+    it('puts the audit line`s own layer/fault/row triple in the deny, verbatim', () => {
+        for (const fault of L0_FAULTS) {
+            expect(fault.denyText, `deny for ${fault.code} is missing the log coordinates`)
+                .toContain(`(layer=L0 fault=${fault.code} row=${L0_ROW_BLOCKED},`);
+            expect(fault.denyText, `deny for ${fault.code} does not cite its matrix row`)
+                .toContain(`the audit line carries (layer=L0 row=${L0_ROW_BLOCKED} fault=${fault.code})`);
+        }
+    });
+
+    // The log side of the join, from the constant the JS L0 block actually logs with. If this row ever
+    // stops matching what the denies cite, the grep that spans all three artifacts silently returns two.
+    it('logs the same row the deny and the doc cite', () => {
+        expect(MATRIX_L0_BLOCK.layer).toBe('L0');
+        expect(MATRIX_L0_BLOCK.row).toBe(L0_ROW_BLOCKED);
+        expect(renderGuardMatrixDoc()).toContain(`| ${L0_ROW_BLOCKED} | any | no | BLOCK`);
+    });
+
+    /**
+     * THE CURES ARE THE SAME CURES, IN THE SAME ORDER, in the deny and in the doc's Fix box.
+     *
+     * They cannot literally be rendered from one array today: `l0-matrix` imports `shimStaleDenyReason`
+     * to build fault S's `denyText`, so the deny builders cannot import `L0_FAULTS` back without a
+     * cycle. This asserts the property that inversion would have bought — a cure reordered or dropped in
+     * one place and not the other fails the build — which is the point of the pairing, not the plumbing.
+     * (That each cure is also ACCEPTED by isAllowed() is asserted separately, above.)
+     *
+     * SCOPED TO THE JS-DECIDED FAULTS, and that limit is real rather than convenient: for D/X/U/K the
+     * `denyText` is the RENDERED SHIM — the whole POSIX-sh program, because the message is assembled at
+     * runtime from shell variables and the shim source is the only artifact a test can search. An
+     * `indexOf` over that finds the first mention anywhere in a 400-line script, not the order the reader
+     * sees, and fault D genuinely prints two direction-specific messages that order their cures
+     * differently on purpose. So ordering is asserted where it is meaningful; the `toContain` reachability
+     * check above covers all seven.
+     */
+    it('lists each fault`s cures in the deny in the same order the doc`s Fix box does', () => {
+        const jsFaults = L0_FAULTS.filter((f: L0Fault): boolean =>
+            L0_JS_FAULT_CODES.some((c: string): boolean => c === f.code));
+        for (const fault of jsFaults) {
+            const positions = fault.cures.map((c: L0Cure): number => fault.denyText.indexOf(c.mention));
+            for (const [i, pos] of positions.entries()) {
+                expect(pos, `deny for ${fault.code} never mentions cure ${fault.cures[i].mention}`)
+                    .toBeGreaterThanOrEqual(0);
+            }
+            const sorted = [...positions].sort((a: number, b: number): number => a - b);
+            expect(positions, `cures for ${fault.code} appear in a different order than the doc renders them`)
+                .toEqual(sorted);
+        }
     });
 });
 
