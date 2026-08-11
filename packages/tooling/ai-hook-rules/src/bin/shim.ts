@@ -14,6 +14,7 @@ import {
     ADD_HOOK_PKG_CMD, HOOK_PKG,
 } from './l0-allowlist';
 import { WP_LOG_SH } from './shim-audit-log';
+import { DRIFT_INVERSE_FIX_SH } from './shim-drift-fix';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 // The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
@@ -430,13 +431,14 @@ elif [ -n "\$DRIFT_PKG" ]; then
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
     REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin\${NL}    run EXACTLY: '\$WP_INSTALL_CMD'\${WP_BORROW_NOTE}\${NL}\${NL}${NO_CHAINING_RULE}"
   else
-    # NEWER, or undecidable — the same three choices apply either way, so the only thing the ambiguous
+    # NEWER, or undecidable — the same choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.
     DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to \$DRIFT_DECLARED"
     [ "\$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to \$DRIFT_DECLARED"
+    ${DRIFT_INVERSE_FIX_SH}
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → \$DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) you are on main and want what origin pins - move forward: run 'git pull origin main', then 'pnpm install'\${NL}  Fix Option 2: you mean to stay on this code (the downgrade is the point), or you are on a feature branch and want YOUR branch pin - usually right\${NL}    run EXACTLY: 'pnpm install'\${WP_BORROW_NOTE}\${NL}\${NL}${NO_CHAINING_RULE}"
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → \$DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}\${WP_FIX}\${WP_BORROW_NOTE}\${NL}\${NL}${NO_CHAINING_RULE}"
   fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:

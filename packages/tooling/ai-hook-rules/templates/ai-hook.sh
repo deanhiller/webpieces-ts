@@ -141,13 +141,15 @@ WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\(
 # channel — a stray byte there would corrupt allow/deny).
 WP_TREE=""
 WP_LOG_DIR=""
+WP_PRIMARY_LOG_DIR=""
 WP_TAB="$(printf '\t')"     # one real tab, so the OPTIONAL bin= field can carry its own separator
 wp_resolve_log_dir() {
   _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"
   _wp_gd="$(printf '%s\n' "$_wp_rp" | sed -n 1p)"
   _wp_cd="$(printf '%s\n' "$_wp_rp" | sed -n 2p)"
   if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
-    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"; return 0
+    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"
+    WP_PRIMARY_LOG_DIR="$WP_LOG_DIR"; return 0
   fi
   # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
   # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
@@ -159,9 +161,14 @@ wp_resolve_log_dir() {
   case "$_wp_cd" in
     */.git) [ -d "${_wp_cd%/*}" ] && _wp_primary="${_wp_cd%/*}" ;;
   esac
+  # The PRIMARY clone's log dir, resolved on both branches. A deny that has to tell a human WHERE the
+  # audit trail is (the inverse-drift escalation in shim.ts) must be able to name both the tree it is
+  # standing in and the primary — a subagent has no reach into the second one, so the deny has to quote
+  # that path rather than send anyone to go and look.
+  WP_PRIMARY_LOG_DIR="$_wp_primary/.webpieces/logs"
   if [ "$_wp_gd" = "$_wp_cd" ]; then
     WP_TREE=primary
-    WP_LOG_DIR="$_wp_primary/.webpieces/logs"
+    WP_LOG_DIR="$WP_PRIMARY_LOG_DIR"
   else
     # git's OWN name for the worktree (the basename of <primary>/.git/worktrees/<name>), not the
     # directory's basename — two worktrees under different parents may share a directory name.
@@ -284,7 +291,7 @@ case "$FILE" in
     wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
 esac
-if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+(pull|fetch)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/ai-hook-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/ai-hook-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi
@@ -339,13 +346,22 @@ elif [ -n "$DRIFT_PKG" ]; then
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
     REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin${NL}    run EXACTLY: '$WP_INSTALL_CMD'${WP_BORROW_NOTE}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   else
-    # NEWER, or undecidable — the same three choices apply either way, so the only thing the ambiguous
+    # NEWER, or undecidable — the same choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.
     DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
     [ "$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
+    WP_BRANCH="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
+    [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
+    if [ "$WP_BRANCH" = main ]; then
+      WP_FIX="  Fix Option 1: (preferred) you are on main and want what origin pins - move forward${NL}    run EXACTLY: 'git checkout main && git pull origin main', then 'pnpm install'${NL}  Fix Option 2: you mean to stay on this code - the downgrade is the point${NL}    run EXACTLY: 'pnpm install'"
+    else
+      WP_LOG_PATHS="$WP_LOG_DIR/L0-shim/"
+      [ "$WP_PRIMARY_LOG_DIR" = "$WP_LOG_DIR" ] || WP_LOG_PATHS="${WP_LOG_PATHS}${NL}      and, for the primary clone: $WP_PRIMARY_LOG_DIR/L0-shim/"
+      WP_FIX="  Fix Option 1: (preferred) off main, align node_modules to YOUR branch pin - usually right${NL}    run EXACTLY: 'pnpm install'${NL}  Fix Option 2: you actually need the NEWER pin ON THIS BRANCH - there is no cure to run, and this guard will not invent one${NL}    Do NOT reach for 'git pull origin main': pulling main into a feature branch destroys the fork point the build gate --base and the PR review diff are computed from, and the guards block it.${NL}    You hit a weird case of needing a downgrade. Contact Dean - he needs the audit logs to understand why you are downgrading, so the guard logic can account for it.${NL}    L0 audit logs: $WP_LOG_PATHS"
+    fi
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → $DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) you are on main and want what origin pins - move forward: run 'git pull origin main', then 'pnpm install'${NL}  Fix Option 2: you mean to stay on this code (the downgrade is the point), or you are on a feature branch and want YOUR branch pin - usually right${NL}    run EXACTLY: 'pnpm install'${WP_BORROW_NOTE}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → $DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}${WP_FIX}${WP_BORROW_NOTE}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
