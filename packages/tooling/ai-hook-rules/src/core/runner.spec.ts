@@ -461,6 +461,30 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
         const result = runBash(command, outer, 'guards');
         if (result !== null) expect((result as BlockedResult).report).not.toContain('must come FIRST');
     });
+
+    /**
+     * The rendered deny has to carry the quoted token through, not just the resolver's return value —
+     * this is the surface the human actually reads.
+     */
+    it('renders the offending `cd` and the accepted one into the report', () => {
+        const result = runBash('cd . && mkdir -p pintest && cd pintest && pnpm build', outer, 'guards');
+        const report = (result as BlockedResult).report;
+        expect(report).toContain('`cd pintest`');
+        expect(report).toContain('the leading `cd .` WAS accepted');
+    });
+
+    /**
+     * "Split it" was the only escape offered, and for the shape that triggered this it is not one: the
+     * work DEPENDED on running inside the directory, and a lone `cd` moves nothing the guards judge —
+     * which that option concedes in its own parenthetical. The idiom that actually unblocked it was the
+     * tool's own directory flag, so the deny names that pattern rather than leaving it to be rediscovered.
+     */
+    it('offers the directory-flag idiom, not just "split it"', () => {
+        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('directory flag');
+        expect(report).toContain('git -C <dir>');
+        expect(report).toContain('--pack-destination');
+    });
 });
 
 // A config that will not load must not trap the tools needed to repair it. The hard failure is kept

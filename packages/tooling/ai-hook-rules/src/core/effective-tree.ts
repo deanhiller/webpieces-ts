@@ -230,17 +230,38 @@ export class EffectiveTreeResolver {
 
         for (let i = 0; i < segments.length; i++) {
             if (!isCd(segments[i])) continue;
+            const offender = `\`${segments[i].join(' ')}\``;
             if (i >= consumed) {
                 return segments.slice(0, i).some(isRealCommand)
-                    ? 'it comes after another command — a `cd` only counts at the FRONT of the line'
-                    : 'a `VAR=…` assignment precedes it, which ends the scan';
+                    ? `${offender} comes after another command — a \`cd\` only counts at the FRONT of the line${this.acceptedNote(segments, consumed)}`
+                    : `${offender} — a \`VAR=…\` assignment precedes it, which ends the scan`;
             }
             const target = segments[i][1];
             if (target !== undefined && VARIABLE_TARGET.test(target)) {
-                return 'its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)';
+                return `${offender} — its target is not a literal path (a \`$VAR\`, \`~\` or \`$(…)\` the guard cannot expand)`;
             }
         }
         return null;
+    }
+
+    /**
+     * "…and the `cd` you are looking at was FINE."
+     *
+     * Naming the offender is only half the cure. A command shaped `cd <abs literal> && … && cd sub && …`
+     * begins with a perfectly compliant `cd`, so a reader told "a `cd` must come FIRST" audits the FRONT
+     * of the line, finds a `cd` that IS first and IS literal, and concludes the guard is broken. That
+     * happened: a human read this deny, checked the leading `cd`, and started filing a bug against the
+     * rule (2026-08-11). Working out which of the two `cd`s was meant took a diff of the allowed retry
+     * against the denied attempts.
+     *
+     * `consumed` already marks the boundary exactly — `segments[0..consumed-1]` are the `cd`s that
+     * counted — so the accepted side costs nothing to state and is what stops the reader auditing the
+     * wrong one.
+     */
+    private acceptedNote(segments: readonly (readonly string[])[], consumed: number): string {
+        if (consumed === 0) return '';
+        if (consumed === 1) return ` (the leading \`${segments[0].join(' ')}\` WAS accepted — this is a SECOND \`cd\`)`;
+        return ` (the leading ${consumed} \`cd\`s WERE accepted — this is a later one)`;
     }
 
     /**
