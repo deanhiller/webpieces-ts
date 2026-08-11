@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import * as path from 'path';
 
 import { EffectiveTree } from './effective-tree';
@@ -45,6 +46,9 @@ import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces
  * it is the same answer from every checkout. Measured 2026-08-10: a worktree on 0.4.624 with its own
  * install, a main clone on 0.4.616, and not one word from this guard.
  */
+/** The one file a pin lives in — named here so the "did this branch bump it" check cannot drift from it. */
+const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
+
 export class VersionSyncGuard {
     private readonly inspection = new ReadOnlyInspectionScan();
     private readonly versions = new WebpiecesVersions();
@@ -119,6 +123,7 @@ export class VersionSyncGuard {
     // if each one argues its case. State the skew, show every version WITH its file, give the git cure
     // first, then the two structural escapes, then what is still allowed.
     private report(tree: EffectiveTree, quartet: VersionQuartet): string {
+        const bump = this.isDeliberateBump(tree, quartet);
         return [
             `❌ @webpieces version SKEW — this worktree and the main tree disagree, so work here is blocked.`,
             '',
@@ -127,6 +132,40 @@ export class VersionSyncGuard {
             `   Whichever tree's hooks are live, one of these two releases lints, validates and builds`,
             `   this worktree — and it may be the one this manifest does not ask for.`,
             '',
+            ...this.fixLines(tree, quartet, bump),
+            '',
+            ...this.escalationLines(tree, quartet, bump),
+            '',
+            `   STILL ALLOWED HERE: every Read, read-only inspection, \`pnpm install\`, \`git pull\`/\`fetch\`,`,
+            `   and edits to pnpm-workspace.yaml / package.json / webpieces.config.json.`,
+            `   Do NOT lower the MAIN tree's pin to match — that downgrades every tree, including this`,
+            `   session's own governor.`,
+        ].join('\n');
+    }
+
+    /**
+     * The cure list, which is NOT the same list in both directions.
+     *
+     * The ordinary skew is two trees sitting on different commits of main, and there `git pull` both +
+     * `pnpm install` genuinely converges them — the pin is tracked, so the same hash gives the same
+     * version. That cure is WRONG, and worse than useless, when the branch bumped the pin ON PURPOSE:
+     * pulling would revert the deliverable, and an install cannot move a pin in either tree. Printing
+     * the git cure first in that case is what sent a real upgrade agent round the loop below.
+     */
+    private fixLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
+        if (bump) {
+            return [
+                `   THIS BRANCH BUMPED THE PIN ON PURPOSE (${this.show(quartet.main.pinned).trim()} → ${this.show(quartet.worktree.pinned).trim()}), so the usual cures do NOT apply:`,
+                `     • \`pnpm install\` cannot help in EITHER tree — an install materializes a pin, never moves one.`,
+                `     • \`git pull\` here would revert the bump, which is the whole deliverable.`,
+                `     • Wiping this tree's node_modules does NOT help — the two PINS still disagree, and the`,
+                `       L0 drift guard blocks in this guard's place.`,
+                `   Two ways out, and BOTH need the main tree:`,
+                `     1. Redo this task in the MAIN tree — a version bump cannot be done in a worktree at all.`,
+                `     2. Or raise the MAIN tree's pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, then continue here.`,
+            ];
+        }
+        return [
             `   FIX (usually just git — the pin is TRACKED, so the same commit gives the same version):`,
             `     1. \`git -C ${tree.mainRoot} pull\` and \`git -C ${tree.root} pull\` onto the same main,`,
             `        then \`pnpm install\` in each tree that has a node_modules. A worktree MAY have its`,
@@ -135,13 +174,57 @@ export class VersionSyncGuard {
             `     3. Or, if this tree genuinely needs a DIFFERENT version, use a separate CLONE, not a`,
             `        worktree: a clone gets its own governance. (This is the answer to "I need a different`,
             `        version", never to "I need to install here" — installing here is fine.)`,
-            '',
-            `   STILL ALLOWED HERE: every Read, read-only inspection, \`pnpm install\`, \`git pull\`/\`fetch\`,`,
-            `   and edits to pnpm-workspace.yaml / package.json / webpieces.config.json.`,
-            `   Do NOT lower the MAIN tree's pin to match — that downgrades every tree, including this`,
-            `   session's own governor. If you are a SUBAGENT, you cannot fix the main tree: report to your`,
-            `   coordinator that one of you must move to the other's version.`,
-        ].join('\n');
+        ];
+    }
+
+    /**
+     * THE SUBAGENT CANNOT REACH THE MAIN TREE, so the message it is handed has to be the message it
+     * FORWARDS. This used to be one sentence — "report to your coordinator that one of you must move to
+     * the other's version" — with no command, no direction and nothing pasteable, and the result was a
+     * subagent that correctly diagnosed the block, correctly escalated, and handed its coordinator a
+     * request too vague to act on. Worse, the obvious guess ("ask the coordinator to run `pnpm install`
+     * in main") is a NO-OP on a bump: it reinstalls main's own pin and nothing moves.
+     *
+     * So the escalation is rendered as literal text to forward, with the versions and the direction
+     * already filled in. A human cannot sit with every agent; the deny has to carry the whole ask.
+     */
+    private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
+        const ask = bump
+            ? [
+                  `     > A \`pnpm install\` in main will NOT fix this — main's PIN has to move. Pick one:`,
+                  `     >  (a) I redo this task in the MAIN tree (a version bump cannot be done in a worktree), or`,
+                  `     >  (b) you raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and I continue here.`,
+              ]
+            : [`     > Please \`git -C ${tree.mainRoot} pull\` then \`pnpm install\` there, so both trees are on`, `     > the same release. I cannot reach that tree from here.`];
+        return [
+            `   SUBAGENT? You cannot fix the main tree from here. Forward this to your coordinator verbatim:`,
+            `     > My worktree ${tree.root} is on @webpieces ${this.show(quartet.worktree.pinned).trim()};`,
+            `     > the main tree ${tree.mainRoot} is on ${this.show(quartet.main.pinned).trim()}.`,
+            ...ask,
+        ];
+    }
+
+    /**
+     * Did THIS BRANCH change the pin, as opposed to the two trees having drifted onto different commits?
+     *
+     * Only answerable now that both pin legs actually resolve — before the catalog reader followed YAML
+     * anchors they both read null on the repos that pin via an anchor, so every skew looked alike and the
+     * report could only ever print the one generic cure.
+     *
+     * Two git spawns worst case, on the BLOCK path only (this is never reached on an allow), and
+     * best-effort: a git failure answers "not a deliberate bump", which falls back to the generic cure
+     * that was the only text this report had before.
+     */
+    private isDeliberateBump(tree: EffectiveTree, quartet: VersionQuartet): boolean {
+        if (quartet.main.pinned === null || quartet.worktree.pinned === null) return false;
+        if (quartet.main.pinned === quartet.worktree.pinned) return false;
+        return this.touchesWorkspaceFile(tree.root, ['status', '--porcelain', '--', WORKSPACE_MANIFEST])
+            || this.touchesWorkspaceFile(tree.root, ['diff', '--name-only', 'origin/main...HEAD', '--', WORKSPACE_MANIFEST]);
+    }
+
+    private touchesWorkspaceFile(root: string, args: readonly string[]): boolean {
+        const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+        return result.status === 0 && (result.stdout ?? '').trim() !== '';
     }
 
     // Every version WITH the file it came from. An agent that is told "they disagree" without being told
