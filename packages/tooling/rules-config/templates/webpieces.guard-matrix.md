@@ -38,7 +38,7 @@ the option you pick EXACTLY as written and run nothing else on that line.
 ### `D` — version drift — root package.json pin != installed version
 
 - **Option 1 (preferred)**: `pnpm install`  ← pick this when node_modules is OLDER than the pin, OR you are on a feature branch and want YOUR branch pin (usually the case) — it always clears the drift
-- **Option 2**: `git pull`  ← pick this when node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so pull first and install second; a bare install would downgrade you
+- **Option 2**: `git checkout main && git pull origin main`  ← pick this when node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so sync first and install second; a bare install would downgrade you
 
 ### `X` — guard bin missing (fresh clone / new worktree / package removed)
 
@@ -95,13 +95,14 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 2 | a Write/Edit whose target is webpieces.config.json | PASS |
 | 3 | pnpm|npm install | ALLOW |
 | 4 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
-| 5 | git pull / git fetch - merge is NOT on the list | ALLOW |
-| 6 | pnpm exec wp-upgrade-shim | ALLOW |
-| 7 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 8 | pnpm wp-prune-unknown-config | ALLOW |
-| 9 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 10 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
-| 11 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 5 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
+| 6 | git checkout main && git pull origin main | ALLOW |
+| 7 | pnpm exec wp-upgrade-shim | ALLOW |
+| 8 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
+| 9 | pnpm wp-prune-unknown-config | ALLOW |
+| 10 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
+| 11 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 12 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

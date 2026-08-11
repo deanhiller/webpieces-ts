@@ -99,6 +99,22 @@ export class ShimTestkit {
     }
 
     /**
+     * Make `root` a real git repo whose CURRENT BRANCH is `branch`, and return it.
+     *
+     * The fault-D deny asks `git branch --show-current` to decide whether "move forward to what origin
+     * pins" is a legal command here (it is on main, and it destroys the fork point on a feature branch),
+     * so the branch is now an INPUT to the message and has to be stageable. `symbolic-ref` rather than a
+     * commit: `--show-current` answers on an UNBORN branch, so this needs no user identity, no index and
+     * no object write — which is also why a staged root with NO git dir at all keeps answering '' and
+     * lands on the conservative, non-main half.
+     */
+    stageBranch(root: string, branch: string): string {
+        spawnSync('git', ['init', '-q'], { cwd: root, encoding: 'utf8' });
+        spawnSync('git', ['symbolic-ref', 'HEAD', `refs/heads/${branch}`], { cwd: root, encoding: 'utf8' });
+        return root;
+    }
+
+    /**
      * A repo root that DECLARES @webpieces/ai-hook-rules but has nothing installed — fault X, the
      * ordinary fresh-clone / new-worktree case whose cure really is `pnpm install`.
      *

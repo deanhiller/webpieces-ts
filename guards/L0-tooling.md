@@ -62,19 +62,33 @@ hurt it, and gating each entry on a fault is what produced four real defects.
 | 2 | a Write/Edit whose target is `webpieces.config.json` | PASS |
 | 3 | `pnpm\|npm install` | ALLOW |
 | 4 | `rm -rf node_modules && pnpm install` | ALLOW |
-| 5 | `git pull` / `git fetch` — **merge is NOT on the list** | ALLOW |
-| 6 | `pnpm exec wp-upgrade-shim` | ALLOW |
-| 7 | the `cp` of the shipped template over `.claude/webpieces/ai-hook.sh` | ALLOW |
-| 8 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--target=project` | ALLOW |
-| 9 | read-only **orientation**: `pwd`, `git status\|log\|diff\|show\|branch\|rev-parse`, `git worktree list` | ALLOW |
+| 5 | `git fetch` — a bare `git pull` and `git merge` are **NOT** on the list | ALLOW |
+| 6 | `git checkout main && git pull origin main` — the ONE pull spelling, and only for `main` | ALLOW |
+| 7 | `pnpm exec wp-upgrade-shim` | ALLOW |
+| 8 | the `cp` of the shipped template over `.claude/webpieces/ai-hook.sh` | ALLOW |
+| 9 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--target=project` | ALLOW |
+| 10 | read-only **orientation**: `pwd`, `git status\|log\|diff\|show\|branch\|rev-parse`, `git worktree list` | ALLOW |
 
-Entry 9 is the only one that is not a cure — it is the DIAGNOSIS the cures depend on. An agent in a
+Entries 5 and 6 are one decision split in two (2026-08-10, audit finding C6). `git pull` used to share
+entry 5 with `git fetch` and was TERMINAL, so it short-circuited `redirect-how-to-merge-main` — the
+guard whose entire job is stopping `git pull origin main` on a FEATURE branch, because a raw pull there
+merges main into the branch and destroys the fork point that the 3-point merge, `nx affected --base=`
+and the PR review diff are all computed from. Under an L0 fault the drift message *told* the agent to
+run it and entry 5 *permitted* it, on whatever branch it happened to be on; nothing failed at the time,
+and it surfaced later as a build that covered the wrong scope and a PR diff describing work nobody did.
+`git fetch` cannot merge, so it can never poison a fork point and stays terminal. Entry 6 is the one
+pull spelling that is always safe — it ends ON main, so nothing is merged into a feature branch, and it
+is a no-op checkout when you are already there. Any other branch (`git checkout feat && git pull origin
+main`) is REFUSED, and a bare `git pull` now falls through to `redirect-how-to-merge-main`, which
+allows it on main and blocks it on a feature branch.
+
+Entry 10 is the only one that is not a cure — it is the DIAGNOSIS the cures depend on. An agent in a
 linked worktree, blocked by a `D` measured against the primary clone, ran `pnpm install` five times
 because it could not run `pwd` to see that it was standing somewhere else (2026-08-03). Only the
 literal `list` subcommand of `git worktree` is accepted; `add` / `remove` / `prune` / `move` /
 `repair` all mutate and stay denied, as does a bare `git worktree`.
 
-Being a diagnostic rather than a cure also means entry 9 does **not** bypass L1. The other Bash
+Being a diagnostic rather than a cure also means entry 10 does **not** bypass L1. The other Bash
 entries repair the tooling, so they are waved through ahead of the config load — unconditionally, on a
 healthy repo too (`L0_CURE_ALLOW_JS`). Orientation repairs nothing, so on a healthy repo `git status`
 from a subdirectory still meets L1's force-to-root; it is only exempt while a fault is up. That
@@ -167,8 +181,8 @@ this table adds the symptom and the incident, not a second set of commands.
 | # | what you SEE (exact symptom) | state | verdict | Fix |
 |---|---|---|---|---|
 | 1 | `version drift: package.json pins …@X but node_modules has Y`, where **X > Y** | `D`; you pulled or switched to a commit that bumped the pin, before installing | BLOCK | Option 1 (preferred): `pnpm install` |
-| 2 | same message, but **X < Y** — the *pin* is the stale side (your checkout is behind origin) | `D`; on **main** | BLOCK | Option 1 (preferred): `git pull origin main`, then `pnpm install`<br>Option 2: check out the commit you want, branch from it, then `pnpm install` ← pick this when you deliberately want to stay on the OLD code; the downgrade is the point<br>Do NOT: a *bare* `pnpm install` on main — it clears the block but downgrades you |
-| 3 | same message, **X < Y**, on a **feature branch** | `D`; your branch pins its own version | BLOCK | Option 1 (preferred): `pnpm install` ← aligns node_modules to YOUR branch's pin, which is usually what you want<br>Option 2: `pnpm install` FIRST (that re-arms the guards), THEN `pnpm wp-start-update` ← pick this when you actually want main's newer @webpieces<br>Do NOT: run `pnpm wp-start-update` while the block is up — it is not on the allowlist and does not need to be |
+| 2 | same message, but **X < Y** — the *pin* is the stale side (your checkout is behind origin) | `D`; on **main** | BLOCK | Option 1 (preferred): `git checkout main && git pull origin main`, then `pnpm install` ← that exact spelling: it is allowlist entry 6, and a *bare* `git pull origin main` is not on the list at all<br>Option 2: check out the commit you want, branch from it, then `pnpm install` ← pick this when you deliberately want to stay on the OLD code; the downgrade is the point<br>Do NOT: a *bare* `pnpm install` on main — it clears the block but downgrades you |
+| 3 | same message, **X < Y**, on a **feature branch** | `D`; your branch pins its own version | BLOCK | Option 1 (preferred): `pnpm install` ← aligns node_modules to YOUR branch's pin, which is usually what you want<br>If you actually need the NEWER pin *here*: **there is no cure to run, and the deny does not invent one.** Every drift event logged in this repo has been the other direction, so this shape has never been observed — the deny prints the L0 audit-log paths and asks you to contact Dean with them, because that is the evidence the guard logic would have to be designed from<br>Do NOT: `git pull origin main` — it is blocked here (see entries 5/6), and it would merge main into your branch and destroy the fork point |
 | 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | Option 1 (preferred): `pnpm install` ← run it **HERE**, in this worktree; installing in the primary clone does nothing for this tree |
 | 4b | `…-hook not found` / `is NOT declared in package.json anywhere`, and `pnpm install` reports **"Lockfile is up to date"** and changes nothing | `U`; the package used to arrive as a TRANSITIVE dependency of another `@webpieces` package (and a hoisting node-linker put its bins in the root `.bin`). That edge was pruned as unused, so the package left the tree entirely | BLOCK | Option 1 (preferred): `pnpm add -D @webpieces/ai-hook-rules@<the version your other @webpieces deps are pinned to>` ← the deny infers that pin for you and prints the exact line<br>Do NOT: run `pnpm install` again — with nothing asking for the package it is a **no-op**, and repeating it converges to the same broken tree (2026-08-05: four identical installs, then the block was handed back to the human) |
 | 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | Option 1 (preferred): `rm -rf node_modules && pnpm install` ← a *bare* install SKIPS the corrupt package: pnpm sees the right version on disk and considers it installed<br>Do NOT: `pnpm install` on its own |
@@ -177,7 +191,7 @@ this table adds the symptom and the incident, not a second set of commands.
 | 8 | nothing — no fault | — | → L1 | — |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
 | 10 | Reads succeed while `D`/`X`/`U`/`K` blocks Bash | the bin never ran, so PASS degenerates to a **terminal allow** | ALLOW_FAIL_OPEN | nothing to do — but note reads are UNGUARDED during those four (see "Two known gaps") |
-| 11 | you are blocked in a **linked worktree** and `pnpm install` keeps succeeding without clearing it | any fault, measured against `$CLAUDE_PROJECT_DIR` (the **primary clone**) while you stand somewhere else | BLOCK, then ALLOW once you look | Option 1 (preferred): `pwd` ← allowlist entry 9; then compare it with the path the deny names. Fix the tree you are actually IN with `cd <that path> && pnpm install`.<br>Also allowed: `git worktree list`, `git rev-parse --show-toplevel`<br>Do NOT: re-run the same bare `pnpm install` a second time — it already succeeded, in the wrong tree (2026-08-03: five identical installs, then the block was handed back to the human) |
+| 11 | you are blocked in a **linked worktree** and `pnpm install` keeps succeeding without clearing it | any fault, measured against `$CLAUDE_PROJECT_DIR` (the **primary clone**) while you stand somewhere else | BLOCK, then ALLOW once you look | Option 1 (preferred): `pwd` ← allowlist entry 10; then compare it with the path the deny names. Fix the tree you are actually IN with `cd <that path> && pnpm install`.<br>Also allowed: `git worktree list`, `git rev-parse --show-toplevel`<br>Do NOT: re-run the same bare `pnpm install` a second time — it already succeeded, in the wrong tree (2026-08-03: five identical installs, then the block was handed back to the human) |
 
 Row 7 is the collapse: `C`, `Y`, a validation banner and a syntax error look like four problems and
 are one. They all mean the file is wrong, and they all cure to making it right.
@@ -193,7 +207,7 @@ function working, not a regression.**
   blindness and caused the 2026-07 `0.3.369 vs 0.4.405` incident — fixed by resolving through
   `pnpm-lock.yaml`. Ranges remain.
 - **The `D`/`X`/`K` Read asymmetry** (use case 10). Narrowing the Read entry to a path pattern is the
-  fix; deliberately deferred. Allowlist entry 9 (read-only orientation) sits in the same asymmetry: the
+  fix; deliberately deferred. Allowlist entry 10 (read-only orientation) sits in the same asymmetry: the
   bin never runs under those three, so an allowed `git status` is terminal rather than falling through
   to L1. It reads and reports only, so the exposure is disclosure, not mutation — but it is the same
   gap, and the same narrowing closes both.

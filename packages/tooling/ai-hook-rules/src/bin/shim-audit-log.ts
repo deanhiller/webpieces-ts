@@ -96,7 +96,8 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
   _wp_gd="$(printf '%s\\n' "$_wp_rp" | sed -n 1p)"
   _wp_cd="$(printf '%s\\n' "$_wp_rp" | sed -n 2p)"
   if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
-    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/${WEBPIECES_TMP_DIR}/${LOGS_STATE_DIR}"; return 0
+    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/${WEBPIECES_TMP_DIR}/${LOGS_STATE_DIR}"
+    WP_PRIMARY_LOG_DIR="$WP_LOG_DIR"; return 0
   fi
   # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
   # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
@@ -108,9 +109,14 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
   case "$_wp_cd" in
     */.git) [ -d "\${_wp_cd%/*}" ] && _wp_primary="\${_wp_cd%/*}" ;;
   esac
+  # The PRIMARY clone's log dir, resolved on both branches. A deny that has to tell a human WHERE the
+  # audit trail is (the inverse-drift escalation in shim.ts) must be able to name both the tree it is
+  # standing in and the primary — a subagent has no reach into the second one, so the deny has to quote
+  # that path rather than send anyone to go and look.
+  WP_PRIMARY_LOG_DIR="$_wp_primary/${WEBPIECES_TMP_DIR}/${LOGS_STATE_DIR}"
   if [ "$_wp_gd" = "$_wp_cd" ]; then
     WP_TREE=primary
-    WP_LOG_DIR="$_wp_primary/${WEBPIECES_TMP_DIR}/${LOGS_STATE_DIR}"
+    WP_LOG_DIR="$WP_PRIMARY_LOG_DIR"
   else
     # git's OWN name for the worktree (the basename of <primary>/.git/worktrees/<name>), not the
     # directory's basename — two worktrees under different parents may share a directory name.
@@ -140,6 +146,7 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
  */
 export const WP_LOG_SH = `WP_TREE=""
 WP_LOG_DIR=""
+WP_PRIMARY_LOG_DIR=""
 WP_TAB="$(printf '\\t')"     # one real tab, so the OPTIONAL bin= field can carry its own separator
 ${RESOLVE_LOG_DIR_SH}
 wp_clean() {                 # one path segment from an UNTRUSTED payload id — twin of LogStream's segment()

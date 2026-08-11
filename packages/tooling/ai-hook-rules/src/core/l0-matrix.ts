@@ -1,8 +1,8 @@
 import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
 import {
-    ADD_HOOK_PKG_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
-    RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
+    ADD_HOOK_PKG_CMD, CHECKOUT_MAIN_PULL_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call,
+    L0_ALLOWLIST, RECOVERY_CMD, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
 } from '../bin/shim';
 import { ENV_SURFACE, REGISTRATION_SURFACE } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
@@ -174,9 +174,14 @@ export const L0_FAULTS: readonly L0Fault[] = [
             bashCure('pnpm install', true,
                 'node_modules is OLDER than the pin, OR you are on a feature branch and want YOUR '
                 + 'branch pin (usually the case) — it always clears the drift'),
-            bashCure('git pull', false,
+            // The on-main sync is spelled `git checkout main && git pull origin main` and NOT `git pull`:
+            // a raw pull on a FEATURE branch merges main into it and destroys the fork point, so it is
+            // no longer on the L0 allowlist at all (see CHECKOUT_MAIN_PULL_BODY_ERE). This spelling ends
+            // ON main, which is why it is safe from any branch — and it is a no-op checkout when you are
+            // already there.
+            bashCure(CHECKOUT_MAIN_PULL_CMD, false,
                 'node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so '
-                + 'pull first and install second; a bare install would downgrade you'),
+                + 'sync first and install second; a bare install would downgrade you'),
         ], renderShim()),
     new L0Fault(L0_FAULT_BIN_MISSING, 'guard bin missing (fresh clone / new worktree / package removed)',
         'sh, before the bin runs', 'sh',
