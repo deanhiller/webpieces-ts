@@ -30,10 +30,14 @@ export class StateMigrationReport {
  * with three failure modes, a Windows hazard, and `rename(2)` silently REPLACING the link). After a
  * migration the legacy `<worktree>/.webpieces/` is simply gone; nothing takes its place.
  *
- * WHY it must exist: those directories hold REAL in-flight state — a half-finished 3-point merge under
- * `merge-info/staged/<branch>/`, a written-but-not-yet-posted `pr-review/<branch>/review.json`. The
- * first invocation under the new scheme must not orphan them; a merge an agent is standing in the
- * middle of is not recoverable by re-running anything.
+ * WHY it must exist: those directories hold REAL in-flight state — above all a half-finished 3-point
+ * merge under `merge-info/staged/<branch>/`. The first invocation under the new scheme must not orphan
+ * them; a merge an agent is standing in the middle of is not recoverable by re-running anything.
+ *
+ * WHAT IT MUST NOT TOUCH: the `keepInPlace` leaves — `pr-review/` today. Those are not legacy at all;
+ * `DotWebpieces.aiWritable()` resolves them to the worktree root ON PURPOSE, because that is the only
+ * directory a worktree-isolated coding agent is permitted to write into. Draining one would delete the
+ * live review directory out from under the agent writing it.
  *
  * WHY a plain move suffices: the destination namespace is created FOR this worktree, so it is empty in
  * the ordinary case and the whole tree moves in one `rename`. Where something is already there (a
@@ -57,8 +61,14 @@ export class StateDirMigrator {
     /**
      * Drain `legacyDir` into `targetDir`. A no-op when they are the same directory or when the legacy
      * dir does not exist / is not a real directory (a symlink means migration already happened).
+     *
+     * `keepInPlace` names the TOP-LEVEL leaves of `legacyDir` that are NOT legacy — the ones
+     * `DotWebpieces.aiWritable()` deliberately resolves to the worktree's own root because a
+     * worktree-isolated coding agent cannot write anywhere else (today: `pr-review/`). Sweeping those
+     * into the namespace would move a live directory out from under the agent that is mid-way through
+     * writing it, so they are skipped and NOT reported as kept — nothing about them is unresolved.
      */
-    migrate(legacyDir: string, targetDir: string): StateMigrationReport {
+    migrate(legacyDir: string, targetDir: string, keepInPlace: readonly string[]): StateMigrationReport {
         const report = new StateMigrationReport();
         if (path.resolve(legacyDir) === path.resolve(targetDir)) return report;
 
@@ -66,7 +76,7 @@ export class StateDirMigrator {
         try {
             if (!this.isRealDirectory(legacyDir)) return report;
             fs.mkdirSync(targetDir, { recursive: true });
-            this.drain(legacyDir, targetDir, '', report);
+            this.drain(legacyDir, targetDir, '', report, new Set(keepInPlace));
             this.removeIfEmpty(legacyDir);
         } catch (err: unknown) {
             const error = toError(err);
@@ -85,10 +95,18 @@ export class StateDirMigrator {
      * in-flight `merge-info/staged/<branch>/` intact rather than copying it file by file and risking a
      * half-moved merge. Only when the destination is an existing DIRECTORY do we descend and consider
      * its children individually.
+     *
+     * `keepInPlace` is consulted at the TOP LEVEL only (`relative === ''`), because that is the scope
+     * `DotWebpieces.aiWritable()` assigns: a whole leaf of `.webpieces/` either lives in the worktree or
+     * it does not. A nested `pr-review/` under some other home is ordinary legacy state.
      */
-    private drain(legacyRoot: string, targetRoot: string, relative: string, report: StateMigrationReport): void {
+    private drain(
+        legacyRoot: string, targetRoot: string, relative: string, report: StateMigrationReport,
+        keepInPlace: ReadonlySet<string>,
+    ): void {
         const from = path.join(legacyRoot, relative);
         for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+            if (relative === '' && keepInPlace.has(entry.name)) continue;
             const childRelative = path.join(relative, entry.name);
             const source = path.join(legacyRoot, childRelative);
             const destination = path.join(targetRoot, childRelative);
@@ -98,7 +116,7 @@ export class StateDirMigrator {
                 continue;
             }
             if (entry.isDirectory() && fs.statSync(destination).isDirectory()) {
-                this.drain(legacyRoot, targetRoot, childRelative, report);
+                this.drain(legacyRoot, targetRoot, childRelative, report, keepInPlace);
                 this.removeIfEmpty(source);
                 continue;
             }

@@ -77,10 +77,13 @@ const CHECKLIST_ARCHIVE_NOTE =
 export class ReviewJsonService {
     constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
 
-    // The per-feature PR working dir: `<local .webpieces>/pr-review/<feature>`. LOCAL scope — a PR
-    // review belongs to the worktree that is preparing it, and two worktrees never share one.
+    // The per-feature PR working dir: `<worktree>/.webpieces/pr-review/<feature>`. AI-WRITABLE scope,
+    // not local() — an agent AUTHORS review.json here, and each reviewer subagent authors its own
+    // review-<id>.json beside it. A worktree-isolated agent's Write is refused for any path under the
+    // shared checkout, which is where local() puts this, so local() made both files unwritable by the
+    // very agents the flow instructs to write them. See DotWebpieces.aiWritable() for the full account.
     prDirFor(repoRoot: string, featureName: string): string {
-        return this.dotDir.localFile(repoRoot, PR_REVIEW_DIR, featureName);
+        return this.dotDir.aiWritableFile(repoRoot, PR_REVIEW_DIR, featureName);
     }
 
     // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name.

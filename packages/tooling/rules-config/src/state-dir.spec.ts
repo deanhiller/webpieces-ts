@@ -114,8 +114,51 @@ describe('DotWebpieces resolution edge cases', () => {
         fs.mkdirSync(notARepo);
         expect(dot.shared(notARepo)).toBe(path.join(notARepo, '.webpieces'));
         expect(dot.local(notARepo)).toBe(path.join(notARepo, '.webpieces'));
+        expect(dot.aiWritable(notARepo)).toBe(path.join(notARepo, '.webpieces'));
     });
 
+});
+
+/**
+ * aiWritable() exists for ONE constraint that no amount of path design can negotiate with: a
+ * worktree-isolated coding agent's file-write tool refuses every path under the shared checkout. So the
+ * state the flow ASKS AN AGENT TO WRITE (review.json, and each reviewer subagent's review-<id>.json)
+ * must resolve inside the worktree, while everything the TOOLING writes stays on local().
+ */
+describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually write', () => {
+    beforeEach(() => { makeRepoWithWorktree('dotwp-aiw-', 'wt-feature'); });
+    afterEach(cleanupRepo);
+
+    it('resolves INSIDE the linked worktree, never under the primary clone', () => {
+        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces'));
+        // The whole point: not a subpath of the shared checkout's state dir.
+        expect(dot.aiWritable(worktree).startsWith(dot.shared(worktree))).toBe(false);
+        expect(dot.aiWritable(worktree)).not.toBe(dot.local(worktree));
+    });
+
+    it('is the SAME dir as local()/shared() in the primary clone — nothing changes without worktrees', () => {
+        const expected = path.join(primary, '.webpieces');
+        expect(dot.aiWritable(primary)).toBe(expected);
+        expect(dot.local(primary)).toBe(expected);
+        expect(dot.shared(primary)).toBe(expected);
+    });
+
+    it('resolves from a SUBDIRECTORY to the worktree ROOT, not to the subdirectory', () => {
+        const subdir = path.join(worktree, 'packages', 'deep');
+        fs.mkdirSync(subdir, { recursive: true });
+        expect(dot.aiWritable(subdir)).toBe(path.join(worktree, '.webpieces'));
+    });
+
+    it('two worktrees get DISJOINT aiWritable() dirs — one review per tree, never shared', () => {
+        const second = path.join(tmp, 'wt-other');
+        git(primary, `worktree add -q -b other ${second}`);
+        expect(dot.aiWritable(worktree)).not.toBe(dot.aiWritable(second));
+    });
+
+    it('aiWritableFile() joins beneath it', () => {
+        expect(dot.aiWritableFile(worktree, 'pr-review', 'feature'))
+            .toBe(path.join(worktree, '.webpieces', 'pr-review', 'feature'));
+    });
 });
 
 describe('the config boundary', () => {

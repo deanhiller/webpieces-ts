@@ -57,7 +57,6 @@ describe('legacy per-worktree .webpieces migration', () => {
     it('moves an IN-FLIGHT merge out of the legacy dir without losing a byte', () => {
         const marker = 'merge-info/staged/feature/merge-in-progress.json';
         writeFile(worktree, `.webpieces/${marker}`, '{"validated":false,"conflictedFiles":["a.ts"]}');
-        writeFile(worktree, '.webpieces/pr-review/feature/review.json', '{"title":"wip"}');
 
         // Resolution itself performs the migration — the first new-code process in this worktree.
         const resolved = new DotWebpieces().local(worktree);
@@ -65,10 +64,31 @@ describe('legacy per-worktree .webpieces migration', () => {
         expect(resolved).toBe(namespace);
         expect(fs.readFileSync(path.join(namespace, marker), 'utf8'))
             .toBe('{"validated":false,"conflictedFiles":["a.ts"]}');
-        expect(fs.readFileSync(path.join(namespace, 'pr-review/feature/review.json'), 'utf8'))
-            .toBe('{"title":"wip"}');
         // The drained legacy dir removes itself, so nothing is left to diverge from.
         expect(fs.existsSync(path.join(worktree, '.webpieces'))).toBe(false);
+    });
+
+    /**
+     * The regression this exists to prevent: `pr-review/` is where a coding agent WRITES review.json and
+     * where reviewer subagents write their verdicts, and a worktree-isolated agent may only write inside
+     * its own worktree. `aiWritable()` puts it there deliberately, so a migrator that swept it into the
+     * primary clone's namespace would delete the live directory out from under the agent — and put the
+     * only writable copy back out of reach.
+     */
+    it('LEAVES pr-review/ in the worktree — it is aiWritable() state, not legacy', () => {
+        writeFile(worktree, '.webpieces/pr-review/feature/review.json', '{"title":"wip"}');
+        writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"a":1}');
+
+        const dot = new DotWebpieces();
+        expect(dot.local(worktree)).toBe(namespace);
+
+        expect(fs.readFileSync(path.join(worktree, '.webpieces/pr-review/feature/review.json'), 'utf8'))
+            .toBe('{"title":"wip"}');
+        expect(fs.existsSync(path.join(namespace, 'pr-review'))).toBe(false);
+        // …and it is exactly where aiWritable() says to look for it.
+        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces'));
+        // The genuinely-legacy sibling still migrated, so this is a skip and not a disabled migrator.
+        expect(fs.existsSync(path.join(namespace, 'merge-info/staged/feature/merge-in-progress.json'))).toBe(true);
     });
 
     it('NEVER destroys or overwrites: an occupied destination leaves the legacy copy in place', () => {
@@ -77,7 +97,7 @@ describe('legacy per-worktree .webpieces migration', () => {
         writeFile(worktree, `.webpieces/${relative}`, '{"which":"legacy"}');
 
         const report = new StateDirMigrator().migrate(
-            path.join(worktree, '.webpieces'), namespace);
+            path.join(worktree, '.webpieces'), namespace, []);
 
         expect(report.kept).toContain(relative);
         expect(fs.readFileSync(path.join(namespace, relative), 'utf8')).toBe('{"which":"already-in-namespace"}');
@@ -96,7 +116,7 @@ describe('legacy .webpieces migration — partial and repeat runs', () => {
         writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"which":"legacy"}');
         writeFile(worktree, '.webpieces/hooks/branch-mutations.log', 'one audit line\n');
 
-        const report = new StateDirMigrator().migrate(path.join(worktree, '.webpieces'), namespace);
+        const report = new StateDirMigrator().migrate(path.join(worktree, '.webpieces'), namespace, []);
 
         // `hooks/` had a free destination, so the WHOLE subtree moved in one rename — that is the
         // property that keeps an in-flight merge from ever being half-migrated.
@@ -112,12 +132,12 @@ describe('legacy .webpieces migration — partial and repeat runs', () => {
      */
     it('sweeps state deposited by an OLD published build on the next new-code resolution', () => {
         new DotWebpieces().local(worktree);                       // new code runs first, dir is clean
-        writeFile(worktree, '.webpieces/pr-review/feature/pr-body.md', 'written by the old build\n');
+        writeFile(worktree, '.webpieces/instruct-ai/webpieces.git-workflow.md', 'written by the old build\n');
 
         const resolved = new DotWebpieces().local(worktree);      // a LATER process (fresh instance)
 
         expect(resolved).toBe(namespace);
-        expect(fs.readFileSync(path.join(namespace, 'pr-review/feature/pr-body.md'), 'utf8'))
+        expect(fs.readFileSync(path.join(namespace, 'instruct-ai/webpieces.git-workflow.md'), 'utf8'))
             .toBe('written by the old build\n');
     });
 

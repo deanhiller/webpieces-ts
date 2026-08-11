@@ -47,9 +47,10 @@ export const RULE_NAMES = {
 // `.webpieces/` is gitignored; only the per-feature subdirs under those two homes are subject
 // to 30-day cleanup (the homes themselves, like hooks/ and instruct-ai/, are permanent).
 // The DIRECTORY NAME only. Never join it onto a root yourself — go through `DotWebpieces.shared()`
-// (repo-wide state) or `DotWebpieces.local()` (this worktree's own state) so the call site declares its
-// scope. In a linked worktree the two resolve to different places, and getting that silently wrong is
-// the bug those methods exist to prevent.
+// (repo-wide state), `DotWebpieces.local()` (this worktree's own tooling-written state) or
+// `DotWebpieces.aiWritable()` (this worktree's state that a CODING AGENT writes) so the call site
+// declares its scope. In a linked worktree the three resolve to different places, and getting that
+// silently wrong is the bug those methods exist to prevent.
 export const WEBPIECES_TMP_DIR = '.webpieces';
 export const MERGE_INFO_DIR = 'merge-info';
 // The PR working home. Renamed from the legacy `pr-info` to `pr-review` for clarity (it holds the
