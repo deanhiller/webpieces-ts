@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from '@webpieces/rules-config';
 
-import { InvocationLog, logGuardDecision, GuardDecision, Verdict , MATRIX_L2 } from './decision-log';
+import { InvocationLog, logGuardDecision, GuardDecision, Verdict , MATRIX_L2_UNROWED } from './decision-log';
 
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
@@ -215,7 +215,7 @@ describe('logGuardDecision', () => {
         const root = tmpRoot();
         logGuardDecision(
             root,
-            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK_AI_CURE', 'use pnpm wp-start-upsert-pr instead', '-', L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK_AI_CURE', 'use pnpm wp-start-upsert-pr instead', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED),
         );
         const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
         expect(content).toContain('\tBLOCK_AI_CURE\t');
@@ -227,7 +227,7 @@ describe('logGuardDecision', () => {
 
     it('carries the same root / CLAUDE_PROJECT_DIR pair as the invocation stream', () => {
         const root = tmpRoot();
-        logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'ls', 'dean/foo', 'ALLOW', 'ok', '-', L0_FAULT_NONE, MATRIX_L2));
+        logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'ls', 'dean/foo', 'ALLOW', 'ok', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
         const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
         expect(content).toContain(`\troot=${root}\t`);
         expect(content).toContain('\tprojectDir=');

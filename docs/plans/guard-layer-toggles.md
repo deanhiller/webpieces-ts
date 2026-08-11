@@ -1,9 +1,34 @@
 # Guard layer toggles — `hookGuards` 9 keys → 3
 
-> **Status: PLAN, not implemented.** Written after the L0/L1 audit-trail work (#626), which at the time
-> also covered a layer called L-1. **L-1 is deleted** (both guard hooks are registered absolute now, so
-> nothing has to police `cd` to keep them launchable) and this file has been corrected to match. The
-> layer names here are the ones the log streams already use, so the two vocabularies stay in step.
+> # ⚠️ SUPERSEDED — SHIPPED, AND NOT WITH THESE KEY NAMES
+>
+> The collapse described here **has landed**. Read `GUARD_MATRIX.md` and `guards/L2-branch-state.md` /
+> `guards/L4-pr-lifecycle.md` for what actually exists; this file is kept only for the reasoning that led
+> there, and everything below the fold is frozen as it was written.
+>
+> **The key names shipped SUFFIXED, not bare.** This plan proposed `branch-state` / `branch-cleanup` /
+> `pr-lifecycle`; the shipped keys are **`branch-state-guard`**, **`branch-creation-guard`** and
+> **`pr-lifecycle-guard`**. Three docs proposed three different spellings of the same three policies at
+> once, which is precisely the drift that made the tables generated. Do not take a key name from this
+> file.
+>
+> **`branch-creation-guard` was NOT renamed.** This plan's `branch-cleanup` rename is rejected: it is
+> already one class implementing one policy and carrying real settings, so the rename would cost a
+> retirement entry, a migration and prose churn across ~10 files for zero policy change.
+>
+> Two proposals in the later sections were also **killed** rather than deferred: a section-level
+> `hookGuards.mode` kill switch (it is a second spelling of three `"mode": "OFF"` lines, and it fights
+> the data model in five places — the loader flattens the section, the validator reports it as an unknown
+> rule, and `ConfigPruner` then DELETES it, since the error banner recommends the very tool that eats
+> it), and declaring the PR host to make an unfireable guard a load-time error (it can honestly
+> disqualify exactly one of the old nine keys, and that key no longer exists; the real failure is `gh`
+> present-but-unauthenticated at refresh time, which no load-time declaration can see — that one is
+> closed by the `no-forge` `ALLOW_FAIL_OPEN` verdict instead).
+>
+> Written after the L0/L1 audit-trail work (#626), which at the time also covered a layer called L-1.
+> **L-1 is deleted** (both guard hooks are registered absolute now, so nothing has to police `cd` to keep
+> them launchable) and this file was corrected to match. The layer names here are the ones the log
+> streams use, so the two vocabularies stay in step.
 
 ## Context
 

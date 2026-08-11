@@ -33,7 +33,7 @@ function isMissingReturnType(line: string): boolean {
 }
 
 export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig> {
-    constructor(config: RequireReturnTypeConfig) { super(config, 'require-return-type'); }
+    constructor(config: RequireReturnTypeConfig) { super(config, 'require-return-type', 'require-return-type'); }
 
     readonly description = 'Every function and method must declare its return type.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

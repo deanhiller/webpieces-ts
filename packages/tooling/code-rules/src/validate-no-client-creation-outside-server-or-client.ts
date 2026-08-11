@@ -89,7 +89,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
         config: NoClientCreationOutsideServerOrClientConfig,
         private readonly roleResolver: ProjectRoleResolver,
     ) {
-        super(config, RULE_NAME);
+        super(config, RULE_NAME, RULE_NAME);
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

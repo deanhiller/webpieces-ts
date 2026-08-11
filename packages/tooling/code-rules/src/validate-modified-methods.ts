@@ -499,7 +499,7 @@ export async function runModifiedMethods(
 @injectable(bindingScopeValues.Singleton)
 export class MaxMethodLinesValidator extends CodeValidator<MaxMethodLinesConfig> {
     constructor(config: MaxMethodLinesConfig) {
-        super(config, 'max-method-lines');
+        super(config, 'max-method-lines', 'max-method-lines');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

@@ -72,20 +72,26 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
         subBranchNaming: 'feature/<ticket>/<short-description>',
         autoReapMergedBranches: true,
     },
-    'pr-creation-or-push-guard': { mode: 'ON' },
-    'merge-in-progress-guard': { mode: 'ON' },
-    'pr-merge-guard': { mode: 'ON' },
-    'redirect-how-to-merge-main': { mode: 'ON' },
+    'pr-lifecycle-guard': { mode: 'ON' },
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and
     // HOOK_GUARD_NAMES with it. It is EXPERIMENTAL and switched only from the optional machine-local
     // ~/.webpieces/config.json (`experimental.whole-repo-build-guard`). Adding it back here would make it
     // a rule every consumer must configure — which is fault Y, i.e. every Bash call blocked on upgrade,
     // which is exactly what it did the first time. See RETIRED_CONFIG_KEYS.
-    // Phase 1 ships OFF on purpose. This guard blocks Read, the highest-blast-radius tool there is,
-    // so it is opted into per-repo (webpieces.config.json → hookGuards) only AFTER the release
-    // carrying it is published and installed. Flipping it ON here would arm it for every consumer
-    // on upgrade, before anyone has verified the fail-open paths against their own git layout.
-    'read-stale-guard': { mode: 'OFF' },
+    //
+    // branch-state-guard ships ON, INCLUDING its Read-blocking half.
+    //
+    // Its predecessor `read-stale-guard` shipped OFF as a "phase 1" staged rollout, on the reasoning
+    // that Read is the highest-blast-radius tool there is and nobody should be armed before verifying
+    // the fail-open paths against their own git layout. Phase 1 is over: this repo has run it ON in
+    // production for releases, and the fail-open paths (branch undeterminable, cache absent, cache for
+    // another branch, offline, dirty tree on main) are each covered by tests. Keeping it OFF now buys
+    // nothing and costs the exact incident the guard exists for — a session spent reading a tree 18
+    // commits behind while the log read "handled".
+    //
+    // Nothing is armed behind anyone's back either way: every built-in requires an explicit entry (the
+    // config-sync check blocks until one exists), so a consumer states this mode themselves on upgrade.
+    'branch-state-guard': { mode: 'ON' },
 };
 
 export const defaultRulesDir: readonly string[] = [];

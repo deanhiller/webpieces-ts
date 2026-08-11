@@ -479,7 +479,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class CatchErrorPatternValidator extends CodeValidator<CatchErrorPatternConfig> {
     constructor(config: CatchErrorPatternConfig) {
-        super(config, 'catch-error-pattern');
+        super(config, 'catch-error-pattern', 'catch-error-pattern');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

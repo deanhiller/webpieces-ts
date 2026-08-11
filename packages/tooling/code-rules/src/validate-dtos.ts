@@ -545,7 +545,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class PrismaValidateDtosValidator extends CodeValidator<PrismaValidateDtosConfig> {
     constructor(config: PrismaValidateDtosConfig) {
-        super(config, 'prisma-validate-dtos');
+        super(config, 'prisma-validate-dtos', 'prisma-validate-dtos');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

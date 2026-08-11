@@ -2,15 +2,35 @@
 
 **Goal: does every merge and PR go through the gated flow?**
 
-**Config key: `pr-lifecycle-guard` (proposed).** Today four keys, all pure boilerplate
-(`mode` plus the two escape hatches, no real settings): `redirect-how-to-merge-main`,
-`pr-creation-or-push-guard`, `pr-merge-guard`, `merge-in-progress-guard`.
+**Config key: `pr-lifecycle-guard`.** ONE key for all four classes below. It used to be four, all pure
+boilerplate (`mode` plus the two escape hatches, no real settings): `redirect-how-to-merge-main`,
+`pr-creation-or-push-guard`, `pr-merge-guard`, `merge-in-progress-guard`. Those four names are still the
+CLASS names — they are what a decision-log line carries as `rule=` and what each deny report titles
+itself with — but they are no longer config keys, and naming one in `webpieces.config.json` fails the
+load with this destination (`retired-config-keys.ts`).
+
+**Say this out loud: `"mode": "OFF"` here also releases the unvalidated-merge gate.** Three of the four
+are pure COMMAND-SHAPE blocks that can never fire spuriously. The fourth, `merge-in-progress-guard`, is
+STATE-conditional: it fires only while a 3-point merge is actually in progress and unvalidated, and it is
+the one state L2 explicitly stands down for. So switching this key off to unblock a `gh pr merge` ALSO
+drops "you have an unfinished merge". That is the honest cost of one key per policy. The alternative
+considered and rejected was a granular sub-mode — four knobs wearing one key's name, which is the shape
+the collapse exists to remove. If the coupling ever proves unacceptable, the honest fix is a SECOND key
+(`pr-lifecycle-guard` + `merge-in-progress-guard`), not a knob.
+
+**The two per-guard command strings are gone.** `pr-creation-or-push-guard.upsertPrCommand` and
+`merge-in-progress-guard.mergeCompleteCommand` were second spellings of `commands.guardHints
+.prCreationOrPush` / `.mergeInProgress`, and — being read at the point of use — they BEAT the commands
+section, which made `guardHintsWhy`'s promise that renaming a gated command there makes "every guard
+message follow" false for any repo that set them. Deleted, with `RETIRED_FIELD_HINTS` naming the
+destination; the loader hands the resolved strings to the two rules at construction.
 
 **Code:** `ai-hook-rules/src/core/rules/{redirect-how-to-merge-main,pr-creation-or-push-guard,pr-merge-guard,merge-in-progress-guard}.ts`
 · the flow itself in `pr-gate`.
 
 > **STUB.** This layer is not yet tabled. What follows is what is known from analysing it alongside
-> L0–L2; the table and use cases still need the same treatment L2 just received.
+> L0–L2; the table and use cases still need the treatment L0, L1 and L2 have had — a row array in code,
+> the doc rendered from it, and a spec locking the two byte-identical.
 
 ## The four guards and what each blocks
 

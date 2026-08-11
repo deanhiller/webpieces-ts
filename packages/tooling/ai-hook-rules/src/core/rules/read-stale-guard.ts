@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-    ReadStaleGuardConfig,
+    BranchStateGuardConfig,
+    BRANCH_STATE_GUARD_KEY,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     MainSyncStatus,
@@ -15,7 +16,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
 import { StaleMainMessage } from './stale-main-message';
@@ -75,8 +76,8 @@ import { TreeRecovery } from './tree-recovery';
  * never reaches the runner's rule loop). Fires the detached refresher on every call, which is also
  * what makes reads keep the shared main-sync cache warm for feature-branch-guard.
  */
-export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
-    constructor(config: ReadStaleGuardConfig) { super(config, 'read-stale-guard'); }
+export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
+    constructor(config: BranchStateGuardConfig) { super(config, 'read-stale-guard', BRANCH_STATE_GUARD_KEY); }
 
     readonly description = 'Block reads on a branch that is stale to read from — a `main` behind origin/main, or a feature branch whose PR is already merged.';
     override readonly files = ['**/*'];
@@ -90,7 +91,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
             new Option('On main, behind origin/main → git pull origin main. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main. Then retry the read.', true),
             new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
             new Option('Still allowed right now: Bash that does not read repo files (installs, upgrades, builds, tests, the pull itself, git/gh metadata), all Write/Edit, and reading webpieces.config.json. Content-reading Bash (cat/grep/ls/…) is blocked too on a stale main — see stale-main-bash-guard.'),
-            new Option('Disable in webpieces.config.json under hookGuards → read-stale-guard (mode OFF) if intentional.'),
+            new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
 
@@ -166,7 +167,16 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         // such a bug degrades to an allow. Unreachable in normal operation. (A branch the refresh has
         // not seen yet is the `status === null` case above — still fail-open.)
         if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
-        if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
+        // NOT-MERGED, or NOT-ASKED? `branchAlreadyMerged: false` is produced both by "this branch has
+        // no merged PR" and by "the forge could not be reached" (`gh` missing, unauthenticated,
+        // rate-limited, offline). Same allow either way — never block on data you could not establish
+        // — but the LOG must not call the second one an approval, or the trail cannot tell a policy
+        // that is protecting something from one that is quietly standing down.
+        if (!status.branchAlreadyMerged) {
+            return status.forgeReachable
+                ? this.allow(ctx, branch, 'clean-feature-branch', cache)
+                : this.failOpen(ctx, branch, 'no-forge', cache);
+        }
         if (this.isDirty(ctx.workspaceRoot)) {
             return this.failOpen(ctx, branch, 'dirty-merged-branch', cache);
         }
@@ -287,7 +297,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
     private logDecision(ctx: FileContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('read-stale-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('read-stale-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, matrixL2Row(reason)),
         );
     }
 

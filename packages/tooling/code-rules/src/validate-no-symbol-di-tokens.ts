@@ -319,7 +319,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoSymbolDiTokensValidator extends CodeValidator<NoSymbolDiTokensConfig> {
     constructor(config: NoSymbolDiTokensConfig) {
-        super(config, 'no-symbol-di-tokens');
+        super(config, 'no-symbol-di-tokens', 'no-symbol-di-tokens');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

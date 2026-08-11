@@ -27,7 +27,7 @@ function enclosingFunctionName(strippedLines: readonly string[], idx: number): s
 }
 
 export class NoProcessExitOutsideMainRule extends EditRuleBase<NoProcessExitOutsideMainConfig> {
-    constructor(config: NoProcessExitOutsideMainConfig) { super(config, 'no-process-exit-outside-main'); }
+    constructor(config: NoProcessExitOutsideMainConfig) { super(config, 'no-process-exit-outside-main', 'no-process-exit-outside-main'); }
 
     readonly description = 'Disallow process.exit() outside a main()/runMain wrapper (and importing another module\'s main). A deep exit crashes a reused server/command too early; throw a semantic error and let main pick the exit code.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

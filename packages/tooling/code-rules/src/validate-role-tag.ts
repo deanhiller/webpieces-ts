@@ -56,7 +56,7 @@ const ROLE_TAG_SPEC = new TagRuleSpec(ROLE_TAG_PREFIX, 'role-tag', 'Role Tag', D
 @injectable(bindingScopeValues.Singleton)
 export class RoleTagValidator extends CodeValidator<RoleTagConfig> {
     constructor(config: RoleTagConfig) {
-        super(config, 'role-tag');
+        super(config, 'role-tag', 'role-tag');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

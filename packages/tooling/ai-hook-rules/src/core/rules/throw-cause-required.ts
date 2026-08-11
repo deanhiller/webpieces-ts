@@ -22,7 +22,7 @@ const ERROR_MESSAGE_PATTERN = /\berror\d*\.message\b/;
 const CAUSE_PATTERN = /\bcause\s*:\s*error\d*\b/;
 
 export class ThrowCauseRequiredRule extends EditRuleBase<ThrowCauseRequiredConfig> {
-    constructor(config: ThrowCauseRequiredConfig) { super(config, 'throw-cause-required'); }
+    constructor(config: ThrowCauseRequiredConfig) { super(config, 'throw-cause-required', 'throw-cause-required'); }
 
     readonly description = 'When rethrowing with added context, chain the original exception: throw new Error("msg", { cause: error })';
     override readonly files = ['**/*.ts', '**/*.tsx'];

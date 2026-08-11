@@ -212,7 +212,7 @@ async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspa
 @injectable(bindingScopeValues.Singleton)
 export class NoProcessExitOutsideMainValidator extends CodeValidator<NoProcessExitOutsideMainConfig> {
     constructor(config: NoProcessExitOutsideMainConfig) {
-        super(config, 'no-process-exit-outside-main');
+        super(config, 'no-process-exit-outside-main', 'no-process-exit-outside-main');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

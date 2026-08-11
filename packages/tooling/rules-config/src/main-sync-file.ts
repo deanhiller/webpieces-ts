@@ -42,6 +42,19 @@ export class MainSyncStatus {
     // could not be read. Paired with `originMain`, this is what tells the read-stale-guard whether a
     // checked-out `main` is behind its remote. Defaulted field for the same reason as `openPr`.
     localMain: string = '';
+    /**
+     * Did the forge answer when this entry was computed? See PullRequestIndex.forgeReachable.
+     *
+     * `branchAlreadyMerged: false` is produced BOTH by "this branch has no merged PR" and by "we could
+     * not ask", and the three guards that act on the merged state took the ordinary ALLOW path in both.
+     * Carrying the distinction into the cache is what lets them say ALLOW_FAIL_OPEN / `no-forge`
+     * instead — the typed verdict exists precisely so abstentions are countable.
+     *
+     * Defaults TRUE, matching `openPr`/`localMain` as a non-positional field: an entry written before
+     * this field existed (or hand-edited) is read as "the forge answered", which preserves today's
+     * verdicts exactly rather than retro-labelling old caches as abstentions.
+     */
+    forgeReachable: boolean = true;
 
     constructor(
         branch: string,
@@ -93,10 +106,24 @@ export class PullRequestIndex {
     // branch -> PR number, as a string ('' means "no such PR"), for MERGED and OPEN respectively.
     merged: Record<string, string>;
     open: Record<string, string>;
+    /**
+     * Did the forge actually ANSWER?
+     *
+     * `mergedFor()` returning '' has always meant two completely different things — "this branch has no
+     * merged PR" and "we could not ask" (`gh` missing, unauthenticated, rate-limited, offline, or the
+     * response unparseable). Both produced the same empty index, so from the decision log you could not
+     * tell whether the merged-branch policy was PROTECTING anything or quietly abstaining. This flag is
+     * the difference, and it is what lets the guards emit ALLOW_FAIL_OPEN instead of a plain ALLOW.
+     *
+     * REQUIRED, not defaulted: an index built on a failure path must say so out loud, and a default of
+     * `true` would make "we asked and got an answer" the thing you get by forgetting.
+     */
+    forgeReachable: boolean;
 
-    constructor(merged: Record<string, string>, open: Record<string, string>) {
+    constructor(merged: Record<string, string>, open: Record<string, string>, forgeReachable: boolean) {
         this.merged = merged;
         this.open = open;
+        this.forgeReachable = forgeReachable;
     }
 
     // A merged PR for this branch, or '' — the same value the old per-branch `gh` call produced.
@@ -125,6 +152,7 @@ interface RawStatus {
     timestamp?: string;
     openPr?: string;
     localMain?: string;
+    forgeReachable?: boolean;
 }
 
 // v2 has `branches`; a v1 document instead has the RawStatus fields at the top level.
@@ -225,15 +253,18 @@ export class MainSyncFileStore {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const parsed = JSON.parse(json) as RawPullRequest[] | null;
-            if (!Array.isArray(parsed)) return new PullRequestIndex(merged, open);
+            // Parsed but not an array: `gh` answered with something we do not understand, which is
+            // not the same as it answering "no PRs". Unreachable, so the guards abstain rather than allow.
+            if (!Array.isArray(parsed)) return new PullRequestIndex(merged, open, false);
             for (const row of parsed) {
                 if (row !== null && typeof row === 'object') this.indexOne(row, merged, open);
             }
         } catch (err: unknown) {
             const error = toError(err);
             void error;
+            return new PullRequestIndex(merged, open, false);
         }
-        return new PullRequestIndex(merged, open);
+        return new PullRequestIndex(merged, open, true);
     }
 
     private indexOne(row: RawPullRequest, merged: Record<string, string>, open: Record<string, string>): void {
@@ -280,6 +311,7 @@ export class MainSyncFileStore {
         );
         status.openPr = raw.openPr ?? '';
         status.localMain = raw.localMain ?? '';
+        status.forgeReachable = raw.forgeReachable ?? true;
         return status;
     }
 }

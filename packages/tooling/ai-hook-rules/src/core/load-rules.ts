@@ -6,9 +6,9 @@ import {
     NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
     NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
-    NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
-    MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
-    NoJsFilesConfig, FeatureBranchGuardConfig, ReadStaleGuardConfig, MergedBranchBashGuardConfig, StaleMainBashGuardConfig, MatchRuleConfig,
+    NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig,
+    PrLifecycleGuardConfig, BranchStateGuardConfig,
+    NoJsFilesConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from './types';
@@ -16,7 +16,7 @@ import { InformAiError } from './types';
 import { toError } from './to-error';
 import { EmptyRuleConfig } from './rule-base';
 import { CustomRuleAdapter } from './custom-rule-adapter';
-import { builtInRuleNames } from './rules/index';
+import { builtInConfigKeys } from './rules/index';
 import { NoAnyUnknownRule } from './rules/no-any-unknown';
 import { NoImplicitAnyRule } from './rules/no-implicit-any';
 import { MaxFileLinesRule } from './rules/max-file-lines';
@@ -45,34 +45,59 @@ import { MatchRule } from './rules/match-rule';
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
 
-// Each built-in rule is constructed from its typed *Config (the entry in webpieces.config.json).
-// The config arrives as a plain object structurally typed as the *Config class, so the `as`
-// narrows the shared BaseRuleConfig param back to the concrete config the rule consumes.
-type RuleFactory = (config: BaseRuleConfig) => Rule;
+/**
+ * ONE CONFIG KEY → N RULES.
+ *
+ * Each built-in rule is constructed from its typed *Config (the entry in webpieces.config.json). The
+ * config arrives as a plain object structurally typed as the *Config class, so the `as` narrows the
+ * shared BaseRuleConfig param back to the concrete config the rule consumes.
+ *
+ * The map is keyed by CONFIG KEY and each factory returns an ARRAY, because a hookGuards key names a
+ * POLICY and a policy may be implemented by several classes: `branch-state-guard` builds all four
+ * branch-state guards from one entry, `pr-lifecycle-guard` all four PR-lifecycle guards. It used to be
+ * `Record<string, (c) => Rule>` — one factory per key — which is precisely why four classes could not
+ * share a key and why the config had to carry nine switches for three decisions.
+ *
+ * `guardHints` are the resolved `commands.guardHints` strings, handed to the two rules that print a
+ * gated command. They arrive as a constructor argument rather than a config field, so there is exactly
+ * one spelling of each command in the config (see PrLifecycleGuardConfig).
+ */
+type RuleFactory = (config: BaseRuleConfig, guardHints: GuardHintCommands) => readonly Rule[];
+
+/** The two gated-command strings guards print, resolved from `commands.guardHints`. Data-only. */
+export class GuardHintCommands {
+    constructor(readonly upsertPr: string, readonly mergeComplete: string) {}
+}
 
 const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
-    'no-any-unknown': (c: BaseRuleConfig) => new NoAnyUnknownRule(c as NoAnyUnknownConfig),
-    'no-implicit-any': (c: BaseRuleConfig) => new NoImplicitAnyRule(c as NoImplicitAnyConfig),
-    'max-file-lines': (c: BaseRuleConfig) => new MaxFileLinesRule(c as MaxFileLinesConfig),
-    'validate-ts-in-src': (c: BaseRuleConfig) => new ValidateTsInSrcRule(c as ValidateTsInSrcConfig),
-    'no-destructure': (c: BaseRuleConfig) => new NoDestructureRule(c as NoDestructureConfig),
-    'require-return-type': (c: BaseRuleConfig) => new RequireReturnTypeRule(c as RequireReturnTypeConfig),
-    'no-unmanaged-exceptions': (c: BaseRuleConfig) => new NoUnmanagedExceptionsRule(c as NoUnmanagedExceptionsConfig),
-    'catch-error-pattern': (c: BaseRuleConfig) => new CatchErrorPatternRule(c as CatchErrorPatternConfig),
-    'throw-cause-required': (c: BaseRuleConfig) => new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig),
-    'no-symbol-di-tokens': (c: BaseRuleConfig) => new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig),
-    'no-custom-css': (c: BaseRuleConfig) => new NoCustomCssRule(c as NoCustomCssConfig),
-    'no-process-exit-outside-main': (c: BaseRuleConfig) => new NoProcessExitOutsideMainRule(c as NoProcessExitOutsideMainConfig),
-    'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
-    'pr-creation-or-push-guard': (c: BaseRuleConfig) => new PrCreationOrPushGuardRule(c as PrCreationOrPushGuardConfig),
-    'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),
-    'pr-merge-guard': (c: BaseRuleConfig) => new PrMergeGuardRule(c as PrMergeGuardConfig),
-    'redirect-how-to-merge-main': (c: BaseRuleConfig) => new RedirectHowToMergeMainRule(c as RedirectHowToMergeMainConfig),
-    'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
-    'feature-branch-guard': (c: BaseRuleConfig) => new FeatureBranchGuardRule(c as FeatureBranchGuardConfig),
-    'read-stale-guard': (c: BaseRuleConfig) => new ReadStaleGuardRule(c as ReadStaleGuardConfig),
-    'merged-branch-bash-guard': (c: BaseRuleConfig) => new MergedBranchBashGuardRule(c as MergedBranchBashGuardConfig),
-    'stale-main-bash-guard': (c: BaseRuleConfig) => new StaleMainBashGuardRule(c as StaleMainBashGuardConfig),
+    'no-any-unknown': (c: BaseRuleConfig) => [new NoAnyUnknownRule(c as NoAnyUnknownConfig)],
+    'no-implicit-any': (c: BaseRuleConfig) => [new NoImplicitAnyRule(c as NoImplicitAnyConfig)],
+    'max-file-lines': (c: BaseRuleConfig) => [new MaxFileLinesRule(c as MaxFileLinesConfig)],
+    'validate-ts-in-src': (c: BaseRuleConfig) => [new ValidateTsInSrcRule(c as ValidateTsInSrcConfig)],
+    'no-destructure': (c: BaseRuleConfig) => [new NoDestructureRule(c as NoDestructureConfig)],
+    'require-return-type': (c: BaseRuleConfig) => [new RequireReturnTypeRule(c as RequireReturnTypeConfig)],
+    'no-unmanaged-exceptions': (c: BaseRuleConfig) => [new NoUnmanagedExceptionsRule(c as NoUnmanagedExceptionsConfig)],
+    'catch-error-pattern': (c: BaseRuleConfig) => [new CatchErrorPatternRule(c as CatchErrorPatternConfig)],
+    'throw-cause-required': (c: BaseRuleConfig) => [new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig)],
+    'no-symbol-di-tokens': (c: BaseRuleConfig) => [new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig)],
+    'no-custom-css': (c: BaseRuleConfig) => [new NoCustomCssRule(c as NoCustomCssConfig)],
+    'no-process-exit-outside-main': (c: BaseRuleConfig) => [new NoProcessExitOutsideMainRule(c as NoProcessExitOutsideMainConfig)],
+    'no-js-files': (c: BaseRuleConfig) => [new NoJsFilesRule(c as NoJsFilesConfig)],
+    'branch-creation-guard': (c: BaseRuleConfig) => [new BranchCreationGuardRule(c as BranchCreationGuardConfig)],
+    // THE TWO COLLAPSED POLICIES. Order inside each array is the order the rules run in, and it is the
+    // same order the previous per-key registry produced.
+    'pr-lifecycle-guard': (c: BaseRuleConfig, hints: GuardHintCommands) => [
+        new PrCreationOrPushGuardRule(c as PrLifecycleGuardConfig, hints.upsertPr),
+        new MergeInProgressGuardRule(c as PrLifecycleGuardConfig, hints.mergeComplete),
+        new PrMergeGuardRule(c as PrLifecycleGuardConfig),
+        new RedirectHowToMergeMainRule(c as PrLifecycleGuardConfig),
+    ],
+    'branch-state-guard': (c: BaseRuleConfig) => [
+        new FeatureBranchGuardRule(c as BranchStateGuardConfig),
+        new ReadStaleGuardRule(c as BranchStateGuardConfig),
+        new MergedBranchBashGuardRule(c as BranchStateGuardConfig),
+        new StaleMainBashGuardRule(c as BranchStateGuardConfig),
+    ],
 };
 
 // Index the typed config by rule name. Each value is the rule's *Config (a plain object from
@@ -82,8 +107,13 @@ function asConfigMap(config: WebpiecesRulesConfig): Record<string, BaseRuleConfi
     return config as unknown as Record<string, BaseRuleConfig | undefined>;
 }
 
-export function loadRules(config: WebpiecesRulesConfig, workspaceRoot: string): readonly Rule[] {
-    const builtIns = loadBuiltInRules(config);
+// webpieces-disable no-function-outside-class -- the module's entry point, beside loadMatchRules/loadExperimentalBashRules; this whole loader is module-scope functions and a lone class for one of them would break the file's shape
+export function loadRules(
+    config: WebpiecesRulesConfig,
+    workspaceRoot: string,
+    guardHints: GuardHintCommands,
+): readonly Rule[] {
+    const builtIns = loadBuiltInRules(config, guardHints);
     const custom = loadCustomRules(config, workspaceRoot);
     return [...builtIns, ...custom];
 }
@@ -91,7 +121,7 @@ export function loadRules(config: WebpiecesRulesConfig, workspaceRoot: string): 
 /**
  * The EXPERIMENTAL bash guards: rules that have NO webpieces.config.json entry, are switched only from
  * the optional machine-local `~/.webpieces/config.json`, and are therefore deliberately kept out of
- * `builtInRuleNames`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y, "every built-in rule needs
+ * `builtInConfigKeys`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y, "every built-in rule needs
  * an entry, or every Bash call is blocked") can never see them. That containment is the whole point:
  * whole-repo-build-guard shipped inside the config-driven set once and took every upgrading consumer's
  * shell down with it.
@@ -112,17 +142,19 @@ export function loadMatchRules(matchRules: readonly MatchRuleConfig[]): Rule[] {
     return matchRules.map((c: MatchRuleConfig) => new MatchRule(c));
 }
 
-function loadBuiltInRules(config: WebpiecesRulesConfig): Rule[] {
+// Iterates CONFIG KEYS, not rule names — one entry can yield several rules (see BUILT_IN_RULE_MAP).
+// webpieces-disable no-function-outside-class -- the body of loadRules above, in the same module of loader functions
+function loadBuiltInRules(config: WebpiecesRulesConfig, guardHints: GuardHintCommands): Rule[] {
     const map = asConfigMap(config);
     const rules: Rule[] = [];
-    for (const name of builtInRuleNames) {
-        const factory = BUILT_IN_RULE_MAP[name];
+    for (const configKey of builtInConfigKeys) {
+        const factory = BUILT_IN_RULE_MAP[configKey];
         if (!factory) {
-            process.stderr.write(`[ai-hooks] unknown built-in rule: ${name}\n`);
+            process.stderr.write(`[ai-hooks] unknown built-in config key: ${configKey}\n`);
             continue;
         }
-        const ruleConfig = map[name] ?? new EmptyRuleConfig();
-        rules.push(factory(ruleConfig));
+        const ruleConfig = map[configKey] ?? new EmptyRuleConfig();
+        rules.push(...factory(ruleConfig, guardHints));
     }
     return rules;
 }

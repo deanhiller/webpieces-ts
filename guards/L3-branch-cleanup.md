@@ -2,9 +2,12 @@
 
 **Goal: which dead branches and worktrees get reaped?**
 
-**Config key: `branch-cleanup-guard` (proposed).** Today: `branch-creation-guard`, which already carries
-real settings (`subBranchNaming`, `autoReapMergedBranches`, `maxLocalBranches`, `maxWorktrees`) rather
-than pure boilerplate.
+**Config key: `branch-creation-guard`.** Shipped, and it KEEPS that name. A rename to
+`branch-cleanup-guard` was once proposed here and is rejected: this is already one class implementing one
+policy, carrying real settings (`subBranchNaming`, `autoReapMergedBranches`, `maxLocalBranches`,
+`maxWorktrees`) rather than pure boilerplate. The rename would cost a retirement entry, a migration and
+prose churn across roughly ten files for zero policy change. L2 and L4 collapsed because four keys there
+described ONE decision; nothing here needs collapsing.
 
 **Code:** `ai-hook-rules/src/core/rules/branch-creation-guard.ts` ·
 `rules-config/src/merged-branches.ts` (the classification ladders) ·
@@ -12,7 +15,8 @@ than pure boilerplate.
 `rules-config/src/worktree-reaper.ts` · `pr-gate`'s `wp-cleanup` command.
 
 > **STUB.** This layer is not yet tabled. What follows is what is already known from analysing it
-> alongside L0–L2; the table and use cases still need the same treatment L2 just received.
+> alongside L0–L2; the table and use cases still need the treatment L0, L1 and L2 have had — a row
+> array in code, the doc rendered from it, and a spec locking the two byte-identical.
 
 ## What is already understood
 

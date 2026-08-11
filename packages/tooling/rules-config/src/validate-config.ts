@@ -119,6 +119,18 @@ const RETIRED_FIELD_HINTS: Record<string, string> = {
         'This field was removed — it was never read. The runtime graph is derived automatically from ' +
         'architecture/dependencies.json, so there is NO list of api libs to maintain. Delete it (do not ' +
         'enumerate api libs and do not replace it with a glob).',
+    // The two per-guard command strings, deleted as SECOND SPELLINGS of commands.guardHints. They were
+    // read at the point of use, so they BEAT the commands section — which made guardHintsWhy's promise
+    // ("rename a gated command here and every guard message follows") false for any repo that set them.
+    // Keyed on the new policy key, since that is the entry a consumer's field now sits inside.
+    'pr-lifecycle-guard.upsertPrCommand':
+        'This field was removed. The command the push/PR-creation block prints lives in ONE place: ' +
+        '"commands": { "guardHints": { "prCreationOrPush": <value> } }. Move your value there and delete ' +
+        'this key.',
+    'pr-lifecycle-guard.mergeCompleteCommand':
+        'This field was removed. The command the unfinished-merge block prints lives in ONE place: ' +
+        '"commands": { "guardHints": { "mergeInProgress": <value> } }. Move your value there and delete ' +
+        'this key.',
 };
 
 // Universal field renames (apply to EVERY rule/guard AND every match-rule, unlike the per-rule

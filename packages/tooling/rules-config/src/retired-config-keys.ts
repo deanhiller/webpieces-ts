@@ -95,22 +95,30 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
     // load-config.ts rewrote the key so no validator ever saw it). That hid the rename from the config file
     // forever: the old name kept working, so no consumer ever updated, and the alias table could never be
     // deleted. Now each is a hard error with the new name.
+    //
+    // These three RE-POINTED when hookGuards collapsed to one key per policy. Their old destinations
+    // (`pr-merge-guard`, `pr-creation-or-push-guard`, `read-stale-guard`) are themselves retired now,
+    // and a retirement whose `movedTo` names a dead key teaches the removed API — the same defect one
+    // level out. Each therefore names the POLICY key it lands on today, in one hop.
     new RetiredConfigKey(
-        RETIRED_SCOPE_RULE, 'pr-merge-cleanup', 'pr-merge-guard',
-        'Rename the key to "pr-merge-guard". Its value carries over unchanged.',
+        RETIRED_SCOPE_RULE, 'pr-merge-cleanup', 'pr-lifecycle-guard',
+        'Rename the key to "pr-lifecycle-guard" (merging its value into that entry if you already have ' +
+        'one — the four PR/merge guards share one key now). Its mode and escape hatches carry over.',
         '[pr-merge-cleanup]', false,
     ),
     new RetiredConfigKey(
-        RETIRED_SCOPE_RULE, 'pr-creation-guard', 'pr-creation-or-push-guard',
-        'Rename the key to "pr-creation-or-push-guard" — the guard grew a second blocked action (a manual ' +
-        'git push), so it is no longer only about PR creation. Its value carries over unchanged.',
+        RETIRED_SCOPE_RULE, 'pr-creation-guard', 'pr-lifecycle-guard',
+        'Rename the key to "pr-lifecycle-guard" (merging its value into that entry if you already have ' +
+        'one — the four PR/merge guards share one key now). Its mode and escape hatches carry over; the ' +
+        'old "upsertPrCommand" field does NOT — that string lives only in commands.guardHints.prCreationOrPush.',
         '[pr-creation-guard]', false,
     ),
     new RetiredConfigKey(
-        RETIRED_SCOPE_RULE, 'main-stale-guard', 'read-stale-guard',
-        'Rename the key to "read-stale-guard" — the guard grew a second blocked state (an already-merged ' +
-        'feature branch), so it is no longer about `main` at all; it is THE guard that can block a Read. ' +
-        'Its value carries over unchanged.',
+        RETIRED_SCOPE_RULE, 'main-stale-guard', 'branch-state-guard',
+        'Rename the key to "branch-state-guard" (merging its value into that entry if you already have ' +
+        'one — the four branch-state guards share one key now). Its mode and escape hatches carry over. ' +
+        'Note the widened scope: that key arms the Write, Read AND Bash halves of the branch-state ' +
+        'policy, not just the Read block this key used to name.',
         '[main-stale-guard]', false,
     ),
 
@@ -156,7 +164,71 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
         'command behaves exactly as it does by default when it does not exist.',
         '[whole-repo-build-guard]', true,
     ),
+
+    // --- THE 9 → 3 COLLAPSE of `hookGuards`: one key per POLICY, not one per implementation CLASS.
+    //
+    // Eight class-named keys become two policy keys. The CLASSES are untouched — `feature-branch-guard`
+    // is still the rule name in every decision-log line and every deny report — so nothing an operator
+    // greps for moved. What moved is the SWITCH, because nine keys let a consumer configure HALF a
+    // policy: `read-stale-guard: OFF` beside `merged-branch-bash-guard: ON` is "read the file, yes;
+    // `cat` the same file, no", which nobody chose and the config made reachable.
+    //
+    // EVERY ONE OF THESE IS `prunable: false`, and that is not bookkeeping. `PRUNABLE_SECTIONS` in
+    // ConfigPruner includes `hookGuards`, and the validation banner actively RECOMMENDS running the
+    // pruner. A `prunable: true` here would mean the recommended cure silently DELETES four configured
+    // guards with no destination named — a config loss, which is worse than a block. False keeps the
+    // migration instruction and makes the pruner return null for these keys.
+    //
+    // 4 → 1 is legal for this table (nothing requires `movedTo` to be unique), but it is NOT legal for
+    // a naive 1:1 migrator: see migrateRetiredRuleNames in ai-hook-rules' setup.ts, which unions the
+    // four old entries into the destination and then fills any missing required field, rather than
+    // renaming the first and deleting the rest.
+    ...branchStateRetirements(),
+    ...prLifecycleRetirements(),
 ];
+
+// The four branch-state classes. Split into a helper purely to keep the table above readable; the
+// instruction is per-key because the fields that carry over differ (only feature-branch-guard had
+// `branchNamingConvention`).
+// webpieces-disable no-function-outside-class -- table data for RETIRED_CONFIG_KEYS, beside the array it feeds
+function branchStateRetirements(): RetiredConfigKey[] {
+    const merged = 'MERGE it into ONE "branch-state-guard" entry under "hookGuards"';
+    const shared =
+        `${merged}. All four of feature-branch-guard, read-stale-guard, stale-main-bash-guard and ` +
+        'merged-branch-bash-guard now read that single entry — they are one policy ("may I work here, ' +
+        'and is what I read current?") implemented by four classes, and configuring them separately let ' +
+        'you switch on half of it. Keep "mode", "turnOffRuleUntilEpoch" and "turnOffRuleWhileOnBranch"; ' +
+        'the ONE "hangTimeoutMinutes" survives (there was only ever one refresher and one cache, so at ' +
+        'most one of the four values could ever take effect); "branchNamingConvention" survives from ' +
+        'feature-branch-guard. If the four disagreed on "mode", pick the one you meant — "ON" arms the ' +
+        'whole policy including the Read block. Then DELETE this key.';
+    return [
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'feature-branch-guard', 'branch-state-guard', shared, '[feature-branch-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'read-stale-guard', 'branch-state-guard', shared, '[read-stale-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'stale-main-bash-guard', 'branch-state-guard', shared, '[stale-main-bash-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'merged-branch-bash-guard', 'branch-state-guard', shared, '[merged-branch-bash-guard]', false),
+    ];
+}
+
+// The four PR-lifecycle classes.
+// webpieces-disable no-function-outside-class -- table data for RETIRED_CONFIG_KEYS, beside the array it feeds
+function prLifecycleRetirements(): RetiredConfigKey[] {
+    const shared =
+        'MERGE it into ONE "pr-lifecycle-guard" entry under "hookGuards". All four of ' +
+        'pr-creation-or-push-guard, merge-in-progress-guard, pr-merge-guard and ' +
+        'redirect-how-to-merge-main now read that single entry — they are one policy ("do PRs and ' +
+        'merges go through the gated flow?"). Keep "mode", "turnOffRuleUntilEpoch" and ' +
+        '"turnOffRuleWhileOnBranch". Know what "mode": "OFF" now means: it releases the ' +
+        'unvalidated-merge gate as well as the PR/push blocks, because merge-in-progress-guard is under ' +
+        'this key too. The per-guard "upsertPrCommand" / "mergeCompleteCommand" fields are gone — those ' +
+        'strings live ONLY in commands.guardHints.prCreationOrPush / .mergeInProgress. Then DELETE this key.';
+    return [
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'pr-creation-or-push-guard', 'pr-lifecycle-guard', shared, '[pr-creation-or-push-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'merge-in-progress-guard', 'pr-lifecycle-guard', shared, '[merge-in-progress-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'pr-merge-guard', 'pr-lifecycle-guard', shared, '[pr-merge-guard]', false),
+        new RetiredConfigKey(RETIRED_SCOPE_RULE, 'redirect-how-to-merge-main', 'pr-lifecycle-guard', shared, '[redirect-how-to-merge-main]', false),
+    ];
+}
 
 /**
  * The shared message. Leads with the retirement, then the destination, then the edit — an agent reading this

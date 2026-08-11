@@ -1,7 +1,8 @@
 import { execSync, spawnSync } from 'child_process';
 
 import {
-    StaleMainBashGuardConfig,
+    BranchStateGuardConfig,
+    BRANCH_STATE_GUARD_KEY,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     MainSyncStatus,
@@ -13,7 +14,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner } from '../command-scan';
 import { StaleMainMessage } from './stale-main-message';
@@ -88,8 +89,8 @@ import { BranchSwitchScan } from './branch-switch-scan';
  *     very files in conflict. Never trap the agent away from its own rescue.
  *   - reading `webpieces.config.json` (the mode-OFF escape hatch) and `.webpieces/**` → allow
  */
-export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfig> {
-    constructor(config: StaleMainBashGuardConfig) { super(config, 'stale-main-bash-guard'); }
+export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig> {
+    constructor(config: BranchStateGuardConfig) { super(config, 'stale-main-bash-guard', BRANCH_STATE_GUARD_KEY); }
 
     private readonly scanner = new CommandScanner();
     private readonly recovery = new TreeRecovery();
@@ -117,7 +118,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
                 + '\nWhichever form applies, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
             new Option('NOT blocked: `git checkout <sha>`, `git checkout -b <x> origin/main`, `git checkout -- <file>`, any other branch. Also still allowed: builds, tests, installs, the pull itself, all git/gh METADATA (status|log|diff|show|branch), every Write/Edit, and reading webpieces.config.json.'),
-            new Option('Disable in webpieces.config.json under hookGuards → stale-main-bash-guard (mode OFF) if intentional.'),
+            new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
 
@@ -288,7 +289,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('stale-main-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('stale-main-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, matrixL2Row(reason)),
         );
     }
 

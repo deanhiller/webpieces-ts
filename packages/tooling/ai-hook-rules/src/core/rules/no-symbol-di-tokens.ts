@@ -47,7 +47,7 @@ function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): b
 }
 
 export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
-    constructor(config: NoSymbolDiTokensConfig) { super(config, 'no-symbol-di-tokens'); }
+    constructor(config: NoSymbolDiTokensConfig) { super(config, 'no-symbol-di-tokens', 'no-symbol-di-tokens'); }
 
     readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @injectable(bindingScopeValues.Singleton) + inject-by-type instead.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

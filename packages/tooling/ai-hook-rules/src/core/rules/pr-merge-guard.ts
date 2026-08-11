@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { PrMergeGuardConfig } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -13,8 +13,8 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
-    constructor(config: PrMergeGuardConfig) { super(config, 'pr-merge-guard'); }
+export class PrMergeGuardRule extends BashRuleBase<PrLifecycleGuardConfig> {
+    constructor(config: PrLifecycleGuardConfig) { super(config, 'pr-merge-guard', PR_LIFECYCLE_GUARD_KEY); }
 
     readonly description = 'Redirect a hand-rolled `gh pr merge` to `pnpm wp-land-pr`, then require branch cleanup.';
 

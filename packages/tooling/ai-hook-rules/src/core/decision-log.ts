@@ -8,6 +8,7 @@ import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-str
 import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
+import { l2RowForReason } from './l2-rows';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
 // the ASYNC log (the `async-refresh/` stream, written by the detached refresher in main-sync-log.ts). This
@@ -47,18 +48,22 @@ export type Verdict = 'ALLOW' | 'ALLOW_EXEMPT' | 'ALLOW_FAIL_OPEN' | 'BLOCK_AI_C
 /**
  * WHICH ROW of WHICH layer's decision table produced this line. Data-only → a class, per CLAUDE.md.
  *
- * `row` is the row NUMBER from the layer's row array (`L1_ROWS[i].num`) — the
+ * `row` is the row NUMBER from the layer's row array (`L1_ROWS[i].num`, `L2_ROWS[i].num`) — the
  * same number the generated doc prints, because the doc is rendered from that same array. So a log
  * line joins to its matrix row BY NUMBER, and checking observed behaviour against the documented use
- * cases becomes a lookup rather than an investigation. `'-'` for a layer with no row array yet (L2).
+ * cases becomes a lookup rather than an investigation.
  */
 export class MatrixRef {
     constructor(readonly layer: string, readonly row: string) {}
 }
 
 /**
- * The layer tokens. `row` is `'-'` only for a layer with no row array YET (L2 is the un-converted one)
- * — but the LAYER is always named, so `grep layer=L2` works today and the row fills in when L2 converts.
+ * The layer tokens. EVERY layer now cites a row: L0 through its two decision-matrix rows, L1 through
+ * L1_ROWS, and L2 through L2_ROWS (see `matrixL2Row`). This used to say `'-'` was for "a layer with no
+ * row array YET (L2 is the un-converted one)" — L2 is converted, and a comment describing a state the
+ * code left behind is exactly the kind of doc a reader trusts and should not.
+ *
+ * `'-'` survives for ONE case, and it is a real one: an L2 reason that no row claims. See matrixL2Row.
  *
  * These are REQUIRED at the constructor, not defaulted: a defaulted `MatrixRef` would make the
  * uncited case reachable by doing nothing and impossible to grep — the same defect this file's own
@@ -74,7 +79,42 @@ export class MatrixRef {
  */
 export const MATRIX_L0_ALLOW = new MatrixRef('L0', L0_ROW_ALLOWLISTED);
 export const MATRIX_L0_BLOCK = new MatrixRef('L0', L0_ROW_BLOCKED);
-export const MATRIX_L2 = new MatrixRef('L2', '-');
+
+/**
+ * The L2 reference for one decision, with the row DERIVED FROM THE REASON.
+ *
+ * There is no `MATRIX_L2` constant any more, and its absence is the point: a single shared instance
+ * meant every L2 line in the repo carried `row=-`, which reads as "L2 has no rows" rather than "this
+ * decision was not classified". Deleting it makes every construction site name a reason, and the reason
+ * is the only thing a call site has that identifies which row it is an instance of.
+ *
+ * `l2RowForReason` returns null for a reason no row claims, and that renders as `'-'` — visible in the
+ * log, not silently absorbed into a default row. l2-matrix.spec.ts reads the four guard sources and
+ * fails the build if any reason literal in them is unmapped, so `-` should never appear in practice;
+ * when it does, it is a genuine hole in the table and the log says so.
+ */
+// webpieces-disable no-function-outside-class -- a named constructor for MatrixRef beside it, in this module of module-scope writers
+export function matrixL2Row(reason: string): MatrixRef {
+    const row = l2RowForReason(reason);
+    return new MatrixRef('L2', row === null ? '-' : String(row));
+}
+
+/**
+ * The L2 stream, with NO row — for the two kinds of line that genuinely are not an instance of a row.
+ *
+ *  1. The runner's AGGREGATE bash lines ("no bash-guard block" / "bash-guard block"). They summarise
+ *     the whole guard set's answer for one command, not one row's verdict; the per-guard lines that
+ *     DO cite rows are written alongside them by the guards themselves.
+ *  2. `whole-repo-build-guard`, which is not a branch-state policy at all — it is the experimental
+ *     home-config guard, has no webpieces.config.json entry, and shares this stream only because the
+ *     stream is "bash decisions", not "L2 rows".
+ *
+ * A NAMED constant rather than an inline `new MatrixRef('L2', '-')`, so `grep MATRIX_L2_UNROWED` lists
+ * every uncited line and the list stays short and arguable. It is deliberately NOT called `MATRIX_L2`:
+ * the old name was used by everything and made "L2 has no rows" indistinguishable from "this line is
+ * not a row".
+ */
+export const MATRIX_L2_UNROWED = new MatrixRef('L2', '-');
 
 // Data-only record of one guard decision (per CLAUDE.md: classes for data, not object literals).
 // `cache` summarizes the async-written main-sync-status.json that drove a feature-branch-guard

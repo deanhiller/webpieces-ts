@@ -3,13 +3,13 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { RedirectHowToMergeMainConfig, StaleMainBashGuardConfig } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig, BranchStateGuardConfig } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { Option } from '../fix-hint';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';
 
-const rule = new RedirectHowToMergeMainRule(new RedirectHowToMergeMainConfig());
+const rule = new RedirectHowToMergeMainRule(new PrLifecycleGuardConfig());
 
 function ctx(command: string, workspaceRoot: string): BashContext {
     return new BashContext(command, workspaceRoot);
@@ -268,7 +268,7 @@ describe('redirect-how-to-merge-main — the pull path', () => {
      */
     it('does not block the cure stale-main-bash-guard prescribes', () => {
         git('checkout', 'main');
-        const hint = new StaleMainBashGuardRule(new StaleMainBashGuardConfig()).fixHint;
+        const hint = new StaleMainBashGuardRule(new BranchStateGuardConfig()).fixHint;
         const preferred = hint.fixOptions.filter((o: Option): boolean => o.preferred);
         expect(preferred.length).toBe(1);
         const cure = /git checkout main && git pull origin main/.exec(preferred[0].text);

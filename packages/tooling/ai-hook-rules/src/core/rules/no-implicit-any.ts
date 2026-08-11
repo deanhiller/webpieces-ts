@@ -40,7 +40,7 @@ function findOffender(line: string): string | null {
 }
 
 export class NoImplicitAnyRule extends EditRuleBase<NoImplicitAnyConfig> {
-    constructor(config: NoImplicitAnyConfig) { super(config, 'no-implicit-any'); }
+    constructor(config: NoImplicitAnyConfig) { super(config, 'no-implicit-any', 'no-implicit-any'); }
 
     readonly description = 'Disallow function parameters without explicit type annotations (implicit-any).';
     override readonly files = ['**/*.ts', '**/*.tsx'];

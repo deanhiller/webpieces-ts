@@ -8,7 +8,7 @@ import { FixHint, DisableEscape, Option } from '../fix-hint';
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 
 export class NoDestructureRule extends EditRuleBase<NoDestructureConfig> {
-    constructor(config: NoDestructureConfig) { super(config, 'no-destructure'); }
+    constructor(config: NoDestructureConfig) { super(config, 'no-destructure', 'no-destructure'); }
 
     readonly description = 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

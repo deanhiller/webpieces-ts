@@ -67,7 +67,8 @@ export {
     DEFAULT_MATCH_RULES,
 } from './match-rules-config';
 export type { ConfigSection } from './sections';
-export { HOOK_GUARD_NAMES, isHookGuard, sectionForRule } from './sections';
+export { schemaFieldNames } from './rule-schemas';
+export { HOOK_GUARD_NAMES, BRANCH_STATE_GUARD_KEY, PR_LIFECYCLE_GUARD_KEY, isHookGuard, sectionForRule } from './sections';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
@@ -130,10 +131,7 @@ export {
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
-    PrCreationOrPushGuardConfig,
-    MergeInProgressGuardConfig,
-    PrMergeGuardConfig,
-    RedirectHowToMergeMainConfig,
+    PrLifecycleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
@@ -184,10 +182,7 @@ export type {
     ValidateTsMode,
 } from './rule-configs';
 export {
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
-    MergedBranchBashGuardConfig,
-    StaleMainBashGuardConfig,
+    BranchStateGuardConfig,
 } from './main-sync-guard-configs';
 export {
     GateDefinition,

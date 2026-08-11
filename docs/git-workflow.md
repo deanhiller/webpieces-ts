@@ -30,8 +30,9 @@ and breaks the diff range used by PR review and AI code analysis. These are bloc
 **You MUST branch off fresh `main`.** Name it `{whoami}/<short-feature-description>` — lowercase, no
 version numbers, no `sub/` prefix (e.g. `dean/upgrade-webpieces`). The `branch-creation-guard` blocks
 anything else. Sub-branches (branching off another feature branch) are disabled; to allow one
-temporarily, set `branch-creation-guard.ignoreModifiedUntilEpoch` to a future epoch in
-`webpieces.config.json`.
+temporarily, set `branch-creation-guard.turnOffRuleUntilEpoch` to a future epoch in
+`webpieces.config.json`. (It was `ignoreModifiedUntilEpoch` two renames ago; the validator has rejected
+that spelling for several releases, so this line prescribed an edit that could only fail the load.)
 
 **Primary clone:**
 ```bash

@@ -73,11 +73,11 @@ describe('validateWebpiecesConfig', () => {
 
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
-            'pr-merge-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
-            'feature-branch-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
+            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
+            'branch-creation-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
+            'branch-state-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
         });
-        for (const rule of ['pr-creation-or-push-guard', 'pr-merge-guard', 'feature-branch-guard']) {
+        for (const rule of ['pr-lifecycle-guard', 'branch-creation-guard', 'branch-state-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }
@@ -193,8 +193,8 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
 
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
     it('rejects a rule with mode only — BOTH escape hatches are now required', () => {
-        const errors = errorsFor('pr-creation-or-push-guard', validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'ON' },
+        const errors = errorsFor('pr-lifecycle-guard', validateWebpiecesConfig({
+            'pr-lifecycle-guard': { mode: 'ON' },
         }));
         expect(errors.some(e => e.includes('Missing required field "turnOffRuleUntilEpoch"'))).toBe(true);
         expect(errors.some(e => e.includes('Missing required field "turnOffRuleWhileOnBranch"'))).toBe(true);
@@ -202,18 +202,18 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('accepts the new turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch field names', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
+            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
         });
-        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
+        expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('rejects turnOffRuleUntilEpoch with the wrong type', () => {
         const errors = validateWebpiecesConfig({
             // webpieces-disable no-any-unknown -- deliberately wrong type for the negative test
-            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 'soon' as unknown as number },
+            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 'soon' as unknown as number },
         });
         expect(
-            errorsFor('pr-creation-or-push-guard', errors).some(
+            errorsFor('pr-lifecycle-guard', errors).some(
                 e => e.includes('"turnOffRuleUntilEpoch" must be number'),
             ),
         ).toBe(true);
@@ -221,10 +221,10 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('rejects a present rule that is missing the required mode', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { turnOffRuleUntilEpoch: 0 },
+            'pr-lifecycle-guard': { turnOffRuleUntilEpoch: 0 },
         });
         expect(
-            errorsFor('pr-creation-or-push-guard', errors).some(
+            errorsFor('pr-lifecycle-guard', errors).some(
                 e => e.includes('Missing required field "mode"'),
             ),
         ).toBe(true);
@@ -232,9 +232,9 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('accepts a fully-specified rule (mode + both hatches)', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+            'pr-lifecycle-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         });
-        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
+        expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('branch-creation-guard accepts ON_NO_SUBBRANCHES mode and branchFormat', () => {
@@ -256,15 +256,15 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 describe('validateWebpiecesConfig — escape-hatch fields (required, nullable branch, renamed old names)', () => {
     it('accepts a null branch hatch (the always-on value)', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         });
-        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
+        expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('flags the renamed old names with a "renamed to X" hint', () => {
-        const errors = errorsFor('pr-creation-or-push-guard', validateWebpiecesConfig({
+        const errors = errorsFor('pr-lifecycle-guard', validateWebpiecesConfig({
             // webpieces-disable no-any-unknown -- deliberately the removed old names for the negative test
-            'pr-creation-or-push-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0, ignoreRuleWhileOnBranch: null } as unknown as Record<string, unknown>,
+            'pr-lifecycle-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0, ignoreRuleWhileOnBranch: null } as unknown as Record<string, unknown>,
         }));
         expect(errors.some(e => e.includes('"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"'))).toBe(true);
         expect(errors.some(e => e.includes('"ignoreRuleWhileOnBranch" — it was renamed to "turnOffRuleWhileOnBranch"'))).toBe(true);
@@ -398,8 +398,8 @@ describe('validatePrGateSection — mergeMode (required policy)', () => {
 
 describe('validateSectionPlacement', () => {
     it('flags a guard left in the rules section', () => {
-        const errors = validateSectionPlacement({ 'pr-creation-or-push-guard': { mode: 'ON' } }, {});
-        expect(errors.some(e => e.includes('[pr-creation-or-push-guard]') && e.includes('"hookGuards"'))).toBe(true);
+        const errors = validateSectionPlacement({ 'pr-lifecycle-guard': { mode: 'ON' } }, {});
+        expect(errors.some(e => e.includes('[pr-lifecycle-guard]') && e.includes('"hookGuards"'))).toBe(true);
     });
 
     it('flags a code rule placed in the hookGuards section', () => {
@@ -410,7 +410,7 @@ describe('validateSectionPlacement', () => {
     it('accepts correctly-placed entries', () => {
         const errors = validateSectionPlacement(
             { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } },
-            { 'pr-creation-or-push-guard': { mode: 'ON' } },
+            { 'pr-lifecycle-guard': { mode: 'ON' } },
         );
         expect(errors).toEqual([]);
     });
@@ -495,9 +495,24 @@ describe('rule registry consistency', () => {
 
     it('allRuleNames is exactly the schema keys, so the installer seeds every known rule', () => {
         // allRuleNames drives buildSeedConfig; a name missing here can never be seeded and a repo
-        // could not add it via `wp-install-ai-hooks`.
+        // could not add it via the install command.
         expect(allRuleNames().length).toBeGreaterThan(0);
-        expect(new Set(allRuleNames()).has('read-stale-guard')).toBe(true);
+        // The branch-state POLICY, not the four class names behind it. `read-stale-guard` used to be
+        // asserted here; it is now a rule NAME with no config key of its own, so demanding a schema for
+        // it would recreate the exact deadlock this describe block exists to prevent — the validator
+        // demanding a key that RETIRED_CONFIG_KEYS then rejects.
+        expect(new Set(allRuleNames()).has('branch-state-guard')).toBe(true);
+    });
+
+    // The other half of that deadlock, in the new direction the collapse opens up: a rule NAME must
+    // never acquire a schema, because a schema is what makes the validator demand a config entry.
+    it('no retired class-named guard has a schema, so the validator can never demand a rejected key', () => {
+        const schema = new Set(allRuleNames());
+        const retiredNames = [
+            'feature-branch-guard', 'read-stale-guard', 'stale-main-bash-guard', 'merged-branch-bash-guard',
+            'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard', 'redirect-how-to-merge-main',
+        ];
+        expect(retiredNames.filter((name: string): boolean => schema.has(name))).toEqual([]);
     });
 
     it('every defaultRules key has a schema (else the loader defaults a rule the validator rejects)', () => {

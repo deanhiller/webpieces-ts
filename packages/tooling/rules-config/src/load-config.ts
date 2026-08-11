@@ -96,7 +96,6 @@ export class ConfigLoader {
         }
 
         const commands = buildCommandsConfig(consumerConfig.commands);
-        this.applyCommandDefaults(overrideRules, commands);
 
         const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
         const mergedRules = new Map<string, ResolvedRuleConfig>();
@@ -116,25 +115,19 @@ export class ConfigLoader {
         return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, matchRules, configPath);
     }
 
-    // Inject the canonical command strings (from the `commands` section) as the DEFAULT for the guards
-    // that surface them in their fix hints. Only fills a gap — an explicit per-guard override wins.
-    private applyCommandDefaults(
-        // webpieces-disable no-any-unknown -- opaque merged rule/guard map
-        rules: Record<string, Record<string, unknown>>,
-        commands: CommandsConfig,
-    ): void {
-        const prCreation = rules['pr-creation-or-push-guard'];
-        if (prCreation && prCreation['upsertPrCommand'] === undefined) {
-            prCreation['upsertPrCommand'] = commands.upsertPr;
-        }
-        const mergeInProgress = rules['merge-in-progress-guard'];
-        if (mergeInProgress && mergeInProgress['mergeCompleteCommand'] === undefined) {
-            mergeInProgress['mergeCompleteCommand'] = commands.mergeComplete;
-        }
-        // whole-repo-build-guard is NOT injected here — it has no rules/hookGuards entry at all. It reads
-        // the same commands.pr-gate.buildCommand, handed to it directly by ai-hook-rules' runner off
-        // LoadedConfig.prGate. See home-config.ts for why that guard is home-config-only.
-    }
+    // There is deliberately NO applyCommandDefaults here any more.
+    //
+    // It used to WRITE `commands.guardHints` values into two guard entries under the literal keys
+    // 'pr-creation-or-push-guard' / 'merge-in-progress-guard', as a default beneath the guards' own
+    // `upsertPrCommand` / `mergeCompleteCommand` fields. Two defects in one method: those per-guard
+    // fields were a second spelling that BEAT the commands section (so the "one place" promise was
+    // false), and the injection was keyed on guard-name literals — a key rename that missed it did NOT
+    // fail the build, the lookup simply missed and both guards quietly printed their local defaults.
+    //
+    // Both fields are now deleted (see PrLifecycleGuardConfig and RETIRED_FIELD_HINTS), and the
+    // resolved `CommandsConfig` strings are handed to the two rules at CONSTRUCTION — a compile-time
+    // wire that cannot silently miss. whole-repo-build-guard was already fed that way off
+    // LoadedConfig.prGate; this makes the guard-hint strings match.
 
     // webpieces-disable no-any-unknown -- merging opaque option bags from config JSON
     private mergeRule(

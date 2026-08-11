@@ -116,7 +116,7 @@ const FRAMEWORK_TAG_SPEC = new TagRuleSpec(
 @injectable(bindingScopeValues.Singleton)
 export class FrameworkTagValidator extends CodeValidator<FrameworkTagConfig> {
     constructor(config: FrameworkTagConfig) {
-        super(config, 'framework-tag');
+        super(config, 'framework-tag', 'framework-tag');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

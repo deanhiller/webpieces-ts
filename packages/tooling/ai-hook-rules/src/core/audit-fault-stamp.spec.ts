@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { InvocationLog, logGuardDecision, GuardDecision , MATRIX_L2 } from './decision-log';
+import { InvocationLog, logGuardDecision, GuardDecision , MATRIX_L2_UNROWED } from './decision-log';
 import { LogStream } from './log-stream';
 import { L0_FAULTS, L0Fault } from './l0-matrix';
 import { L0_JS_FAULT_CODES, L0_SH_FAULT_CODES, L0_FAULT_NONE } from './l0-fault-codes';
@@ -78,7 +78,7 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
             invocations.finish('BLOCK_AI_CURE', 'some-rule', code);
             expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
-            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code, MATRIX_L2));
+            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code, MATRIX_L2_UNROWED));
             expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
             const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
@@ -129,7 +129,7 @@ describe('a log failure never throws', () => {
             invocations.finish('BLOCK_AI_CURE', 'r', 'C');
         }).not.toThrow();
 
-        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK_AI_CURE', 'why', '-', 'C', MATRIX_L2))).not.toThrow();
+        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK_AI_CURE', 'why', '-', 'C', MATRIX_L2_UNROWED))).not.toThrow();
 
         const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
         expect(() => logRejection('Edit', input, new BlockedResult('[r] (x)\nno', 'C'), root)).not.toThrow();

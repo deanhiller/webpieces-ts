@@ -37,9 +37,16 @@ openclaw plugins enable @webpieces/ai-hook-rules
 with an absolute `$CLAUDE_PROJECT_DIR/` path** so they resolve from any cwd:
 
 - `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit`. Runs the code-style rules.
-- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash|Read`. Runs the git/PR/branch guards
-  (`hookGuards` section): bash git/PR guards on `Bash`, and file guards like
-  `feature-branch-guard` on `Write|Edit|MultiEdit`. `Read` carries no guard — it is a
+- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash|Read`. Runs the git/PR/branch guards. The
+  `hookGuards` section carries exactly THREE keys, one per POLICY — `branch-state-guard`
+  ("may I work here, and is what I read current?"), `branch-creation-guard` ("should this branch or
+  worktree exist?") and `pr-lifecycle-guard` ("do PRs and merges go through the gated flow?"). Several
+  guard CLASSES sit behind each key, because the tool wiring differs even where the policy does not:
+  bash git/PR guards on `Bash`, and file guards like `feature-branch-guard` (a class under
+  `branch-state-guard`) on `Write|Edit|MultiEdit`. A class name is what a deny report and a decision-log
+  line carry as `rule=`; a config key is what you switch. `Read` is guarded ONLY by
+  `read-stale-guard` — another class under `branch-state-guard` — which blocks a read of a stale tree;
+  otherwise it is a
   log-and-allow fast path that records every file the AI opens in
   `.webpieces/logs/calls/<session>-<agent>-<hook>.log`
   (never blocked), so you can see whether the AI read a project's `design.json` before editing it.
@@ -101,7 +108,7 @@ self-heals it; a settings file that registers no webpieces hooks is never touche
 
 There is no runtime escape-hatch file. To stop enforcement, **uninstall the hook**
 (re-run `pnpm wp-install-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
-`webpieces.config.json` (`mode: "OFF"`, `ignoreModifiedUntilEpoch`, `ignoreRuleWhileOnBranch`)
+`webpieces.config.json` (`mode: "OFF"`, `turnOffRuleUntilEpoch`, `turnOffRuleWhileOnBranch`)
 and per-line opt-outs use `// webpieces-disable <rule> -- reason`.
 
 ## Starter rules

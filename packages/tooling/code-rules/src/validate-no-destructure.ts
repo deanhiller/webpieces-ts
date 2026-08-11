@@ -449,7 +449,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoDestructureValidator extends CodeValidator<NoDestructureConfig> {
     constructor(config: NoDestructureConfig) {
-        super(config, 'no-destructure');
+        super(config, 'no-destructure', 'no-destructure');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

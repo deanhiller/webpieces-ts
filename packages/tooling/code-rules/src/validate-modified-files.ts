@@ -317,7 +317,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class MaxFileLinesValidator extends CodeValidator<MaxFileLinesConfig> {
     constructor(config: MaxFileLinesConfig) {
-        super(config, 'max-file-lines');
+        super(config, 'max-file-lines', 'max-file-lines');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

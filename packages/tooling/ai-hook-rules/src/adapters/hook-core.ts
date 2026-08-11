@@ -1,8 +1,9 @@
 import * as path from 'path';
 
 import { run, runBash, runRead } from '../core/runner';
+import { branchStateHangTimeoutFor } from '../core/main-sync-timeout';
 import { logRejection, extractRuleNames } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0_BLOCK, MATRIX_L2 } from '../core/decision-log';
+import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0_BLOCK, matrixL2Row } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -182,12 +183,12 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
                 root,
-                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, MATRIX_L2),
+                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, matrixL2Row('config-bypass (feature-branch-guard skipped)')),
             );
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
             // refreshes the sync status. Fire-and-forget; never blocks the edit.
-            triggerMainSyncRefresh(root);
+            triggerMainSyncRefresh(root, branchStateHangTimeoutFor(cwd));
         }
         emitAllow();
     }
@@ -338,7 +339,7 @@ export async function runMain(mode: HookMode): Promise<void> {
                 invocationLog.begin(cwd, payload.tool_name, readPath);
                 // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
                 // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
-                triggerMainSyncRefresh(cwd);
+                triggerMainSyncRefresh(cwd, branchStateHangTimeoutFor(cwd));
             }
             handleRead(readPath, cwd, mode);
             emitAllow();

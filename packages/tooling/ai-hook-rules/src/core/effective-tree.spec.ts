@@ -35,14 +35,14 @@ function initRepo(dir: string): void {
     gitIn(dir, 'commit', '-m', 'init');
 }
 
-// Same seeder runner.spec uses: a fully valid config with ONLY pr-creation-or-push-guard armed, so
+// Same seeder runner.spec uses: a fully valid config with ONLY the PR-lifecycle policy armed, so
 // no other guard reads git state or spawns the detached main-sync refresher.
 function writeGuardConfig(root: string): void {
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
     const config = migrate({}).config as Record<string, any>;
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) {
-        config.hookGuards[name].mode = name === 'pr-creation-or-push-guard' ? 'ON' : 'OFF';
+        config.hookGuards[name].mode = name === 'pr-lifecycle-guard' ? 'ON' : 'OFF';
     }
     config.excludePaths = [];
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));

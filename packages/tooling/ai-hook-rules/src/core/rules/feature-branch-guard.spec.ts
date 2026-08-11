@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, FeatureBranchGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus, BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import type { FileContext } from '../types';
 
@@ -31,7 +31,7 @@ function ctx(relativePath: string = 'src/a.ts'): FileContext {
 }
 
 function rule(): FeatureBranchGuardRule {
-    const cfg = new FeatureBranchGuardConfig();
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return new FeatureBranchGuardRule(cfg);
 }

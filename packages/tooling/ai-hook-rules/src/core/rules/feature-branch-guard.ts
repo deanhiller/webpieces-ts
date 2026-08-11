@@ -1,7 +1,8 @@
 import { execSync } from 'child_process';
 
 import {
-    FeatureBranchGuardConfig,
+    BranchStateGuardConfig,
+    BRANCH_STATE_GUARD_KEY,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     squashRecoverySteps,
@@ -15,7 +16,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
@@ -33,8 +34,10 @@ import { TreeRecovery } from './tree-recovery';
  * hookGuard); file-scoped, so only Write/Edit/MultiEdit are guarded — Bash passes through so the AI
  * can still run `pnpm wp-start-upsert-pr` and the rest of the recovery flow.
  */
-export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfig> {
-    constructor(config: FeatureBranchGuardConfig) { super(config, 'feature-branch-guard'); }
+export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig> {
+    // NAME is this class's operator identity (every `rule=` in the log, every deny header);
+    // CONFIG KEY is the one branch-state policy entry all four of these guards read. See AbstractRule.
+    constructor(config: BranchStateGuardConfig) { super(config, 'feature-branch-guard', BRANCH_STATE_GUARD_KEY); }
 
     readonly description = 'Block edits unless you are on a proper feature branch (not main, not already-merged, forked, in sync with main).';
     override readonly files = ['**/*'];
@@ -48,7 +51,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         [
             new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
             new Option('main moved/conflicts, NO PR yet → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. An OPEN PR? then you MUST use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr` (the merge rewrites the branch, so the PR must be re-pointed in the same run). Never mix a start from one pair with a finish from the other.'),
-            new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
+            new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
 
@@ -94,6 +97,15 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         if (status.conflict) {
             return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles, status.openPr), cache);
         }
+        // NOT-MERGED, or NOT-ASKED? `branchAlreadyMerged: false` is produced both by "this branch has
+        // no merged PR" and by "the forge could not be reached" (`gh` missing, unauthenticated,
+        // rate-limited, offline). Same allow either way — never block on data you could not establish
+        // — but the LOG must not call the second one an approval, or the trail cannot tell a policy
+        // that is protecting something from one that is quietly standing down.
+        // Reached only when the branch is NOT merged, HAS a fork point and does NOT conflict. The
+        // last two are pure git; only the first depends on the forge, which is why an unreachable
+        // forge downgrades this to an abstention rather than leaving it a clean approval.
+        if (!status.forgeReachable) return this.failOpen(ctx, branch, 'no-forge', cache);
         return this.allow(ctx, branch, 'clean-feature-branch', cache);
     }
 
@@ -135,7 +147,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     private logDecision(ctx: FileContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, matrixL2Row(reason)),
         );
     }
 
