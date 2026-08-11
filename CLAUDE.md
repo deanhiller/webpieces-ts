@@ -652,21 +652,27 @@ interchangeable:
   ```bash
   pnpm wp-land-pr && git checkout main && git pull origin main && pnpm wp-cleanup
   ```
-- in a linked worktree — land, then reap the now-dead worktree **from the primary clone**, always
-  prune → remove → delete in that order (git refuses to delete a branch a worktree still holds, so
-  `wp-cleanup` deliberately spares it):
+- in a linked worktree — land, then run the same cleanup **from the primary clone** (`wp-cleanup`
+  deliberately spares the worktree you are standing in, so it cannot reap the one you are inside):
   ```bash
   pnpm wp-land-pr
-  git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
+  pnpm wp-cleanup     # from the primary clone
   ```
-  That `git branch -D` is the one sanctioned use of it: for **branches**, still `pnpm wp-cleanup`,
-  never `git branch -D` by hand.
 
-Either way `wp-cleanup` deletes only provably-dead branches (merged PR, squash-merge backup of one,
-or no commits of their own), spares everything else for a human, and logs each deletion with its
-pre-delete SHA and a `recover=` command. Do not stop to ask whether it is safe to run, and do not
-treat picking the right form as a reason to deliberate — it is the sanctioned cleanup command, and
-asking is what let stale branches pile up in the first place.
+`wp-cleanup` reaps **worktrees first, then branches**, and that order is the whole fix: a worktree HOLDS
+its branch, so reaping the tree is what makes the branch reapable, and the branch pass then recomputes
+its verdicts against the post-removal truth. Do not hand-run `git worktree prune`/`remove` or
+`git branch -D` — the tool does both, in the right order, and archives what it removes.
+
+It removes only what it can PROVE is dead: a worktree whose directory is already gone, or whose branch
+is dead by a merged PR (its own, or the one it snapshots); a branch that is merged, is a squash-merge
+backup of a merged one, or has no commits of its own. Everything short of that is spared or offered as a
+question — a LOCKED worktree, the one you are standing in, a detached HEAD, and any branch not provably
+merged (including one with no commits yet, which is what every worktree looks like while an agent is
+still working in it). Every removal is logged with its pre-delete SHA and a `recover=` command that
+brings back both the directory and its branch. Do not stop to ask whether it is safe to run — it is the
+sanctioned cleanup command, and asking is what let stale branches and worktrees pile up in the first
+place.
 
 **The ONLY reasons to stop before posting the PR:**
 - The human explicitly said "don't open a PR yet."

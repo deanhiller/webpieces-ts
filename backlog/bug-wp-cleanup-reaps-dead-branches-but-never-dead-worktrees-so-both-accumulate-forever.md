@@ -1,3 +1,33 @@
+> # ✅ RESOLVED — fixed **2026-07-30** by [#512](https://github.com/deanhiller/webpieces-ts/pull/512).
+> Kept as a forensic record only.
+>
+> Re-verified today by reading the shipped code, not by trusting the PR title:
+>
+> - `packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts` — `WorktreeCleanupSection`, the
+>   worktree half of `wp-cleanup`: it computes FRESH verdicts (never the cache on disk, which is allowed
+>   to go stale for BLOCKING and never for removing a directory), reaps the provably-dead ones, prints
+>   the spared ones with why, and PROMPTS about the probably-dead ones.
+> - `packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts` — runs that section BEFORE the
+>   branch pass, and its header states the reasoning this report asked for: *"WORKTREES FIRST, then
+>   branches. The order is the fix, not a detail: a worktree HOLDS its branch."* The branch pass then
+>   recomputes its verdicts against the post-removal truth, so a branch freed by a reap is no longer
+>   spared as `in-use`. That closes the self-reinforcing loop this report is about.
+>
+> **What it does NOT do, stated so the fix is not over-read.** Only a provably-dead worktree is removed:
+> one whose directory is already gone (`prunable-worktree`), or whose branch is dead by a merged PR —
+> its own or that of the branch it snapshots (`classifyWorktrees` in `rules-config/merged-branches.ts`).
+> Everything else is spared or offered as a question: a LOCKED tree ("a human said do not touch"), the
+> tree you are standing in, a detached HEAD, and any branch short of provably merged — *including one
+> with no commits yet, which is what every worktree looks like while an agent is working in it*. Removal
+> is logged to `.webpieces/logs/branch-mutations.log` (phase `REAP_WORKTREE`) with a `recover=` command
+> that restores both the directory and its branch, and git's refusal to remove a tree holding
+> uncommitted or untracked files is kept, not forced.
+>
+> `CLAUDE.md`'s cleanup section described the pre-fix world until 2026-08-11 — it still prescribed a
+> hand-run `git worktree prune && git worktree remove && git branch -D` and claimed `wp-cleanup`
+> "deliberately spares" a worktree-held branch. That prose is corrected in the same change as this
+> banner.
+
 # BUG: `wp-cleanup` reaps dead branches but never dead worktrees — and a live worktree pins its branch, so both accumulate forever
 
 **Package:** `@webpieces/pr-gate` + `@webpieces/rules-config`

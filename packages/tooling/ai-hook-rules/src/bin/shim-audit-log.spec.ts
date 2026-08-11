@@ -6,7 +6,9 @@ import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/rules-config';
 
-import { renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RESOLVE_LOG_DIR_SH } from './shim';
+import {
+    renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, ShimLogVerdict, RESOLVE_LOG_DIR_SH,
+} from './shim';
 import { L0_FAULTS, L0Fault } from '../core/l0-matrix';
 import { ShimTestkit } from './shim-testkit';
 import { L0_SHIM_STREAM } from '../core/log-streams';
@@ -477,7 +479,27 @@ describe('the log vocabulary is the matrix vocabulary', () => {
     it('emits only verdicts the documented table names', () => {
         const shim = renderShim();
         for (const verdict of SHIM_LOG_VERDICTS) {
-            expect(shim, `verdict ${verdict} is never emitted`).toContain(verdict);
+            expect(shim, `verdict ${verdict.label} is never emitted`).toContain(verdict.label);
+            expect(verdict.means, `verdict ${verdict.label} has no meaning for the doc`).not.toBe('');
+        }
+    });
+
+    /**
+     * …AND THE OTHER DIRECTION, which is the half that was missing: `DENY-UNDECLARED` has been emitted
+     * by the shim since fault U existed, while SHIM_LOG_VERDICTS never listed it — so the vocabulary the
+     * doc renders was short by one verdict and no test could say so.
+     */
+    it('declares every verdict label the shim assigns', () => {
+        const shim = renderShim();
+        // The three places the shim NAMES a verdict: the pass-through assignment, the deny label, and
+        // the literal third argument of wp_log. Scraping every ALLOW-ish word instead would match prose.
+        const assigned = /(?:WP_VERDICT=|DENY_LABEL=")([A-Z][A-Z-]*)/g;
+        const logged = /wp_log "\$WP_FAULT" ([A-Z][A-Z-]*)/g;
+        const emitted = [...shim.matchAll(assigned), ...shim.matchAll(logged)]
+            .map((m: RegExpMatchArray): string => m[1]);
+        const declared = new Set(SHIM_LOG_VERDICTS.map((v: ShimLogVerdict): string => v.label));
+        for (const label of new Set(emitted)) {
+            expect(declared.has(label), `the shim emits ${label}, which SHIM_LOG_VERDICTS does not declare`).toBe(true);
         }
     });
 });

@@ -113,6 +113,13 @@ export const L0_FAULT_NAMES: Readonly<Record<L0FaultCode, string>> = {
 };
 
 /**
+ * The LAYER token — the other half of every join key, spelled once. The deny header, the matrix
+ * citation, the sh audit line and guards/L0-tooling.md all read it from here, so `grep layer=L0` cannot
+ * miss an artifact that typed the token itself.
+ */
+export const L0_LAYER = 'L0';
+
+/**
  * The three rows of L0's decision matrix, by number — the numbers `renderGuardMatrixDoc` prints, the
  * numbers the audit line's `row=` carries, and the numbers a deny cites. L0's matrix has no genuine
  * second dimension: every branch reduces to `fault present?` x `on the allowlist?`.
@@ -139,7 +146,7 @@ export const L0_ROW_BLOCKED = '3';
  */
 // webpieces-disable no-function-outside-class -- pure string builder over this leaf module's own constants; it must stay importable by the dependency-free shim renderer.
 export function l0GuardHeader(fault: L0FaultCode, detail: string): string {
-    return `[${L0_FAULT_NAMES[fault]}] (layer=L0 fault=${fault} row=${L0_ROW_BLOCKED}, ${detail})`;
+    return `[${L0_FAULT_NAMES[fault]}] (layer=${L0_LAYER} fault=${fault} row=${L0_ROW_BLOCKED}, ${detail})`;
 }
 
 /**
@@ -148,5 +155,5 @@ export function l0GuardHeader(fault: L0FaultCode, detail: string): string {
  */
 // webpieces-disable no-function-outside-class -- sibling of l0GuardHeader in this leaf codebook module.
 export function l0MatrixCitation(fault: L0FaultCode): string {
-    return `matrix row ${L0_ROW_BLOCKED}: fault=${fault} present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=${L0_ROW_BLOCKED} fault=${fault}) and the same row webpieces.guard-matrix.md prints.`;
+    return `matrix row ${L0_ROW_BLOCKED}: fault=${fault} present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=${L0_LAYER} row=${L0_ROW_BLOCKED} fault=${fault}) and the same row webpieces.guard-matrix.md prints.`;
 }
