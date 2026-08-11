@@ -18,39 +18,27 @@ const FIX_HINT = new FixHint(
     + '\n'
     + GUIDANCE.flows().join('\n') + '\n'
     + '\n'
-    + 'Either flow does a 3-point merge (fork-point=A, feature-HEAD=B, main-HEAD=C). WHY that matters:\n'
-    + 'the fork point must be a pure main commit holding none of your work, AND your branch must hold\n'
-    + 'none of main\'s commits after it — only then is diff(fork point → HEAD) exactly your changes.\n'
-    + 'Three things read that diff: the 3-point merge (B−A vs C−A is how conflicts are resolved), the\n'
-    + 'build gate (`nx affected --base=` is the fork point, so it rebuilds only your work), and the PR\n'
-    + 'review diff. A raw `git merge`/`git rebase` breaks BOTH halves at once — your branch takes on\n'
-    + 'main\'s commits and the base stops being a clean main state — so all three then describe work you\n'
-    + 'did not do. The gated flow squash-rewrites and force-pushes precisely to restore that invariant\n'
-    + '(branch = current main + one commit that is exactly your work); the rewrite IS the mechanism, not\n'
-    + 'a side effect. It also means you must NEVER run these commands on a branch another session owns.\n'
-    + 'The gated commands merge internally as child processes this hook never sees, so they are\n'
-    + 'unaffected by this guard.\n'
+    // The fork-point DERIVATION (why the invariant has two halves, and the three consumers a polluted
+    // fork point corrupts) and the WORD-FOR-WORD warning to hand the human are NOT here on purpose.
+    // Both are stated in full in the git-workflow doc this hint links by absolute path, and a message
+    // that re-derives what the linked doc already says is a second copy to keep in step. What survives
+    // here is only what changes what the AI types next.
+    + 'Either flow does a 3-point merge, which keeps the fork point a pure main commit — what the build\n'
+    + 'gate\'s --base and the PR review diff are computed from; a raw merge/rebase destroys it. The\n'
+    + 'gated commands merge internally as child processes this hook never sees.\n'
     + '\n'
     + GUIDANCE.readOnlyChecks().join('\n') + '\n'
     + '\n'
-    + 'If you believe a raw merge/rebase is genuinely required, do NOT run it and do NOT work around\n'
-    + 'this guard. STOP and ask the HUMAN to run that exact command themselves — and when you ask,\n'
-    + 'warn them, in these words:\n'
-    + '\n'
-    + '  "I am asking you to run a raw git merge/rebase. This is almost always the WRONG call —\n'
-    + '   the gated pair for my situation (`wp-start-update` → `wp-finish-update` with no PR, or\n'
-    + '   `wp-start-upsert-pr` → `wp-finish-upsert-pr` when a PR is open) does a 3-point merge and is\n'
-    + '   the correct flow. Please push back and tell me to use the 3-point merge instead, unless you\n'
-    + '   are certain this is a genuine exception."\n'
-    + '\n'
-    + 'READ the instruct-ai git-workflow doc at the absolute path on the violation line above for the\n'
-    + 'full flow (incl. worktrees).\n'
+    // The "do not run it, ask the human, tell them to push back" instruction is NOT repeated here: the
+    // violation line the AI reads first already says it. This paragraph's job is only the pointer.
+    + 'READ the instruct-ai git-workflow doc at the absolute path on the violation line above — the full\n'
+    + 'flow (incl. worktrees), the fork-point invariant, why you must never sync a branch another\n'
+    + 'session owns, and the exact words to warn a human with when you ask them to run a merge.\n'
     // NOT "add that info to memory": "that info" was the whole git-workflow doc, which is REGENERATED
     // per repo and per version — memorizing it guarantees a stale recall in the next session. Only the
     // invariant is stable enough to persist; the doc must be re-read, never remembered.
-    + 'Add to memory: never run a raw `git merge`/`git rebase` — use this repo\'s gated sync flow, and\n'
-    + 're-read its git-workflow doc each time rather than recalling it (it is regenerated per repo and\n'
-    + 'per version, so a remembered copy will be wrong).',
+    + 'Add to memory: never run a raw `git merge`/`git rebase` — use this repo\'s gated sync flow and\n'
+    + 're-read its git-workflow doc each time rather than recalling it (regenerated per repo/version).',
 );
 
 // `git merge --abort` / `git rebase --abort|--quit` UNDO an in-progress operation — they cannot create
