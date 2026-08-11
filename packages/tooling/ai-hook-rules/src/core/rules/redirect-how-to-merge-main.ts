@@ -32,9 +32,14 @@ const FIX_HINT = new FixHint(
     + '\n'
     // The "do not run it, ask the human, tell them to push back" instruction is NOT repeated here: the
     // violation line the AI reads first already says it. This paragraph's job is only the pointer.
+    // The liveness phrase is kept on ONE line deliberately: it is asserted in full, and a wrap would
+    // split the assertion's substring across two chunks. The retired wording ("a branch you do not own")
+    // was pinned only by a `never sync a branch` PREFIX, which passed under both framings — which is how
+    // this hint kept teaching the removed rule after the doc it links had replaced it.
     + 'READ the instruct-ai git-workflow doc at the absolute path on the violation line above — the full\n'
-    + 'flow (incl. worktrees), the fork-point invariant, why you must never sync a branch another\n'
-    + 'session owns, and the exact words to warn a human with when you ask them to run a merge.\n'
+    + 'flow (incl. worktrees), the fork-point invariant, why you must\n'
+    + 'never sync a branch something is ACTIVELY holding (liveness, not authorship — a finished agent\n'
+    + 'holds nothing), and the exact words to warn a human with when you ask them to run a merge.\n'
     // NOT "add that info to memory": "that info" was the whole git-workflow doc, which is REGENERATED
     // per repo and per version — memorizing it guarantees a stale recall in the next session. Only the
     // invariant is stable enough to persist; the doc must be re-read, never remembered.

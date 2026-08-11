@@ -94,12 +94,26 @@ one commit. And since this repo squash-merges PRs anyway, those individual commi
 survive into main's history — the `<feature>PreMerge<n>` snapshot branches exist precisely to preserve
 the original pre-squash history for debugging, which is their entire purpose.
 
-**Consequence — never sync a branch you do not own.** Because the flow rewrites history and
-force-pushes, **never run `pnpm wp-start-upsert-pr` (or `pnpm wp-start-update`) against a branch that
-another process, session, or agent owns.** This is not caution or etiquette, it is a correctness
-requirement: that other process's fork point and its `PreMerge<n>` snapshot trail would be replaced
-underneath it mid-flight, and the work it was holding becomes unrecoverable-by-construction. If you
-find yourself looking at an open PR on a branch this session did not create, leave it alone.
+**Consequence — never sync a branch something is ACTIVELY holding.** Because the flow rewrites history
+and force-pushes, **never run `pnpm wp-start-upsert-pr` (or `pnpm wp-start-update`) against a branch a
+live process, session, or agent is working on right now.** This is not caution or etiquette, it is a
+correctness requirement: that process's fork point and its `PreMerge<n>` snapshot trail would be
+replaced underneath it mid-flight, and the work it was holding becomes unrecoverable-by-construction.
+
+**The test is LIVENESS, not authorship.** "This session did not create it" is the wrong question — a
+branch whose owner has finished is not owned by anyone, and taking it over is often exactly what needs
+to happen (an agent that stalled mid-flow leaves a real PR that still has to land). Ask instead whether
+anything is holding it *now*:
+
+- `git worktree list` marks a live agent's worktree **`locked`** — the harness locks it for the agent's
+  lifetime and releases it on completion. Locked means hands off.
+- An agent that has finished, stalled, or been interrupted is NOT holding its branch. Prefer waking that
+  agent — it still has the context — but if it is genuinely gone, the branch is yours to finish.
+- Two LIVE sessions on one branch is the case this forbids, and it stays forbidden.
+
+Conflicts themselves are not a reason to stop: the 3-point merge shows you base, ours and theirs, so
+both sides' intent is visible and `/wp-merge` resolves them. Escalate to a human only when the two
+intents genuinely disagree — not merely because the text does.
 
 Sync only via the gated 3-point squash-update — `pnpm wp-start-update` when no PR is open,
 `pnpm wp-start-upsert-pr` when one is (see "Which flow?" below).
