@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { renderL1Doc } from '../packages/tooling/ai-hook-rules/src/core/l1-doc';
+import { L0ToolingDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-tooling-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
 
 /**
@@ -13,6 +14,11 @@ import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
  * TWO KINDS of output, and the difference matters:
  *
  *   docs      `guards/L1-location.md` — rendered from L1_ROWS, the array the guard itself consults.
+ *             `guards/L0-tooling.md` — PARTLY rendered: the block between the two markers
+ *             (`L0_DOC_BEGIN`/`L0_DOC_END`) is spliced from L0_FAULTS + L0_ALLOWLIST + the managed-surface
+ *             constants + SHIM_LOG_FIELDS; every byte outside it is hand-written prose and is preserved.
+ *             That doc is the largest guard doc in the repo and the only hand-written one, and it is the
+ *             only one that has ever gone stale — twice in one session.
  *   templates `packages/tooling/ai-hook-rules/templates/ai-hook.sh` — the POSIX-sh hook, rendered from
  *             renderShim(). These used to have NO command at all: their
  *             byte-lock specs quoted a `fs.writeFileSync(...)` snippet in a comment for a human to
@@ -36,6 +42,13 @@ function main(): void {
     const doc = path.join(root, 'guards', 'L1-location.md');
     fs.writeFileSync(doc, renderL1Doc(), 'utf8');
     wrote.push(doc);
+
+    // L0's doc is SPLICED, not overwritten: read what is committed, replace only the marked block, write
+    // it back. splice() throws when the marker pair is missing or doubled, so a doc that silently stopped
+    // being generated fails here rather than drifting quietly.
+    const l0 = path.join(root, 'guards', 'L0-tooling.md');
+    fs.writeFileSync(l0, new L0ToolingDoc().splice(fs.readFileSync(l0, 'utf8')), 'utf8');
+    wrote.push(l0);
 
     const templates = path.join(root, 'packages', 'tooling', 'ai-hook-rules', 'templates');
     const shim = path.join(templates, 'ai-hook.sh');

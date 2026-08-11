@@ -2,7 +2,7 @@ import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpiece
 import { L0_SHIM_STREAM } from '../core/log-streams';
 
 import {
-    L0_FAULT_NONE, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,
+    L0_FAULT_NONE, L0_LAYER, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,
 } from '../core/l0-fault-codes';
 
 // ---------------------------------------------------------------------------
@@ -42,25 +42,38 @@ import {
 export const SHIM_LOG_MAX_BYTES = 512 * 1024;
 
 /**
+ * One verdict label the shim can record, WITH what it means. Data-only → a class, per CLAUDE.md.
+ *
+ * The meaning travels with the label because guards/L0-tooling.md renders this table rather than
+ * restating it: a bare `string[]` left the meanings in prose, and the prose is what went stale (the
+ * hand-written doc documented `DENY-UNDECLARED` for releases while this array did not list it at all).
+ */
+export class ShimLogVerdict {
+    constructor(
+        readonly label: string,
+        readonly means: string,
+    ) {}
+}
+
+/**
  * The verdict vocabulary one shim invocation can record, and how each maps to guards/L0-tooling.md.
  *
- * The three ALLOW-* and three DENY-* labels are the ones this log has always used and are kept
- * verbatim, so anything already grepping them keeps working. `PASS-BIN-*` is new: it is the healthy
- * case the log used to be silent about.
- *
- *   PASS-BIN-ALLOW  no sh-side fault; the bin ran and returned 0  → matrix row 1 (no fault → L1)
- *   PASS-BIN-BLOCK  no sh-side fault; the bin ran and returned 2  → matrix row 1; a LATER layer blocked
- *   ALLOW-READ      allowlist entry 1 (any Read)                  → PASS, terminal here (use case 10)
- *   ALLOW-CONFIG    allowlist entry 2 (webpieces.config.json)     → PASS, terminal here
- *   ALLOW-CURE      allowlist entries 3-8 (a cure command)        → ALLOW
- *   DENY            fault X, not on the allowlist                 → BLOCK_AI_CURE
- *   DENY-STALE      fault D, not on the allowlist                 → BLOCK_AI_CURE
- *   DENY-BROKEN     fault K, not on the allowlist                 → BLOCK_AI_CURE
+ * The ALLOW-* and DENY-* labels are the ones this log has always used and are kept verbatim, so
+ * anything already grepping them keeps working. `PASS-BIN-*` is the healthy case the log used to be
+ * silent about, and `DENY-UNDECLARED` is fault U's — emitted by the shim since U existed, but missing
+ * from this array until the generated doc started reading it.
  */
-export const SHIM_LOG_VERDICTS = [
-    'PASS-BIN-ALLOW', 'PASS-BIN-BLOCK', 'ALLOW-READ', 'ALLOW-CONFIG', 'ALLOW-CURE',
-    'DENY', 'DENY-STALE', 'DENY-BROKEN',
-] as const;
+export const SHIM_LOG_VERDICTS: readonly ShimLogVerdict[] = [
+    new ShimLogVerdict('PASS-BIN-ALLOW', 'no sh-side fault; the bin ran and exited 0 — matrix row 1, handed down to L1'),
+    new ShimLogVerdict('PASS-BIN-BLOCK', 'no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked'),
+    new ShimLogVerdict('ALLOW-READ', 'allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran)'),
+    new ShimLogVerdict('ALLOW-CONFIG', 'allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here'),
+    new ShimLogVerdict('ALLOW-CURE', 'a Bash entry of the allowlist matched — ALLOW'),
+    new ShimLogVerdict('DENY', 'fault X, not on the allowlist — BLOCK_AI_CURE'),
+    new ShimLogVerdict('DENY-UNDECLARED', 'fault U, not on the allowlist — BLOCK_AI_CURE'),
+    new ShimLogVerdict('DENY-STALE', 'fault D, not on the allowlist — BLOCK_AI_CURE'),
+    new ShimLogVerdict('DENY-BROKEN', 'fault K, not on the allowlist — BLOCK_AI_CURE'),
+];
 
 /**
  * The sh-side L0 fault codes, IMPORTED from the one codebook (../core/l0-fault-codes) rather than
@@ -70,6 +83,70 @@ export const SHIM_LOG_VERDICTS = [
  * field, so a `-` here is a statement about this layer only, never a claim that nothing was wrong.
  */
 export const SHIM_LOG_FAULTS = [...L0_SH_FAULT_CODES, L0_FAULT_NONE] as const;
+
+/**
+ * One FIELD of the audit line: how it reads on disk, the sh expression that produces it, and what it
+ * answers. Data-only → a class, per CLAUDE.md.
+ */
+export class ShimLogField {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        readonly label: string,
+        /** The sh word spliced into the printf below — the ONE place this field's value is spelled. */
+        readonly shValue: string,
+        readonly means: string,
+        /**
+         * True for a field that is printed only SOMETIMES (`bin=`, and only when it differs from
+         * `shim=`). Such a field carries its OWN trailing tab in its sh value and therefore renders
+         * with NO separator of its own — `%s%s` glues it to the next field, so an empty value leaves
+         * the line one field shorter rather than leaving a stray tab behind.
+         */
+        readonly optional: boolean = false,
+    ) {}
+}
+
+/**
+ * THE LINE, as data. The printf below is BUILT from this array and guards/L0-tooling.md RENDERS it, so
+ * a field cannot be added, dropped or reordered without both the shim and the doc changing with it.
+ *
+ * That is not decoration: `shim=`/`bin=` were inserted mid-line (deliberately breaking positional
+ * readers rather than appending where a stale parser keeps working), then `layer=`/`row=` joined them,
+ * and the hand-written doc went on describing a 7-field line with no `U` in its fault set the whole time.
+ */
+export const SHIM_LOG_FIELDS: readonly ShimLogField[] = [
+    new ShimLogField('<iso-ts>', `"$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)"`,
+        'when the shim judged the call, local time with offset'),
+    new ShimLogField('<bin-name>', '"$BIN_NAME"',
+        'WHICH hook ran - wp-ai-guards-hook or wp-ai-rules-hook; Claude Code runs them in parallel'),
+    new ShimLogField('<tool>', '"$TOOL"', 'the PreToolUse tool name (Bash, Read, Write, Edit, …)'),
+    new ShimLogField('tree=<name|primary>', '"tree=$WP_TREE"',
+        'git\'s own name for the worktree the CALL was made in, derived from the payload\'s cwd'),
+    new ShimLogField(`layer=${L0_LAYER}`, `"layer=${L0_LAYER}"`,
+        'the layer that judged it — constant here, and the first half of the join key a deny cites'),
+    new ShimLogField(`row=<${L0_ROW_HANDED_DOWN}|${L0_ROW_ALLOWLISTED}|${L0_ROW_BLOCKED}>`, '"row=$_wp_row"',
+        'WHICH row of the three-row matrix this call took, read off the verdict (hand-down / allowlisted / blocked)'),
+    new ShimLogField('shim=<root>', '"shim=$ROOT"',
+        'WHICH COPY of ai-hook.sh ran, resolved from $0 — against tree= it is the straddle detector'),
+    new ShimLogField('bin=<root>', '"$_wp_bin"',
+        'WHICH TREE supplied the binary — printed ONLY when it differs from shim=, so its presence IS the borrow',
+        true),
+    new ShimLogField(`fault=<${SHIM_LOG_FAULTS.join('|')}>`, '"fault=$1"',
+        'the sh-side L0 fault, or `-`; S/C/Y are the binary\'s and are stamped on ITS streams'),
+    new ShimLogField('<VERDICT>', '"$2"', 'one of the verdict labels below — kept adjacent to the command'),
+    new ShimLogField('<command>', '"$CMD_LOG"',
+        'the command PREFIX (the audit spelling; the DECISION reads $CMD, which fails closed on a quote)'),
+];
+
+/**
+ * The writer's `printf`, assembled from SHIM_LOG_FIELDS — one `%s` per field, in the same order, and a
+ * tab after every field EXCEPT an optional one (which carries its own). Retyping either half is what
+ * let the format and its documentation disagree, so neither half is retyped anywhere.
+ */
+export const SHIM_LOG_PRINTF =
+    `printf '${SHIM_LOG_FIELDS.map(
+        (f: ShimLogField, i: number): string => '%s' + (i === SHIM_LOG_FIELDS.length - 1 ? '' : (f.optional ? '' : '\\t')),
+    ).join('')}\\n' `
+    + `${SHIM_LOG_FIELDS.map((f: ShimLogField): string => f.shValue).join(' ')} >> "$_wp_f"`;
 
 /**
  * Shell fragment: derive WHERE this call's log belongs — the sh TWIN of `DotWebpieces.local()` +
@@ -128,13 +205,13 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
 /**
  * Shell fragment: the audit-log writer itself — `wp_log <fault> <verdict>`, one tab-separated line.
  *
- * FORMAT (10 fields, tab-separated, append-only; 11 with the optional `bin=`):
- *   <iso-ts>  <bin-name>  <tool>  tree=<name|primary>  layer=L0  row=<1|2|3>  shim=<root>
- *   [bin=<root>]  fault=<D|X|U|K|->  <VERDICT>  <command>
+ * FORMAT: SHIM_LOG_FIELDS, tab-separated, append-only — that array IS the format, and SHIM_LOG_PRINTF
+ * is built from it, so neither this docblock nor guards/L0-tooling.md can describe a line the shim does
+ * not write.
  *
  * `tree=` and `fault=` are the two fields that make the file reconcilable against guards/L0-tooling.md:
  * the first says WHICH checkout produced the line (a shared log across seven worktrees is otherwise
- * unreadable), the second says which of the six documented faults the sh half detected. The verdict
+ * unreadable), the second says which of the sh-side faults the shim detected. The verdict
  * keeps its historical spelling and stays adjacent to the command, so `grep 'DENY-STALE\\t'` still
  * finds what it always found.
  *
@@ -204,6 +281,6 @@ wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
     # what distinguishes it from the ~50 constant bytes 'bin=' used to spend above.
     _wp_row=${L0_ROW_HANDED_DOWN}
     case "$2" in ALLOW*) _wp_row=${L0_ROW_ALLOWLISTED} ;; DENY*) _wp_row=${L0_ROW_BLOCKED} ;; esac
-    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "layer=L0" "row=$_wp_row" "shim=$ROOT" "$_wp_bin" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
+    ${SHIM_LOG_PRINTF}
   } 2>/dev/null || true
 }`;
