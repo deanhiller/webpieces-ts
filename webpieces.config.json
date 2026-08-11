@@ -218,6 +218,13 @@
         }
     },
     "hookGuards": {
+        "branch-state-guard": {
+            "mode": "ON",
+            "branchNamingConvention": "{whoami}/{featurename}",
+            "hangTimeoutMinutes": 5,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "branch-creation-guard": {
             "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
@@ -227,44 +234,7 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
-        "read-stale-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "merge-in-progress-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "redirect-how-to-merge-main": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "feature-branch-guard": {
-            "mode": "ON",
-            "branchNamingConvention": "{whoami}/{featurename}",
-            "hangTimeoutMinutes": 5,
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "pr-creation-or-push-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "pr-merge-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "merged-branch-bash-guard": {
-            "mode": "ON",
-            "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
-        },
-        "stale-main-bash-guard": {
+        "pr-lifecycle-guard": {
             "mode": "ON",
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
@@ -379,7 +349,7 @@
                 }
             ]
         },
-        "guardHintsWhy": "The command strings the bash guards print in their fix hints — each name binds to exactly one guard (prCreationOrPush -> pr-creation-or-push-guard, mergeInProgress -> merge-in-progress-guard). Rename a gated command here and every guard message follows. These were the flat commands.upsertPr / commands.mergeComplete keys, which are now RETIRED.",
+        "guardHintsWhy": "The command strings the PR-lifecycle guards print in their fix hints. prCreationOrPush -> the push/PR-creation block, mergeInProgress -> the unvalidated-merge block. This is the ONLY place these strings live: the per-guard upsertPrCommand / mergeCompleteCommand fields were second spellings of these, they BEAT this section at the point of use, and they are now DELETED. Rename a gated command here and every guard message follows — which is true as of the 9->3 hookGuards collapse, and was not true before it.",
         "guardHints": {
             "prCreationOrPush": "pnpm wp-start-upsert-pr",
             "mergeInProgress": "pnpm wp-finish-upsert-pr"
