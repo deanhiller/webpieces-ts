@@ -295,6 +295,56 @@ describe('WebpiecesVersions — reading', () => {
         expect(versions.forTree(dirs.wt).installed).toBeNull();
     });
 
+    /**
+     * The shape a consumer repo writes when it keeps the whole @webpieces family in lockstep: the version
+     * appears ONCE, on the first family member, and every other entry aliases it. The umbrella's own value
+     * is then `*wp`, not a digit — which used to read as null and silently drop the trinary compare's
+     * third leg, on precisely the repos that pin most carefully.
+     */
+    it('follows a YAML alias to the anchor that defines the version', () => {
+        const root = tmp();
+        fs.writeFileSync(
+            path.join(root, 'pnpm-workspace.yaml'),
+            `catalog:\n  '@webpieces/core-context': &wp 0.4.634\n  '@webpieces/core-util': *wp\n  '${PKG}': *wp\n  inversify: 7.10.4\n`,
+        );
+        expect(new WebpiecesVersions().forTree(root).pinned).toBe('0.4.634');
+    });
+
+    /** The mirror image: the umbrella's own line is where the anchor is DEFINED. `&wp` names it, it is not it. */
+    it('steps over an anchor DEFINED on the umbrella line', () => {
+        const root = tmp();
+        fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': &wp 0.4.637\n  '@webpieces/core-util': *wp\n`);
+        expect(new WebpiecesVersions().forTree(root).pinned).toBe('0.4.637');
+    });
+
+    /**
+     * The repos that use an anchor also EXPLAIN it in a comment directly above the catalog, and that
+     * prose contains the literal `&wp`. A bare anchor search reads the next word out of the SENTENCE —
+     * which is how the first cut of this fix still returned null on the real file it was written for.
+     */
+    it('ignores an anchor name that appears in a comment', () => {
+        const root = tmp();
+        fs.writeFileSync(
+            path.join(root, 'pnpm-workspace.yaml'),
+            `# their version is defined ONCE via the &wp YAML anchor below and every entry aliases it.\ncatalog:\n  '@webpieces/core-context': &wp 0.4.634\n  '${PKG}': *wp\n`,
+        );
+        expect(new WebpiecesVersions().forTree(root).pinned).toBe('0.4.634');
+    });
+
+    /** An alias with no definition is unreadable, not a version — and unreadable must stay "no opinion". */
+    it('returns null for a dangling alias rather than guessing', () => {
+        const root = tmp();
+        fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': *missing\n`);
+        expect(new WebpiecesVersions().forTree(root).pinned).toBeNull();
+    });
+
+    /** A RANGE stays null through an alias too — resolving one must not smuggle in an incomparable spec. */
+    it('returns null when the anchor resolves to a range', () => {
+        const root = tmp();
+        fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '@webpieces/core-util': &wp ^0.4.0\n  '${PKG}': *wp\n`);
+        expect(new WebpiecesVersions().forTree(root).pinned).toBeNull();
+    });
+
     it('quartet.inSync is true only when every readable version agrees', () => {
         const agree = pair('0.4.616', '0.4.616');
         const disagree = pair('0.4.616', '0.4.612');
