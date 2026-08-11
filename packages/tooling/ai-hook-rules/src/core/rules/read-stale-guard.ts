@@ -16,6 +16,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
@@ -104,7 +105,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
 
         // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
         // BOTH states — the merged-branch signal comes out of that same cache.
-        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
 
         // Escape valve 3 — the read half of the config escape hatch. Ahead of BOTH states' blocks so
         // the agent can always read-then-edit the file that turns this guard off.

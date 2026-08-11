@@ -16,6 +16,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
@@ -69,7 +70,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         }
 
         // Keep the cache warm for the next call. Detached; never blocks this edit.
-        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
 
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it

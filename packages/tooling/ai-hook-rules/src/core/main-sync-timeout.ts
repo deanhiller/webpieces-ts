@@ -1,5 +1,6 @@
 import {
-    loadAndValidate, WebpiecesRulesConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES,
+    loadAndValidate, WebpiecesRulesConfig, BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY,
+    DEFAULT_HANG_TIMEOUT_MINUTES,
 } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
@@ -24,12 +25,25 @@ import type { Rule } from './types';
 // again, one release later.
 // ---------------------------------------------------------------------------
 
-/** The configured value for a caller that has ALREADY loaded the config. */
+/**
+ * The value on a branch-state ENTRY, or the default — for the four guard classes, which are handed
+ * their own typed config and never see the whole file.
+ *
+ * The four used to spell this inline as `this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES`,
+ * which is a fourth copy of the resolution and exactly the shape that let the four DECLARATIONS drift
+ * apart in the first place. One reader, one fallback.
+ */
+// webpieces-disable no-function-outside-class -- module-scope config accessor, matching the shape of the runner helpers it was extracted from
+export function hangTimeoutOf(config: BranchStateGuardConfig): number {
+    const configured = config.hangTimeoutMinutes;
+    return typeof configured === 'number' ? configured : DEFAULT_HANG_TIMEOUT_MINUTES;
+}
+
+/** The configured value for a caller that has ALREADY loaded the whole config. */
 // webpieces-disable no-function-outside-class -- module-scope config accessor, matching the shape of the runner helpers it was extracted from
 export function branchStateHangTimeout(config: WebpiecesRulesConfig): number {
     const entry = config[BRANCH_STATE_GUARD_KEY];
-    const configured = entry?.hangTimeoutMinutes;
-    return typeof configured === 'number' ? configured : DEFAULT_HANG_TIMEOUT_MINUTES;
+    return entry === undefined ? DEFAULT_HANG_TIMEOUT_MINUTES : hangTimeoutOf(entry);
 }
 
 // Memoized per PROCESS, and a hook process handles exactly one tool call — so the adapter's two call

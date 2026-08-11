@@ -5,6 +5,7 @@ import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
 import { spawnerIdentity } from './sync-main';
+import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.
@@ -41,16 +42,16 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
     });
 
     it('spawns once no matter how many call sites fire on the same tool call', () => {
-        triggerMainSyncRefresh(root);
-        triggerMainSyncRefresh(root);
-        triggerMainSyncRefresh(root);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(1);
     });
 
     it('spawns again in the NEXT hook process (the latch is per-process, not per-repo)', () => {
-        triggerMainSyncRefresh(root);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
         resetMainSyncRefreshLatchForTest();  // stands in for a fresh hook process
-        triggerMainSyncRefresh(root);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(2);
     });
 });

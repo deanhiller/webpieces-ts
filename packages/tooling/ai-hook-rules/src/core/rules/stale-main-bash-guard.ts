@@ -14,6 +14,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner } from '../command-scan';
@@ -135,7 +136,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command.
-        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
 
         // State A is on `main` only. A merged feature branch is merged-branch-bash-guard's job.
         if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main (state B is another guard)');

@@ -14,6 +14,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner, CommandSegment } from '../command-scan';
@@ -81,7 +82,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
         // Keep the shared cache warm for the next call. Detached; never blocks this command. (The
         // runner also warms it, but only when feature-branch-guard is loaded — do it here too so this
         // guard is self-sufficient when that one is off.)
-        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
 
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first command of the session), or a branch this refresh has not seen → allow;

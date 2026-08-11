@@ -6,7 +6,7 @@ vi.mock('child_process', () => ({
     execSync: (): string => 'abc1234def\n',
 }));
 
-// The decision log writes to disk; silence it so these tests never touch the fs. MATRIX_L2 is a real
+// The decision log writes to disk; silence it so these tests never touch the fs. MATRIX_L2_UNROWED is a real
 // value the guard passes through, so it is re-exported from the original rather than stubbed.
 type DecisionLogModule = typeof import('../decision-log');
 vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>) => {

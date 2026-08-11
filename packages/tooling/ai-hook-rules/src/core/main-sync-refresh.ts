@@ -2,8 +2,6 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
-
 import { toError } from './to-error';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
@@ -41,6 +39,13 @@ export function refresherArgv(refresher: string, workspaceRoot: string, hangTime
  * /dev/null) so a crash before the child's own logging is still captured. If the async-refresh stream shows
  * SPAWN_ATTEMPT but never START, the detached child was killed before it ran.
  *
+ * `hangTimeoutMinutes` IS REQUIRED, deliberately. It used to default to DEFAULT_HANG_TIMEOUT_MINUTES,
+ * and that default is the mechanism by which three of the four configured values could never reach a
+ * spawn: two callers ran before any guard and simply omitted the argument, and the at-most-once latch
+ * below then meant the guard's own call — the one carrying the configured value — was a no-op. An
+ * omitted argument that silently means "the default" is unreadable at the call site and impossible to
+ * grep. Required makes every caller say which value it is passing, and makes forgetting a compile error.
+ *
  * THE IDENTITY GOES ON ARGV, and that is what makes the sentence above true. The child is a separate
  * node process whose `logStream` starts unidentified, so it used to write every line to the shared
  * `unknown-coordinator-hook.log` while this parent wrote SPAWN_ATTEMPT to its own
@@ -50,7 +55,8 @@ export function refresherArgv(refresher: string, workspaceRoot: string, hangTime
  * session/agent/hook through (positional argv, alongside the root and timeout the child already
  * takes) puts the whole cycle back in ONE file.
  */
-export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes: number = DEFAULT_HANG_TIMEOUT_MINUTES): void {
+// webpieces-disable no-function-outside-class -- the module's one entry point, beside refresherArgv; a detached fire-and-forget spawn has no state to inject and must stay callable from a tree too broken to build a DI container
+export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes: number): void {
     // ONE refresher per hook process. Several call sites fire this on a single tool call — the Read
     // fast path in hook-core AND read-stale-guard's own check(), for one — which is why the log showed
     // two SPAWN_ATTEMPTs ~20ms apart from the same pid on every cycle. The loser only ever reached the
