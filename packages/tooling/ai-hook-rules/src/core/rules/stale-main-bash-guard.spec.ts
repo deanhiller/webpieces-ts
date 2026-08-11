@@ -293,7 +293,24 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
         expect(blocked('git switch -c deanhiller/feat origin/main')).toBe(false);
         expect(blocked('git checkout 2b151db')).toBe(false);
         expect(blocked('git checkout -- main')).toBe(false);
+        expect(blocked('git checkout -- main.ts')).toBe(false);
+        expect(blocked('git checkout feature/main-thing')).toBe(false);
+        expect(blocked('git checkout -q feature')).toBe(false);
         expect(blocked('git checkout deanhiller/some-branch')).toBe(false);
+    });
+
+    /**
+     * Flags do not change which branch you land on, so they must not change the verdict — in EITHER
+     * direction. The shared BranchSwitchScan is what makes this rule and redirect-how-to-merge-main
+     * agree on the answer; before it, `git checkout -q main` was blocked by that guard as a "feature
+     * switch" while this one prescribed the unflagged spelling as the cure.
+     */
+    it('is flag-tolerant about the branch name', () => {
+        expect(blocked('git checkout -q main')).toBe(true);
+        expect(blocked('git checkout --quiet main')).toBe(true);
+        expect(blocked('git switch -q main')).toBe(true);
+        expect(blocked('git checkout -q main && git pull -q origin main')).toBe(false);
+        expect(blocked('git switch --quiet main && git pull --ff-only origin main')).toBe(false);
     });
 
     /**

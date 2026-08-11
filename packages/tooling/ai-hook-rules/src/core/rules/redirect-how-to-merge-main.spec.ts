@@ -3,9 +3,11 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { RedirectHowToMergeMainConfig } from '@webpieces/rules-config';
+import { RedirectHowToMergeMainConfig, StaleMainBashGuardConfig } from '@webpieces/rules-config';
 import { BashContext } from '../types';
+import { Option } from '../fix-hint';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
+import { StaleMainBashGuardRule } from './stale-main-bash-guard';
 
 const rule = new RedirectHowToMergeMainRule(new RedirectHowToMergeMainConfig());
 
@@ -217,6 +219,47 @@ describe('redirect-how-to-merge-main — the pull path', () => {
         // since pull retains a legitimate on-main form.
         git('checkout', 'main');
         expect(rule.check(ctx('git checkout feat && git pull origin main', repo)).length).toBe(1);
+    });
+
+    /**
+     * The measured 2026-08-11 bug. `git checkout main && git pull origin main` passed; adding `-q`
+     * made `main` stop following `checkout`, so the main EXEMPTION missed, the negative-lookahead twin
+     * concluded the target was a feature branch, and the command was blocked with a reason that was
+     * the opposite of what it does. A human had to route around two guards to update main.
+     */
+    it('is flag-tolerant: -q/--quiet do not turn a checkout of MAIN into a feature switch', () => {
+        git('checkout', 'main');
+        expect(rule.check(ctx('git checkout -q main && git pull -q origin main', repo)).length).toBe(0);
+        expect(rule.check(ctx('git checkout --quiet main && git pull origin main', repo)).length).toBe(0);
+        expect(rule.check(ctx('git switch -q main && git pull --ff-only origin main', repo)).length).toBe(0);
+    });
+
+    // The other direction, which matters more: a flag must not smuggle a FEATURE switch past the
+    // guard, and `main` appearing anywhere in the words is not the question being asked.
+    it('still blocks a flagged switch to a branch that merely LOOKS like main', () => {
+        git('checkout', 'main');
+        expect(rule.check(ctx('git checkout -q feat && git pull origin main', repo)).length).toBe(1);
+        expect(rule.check(ctx('git checkout feature/main-thing && git pull origin main', repo)).length).toBe(1);
+        expect(rule.check(ctx('git checkout -b feature/main-thing && git pull origin main', repo)).length).toBe(1);
+        expect(rule.check(ctx('git checkout -- main.ts && git pull origin main', repo)).length).toBe(0);  // a FILE; on main, so the pull is fine
+    });
+
+    /**
+     * THE INVARIANT this fix restores: the cure one guard PRINTS must not be blocked by the other.
+     * Asserted against stale-main-bash-guard's own fix-hint text rather than a copy of it, so a future
+     * edit to that hint that drifts away from what this guard accepts turns this red.
+     */
+    it('does not block the cure stale-main-bash-guard prescribes', () => {
+        git('checkout', 'main');
+        const hint = new StaleMainBashGuardRule(new StaleMainBashGuardConfig()).fixHint;
+        const preferred = hint.fixOptions.filter((o: Option): boolean => o.preferred);
+        expect(preferred.length).toBe(1);
+        const cure = /git checkout main && git pull origin main/.exec(preferred[0].text);
+        expect(cure).not.toBeNull();
+        expect(rule.check(ctx(cure === null ? '' : cure[0], repo)).length).toBe(0);
+        // …and the same cure carrying the flags an agent habitually appends, which is the form that
+        // was blocked in the field.
+        expect(rule.check(ctx('git checkout -q main && git pull -q origin main', repo)).length).toBe(0);
     });
 });
 

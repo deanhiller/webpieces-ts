@@ -8,6 +8,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { CommandScanner } from '../command-scan';
 import { TreeRecovery } from './tree-recovery';
+import { BranchSwitch, BranchSwitchScan } from './branch-switch-scan';
 
 const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 const GUIDANCE = new SyncFlowGuidance();
@@ -55,13 +56,16 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-// Switches to a branch OTHER than main. `git branch -D <x>` is not a checkout so it does not trip
-// this; `checkout main` and flag-only forms like `checkout -` do not count as a feature switch.
-const SWITCHES_TO_NON_MAIN = /git\s+(?:checkout|switch)\s+(?!main\b|-\s|-$)\S+/;
-
 export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeMainConfig> {
     private readonly scanner = new CommandScanner();
     private readonly recovery = new TreeRecovery();
+    // "Which branch does this land on?" — see branch-switch-scan.ts. It replaced a pair of regexes
+    // here (`/git\s+(?:checkout|switch)\s+main\b/` and its negative-lookahead twin) that assumed the
+    // branch name is the token immediately after the subcommand. One flag broke both halves at once:
+    // `git checkout -q main && git pull -q origin main` missed the main EXEMPTION and then tripped the
+    // feature-switch block, so this guard rejected the very command stale-main-bash-guard prescribes,
+    // with a reason ("switches to a feature branch") that was the opposite of the truth.
+    private readonly switches = new BranchSwitchScan(this.scanner);
 
     constructor(config: RedirectHowToMergeMainConfig) { super(config, 'redirect-how-to-merge-main'); }
 
@@ -106,14 +110,19 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
     }
 
     private checkPull(ctx: BashContext, segment: string): Violation | null {
-        if (SWITCHES_TO_NON_MAIN.test(ctx.command)) {
+        // The two branch questions are COMPLEMENTS of one parse, so they are asked of one parse —
+        // that is what keeps them from disagreeing. `git branch -D <x>` is not a checkout so it does
+        // not trip this, and `git checkout -` (previous branch, unknowable at hook time) lands
+        // nowhere we can name, so it counts as neither.
+        const switches = this.switches.switchesIn(ctx.command);
+        if (switches.some((s: BranchSwitch): boolean => !this.switches.isExistingMain(s))) {
             return this.block(ctx, segment, 'Blocked: this command switches to a feature branch and then pulls main into it.');
         }
         // The recommended `git checkout main && git pull origin main` — but ONLY in the primary
         // clone. Inside a linked worktree that checkout FATALS ("'main' is already checked out at
         // <primary>"), so waving it through here hands the AI a command that cannot work and costs
         // it a turn to discover. Steer to the fetch, which is all a worktree needs.
-        if (/git\s+(?:checkout|switch)\s+main\b/.test(ctx.command)) {
+        if (switches.length > 0) {
             if (this.recovery.kindOf(ctx.workspaceRoot) !== 'worktree') return null;
             // block() appends updateMainSteps for the tree we are in — don't say it twice here.
             return this.block(ctx, segment, 'Blocked.');

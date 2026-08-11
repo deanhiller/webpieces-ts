@@ -19,6 +19,7 @@ import { CommandScanner } from '../command-scan';
 import { StaleMainMessage } from './stale-main-message';
 import { ContentReadScan } from './content-read-scan';
 import { TreeRecovery } from './tree-recovery';
+import { BranchSwitchScan } from './branch-switch-scan';
 
 /**
  * The BASH half of the STALE-MAIN protection (read-stale-guard's State A), in two halves of its own:
@@ -92,6 +93,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
 
     private readonly scanner = new CommandScanner();
     private readonly recovery = new TreeRecovery();
+    private readonly switches = new BranchSwitchScan(this.scanner);
 
     readonly description =
         'Block a bare `git checkout main` (chain the pull into the same command), and block ' +
@@ -173,27 +175,14 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
      */
     private bareCheckoutOfMain(ctx: BashContext): string | null {
         for (const segment of this.scanner.commandSegments(ctx.command)) {
-            if (!this.scanner.invokesGit(segment, 'checkout') && !this.scanner.invokesGit(segment, 'switch')) continue;
-            if (!this.switchesToMainBranch(segment)) continue;
+            // BranchSwitchScan answers "which branch does this land on" for both guards, flag-tolerantly:
+            // `git checkout -q main` lands on main exactly as the bare form does, while
+            // `git checkout -b x origin/main` (creates), `git checkout -- main` (pathspec) and
+            // `git checkout <sha>` do not. See branch-switch-scan.ts for why that lives in one place.
+            if (!this.switches.landsOnExistingMain(segment)) continue;
             return this.scanner.commandInvokesAnyGit(ctx.command, ['pull']) ? null : segment;
         }
         return null;
-    }
-
-    /**
-     * True only for landing ON the branch. `-b`/`-B`/`-c`/`-C` CREATE a branch, so
-     * `git checkout -b x origin/main` is current by construction and never blocked; a `--` turns the
-     * rest into pathspecs, so `git checkout -- main` restores a FILE named main and moves no branch.
-     */
-    private switchesToMainBranch(segment: string): boolean {
-        const words = this.scanner.words(segment);
-        for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-            if (word === '--') return false;
-            if (/^-[bBcC]$/.test(word)) return false;
-            if (i > 1 && word === 'main') return true;
-        }
-        return false;
     }
 
     private pairingMessage(ctx: BashContext): string {
