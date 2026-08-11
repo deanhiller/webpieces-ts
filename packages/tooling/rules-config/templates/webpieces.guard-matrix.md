@@ -86,7 +86,7 @@ The tool is not a dimension either: "any Read" is an allowlist ENTRY, not a tool
 
 ONE list, consulted identically by every fault. A cure that cannot help a given fault also
 cannot hurt it, and gating each entry on a fault is what produced four real defects (a stale
-shim that denied `pnpm install` and `git pull`; faults that denied every Read; a config fault
+shim that denied `pnpm install` and every git sync; faults that denied every Read; a config fault
 that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm install`).
 
 | # | allowed | outcome |

