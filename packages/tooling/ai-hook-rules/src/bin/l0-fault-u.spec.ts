@@ -41,7 +41,7 @@ describe('fault U — the guard package is not declared anywhere', () => {
         expect(reason).toContain('is NOT declared in package.json anywhere');
         expect(reason).toContain("Do NOT run 'pnpm install'");
         expect(reason).toContain('NO-OP');
-        expect(reason).toContain(`Run EXACTLY: '${ADD_HOOK_PKG_CMD}`);
+        expect(reason).toContain(`run EXACTLY: '${ADD_HOOK_PKG_CMD}`);
         // The X claim must be GONE from this branch — asserting it is what sent the reporter in circles.
         expect(reason).not.toContain('is declared in package.json but is not installed');
     });
@@ -50,13 +50,13 @@ describe('fault U — the guard package is not declared anywhere', () => {
         const root = kit.stageDriftRoot('0.4.574', '0.4.574');   // an exact @webpieces/pr-gate pin...
         fs.rmSync(path.join(root, 'node_modules', '.bin'), { recursive: true });  // ...but no bins
         const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
-        expect(reason).toContain(`Run EXACTLY: '${ADD_HOOK_PKG_CMD}@0.4.574'`);
+        expect(reason).toContain(`run EXACTLY: '${ADD_HOOK_PKG_CMD}@0.4.574'`);
     });
 
     it('still emits the DECLARED message (cure: pnpm install) once package.json asks for the package', () => {
         const reason = kit.runShim(kit.stageDeclaredRoot(), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
         expect(reason).toContain('is declared in package.json but is not installed');
-        expect(reason).toContain("Run EXACTLY: 'pnpm install'");
+        expect(reason).toContain("run EXACTLY: 'pnpm install'");
         expect(reason).not.toContain('NOT declared in package.json anywhere');
     });
 

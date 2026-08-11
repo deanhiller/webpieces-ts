@@ -8,7 +8,8 @@ import { ENV_SURFACE, REGISTRATION_SURFACE } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import {
     L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC,
-    L0_FAULT_DRIFT, L0_FAULT_SHIM_STALE, L0_FAULT_UNDECLARED,
+    L0_FAULT_DRIFT, L0_FAULT_NAMES, L0_FAULT_SHIM_STALE, L0_FAULT_UNDECLARED, L0FaultCode,
+    L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, l0GuardHeader, l0MatrixCitation,
 } from './l0-fault-codes';
 import { toError } from './to-error';
 
@@ -72,7 +73,12 @@ export class L0Cure {
 /** One L0 fault. Data-only → a class, per CLAUDE.md. */
 export class L0Fault {
     constructor(
-        readonly code: string,
+        /**
+         * The codebook's letter — typed as the UNION of every declared code, not `string`, so
+         * `L0_FAULT_NAMES[code]` is total and neither this module nor the deny builders need a
+         * `?? 'unknown'` fallback. A fault added without a name fails to compile.
+         */
+        readonly code: L0FaultCode,
         readonly name: string,
         readonly detectedBy: string,
         readonly enforcedIn: string,
@@ -100,22 +106,42 @@ export class L0Fault {
 // agent. Writing the file is the one cure that always works, and it is the same cure every other config
 // problem has (see the config-validation invariant in guards/L0-tooling.md): the validator reports every
 // error at once, so the write/validate loop converges in a couple of passes.
-export const CONFIG_MISSING_REPORT =
-    `${CONFIG_FILENAME} not found — the webpieces guards cannot run without it, so every other tool call is blocked.\n` +
-    'THIS IS NOT A DEADLOCK: both options below are explicitly allowed through while this guard is up.\n' +
-    `OPTION 1 (preferred — it needs no other tool and it never prompts) - create ${CONFIG_FILENAME}\n` +
-    'yourself: any Read, and any Write/Edit whose target is that file, is always allowed through, so\n' +
-    'you can inspect the repo and write it. The validator reports EVERY missing/invalid entry at once\n' +
-    '(each with the snippet to paste), so a minimal first draft converges in about two passes.\n' +
-    'OPTION 2 (pick this ONLY at an interactive terminal where you can answer its two prompts) - run\n' +
-    'EXACTLY this command to seed the config: `pnpm exec wp-install-ai-hooks`. It goes on to wire the\n' +
-    'Claude Code hooks and asks for a target twice, which hangs a non-interactive session.\n' +
-    'Do not append anything to the option you pick — the allowlist is anchored to the whole command.';
+export const CONFIG_MISSING_REPORT = [
+    `❌ webpieces ai-hooks blocked this call: ${CONFIG_FILENAME} not found.`,
+    '',
+    l0GuardHeader(L0_FAULT_CONFIG_MISSING, '1 violation'),
+    `  ${CONFIG_FILENAME}`,
+    '    → the webpieces guards cannot run without it, so every OTHER tool call is blocked.',
+    `    → ${l0MatrixCitation(L0_FAULT_CONFIG_MISSING)}`,
+    '',
+    'Still allowed while this block is up:',
+    '  - any Read',
+    `  - any Write/Edit whose target is ${CONFIG_FILENAME}`,
+    '  - every command on the L0 allowlist, including the Fix Options below',
+    '  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human.',
+    '',
+    `  Fix Option 1: (preferred) it needs no other tool and it never prompts - create ${CONFIG_FILENAME}`,
+    '    yourself. The validator reports EVERY missing/invalid entry at once (each with the snippet to',
+    '    paste), so a minimal first draft converges in about two passes.',
+    '  Fix Option 2: pick this ONLY at an interactive terminal where you can answer its two prompts - it',
+    '    goes on to wire the Claude Code hooks and asks for a target twice, which hangs a non-interactive',
+    '    session.',
+    '    run EXACTLY: `pnpm exec wp-install-ai-hooks`',
+    '',
+    'Do not append anything to the option you pick — the allowlist is anchored to the whole command.',
+].join('\n');
 
-// The first line of the fault-Y deny (built out in runner.checkConfigSync, which appends the per-rule
-// detail). Kept here so the fault table quotes the same text the runner emits.
-export const CONFIG_OUT_OF_SYNC_HEADER =
-    `${CONFIG_FILENAME} is out of sync — new built-in rules are present that have no entry in ${CONFIG_FILENAME}.`;
+// The HEADER of the fault-Y deny (built out in runner.checkConfigSync, which appends the per-rule
+// detail as the `[…]` block's offenders). Kept here so the fault table quotes the same text the runner
+// emits, and so Y opens with the same `[guard-name] (layer=L0 fault=Y row=3)` coordinates as every
+// other L0 fault — that triple is what joins the deny to the audit line and to the matrix row.
+export const CONFIG_OUT_OF_SYNC_HEADER = [
+    `❌ webpieces ai-hooks blocked this call: ${CONFIG_FILENAME} is out of sync.`,
+    '',
+    l0GuardHeader(L0_FAULT_CONFIG_OUT_OF_SYNC, '1 violation'),
+    `  new built-in rules are present that have no entry in ${CONFIG_FILENAME}`,
+    `    → ${l0MatrixCitation(L0_FAULT_CONFIG_OUT_OF_SYNC)}`,
+].join('\n');
 
 // Writing/repairing the file yourself. PREFERRED for both config faults, per the config-validation
 // invariant in guards/L0-tooling.md: every config problem cures to "make the file right", the validator
@@ -253,9 +279,16 @@ export function renderGuardMatrixDoc(): string {
         '',
         '## The faults',
         '',
-        '| code | fault | detected by | enforced in |',
-        '|---|---|---|---|',
-        ...L0_FAULTS.map((f: L0Fault): string => `| \`${f.code}\` | ${f.name} | ${f.detectedBy} | ${f.enforcedIn} |`),
+        'THE JOIN KEYS ARE `guard`, `fault=` and `row=`. Every L0 deny opens',
+        '`[<guard>] (layer=L0 fault=<code> row=3, …)`, and every audit line — from BOTH halves of L0, the',
+        '`sh` shim and the guard bin — carries `layer=L0 row=<n> fault=<code>`. So one grep lands you in',
+        'the deny, the log line and the row below. The guard names come from `L0_FAULT_NAMES` and the row',
+        'numbers from `L0_ROW_*`, both spelled in exactly one place (`core/l0-fault-codes.ts`).',
+        '',
+        '| code | guard | fault | detected by | enforced in |',
+        '|---|---|---|---|---|',
+        ...L0_FAULTS.map((f: L0Fault): string =>
+            `| \`${f.code}\` | \`${L0_FAULT_NAMES[f.code]}\` | ${f.name} | ${f.detectedBy} | ${f.enforcedIn} |`),
         '',
         'First match wins. `D`/`X`/`U`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the',
         'guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.',
@@ -286,8 +319,12 @@ function renderMatrixAndAllowlist(): string[] {
         '| # | fault | on the allowlist? | outcome |',
         '|---|---|---|---|',
         '| 1 | none | — | hand down to the next guard layer |',
-        '| 2 | any | yes | PASS or ALLOW (see the entry) |',
-        '| 3 | any | no | BLOCK — **only the message varies by fault** |',
+        `| ${L0_ROW_ALLOWLISTED} | any | yes | PASS or ALLOW (see the entry) |`,
+        `| ${L0_ROW_BLOCKED} | any | no | BLOCK — **only the message varies by fault** |`,
+        '',
+        `Row ${L0_ROW_BLOCKED} is the only row that blocks, so every L0 deny cites it — \`row=${L0_ROW_BLOCKED}\` in the`,
+        'deny header, `row=' + L0_ROW_BLOCKED + '` on the audit line, and this row here. Same numbers as L1 uses for',
+        'its own rows (see `L1_ROWS`), and for the same reason: a row number is IDENTITY, so it is never reused.',
         '',
         'The tool is not a dimension either: "any Read" is an allowlist ENTRY, not a tool check.',
         '',
@@ -347,9 +384,16 @@ export function writeGuardMatrixDoc(workspaceRoot: string): string {
     }
 }
 
-/** The `READ <path>` pointer appended to an L0 deny, or '' when the doc could not be written. */
+/**
+ * The `READ <path>` pointer appended to an L0 deny, or '' when the doc could not be written.
+ *
+ * It opens with a NEWLINE, not a space: the JS-side L0 denies render in the house format now (a header,
+ * a `[guard-name]` block, `Fix Option N:` lines), so a pointer glued onto the end of the last line would
+ * be the one place the shape broke. A real newline is safe on both call paths — denyJson() JSON.stringifies
+ * it, exactly as it does for every multi-line L1 report.
+ */
 // webpieces-disable no-function-outside-class -- sibling of writeGuardMatrixDoc in this module
 export function guardMatrixPointer(docPath: string): string {
     if (docPath === '') return '';
-    return ` The full L0 guard matrix - every fault and everything that is allowed through - is at ${docPath}; READ it if you are unsure why this call was blocked.`;
+    return `\nThe full L0 guard matrix - every fault and everything that is allowed through - is at ${docPath}; READ it if you are unsure why this call was blocked.`;
 }

@@ -164,7 +164,7 @@ describe('applyHook — checked-in shim management', () => {
         // Generic shim: no hard-coded bin, reads it from $1 and degrades gracefully.
         const body = fs.readFileSync(shim, 'utf8');
         expect(body).toContain('BIN_NAME="$1"');
-        expect(body).toContain("Run EXACTLY: 'pnpm install'");
+        expect(body).toContain("run EXACTLY: 'pnpm install'");
         // Fail closed when the bin is missing: deny via the PreToolUse JSON protocol (blocks the call
         // AND surfaces the reason), not a bare exit 2 (blocks but hides the reason in the UI).
         expect(body).toContain('"permissionDecision":"deny"');
@@ -265,7 +265,7 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
         expect(decision.hookSpecificOutput.hookEventName).toBe('PreToolUse');
         expect(decision.hookSpecificOutput.permissionDecision).toBe('deny');
         const reason = decision.hookSpecificOutput.permissionDecisionReason;
-        expect(reason).toContain("Run EXACTLY: 'pnpm install'");
+        expect(reason).toContain("run EXACTLY: 'pnpm install'");
         expect(reason).toContain('not installed');
         expect(reason).toContain('wp-ai-guards-hook');
     });
@@ -485,7 +485,17 @@ describe('renderShim fallback — audit log', () => {
 describe('renderShim fallback — tool-conditional deny visibility', () => {
     const ESC = String.fromCharCode(0x1b);
 
-    it('Bash deny carries an ANSI-red systemMessage (valid JSON after ${BIN_NAME} sub)', () => {
+    /**
+     * THE RED IS ON THE HEADLINE ONLY, and the multi-line body below it is PLAIN.
+     *
+     * Both halves matter and neither is cosmetic. The red must survive the move to a multi-line deny —
+     * losing it makes a Bash block invisible to the human, which is the failure this whole systemMessage
+     * path exists to prevent. And the BODY must stay plain: a full page in bold red is harder to read
+     * than the paragraph it replaced, because the indentation that carries the house structure stops
+     * registering when every line shouts. So: opens with the ANSI sequence, closes it before the first
+     * newline, and every line after that is uncoloured.
+     */
+    it('Bash deny reds ONLY the headline, leaves the structured body plain, and stays valid JSON', () => {
         const out = runShim(declaredRoot(), 'wp-ai-guards-hook', bashPayload('pnpm build'));
         expect(out.status).toBe(0);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -494,12 +504,37 @@ describe('renderShim fallback — tool-conditional deny visibility', () => {
             hookSpecificOutput: { permissionDecisionReason: string };
         };
         expect(decision.systemMessage).toBeDefined();
-        expect(decision.systemMessage!.startsWith(`${ESC}[31`)).toBe(true);
-        expect(decision.systemMessage!.endsWith(`${ESC}[0m`)).toBe(true);
-        expect(decision.systemMessage).toContain("Run EXACTLY: 'pnpm install'");
+        const lines = decision.systemMessage!.split('\n');
+        expect(lines.length).toBeGreaterThan(5);                          // the `\n` escapes really rendered
+        expect(lines[0].startsWith(`${ESC}[31`)).toBe(true);              // headline opens red…
+        expect(lines[0].endsWith(`${ESC}[0m`)).toBe(true);                // …and closes on its own line
+        for (const line of lines.slice(1)) expect(line.includes(ESC)).toBe(false);  // body is PLAIN
+        expect(decision.systemMessage).toContain("run EXACTLY: 'pnpm install'");
         // The reason the model reads stays plain (no ANSI), and BIN_NAME substituted cleanly.
         expect(decision.hookSpecificOutput.permissionDecisionReason).toContain('wp-ai-guards-hook');
         expect(decision.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);
+    });
+
+    /**
+     * THE `${NL}` ESCAPE ITSELF, proved rather than assumed — the delicate half of this change.
+     *
+     * The sh half cannot use a real newline: `REASON` is printf'd into a JSON string literal, where a raw
+     * newline is invalid. It spells them `${NL}` = `${BS}n` — the two characters backslash + n — exactly
+     * as it has always spelled the ANSI escape `${ESC}` = `${BS}u001b`. This asserts the whole chain in
+     * one go: the payload PARSES (so nothing was corrupted), and the parsed reason contains real
+     * newlines (so the escape was a JSON escape and not two literal characters).
+     */
+    it('emits multi-line reasons via the ${NL} JSON escape, and the payload still parses', () => {
+        const out = runShim(declaredRoot(), 'wp-ai-guards-hook', bashPayload('pnpm build'));
+        expect(out.stdout).toContain('\\n');           // the ESCAPE is on the wire, never a raw newline
+        expect(out.stdout.split('\n').length).toBe(2); // …so the JSON itself is ONE line (plus the trailing \n)
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        const decision = JSON.parse(out.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } };
+        const reason = decision.hookSpecificOutput.permissionDecisionReason;
+        expect(reason.split('\n').length).toBeGreaterThan(5);
+        expect(reason).toContain('\n[guard-bin-missing] (layer=L0 fault=X row=3, 1 violation)');
+        expect(reason).toContain('\nStill allowed while this block is up:');
+        expect(reason).toContain("\n  Fix Option 1: (preferred)");
     });
 
     it('Write/Edit deny has NO systemMessage (reason renders red natively)', () => {

@@ -65,6 +65,22 @@ function residentTree(main: string, wt: string): EffectiveTree {
     return new EffectiveTree(wt, wt, wt, wt, main, 'worktree');
 }
 
+/**
+ * THE ROW-8 REPORT, rendered against real fixtures, EXPORTED for the cross-surface banned-phrase sweep in
+ * shim-deny-reason.spec.ts.
+ *
+ * That sweep greps every RENDERED guard surface for wordings that contradict the worktree rule, so a new
+ * message inherits the ban for free — and this was the one surface it could not reach, because the guard
+ * reads pnpm-workspace.yaml and node_modules off disk and so needs the tmp-dir fixtures above. It is also
+ * the surface MOST likely to regrow the phrase, being the guard that talks about worktrees for a living;
+ * it was pinned only by a single `not.toContain` local to this file. Exporting the render (rather than
+ * copying the fixtures into the other spec) keeps ONE definition of what a skewed worktree looks like.
+ */
+export function renderVersionSyncRow8Report(): string {
+    const dirs = pair('0.4.616', '0.4.612');
+    return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+}
+
 describe('VersionSyncGuard — when it fires', () => {
     it('BLOCKS real work in a worktree whose pin disagrees with the main tree', () => {
         const dirs = pair('0.4.616', '0.4.612');

@@ -1,0 +1,21 @@
+{
+  "title": "Bring the L0 denies into the house format, and gate fault S's cure on the caller",
+  "riskScore": 30,
+  "riskLevel": "yellow",
+  "summary": "Every L1/L2 deny is rendered by formatReport() into a scannable shape (header, [rule-name] (N violations), indented offenders with a one-line arrow of why, numbered Fix Option N lines); the seven L0 faults were the only denies in webpieces answering in one unbroken paragraph, with fault S running ~3,300 characters and the two commands that matter buried mid-sentence. All seven now use that same skeleton, and the change is deliberately about structure rather than length. The delicate half is the POSIX-sh side (faults D/X/U/K), where REASON is printf'd into a JSON string literal and a raw newline would be invalid: it spells newlines ${NL} = ${BS}n, the exact construction it has always used for the ANSI escape ${ESC} = ${BS}u001b, so the no-raw-quote/no-raw-backslash invariant is untouched and is still asserted by the existing specs. The JS side needed no new mechanism because denyJson() JSON.stringifies, as it already does for every multi-line L1 report. New tests prove the whole chain end to end through a real /bin/sh: the payload parses, the reason carries real newlines, and the systemMessage still carries 31;1m. The red now paints ONLY the headline on both emitters, because a multi-line body entirely in bold red is less readable than the paragraph it replaced. A three-way join was added so one grep spans the deny, the audit line and the matrix doc: core/l0-fault-codes.ts (a leaf module all three halves can import) now owns the guard NAMES and the matrix ROW numbers, MATRIX_L0 splits into MATRIX_L0_ALLOW/MATRIX_L0_BLOCK because it carried row '-', and the sh audit line gains layer= and row= without which the deny's claim about the log was true of the JS half and false of the other four faults. The caller-gated branch for fault S reads agent_id and root= vs projectDir=, and it changes the MESSAGE ONLY - never the block/allow decision, never which command is printed, and never which tree anything acts on, which stays decided from the path.",
+  "violations": [],
+  "risks": [
+    "The rendered shim changes, so templates/ai-hook.sh is regenerated and every consumer's committed shim goes byte-different on the next upgrade - i.e. this release will fire fault S once per repo, which is the designed self-heal path (wp-upgrade-shim) and is exactly what the deny being rewritten here explains.",
+    "The sh deny now depends on POSIX ${REASON#\"$WP_HEAD\"} prefix removal with a QUOTED pattern. Verified literal (glob metacharacters in the headline are not treated as patterns) through /bin/sh; it is specified behaviour, so dash on CI behaves identically, but it is a shell construct the shim did not use before.",
+    "The sh audit-log line format changed: bin= is now conditional and layer=/row= were added, so any external positional parser of .webpieces/logs/L0-shim/* breaks. Field-name parsers are unaffected, and the historical 'grep DENY-STALE\\t<command>' greps still work because the verdict stays adjacent to the command.",
+    "Message budget for fault S was raised from 3350 to 3850 chars. That is a deliberate, argued one-time move (the house format's section headings and per-command lines cost real characters, and the join coordinates are behaviour rather than argument), not a silent relaxation - the reasoning is written into the test."
+  ],
+  "filesToReview": [
+    "packages/tooling/ai-hook-rules/src/bin/shim.ts",
+    "packages/tooling/ai-hook-rules/src/bin/shim-deny-reason.ts",
+    "packages/tooling/ai-hook-rules/src/core/l0-fault-codes.ts",
+    "packages/tooling/ai-hook-rules/src/bin/shim-audit-log.ts",
+    "packages/tooling/ai-hook-rules/src/adapters/claude-code-response.ts",
+    "packages/tooling/ai-hook-rules/templates/ai-hook.sh"
+  ]
+}

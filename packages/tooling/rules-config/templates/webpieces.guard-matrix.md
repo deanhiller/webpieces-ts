@@ -10,15 +10,21 @@ reading this, one of the faults below fired and named this file.
 
 ## The faults
 
-| code | fault | detected by | enforced in |
-|---|---|---|---|
-| `D` | version drift — root package.json pin != installed version | sh, before the bin runs | sh |
-| `X` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
-| `U` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
-| `K` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
-| `S` | a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release | the guard bin | JS |
-| `C` | webpieces.config.json missing | the guard bin | JS |
-| `Y` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
+THE JOIN KEYS ARE `guard`, `fault=` and `row=`. Every L0 deny opens
+`[<guard>] (layer=L0 fault=<code> row=3, …)`, and every audit line — from BOTH halves of L0, the
+`sh` shim and the guard bin — carries `layer=L0 row=<n> fault=<code>`. So one grep lands you in
+the deny, the log line and the row below. The guard names come from `L0_FAULT_NAMES` and the row
+numbers from `L0_ROW_*`, both spelled in exactly one place (`core/l0-fault-codes.ts`).
+
+| code | guard | fault | detected by | enforced in |
+|---|---|---|---|---|
+| `D` | `version-drift` | version drift — root package.json pin != installed version | sh, before the bin runs | sh |
+| `X` | `guard-bin-missing` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
+| `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
+| `K` | `guard-bin-crashed` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
+| `S` | `managed-hook-surface` | a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release | the guard bin | JS |
+| `C` | `config-missing` | webpieces.config.json missing | the guard bin | JS |
+| `Y` | `config-out-of-sync` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
 
 First match wins. `D`/`X`/`U`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the
 guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.
@@ -69,6 +75,10 @@ L0 has NO genuine second dimension. Every branch reduces to one question:
 | 1 | none | — | hand down to the next guard layer |
 | 2 | any | yes | PASS or ALLOW (see the entry) |
 | 3 | any | no | BLOCK — **only the message varies by fault** |
+
+Row 3 is the only row that blocks, so every L0 deny cites it — `row=3` in the
+deny header, `row=3` on the audit line, and this row here. Same numbers as L1 uses for
+its own rows (see `L1_ROWS`), and for the same reason: a row number is IDENTITY, so it is never reused.
 
 The tool is not a dimension either: "any Read" is an allowlist ENTRY, not a tool check.
 

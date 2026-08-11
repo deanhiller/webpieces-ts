@@ -32,8 +32,23 @@ import { L0_FAULT_NONE } from '../core/l0-fault-codes';
 // ANSI escape (0x1b) built at runtime so no raw ESC byte sits in source. ANSI red is a *bonus* — the
 // 🛑 prefix + reason stay meaningful if a future/CI renderer strips the color. One place = one escape.
 const ESC = String.fromCharCode(0x1b);
+
+/**
+ * ONLY THE HEADLINE IS RED. The body is left plain, and that is a legibility decision, not an oversight.
+ *
+ * Every deny that reaches here is MULTI-LINE — formatReport()'s `[rule] (N violations)` / `→ why` /
+ * `Fix Option N:` skeleton for L1 and L2, and now the same skeleton for L0. A whole page rendered in
+ * bold red is harder to read than the paragraph it replaced: the indentation that carries the structure
+ * stops registering when every line shouts. Red the first line so the block is unmissable in a scroll of
+ * terminal output, then let the structure do the rest of the work.
+ *
+ * The reset (`[0m`) still closes the sequence on the same line it opened, so nothing leaks into the
+ * body or into whatever the terminal prints next.
+ */
 function redSystemMessage(reason: string): string {
-    return `${ESC}[31;1m🛑 ${reason}${ESC}[0m`;
+    const nl = reason.indexOf('\n');
+    if (nl < 0) return `${ESC}[31;1m🛑 ${reason}${ESC}[0m`;
+    return `${ESC}[31;1m🛑 ${reason.slice(0, nl)}${ESC}[0m${reason.slice(nl)}`;
 }
 
 export function denyJson(reason: string, toolName: string): string {

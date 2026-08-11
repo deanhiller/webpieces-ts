@@ -10,7 +10,7 @@ import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches } fro
 import { missingDirectoryBlock } from './missing-directory';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
-import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0, MATRIX_L2 } from './decision-log';
+import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0_ALLOW, MATRIX_L2 } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
@@ -250,7 +250,7 @@ function l0FaultAllows(command: string): boolean {
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function logL0CureBypass(command: string, cwd: string): void {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)', '-', L0_FAULT_NONE, MATRIX_L0));
+    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)', '-', L0_FAULT_NONE, MATRIX_L0_ALLOW));
 }
 
 /**

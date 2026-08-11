@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { run, runBash, runRead } from '../core/runner';
 import { logRejection, extractRuleNames } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0, MATRIX_L2 } from '../core/decision-log';
+import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0_BLOCK, MATRIX_L2 } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -284,7 +284,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const target = payload.tool_input.command ?? payload.tool_input.file_path ?? '';
     logGuardDecision(
         root,
-        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE, MATRIX_L0),
+        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE, MATRIX_L0_BLOCK),
     );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
