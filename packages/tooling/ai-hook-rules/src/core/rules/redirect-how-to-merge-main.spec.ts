@@ -82,7 +82,13 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
         // The doc pointer must advertise what the hint no longer spells out, or the reader has no
         // reason to open it.
         expect(hint).toContain('the fork-point invariant');
-        expect(hint).toContain('never sync a branch');
+        // The FULL phrase, not the `never sync a branch` prefix it used to assert. That prefix passed
+        // under both the retired authorship framing ("...you do not own") and the liveness one, so the
+        // hint could keep teaching the removed rule while the doc taught its replacement — and the hint
+        // is what an agent reads FIRST, the doc only what it is sent to open.
+        expect(hint).toContain('never sync a branch something is ACTIVELY holding');
+        expect(hint).not.toContain('you do not own');
+        expect(hint).not.toContain('another\nsession owns');
     });
 
     it('sends the AI to a doc that states the invariant, its consumers and the rewrite in full', () => {
@@ -98,7 +104,18 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
         expect(written).toContain('The review diff.');
         // The rewrite is the mechanism, and the ownership consequence that follows from it.
         expect(written).toContain('The rewrite **is** the mechanism');
-        expect(written).toContain('never sync a branch you do not own');
+        // The consequence is about LIVENESS, not authorship. It used to read "never sync a branch you do
+        // not own", which was the wrong test: a branch whose owner has finished is held by nobody, and
+        // taking it over is often exactly what has to happen (a stalled agent still leaves a real PR to
+        // land). What the force-push actually destroys is a fork point something is holding RIGHT NOW.
+        expect(written).toContain('never sync a branch something is ACTIVELY holding');
+        expect(written).toContain('The test is LIVENESS, not authorship');
+        // The observable signal that answers it, so the rule is checkable rather than a judgement call.
+        expect(written).toContain('`locked`');
+        // And conflicts alone are not an escalation: the 3-point merge shows both intents.
+        expect(written).toContain('/wp-merge');
+        // The superseded wording must not come back alongside the new one.
+        expect(written).not.toContain('never sync a branch you do not own');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
