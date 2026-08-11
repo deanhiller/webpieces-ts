@@ -113,3 +113,9 @@ node_modules_*/
 # of all 27 project.json files. EVERY nx command on the primary clone then dies instantly
 # with MultipleProjectsWithSameNameError for as long as any agent worktree exists.
 .claude/worktrees/
+
+# Stray review.json at the REPO ROOT. The real one lives in .webpieces/pr-review/<branch>/review.json
+# (gitignored with the rest of .webpieces/). A root-level copy is always an accident: it is what lands
+# when an isolated agent cannot Write to the shared checkout and `cp`s its verdict to the wrong place.
+# Committed once by #647 that way. Ignored so the next one never reaches a PR.
+/review.json
