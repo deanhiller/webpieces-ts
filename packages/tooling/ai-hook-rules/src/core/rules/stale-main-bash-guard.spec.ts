@@ -332,10 +332,38 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
     });
 
     // It names the pin/shim revert, because "you'll have stale files" understates it and was not
-    // what actually cost the session.
+    // what actually cost the session. The 157-commit narrative behind it is maintainer material and
+    // lives in the class docblock — a blocked AI reads this, and only acts on what it can type.
     it('explains that the checkout reverts the guard that would have caught the drift', () => {
         const message = rule().check(ctx('git checkout main'))[0].message;
         expect(message).toContain('@webpieces pin');
         expect(message).toContain('BACKWARDS');
+        // Short enough to be read. The prose above the tree-shaped steps is the part that grew.
+        expect(message.split('\n')[0].length).toBeLessThan(300);
+    });
+
+    /**
+     * The PREFERRED fix option must not be a command a SIBLING guard denies. `git checkout main`
+     * inside a linked worktree is blocked by redirect-how-to-merge-main (it fatals there), and this
+     * hint has no workspace root, so it cannot detect which tree it is talking to. Rendering
+     * TreeRecovery's 'unknown' kind is the honest answer: BOTH forms, each labelled with the tree it
+     * belongs to — and it comes from the one place tree-shaped cures are written.
+     */
+    it('does not prefer a cure that is blocked in a linked worktree', () => {
+        const preferred = rule().fixHint.fixOptions.filter((o): boolean => o.preferred);
+        expect(preferred.length).toBe(1);
+        const text = preferred[0].text;
+        // Both tree kinds, each named, so no reader takes the wrong one silently.
+        expect(text).toContain('in the primary clone:');
+        expect(text).toContain('in a linked worktree');
+        expect(text).toContain('git checkout main && git pull origin main');
+        expect(text).toContain('git fetch origin main');
+        // The instruction that is this guard's whole point survives the rewrite.
+        expect(text).toContain('the pull must be in the SAME command');
+        // The worktree form must NOT be a separate unranked sibling option again — that split is
+        // exactly what let a reader take the preferred, tree-blind one and get denied.
+        const worktreeOptions = rule().fixHint.fixOptions
+            .filter((o): boolean => !o.preferred && o.text.includes('linked worktree'));
+        expect(worktreeOptions.length).toBe(0);
     });
 });

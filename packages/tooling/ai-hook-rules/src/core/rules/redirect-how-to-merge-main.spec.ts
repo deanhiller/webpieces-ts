@@ -68,30 +68,48 @@ describe('redirect-how-to-merge-main — merge/rebase are banned outright', () =
 });
 
 // An AI that only learns WHAT to type instead keeps looking for a way around the guard; one that
-// understands WHY the fork point matters stops trying. So the hint must state the invariant itself
-// (BOTH halves) and name what breaks, not merely the replacement commands. The authoritative version
-// of this reasoning lives in the git-workflow template; the hint carries a compact echo of it.
+// understands WHY the fork point matters stops trying. The DERIVATION of that WHY lives in ONE place —
+// the git-workflow template — and the hint's job is to name the invariant, say what breaks it, and
+// send the reader there. It used to re-derive the whole thing inline, which is a second copy of a
+// doc that is regenerated per version; these tests now pin each half where it actually belongs.
 describe('redirect-how-to-merge-main — why the fork point matters', () => {
-    it('explains WHY, not only which command to run instead', () => {
+    it('names the invariant and what breaks it, and points at the derivation', () => {
         const hint = rule.fixHint.mainMessage;
-        // Both halves of the symmetric invariant.
-        expect(hint).toContain('pure main commit holding none of your work');
-        expect(hint).toContain('none of main\'s commits after it');
-        // The consumers a polluted fork point corrupts — the merge is only one of three.
-        expect(hint).toContain('nx affected --base=');
+        expect(hint).toContain('pure main commit');
+        // The consumers a polluted fork point corrupts.
+        expect(hint).toContain('--base');
         expect(hint).toContain('review diff');
-        // The rewrite is the mechanism, and the ownership consequence that follows from it.
-        expect(hint).toContain('the rewrite IS the mechanism');
-        expect(hint).toContain('NEVER run these commands on a branch another session owns');
+        // The doc pointer must advertise what the hint no longer spells out, or the reader has no
+        // reason to open it.
+        expect(hint).toContain('the fork-point invariant');
+        expect(hint).toContain('never sync a branch');
     });
 
-    it('sends the AI to a doc that states the invariant in full', () => {
+    it('sends the AI to a doc that states the invariant, its consumers and the rewrite in full', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-invariant-'));
         rule.check(ctx('git merge origin/main', root));
         const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
         expect(written).toContain('THE FORK POINT INVARIANT');
+        // Both halves of the symmetric invariant.
         expect(written).toContain('pure `main` commit containing none of your work');
         expect(written).toContain('none of main\'s commits after it');
+        // The consumers a polluted fork point corrupts — the merge is only one of three.
+        expect(written).toContain('`nx affected` — the build gate\'s scope');
+        expect(written).toContain('The review diff.');
+        // The rewrite is the mechanism, and the ownership consequence that follows from it.
+        expect(written).toContain('The rewrite **is** the mechanism');
+        expect(written).toContain('never sync a branch you do not own');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    // The scripted warning to hand the human was lifted out of the hint for the same reason. It is
+    // only safe to drop from the message because the doc the message links carries it.
+    it('leaves the words to warn the human with in the doc it links', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-warn-'));
+        rule.check(ctx('git merge origin/main', root));
+        const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
+        expect(written).toContain('push back and make you use the 3-point merge instead');
+        expect(rule.fixHint.mainMessage).toContain('the exact words to warn a human with');
         fs.rmSync(root, { recursive: true, force: true });
     });
 });

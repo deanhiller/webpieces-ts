@@ -106,9 +106,16 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         'Landing on `main` without pulling, or reading files while main is behind origin/main, both give you stale content.',
         'Pair the checkout with the pull, or update main and re-run:',
         [
-            new Option('git checkout main && git pull origin main (the pull must be in the SAME command).', true),
+            // TREE-SHAPED, from the one source of tree-shaped cures. A static rule-level hint has no
+            // workspace root, so it renders the 'unknown' kind — TreeRecovery's deliberate answer for
+            // "we cannot detect the tree": both forms, each labelled. That matters here because the
+            // primary-clone form (`git checkout main && …`) is BLOCKED by redirect-how-to-merge-main
+            // inside a linked worktree, so a preferred option naming it unconditionally hands the AI a
+            // cure a sibling guard denies. The per-block message (pairingMessage) is detected and
+            // prints exactly one form; this is the fallback for the hint that cannot look.
+            new Option(this.recovery.updateMainSteps('unknown').join('\n')
+                + '\nWhichever form applies, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
-            new Option('In a linked worktree `git checkout main` FATALS ("main is already checked out at <primary clone>") — branch off fresh main instead: git fetch origin main && git checkout -b <name> origin/main'),
             new Option('NOT blocked: `git checkout <sha>`, `git checkout -b <x> origin/main`, `git checkout -- <file>`, any other branch. Also still allowed: builds, tests, installs, the pull itself, all git/gh METADATA (status|log|diff|show|branch), every Write/Edit, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → stale-main-bash-guard (mode OFF) if intentional.'),
         ],
@@ -180,12 +187,12 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
 
     private pairingMessage(ctx: BashContext): string {
         const steps = this.recovery.updateMainSteps(this.recovery.kindOf(ctx.workspaceRoot)).join('\n');
-        return 'Blocked: a bare `git checkout main` lands you on whatever local `main` you last had. '
-            + 'That is not only stale FILES — it also reverts `package.json`\'s @webpieces pin and the '
-            + 'guard shim under `.claude/webpieces/`, so the very hook that would diagnose the resulting '
-            + 'version drift is replaced by an older copy that reports it BACKWARDS and names the cure '
-            + 'that makes it worse. Chain the pull into the same command, leaving no window in which you '
-            + 'are on a stale main:\n' + steps;
+        // Deliberately SHORT. The incident that bought this guard (a main 157 commits behind; the
+        // downgrade the reverted shim then prescribed) is maintainer material and lives in the class
+        // docblock above — the reader of THIS text needs only what changes what they type.
+        return 'Blocked: a bare `git checkout main` lands you on whatever local `main` you last had — '
+            + 'stale files, plus a reverted @webpieces pin and guard shim, so the drift guard then '
+            + 'reports the drift BACKWARDS. Chain the pull into the same command:\n' + steps;
     }
 
     // The first segment that would read stale workspace content, or null when none does. The RAW
