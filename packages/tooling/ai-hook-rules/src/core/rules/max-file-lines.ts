@@ -9,7 +9,7 @@ const DEFAULT_LIMIT = 900;
 const INSTRUCT_FILE = 'webpieces.filesize.md';
 
 export class MaxFileLinesRule extends FileRuleBase<MaxFileLinesConfig> {
-    constructor(config: MaxFileLinesConfig) { super(config, 'max-file-lines'); }
+    constructor(config: MaxFileLinesConfig) { super(config, 'max-file-lines', 'max-file-lines'); }
 
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

@@ -17,7 +17,7 @@ const RE_STYLE_BINDING = /\[style(?:\.[\w.-]+)?\]/; // [style] / [style.width]
 const TEST_PATHS: RegExp[] = [/\.test\.ts$/, /\.spec\.ts$/, /__tests__\//];
 
 export class NoCustomCssRule extends EditRuleBase<NoCustomCssConfig> {
-    constructor(config: NoCustomCssConfig) { super(config, 'no-custom-css'); }
+    constructor(config: NoCustomCssConfig) { super(config, 'no-custom-css', 'no-custom-css'); }
 
     readonly description =
         'Ban hand-written CSS in Angular (styles/styleUrls in @Component, inline style=, [style.x], [ngStyle]) — style with Tailwind utility classes.';

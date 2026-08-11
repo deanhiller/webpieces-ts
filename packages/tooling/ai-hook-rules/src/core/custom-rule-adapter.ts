@@ -23,7 +23,9 @@ export class CustomRuleAdapter extends AbstractRule<BaseRuleConfig> implements R
     private readonly rawConfig: RuleOptions;
 
     constructor(impl: PlainRule, rawConfig: RuleOptions) {
-        super(rawConfig as BaseRuleConfig, impl.name);
+        // A custom rule from `rulesDir` is keyed in webpieces.config.json by its own `name`, so the
+        // two identities coincide. Stated twice rather than defaulted — see AbstractRule.
+        super(rawConfig as BaseRuleConfig, impl.name, impl.name);
         this.impl = impl;
         this.scope = impl.scope;
         this.files = impl.files;

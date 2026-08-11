@@ -1,7 +1,8 @@
 import {
     DEFAULT_DEV_BRANCH,
     DEFAULT_DEV_BRANCH_NAMESPACE,
-    PrCreationOrPushGuardConfig,
+    PrLifecycleGuardConfig,
+    PR_LIFECYCLE_GUARD_KEY,
     RepoRootFinder,
     WP_PUSH_DEV,
     loadAndValidate,
@@ -13,7 +14,6 @@ import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 
-const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-start-upsert-pr';
 const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 
 /**
@@ -97,12 +97,19 @@ function targetsDevEnvironment(cmd: string, namespace: string, devBranch: string
         (token: string): boolean => token === devBranch || token === `refs/heads/${devBranch}`);
 }
 
-export class PrCreationOrPushGuardRule extends BashRuleBase<PrCreationOrPushGuardConfig> {
+export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConfig> {
+    /**
+     * The gated command this guard names, handed in by the LOADER from `commands.guardHints
+     * .prCreationOrPush` (already defaulted there). It is a constructor parameter, not a config field:
+     * the field `pr-creation-or-push-guard.upsertPrCommand` was a SECOND SPELLING that beat the
+     * commands section at the point of use, and the loader's name-keyed injection that fed it could
+     * miss a rename without failing the build. One spelling, wired at compile time.
+     */
     private readonly upsertPrCommand: string;
 
-    constructor(config: PrCreationOrPushGuardConfig) {
-        super(config, 'pr-creation-or-push-guard');
-        this.upsertPrCommand = config.upsertPrCommand ?? DEFAULT_UPSERT_PR_COMMAND;
+    constructor(config: PrLifecycleGuardConfig, upsertPrCommand: string) {
+        super(config, 'pr-creation-or-push-guard', PR_LIFECYCLE_GUARD_KEY);
+        this.upsertPrCommand = upsertPrCommand;
     }
 
     readonly description = 'Block manual `git push` and direct PR creation/edit (gh pr / gh api / curl) so pushes and PRs go only through the gated upsert-pr command.';

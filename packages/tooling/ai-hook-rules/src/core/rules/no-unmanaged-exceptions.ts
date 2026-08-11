@@ -19,7 +19,7 @@ function hasPrecedingDisable(lines: readonly string[], idx: number): boolean {
 }
 
 export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedExceptionsConfig> {
-    constructor(config: NoUnmanagedExceptionsConfig) { super(config, 'no-unmanaged-exceptions'); }
+    constructor(config: NoUnmanagedExceptionsConfig) { super(config, 'no-unmanaged-exceptions', 'no-unmanaged-exceptions'); }
 
     readonly description = 'try/catch is generally not allowed. Only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

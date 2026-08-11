@@ -118,9 +118,12 @@ equivalent in a pre-AI toolchain, and it is the one that matters most now: it is
 can put a convention where an agent cannot skip it, because the agent does not get to choose whether
 the hook runs.
 
-Beyond the code rules, this layer holds **workflow guards** — `feature-branch-guard` (don't edit on
-`main`), `read-stale-guard` (don't reason about an already-merged branch), `merge-in-progress-guard`,
-`branch-creation-guard`, `pr-merge-guard`, and the EXPERIMENTAL `whole-repo-build-guard` (don't build
+Beyond the code rules, this layer holds **workflow guards**, switched by THREE `hookGuards` keys — one
+per policy, not one per class. `branch-state-guard` covers "may I work here, and is what I read
+current?" (don't edit on `main`, don't reason about an already-merged branch, don't `cat` a stale tree);
+`branch-creation-guard` covers which branches and worktrees may exist; `pr-lifecycle-guard` covers "do
+PRs and merges go through the gated flow?". Alongside them sits the EXPERIMENTAL
+`whole-repo-build-guard`, which has no repo config key at all (don't build
 the whole monorepo — run the affected build). These encode process, not syntax: an agent physically
 cannot start work in the wrong place. Configured under `hookGuards` in `webpieces.config.json` — except
 `whole-repo-build-guard`, which has no repo-config entry at all: it is switched per MACHINE from the
@@ -248,8 +251,8 @@ A sequence that does not produce a revolt:
 1. **Install the engine, everything `OFF`.** Add `@webpieces/code-rules` + `@webpieces/ai-hook-rules`,
    write a `webpieces.config.json` with every rule `mode: "OFF"`. Nothing changes; the machinery is
    now present.
-2. **Turn on the process guards first.** `feature-branch-guard`, `branch-creation-guard`,
-   `read-stale-guard`. These are uncontroversial, they pay off immediately with AI agents, and they
+2. **Turn on the process guards first.** `branch-state-guard` and `branch-creation-guard` — two
+   `hookGuards` keys. These are uncontroversial, they pay off immediately with AI agents, and they
    teach the org that the hook exists and is survivable.
 3. **Pick your two highest-pain code conventions** — the ones you have already lost a code review
    argument about twice. Set them to `NEW_AND_MODIFIED_CODE` with an

@@ -288,7 +288,7 @@ async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteCla
 @injectable(bindingScopeValues.Singleton)
 export class InjectAnnotationNotNeededForConcreteClassValidator extends CodeValidator<InjectAnnotationNotNeededForConcreteClassConfig> {
     constructor(config: InjectAnnotationNotNeededForConcreteClassConfig) {
-        super(config, RULE_NAME);
+        super(config, RULE_NAME, RULE_NAME);
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

@@ -66,7 +66,7 @@ export class CssHit {
 @injectable(bindingScopeValues.Singleton)
 export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
     constructor(config: NoCustomCssConfig) {
-        super(config, 'no-custom-css');
+        super(config, 'no-custom-css', 'no-custom-css');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

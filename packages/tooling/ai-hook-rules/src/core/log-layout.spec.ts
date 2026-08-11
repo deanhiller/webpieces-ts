@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { LOGS_STATE_DIR } from '@webpieces/rules-config';
 
-import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef , MATRIX_L2 } from './decision-log';
+import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef , MATRIX_L2_UNROWED } from './decision-log';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logRejection } from './rejection-log';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
@@ -59,7 +59,7 @@ function exerciseEveryWriter(root: string): void {
     invocations.begin(root, 'Bash', 'ls');
     invocations.finish('ALLOW', '-');
 
-    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'gh pr create', 'dean/x', 'BLOCK_AI_CURE', 'nope', '-', L0_FAULT_NONE, MATRIX_L2));
+    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', 'gh pr create', 'dean/x', 'BLOCK_AI_CURE', 'nope', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
     logL1Decision(root, new GuardDecision('force-to-root', 'Bash', 'git status', 'dean/x', 'BLOCK_AI_CURE', 'git/gh from subdir', '-', '-', new MatrixRef('L1', '5')));
     logSyncEvent(root, new SyncLogEvent('FINISH', 123, 'main', 'done'));
 

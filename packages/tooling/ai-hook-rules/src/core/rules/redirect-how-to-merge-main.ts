@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { RedirectHowToMergeMainConfig, RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY, RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -61,7 +61,7 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeMainConfig> {
+export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardConfig> {
     private readonly scanner = new CommandScanner();
     private readonly recovery = new TreeRecovery();
     // "Which branch does this land on?" — see branch-switch-scan.ts. It replaced a pair of regexes
@@ -72,7 +72,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
     // with a reason ("switches to a feature branch") that was the opposite of the truth.
     private readonly switches = new BranchSwitchScan(this.scanner);
 
-    constructor(config: RedirectHowToMergeMainConfig) { super(config, 'redirect-how-to-merge-main'); }
+    constructor(config: PrLifecycleGuardConfig) { super(config, 'redirect-how-to-merge-main', PR_LIFECYCLE_GUARD_KEY); }
 
     readonly description = 'Block ALL `git merge`/`git rebase` (any branch, any form) and `git pull origin main` on a feature branch. Use the squash-update process instead.';
     readonly fixHint = FIX_HINT;

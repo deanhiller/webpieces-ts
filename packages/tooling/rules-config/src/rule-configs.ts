@@ -428,45 +428,39 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     };
 }
 
-export class PrCreationOrPushGuardConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
-    // The gated command the guard points agents to instead of direct PR creation OR a manual push.
-    // Per-project override; defaults to `pnpm wp-start-upsert-pr` at the point of use.
-    upsertPrCommand?: string;
-
-    static readonly SCHEMA: SchemaShape<PrCreationOrPushGuardConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
-        upsertPrCommand: FieldDef.optional('string'),
-        ...BASE_RULE_SCHEMA,
-    };
-}
-
-export class MergeInProgressGuardConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
-    // The gated command the guard points agents to in order to finish a 3-point merge. Per-project
-    // override; defaults to `commands.mergeComplete` (pnpm wp-finish-upsert-pr) at load time.
-    mergeCompleteCommand?: string;
-
-    static readonly SCHEMA: SchemaShape<MergeInProgressGuardConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
-        mergeCompleteCommand: FieldDef.optional('string'),
-        ...BASE_RULE_SCHEMA,
-    };
-}
-
-export class PrMergeGuardConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
-
-    static readonly SCHEMA: SchemaShape<PrMergeGuardConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
-        ...BASE_RULE_SCHEMA,
-    };
-}
-
-export class RedirectHowToMergeMainConfig extends BaseRuleConfig {
+/**
+ * `pr-lifecycle-guard` — ONE key, ONE policy: *PRs and merges go through the gated flow.*
+ *
+ * Four CLASSES implement it, and their names are unchanged (they are the operator identity every
+ * decision-log line and every deny report carries):
+ *
+ *   pr-creation-or-push-guard  a manual `git push` / `gh pr create|edit` / a raw pulls API call
+ *   merge-in-progress-guard    a PR command while a 3-point merge is half-finished
+ *   pr-merge-guard             a bare `gh pr merge`
+ *   redirect-how-to-merge-main "how do I get main into my branch?" → the documented flow
+ *
+ * ## Say this out loud: `"mode": "OFF"` releases the unvalidated-merge gate too
+ *
+ * Three of the four are pure COMMAND-SHAPE blocks and can never fire spuriously. The fourth,
+ * merge-in-progress-guard, is STATE-conditional — it fires only while a 3-point merge is actually in
+ * progress, and it is the one state L2 explicitly stands down for. So turning this key OFF to unblock
+ * `gh pr merge` ALSO drops the "you have an unfinished merge" gate. That is the honest cost of one key
+ * per policy, and it is stated here, in guards/L4-pr-lifecycle.md, and in the error path, rather than
+ * being papered over with a granular sub-mode (which would be four knobs wearing one key's name).
+ *
+ * ## The command strings are NOT here
+ *
+ * `upsertPrCommand` and `mergeCompleteCommand` used to sit on the two guards, and — being read at the
+ * point of use — they BEAT `commands.guardHints`, so `guardHintsWhy`'s claim that renaming a gated
+ * command there makes "every guard message follow" was simply false. They are DELETED, not deprecated.
+ * `commands.guardHints.prCreationOrPush` / `.mergeInProgress` is the one place those strings live, and
+ * the loader hands the resolved values to the two rules directly. A consumer that still sets the old
+ * per-guard field gets a RETIRED_FIELD_HINTS error naming the destination.
+ */
+export class PrLifecycleGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
 
-    static readonly SCHEMA: SchemaShape<RedirectHowToMergeMainConfig> = {
+    static readonly SCHEMA: SchemaShape<PrLifecycleGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         ...BASE_RULE_SCHEMA,
     };

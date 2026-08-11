@@ -10,7 +10,7 @@ const ANY_PATTERN =
     /(?::\s*any\b|\bas\s+any\b|<any>|any\[\]|Array<any>|Promise<any>|Map<[^,<>]+,\s*any\s*>|Record<[^,<>]+,\s*any\s*>|Set<any>)/; // webpieces-disable no-any-unknown -- regex literal, not a type
 
 export class NoAnyUnknownRule extends EditRuleBase<NoAnyUnknownConfig> {
-    constructor(config: NoAnyUnknownConfig) { super(config, 'no-any-unknown'); }
+    constructor(config: NoAnyUnknownConfig) { super(config, 'no-any-unknown', 'no-any-unknown'); }
 
     readonly description = 'Disallow the `any` keyword. Use concrete types or interfaces.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

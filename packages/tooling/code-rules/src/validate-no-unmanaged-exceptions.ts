@@ -271,7 +271,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoUnmanagedExceptionsValidator extends CodeValidator<NoUnmanagedExceptionsConfig> {
     constructor(config: NoUnmanagedExceptionsConfig) {
-        super(config, 'no-unmanaged-exceptions');
+        super(config, 'no-unmanaged-exceptions', 'no-unmanaged-exceptions');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

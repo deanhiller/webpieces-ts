@@ -21,12 +21,15 @@ function mktmp(contents: Record<string, string>): string {
 // Minimal valid config — every built-in present in its correct section, all OFF with an explicit
 // turnOffRuleUntilEpoch (0 = active; the hatch is optional now but kept here for realism), plus a
 // valid commands.pr-gate block. Code rules go under `rules`; the bash guards go under `hookGuards`.
+// ONE KEY PER POLICY. The eight class-named keys this replaced (feature-branch-guard,
+// read-stale-guard, stale-main-bash-guard, merged-branch-bash-guard, pr-creation-or-push-guard,
+// merge-in-progress-guard, pr-merge-guard, redirect-how-to-merge-main) are RETIRED: naming any of them
+// here would fail the load with a migration instruction, which is what the retired-guard-names describe
+// block below asserts on purpose.
 const HOOK_GUARD_NAMES = [
-    'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
-    'redirect-how-to-merge-main', 'feature-branch-guard', 'read-stale-guard', 'merged-branch-bash-guard',
+    'branch-state-guard', 'branch-creation-guard', 'pr-lifecycle-guard',
     // NOT 'whole-repo-build-guard' — it is retired as a repo-config key (it is switched from
     // ~/.webpieces/config.json instead), so naming it here would FAIL the load rather than configure it.
-    'stale-main-bash-guard',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
@@ -197,7 +200,7 @@ describe('loadAndValidate — sections & commands', () => {
     it('errors when a guard is left in the rules section (placement)', () => {
         const sections = allRulesOff();
         // Misplace a guard into rules.
-        (sections['rules'] as Record<string, unknown>)['pr-creation-or-push-guard'] = { mode: 'ON', turnOffRuleUntilEpoch: 0 };
+        (sections['rules'] as Record<string, unknown>)['pr-lifecycle-guard'] = { mode: 'ON', turnOffRuleUntilEpoch: 0 };
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': validPrGate() } }) });
         expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
     });
@@ -231,10 +234,14 @@ describe('loadAndValidate — sections & commands', () => {
         const loaded = loadAndValidate(dir);
         expect(loaded.commands.upsertPr).toBe('pnpm gh-upsert');
         expect(loaded.commands.mergeComplete).toBe('pnpm gh-finish');
-        const prGuard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
-        expect(prGuard['upsertPrCommand']).toBe('pnpm gh-upsert');
-        const mergeGuard = loaded.rulesConfig['merge-in-progress-guard'] as Record<string, unknown>;
-        expect(mergeGuard['mergeCompleteCommand']).toBe('pnpm gh-finish');
+        // …and they are NOT written back onto any guard's config entry. The loader used to inject them
+        // there as a default beneath per-guard `upsertPrCommand` / `mergeCompleteCommand` fields — a
+        // second spelling that beat the commands section at the point of use, keyed on guard-name
+        // literals that a rename could miss without failing the build. Both fields are deleted and the
+        // resolved strings reach the two rules at CONSTRUCTION (see load-rules.BUILT_IN_RULE_MAP).
+        const guard = loaded.rulesConfig['pr-lifecycle-guard'] as Record<string, unknown>;
+        expect(guard['upsertPrCommand']).toBeUndefined();
+        expect(guard['mergeCompleteCommand']).toBeUndefined();
     });
 
     // There is no precedence chain to test any more: a half-migrated file does not quietly resolve to the
@@ -330,9 +337,11 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
  */
 describe('loadAndValidate — retired guard names', () => {
     const RENAMES: readonly (readonly [string, string])[] = [
-        ['pr-merge-cleanup', 'pr-merge-guard'],
-        ['pr-creation-guard', 'pr-creation-or-push-guard'],
-        ['main-stale-guard', 'read-stale-guard'],
+        // Each re-points at the POLICY key it lands on TODAY. Their old destinations are themselves
+        // retired now, and a retirement whose movedTo names a dead key teaches the removed API.
+        ['pr-merge-cleanup', 'pr-lifecycle-guard'],
+        ['pr-creation-guard', 'pr-lifecycle-guard'],
+        ['main-stale-guard', 'branch-state-guard'],
     ];
 
     for (const rename of RENAMES) {

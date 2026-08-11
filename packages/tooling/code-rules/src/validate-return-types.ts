@@ -360,7 +360,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class RequireReturnTypeValidator extends CodeValidator<RequireReturnTypeConfig> {
     constructor(config: RequireReturnTypeConfig) {
-        super(config, 'require-return-type');
+        super(config, 'require-return-type', 'require-return-type');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

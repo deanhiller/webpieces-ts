@@ -123,7 +123,7 @@ describe('config-error banner — the markers match what the validators actually
     });
 
     it('a guard left in `rules` and a code rule left in `hookGuards` both carry the marker', () => {
-        const guardInRules = validateSectionPlacement({ 'pr-merge-guard': {} }, {});
+        const guardInRules = validateSectionPlacement({ 'pr-lifecycle-guard': {} }, {});
         const ruleInGuards = validateSectionPlacement({}, { 'max-file-lines': {} });
         expect(guardInRules).toHaveLength(1);
         expect(ruleInGuards).toHaveLength(1);

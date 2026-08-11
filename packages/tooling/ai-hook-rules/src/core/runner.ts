@@ -1,16 +1,16 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
 import { gitFromSubdirBlock } from './force-to-root';
-import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches } from './load-rules';
+import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches, GuardHintCommands } from './load-rules';
 import { missingDirectoryBlock } from './missing-directory';
 import { MatchRule } from './rules/match-rule';
-import { triggerMainSyncRefresh } from './main-sync-refresh';
-import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0_ALLOW, MATRIX_L2 } from './decision-log';
+import { branchStateHangTimeout, maybeRefreshMainSync } from './main-sync-timeout';
+import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0_ALLOW, MATRIX_L2_UNROWED } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
@@ -28,10 +28,14 @@ import {
 // disjoint category ('rules' = code-style, 'guards' = the hookGuards section); 'all' runs both (the
 // openclaw plugin adapter, a single before_tool_call hook). isHookGuard is the shared classifier in
 // @webpieces/rules-config.
+// isHookGuard is asked about the rule's CONFIG KEY, never its name. Since the collapse those differ
+// for every class behind a policy key — `feature-branch-guard` is a rule NAME whose key is
+// `branch-state-guard` — and asking about the name would classify all eight collapsed guards as
+// code-style rules, i.e. run them in the wrong hook and never in the guards hook at all.
 function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
-    if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.name));
-    return rules.filter((r: Rule): boolean => !isHookGuard(r.name));
+    if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.configKey));
+    return rules.filter((r: Rule): boolean => !isHookGuard(r.configKey));
 }
 
 // Drop every rule excluded for this path (webpieces.config.json → excludePaths). ONE glob list: a path
@@ -51,20 +55,18 @@ export function effectiveBashCwd(command: string, cwd: string): string {
     return new EffectiveTreeResolver().effectiveCwd(command, cwd);
 }
 
+// The resolved gated-command strings the PR-lifecycle guards print, straight off the loaded
+// `commands.guardHints`. Handed to the rules at construction rather than injected into their config
+// entries under guard-name literals — the injection this replaces could miss a rename silently.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function guardHintsOf(loaded: LoadedConfig): GuardHintCommands {
+    return new GuardHintCommands(loaded.commands.upsertPr, loaded.commands.mergeComplete);
+}
+
 // A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
 const GIT_OR_GH_RE = /(?:^|[;&|]\s*)(?:git|gh)\b/;
 export function isGitOrGhCommand(command: string): boolean {
     return GIT_OR_GH_RE.test(command);
-}
-
-// Fire-and-forget the detached refresher when feature-branch-guard is loaded and active, so the
-// cache (.webpieces/main-sync-status.json) stays fresh as the AI works. The guard rule itself also
-// triggers this on Write/Edit; this covers the Bash path so the cache is warm on every command.
-function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string): void {
-    const guard = rules.find((r: Rule): boolean => r.name === 'feature-branch-guard');
-    if (guard && guard.shouldRun()) {
-        triggerMainSyncRefresh(workspaceRoot, DEFAULT_HANG_TIMEOUT_MINUTES);
-    }
 }
 
 // Fault C (webpieces.config.json missing) — the deny text lives in ./l0-matrix beside the rest of the
@@ -121,7 +123,7 @@ function runInternal(
 
     // Built-in/custom rules PLUS the client-authored match-rules (content guards). Match-rules run only
     // in the file-edit path (they are code-style, so filterByMode keeps them out of the bash/guards path).
-    const allRules = [...loadRules(loaded.rulesConfig, workspaceRoot), ...loadMatchRules(loaded.matchRules)];
+    const allRules = [...loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), ...loadMatchRules(loaded.matchRules)];
     const modeRules = filterByMode(allRules, mode);
     if (modeRules.length === 0) return null;
 
@@ -197,7 +199,7 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
     if (new EffectiveTreeResolver().resolve('', cwd, workspaceRoot).kind === 'foreign') return null;
 
     const relativePath = path.relative(workspaceRoot, filePath);
-    const all = loadRules(loaded.rulesConfig, workspaceRoot);
+    const all = loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded));
     const rules = filterByExcludedPaths(
         all.filter((r: Rule): boolean => READ_SCOPED_GUARDS.has(r.name)),
         relativePath,
@@ -451,7 +453,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
     const relativeCwd = path.relative(workspaceRoot, tree.effectiveCwd);
     const rules = filterByExcludedPaths(
-        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode), relativeCwd, loaded.excludePaths,
+        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode), relativeCwd, loaded.excludePaths,
     );
     const experimental = experimentalBashRules(loaded, mode, relativeCwd);
     if (rules.length === 0 && experimental.length === 0) return null;
@@ -467,7 +469,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     // fresh status. Detached + fire-and-forget — never blocks the command. Only when the guard is
     // loaded (guards/all mode) and enabled, so a project that opted out never triggers git fetches.
     // Keyed on the JUDGED tree, so a worktree's cache is refreshed rather than the primary clone's.
-    maybeRefreshMainSync(rules, tree.root);
+    maybeRefreshMainSync(rules, tree.root, branchStateHangTimeout(loaded.rulesConfig));
 
     const ctx = buildBashContext(command, tree);
     const groups = runBashRules([...rules, ...experimental], ctx);
@@ -477,13 +479,13 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
         // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
         // logged below.
         if (/\b(?:git|gh)\b/.test(command)) {
-            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2));
+            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
         }
         return null;
     }
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2));
+    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
     const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }
@@ -523,14 +525,30 @@ function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly st
         + `judged from somewhere you did not intend.`;
 }
 
-// The set of rule names explicitly present in webpieces.config.json (every key except rulesDir).
+// The set of CONFIG KEYS explicitly present in webpieces.config.json (every key except rulesDir).
 function configuredRuleNames(config: WebpiecesRulesConfig): ReadonlySet<string> {
     return new Set(Object.keys(config).filter((k: string) => k !== 'rulesDir'));
 }
 
+/**
+ * Fault Y — a loaded rule whose CONFIG KEY has no entry.
+ *
+ * Compared on `configKey`, not `name`. Eight of the loaded rules are classes behind two policy keys, so
+ * comparing names here would demand entries named `feature-branch-guard`, `pr-merge-guard` and six
+ * others — keys the validator then REJECTS as retired. That is the two-enforcement-paths deadlock this
+ * repo has already hit once (see the narration in guards.spec.ts), and it blocks every Bash/Write/Edit.
+ *
+ * De-duplicated on the key too, so one missing policy entry reports ONE paste-ready snippet rather than
+ * four copies of the same one under four different headings.
+ */
 function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): BlockedResult | null {
     const configured = configuredRuleNames(config);
-    const unconfiguredRules = rules.filter((r: Rule) => !configured.has(r.name));
+    const seen = new Set<string>();
+    const unconfiguredRules = rules.filter((r: Rule): boolean => {
+        if (configured.has(r.configKey) || seen.has(r.configKey)) return false;
+        seen.add(r.configKey);
+        return true;
+    });
     if (unconfiguredRules.length === 0) return null;
 
     // ONE action, no menu, no escalation — the config-validation invariant (guards/L0-tooling.md): every
@@ -558,7 +576,7 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
     ];
 
     for (const rule of unconfiguredRules) {
-        lines.push(`--- ${rule.name} ---`);
+        lines.push(`--- ${rule.configKey} ---`);
         lines.push(`Description: ${rule.description}`);
         const opts = rule.defaultOptions;
         const optKeys = Object.keys(opts);
@@ -573,7 +591,7 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
         // The SAME entry the installer would seed: recommended mode, both hatches, and every other
         // schema-required field — so pasting it satisfies the loader in one pass.
         lines.push(`Entry to add to ${CONFIG_FILENAME}:`);
-        lines.push(`  "${rule.name}": ${JSON.stringify(seedEntryForRule(rule.name))}`);
+        lines.push(`  "${rule.configKey}": ${JSON.stringify(seedEntryForRule(rule.configKey))}`);
         lines.push('');
     }
 

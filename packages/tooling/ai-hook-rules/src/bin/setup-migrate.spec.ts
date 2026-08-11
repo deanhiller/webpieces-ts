@@ -23,8 +23,11 @@ describe('migrate', () => {
         });
 
         expect(result.config.rules['no-any-unknown']).toBeDefined();
+        // The guard was BOTH misplaced (in `rules`) and retired (a class name, not a policy key), so
+        // it lands under its destination key, in the right section, in one pass.
         expect(result.config.rules['pr-creation-or-push-guard']).toBeUndefined();
-        expect(result.config.hookGuards['pr-creation-or-push-guard']).toBeDefined();
+        expect(result.config.hookGuards['pr-creation-or-push-guard']).toBeUndefined();
+        expect(result.config.hookGuards['pr-lifecycle-guard']).toBeDefined();
         expect(result.config.commands['pr-gate']).toBeDefined();
         expect((result.config as { 'pr-gate'?: unknown })['pr-gate']).toBeUndefined();
         const hints = result.config.commands['guardHints'] as Record<string, unknown>;
@@ -56,21 +59,90 @@ describe('migrate', () => {
             commands: { 'pr-gate': { mode: 'OFF' } },
         });
         expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
-        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
-        expect(result.changes.some(c => c.includes('renamed retired "main-stale-guard"'))).toBe(true);
+        // Two hops in one pass: main-stale-guard was renamed read-stale-guard, and read-stale-guard is
+        // now one of four classes behind `branch-state-guard`. The table points it at the destination it
+        // lands on TODAY, so a config several releases behind still migrates in a single run.
+        expect(result.config.hookGuards['read-stale-guard']).toBeUndefined();
+        expect(result.config.hookGuards['branch-state-guard']).toMatchObject({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
+        expect(result.changes.some(c => c.includes('retired "main-stale-guard" -> "branch-state-guard"'))).toBe(true);
     });
 
-    it('drops a retired name rather than clobbering an explicit entry under the new name', () => {
+    it('keeps the value a consumer stated rather than clobbering it with a later retired key', () => {
         const result = migrate({
             rules: {},
             hookGuards: {
                 'main-stale-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0 },
-                'read-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
+                'branch-state-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
             },
             commands: { 'pr-gate': { mode: 'OFF' } },
         });
         expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
-        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
+        expect(result.config.hookGuards['branch-state-guard']).toMatchObject({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
+    });
+
+    /**
+     * N -> 1 IS THE WHOLE POINT, and a 1:1 migrator gets it silently wrong.
+     *
+     * Four retired keys now point at ONE destination. The previous code renamed the first key it met and
+     * then, finding the destination present, DELETED the other three — so which guard's settings survived
+     * depended on RETIRED_CONFIG_KEYS declaration order rather than on the consumer's file, and the
+     * survivor carried only that guard's fields, leaving the merged entry short of the schema's required
+     * ones. This is the command advertised as the migration path; half-migrating into an invalid config
+     * is worse than refusing to migrate at all.
+     */
+    it('UNIONS four retired branch-state keys into one entry, keeping every field that survives', () => {
+        const result = migrate({
+            rules: {},
+            hookGuards: {
+                'feature-branch-guard': { mode: 'ON', branchNamingConvention: '{whoami}/{feature}', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+                'read-stale-guard': { mode: 'OFF', hangTimeoutMinutes: 9, turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+                'stale-main-bash-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+                'merged-branch-bash-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+            },
+            commands: { 'pr-gate': { mode: 'OFF' } },
+        });
+        for (const retired of ['feature-branch-guard', 'read-stale-guard', 'stale-main-bash-guard', 'merged-branch-bash-guard']) {
+            expect(result.config.hookGuards[retired], retired).toBeUndefined();
+        }
+        // First writer wins per field, and the more specific keys are declared first — so the naming
+        // convention and the ONE surviving hangTimeoutMinutes both carry across.
+        expect(result.config.hookGuards['branch-state-guard']).toEqual({
+            mode: 'ON',
+            branchNamingConvention: '{whoami}/{feature}',
+            hangTimeoutMinutes: 9,
+            turnOffRuleUntilEpoch: 0,
+            turnOffRuleWhileOnBranch: null,
+        });
+    });
+
+    it('DROPS a field the destination schema deleted, rather than carrying it into an invalid config', () => {
+        const result = migrate({
+            rules: {},
+            hookGuards: {
+                'pr-creation-or-push-guard': { mode: 'ON', upsertPrCommand: 'pnpm mine', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+            },
+            commands: { 'pr-gate': { mode: 'OFF' } },
+        });
+        const merged = result.config.hookGuards['pr-lifecycle-guard'];
+        expect(merged['upsertPrCommand']).toBeUndefined();
+        expect(merged['mode']).toBe('ON');
+        expect(result.changes.some(c => c.includes('dropped deleted field(s) upsertPrCommand'))).toBe(true);
+    });
+
+    it('FILLS a required field the union left short, so the migrated config actually loads', () => {
+        // A config old enough to predate the escape hatches: the union of its entries satisfies no
+        // schema on its own. Seeding the gap from seedEntryForRule is what makes the install command a
+        // complete instruction rather than a first step.
+        const result = migrate({
+            rules: {},
+            hookGuards: { 'stale-main-bash-guard': { mode: 'ON' } },
+            commands: { 'pr-gate': { mode: 'OFF' } },
+        });
+        const merged = result.config.hookGuards['branch-state-guard'];
+        expect(merged['mode']).toBe('ON');
+        expect(merged['turnOffRuleUntilEpoch']).toBe(0);
+        expect(merged['turnOffRuleWhileOnBranch']).toBeNull();
+        expect(result.changes.some(c => c.includes('filled required field(s) on "branch-state-guard"'))).toBe(true);
     });
 
     /**

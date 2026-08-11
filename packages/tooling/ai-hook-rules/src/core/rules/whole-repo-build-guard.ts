@@ -8,7 +8,7 @@ import { BashRuleBase, EmptyRuleConfig } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
-import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2_UNROWED } from '../decision-log';
 import { CommandScanner } from '../command-scan';
 import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
 
@@ -79,7 +79,11 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
      * because this guard has no config entry to read one from — and that is the point.
      */
     constructor(private readonly affectedBuildCommand: string) {
-        super(new EmptyRuleConfig(), 'whole-repo-build-guard');
+        // configKey === name and is DELIBERATELY not a real key: this guard has no
+        // webpieces.config.json entry at all (see RETIRED_CONFIG_KEYS), and it is loaded outside the
+        // config-driven set so the fault-Y sync check never sees it. Naming it here keeps the
+        // AbstractRule contract honest without putting the string in HOOK_GUARD_NAMES.
+        super(new EmptyRuleConfig(), 'whole-repo-build-guard', 'whole-repo-build-guard');
     }
 
     private readonly scanner = new CommandScanner();
@@ -247,7 +251,7 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
     private logDecision(ctx: BashContext, verdict: Verdict, reason: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('whole-repo-build-guard', 'Bash', ctx.command, '-', verdict, reason, '-', L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('whole-repo-build-guard', 'Bash', ctx.command, '-', verdict, reason, '-', L0_FAULT_NONE, MATRIX_L2_UNROWED),
         );
     }
 }

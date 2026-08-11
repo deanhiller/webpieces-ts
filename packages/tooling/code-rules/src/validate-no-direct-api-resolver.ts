@@ -587,7 +587,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoDirectApiResolverValidator extends CodeValidator<AngularNoDirectApiInResolverConfig> {
     constructor(config: AngularNoDirectApiInResolverConfig) {
-        super(config, 'angular-no-direct-api-in-resolver');
+        super(config, 'angular-no-direct-api-in-resolver', 'angular-no-direct-api-in-resolver');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

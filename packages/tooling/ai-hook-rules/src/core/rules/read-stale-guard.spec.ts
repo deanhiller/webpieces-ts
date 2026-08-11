@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, ReadStaleGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus, BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import type { FileContext } from '../types';
 
@@ -70,7 +70,7 @@ vi.mock('../decision-log', () => ({
     GuardDecision: class { constructor(...args: unknown[]) { void args; } },
     // The layer token the guards now stamp on every line. A mock that omits it fails at import,
     // which is the mock telling the truth: this module really does depend on it.
-    MATRIX_L2: { layer: 'L2', row: '-' },
+    matrixL2Row: (reason: string) => ({ layer: 'L2', row: reason }),
 }));
 
 import { ReadStaleGuardRule } from './read-stale-guard';
@@ -80,7 +80,7 @@ function ctx(relativePath: string = 'src/a.ts'): FileContext {
 }
 
 function rule(): ReadStaleGuardRule {
-    const cfg = new ReadStaleGuardConfig();
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return new ReadStaleGuardRule(cfg);
 }
@@ -376,7 +376,7 @@ describe('read-stale-guard — config', () => {
     beforeEach(reset);
 
     it('does not run when mode is OFF', () => {
-        const cfg = new ReadStaleGuardConfig();
+        const cfg = new BranchStateGuardConfig();
         cfg.mode = 'OFF';
         expect(new ReadStaleGuardRule(cfg).shouldRun()).toBe(false);
     });

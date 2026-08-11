@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, MergedBranchBashGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus, BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import { BashContext } from '../types';
 
@@ -42,7 +42,7 @@ vi.mock('../decision-log', () => ({
     GuardDecision: class { constructor(...args: unknown[]) { void args; } },
     // The layer token the guards now stamp on every line. A mock that omits it fails at import,
     // which is the mock telling the truth: this module really does depend on it.
-    MATRIX_L2: { layer: 'L2', row: '-' },
+    matrixL2Row: (reason: string) => ({ layer: 'L2', row: reason }),
 }));
 
 import { MergedBranchBashGuardRule } from './merged-branch-bash-guard';
@@ -52,7 +52,7 @@ function ctx(command: string): BashContext {
 }
 
 function rule(): MergedBranchBashGuardRule {
-    const cfg = new MergedBranchBashGuardConfig();
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return new MergedBranchBashGuardRule(cfg);
 }

@@ -10,7 +10,7 @@ vi.mock('child_process', () => ({
     }),
 }));
 
-import { PrMergeGuardConfig } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { PrMergeGuardRule } from './pr-merge-guard';
 
@@ -19,7 +19,7 @@ function ctx(command: string): BashContext {
 }
 
 function guard(): PrMergeGuardRule {
-    return new PrMergeGuardRule(new PrMergeGuardConfig());
+    return new PrMergeGuardRule(new PrLifecycleGuardConfig());
 }
 
 describe('pr-merge-guard redirects every hand-rolled merge to wp-land-pr', () => {

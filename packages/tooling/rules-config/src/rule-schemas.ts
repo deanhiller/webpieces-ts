@@ -2,12 +2,7 @@
 // Every consumer of "what fields does rule X have" reads it from here: the validator, the missing-rule
 // snippet, and the installer's seeding (seed-entry.ts) — one table, so they cannot disagree.
 import { FieldDef } from './field-def';
-import {
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
-    MergedBranchBashGuardConfig,
-    StaleMainBashGuardConfig,
-} from './main-sync-guard-configs';
+import { BranchStateGuardConfig } from './main-sync-guard-configs';
 import {
     MaxMethodLinesConfig,
     MaxFileLinesConfig,
@@ -30,10 +25,7 @@ import {
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
-    PrCreationOrPushGuardConfig,
-    MergeInProgressGuardConfig,
-    PrMergeGuardConfig,
-    RedirectHowToMergeMainConfig,
+    PrLifecycleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
@@ -51,6 +43,11 @@ import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creatio
 
 // Thin lookup table — each entry delegates to the class's own SCHEMA.
 // No field lists here; all schemas live with their config class.
+//
+// KEYED BY CONFIG KEY, not by rule name. For most rules those are the same string, but the three
+// hookGuard entries below are POLICIES implemented by more than one class: `branch-state-guard` is
+// read by the four branch-state guards and `pr-lifecycle-guard` by the four PR-lifecycle guards (see
+// AbstractRule.configKey). A rule NAME that is not a config key has no row here and never should.
 export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'max-method-lines': MaxMethodLinesConfig.SCHEMA,
     'max-file-lines': MaxFileLinesConfig.SCHEMA,
@@ -74,14 +71,8 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'framework-tag': FrameworkTagConfig.SCHEMA,
     'role-tag': RoleTagConfig.SCHEMA,
     'branch-creation-guard': BranchCreationGuardConfig.SCHEMA,
-    'pr-creation-or-push-guard': PrCreationOrPushGuardConfig.SCHEMA,
-    'merge-in-progress-guard': MergeInProgressGuardConfig.SCHEMA,
-    'pr-merge-guard': PrMergeGuardConfig.SCHEMA,
-    'redirect-how-to-merge-main': RedirectHowToMergeMainConfig.SCHEMA,
-    'feature-branch-guard': FeatureBranchGuardConfig.SCHEMA,
-    'read-stale-guard': ReadStaleGuardConfig.SCHEMA,
-    'merged-branch-bash-guard': MergedBranchBashGuardConfig.SCHEMA,
-    'stale-main-bash-guard': StaleMainBashGuardConfig.SCHEMA,
+    'pr-lifecycle-guard': PrLifecycleGuardConfig.SCHEMA,
+    'branch-state-guard': BranchStateGuardConfig.SCHEMA,
     'no-file-import-cycles': NoFileImportCyclesConfig.SCHEMA,
     'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
     'nx-wiring': NxWiringConfig.SCHEMA,
@@ -96,8 +87,25 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-eslint-sync': ValidateEslintSyncConfig.SCHEMA,
 };
 
-// Every built-in rule name that has a typed schema (code rules + bash guards). The installer uses
-// this (with sectionForRule) to seed a fresh webpieces.config.json with every rule in its section.
+/**
+ * The field names `configKey`'s schema accepts, or null when there is no schema (a custom rule from
+ * `rulesDir`, or a name that is not a config key at all).
+ *
+ * Exists so the installer's N→1 retirement merge can drop fields the DESTINATION schema does not know
+ * — `upsertPrCommand` folded from a retired guard entry into `pr-lifecycle-guard` would otherwise
+ * produce a config the validator rejects on the very next call. Returning the names rather than the
+ * FieldDefs keeps the schema objects themselves unexported: there is one reader of a schema's shape,
+ * and it is this package's own validator.
+ */
+// webpieces-disable no-function-outside-class -- pure lookup over the module-scope schema table, beside allRuleNames
+export function schemaFieldNames(configKey: string): readonly string[] | null {
+    const schema = RULE_SCHEMAS[configKey];
+    return schema === undefined ? null : Object.keys(schema);
+}
+
+// Every built-in CONFIG KEY that has a typed schema (code rules + bash guards). The installer uses
+// this (with sectionForRule) to seed a fresh webpieces.config.json with every entry in its section.
+// It is the key set, not the class set: four classes behind `branch-state-guard` contribute one name.
 // webpieces-disable no-function-outside-class -- pure lookup over the module-scope schema table
 export function allRuleNames(): readonly string[] {
     return Object.keys(RULE_SCHEMAS);

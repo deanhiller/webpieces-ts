@@ -20,10 +20,7 @@ import {
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
-    PrCreationOrPushGuardConfig,
-    MergeInProgressGuardConfig,
-    PrMergeGuardConfig,
-    RedirectHowToMergeMainConfig,
+    PrLifecycleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     DiGraphConfig,
@@ -31,7 +28,7 @@ import {
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
-import { FeatureBranchGuardConfig, ReadStaleGuardConfig } from './main-sync-guard-configs';
+import { BranchStateGuardConfig } from './main-sync-guard-configs';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 
 export class WebpiecesRulesConfig {
@@ -56,13 +53,12 @@ export class WebpiecesRulesConfig {
     'inject-annotation-not-needed-for-concrete-class'?: InjectAnnotationNotNeededForConcreteClassConfig;
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
+    // The THREE hookGuards keys, complete. It used to list five of the nine class-named keys — both
+    // bash guards were simply missing — and nothing caught it, because this class is populated by
+    // dynamic key assignment in the loader. One key per POLICY makes completeness checkable by eye.
+    'branch-state-guard'?: BranchStateGuardConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
-    'pr-creation-or-push-guard'?: PrCreationOrPushGuardConfig;
-    'merge-in-progress-guard'?: MergeInProgressGuardConfig;
-    'pr-merge-guard'?: PrMergeGuardConfig;
-    'redirect-how-to-merge-main'?: RedirectHowToMergeMainConfig;
-    'feature-branch-guard'?: FeatureBranchGuardConfig;
-    'read-stale-guard'?: ReadStaleGuardConfig;
+    'pr-lifecycle-guard'?: PrLifecycleGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;
     'di-graph'?: DiGraphConfig;

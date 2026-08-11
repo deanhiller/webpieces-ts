@@ -303,6 +303,18 @@ export class MainSyncStatusService {
      */
     // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
     private computeBranchStatus(repoRoot: string, branch: string, index: PullRequestIndex): MainSyncStatus {
+        return this.stampForge(this.computeBranchStatusInner(repoRoot, branch, index), index);
+    }
+
+    // Every return path of the computation below has to carry the forge flag, and threading it through
+    // four constructions is how one of them would end up missing it. One wrapper, one assignment.
+    private stampForge(status: MainSyncStatus, index: PullRequestIndex): MainSyncStatus {
+        status.forgeReachable = index.forgeReachable;
+        return status;
+    }
+
+    // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
+    private computeBranchStatusInner(repoRoot: string, branch: string, index: PullRequestIndex): MainSyncStatus {
         const mergedPr = index.mergedFor(branch);
         const openPr = index.openFor(branch);
 
@@ -492,7 +504,12 @@ export class MainSyncStatusService {
         const result = this.capture(repoRoot, 'gh', [
             'pr', 'list', '--state', 'all', '--json', 'number,headRefName,state', '--limit', '200',
         ]);
-        if (!result.ok || result.out === '') return new PullRequestIndex({}, {});
+        // `gh` could not be run, or exited non-zero (missing, unauthenticated, rate-limited, offline).
+        // An EMPTY index is the same fail-open answer as before — but it is now labelled UNREACHABLE, so
+        // the guards can report an abstention rather than an approval. Empty STDOUT on a zero exit is a
+        // real answer ("this repo has no PRs"), so only the failure path clears the flag.
+        if (!result.ok) return new PullRequestIndex({}, {}, false);
+        if (result.out === '') return new PullRequestIndex({}, {}, true);
         return this.store.indexPullRequests(result.out);
     }
 

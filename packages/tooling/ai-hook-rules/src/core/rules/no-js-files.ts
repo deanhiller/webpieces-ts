@@ -6,7 +6,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 
 export class NoJsFilesRule extends FileRuleBase<NoJsFilesConfig> {
-    constructor(config: NoJsFilesConfig) { super(config, 'no-js-files'); }
+    constructor(config: NoJsFilesConfig) { super(config, 'no-js-files', 'no-js-files'); }
 
     readonly description = 'Disallow writing new .js/.jsx files. Use .ts/.tsx instead.';
     override readonly files = ['**/*.js', '**/*.jsx'];

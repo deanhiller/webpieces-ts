@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing, CONFIG_POLICY_DOC } from '@webpieces/rules-config';
+import { allRuleNames, seedEntryForRule, schemaFieldNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing, CONFIG_POLICY_DOC } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -270,14 +270,75 @@ function migrateRetiredRuleNames(section: Section, changes: string[]): void {
             changes.push(`deleted retired "${entry.key}" (it moved to ${entry.movedTo})`);
             continue;
         }
-        if (entry.movedTo in section) {
-            delete section[entry.key];
-            changes.push(`dropped retired "${entry.key}" ("${entry.movedTo}" is already configured)`);
-            continue;
+        mergeIntoDestination(section, entry.key, entry.movedTo, changes);
+    }
+    fillRequiredFields(section, changes);
+}
+
+/**
+ * Fold one retired key's entry into its destination, whether the destination exists yet or not.
+ *
+ * THIS IS N→1, NOT 1:1, and the difference is the whole reason this helper exists. Four retired keys
+ * now point at ONE destination (`branch-state-guard`, `pr-lifecycle-guard`). The previous code renamed
+ * the first key it met and then, finding the destination already present, DELETED each of the other
+ * three outright — so which guard's settings survived depended on RETIRED_CONFIG_KEYS declaration
+ * order rather than on the consumer's file, and the survivor carried only that one guard's fields, so
+ * it was missing required fields of the merged schema. `wp-install-ai-hooks` is the command advertised
+ * as the migration path; half-migrating every consumer into an invalid config is not an option.
+ *
+ * UNION, first writer wins per field. Earlier-declared keys are the more specific ones (only
+ * feature-branch-guard carries `branchNamingConvention`), and a field already present on the
+ * destination — because the consumer wrote it, or an earlier key contributed it — is never overwritten.
+ * Fields the merged schema does not know are dropped by the same pass, since carrying a deleted field
+ * across (`upsertPrCommand`) would produce a config the validator immediately rejects.
+ */
+// webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
+function mergeIntoDestination(section: Section, key: string, destination: string, changes: string[]): void {
+    const source = asSection(section[key]);
+    delete section[key];
+    const fields = schemaFieldNames(destination);
+    const target = asSection(section[destination]);
+    const existed = destination in section;
+    const carried: string[] = [];
+    const dropped: string[] = [];
+    for (const field of Object.keys(source)) {
+        if (fields !== null && !fields.includes(field)) { dropped.push(field); continue; }
+        if (field in target) continue;
+        target[field] = source[field];
+        carried.push(field);
+    }
+    section[destination] = target;
+    const verb = existed ? 'merged' : 'renamed';
+    const droppedNote = dropped.length > 0 ? `; dropped deleted field(s) ${dropped.join(', ')}` : '';
+    changes.push(`${verb} retired "${key}" -> "${destination}" (carried ${carried.join(', ') || 'nothing new'}${droppedNote})`);
+}
+
+/**
+ * Fill any schema-REQUIRED field a migrated entry ended up without.
+ *
+ * A union of four partial entries is not guaranteed to satisfy the destination's schema — the merged
+ * `branch-state-guard` needs `mode` and both escape hatches, and a consumer whose four old entries
+ * predate one of them would land short. Seeding the gap from the SAME source the installer and the
+ * validator use (seedEntryForRule) is what makes the install command a complete instruction
+ * rather than a first step. Only ever ADDS; a value the consumer stated is never touched.
+ */
+// webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
+function fillRequiredFields(section: Section, changes: string[]): void {
+    for (const name of Object.keys(section)) {
+        if (schemaFieldNames(name) === null) continue;
+        // A rule ENTRY is a flat bag of scalars, so it is read as Json here rather than through
+        // asSection (whose values are whole entries). Same object either way; only the view differs.
+        const entry: Json = asSection(section[name]);
+        const seed = seedEntryForRule(name);
+        const added: string[] = [];
+        for (const field of Object.keys(seed)) {
+            if (field in entry) continue;
+            entry[field] = seed[field];
+            added.push(field);
         }
-        section[entry.movedTo] = section[entry.key];
-        delete section[entry.key];
-        changes.push(`renamed retired "${entry.key}" -> "${entry.movedTo}"`);
+        if (added.length === 0) continue;
+        section[name] = entry;
+        changes.push(`filled required field(s) on "${name}": ${added.join(', ')}`);
     }
 }
 

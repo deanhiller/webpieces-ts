@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, StaleMainBashGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus, BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import { BashContext } from '../types';
 
@@ -50,7 +50,7 @@ vi.mock('../decision-log', () => ({
     GuardDecision: class { constructor(...args: unknown[]) { void args; } },
     // The layer token the guards now stamp on every line. A mock that omits it fails at import,
     // which is the mock telling the truth: this module really does depend on it.
-    MATRIX_L2: { layer: 'L2', row: '-' },
+    matrixL2Row: (reason: string) => ({ layer: 'L2', row: reason }),
 }));
 
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';
@@ -60,7 +60,7 @@ function ctx(command: string): BashContext {
 }
 
 function rule(): StaleMainBashGuardRule {
-    const cfg = new StaleMainBashGuardConfig();
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return new StaleMainBashGuardRule(cfg);
 }
@@ -219,7 +219,7 @@ describe('stale-main-bash-guard — fail-open valves', () => {
     });
 
     it('does not run at all when mode is OFF', () => {
-        const cfg = new StaleMainBashGuardConfig();
+        const cfg = new BranchStateGuardConfig();
         cfg.mode = 'OFF';
         expect(new StaleMainBashGuardRule(cfg).shouldRun()).toBe(false);
     });

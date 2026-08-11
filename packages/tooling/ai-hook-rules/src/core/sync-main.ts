@@ -42,9 +42,24 @@ export function main(): void {
     logStream.identify(spawnerIdentity(process.argv));
     refreshMainSync(
         process.argv[2] ?? process.cwd(),
-        Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES,
+        hangTimeoutFromArgv(process.argv[3]),
         process.argv.slice(2).join(' '),
     );
+}
+
+/**
+ * Parse the hang timeout off argv, WITHOUT `||`.
+ *
+ * `Number(argv[3]) || DEFAULT` silently rewrote a configured `0` — "never treat a lock as stale" — into
+ * the 5-minute default, because `0` is falsy. The knob now has exactly one reader (the branch-state
+ * policy entry), so a value that survives the config only to be discarded at the process boundary is
+ * the whole knob being a lie. Only a MISSING or non-numeric argument falls back.
+ */
+// webpieces-disable no-function-outside-class -- argv parse for this detached main(), matching the file's existing shape
+export function hangTimeoutFromArgv(raw: string | undefined): number {
+    if (raw === undefined || raw.trim() === '') return DEFAULT_HANG_TIMEOUT_MINUTES;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : DEFAULT_HANG_TIMEOUT_MINUTES;
 }
 
 /**

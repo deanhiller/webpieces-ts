@@ -24,7 +24,7 @@ function findProjectRoot(filePath: string, workspaceRoot: string): string | null
 }
 
 export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
-    constructor(config: ValidateTsInSrcConfig) { super(config, 'validate-ts-in-src'); }
+    constructor(config: ValidateTsInSrcConfig) { super(config, 'validate-ts-in-src', 'validate-ts-in-src'); }
 
     readonly description = 'Every .ts file must belong to a project\'s src/ directory.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

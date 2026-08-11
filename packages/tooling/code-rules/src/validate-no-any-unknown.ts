@@ -402,7 +402,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoAnyUnknownValidator extends CodeValidator<NoAnyUnknownConfig> {
     constructor(config: NoAnyUnknownConfig) {
-        super(config, 'no-any-unknown');
+        super(config, 'no-any-unknown', 'no-any-unknown');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

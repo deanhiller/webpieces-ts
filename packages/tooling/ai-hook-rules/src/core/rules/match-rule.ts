@@ -11,7 +11,10 @@ import { FixHint, Option, DisableEscape } from '../fix-hint';
  * instantiated per array entry (see loadMatchRules). `name` doubles as the disable token.
  */
 export class MatchRule extends EditRuleBase<MatchRuleConfig> {
-    constructor(config: MatchRuleConfig) { super(config, config.name); }
+    // A match-rule is its OWN key: it lives in the `match-rules` array, not in `rules`/`hookGuards`,
+    // so name and configKey are the same string here and always will be. Passed explicitly all the
+    // same — there is no defaulted spelling of this decision anywhere.
+    constructor(config: MatchRuleConfig) { super(config, config.name, config.name); }
 
     override readonly files = ['**/*.ts', '**/*.tsx'];
 

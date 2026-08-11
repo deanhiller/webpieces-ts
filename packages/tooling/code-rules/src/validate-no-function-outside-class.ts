@@ -295,7 +295,7 @@ async function runValidatorImpl(options: NoFunctionOutsideClassConfig, workspace
 @injectable(bindingScopeValues.Singleton)
 export class NoFunctionOutsideClassValidator extends CodeValidator<NoFunctionOutsideClassConfig> {
     constructor(config: NoFunctionOutsideClassConfig) {
-        super(config, 'no-function-outside-class');
+        super(config, 'no-function-outside-class', 'no-function-outside-class');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

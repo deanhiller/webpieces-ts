@@ -27,14 +27,27 @@ anyone could find anything in it.
 
 | layer | source of truth | doc |
 |---|---|---|
-| L0 | `L0_FAULTS` + `L0_ALLOWLIST` | **generated, byte-locked** |
+| L0 | `L0_FAULTS` + `L0_ALLOWLIST` | **PARTLY generated, byte-locked** — only the block between the `L0_DOC_BEGIN` / `L0_DOC_END` markers (~143 of 450 lines); regenerate with `pnpm guards:generate` |
 | L1 | `L1_ROWS` | **generated, byte-locked** — regenerate with `pnpm guards:generate` |
-| L2 | — | hand-written; conversion rides with the guard collapse |
+| L2 | `L2_ROWS` | **generated, byte-locked** — regenerate with `pnpm guards:generate` |
 | L3, L4 | — | stubs |
 
-For a converted layer the split is: **row data** lives in the array, **prose** lives as literal lines
-inside the renderer, and there is no third place. The byte-lock spec fails on any hand edit, and
-`pnpm guards:generate` rewrites the file from the array — never hand-edit a generated doc.
+One command regenerates all three: `pnpm guards:generate` rewrites L1 and L2 whole, SPLICES L0's marked
+block, and writes the shim template.
+
+For a WHOLE-file layer (L1, L2) the split is: **row data** lives in the array, **prose** lives as
+literal lines inside the renderer, there is no third place, and the byte-lock spec fails on any hand
+edit. **L0 is the exception on both counts**: everything outside its marker pair is hand-written prose
+that the splice preserves byte for byte and the spec deliberately permits you to edit. Two of those
+three sentences were stated here without qualification and were false for L0, which is the largest guard
+doc in the repo and the only one that has ever gone stale.
+
+**L1 and L2 differ in one way worth knowing.** L1 DISPATCHES from its rows — the runner takes the first
+matching row and switches on its `blockId`, so deleting a row deletes a block. L2's four guard classes
+each own their own ladder (they diverge in polarity, quantifier and empty-command handling, deliberately),
+so L2 joins to its rows by REASON instead: every decision-log line carries `row=<n>` derived from the
+reason the guard logged, and a spec asserts the map is exhaustive against the guard sources. Rows L2
+cannot yet honour are listed in that doc's own "Not done" section rather than rendered as if they were live.
 
 **How the generated files reach this repo's root, despite the one-release lag.** The runtime copy in
 `.webpieces/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine
@@ -49,18 +62,31 @@ hack, and consumers keep getting the published copy at block time.
 | layer | goal — the question it answers | config key | doc |
 |---|---|---|---|
 | **L0** | Is webpieces itself trustworthy right now? | *(none — always on)* | [L0 — tooling integrity](guards/L0-tooling.md) |
-| **L1** | Is this call ours to judge, are the versions in sync, and is git run from the root? | `location-guard` *(proposed)* | [L1 — location](guards/L1-location.md) |
-| **L2** | May I work here, and is what I read current? | `branch-state-guard` *(proposed)* | [L2 — branch state](guards/L2-branch-state.md) |
-| **L3** | Which dead branches and worktrees get reaped? | `branch-cleanup-guard` *(proposed)* | [L3 — branch cleanup](guards/L3-branch-cleanup.md) |
-| **L4** | Does every merge and PR go through the gated flow? | `pr-lifecycle-guard` *(proposed)* | [L4 — PR lifecycle](guards/L4-pr-lifecycle.md) |
+| **L1** | Is this call ours to judge, are the versions in sync, and is git run from the root? | *(none)* | [L1 — location](guards/L1-location.md) |
+| **L2** | May I work here, and is what I read current? | `branch-state-guard` | [L2 — branch state](guards/L2-branch-state.md) |
+| **L3** | Which dead branches and worktrees get reaped? | `branch-creation-guard` | [L3 — branch cleanup](guards/L3-branch-cleanup.md) |
+| **L4** | Does every merge and PR go through the gated flow? | `pr-lifecycle-guard` | [L4 — PR lifecycle](guards/L4-pr-lifecycle.md) |
 
-**L0 has no config key on purpose.** If L0 is off, nothing downstream can be trusted — you would be
-configuring the guards with a config file the validator could not check.
+**L0 and L1 have no config key on purpose.** If L0 is off, nothing downstream can be trusted — you would
+be configuring the guards with a config file the validator could not check. L1's two structural blocks
+(force-to-root, version skew) have no key either and cannot be disabled; `excludePaths` is a top-level
+block, not a `hookGuards` entry. A `location-guard` key was once proposed here — it never existed, and
+adding one would be a key the goal of this table is to remove.
 
-The other four keys are **proposed, not shipped**. Today `hookGuards` carries one key per implementation
-CLASS (nine of them); the proposal is one key per POLICY (four). Each layer file names its own mapping.
-The reason to collapse is in L2: half a policy is representable today, and that is precisely what
-produced the inconsistencies documented there.
+**`hookGuards` is now ONE KEY PER POLICY.** It used to carry one key per implementation CLASS — nine of
+them: L2's four, L3's one, L4's four. Those nine are **three**. The three surviving keys are the ones in
+the table above; the eight retired names are rejected by name with their destination, in
+`retired-config-keys.ts`.
+
+The reason to collapse is in L2: with a key per class, **half a policy was representable** —
+`read-stale-guard: OFF` beside `merged-branch-bash-guard: ON` is "read the file, yes; `cat` the same file,
+no", the same information with opposite verdicts, chosen by nobody. One key per policy makes it
+unconstructible.
+
+**The CLASS names did not change**, and that is the design's payoff: `feature-branch-guard`,
+`read-stale-guard`, `pr-merge-guard` and the rest are still what a decision-log line carries as `rule=`
+and what every deny report titles itself with, so `grep rule=stale-main-bash-guard` still works and no
+prose describing a guard's BEHAVIOUR went stale. Only the switch merged. See `AbstractRule.configKey`.
 
 ## Action codebook
 

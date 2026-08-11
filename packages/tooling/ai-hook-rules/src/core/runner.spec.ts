@@ -9,14 +9,16 @@ import { migrate } from '../bin/setup';
 import { effectiveBashCwd, filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash, run } from './runner';
 import { Rule, Violation, BashContext, BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
 
-// The helper only reads `rule.name` to classify a rule as guard vs code rule (via isHookGuard), so
-// a minimal stand-in is enough. 'feature-branch-guard' is a hook guard; 'max-file-lines' is a code rule.
-function ruleNamed(name: string): Rule {
-    return { name } as unknown as Rule;
+// filterByExcludedPaths reads only `rule.name` (for the assertions below), so a minimal stand-in is
+// enough. `configKey` is carried too because the SIBLING helper filterByMode classifies on that field
+// rather than on the name — a stand-in with only a name would classify the guard as a code rule.
+function ruleNamed(name: string, configKey: string): Rule {
+    return { name, configKey } as unknown as Rule;
 }
 
-const codeRule = ruleNamed('max-file-lines');
-const guard = ruleNamed('feature-branch-guard');
+const codeRule = ruleNamed('max-file-lines', 'max-file-lines');
+// A CLASS name whose config key is the branch-state POLICY — the exact pair the collapse creates.
+const guard = ruleNamed('feature-branch-guard', 'branch-state-guard');
 
 function names(rules: readonly Rule[]): string[] {
     return rules.map((r: Rule): string => r.name);
@@ -208,16 +210,20 @@ function initRepo(dir: string): void {
 
 // loadAndValidate demands a FULLY valid config (pr-gate, match-rules, every rule section), so we build
 // one with the installer's own seeder (migrate({}) fills every rule with a valid default) rather than
-// hand-rolling one that drifts as rules are added. We then (a) arm ONLY pr-creation-or-push-guard so
-// the tests stay hermetic (no other guard reads git state or spawns the main-sync refresher), and
-// (b) set excludePaths per test.
+// hand-rolling one that drifts as rules are added. We then (a) arm ONLY the PR-lifecycle policy so
+// the tests stay hermetic (branch-state-guard is the one that reads git state and spawns the main-sync
+// refresher, so it stays OFF), and (b) set excludePaths per test.
+//
+// `pr-lifecycle-guard` is a POLICY key covering four classes, and arming it arms all four. That is fine
+// here: the other three are pure command-shape blocks that no command in these tests matches, and
+// pr-creation-or-push-guard — the one under test — is the only one that can fire.
 function writeGuardConfig(root: string, guardsExclude: readonly string[]): void {
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
     const config = migrate({}).config as Record<string, any>;
     // seedRule() omits branch-creation-guard's required autoReapMergedBranches — supply it.
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) {
-        config.hookGuards[name].mode = name === 'pr-creation-or-push-guard' ? 'ON' : 'OFF';
+        config.hookGuards[name].mode = name === 'pr-lifecycle-guard' ? 'ON' : 'OFF';
     }
     config.excludePaths = [...guardsExclude];
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));

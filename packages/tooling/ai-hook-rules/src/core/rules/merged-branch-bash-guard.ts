@@ -1,7 +1,8 @@
 import { execSync } from 'child_process';
 
 import {
-    MergedBranchBashGuardConfig,
+    BranchStateGuardConfig,
+    BRANCH_STATE_GUARD_KEY,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     MainSyncStatus,
@@ -13,7 +14,8 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
+import { hangTimeoutOf } from '../main-sync-timeout';
+import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner, CommandSegment } from '../command-scan';
 import { MergedBranchMessage } from './merged-branch-message';
@@ -50,8 +52,8 @@ import { ContentReadScan } from './content-read-scan';
  * path (the thing the whole cache design avoids) and would mean blocking on stale/uncertain data,
  * which violates the fail-open principle every one of these guards is built on. Not worth it.
  */
-export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuardConfig> {
-    constructor(config: MergedBranchBashGuardConfig) { super(config, 'merged-branch-bash-guard'); }
+export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConfig> {
+    constructor(config: BranchStateGuardConfig) { super(config, 'merged-branch-bash-guard', BRANCH_STATE_GUARD_KEY); }
 
     private readonly scanner = new CommandScanner();
     private readonly shell = new ShellSegmentScan(this.scanner);
@@ -68,7 +70,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         [
             new Option('git fetch origin main && git checkout -b <new-branch> origin/main (in a worktree: git worktree add ../<dir> -b <new> origin/main). Then re-run your command.', true),
             new Option('Still allowed here: recovery/cleanup git, read-only git status|log|diff|show|branch and gh pr list|view, switching branches/worktrees, pnpm wp-cleanup, and installs/upgrades.'),
-            new Option('Disable in webpieces.config.json under hookGuards → merged-branch-bash-guard (mode OFF) if intentional.'),
+            new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
 
@@ -80,7 +82,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         // Keep the shared cache warm for the next call. Detached; never blocks this command. (The
         // runner also warms it, but only when feature-branch-guard is loaded — do it here too so this
         // guard is self-sufficient when that one is off.)
-        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
 
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first command of the session), or a branch this refresh has not seen → allow;
@@ -93,7 +95,18 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         // such a bug degrades to an allow. Unreachable in normal operation.
         if (status.branch !== branch) return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
 
-        if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
+        // NOT-MERGED, or NOT-ASKED? `branchAlreadyMerged: false` is produced both by "this branch has
+        // no merged PR" and by "the forge could not be reached" (`gh` missing, unauthenticated,
+        // rate-limited, offline). Same allow either way — never block on data you could not establish
+        // — but the LOG must not call the second one an approval, or the trail cannot tell a policy
+        // that is protecting something from one that is quietly standing down.
+        // For THIS guard the merged flag is the ONLY block condition, so an unreachable forge means
+        // it is fully abstaining — the state it exists to catch cannot be observed at all.
+        if (!status.branchAlreadyMerged) {
+            return status.forgeReachable
+                ? this.allow(ctx, branch, 'clean-feature-branch', cache)
+                : this.failOpen(ctx, branch, 'no-forge', cache);
+        }
 
         // Merged. Allow ONLY when every segment of the command is a recovery / cleanup / read-only
         // inspection command — anything else (servers, builds, tests, cat/ls of repo files, git writes)
@@ -213,7 +226,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('merged-branch-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, MATRIX_L2),
+            new GuardDecision('merged-branch-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache, L0_FAULT_NONE, matrixL2Row(reason)),
         );
     }
 

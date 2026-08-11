@@ -242,6 +242,17 @@ export interface PlainRule {
  * `shouldRun()` (mode + escape-hatch decision) on top of the PlainRule metadata.
  */
 export interface Rule extends PlainRule {
+    /**
+     * The webpieces.config.json key whose entry configures this rule — NOT necessarily `name`.
+     *
+     * `name` is the operator identity (what a decision-log line and a deny report carry); `configKey`
+     * is the switch. They differ wherever several classes implement one POLICY: all four branch-state
+     * guards read `branch-state-guard`, all four PR-lifecycle guards read `pr-lifecycle-guard`. Every
+     * consumer that asks "which section does this live in?" (filterByMode) or "does this have an
+     * entry?" (the fault-Y config-sync check) must read THIS field, because asking for `name` there
+     * demands entries under keys the validator rejects as retired.
+     */
+    readonly configKey: string;
     shouldRun(): boolean;
 }
 

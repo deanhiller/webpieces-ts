@@ -41,7 +41,7 @@ function findToErrorStatement(lines: readonly string[], startIndex: number): ToE
 }
 
 export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig> {
-    constructor(config: CatchErrorPatternConfig) { super(config, 'catch-error-pattern'); }
+    constructor(config: CatchErrorPatternConfig) { super(config, 'catch-error-pattern', 'catch-error-pattern'); }
 
     readonly description = 'Catch blocks must use: catch (err: unknown) { const error = toError(err); }'; // webpieces-disable catch-error-pattern -- example text in a description string
     override readonly files = ['**/*.ts', '**/*.tsx'];

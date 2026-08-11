@@ -740,7 +740,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class PrismaConverterValidator extends CodeValidator<PrismaConverterConfig> {
     constructor(config: PrismaConverterConfig) {
-        super(config, 'prisma-converter');
+        super(config, 'prisma-converter', 'prisma-converter');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

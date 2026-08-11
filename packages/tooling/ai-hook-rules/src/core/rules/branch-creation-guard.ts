@@ -140,7 +140,7 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
 }
 
 export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardConfig> {
-    constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard'); }
+    constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard', 'branch-creation-guard'); }
 
     readonly description =
         'Block new-branch and new-worktree creation when main is stale, when branching off a non-main ' +

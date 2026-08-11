@@ -284,7 +284,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoImplicitAnyValidator extends CodeValidator<NoImplicitAnyConfig> {
     constructor(config: NoImplicitAnyConfig) {
-        super(config, 'no-implicit-any');
+        super(config, 'no-implicit-any', 'no-implicit-any');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

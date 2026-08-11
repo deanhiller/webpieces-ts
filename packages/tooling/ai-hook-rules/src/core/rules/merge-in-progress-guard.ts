@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MergeInProgressGuardConfig } from '@webpieces/rules-config';
+import { dotWebpieces, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -9,7 +9,6 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { CommandScanner } from '../command-scan';
 
-const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
 // The ENTIRE enforcement surface of this guard, declared up here because the fixHint RENDERS ITSELF
 // from these two lists (see `blockedCommandList`). The hint used to hand-write "do not run other
@@ -102,12 +101,18 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardConfig> {
+export class MergeInProgressGuardRule extends BashRuleBase<PrLifecycleGuardConfig> {
+    /**
+     * The gated command this guard names, handed in by the LOADER from `commands.guardHints
+     * .mergeInProgress` (already defaulted there). A constructor parameter, not a config field: the
+     * field `merge-in-progress-guard.mergeCompleteCommand` was a SECOND SPELLING that beat the commands
+     * section, and the loader's name-keyed injection that fed it could miss a rename silently.
+     */
     private readonly mergeCompleteCommand: string;
 
-    constructor(config: MergeInProgressGuardConfig) {
-        super(config, 'merge-in-progress-guard');
-        this.mergeCompleteCommand = config.mergeCompleteCommand ?? DEFAULT_MERGE_COMPLETE_COMMAND;
+    constructor(config: PrLifecycleGuardConfig, mergeCompleteCommand: string) {
+        super(config, 'merge-in-progress-guard', PR_LIFECYCLE_GUARD_KEY);
+        this.mergeCompleteCommand = mergeCompleteCommand;
     }
 
     readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing the merge-complete command.';

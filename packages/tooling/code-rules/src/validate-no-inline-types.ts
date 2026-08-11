@@ -615,7 +615,7 @@ async function runValidatorImpl(
 @injectable(bindingScopeValues.Singleton)
 export class NoInlineTypeLiteralsValidator extends CodeValidator<NoInlineTypeLiteralsConfig> {
     constructor(config: NoInlineTypeLiteralsConfig) {
-        super(config, 'no-inline-type-literals');
+        super(config, 'no-inline-type-literals', 'no-inline-type-literals');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {

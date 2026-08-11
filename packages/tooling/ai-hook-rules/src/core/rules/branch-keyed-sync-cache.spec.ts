@@ -3,13 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import {
-    MainSyncFileStore,
-    MainSyncStatus,
-    MainSyncStatusFile,
-    MergedBranchBashGuardConfig,
-    FeatureBranchGuardConfig,
-} from '@webpieces/rules-config';
+import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile, BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import { BashContext, FileContext } from '../types';
 
@@ -63,7 +57,7 @@ vi.mock('../decision-log', () => ({
             this.reason = reason;
         }
     },
-    MATRIX_L2: { layer: 'L2', row: '-' },
+    matrixL2Row: (reason: string) => ({ layer: 'L2', row: reason }),
 }));
 
 import { MergedBranchBashGuardRule } from './merged-branch-bash-guard';
@@ -97,13 +91,13 @@ function bashGuardBlocks(branch: string): boolean {
 
 function editGuardBlocks(branch: string): boolean {
     state.branch = branch;
-    const cfg = new FeatureBranchGuardConfig();
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return new FeatureBranchGuardRule(cfg).check(new FileContext('/tmp/x/src/a.ts', 'src/a.ts', '/tmp/x')).length > 0;
 }
 
-function armedBashConfig(): MergedBranchBashGuardConfig {
-    const cfg = new MergedBranchBashGuardConfig();
+function armedBashConfig(): BranchStateGuardConfig {
+    const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
     return cfg;
 }
