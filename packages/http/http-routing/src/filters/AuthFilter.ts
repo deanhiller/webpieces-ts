@@ -1,11 +1,11 @@
 import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, PendingWireTrust, PendingTrustedValue, RequestContext } from '@webpieces/core-context';
-import { AuthMode, EndpointNotFoundError, HttpUnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
+import { AuthMode, EndpointNotFoundError, HttpBadRequestError, HttpUnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from '../AuthConfig';
-import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK } from '../AuthHooks';
+import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookHook, WEBHOOK_HOOK } from '../AuthHooks';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -47,6 +47,9 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  *                    "not enabled" (401): JWT needs an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
+ *  - webhook       → the bound {@link WebhookHook} verifies the VENDOR's signature over the retained
+ *                    raw request. No WebhookHook bound → 401, like jwt: an unverified webhook is
+ *                    never waved through because wiring was forgotten.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
  *                    a logged-out page still knows who is logged in; never fails.
  *  - local-only    → serve only when {@link RuntimeLocality} says this process is a developer's
@@ -71,6 +74,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
+        // @optional: only bind a WebhookHook to enable @AuthWebhook endpoints. Unbound = every such
+        // endpoint 401s, which is the ONE default that must not be the other way round.
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
+        @optional() @inject(WEBHOOK_HOOK) private readonly webhookHook?: WebhookHook,
     ) {
         super();
     }
@@ -87,6 +94,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             // Public: best-effort parse so a logged-out page can still know the logged-in user.
             this.bestEffortJwt(authHeader);
             this.reconcileWireTrust(/*callerVerified*/ false);
+            this.rethrowDeferredBodyError();
             return nextFilter.invoke(meta);
         }
 
@@ -100,12 +108,68 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             case 'shared-secret':
                 this.enforceSharedSecret(this.credential(authHeader, SHARED_SECRET_SCHEME), mode.secretKey);
                 break;
+            case 'webhook':
+                await this.enforceWebhook(mode.name, meta);
+                break;
             case 'local-only':
                 this.enforceLocalOnly(meta);
                 break;
         }
         this.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
+        this.rethrowDeferredBodyError();
         return nextFilter.invoke(meta);
+    }
+
+    /**
+     * `@AuthWebhook(name)`: hand the app's {@link WebhookHook} the verbatim request and let it call the
+     * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
+     *
+     * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
+     *    an unverified webhook must never be waved through because wiring was forgotten.
+     * 2. NO raw request — the transport kept no bytes. `assertEveryWebhookEndpointRetainsRawBody`
+     *    normally makes this a startup error, so reaching it means either a hand-registered route or
+     *    an in-process caller (a spec) that published an HttpRequest with no {@link RawRequest}. The
+     *    message says which fix applies rather than leaving a bare 401.
+     * 3. The hook threw — the signature did not verify.
+     */
+    private async enforceWebhook(name: string, meta: MethodMeta): Promise<void> {
+        if (!this.webhookHook) {
+            log.warn(
+                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookHook is bound. ` +
+                `Bind one (options.bind(WEBHOOK_HOOK).to(YourWebhookHook)) to enable webhook verification.`,
+            );
+            throw new HttpUnauthorizedError('Webhook auth is not enabled on this server');
+        }
+        const request = RequestContext.getRequest();
+        const raw = request?.raw;
+        if (!request || !raw) {
+            log.warn(
+                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
+                `no raw bytes. Declare @Endpoint(path, 'external', { calledBy: '${name}', rawBody: true }); a ` +
+                `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
+            );
+            throw new HttpUnauthorizedError('Webhook signature cannot be verified: no raw request was retained');
+        }
+        await this.webhookHook.verify(name, request, raw); // throws HttpUnauthorizedError to deny
+    }
+
+    /**
+     * A body that failed to parse is held on the {@link RawRequest} and surfaces HERE, after auth, as
+     * the 400 it always was — never before it.
+     *
+     * The order is the whole point. A malformed body from an unauthenticated caller must answer 401,
+     * because "your JSON was bad" also says "I got past auth", and on a webhook endpoint — whose url
+     * is public by construction — that is a free oracle for anyone probing. Parsing first made the
+     * framework hand that out for nothing.
+     *
+     * Only routes that retain raw bytes can defer at all; every other route still fails at parse time
+     * in the transport, exactly as before.
+     */
+    private rethrowDeferredBodyError(): void {
+        const parseError = RequestContext.getRequest()?.raw?.bodyParseError;
+        if (parseError) {
+            throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, parseError);
+        }
     }
 
     /**
@@ -137,6 +201,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 return true;
             case 'jwt':
             case 'public':
+            // `webhook` DOES authenticate its sender — but the sender is an outside VENDOR, not a
+            // peer in this repo, and a vendor neither speaks nor forwards webpieces context headers.
+            // So there is no forwarded identity to believe, and admitting one would mean trusting a
+            // key a vendor's payload could carry. Same answer as the OUTBOUND half
+            // (DestinationTrust.forAuthMode), which is the invariant that keeps the two ends agreeing.
+            case 'webhook':
             case 'local-only':
                 return false;
         }

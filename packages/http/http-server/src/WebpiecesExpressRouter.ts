@@ -1,5 +1,5 @@
 import { Express } from 'express';
-import { ApiFactory, ApiClient, getApiPath, getEndpoints, isFormPost, WebpiecesConfig } from '@webpieces/http-routing';
+import { ApiFactory, ApiClient, getApiPath, getEndpoints, isFormPost, isRawBody, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
@@ -133,11 +133,13 @@ export class WebpiecesExpressRouter {
         let count = 0;
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
             const path = basePath + endpointPath;
-            // The parser is chosen by the @Endpoint annotation, not the request Content-Type.
+            // The parser is chosen by the @Endpoint annotation, not the request Content-Type — and
+            // so is whether the verbatim bytes survive the parse for an @AuthWebhook hook to verify.
             const wrapper = this.middleware.createExpressWrapper(
                 apiClient.client[methodName],
                 path,
                 isFormPost(apiClient.api, methodName),
+                isRawBody(apiClient.api, methodName),
             );
             // All webpieces routes are POST (the api-tier convention).
             this.registerHandler(app, 'POST', path, wrapper.execute.bind(wrapper));

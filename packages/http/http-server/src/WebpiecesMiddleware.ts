@@ -209,6 +209,9 @@ export class WebpiecesMiddleware {
      * @param path - The route path (used to build the HttpRequest).
      * @param formPost - True for an @Endpoint(..., { formPost: true }) route (parse body as
      *   urlencoded, not JSON). Default false = JSON.
+     * @param rawBody - True for an @Endpoint(..., { rawBody: true }) route: retain the verbatim
+     *   bytes + absolute url on the HttpRequest so an @AuthWebhook hook can verify a vendor
+     *   signature over them. Default false = the bytes are dropped once parsed.
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
@@ -216,7 +219,8 @@ export class WebpiecesMiddleware {
         clientMethod: (requestDto: unknown) => Promise<unknown>,
         path: string,
         formPost: boolean = false,
+        rawBody: boolean = false,
     ): ExpressWrapper {
-        return new ExpressWrapper(clientMethod, path, this.headers, formPost);
+        return new ExpressWrapper(clientMethod, path, this.headers, formPost, rawBody);
     }
 }

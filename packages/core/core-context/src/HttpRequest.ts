@@ -1,4 +1,5 @@
 import { ContextKey, AnyContextKey } from '@webpieces/core-util';
+import { RawRequest } from './RawRequest';
 
 /**
  * HttpRequest - webpieces' TRANSPORT-NEUTRAL inbound request.
@@ -19,6 +20,14 @@ export class HttpRequest {
         public readonly path: string,
         /** Header name (lowercased) -> values (HTTP allows multiple values per name). */
         public readonly headers: Map<string, string[]>,
+        /**
+         * The verbatim bytes + absolute url, present ONLY on an `@Endpoint(..., { rawBody: true })`
+         * route (see {@link RawRequest}). Absent everywhere else, and absent is the SAFE state:
+         * `@AuthWebhook` has nothing to verify without it and 401s rather than waving the call
+         * through. A spec driving a webhook route in-process supplies one here, the same way a spec
+         * today supplies an `authorization` header.
+         */
+        public readonly raw?: RawRequest,
     ) {}
 
     /** First value of a header, looked up by ContextKey.httpHeader (or a raw lowercased name). */

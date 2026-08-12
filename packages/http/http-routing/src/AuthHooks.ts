@@ -1,4 +1,5 @@
 import { JwtRequirement, rolesRequired, HttpForbiddenError } from '@webpieces/core-util';
+import { HttpRequest, RawRequest } from '@webpieces/core-context';
 import { AuthValues } from './AuthConfig';
 
 /**
@@ -63,3 +64,46 @@ export abstract class OidcHook {
  */
 // webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
 export const OIDC_HOOK = Symbol.for('OidcHook');
+
+/**
+ * WebhookHook - the OPTIONAL mechanism behind `@AuthWebhook(name)`: prove that an inbound request was
+ * really authored by the outside vendor the contract names. Its DI token is the {@link WEBHOOK_HOOK}
+ * Symbol injected via `@inject(WEBHOOK_HOOK)` (a Symbol, because the app container uses autobind;
+ * rebindable in tests). The third hook, symmetric with {@link JwtHook} / {@link OidcHook}:
+ *
+ * ```typescript
+ * // AppModule.ts, beside the CompanyJwtHook binding
+ * options.bind(WEBHOOK_HOOK).to(CompanyWebhookHook);
+ * ```
+ *
+ * When NO WebhookHook is bound, the framework {@link AuthFilter} 401s every `@AuthWebhook` endpoint,
+ * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
+ * one: silently allowing an unverified webhook is the single default that must not exist, and the
+ * framework ships no vendor crypto by design (see {@link AuthWebhook} for why reimplementing five
+ * vendors' schemes is a losing trade).
+ *
+ * ONE hook serves EVERY vendor: `name` selects which, so an app with a Sentry hook and a Twilio hook
+ * switches on it rather than binding a token per vendor. What arrives is enough of the raw request to
+ * call the vendor's OWN validator — the bytes for a body-signing vendor (Sentry, GitHub, Stripe,
+ * Slack), the absolute url for one that signs the url instead (Twilio).
+ */
+export abstract class WebhookHook {
+    /**
+     * Verify ONE inbound request. Return to allow; throw {@link HttpUnauthorizedError} to deny.
+     *
+     * @param name   the string on the contract's `@AuthWebhook(name)` — which vendor this route is.
+     * @param request the transport-neutral request (method, path, headers).
+     * @param raw    the verbatim bytes + absolute url, guaranteed present: `@AuthWebhook` requires
+     *               `@Endpoint(..., { rawBody: true })` at wiring time, and AuthFilter 401s rather
+     *               than calling this hook with nothing to check.
+     */
+    abstract verify(name: string, request: HttpRequest, raw: RawRequest): Promise<void>;
+}
+
+/**
+ * DI identifier for the optional {@link WebhookHook} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(WEBHOOK_HOOK)`
+ * correct — undefined when unbound. The WebhookHook class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const WEBHOOK_HOOK = Symbol.for('WebhookHook');

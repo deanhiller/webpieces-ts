@@ -4,6 +4,7 @@ import {
     getEndpoints,
     getAuthMeta,
     isFormPost,
+    isRawBody,
     getMaskSpec,
     AuthMeta,
     DestinationTrust,
@@ -166,7 +167,7 @@ export abstract class ProxyClient {
                 methodName,
                 new RouteMetadata(
                     'POST', fullPath, methodName, this.apiName, authMeta, undefined, formPost,
-                    getMaskSpec(apiPrototype, methodName),
+                    getMaskSpec(apiPrototype, methodName), isRawBody(apiPrototype, methodName),
                 ),
             );
         }
@@ -214,6 +215,18 @@ export abstract class ProxyClient {
                 `webpieces client does not support calling form-encoded endpoints yet. formPost is ` +
                 `for EXTERNAL inbound webhooks (e.g. Twilio) only. If this endpoint needs a ` +
                 `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
+            );
+        }
+        // FAIL FAST, same shape and same reason: an @AuthWebhook endpoint is verified by the VENDOR's
+        // signature over the request, which no webpieces client can produce. Refusing here — per
+        // method, at call time — means an api that mixes webhook + normal endpoints still yields a
+        // working client for the normal ones.
+        const authMode = route.authMeta?.mode;
+        if (authMode?.kind === 'webhook') {
+            throw new Error(
+                `${this.apiName}.${route.methodName} is @AuthWebhook('${authMode.name}') — only ` +
+                `${authMode.name} can call it, because only ${authMode.name} can produce the signature ` +
+                `its WebhookHook verifies. It is not callable from a webpieces client.`,
             );
         }
         // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
