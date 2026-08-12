@@ -14,7 +14,7 @@ import {
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
-import { WebhookHook } from '../AuthHooks';
+import { WebhookAuthCallback } from '../AuthHooks';
 import { MethodMeta } from '../MethodMeta';
 import { WpResponse, Service } from '../Filter';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
@@ -75,11 +75,11 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 
 /**
  * Exactly what an app's hook is: it calls the VENDOR's validator over the raw request. Here it records
- * what it was handed and answers from `allow`, which is all a `TestWebhookHook` in a consumer repo
+ * what it was handed and answers from `allow`, which is all a `TestWebhookAuthCallback` in a consumer repo
  * needs to do (acceptance check 10 — a spec that builds the real server and drives it through
- * `createApiClient` can rebind this over WEBHOOK_HOOK and never touch a real signature).
+ * `createApiClient` can rebind this over WEBHOOK_AUTH_CALLBACK and never touch a real signature).
  */
-class TestWebhookHook extends WebhookHook {
+class TestWebhookAuthCallback extends WebhookAuthCallback {
     seenName?: string;
     seenBody?: Buffer;
     seenUrl?: string;
@@ -112,7 +112,7 @@ class CollectingRouteBuilder implements RouteBuilder {
     }
 }
 
-function newAuthFilter(hook?: WebhookHook): AuthFilter {
+function newAuthFilter(hook?: WebhookAuthCallback): AuthFilter {
     return new AuthFilter(
         new DefaultOidcVerifier(new GcpOidc()),
         /*authConfig*/ undefined,
@@ -135,7 +135,7 @@ function webhookRequest(body: string, parseError?: Error): HttpRequest {
 /** Run AuthFilter over the webhook route inside a request scope carrying `request`. */
 async function runFilter(
     next: RecordingNext,
-    hook: WebhookHook | undefined,
+    hook: WebhookAuthCallback | undefined,
     request: HttpRequest,
 ): Promise<WpResponse<unknown>> {
     return RequestContext.run(async () => {
@@ -146,7 +146,7 @@ async function runFilter(
 
 describe('AuthFilter enforces @AuthWebhook', () => {
     it('hands the hook the vendor name, the verbatim bytes, the absolute url and the headers', async () => {
-        const hook = new TestWebhookHook(true);
+        const hook = new TestWebhookAuthCallback(true);
         const next = new RecordingNext();
 
         await runFilter(next, hook, webhookRequest('{"title":"boom"}'));
@@ -161,7 +161,7 @@ describe('AuthFilter enforces @AuthWebhook', () => {
     it('401s and NEVER enters the controller when the hook rejects the signature', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, new TestWebhookHook(false), webhookRequest('{}')))
+        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
             .rejects.toThrow(HttpUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
@@ -170,7 +170,7 @@ describe('AuthFilter enforces @AuthWebhook', () => {
      * FAIL CLOSED, matching JwtHook. An app that forgot the binding must not have its webhook route
      * silently open — that is the one default that cannot be the other way round.
      */
-    it('401s on every webhook endpoint when NO WebhookHook is bound', async () => {
+    it('401s on every webhook endpoint when NO WebhookAuthCallback is bound', async () => {
         const next = new RecordingNext();
 
         await expect(runFilter(next, undefined, webhookRequest('{}')))
@@ -183,7 +183,7 @@ describe('AuthFilter enforces @AuthWebhook', () => {
         const next = new RecordingNext();
         const noRaw = new HttpRequest('POST', '/hook/sentry/issue', new Map());
 
-        await expect(runFilter(next, new TestWebhookHook(true), noRaw))
+        await expect(runFilter(next, new TestWebhookAuthCallback(true), noRaw))
             .rejects.toThrow(/no raw request was retained/);
         expect(next.invoked).toBe(false);
     });
@@ -193,7 +193,7 @@ describe('AuthFilter enforces @AuthWebhook', () => {
         // re-stringifying the DTO is not a workaround: the signature would verify in every test and
         // fail on the first real payload.
         const body = '{"title":"café 🚨 crash","rate":1e3}';
-        const hook = new TestWebhookHook(true);
+        const hook = new TestWebhookAuthCallback(true);
 
         await runFilter(new RecordingNext(), hook, webhookRequest(body));
 
@@ -211,7 +211,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const next = new RecordingNext();
         const parseError = new Error('Unexpected token');
 
-        await expect(runFilter(next, new TestWebhookHook(false), webhookRequest('not json', parseError)))
+        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('not json', parseError)))
             .rejects.toThrow(HttpUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
@@ -220,7 +220,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const next = new RecordingNext();
         const parseError = new Error('Unexpected token');
 
-        await expect(runFilter(next, new TestWebhookHook(true), webhookRequest('not json', parseError)))
+        await expect(runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('not json', parseError)))
             .rejects.toThrow(HttpBadRequestError);
         expect(next.invoked).toBe(false);
     });

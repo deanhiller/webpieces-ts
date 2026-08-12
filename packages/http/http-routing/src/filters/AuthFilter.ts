@@ -5,7 +5,7 @@ import { AuthMode, EndpointNotFoundError, HttpBadRequestError, HttpUnauthorizedE
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from '../AuthConfig';
-import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookHook, WEBHOOK_HOOK } from '../AuthHooks';
+import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK } from '../AuthHooks';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -47,8 +47,8 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  *                    "not enabled" (401): JWT needs an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
- *  - webhook       → the bound {@link WebhookHook} verifies the VENDOR's signature over the retained
- *                    raw request. No WebhookHook bound → 401, like jwt: an unverified webhook is
+ *  - webhook       → the bound {@link WebhookAuthCallback} verifies the VENDOR's signature over the retained
+ *                    raw request. No WebhookAuthCallback bound → 401, like jwt: an unverified webhook is
  *                    never waved through because wiring was forgotten.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
  *                    a logged-out page still knows who is logged in; never fails.
@@ -74,10 +74,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
-        // @optional: only bind a WebhookHook to enable @AuthWebhook endpoints. Unbound = every such
+        // @optional: only bind a WebhookAuthCallback to enable @AuthWebhook endpoints. Unbound = every such
         // endpoint 401s, which is the ONE default that must not be the other way round.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(WEBHOOK_HOOK) private readonly webhookHook?: WebhookHook,
+        @optional() @inject(WEBHOOK_AUTH_CALLBACK) private readonly webhookAuthCallback?: WebhookAuthCallback,
     ) {
         super();
     }
@@ -121,7 +121,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `@AuthWebhook(name)`: hand the app's {@link WebhookHook} the verbatim request and let it call the
+     * `@AuthWebhook(name)`: hand the app's {@link WebhookAuthCallback} the verbatim request and let it call the
      * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
      *
      * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
@@ -133,10 +133,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * 3. The hook threw — the signature did not verify.
      */
     private async enforceWebhook(name: string, meta: MethodMeta): Promise<void> {
-        if (!this.webhookHook) {
+        if (!this.webhookAuthCallback) {
             log.warn(
-                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookHook is bound. ` +
-                `Bind one (options.bind(WEBHOOK_HOOK).to(YourWebhookHook)) to enable webhook verification.`,
+                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookAuthCallback is bound. ` +
+                `Bind one (options.bind(WEBHOOK_AUTH_CALLBACK).to(YourWebhookAuthCallback)) to enable webhook verification.`,
             );
             throw new HttpUnauthorizedError('Webhook auth is not enabled on this server');
         }
@@ -150,7 +150,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             );
             throw new HttpUnauthorizedError('Webhook signature cannot be verified: no raw request was retained');
         }
-        await this.webhookHook.verify(name, request, raw); // throws HttpUnauthorizedError to deny
+        await this.webhookAuthCallback.verify(name, request, raw); // throws HttpUnauthorizedError to deny
     }
 
     /**

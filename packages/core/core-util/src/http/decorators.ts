@@ -131,7 +131,7 @@ export type JwtRequirement = JwtRoles & { [field: string]: unknown };
  * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
  *                     `callers` is the allow-list of caller SAs ('self' = this service's SA)
  * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
- * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookHook`
+ * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookAuthCallback`
  *                     verifies it, selected by `name`. The framework ships NO vendor crypto (see
  *                     {@link AuthWebhook}).
  * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
@@ -392,7 +392,7 @@ export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator 
 
 /**
  * @AuthWebhook(name) - an OUTSIDE vendor signed this request in its OWN scheme; the app's bound
- * `WebhookHook` proves it. THE mode for every signed inbound webhook — Sentry, GitHub, Stripe, Slack,
+ * `WebhookAuthCallback` proves it. THE mode for every signed inbound webhook — Sentry, GitHub, Stripe, Slack,
  * Twilio — none of which fits the other kinds: no vendor mints Google OIDC tokens, and none sends its
  * secret (they all send a DERIVATION over the request), so `@Public` was the only reachable posture
  * and `calledBy: 'sentry'` stayed a claim rather than a fact.
@@ -416,7 +416,7 @@ export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator 
  * call the vendor's own library — hence the REQUIRED `{ rawBody: true }` (see
  * {@link EndpointOptions.rawBody}), which is checked at wiring time.
  *
- * FAILS CLOSED: with no `WebhookHook` bound, every `@AuthWebhook` endpoint 401s, matching `JwtHook`.
+ * FAILS CLOSED: with no `WebhookAuthCallback` bound, every `@AuthWebhook` endpoint 401s, matching `JwtHook`.
  * Silently allowing an unverified webhook is the one default that must not exist.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope

@@ -226,7 +226,7 @@ export abstract class ProxyClient {
             throw new Error(
                 `${this.apiName}.${route.methodName} is @AuthWebhook('${authMode.name}') — only ` +
                 `${authMode.name} can call it, because only ${authMode.name} can produce the signature ` +
-                `its WebhookHook verifies. It is not callable from a webpieces client.`,
+                `its WebhookAuthCallback verifies. It is not callable from a webpieces client.`,
             );
         }
         // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
