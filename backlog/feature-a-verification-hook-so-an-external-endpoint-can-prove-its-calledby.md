@@ -132,19 +132,19 @@ the server's container. Symmetric with both existing hooks:
 abstract notify(request: SentryIssueHook): Promise<HookAck>;
 
 // 2. FRAMEWORK — mirrors JwtHook / OidcHook exactly
-export abstract class WebhookHook {
+export abstract class WebhookAuthCallback {
     /** Verify one inbound request. Return to allow; throw HttpUnauthorizedError to deny. */
     abstract verify(name: string, request: RawHttpRequest): Promise<void>;
 }
-export declare const WEBHOOK_HOOK: unique symbol;
+export declare const WEBHOOK_AUTH_CALLBACK: unique symbol;
 
 // 3. APP — AppModule.ts, beside the CompanyJwtHook binding
-options.bind(WEBHOOK_HOOK).to(CompanyWebhookHook);
+options.bind(WEBHOOK_AUTH_CALLBACK).to(CompanyWebhookAuthCallback);
 ```
 
 `AuthMode` gains one member: `{ kind: 'webhook'; name: string }`.
 
-Unbound `WEBHOOK_HOOK` must **fail closed with 401**, matching `JwtHook`'s documented behavior
+Unbound `WEBHOOK_AUTH_CALLBACK` must **fail closed with 401**, matching `JwtHook`'s documented behavior
 (*"When NO JwtHook is bound, the framework AuthFilter treats every jwt endpoint as 'not enabled' and
 fails fast (401)"*). Silently allowing an unverified webhook is the one default that must not exist.
 
@@ -201,8 +201,8 @@ routing; nothing about the controller signature changes.
    byte-identical for a body containing multi-byte UTF-8, an emoji, and a float in exponent notation.
 2. `@AuthWebhook('sentry')` compiles on a contract in a level-0 api lib with **no** import of any
    server or vendor package, and the contract still builds into a browser bundle.
-3. A bound `WebhookHook` that throws yields **401** and the controller method is never entered.
-4. An **unbound** `WEBHOOK_HOOK` yields 401 on every `@AuthWebhook` endpoint — fail closed, matching
+3. A bound `WebhookAuthCallback` that throws yields **401** and the controller method is never entered.
+4. An **unbound** `WEBHOOK_AUTH_CALLBACK` yields 401 on every `@AuthWebhook` endpoint — fail closed, matching
    `JwtHook`.
 5. The hook receives an absolute `url` matching what the sender addressed, **verified behind a proxy
    that terminates TLS** (`x-forwarded-proto: https`), not only on localhost.
@@ -212,7 +212,7 @@ routing; nothing about the controller signature changes.
 8. `assertEveryEndpointHasAuthMode` accepts `webhook`; `DestinationTrust.forAuthMode` classifies it
    (it is a verified caller, not `public`).
 9. A `rawBody` request over the configured cap is rejected without buffering it.
-10. **Testability:** a spec can rebind `WEBHOOK_HOOK` to a `TestWebhookHook` in `appOverrides`, the way
+10. **Testability:** a spec can rebind `WEBHOOK_AUTH_CALLBACK` to a `TestWebhookAuthCallback` in `appOverrides`, the way
     `TestJwtHook` / `TestOidcHook` already work — so a consumer whose entire test discipline is
     "build the real server, drive it through `createApiClient`" can feature-test a webhook route
     without real vendor signatures.
