@@ -62,6 +62,12 @@ export class DestinationTrust {
                 return DestinationTrust.VERIFIES_CALLER;
             case 'jwt':
             case 'public':
+            // @AuthWebhook authenticates an OUTSIDE VENDOR, which is not the same thing as
+            // authenticating a peer in this repo. The vendor knows nothing of webpieces context
+            // headers and would never send one, so there is no identity to propagate in either
+            // direction — and a webpieces client cannot call such an endpoint anyway (it cannot mint
+            // the vendor's signature). Trusted keys stay home.
+            case 'webhook':
             // @AuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
             // credential — so a browser with curl on the same laptop is indistinguishable from us.
             // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to

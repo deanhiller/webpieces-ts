@@ -54,6 +54,24 @@ export interface EndpointOptions {
      * urlencoded has no nesting (unlike JSON). Default false = JSON.
      */
     formPost?: boolean;
+
+    /**
+     * RETAIN the verbatim request bytes + the absolute url the sender addressed, so an
+     * {@link AuthWebhook} hook can verify a vendor signature over them (see `RawRequest`).
+     *
+     * Opt-in PER ENDPOINT, sitting beside `formPost` and for the same reason: the cost lands on the
+     * handful of webhook routes rather than on every request in the process. It is retention, not
+     * new buffering — the express adapter already accumulates the whole body, it simply threw it
+     * away once it had parsed a DTO.
+     *
+     * REQUIRED by `@AuthWebhook`, checked at wiring time (see
+     * {@link assertEveryWebhookEndpointRetainsRawBody}) rather than left to fail as a 401 in
+     * production: a hook with nothing to verify is a misconfiguration, not a bad request.
+     *
+     * Combines with `formPost` — `{ formPost: true, rawBody: true }` is the Twilio case, where the
+     * hook needs the bytes and the url while the controller still wants the flat parsed DTO.
+     */
+    rawBody?: boolean;
 }
 
 /**
@@ -65,54 +83,6 @@ export interface ExternalEndpointOptions extends EndpointOptions {
     calledBy: string;
     /** What that caller IS; picks the node's shape. Defaults to `'saas'` (see DEFAULT_CALLER_KIND). */
     callerKind?: ExternalSystemKind;
-}
-
-/**
- * Route metadata stored per-method at runtime.
- * Used internally by http-routing and http-client as the runtime representation
- * of a route. Constructed from @ApiPath + @Endpoint metadata by ProxyClient
- * and ApiRoutingFactory.
- */
-export class RouteMetadata {
-    httpMethod: string;
-    path: string;
-    methodName: string;
-    controllerClassName?: string;
-    authMeta?: AuthMeta;
-    /** The API contract class name (e.g. 'SaveApi') — distinct from the controller name. */
-    apiName?: string;
-    /**
-     * True when @Endpoint(..., { formPost: true }): the body is application/x-www-form-urlencoded
-     * (flat key→value), not JSON. Rides the route metadata so the per-route body parse can branch
-     * without knowing the apiClass/methodName. Default false = JSON.
-     */
-    readonly formPost: boolean;
-    /**
-     * The @MaskLog field-mask spec for this route, or undefined when the method declared none. Read
-     * ONCE here at route-build time and handed to {@link LogApiCall} via ApiMethodInfo, so the per-call
-     * log path pays for masking only on routes that opted in (the rest stay on plain JSON.stringify).
-     */
-    readonly mask?: MaskSpec;
-
-    constructor(
-        httpMethod: string,
-        path: string,
-        methodName: string,
-        controllerClassName?: string,
-        authMeta?: AuthMeta,
-        apiName?: string,
-        formPost: boolean = false,
-        mask?: MaskSpec,
-    ) {
-        this.httpMethod = httpMethod;
-        this.path = path;
-        this.methodName = methodName;
-        this.controllerClassName = controllerClassName;
-        this.authMeta = authMeta;
-        this.apiName = apiName;
-        this.formPost = formPost;
-        this.mask = mask;
-    }
 }
 
 /**
@@ -161,6 +131,9 @@ export type JwtRequirement = JwtRoles & { [field: string]: unknown };
  * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
  *                     `callers` is the allow-list of caller SAs ('self' = this service's SA)
  * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
+ * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookHook`
+ *                     verifies it, selected by `name`. The framework ships NO vendor crypto (see
+ *                     {@link AuthWebhook}).
  * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
  *                     {@link RuntimeLocality} says this process is deployed. Authenticates NOBODY —
  *                     it is a deployment gate, not a credential.
@@ -170,6 +143,7 @@ export type AuthMode =
     | { kind: 'jwt'; requirement: JwtRequirement }
     | { kind: 'oidc'; callers: string[] }
     | { kind: 'shared-secret'; secretKey: string }
+    | { kind: 'webhook'; name: string }
     | { kind: 'local-only' };
 
 /**
@@ -417,6 +391,40 @@ export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator 
 }
 
 /**
+ * @AuthWebhook(name) - an OUTSIDE vendor signed this request in its OWN scheme; the app's bound
+ * `WebhookHook` proves it. THE mode for every signed inbound webhook — Sentry, GitHub, Stripe, Slack,
+ * Twilio — none of which fits the other kinds: no vendor mints Google OIDC tokens, and none sends its
+ * secret (they all send a DERIVATION over the request), so `@Public` was the only reachable posture
+ * and `calledBy: 'sentry'` stayed a claim rather than a fact.
+ *
+ * ```typescript
+ * @AuthWebhook('sentry')
+ * @Endpoint('/hook/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
+ * abstract notify(request: SentryIssueHook): Promise<HookAck>;
+ * ```
+ *
+ * `name` is a bare STRING resolved through DI in the server's container, exactly as
+ * `@AuthOidc('gmail-push')` already is — never a function reference. An api contract is level 0: a
+ * direct reference to a verifier would invert the dependency graph and drag a vendor SDK into the
+ * browser bundle that imports the same contract.
+ *
+ * THE FRAMEWORK IMPLEMENTS NO VENDOR CRYPTO, deliberately. Every vendor ships an official validator
+ * (`twilio.validateRequest`, `stripe.webhooks.constructEvent`, `@octokit/webhooks-methods`) and every
+ * vendor revises its scheme (Twilio added `bodySHA256` for JSON bodies; Stripe versions its header).
+ * Reimplementing five of those is signing up to track five security changelogs forever and to be
+ * wrong at the moment being wrong matters. The framework hands the hook enough of the raw request to
+ * call the vendor's own library — hence the REQUIRED `{ rawBody: true }` (see
+ * {@link EndpointOptions.rawBody}), which is checked at wiring time.
+ *
+ * FAILS CLOSED: with no `WebhookHook` bound, every `@AuthWebhook` endpoint 401s, matching `JwtHook`.
+ * Silently allowing an unverified webhook is the one default that must not exist.
+ */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'webhook', name });
+}
+
+/**
  * @AuthLocalOnly() - this endpoint exists ONLY on a developer's machine. Off-local it is not
  * registered as a route at all, and if it is somehow reached it 404s. Class- or method-level.
  *
@@ -527,6 +535,41 @@ export function isFormPost(apiClass: Function, methodName: string): boolean {
 }
 
 /**
+ * True when the method's @Endpoint declared `{ rawBody: true }` — the transport must retain the
+ * verbatim bytes + absolute url for an {@link AuthWebhook} hook to verify.
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of isFormPost
+export function isRawBody(apiClass: Function, methodName: string): boolean {
+    return getEndpointOptions(apiClass, methodName).rawBody === true;
+}
+
+/**
+ * Fail-fast at wiring time when an `@AuthWebhook` endpoint did not ask the transport to keep the
+ * bytes it is supposed to verify. A hook with nothing to verify is a MISCONFIGURATION, and it must
+ * surface at startup, naming the fix — not as a 401 in production on exactly the traffic the endpoint
+ * exists for.
+ *
+ * This pairing is a runtime assert rather than a type because the two halves live on DIFFERENT
+ * decorators (`@AuthWebhook` and `@Endpoint`), and no union over one decorator's argument can say
+ * anything about the other's.
+ *
+ * @throws Error naming the first `@AuthWebhook` endpoint missing `{ rawBody: true }`.
+ */
+// webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
+export function assertEveryWebhookEndpointRetainsRawBody(apiClass: Function): void {
+    const endpoints = getEndpoints(apiClass) || {};
+    for (const methodName of Object.keys(endpoints)) {
+        if (getAuthMode(apiClass, methodName)?.kind !== 'webhook' || isRawBody(apiClass, methodName)) continue;
+        throw new Error(
+            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is @AuthWebhook but its @Endpoint ` +
+            `does not declare { rawBody: true }. A webhook hook verifies a signature over the bytes and ` +
+            `the url the SENDER transmitted, and without that option the transport parses the body and ` +
+            `throws them away — leaving the hook nothing to check.`,
+        );
+    }
+}
+
+/**
  * Check if a class has @ApiPath decorator.
  */
 export function isApiPath(apiClass: Function): boolean {
@@ -567,7 +610,8 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
  */
 export const MISSING_AUTH_DECORATOR_FIX =
     "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
-    '@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthLocalOnly() to the class or method.';
+    "@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthWebhook('vendor') / @AuthLocalOnly() to " +
+    'the class or method.';
 
 /**
  * Fail-fast at wiring time if any endpoint lacks an auth mode. Both the server
@@ -603,7 +647,7 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         throw new Error(
             `Conflicting auth decorator on ${location}. ` +
             `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) / ` +
-            `@AuthLocalOnly() is allowed per target.`
+            `@AuthWebhook(...) / @AuthLocalOnly() is allowed per target.`
         );
     }
 }

@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
-import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, getMaskSpec, LogManager, RouteMetadata, AuthMeta, MISSING_AUTH_DECORATOR_FIX, RuntimeLocality } from '@webpieces/core-util';
+import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, isRawBody, assertEveryWebhookEndpointRetainsRawBody, getMaskSpec, LogManager, RouteMetadata, AuthMeta, MISSING_AUTH_DECORATOR_FIX, RuntimeLocality } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -69,6 +69,11 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
      * Validates controller methods and auth decorators in single loop.
      */
     configure(routeBuilder: RouteBuilder): void {
+        // A webhook route whose transport keeps no bytes has nothing to verify. That is a wiring
+        // mistake, so it dies at STARTUP naming the fix — not as a 401 in production on exactly the
+        // traffic the endpoint exists for.
+        assertEveryWebhookEndpointRetainsRawBody(this.apiMetaClass);
+
         const basePath = getApiPath(this.apiMetaClass)!;
         const endpoints = getEndpoints(this.apiMetaClass) || {};
         const controllerFilepath = this.getControllerFilepath();
@@ -115,6 +120,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                 apiName,
                 isFormPost(this.apiMetaClass, methodName),
                 getMaskSpec(this.apiMetaClass, methodName),
+                isRawBody(this.apiMetaClass, methodName),
             );
 
             routeBuilder.addRoute(

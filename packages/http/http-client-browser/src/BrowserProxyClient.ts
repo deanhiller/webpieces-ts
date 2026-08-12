@@ -100,6 +100,16 @@ export class BrowserProxyClient extends ProxyClient {
                     `cannot hold service credentials. Call it server-side with ClientHttpFactory from ` +
                     `@webpieces/http-client-node.`,
                 );
+            // @AuthWebhook is not "a credential a browser lacks" — it is an endpoint whose ONLY
+            // legitimate caller is the outside vendor that signs the request in its own scheme.
+            // NOTHING in this repo can call it, browser or server, so it is refused at bind time
+            // rather than failing as a 401 on the first call.
+            case 'webhook':
+                throw new Error(
+                    `Endpoint ${methodName} is @AuthWebhook('${mode.name}') — only ${mode.name} can call it, ` +
+                    `because only ${mode.name} can produce the signature its WebhookHook verifies. It is not ` +
+                    `callable from a webpieces client.`,
+                );
         }
     }
 }

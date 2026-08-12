@@ -44,6 +44,7 @@ export {
     MISSING_AUTH_DECORATOR_FIX,
     AuthOidc,
     AuthSharedSecret,
+    AuthWebhook,
     AuthLocalOnly,
     MaskLog,
     getApiPath,
@@ -53,16 +54,19 @@ export {
     getEndpointKinds,
     getMaskSpec,
     isFormPost,
+    isRawBody,
     isApiPath,
     getAuthMeta,
     getAuthMode,
     assertEveryEndpointHasAuthMode,
     assertEveryExternalEndpointDeclaresCaller,
+    assertEveryWebhookEndpointRetainsRawBody,
     validateNoConflictingDecorators,
     AuthMeta,
-    RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
+// The runtime representation of ONE route (split out of decorators.ts for file size only).
+export { RouteMetadata } from './http/RouteMetadata';
 export type { AuthMode, EndpointKind, JwtRoles, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
 // API kind (RPC vs PubSub/Cloud Tasks) + queue naming. Split out of decorators.ts for file size only;
 // one-way dependency api-kind -> decorators, and the barrel keeps the surface identical.

@@ -22,6 +22,8 @@ export type { RestorableContext } from './CapturedContext';
 export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 // Transport-neutral request stored in the context (http-routing's request type; re-exported there)
 export { HttpRequest } from './HttpRequest';
+// The verbatim bytes + absolute url a webhook SIGNATURE is computed over ({ rawBody: true } routes).
+export { RawRequest } from './RawRequest';
 
 // DI provider decorators (shared DI seam; http-routing re-exports for back-compat)
 export { provideSingletonDefaultForApi } from './provide';
