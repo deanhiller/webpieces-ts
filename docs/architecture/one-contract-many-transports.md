@@ -15,7 +15,8 @@ exactly one artifact, read by everyone.
 
 A contract is an abstract class decorated with the shared api decorators
 (`packages/core/core-util/src/http/decorators.ts`): `@ApiPath`, `@Post`/`@Get`/…, and an auth mode
-(exactly one of `@Public`, `@AuthJwt`, `@AuthOidc`, `@AuthSharedSecret`, `@AuthLocalOnly`). For a
+(exactly one of `@Public`, `@AuthJwt`, `@AuthOidc`, `@AuthSharedSecret`, `@AuthWebhook`,
+`@AuthLocalOnly`). For a
 pub-sub/task contract it is additionally
 marked `@PubSub` with a queue name. The decorators attach runtime metadata that every transport
 reads back.
