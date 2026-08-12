@@ -107,7 +107,7 @@ export class BrowserProxyClient extends ProxyClient {
             case 'webhook':
                 throw new Error(
                     `Endpoint ${methodName} is @AuthWebhook('${mode.name}') — only ${mode.name} can call it, ` +
-                    `because only ${mode.name} can produce the signature its WebhookHook verifies. It is not ` +
+                    `because only ${mode.name} can produce the signature its WebhookAuthCallback verifies. It is not ` +
                     `callable from a webpieces client.`,
                 );
         }

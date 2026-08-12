@@ -93,7 +93,7 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 //  - JwtHook / OidcHook: OPTIONAL verification mechanisms (bind only what you use).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
 export { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from './AuthConfig';
-export { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookHook, WEBHOOK_HOOK } from './AuthHooks';
+export { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK } from './AuthHooks';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook } from './DefaultJwtHook';

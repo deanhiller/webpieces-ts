@@ -66,17 +66,17 @@ export abstract class OidcHook {
 export const OIDC_HOOK = Symbol.for('OidcHook');
 
 /**
- * WebhookHook - the OPTIONAL mechanism behind `@AuthWebhook(name)`: prove that an inbound request was
- * really authored by the outside vendor the contract names. Its DI token is the {@link WEBHOOK_HOOK}
- * Symbol injected via `@inject(WEBHOOK_HOOK)` (a Symbol, because the app container uses autobind;
+ * WebhookAuthCallback - the OPTIONAL mechanism behind `@AuthWebhook(name)`: prove that an inbound request was
+ * really authored by the outside vendor the contract names. Its DI token is the {@link WEBHOOK_AUTH_CALLBACK}
+ * Symbol injected via `@inject(WEBHOOK_AUTH_CALLBACK)` (a Symbol, because the app container uses autobind;
  * rebindable in tests). The third hook, symmetric with {@link JwtHook} / {@link OidcHook}:
  *
  * ```typescript
  * // AppModule.ts, beside the CompanyJwtHook binding
- * options.bind(WEBHOOK_HOOK).to(CompanyWebhookHook);
+ * options.bind(WEBHOOK_AUTH_CALLBACK).to(CompanyWebhookAuthCallback);
  * ```
  *
- * When NO WebhookHook is bound, the framework {@link AuthFilter} 401s every `@AuthWebhook` endpoint,
+ * When NO WebhookAuthCallback is bound, the framework {@link AuthFilter} 401s every `@AuthWebhook` endpoint,
  * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
  * one: silently allowing an unverified webhook is the single default that must not exist, and the
  * framework ships no vendor crypto by design (see {@link AuthWebhook} for why reimplementing five
@@ -87,7 +87,7 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
  * call the vendor's OWN validator — the bytes for a body-signing vendor (Sentry, GitHub, Stripe,
  * Slack), the absolute url for one that signs the url instead (Twilio).
  */
-export abstract class WebhookHook {
+export abstract class WebhookAuthCallback {
     /**
      * Verify ONE inbound request. Return to allow; throw {@link HttpUnauthorizedError} to deny.
      *
@@ -101,9 +101,9 @@ export abstract class WebhookHook {
 }
 
 /**
- * DI identifier for the optional {@link WebhookHook} binding. It is a Symbol (not the class) so the app
- * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(WEBHOOK_HOOK)`
- * correct — undefined when unbound. The WebhookHook class stays the TYPE and the impl base.
+ * DI identifier for the optional {@link WebhookAuthCallback} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(WEBHOOK_AUTH_CALLBACK)`
+ * correct — undefined when unbound. The WebhookAuthCallback class stays the TYPE and the impl base.
  */
 // webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
-export const WEBHOOK_HOOK = Symbol.for('WebhookHook');
+export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');

@@ -8,7 +8,7 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 - Route/app metadata contracts: `WebAppMeta`, `Routes`, `RouteBuilder`, `RouteDefinition`, `FilterDefinition`, `RouteBuilderImpl`
 - Turning API decorators into invokable routes (`ApiRoutingFactory`, `RouteHandler`, `MethodMeta`) — including SKIPPING an `@AuthLocalOnly` route entirely when `RuntimeLocality` says this process is not a developer machine, so the endpoint does not exist off-local
 - Enforcing every auth mode at request time (`AuthFilter`: `@Public`, `@AuthJwt`, `@AuthOidc`, `@AuthSharedSecret`, `@AuthWebhook`, `@AuthLocalOnly`), and declaring the process's locality at startup from `RuntimeSetupOptions.locality`
-- The three app auth hooks (`JwtHook`, `OidcHook`, `WebhookHook`) and their optional DI tokens — bind one to turn on the endpoints that need it; unbound means 401, never open
+- The three app-implemented auth seams (`JwtHook`, `OidcHook`, `WebhookAuthCallback`) and their optional DI tokens — bind one to turn on the endpoints that need it; unbound means 401, never open
 - Matching filters to routes by controller filepath glob (`FilterMatcher`, `minimatch`)
 - Request-scoped context reading and server config types (`RequestContextReader`, `WebpiecesConfig`)
 
