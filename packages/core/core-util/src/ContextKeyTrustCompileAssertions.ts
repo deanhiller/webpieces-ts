@@ -1,4 +1,4 @@
-import { ContextKey, AnyContextKey } from './ContextKey';
+import { ContextKey, AnyContextKey, AnyTrustedContextKey, AnyUntrustedContextKey } from './ContextKey';
 
 /**
  * COMPILE-TIME assertions that the trust system cannot be bypassed by writing the wrong thing.
@@ -57,5 +57,30 @@ export class ContextKeyTrustCompileAssertions {
             ContextKey.untrusted<string>('actionId', 'x-webpieces-actionid'),
         ];
         void keys;
+    }
+
+    /**
+     * THE assertion that keeps trust a ONE-METHOD question: `isTrusted()` types BOTH of its branches,
+     * so the `else` needs no `isUntrusted()` twin and no cast.
+     *
+     * POSITIVE, and a tripwire on the SHAPE of {@link AnyContextKey}: this compiles only while that
+     * alias is a UNION of the two branches. Respell it as one type with a mixed `Trust` parameter and
+     * the negative has nothing to drop, `takesUntrusted(key)` below stops compiling, and the pressure
+     * to re-add a second predicate for a binary question comes straight back.
+     */
+    isTrustedTypesTheElseBranchToo(key: AnyContextKey): void {
+        if (key.isTrusted()) {
+            this.takesTrusted(key);
+        } else {
+            this.takesUntrusted(key);
+        }
+    }
+
+    private takesTrusted(key: AnyTrustedContextKey): void {
+        void key;
+    }
+
+    private takesUntrusted(key: AnyUntrustedContextKey): void {
+        void key;
     }
 }

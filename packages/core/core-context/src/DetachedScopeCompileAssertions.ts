@@ -84,7 +84,8 @@ export class DetachedScopeCompileAssertions {
      * rebuilt from an EXTERNAL payload, driven off the registry's logged keys.
      *
      * The `isTrusted()` skip is what a reader sees; the compiler is what enforces it. Delete the skip
-     * and `isUntrusted()` still refuses the trusted key, so the trusted branch has no write at all.
+     * and the write below stops compiling, because the key is mixed again and `putUntrusted` refuses
+     * it — see {@link cannotWriteAMixedKeyWithoutTestingItsTrust}.
      */
     // webpieces-disable no-any-unknown -- the EXTERNAL payload is by definition untyped JSON off the wire; that is precisely why every value below is trust-branched and typeof-checked before it is written
     theBrowserLogLoopCompiles(loggedKeys: AnyContextKey[], payload: Record<string, unknown>): void {
@@ -95,8 +96,10 @@ export class DetachedScopeCompileAssertions {
                     // no cast that could produce one.
                     continue;
                 }
+                // Past the `continue`, the key is narrowed to the untrusted branch by the SAME
+                // predicate — no second check, and no cast, to reach `putUntrusted`.
                 const value = payload[key.name];
-                if (key.isUntrusted() && typeof value === 'string') {
+                if (typeof value === 'string') {
                     RequestContext.putUntrusted(key, value);
                 }
             }

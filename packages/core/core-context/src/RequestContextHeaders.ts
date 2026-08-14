@@ -136,19 +136,15 @@ export class RequestContextHeaders {
      * the full rationale — this two-step is the reason trusted keys can safely keep an `httpHeader`
      * and therefore the reason service-to-service identity propagation works at all.
      *
-     * There is NO cast here. `isTrusted()` / `isUntrusted()` are type predicates, so each branch holds
-     * the narrowed key already — the runtime check produces the type it proves. Two positive `if`s
-     * rather than an `if/else` because TypeScript cannot narrow the NEGATIVE of a predicate over
-     * `AnyContextKey` (it is `ContextKey<unknown, Trust>`, one type rather than a union, so there is
-     * nothing to `Exclude`); see {@link ContextKey.isUntrusted}. There is no third trust level, so the
-     * fall-through is unreachable, not a silent drop.
+     * There is NO cast here, on EITHER branch. `isTrusted()` is a type predicate over the
+     * {@link AnyContextKey} union, so the `if` holds a trusted key and the `else` holds an untrusted
+     * one — the runtime check produces the type it proves. Trust is binary and the union has exactly
+     * two constituents, so the `else` is the whole remaining case rather than a silent drop.
      */
     private acceptInbound(key: AnyContextKey, value: string): void {
         if (key.isTrusted()) {
             PendingWireTrust.stash(key, value);
-            return;
-        }
-        if (key.isUntrusted()) {
+        } else {
             RequestContext.putUntrusted(key, value);
         }
     }
