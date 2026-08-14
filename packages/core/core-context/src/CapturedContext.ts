@@ -211,7 +211,7 @@ export class CapturedContext {
         const registry = HeaderRegistry.get();
         for (const name of this.#entries.keys()) {
             const key = registry.findByName(name);
-            if (key && key.isUntrusted()) {
+            if (key && !key.isTrusted()) {
                 kept.set(name, this.#entries.get(name));
             }
         }

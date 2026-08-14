@@ -41,7 +41,7 @@ class BrowserLogEmitter {
                     continue;
                 }
                 const value = payload[key.name];
-                if (key.isUntrusted() && typeof value === 'string' && value !== '') {
+                if (typeof value === 'string' && value !== '') {
                     RequestContext.putUntrusted(key, value);
                 }
             }

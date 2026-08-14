@@ -90,33 +90,40 @@
 export type Trust = 'trusted' | 'untrusted';
 
 /**
- * A ContextKey whose value type is intentionally UNCONSTRAINED — a "key of any value type". Use this
- * (never a bare `ContextKey`, which no longer compiles) for genuinely mixed-bag collections and
- * key-agnostic code: `ALL_HEADERS: AnyContextKey[]`, the {@link HeaderRegistry}'s key arrays, a
- * reader that takes whatever key it is handed. Naming the mixed case makes "I mean any key" a visible,
- * deliberate statement, and confines the one sanctioned `unknown` to this single alias instead of
- * scattering `ContextKey<unknown>` — and its disable comment — across the codebase.
- *
- * NOTE this is mixed in TRUST as well as in value type, so it is READ-ONLY territory: `getAny(key)`
- * takes one, but no WRITE verb does. A write must name the trust level, which is what keeps the
- * `trusted` label honest.
- */
-// webpieces-disable no-any-unknown -- the ONE sanctioned `unknown`: a key whose value type is deliberately unconstrained (mixed-bag collections / key-agnostic code). Every other site names AnyContextKey instead of repeating this.
-export type AnyContextKey = ContextKey<unknown>;
-
-/**
  * A trusted key of any value type — what {@link ContextTuple} carries, and what the trusted write
  * verb accepts when the value type is not statically known.
  */
-// webpieces-disable no-any-unknown -- same sanctioned mixed-bag alias as AnyContextKey, narrowed to the trusted branch
+// webpieces-disable no-any-unknown -- the ONE sanctioned `unknown`: a key whose value type is deliberately unconstrained (mixed-bag collections / key-agnostic code). Every other site names one of these aliases instead of repeating it.
 export type AnyTrustedContextKey = ContextKey<unknown, 'trusted'>;
 
 /**
  * An untrusted key of any value type — what the {@link ApiCallContext} seam stamps, so that seam
  * cannot be used as a side door to forge a trusted value.
  */
-// webpieces-disable no-any-unknown -- same sanctioned mixed-bag alias as AnyContextKey, narrowed to the untrusted branch
+// webpieces-disable no-any-unknown -- same sanctioned mixed-bag alias, narrowed to the untrusted branch
 export type AnyUntrustedContextKey = ContextKey<unknown, 'untrusted'>;
+
+/**
+ * A ContextKey whose value type is intentionally UNCONSTRAINED — a "key of any value type". Use this
+ * (never a bare `ContextKey`, which no longer compiles) for genuinely mixed-bag collections and
+ * key-agnostic code: `ALL_HEADERS: AnyContextKey[]`, the {@link HeaderRegistry}'s key arrays, a
+ * reader that takes whatever key it is handed. Naming the mixed case makes "I mean any key" a visible,
+ * deliberate statement.
+ *
+ * It is a UNION of the two branches, not `ContextKey<unknown, Trust>`, and that is load-bearing rather
+ * than cosmetic. Trust is BINARY, so `if (key.isTrusted())` should type BOTH of its branches — and it
+ * does only against a union: TypeScript narrows the negative of a `this is X` predicate by dropping the
+ * union constituents assignable to `X`, so the `else` here lands on {@link AnyUntrustedContextKey} and
+ * goes straight to `putUntrusted` with no cast. Written as one type with a mixed `Trust` parameter
+ * there would be nothing to drop, the `else` would stay mixed, and the class would need a second
+ * `isUntrusted()` predicate to type the branch its own negative already decided — one runtime question
+ * with two spellings, which is the shim shape CLAUDE.md rejects.
+ *
+ * Mixed in TRUST as well as in value type, so it is READ-ONLY territory: `getAny(key)` takes one, but
+ * no WRITE verb does. A write must name the trust level, which is what keeps the `trusted` label
+ * honest.
+ */
+export type AnyContextKey = AnyTrustedContextKey | AnyUntrustedContextKey;
 
 export class ContextKey<V, T extends Trust = Trust> {
     /**
@@ -225,39 +232,28 @@ export class ContextKey<V, T extends Trust = Trust> {
     }
 
     /**
-     * True for a key built by {@link trusted}. The RUNTIME check used by the inbound fill and the
-     * AuthFilter reconciliation; ordinary application code should never need it, because the typed
-     * verbs already made the decision at compile time.
+     * True for a key built by {@link trusted}. Trust is BINARY, so this ONE predicate answers it in
+     * both directions and there is deliberately no `isUntrusted()` twin. The RUNTIME check used by the
+     * inbound fill and the AuthFilter reconciliation; ordinary application code should never need it,
+     * because the typed verbs already made the decision at compile time.
      *
-     * It is a TYPE PREDICATE, so the branch that takes it holds a `ContextKey<V, 'trusted'>` and can
-     * hand the key straight to `putTrusted` / `PendingWireTrust.stash` with NO cast. Before this, every
-     * such site wrote `key as AnyTrustedContextKey` — a cast is exactly the thing an agent copies to
-     * the one place it is not warranted, so the runtime check now produces the type it proves.
-     */
-    isTrusted(): this is ContextKey<V, 'trusted'> {
-        return this.trust === 'trusted';
-    }
-
-    /**
-     * The other branch — true for a key built by {@link untrusted}, narrowing to
-     * `ContextKey<V, 'untrusted'>` so the key can go straight to `putUntrusted`.
+     * It is a TYPE PREDICATE, so BOTH branches are typed, with NO cast on either side: the `if` holds a
+     * `ContextKey<V, 'trusted'>` for `putTrusted` / `PendingWireTrust.stash`, and the `else` holds a
+     * `ContextKey<V, 'untrusted'>` for `putUntrusted`. The `else` types only because
+     * {@link AnyContextKey} is a UNION of the two branches — see that alias for why the negative of a
+     * predicate needs something to drop. Before this, every such site wrote `key as
+     * AnyTrustedContextKey`; a cast is exactly the thing an agent copies to the one place it is not
+     * warranted, so the runtime check produces the type it proves instead.
      *
-     * NOT a second spelling of `!isTrusted()`: that expression cannot narrow anything. TypeScript
-     * narrows the NEGATIVE of a `this is X` predicate by `Exclude`, and an {@link AnyContextKey} is
-     * `ContextKey<unknown, Trust>` — a single type, not a union of the two branches — so there is
-     * nothing to exclude and the key stays mixed. A positive predicate per branch is the only form that
-     * types the branch it guards, which is why both exist and why neither takes an argument saying
-     * which one you meant.
-     *
-     * This is what makes a loop over a mixed `AnyContextKey[]` — the {@link HeaderRegistry} arrays, a
+     * That is what makes a loop over a mixed `AnyContextKey[]` — the {@link HeaderRegistry} arrays, a
      * browser-log payload re-stated into a detached scope — safe BY CONSTRUCTION: the loop can only
      * write a key whose trust it has just tested, and a trusted key cannot reach `putUntrusted` at all,
      * so a loop fed by a source that proves nothing cannot fabricate a proven value, and nobody has to
      * remember to filter. That is a limit on the SOURCE, not on the key: a trusted key is written all
      * the time via `putTrusted`, by an authenticator or by app code that proved the value out of band.
      */
-    isUntrusted(): this is ContextKey<V, 'untrusted'> {
-        return this.trust === 'untrusted';
+    isTrusted(): this is ContextKey<V, 'trusted'> {
+        return this.trust === 'trusted';
     }
 
     /**
