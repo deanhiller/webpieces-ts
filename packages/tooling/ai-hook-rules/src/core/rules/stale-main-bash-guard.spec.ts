@@ -124,11 +124,28 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
         expect(blocked('git show HEAD:package.json')).toBe(true);
     });
 
-    it('names the cure and does not claim the whole shell is blocked', () => {
+    /*
+     * The message names the BRANCH, not the staleness. An agent told "you are 18 commits behind"
+     * reaches for `git pull`, lands on a CURRENT main, and is still on main — the cure it needs is a
+     * new branch, and that is what row 5's cure cell has always said.
+     */
+    it('names the branch as the finding, and the cure is a new branch', () => {
         const message = rule().check(ctx('cat src/app.ts'))[0].message;
-        expect(message).toContain('git pull --ff-only origin main');
-        expect(message).toContain('18 commit(s) behind');
-        expect(message).toContain('Still allowed right now');
+        expect(message).toContain('you are on `main`');
+        expect(message).toContain('git checkout -b <new-branch> origin/main');
+        expect(message).not.toContain('commit(s) behind');
+    });
+
+    /*
+     * The matrix pointer is BEST-EFFORT: this workspace root does not exist, so the doc cannot be
+     * written and the pointer is correctly empty. What must survive that is the deny itself — a guard
+     * whose doc delivery failed still has to say what to do. (The pointer's own content is pinned in
+     * l2-matrix.spec.ts, where the path is supplied directly.)
+     */
+    it('degrades to the plain deny when the matrix doc cannot be written', () => {
+        const message = rule().check(ctx('cat src/app.ts'))[0].message;
+        expect(message).not.toContain('webpieces.branch-state-matrix.md');
+        expect(message).toContain('git checkout -b <new-branch> origin/main');
     });
 });
 
@@ -141,10 +158,17 @@ describe('stale-main-bash-guard — never wedges the session', () => {
         expect(blocked('git pull origin main')).toBe(false);
     });
 
-    it('allows builds, tests and installs', () => {
+    /*
+     * THE POLARITY FLIP. Builds and tests used to be allowed on `main` because the guard only hunted
+     * content READS. They are blocked now, and the doc's skip-list section already said they should
+     * be: "there is no point running them on `main` or on a dead branch." Installs stay allowed —
+     * they are on the skip list because a broken install is a state you must be able to repair from
+     * wherever you are standing.
+     */
+    it('blocks builds and tests on main, but never the install that repairs the tree', () => {
         expect(blocked('pnpm install')).toBe(false);
-        expect(blocked('pnpm run build-all')).toBe(false);
-        expect(blocked('npx vitest run')).toBe(false);
+        expect(blocked('pnpm run build-all')).toBe(true);
+        expect(blocked('npx vitest run')).toBe(true);
     });
 
     it('allows git and gh METADATA (not file content)', () => {
@@ -160,6 +184,11 @@ describe('stale-main-bash-guard — never wedges the session', () => {
         expect(blocked('git status --porcelain | wc -l')).toBe(false);
     });
 
+    /*
+     * Reading UPSTREAM is exactly what a blocked agent should be doing, so both git spellings of it
+     * stay open — and they are the reason `show` and `grep` sit on the allowlist at all, with
+     * ContentReadScan rejecting their local-rev forms one check earlier.
+     */
     it('allows reads against the CURRENT upstream tree', () => {
         expect(blocked('git show origin/main:package.json')).toBe(false);
         expect(blocked('git grep TODO origin/main')).toBe(false);
@@ -191,31 +220,45 @@ describe('stale-main-bash-guard — fail-open valves', () => {
         expect(blocked('cat src/app.ts')).toBe(false);
     });
 
-    it('allows with no cache, or a cache computed for another branch', () => {
+    /*
+     * THE CACHE VALVES ARE GONE, and their absence is the change. Row 5 is decided from one
+     * `git rev-parse`, so none of these states can reach it — which is the whole point: the cache is
+     * populated for the NEXT call, so a cache-gated block is off on the first call of every session,
+     * exactly when an agent is most likely to still be standing on `main`.
+     */
+    it('blocks with NO cache at all — this is the first-call case the old version could never catch', () => {
         state.status = null;
-        expect(blocked('cat src/app.ts')).toBe(false);
-        state.status = staleMainStatus({ branch: 'dean/feature' });
-        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('cat src/app.ts')).toBe(true);
     });
 
-    it('allows when origin/main is unknown (offline)', () => {
+    it('blocks when origin/main is unknown (offline) — freshness is not the question', () => {
         state.status = staleMainStatus({ originMain: '' });
-        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('cat src/app.ts')).toBe(true);
     });
 
-    it('allows the instant origin/main is an ancestor of HEAD (ancestry, not equality)', () => {
+    it('blocks on a PERFECTLY CURRENT main — `main` is not a place to work either way', () => {
         state.containsExit = 0;
-        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('cat src/app.ts')).toBe(true);
     });
 
-    it('allows when git cannot answer the ancestry question at all', () => {
-        state.containsExit = 128;
-        expect(blocked('cat src/app.ts')).toBe(false);
-    });
-
-    it('allows on a DIRTY tree — the pull is not a clean fast-forward, do not trap the rescue', () => {
+    /*
+     * No dirty valve, and none is needed. The valve existed because row 6's cure is `git pull`, which
+     * is not a clean fast-forward on a dirty tree. Row 5's cure is `git checkout -b`, which CARRIES
+     * uncommitted work onto the new branch — so a dirty tree traps nobody. read-stale-guard still
+     * opens the valve for the Read tool, where the pull really is the cure.
+     */
+    it('blocks on a DIRTY tree — `git checkout -b` carries the work with you, so nothing is trapped', () => {
         state.dirty = ' M src/app.ts\n';
-        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('cat src/app.ts')).toBe(true);
+    });
+
+    it('still allows every command that gets you OUT, dirty tree or not', () => {
+        state.dirty = ' M src/app.ts\n';
+        state.status = null;
+        expect(blocked('git checkout -b dean/x origin/main')).toBe(false);
+        expect(blocked('git stash')).toBe(false);
+        expect(blocked('git status')).toBe(false);
+        expect(blocked('pnpm wp-cleanup')).toBe(false);
     });
 
     it('does not run at all when mode is OFF', () => {
@@ -272,6 +315,9 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
     it('allows the checkout when the pull rides along in the SAME command', () => {
         expect(blocked('git checkout main && git pull origin main')).toBe(false);
         expect(blocked('git switch main && git pull --ff-only origin main')).toBe(false);
+        // Run from the FEATURE branch, which is where you actually are when you land a PR. On `main`
+        // row 5 would block it anyway, on the strength of the un-allowlisted `gh pr merge` segment.
+        state.branch = 'deanhiller/feat';
         expect(blocked('gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup')).toBe(false);
     });
 

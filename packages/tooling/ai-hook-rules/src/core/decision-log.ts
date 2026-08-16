@@ -9,6 +9,7 @@ import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-co
 import { toError } from './to-error';
 import { logStream } from './log-stream';
 import { l2RowForReason } from './l2-rows';
+import { cureForMatrix } from './matrix-cures';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
 // the ASYNC log (the `async-refresh/` stream, written by the detached refresher in main-sync-log.ts). This
@@ -227,6 +228,12 @@ function appendDecision(root: string, streamDir: string, decision: GuardDecision
             // APPEND-ONLY, same spelling as the invocation line and the L0 shim log: which L0 fault
             // this was, or `-`.
             `fault=${decision.fault}`,
+            // WHAT THE AGENT WAS TOLD TO DO — looked up from the row above, never passed in, so it is
+            // by construction the same literal the generated matrix prints for that row (see
+            // matrix-cures.ts). `row=` says which row judged the call; this says what that row
+            // prescribed, which is what makes the trail auditable against the doc without opening it.
+            // APPEND-ONLY, like every field before it.
+            `cure=${oneLine(cureForMatrix(decision.matrix.layer, decision.matrix.row))}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {

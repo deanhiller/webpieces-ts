@@ -16,12 +16,12 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
+import { writeBranchStateMatrixDoc, branchStateMatrixPointer } from '../l2-matrix-doc';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
-import { CommandScanner, CommandSegment } from '../command-scan';
+import { CommandScanner } from '../command-scan';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
-import { ShellSegmentScan, SegmentVerdict } from './shell-segment-scan';
-import { ContentReadScan } from './content-read-scan';
+import { RecoveryAllowlist } from './recovery-allowlist';
 
 /**
  * The BASH half of the merged-branch protection — the gap that let a whole session run on an
@@ -56,7 +56,9 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
     constructor(config: BranchStateGuardConfig) { super(config, 'merged-branch-bash-guard', BRANCH_STATE_GUARD_KEY); }
 
     private readonly scanner = new CommandScanner();
-    private readonly shell = new ShellSegmentScan(this.scanner);
+    // ROW 4, the skip list — shared with stale-main-bash-guard so the two states cannot drift apart
+    // about what "gets you out" means. See recovery-allowlist.ts.
+    private readonly recoveryList = new RecoveryAllowlist(this.scanner);
 
     readonly description =
         'Block ordinary Bash on an already-merged branch (allowlisting only recovery/cleanup and ' +
@@ -111,73 +113,12 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
         // Merged. Allow ONLY when every segment of the command is a recovery / cleanup / read-only
         // inspection command — anything else (servers, builds, tests, cat/ls of repo files, git writes)
         // is denied with the redirect.
-        if (this.isFullyRecovery(ctx)) {
+        if (this.recoveryList.isFullyRecovery(ctx)) {
             return this.allow(ctx, branch, 'merged-branch recovery/inspection (allowlisted)', cache);
         }
 
         const pr = status.mergedPr !== '' ? status.mergedPr : '?';
         return this.block(ctx, branch, `already-merged PR#${pr}`, this.mergedMessage(ctx.workspaceRoot, branch, status.mergedPr), cache);
-    }
-
-    /**
-     * A command is a recovery command only when EVERY one of its segments is — a single
-     * `… && scripts/local.sh start` in the chain is enough to deny the whole thing.
-     *
-     * Segments are judged by ROLE first (see ShellSegmentScan). Shell STRUCTURE (`for … in`, `do`,
-     * `done`) invokes nothing, and output SHAPING (`| tail -40`, `; echo done`) cannot touch the repo
-     * — so neither may veto a chain. Judging the raw string instead is what made the guard reject
-     * `git fetch origin main 2>&1 | tail -5`, a command its own redirect had just told the agent to run.
-     */
-    private isFullyRecovery(ctx: BashContext): boolean {
-        const segments = this.scanner.segmentsWithPipes(ctx.command);
-        if (segments.length === 0) return false;
-        const content = new ContentReadScan(this.scanner, ctx.workspaceRoot, ctx.effectiveCwd);
-        return segments.every((segment: CommandSegment): boolean => this.isRecoverySegment(segment, content));
-    }
-
-    private isRecoverySegment(segment: CommandSegment, content: ContentReadScan): boolean {
-        const verdict = this.shell.classify(segment);
-        if (verdict.role === 'structure') return true;
-        // Inert / piped-into filters are fine EXCEPT when they name a workspace path: `git status |
-        // cat src/foo.ts` still hands the agent pre-merge file content, which is the thing this guard
-        // is protecting against. ContentReadScan already draws exactly that line.
-        if (verdict.role === 'shaping') return content.readsStaleContent(segment) === null;
-
-        // A read that names NOTHING in this tree cannot be affected by which branch this tree is on.
-        // `ls -la ~/.claude/projects/ | grep -i foo` was blocked as "this branch is merged" — the
-        // command touches no repo at all. Only CONTENT READERS qualify, so a build, a server or a git
-        // write never slips through on the strength of its paths.
-        if (content.readsOnlyOutsideContent(segment)) return true;
-
-        const gitSub = this.scanner.gitSubcommandOf(verdict.words);
-        if (gitSub !== null) return ALLOWED_GIT_SUBCOMMANDS.has(gitSub);
-        if (this.isGhInspection(verdict)) return true;
-        if (this.isPackageRecovery(verdict)) return true;
-        return false;
-    }
-
-    // Read-only / status `gh` invocations used for orientation, INCLUDING `gh run view|list|watch` —
-    // watching CI is precisely what you do while parked on a just-merged branch. gh writes (pr
-    // create/merge, run cancel/rerun, api POSTs) are governed by pr-creation-or-push-guard /
-    // pr-merge-guard and are NOT allowlisted here.
-    private isGhInspection(verdict: SegmentVerdict): boolean {
-        const words = verdict.words;
-        if (words.length === 0 || words[0] !== 'gh') return false;
-        const top = words[1];
-        if (top === undefined) return false;
-        const action = words[2];
-        const readActions = GH_READ_ACTIONS.get(top);
-        if (readActions !== undefined) return action !== undefined && readActions.has(action);
-        return GH_READ_TOPLEVEL.has(top);
-    }
-
-    // pnpm/npm/yarn recovery bins: the `wp-*` cleanup/gated commands and package installs (a chained
-    // install that isInstallerCommand — the pure-install bypass — did not catch reaches here).
-    private isPackageRecovery(verdict: SegmentVerdict): boolean {
-        const words = verdict.words;
-        if (words.length === 0 || !PACKAGE_MANAGERS.has(words[0])) return false;
-        return words.slice(1).some((word: string): boolean =>
-            /^wp-[a-z-]+$/.test(word) || PACKAGE_INSTALL_VERBS.has(word));
     }
 
     private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
@@ -215,7 +156,9 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
 
     private block(ctx: BashContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
-        return [new V(1, this.truncate(ctx.command), message)];
+        // Deliver the matrix and name the row — see stale-main-bash-guard.block for why it is lazy.
+        const pointer = branchStateMatrixPointer(writeBranchStateMatrixDoc(ctx.workspaceRoot), matrixL2Row(reason).row);
+        return [new V(1, this.truncate(ctx.command), message + pointer)];
     }
 
     private truncate(s: string): string {
@@ -253,24 +196,3 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
 // cleanup (branch-creation-guard governs creation); `pull` is the on-main update, itself gated by
 // redirect-how-to-merge-main. Reading git METADATA (log/diff/show) is fine — it is not the stale FILE
 // CONTENT that `cat` would surface, which is exactly why `git grep` (reads tracked content) is absent.
-const ALLOWED_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
-    'status', 'log', 'diff', 'show', 'branch', 'checkout', 'switch', 'worktree', 'fetch', 'pull',
-    'rev-parse', 'rev-list', 'merge-base', 'ls-files', 'ls-tree', 'cat-file', 'for-each-ref',
-    'symbolic-ref', 'describe', 'name-rev', 'reflog', 'shortlog', 'remote', 'config', 'stash', 'tag',
-    'blame', 'whatchanged', 'cherry',
-]);
-
-// Read-only actions per `gh` topic. `run` is here because `gh run view <id>` was blocked outright in
-// the field while `gh pr view` beside it succeeded — both are read-only, and CI watching is the normal
-// thing to do while parked. The WRITE actions of the same topics (pr create/merge/close, run
-// cancel/rerun/delete) are simply absent, so they still fall through to the block.
-const GH_READ_ACTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-    ['pr', new Set(['list', 'view', 'status', 'checks', 'diff'])],
-    ['run', new Set(['list', 'view', 'watch'])],
-    ['issue', new Set(['list', 'view', 'status'])],
-]);
-// Read-only top-level `gh` commands.
-const GH_READ_TOPLEVEL: ReadonlySet<string> = new Set(['status', 'auth', 'browse', 'repo', 'search']);
-
-const PACKAGE_MANAGERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'npx', 'pnpx', 'yarn']);
-const PACKAGE_INSTALL_VERBS: ReadonlySet<string> = new Set(['install', 'ci', 'add', 'i']);

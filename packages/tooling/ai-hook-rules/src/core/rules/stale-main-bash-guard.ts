@@ -1,11 +1,9 @@
-import { execSync, spawnSync } from 'child_process';
+import { execSync } from 'child_process';
 
 import {
     BranchStateGuardConfig,
     BRANCH_STATE_GUARD_KEY,
     DEFAULT_HANG_TIMEOUT_MINUTES,
-    readMainSyncStatus,
-    MainSyncStatus,
 } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
@@ -16,12 +14,12 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
+import { writeBranchStateMatrixDoc, branchStateMatrixPointer } from '../l2-matrix-doc';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { CommandScanner } from '../command-scan';
-import { StaleMainMessage } from './stale-main-message';
-import { ContentReadScan } from './content-read-scan';
 import { TreeRecovery } from './tree-recovery';
 import { BranchSwitchScan } from './branch-switch-scan';
+import { RecoveryAllowlist } from './recovery-allowlist';
 
 /**
  * The BASH half of the STALE-MAIN protection (read-stale-guard's State A), in two halves of its own:
@@ -61,34 +59,42 @@ import { BranchSwitchScan } from './branch-switch-scan';
  *   ALLOWED   `git checkout -b <x> origin/main` (current by construction), `git checkout <sha>`,
  *             `git checkout -- <file>`, and any other branch.
  *
- * ── REACTIVE: content-reading Bash on a stale `main` ─────────────────────────────────────────────
+ * ── ROW 5: you are on `main`, and that is the whole finding ──────────────────────────────────────
  *
- * read-stale-guard blocks the Read tool when local `main` is behind origin/main — but it looks at
- * nothing else, deliberately: "every cure is a Bash command, so Bash is the escape hatch — never
- * wedge it." That reasoning is right about the CURE and wrong about `cat`/`grep`/`ls`. In the
- * incident this closes, an agent sat on a `main` 18 commits behind origin/main (108 files, +8069
- * −3692 upstream), had its Read tool blocked exactly as designed, and then spent the whole session
- * `ls`-ing, `grep`-ing and `cat`-ing the same stale tree through the side door — describing a CI
- * workflow set that was missing a 186-line workflow which existed upstream. The logs read
- * "read-stale-guard handled", which is worse than no guard: it looks covered.
+ * The second half USED to ask the main-sync cache whether `main` was BEHIND, and blocked only
+ * CONTENT-READING Bash when it was. Both halves of that were wrong, and the table always said so —
+ * row 5 reads `B E` / on `main` / block, with the cure `git checkout -b <new> origin/main`.
  *
- * So this guard blocks CONTENT-READING Bash only, never the whole shell. Builds, tests, installs,
- * `git pull`, git METADATA (log/diff/show/status) — all still run. What is blocked is a command that
- * would put stale FILE CONTENT into context: `cat`/`head`/`grep`/`rg`/`sed`/`awk`/`ls`/`find`/… of a
- * path inside this workspace, and `git grep` / `git show <rev>:<path>` against a local rev. The same
- * line merged-branch-bash-guard already draws for State B, scoped tighter because State A's cure is
- * one command away and there is no reason to stop anything else.
+ * FRESHNESS IS THE WRONG QUESTION. `main` is not a place to work even when it is perfectly current.
+ * Staleness changes what you would READ; it does not change whether this is the branch to work on,
+ * and the cure is not `git pull` but a new branch. Gating the block on the cache meant a current
+ * `main` was treated as a fine place to run a build, an installer or a codegen step.
  *
- * A piped consumer reads stdin, not the tree: `git log --oneline | grep fix` is allowed, because the
- * bytes came from git metadata, not from a stale file. That is why the scan needs the pipe flag.
+ * THE CACHE IS THE WRONG PRECONDITION. It is written by a fire-and-forget refresher that populates it
+ * for the NEXT call, so the FIRST call of every session has none — and in a multi-worktree repo
+ * another tree can hold the refresh lock indefinitely. A block that needs the cache is off exactly
+ * when a session is starting, which is precisely when an agent is still standing on `main`. Row 5's
+ * Write/Edit half (feature-branch-guard) has always been one `git rev-parse` for this reason; this is
+ * `B` being brought into line with `E`, which is the table's own rule, not a new policy.
  *
- * FAIL-OPEN, with read-stale-guard's own escape valves, so it can never wedge a session:
- *   - branch undeterminable / not on `main` / no cache / cache for another branch → allow
- *   - `originMain` unknown (offline) → allow
- *   - origin/main already an ancestor of HEAD (ancestry, NOT equality) → allow the instant the pull lands
- *   - DIRTY tree → allow: the pull is not a clean fast-forward, and resolving that means reading the
- *     very files in conflict. Never trap the agent away from its own rescue.
- *   - reading `webpieces.config.json` (the mode-OFF escape hatch) and `.webpieces/**` → allow
+ * A CONTENT-READ BLOCKLIST COULD NOT HAVE CAUGHT THE WRITES. Enumerating readers catches `cat` and
+ * `grep`; it structurally cannot catch `pnpm install`, `npx expo install`, a formatter, codegen or a
+ * `>` redirect — commands whose stated purpose is something else and whose effect is to modify
+ * tracked files. On `main` the polarity is therefore DEFAULT-DENY plus row 4's skip list, the same
+ * shape merged-branch-bash-guard uses for state B, and via the same shared RecoveryAllowlist.
+ *
+ *   BLOCKED   anything on `main` that is not on the skip list — builds, tests, installers,
+ *             formatters, codegen, `cat`/`grep`/`ls` of the tree, git writes.
+ *   ALLOWED   everything that gets you OUT or tells you where you are: `git checkout -b <new>
+ *             origin/main`, `git switch`, `git pull`/`fetch`, `git status|log|diff|show|branch`,
+ *             `gh pr view|list|status|checks`, `git stash`, every `wp-*` bin, installs.
+ *
+ * FAIL-OPEN is preserved where it still means anything: branch undeterminable → allow. The cache
+ * valves (`no-sync-cache`, `origin-main-unknown`, `dirty-tree-on-main`) are gone from THIS guard
+ * because it no longer reads the cache; read-stale-guard still opens them for the Read tool, where a
+ * dirty tree genuinely does make the prescribed `git pull` unavailable (see the doc's "Not done").
+ * Here the cure is `git checkout -b`, which CARRIES uncommitted work onto the new branch — so a dirty
+ * tree traps nobody and needs no valve.
  */
 export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig> {
     constructor(config: BranchStateGuardConfig) { super(config, 'stale-main-bash-guard', BRANCH_STATE_GUARD_KEY); }
@@ -96,17 +102,20 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     private readonly scanner = new CommandScanner();
     private readonly recovery = new TreeRecovery();
     private readonly switches = new BranchSwitchScan(this.scanner);
+    // ROW 4, the skip list — the SAME instance-shape merged-branch-bash-guard uses, so the two states
+    // cannot drift apart about what "gets you out" means. See recovery-allowlist.ts.
+    private readonly recoveryList = new RecoveryAllowlist(this.scanner);
 
     readonly description =
-        'Block a bare `git checkout main` (chain the pull into the same command), and block ' +
-        'content-reading Bash (cat/grep/ls/…) while local main is behind origin/main — so a session ' +
-        'neither lands on a stale main nor reasons over one through the side door the Read block leaves.';
+        'Block a bare `git checkout main` (chain the pull into the same command), and block Bash on ' +
+        'main outright — allowlisting only the commands that get you off it — so a session neither ' +
+        'lands on main nor works there, whether or not main happens to be current.';
     override readonly defaultOptions = {
         hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
     };
     readonly fixHint = new FixHint(
-        'Landing on `main` without pulling, or reading files while main is behind origin/main, both give you stale content.',
-        'Pair the checkout with the pull, or update main and re-run:',
+        'Landing on `main` without pulling, or working on `main` at all, both put your work somewhere it does not belong.',
+        'Get onto a feature branch, or pair the checkout with the pull:',
         [
             // TREE-SHAPED, from the one source of tree-shaped cures. A static rule-level hint has no
             // workspace root, so it renders the 'unknown' kind — TreeRecovery's deliberate answer for
@@ -118,7 +127,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
                 + '\nWhichever form applies, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
-            new Option('NOT blocked: `git checkout <sha>`, `git checkout -b <x> origin/main`, `git checkout -- <file>`, any other branch. Also still allowed: builds, tests, installs, the pull itself, all git/gh METADATA (status|log|diff|show|branch), every Write/Edit, and reading webpieces.config.json.'),
+            new Option('Still allowed on main: everything that gets you OUT or tells you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, gh pr view|list|status|checks, git stash, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -141,32 +150,36 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         // State A is on `main` only. A merged feature branch is merged-branch-bash-guard's job.
         if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main (state B is another guard)');
 
-        const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
-        if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
-
-        const cache = this.cacheSummary(status);
-        // BELT-AND-BRACES since the cache became branch-keyed: we asked for the 'main' entry by key, so
-        // a mismatch means the map's key and the entry's own `branch` disagree — a shape bug. Kept so
-        // that degrades to an allow. Unreachable in normal operation.
-        if (status.branch !== 'main') return this.failOpen(ctx, branch, 'stale-cross-branch-cache', cache);
-        // Offline / origin unresolvable — we have nothing to be stale RELATIVE TO.
-        if (status.originMain === '') return this.failOpen(ctx, branch, 'origin-main-unknown', cache);
-
-        // Ancestry, not equality: the moment the pull lands (or we are simply ahead), we are current.
-        if (this.contains(ctx.workspaceRoot, status.originMain)) {
-            return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
+        // ROW 4 — the skip list, ahead of the block, so no command that gets you OUT is ever denied.
+        if (this.recoveryList.isFullyRecovery(ctx)) {
+            return this.allow(ctx, branch, 'not-a-content-read (cure/build/metadata)');
         }
 
-        // A dirty tree means the pull is not a clean fast-forward. Do not cut the agent off from the
-        // files it must read to resolve that — the same valve read-stale-guard opens.
-        if (this.isDirty(ctx.workspaceRoot)) {
-            return this.failOpen(ctx, branch, 'dirty-tree-on-main', cache);
-        }
-
-        const reader = this.staleContentRead(ctx);
-        if (reader === null) return this.allow(ctx, branch, 'not-a-content-read (cure/build/metadata)', cache);
-
-        return this.block(ctx, branch, `stale-main content read (${reader})`, this.staleMessage(ctx.workspaceRoot), cache);
+        // ROW 5 — on `main`. NO CACHE IS READ ON THIS PATH, and that is the change.
+        //
+        // The old ladder asked the cache "is main BEHIND?" and only then blocked, and only content
+        // READS. That made the whole Bash half of row 5 conditional on freshness, which is the wrong
+        // question twice over:
+        //
+        //   1. Freshness is irrelevant to whether you should be working here. `main` is not a place to
+        //      work even when it is perfectly current — the cure is the same either way, and it is not
+        //      `git pull`, it is `git checkout -b`. Row 5's cure has always said so.
+        //   2. The cache is populated by a FIRE-AND-FORGET refresher that fills it for the NEXT call,
+        //      so on the first call of every session there is none — and in a multi-worktree repo
+        //      another tree can hold the refresh lock indefinitely. A block that needs the cache is a
+        //      block that is off exactly when a session is starting, which is when an agent is most
+        //      likely to still be standing on `main`.
+        //
+        // So this is now one `git rev-parse` and a text scan, both of which fire on call #1 — the same
+        // arrangement that has always governed row 5's Write/Edit half (feature-branch-guard). `B`
+        // tracking `E` here is the table's own rule, not a new policy.
+        //
+        // The polarity flips with it: on `main` this is DEFAULT-DENY plus row 4's skip list, where it
+        // used to be default-allow plus a content-read blocklist. That is what makes it catch the
+        // commands a blocklist structurally cannot — an installer, a formatter or a codegen step that
+        // WRITES tracked files while its stated purpose is something else. Blocking those was never
+        // going to come from enumerating readers.
+        return this.block(ctx, branch, 'on-main', this.onMainMessage(ctx.workspaceRoot), '-');
     }
 
     /**
@@ -187,6 +200,21 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         return null;
     }
 
+    /**
+     * The row 5 deny. Deliberately SHORT, and deliberately NOT about staleness.
+     *
+     * The old message opened by reporting how many commits behind `main` was, which invited exactly
+     * the wrong cure — an agent that reads "behind" reaches for `git pull`, ends up on a CURRENT
+     * `main`, and is still on `main`. The finding is the branch, so that is the first thing said.
+     */
+    private onMainMessage(workspaceRoot: string): string {
+        return 'Blocked: you are on `main`. `main` is not a place to work — whether or not it is '
+            + 'current — because work here cannot be reviewed, cannot be reverted as a unit, and is '
+            + 'one `git checkout` away from being lost. This is judged from the branch alone, so it '
+            + 'fires on the first command of a session, before any freshness is known.\n'
+            + `Start a branch (uncommitted work comes with you):\n  cd '${workspaceRoot}' && git fetch origin main && git checkout -b <new-branch> origin/main`;
+    }
+
     private pairingMessage(ctx: BashContext): string {
         const steps = this.recovery.updateMainSteps(this.recovery.kindOf(ctx.workspaceRoot)).join('\n');
         // Deliberately SHORT. The incident that bought this guard (a main 157 commits behind; the
@@ -197,65 +225,11 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             + 'reports the drift BACKWARDS. Chain the pull into the same command:\n' + steps;
     }
 
-    // The first segment that would read stale workspace content, or null when none does. The RAW
-    // command is scanned, not commandCode: this is a blocklist-shaped guard, so stripping quoted
-    // prose can only ever block LESS (see BashContext.commandCode).
-    private staleContentRead(ctx: BashContext): string | null {
-        const scan = new ContentReadScan(this.scanner, ctx.workspaceRoot, ctx.effectiveCwd);
-        for (const segment of this.scanner.segmentsWithPipes(ctx.command)) {
-            const hit = scan.readsStaleContent(segment);
-            if (hit !== null) return hit;
-        }
-        return null;
-    }
 
-    // Is `commit` already contained in HEAD? Exit code IS the answer, so spawnSync: 0 = ancestor,
-    // 1 = genuinely behind, anything else = git could not tell → fail OPEN. (Mirrors read-stale-guard.)
-    private contains(workspaceRoot: string, commit: string): boolean {
-        const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], {
-            cwd: workspaceRoot,
-            encoding: 'utf8',
-        });
-        if (result.status === 0) return true;
-        if (result.status === 1) return false;
-        return true;
-    }
 
-    private isDirty(workspaceRoot: string): boolean {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const out = execSync('git status --porcelain', {
-                cwd: workspaceRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            return out.trim().length > 0;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return true;  // cannot tell → assume dirty, the fail-OPEN direction here
-        }
-    }
 
-    private staleMessage(workspaceRoot: string): string {
-        return new StaleMainMessage(workspaceRoot).forBash(this.behindCount(workspaceRoot));
-    }
 
-    private behindCount(workspaceRoot: string): string {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const out = execSync('git rev-list --count HEAD..origin/main', {
-                cwd: workspaceRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-            return /^\d+$/.test(out) ? out : '?';
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return '?';
-        }
-    }
 
-    private cacheSummary(status: MainSyncStatus): string {
-        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} ts=${status.timestamp}`;
-    }
 
     /**
      * The guard could not ESTABLISH the state it judges on, so it judged nothing.
@@ -279,7 +253,12 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
 
     private block(ctx: BashContext, branch: string, reason: string, message: string, cache: string): readonly Violation[] {
         this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
-        return [new V(1, this.truncate(ctx.command), message)];
+        // Deliver the matrix and name the row, the same way an L0 block does. The doc is written
+        // LAZILY here rather than up front: only a blocked agent needs it, and this is the one path
+        // that knows the row it should be opened at.
+        const row = matrixL2Row(reason).row;
+        const pointer = branchStateMatrixPointer(writeBranchStateMatrixDoc(ctx.workspaceRoot), row);
+        return [new V(1, this.truncate(ctx.command), message + pointer)];
     }
 
     private truncate(s: string): string {
