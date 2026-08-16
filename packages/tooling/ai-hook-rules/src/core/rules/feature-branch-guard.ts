@@ -18,6 +18,7 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
+import { writeBranchStateMatrixDoc, branchStateMatrixPointer } from '../l2-matrix-doc';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
@@ -142,7 +143,9 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
 
     private block(ctx: FileContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
-        return [new V(1, ctx.relativePath, message)];
+        // Deliver the matrix and name the row — see stale-main-bash-guard.block for why it is lazy.
+        const pointer = branchStateMatrixPointer(writeBranchStateMatrixDoc(ctx.workspaceRoot), matrixL2Row(reason).row);
+        return [new V(1, ctx.relativePath, message + pointer)];
     }
 
     private logDecision(ctx: FileContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {

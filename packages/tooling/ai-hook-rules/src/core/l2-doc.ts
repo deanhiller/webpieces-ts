@@ -1,4 +1,4 @@
-import { L2Row, L2NotDone, L2_ROWS, L2_FAIL_OPEN_ROW, NOT_DONE } from './l2-rows';
+import { L2Row, L2NotDone, L2UseCase, L2_ROWS, L2_FAIL_OPEN_ROW, NOT_DONE, allL2UseCases } from './l2-rows';
 
 // ---------------------------------------------------------------------------
 // guards/L2-branch-state.md, rendered from L2_ROWS.
@@ -27,6 +27,11 @@ function notDoneRow(entry: L2NotDone): string {
     return `| ${entry.row} | ${entry.gap} | ${entry.why} |`;
 }
 
+// webpieces-disable no-function-outside-class -- pure row formatter for renderL2Doc below, in this render module
+function useCaseRow(useCase: L2UseCase): string {
+    return `| ${useCase.num} | ${useCase.symptom} | ${useCase.state} | ${useCase.verdict} | ${useCase.fix} |`;
+}
+
 /**
  * Render guards/L2-branch-state.md.
  *
@@ -38,6 +43,7 @@ export function renderL2Doc(): string {
     return [
         ...renderHead(),
         ...renderTable(),
+        ...renderUseCases(),
         ...renderNotes(),
         ...renderTail(),
     ].join('\n');
@@ -165,8 +171,37 @@ function renderTable(): string[] {
     ];
 }
 
-// How the log joins to this table, and the skip list. Prose plus the reason→row contract.
+// The use-case table (ROW DATA, in the doc's own global numbering) and the note that explains it.
 // webpieces-disable no-function-outside-class -- third section of renderL2Doc's string, beside it in this module
+function renderUseCases(): string[] {
+    return [
+        '## L2 use cases',
+        '',
+        'Same row shape as L0 and L1: the **Fix** is literal or it is not a fix. Each case is attached IN',
+        'CODE to the row that judges it (`useCases` on `L2Row`), so this table cannot describe a row that no',
+        'longer exists and a row cannot quietly acquire behaviour nothing documents.',
+        '',
+        '**This table is how the layer LEARNS.** When a new situation comes up in a session, the change is',
+        'one more `new L2UseCase(...)` on the row that judged it — not a paragraph added here, which the',
+        'byte-lock spec would reject anyway. Every case also carries the exact `reason` string the guard',
+        'logs, and a spec pushes that back through `l2RowForReason` to assert it lands on the row it is filed',
+        'under. So a case whose row is wrong fails the build rather than misinforming a reader.',
+        '',
+        '| # | what you SEE (exact symptom) | state | verdict | Fix |',
+        '|---|---|---|---|---|',
+        ...allL2UseCases().map(useCaseRow),
+        '',
+        'The write-on-main case under row 5 is the one to read beside "Not done": it is a real incident from',
+        'another repo on this toolchain, where `npx expo install` on `main` modified two tracked files and no',
+        'guard fired. It is filed under row 5 because row 5 is the row that SHOULD judge it — the table states',
+        'the policy, and "Not done" states how far the code has got. That is the arrangement that keeps a gap',
+        'visible instead of letting the doc quietly narrow itself to whatever the code happens to do.',
+        '',
+    ];
+}
+
+// How the log joins to this table, and the skip list. Prose plus the reason→row contract.
+// webpieces-disable no-function-outside-class -- fourth section of renderL2Doc's string, beside it in this module
 function renderNotes(): string[] {
     return [
         '## How a log line joins to a row',

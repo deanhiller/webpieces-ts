@@ -2,11 +2,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 
+import { loadTemplate } from '@webpieces/rules-config';
+
 import { renderL2Doc } from './l2-doc';
 import {
-    L2Row, L2Tool, L2_ROWS, L2_FAIL_OPEN_ROW, NOT_DONE, l2RowForReason, l2MappedReasons,
+    L2Row, L2Tool, L2UseCase, L2_ROWS, L2_FAIL_OPEN_ROW, NOT_DONE, NO_ROW_EXIT, l2RowForReason,
+    l2MappedReasons, allL2UseCases,
 } from './l2-rows';
 import { matrixL2Row, MATRIX_L2_UNROWED } from './decision-log';
+import { BRANCH_STATE_MATRIX_DOC, branchStateMatrixPointer } from './l2-matrix-doc';
+import { cureForMatrix, NO_CURE } from './matrix-cures';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const L2_DOC = path.join(REPO_ROOT, 'guards', 'L2-branch-state.md');
@@ -142,6 +147,160 @@ describe('L2 reason -> row is exhaustive over the four guards', () => {
 
     it('keeps the un-rowed reference for the two kinds of line that are not a row', () => {
         expect(MATRIX_L2_UNROWED).toEqual({ layer: 'L2', row: '-' });
+    });
+});
+
+/**
+ * THE DELIVERED COPY. `guards/L2-branch-state.md` is for a human reading the repo; the rules-config
+ * template is what an L2 block drops into `.webpieces/instruct-ai/` and names by absolute path. Both
+ * come from renderL2Doc(), and this is what keeps that true — a delivered doc describing a table the
+ * guards no longer have is worse than no doc, for the reason the "side door" incident already taught:
+ * it looks covered.
+ */
+describe('the L2 matrix is DELIVERED to the AI, not just committed', () => {
+    it('locks the rules-config template byte-identical to renderL2Doc()', () => {
+        expect(loadTemplate(BRANCH_STATE_MATRIX_DOC), 'run `pnpm guards:generate`').toBe(renderL2Doc());
+    });
+
+    it('is the same bytes as the repo-facing doc, so there is exactly one L2 table', () => {
+        expect(loadTemplate(BRANCH_STATE_MATRIX_DOC)).toBe(fs.readFileSync(L2_DOC, 'utf8'));
+    });
+
+    it('points the reader at the doc only when it was actually written', () => {
+        expect(branchStateMatrixPointer('', '5')).toBe('');
+        expect(branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5'))
+            .toContain('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md');
+    });
+
+    // The row is the point: a bare "read this doc" is a page, a row number is the two lines that
+    // explain this exact verdict — and it is the SAME number the log line carries.
+    it('names the row that judged the call', () => {
+        expect(branchStateMatrixPointer('/tmp/x.md', '8')).toContain('ROW 8');
+    });
+
+    // Interpolated into a REASON="…" shell assignment and then printf'd into a JSON string, exactly as
+    // L0's pointer is: a quote or backslash corrupts the decision payload, not merely the prose.
+    it('emits a JSON-safe pointer', () => {
+        const pointer = branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5');
+        expect(pointer).not.toContain('"');
+        expect(pointer).not.toContain('\\');
+    });
+
+    // An absolute path or it is not a pointer — the shell's cwd is not the governed root and cannot be
+    // assumed, which is why L1's messages name <root> explicitly rather than saying "cd first".
+    it('keeps the path absolute, and starts on its own line so the house report shape holds', () => {
+        const pointer = branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5');
+        expect(pointer.startsWith('\n')).toBe(true);
+        expect(pointer).toContain(' /repo/');
+    });
+});
+
+/**
+ * `cure=` — the other half of `row=`. Derived from the row, never passed in, so the logged cure is by
+ * construction the literal the doc prints. See matrix-cures.ts for why a GuardDecision field would
+ * have been two spellings of one thing.
+ */
+describe('cure= is looked up from the matrix, not authored twice', () => {
+    it('logs the same literal the doc prints, for every blocking L2 row', () => {
+        for (const row of L2_ROWS) {
+            if (row.action.kind !== 'block') continue;
+            expect(cureForMatrix('L2', String(row.num)), `row ${row.num}`).toBe(row.cure.replace(/`/g, ''));
+        }
+    });
+
+    it('logs `-` for an allowing row, an unknown row, and a layer this module does not own', () => {
+        expect(cureForMatrix('L2', '10')).toBe(NO_CURE);
+        expect(cureForMatrix('L2', '-')).toBe(NO_CURE);
+        expect(cureForMatrix('L2', '999')).toBe(NO_CURE);
+        expect(cureForMatrix('L0', '3')).toBe(NO_CURE);
+    });
+
+    // Read through grep, not through a markdown renderer — a cure you cannot grep without escaping
+    // fence characters is a cure the trail cannot be searched by.
+    it('strips the doc backticks so the field is greppable', () => {
+        expect(cureForMatrix('L2', '5')).toBe('git checkout -b <new> origin/main');
+        expect(cureForMatrix('L2', '5')).not.toContain('`');
+    });
+
+    it('resolves a cure for every reason the guards can log on a blocking row', () => {
+        for (const row of L2_ROWS) {
+            if (row.action.kind !== 'block') continue;
+            expect(cureForMatrix('L2', String(row.num)), `row ${row.num} has no loggable cure`).not.toBe(NO_CURE);
+        }
+    });
+});
+
+/**
+ * THE USE CASES, and the join that keeps them honest.
+ *
+ * A use-case table is worth exactly as much as its worst-maintained row, so the enforcement here is not
+ * "does it render" but "does each case's own `reason` string, pushed back through the SAME matcher the
+ * guards stamp `row=` with, land on the row the case is filed under". That is the loop the decision log
+ * opens: `row=` in the trail → this table on the page → one matcher between them.
+ */
+describe('L2 use cases', () => {
+    it('numbers every case uniquely and contiguously from 1 — numbers are cited, so they are identity', () => {
+        const numbers = allL2UseCases().map((useCase: L2UseCase): number => useCase.num);
+        expect(new Set(numbers).size, 'duplicate use-case number').toBe(numbers.length);
+        expect([...numbers].sort((a: number, b: number): number => a - b))
+            .toEqual(Array.from({ length: numbers.length }, (_unused: unknown, i: number): number => i + 1));
+    });
+
+    it('files each case under the row its OWN logged reason resolves to', () => {
+        const wrong: string[] = [];
+        for (const row of L2_ROWS) {
+            for (const useCase of row.useCases) {
+                if (useCase.reason === NO_ROW_EXIT) continue;
+                const resolved = l2RowForReason(useCase.reason);
+                if (resolved !== row.num) wrong.push(`case ${useCase.num}: reason resolves to row ${String(resolved)}, filed under ${row.num}`);
+            }
+        }
+        expect(wrong, 'a use case whose reason does not match its row misinforms every reader of the doc').toEqual([]);
+    });
+
+    /*
+     * NO_ROW_EXIT opts a case out of the join above, so it is the one thing here that could quietly
+     * hollow the enforcement out. Pinned to the exact cases that may use it: adding a third is a
+     * deliberate edit to this list, not a sixth argument nobody reviews.
+     */
+    it('lets only the L4-owned merge-in-progress case skip the reason join', () => {
+        const unenforced = allL2UseCases()
+            .filter((useCase: L2UseCase): boolean => useCase.reason === NO_ROW_EXIT)
+            .map((useCase: L2UseCase): number => useCase.num);
+        expect(unenforced, 'NO_ROW_EXIT is for states another layer owns, not for cases nobody checked').toEqual([5]);
+    });
+
+    it('gives every case a literal Fix, or says None — never "see the docs"', () => {
+        for (const useCase of allL2UseCases()) {
+            expect(useCase.fix.length, `case ${useCase.num}`).toBeGreaterThan(0);
+            expect(useCase.fix, `case ${useCase.num}`).not.toContain('see the docs');
+        }
+    });
+
+    // NOTE: "every row has at least one use case" is NOT asserted here. It is the TYPE — `useCases` is a
+    // non-empty tuple, so an empty row does not compile. A runtime assertion standing in for a type that
+    // could express the invariant is the shape CLAUDE.md rejects.
+
+    it('renders every case into the doc, verbatim', () => {
+        const doc = renderL2Doc();
+        expect(doc).toContain('## L2 use cases');
+        for (const useCase of allL2UseCases()) {
+            expect(doc, `case ${useCase.num} symptom`).toContain(useCase.symptom);
+            expect(doc, `case ${useCase.num} fix`).toContain(useCase.fix);
+        }
+    });
+
+    /*
+     * The NOT_DONE rows are the ones a reader is most likely to misread as live behaviour, so each gap
+     * must have a use case on its row showing what actually happens today. Case 10 (the `npx expo
+     * install`-on-main write) is the row-5 instance; it says in its own verdict cell that the code does
+     * not yet judge it.
+     */
+    it('gives every Not-done row a use case on that row', () => {
+        for (const entry of NOT_DONE) {
+            const row = L2_ROWS.find((r: L2Row): boolean => r.num === entry.row);
+            expect(row?.useCases.length, `not-done row ${entry.row} has no illustrating use case`).toBeGreaterThan(0);
+        }
     });
 });
 

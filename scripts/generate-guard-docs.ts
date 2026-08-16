@@ -4,6 +4,7 @@ import * as path from 'path';
 import { renderL1Doc } from '../packages/tooling/ai-hook-rules/src/core/l1-doc';
 import { renderL2Doc } from '../packages/tooling/ai-hook-rules/src/core/l2-doc';
 import { L0ToolingDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-tooling-doc';
+import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
 
 /**
@@ -50,6 +51,15 @@ function main(): void {
     const l2 = path.join(root, 'guards', 'L2-branch-state.md');
     fs.writeFileSync(l2, renderL2Doc(), 'utf8');
     wrote.push(l2);
+
+    // The DELIVERED copy of the same bytes. `guards/L2-branch-state.md` is for a human reading the
+    // repo; this is the rules-config TEMPLATE an L2 block drops into `.webpieces/instruct-ai/` and
+    // names by absolute path in the deny (see core/l2-matrix-doc.ts). One renderer feeds both, so the
+    // doc an agent is handed mid-block cannot describe a table the guards no longer have — the same
+    // arrangement L0 already has with webpieces.guard-matrix.md.
+    const l2Template = path.join(root, 'packages', 'tooling', 'rules-config', 'templates', BRANCH_STATE_MATRIX_DOC);
+    fs.writeFileSync(l2Template, renderL2Doc(), 'utf8');
+    wrote.push(l2Template);
 
     // L0's doc is SPLICED, not overwritten: read what is committed, replace only the marked block, write
     // it back. splice() throws when the marker pair is missing or doubled, so a doc that silently stopped

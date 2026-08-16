@@ -79,7 +79,11 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
             expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
             logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code, MATRIX_L2_UNROWED));
-            expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\n`);
+            // Anchored on the TAB that follows, not on the newline: the decision line is APPEND-ONLY,
+            // so `fault=` stopped being the last field the moment `cure=` was appended after it. The
+            // invariant worth pinning is that the field is present and tab-delimited — pinning it as
+            // terminal would make every future append a false failure.
+            expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\t`);
 
             const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
             logRejection('Edit', input, new BlockedResult('[some-rule] (a reason)\nblocked', code), root);
