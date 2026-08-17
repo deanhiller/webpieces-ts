@@ -16,11 +16,23 @@ export class ProvenanceResult {
     detail: string; // human-readable explanation for the warning/error/dashboard
     // agentIds credited, keyed by agentType, so an evidence pass does not re-scan to find them again.
     agentIds: Record<string, string>;
+    /**
+     * The agentTypes that could NOT be credited — the FACT, with no remedy attached.
+     *
+     * Structured rather than only spelled into `detail` because the remedy depends on something this
+     * service cannot see: whether that reviewer already wrote a verdict file. "It never ran" and "it ran
+     * and cannot be attributed" need OPPOSITE instructions — spawn one, versus do not re-spawn, because a
+     * re-spawn overwrites the verdict and is stamped identically. Handing the caller a pre-worded
+     * imperative is what produced the destructive loop this field exists to end; see ProvenanceEnforcer.
+     */
+    missing: string[];
 
-    constructor(status: string, detail: string, agentIds: Record<string, string> = {}) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(status: string, detail: string, agentIds: Record<string, string> = {}, missing: string[] = []) {
         this.status = status;
         this.detail = detail;
         this.agentIds = agentIds;
+        this.missing = missing;
     }
 }
 
@@ -36,6 +48,14 @@ export class ReviewerEvidence {
     agentId: string;
     readDiff: boolean;       // opened the materialized diff dir (or its own instructions file)
     readDoc: boolean;        // opened its checklist's guidance doc
+    /**
+     * Named its own verdict file — `.webpieces/pr-review/<featureSlug>/review-<id>.json` — in a tool input.
+     *
+     * Recorded, not just consumed, because it is the field that answers "who wrote this verdict?" for an
+     * auditor reading provenance.json later. It is also a CREDIT channel: see
+     * {@link SubagentProvenanceService.creditedByWhatItTouched}.
+     */
+    wroteVerdict: boolean;
     toolCallCount: number;
     offRepoSearches: number; // tool calls that reached into node_modules — the archaeology signal
     /**
@@ -67,11 +87,12 @@ export class ReviewerEvidence {
     transcriptPath: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '', models: string[] = []) {
+    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '', models: string[] = [], wroteVerdict = false) {
         this.agentType = agentType;
         this.agentId = agentId;
         this.readDiff = readDiff;
         this.readDoc = readDoc;
+        this.wroteVerdict = wroteVerdict;
         this.toolCallCount = toolCallCount;
         this.offRepoSearches = offRepoSearches;
         this.transcriptPath = transcriptPath;
@@ -97,19 +118,35 @@ export class TranscriptScan {
     }
 }
 
-/** What to look for when reading reviewer transcripts. Data-only — avoids a 5-param method. */
-export class EvidenceRequest {
+/**
+ * WHERE this branch's review materials live. Data-only.
+ *
+ * One class for BOTH passes — crediting (`verifyDistinct`) and evidence (`evidenceFor`) — because they
+ * ask their questions of the same paths. `diffDir` is the per-branch materialization
+ * (`.webpieces/pr-review/<featureSlug>/diff`), which is what makes it usable as PROOF of which branch a
+ * reviewer looked at: the path names the branch, it is absolute, and stage ② recreates it per run.
+ */
+export class ReviewerContext {
     branch: string;
-    agentIds: Record<string, string>; // agentType → agentId, straight from ProvenanceResult
     diffDir: string;                  // '' when nothing was materialized
     docPaths: Record<string, string>; // agentType → its checklist doc path ('' when none)
+    /**
+     * agentType → the absolute path of the verdict file THAT checklist must write on THIS branch
+     * (`.webpieces/pr-review/<featureSlug>/review-<id>.json`). '' when unknown.
+     *
+     * The strongest attribution signal available, and stronger than `diffDir`: the path is
+     * worktree-absolute (naming the tree), per-branch (naming the featureSlug) AND per-checklist (naming
+     * the id), so a transcript containing it can only belong to a reviewer that authored that checklist's
+     * verdict for that branch. `diffDir` proves the branch but not the checklist.
+     */
+    verdictPaths: Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(branch: string, agentIds: Record<string, string>, diffDir = '', docPaths: Record<string, string> = {}) {
+    constructor(branch: string, diffDir = '', docPaths: Record<string, string> = {}, verdictPaths: Record<string, string> = {}) {
         this.branch = branch;
-        this.agentIds = agentIds;
         this.diffDir = diffDir;
         this.docPaths = docPaths;
+        this.verdictPaths = verdictPaths;
     }
 }
 
@@ -138,26 +175,20 @@ export class SubagentProvenanceService {
     // See branchOfCwd for why it is cached and pinnedBranch for what "pinned" buys.
     private readonly branchByCwd = new Map<string, string>();
 
-    // Verify a subagent of `expectedAgentType` ran on `branch`. Absent CLAUDE_CODE_SESSION_ID (plain
-    // terminal / CI) returns SKIPPED — the feature must not break non-Claude-Code consumers.
-    verify(expectedAgentType: string, branch: string): ProvenanceResult {
-        if (!this.inClaudeSession()) return this.skipped(`the "${expectedAgentType}" reviewer subagent`);
-        const dirs = this.allSubagentsDirs();
-        const agentId = this.findMatchingAgentId(dirs, expectedAgentType, branch);
-        return agentId !== ''
-            ? new ProvenanceResult(PROVENANCE_OK, `verified "${expectedAgentType}" reviewer subagent ran (agent ${agentId}).`)
-            : new ProvenanceResult(PROVENANCE_MISSING,
-                `No "${expectedAgentType}" reviewer subagent ran on this branch — a separate reviewer of that type must review this checklist.`);
-    }
+    // transcript path → its one scan. The credit pass and the evidence pass ask different questions of
+    // the same (largest) files this service opens, and the credit pass may look at candidates the
+    // evidence pass then re-visits. See scanTranscript for why one pass answers both.
+    private readonly scanByPath = new Map<string, TranscriptScan>();
 
-    // Verify EVERY expected reviewer subagent ran on `branch` as a DISTINCT run — the coding agent may not
-    // self-certify, and one reviewer may not stand in for several. SKIPPED (pass) without a session id.
+    // Verify EVERY expected reviewer subagent ran on `context.branch` as a DISTINCT run — the coding agent
+    // may not self-certify, and one reviewer may not stand in for several. SKIPPED (pass) without a
+    // session id.
     //
     // Scoped by BRANCH across ALL sessions (not the current session): once a reviewer ran on this branch in
     // any session, a later re-push in a NEW session still finds it, so the review is NOT forced to re-run.
     // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
     // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
-    verifyDistinct(expectedAgentTypes: readonly string[], branch: string): ProvenanceResult {
+    verifyDistinct(expectedAgentTypes: readonly string[], context: ReviewerContext): ProvenanceResult {
         if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required');
         if (!this.inClaudeSession()) return this.skipped('reviewer subagents');
         const dirs = this.allSubagentsDirs();
@@ -165,7 +196,7 @@ export class SubagentProvenanceService {
         const usedAgentIds = new Set<string>();
         const credited: Record<string, string> = {};
         for (const type of expectedAgentTypes) {
-            const agentId = this.findMatchingAgentId(dirs, type, branch, usedAgentIds);
+            const agentId = this.findMatchingAgentId(dirs, type, context, usedAgentIds);
             if (agentId === '') missing.push(type);
             else {
                 usedAgentIds.add(agentId);
@@ -175,8 +206,8 @@ export class SubagentProvenanceService {
         return missing.length === 0
             ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`, credited)
             : new ProvenanceResult(PROVENANCE_MISSING,
-                `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${missing.join(', ')}`,
-                credited);
+                `${missing.length} reviewer subagent(s) could not be attributed to this branch: ${missing.join(', ')}`,
+                credited, missing);
     }
 
     /**
@@ -198,39 +229,44 @@ export class SubagentProvenanceService {
      *
      * Returns [] outside a Claude Code session, matching verify/verifyDistinct's SKIP behavior.
      */
-    evidenceFor(request: EvidenceRequest): ReviewerEvidence[] {
+    evidenceFor(context: ReviewerContext, agentIds: Record<string, string>): ReviewerEvidence[] {
         if (!this.inClaudeSession()) return [];
         const dirs = this.allSubagentsDirs();
         const out: ReviewerEvidence[] = [];
-        for (const agentType of Object.keys(request.agentIds)) {
-            const agentId = request.agentIds[agentType];
+        for (const agentType of Object.keys(agentIds)) {
+            const agentId = agentIds[agentType];
             const jsonl = this.transcriptPath(dirs, agentId);
             if (jsonl === '') {
                 out.push(new ReviewerEvidence(agentType, agentId));
                 continue;
             }
-            out.push(this.evidenceFromTranscript(agentType, agentId, jsonl, request));
+            out.push(this.evidenceFromTranscript(agentType, agentId, jsonl, context));
         }
         return out;
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private evidenceFromTranscript(agentType: string, agentId: string, jsonl: string, request: EvidenceRequest): ReviewerEvidence {
+    private evidenceFromTranscript(agentType: string, agentId: string, jsonl: string, context: ReviewerContext): ReviewerEvidence {
         const scan = this.scanTranscript(jsonl);
         const inputs = scan.inputs;
-        const docPath = request.docPaths[agentType] ?? '';
-        // The instructions file counts as "read the diff": it lives in the same per-branch dir, it is what
-        // the reviewer is told to open first, and it inlines the diff paths. A reviewer that opened it and
-        // then its own diff files is the intended path; treating only the diff dir as proof would flag it.
-        const readDiff = request.diffDir !== '' && this.mentions(inputs, request.diffDir);
+        const docPath = context.docPaths[agentType] ?? '';
+        const verdictPath = context.verdictPaths[agentType] ?? '';
         return new ReviewerEvidence(
-            agentType, agentId, readDiff,
+            agentType, agentId, this.readDiffDir(scan, context),
             docPath !== '' && this.mentions(inputs, docPath),
             inputs.length,
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
             jsonl,
             scan.models,
+            verdictPath !== '' && this.mentions(inputs, verdictPath),
         );
+    }
+
+    // The instructions file counts as "read the diff": it lives in the same per-branch dir, it is what
+    // the reviewer is told to open first, and it inlines the diff paths. A reviewer that opened it and
+    // then its own diff files is the intended path; treating only the diff dir as proof would flag it.
+    private readDiffDir(scan: TranscriptScan, context: ReviewerContext): boolean {
+        return context.diffDir !== '' && this.mentions(scan.inputs, context.diffDir);
     }
 
     /**
@@ -257,7 +293,12 @@ export class SubagentProvenanceService {
     }
 
     /**
-     * ONE pass over the transcript for both answers (see {@link TranscriptScan}).
+     * ONE pass over the transcript for both answers (see {@link TranscriptScan}), CACHED per path.
+     *
+     * Cached because two passes now ask questions of the same file: crediting (does it name this branch's
+     * verdict/diff?) and evidence (what did it read, which model served it?). Without the cache the credit
+     * pass would re-read every candidate the evidence pass then re-opens — on the largest files this
+     * service touches, on the path that opens a PR.
      *
      * Tool inputs are JSON-stringified rather than walked field-by-field because the shape differs per
      * tool (Read takes file_path, Bash takes command, Grep takes path) and a substring test over the
@@ -269,6 +310,14 @@ export class SubagentProvenanceService {
      * `model` field must not be able to block a PR.
      */
     private scanTranscript(jsonl: string): TranscriptScan {
+        const cached = this.scanByPath.get(jsonl);
+        if (cached !== undefined) return cached;
+        const scan = this.readTranscript(jsonl);
+        this.scanByPath.set(jsonl, scan);
+        return scan;
+    }
+
+    private readTranscript(jsonl: string): TranscriptScan {
         const scan = new TranscriptScan();
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable transcript yields no evidence, never a crash
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -313,7 +362,7 @@ export class SubagentProvenanceService {
     // The agentId of a matching subagent run for `agentType` on `branch`, searched across ALL sessions'
     // subagent dirs (branch-scoped, so a run from a prior session still counts). '' if none. `exclude`
     // skips agentIds already credited to another checklist so one run can't satisfy two.
-    private findMatchingAgentId(dirs: readonly string[], agentType: string, branch: string, exclude: ReadonlySet<string> = new Set()): string {
+    private findMatchingAgentId(dirs: readonly string[], agentType: string, context: ReviewerContext, exclude: ReadonlySet<string> = new Set()): string {
         for (const dir of dirs) {
             for (const metaFile of this.metaFiles(dir)) {
                 const agentId = this.agentIdOf(metaFile);
@@ -322,7 +371,7 @@ export class SubagentProvenanceService {
                 if (!meta || meta['agentType'] !== agentType) continue;
                 const spawnDepth = meta['spawnDepth'];
                 if (typeof spawnDepth !== 'number' || spawnDepth < 1) continue;
-                if (this.sidechainOnBranch(dir, agentId, branch)) return agentId;
+                if (this.sidechainOnBranch(dir, agentId, agentType, context)) return agentId;
             }
         }
         return '';
@@ -392,8 +441,20 @@ export class SubagentProvenanceService {
      * An UNRESOLVABLE cwd does not credit either. A reaped worktree, a deleted directory, a non-repo
      * path or a detached HEAD yields '' and falls through to a refusal. Leniency here is bounded by
      * "git can still prove it", never by "we could not check, so assume yes".
+     *
+     * ─── Why neither field can settle it from a PRIMARY CLONE, and what does ──────────────────────
+     * Both fields above are stamped from the SPAWNING session's cwd — the Agent tool has no cwd
+     * parameter, so a subagent inherits its parent's. A session rooted in the primary clone that spawns
+     * a reviewer for a WORKTREE branch therefore produces `gitBranch` = the clone's branch (mismatch)
+     * and `cwd` = the clone (gated off, correctly) — and NO respawn can change either stamp. That is not
+     * an exotic setup: it is what the flow instructs the moment a worker agent dies mid-flow and the
+     * top-level session has to take over, and it deadlocked a branch whose seven reviewers had all run.
+     *
+     * So the third channel is not a loosening of the cwd rule — it is a DIFFERENT question, asked of
+     * evidence the reviewer cannot inherit and cannot fake by accident: {@link creditedByWhatItTouched}.
      */
-    private sidechainOnBranch(dir: string, agentId: string, branch: string): boolean {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private sidechainOnBranch(dir: string, agentId: string, agentType: string, context: ReviewerContext): boolean {
         const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
         if (!fs.existsSync(jsonl)) return true;
         const first = this.firstNonEmptyLine(jsonl);
@@ -404,9 +465,41 @@ export class SubagentProvenanceService {
         const gitBranch = rec['gitBranch'];
         // Not recorded at all → accept, as before: nothing to contradict and nothing to verify against.
         if (typeof gitBranch !== 'string' || gitBranch === '') return true;
-        const want = this.stripWp(branch);
+        const want = this.stripWp(context.branch);
         if (this.stripWp(gitBranch) === want) return true;
-        return want !== '' && this.stripWp(this.branchOfCwd(rec['cwd'])) === want;
+        if (want !== '' && this.stripWp(this.branchOfCwd(rec['cwd'])) === want) return true;
+        return this.creditedByWhatItTouched(jsonl, agentType, context);
+    }
+
+    /**
+     * Credit a reviewer for WHAT IT TOUCHED when neither harness-stamped field can settle it.
+     *
+     * Both paths compared here are ABSOLUTE and BRANCH-SPECIFIC — they live under
+     * `<worktree>/.webpieces/pr-review/<featureSlug>/`, so the string names the tree AND the branch. A
+     * reviewer that worked on a different branch cannot have them in its transcript, and a reviewer of
+     * this branch that ran from a mis-stamped cwd cannot avoid having them. That is the property
+     * `gitBranch` lacks — this file's own sweep of 961 record-0s found the mis-stamp is the MAJORITY
+     * case among subagents in dedicated worktrees.
+     *
+     * Two channels, either sufficient:
+     *   1. it WROTE this checklist's verdict file — proves branch AND checklist, and is the act the whole
+     *      gate is trying to attribute. Matched as a substring of any tool input, so a Write, an Edit and
+     *      a `cat > <path>` heredoc all count; the point is that the path was named, not which tool named it.
+     *   2. it READ this branch's materialized diff dir — proves the branch. Kept as a second channel
+     *      because a reviewer whose verdict was relayed by its parent still demonstrably reviewed this
+     *      branch, and refusing that would re-open a narrower version of the same unrecoverable deadlock.
+     *
+     * Independence is NOT weakened by either: `isSidechain === true` and `spawnDepth >= 1` are checked
+     * before we get here (so the main loop's own transcript can never qualify), and `verifyDistinct`
+     * excludes an agentId already credited to another checklist. It remains non-tamper-proof in exactly
+     * the way the class doc already states — forging this now means forging a transcript rather than a
+     * meta.json, which is the same bar, not a lower one.
+     */
+    private creditedByWhatItTouched(jsonl: string, agentType: string, context: ReviewerContext): boolean {
+        const scan = this.scanTranscript(jsonl);
+        const verdictPath = context.verdictPaths[agentType] ?? '';
+        if (verdictPath !== '' && this.mentions(scan.inputs, verdictPath)) return true;
+        return this.readDiffDir(scan, context);
     }
 
     /**
