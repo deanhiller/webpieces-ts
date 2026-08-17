@@ -8,6 +8,7 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - `buildClientProxy` — the typed `Proxy` trap (including the framework-inspection whitelist) shared by both environment factories
 - `ClientTarget` — the base a `ClientConfig` extends: a logging `svcName` plus an async `resolveBaseUrl()`
 - Translating HTTP responses/status codes into the typed `HttpError` hierarchy (`ClientErrorTranslator`)
+- Deciding whether a response body may be parsed at all, from its `content-type` (`ResponseBodyReader`) — an infra 502/503/504 serves HTML, so it becomes a status-typed `HttpError` rather than a `SyntaxError`
 - Attaching outbound delivery auth per the endpoint's `AuthMode` (@AuthOidc bearer via the injected `IdTokenMinter`, @AuthSharedSecret value from the bound `Secrets`)
 
 ## Out of Scope

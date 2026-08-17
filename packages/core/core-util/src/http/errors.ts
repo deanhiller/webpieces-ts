@@ -147,6 +147,23 @@ export class HttpBadGatewayError extends HttpError {
 }
 
 /**
+ * HttpServiceUnavailableError - 503 Service Unavailable.
+ *
+ * The cold-start code: a scale-to-zero backend (Cloud Run `min_instance_count = 0`) whose instance
+ * is still booting is answered by the load balancer with a 503 and ITS OWN HTML page — no
+ * ProtocolError body at all. Without this member the client fell through to a generic `HttpError`,
+ * so an app could not say "the server is waking, retry" without matching on `err.code === 503`,
+ * which is the untyped pattern this ladder exists to replace.
+ */
+export class HttpServiceUnavailableError extends HttpError {
+    constructor(message: string, cause?: Error) {
+        super(message, 503, undefined, cause);
+        this.name = 'HttpServiceUnavailableError';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
  * HttpGatewayTimeoutError - 504 Gateway Timeout.
  * SHOULD NOT BE USED SERVER SIDE SINCE ALBs will return 504 and it will not be translated
  * to json body 'ProtocolError'.

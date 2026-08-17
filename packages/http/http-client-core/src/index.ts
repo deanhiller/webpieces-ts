@@ -30,3 +30,4 @@ export { RequestOutcome } from './RequestOutcome';
 export type { ApiPrototype } from './ApiPrototype';
 export { buildClientProxy } from './buildClientProxy';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
+export { ResponseBodyReader } from './ResponseBodyReader';

@@ -9,7 +9,6 @@ import {
     AuthMeta,
     DestinationTrust,
     RouteMetadata,
-    ProtocolError,
     LogApiCall,
     LogApiCallImpl,
     ApiMethodInfo,
@@ -19,6 +18,7 @@ import {
 import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { RequestOutcome } from './RequestOutcome';
+import { ResponseBodyReader } from './ResponseBodyReader';
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -47,6 +47,9 @@ export abstract class ProxyClient {
 
     // Stateless + dependency-free, so the browser bundle keeps no DI on the fetch path.
     private readonly networkRejectClassifier = new NetworkRejectClassifier();
+
+    // Same shape and same reason: stateless, so it is constructed here rather than injected.
+    private readonly bodyReader = new ResponseBodyReader();
 
     constructor(protected readonly logApiCall: LogApiCallImpl = LogApiCall) {}
 
@@ -298,47 +301,75 @@ export abstract class ProxyClient {
             throw networkError;
         }
 
+        const callId = `${this.apiName}.${route.methodName}`;
         if (response.ok) {
-            // webpieces-disable no-unmanaged-exceptions -- a malformed 2xx body must still report the END marker
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const body = await response.json();
-                this.onRequestEnd(route, new RequestOutcome(true, response.status, response.headers));
-                return body;
-            } catch (err: unknown) {
-                const error = toError(err);
-                this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
-                throw error;
-            }
+            return this.readSuccessBody(response, route, callId);
         }
+        throw await this.endWithTypedFailure(response, route, callId);
+    }
 
-        // Handle errors (non-2xx responses): parse ProtocolError from the response body and
-        // reconstruct the appropriate HttpError subclass. The headers still reach the seam here, so
-        // a version (or any future) header is observed even on error responses.
-        //
-        // The parse is GUARDED because a non-2xx body is not always ours: an infra 502/504 (load
-        // balancer, proxy) returns HTML, and `response.json()` throws on it. Unguarded, the END
-        // marker would never fire for exactly the 5xx case the seam exists to catch — the caller
-        // would see the throw while the app's progress bar span never closed. Either way the caller
-        // still gets the same failure it always got; only the lifecycle report is new.
-        //
-        // `translated` is the HttpError subclass ClientErrorTranslator picked, and translateError
-        // RETURNS Error — so nothing in this seam is ever `unknown`.
-        let translated: Error;
-        // webpieces-disable no-unmanaged-exceptions -- a non-JSON error body must still report the END marker
+    /**
+     * Read a 2xx body, reporting the END marker on both outcomes.
+     *
+     * The content-type gate is the same one the error path uses: a 2xx that is not JSON (a proxy's
+     * captive-portal page, an SPA index.html served by a misrouted CDN) is reported for WHAT ARRIVED,
+     * instead of `SyntaxError: Unexpected token '<'`, which names nothing a reader can act on.
+     */
+    // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
+    private async readSuccessBody(response: Response, route: RouteMetadata, callId: string): Promise<unknown> {
+        // webpieces-disable no-unmanaged-exceptions -- a malformed 2xx body must still report the END marker
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const protocolError = (await response.json()) as ProtocolError;
-            translated = ClientErrorTranslator.translateError(response, protocolError);
+            if (!this.bodyReader.isJson(response)) {
+                throw new Error(this.bodyReader.describeForeignBody(response, callId, await response.text()));
+            }
+            const body = await response.json();
+            this.onRequestEnd(route, new RequestOutcome(true, response.status, response.headers));
+            return body;
         } catch (err: unknown) {
             const error = toError(err);
-            // The error body was not ours (e.g. an infra 502 serving HTML), so there was no
-            // ProtocolError to translate — report the parse failure itself as the outcome.
             this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
             throw error;
         }
+    }
+
+    /**
+     * Turn a non-2xx response into the error the caller will see, firing the END marker first — so a
+     * listener always gets its stop marker even though the caller sees an exception. RETURNS the
+     * error rather than throwing it, which keeps the one `throw` visible at the call site.
+     *
+     * The headers still reach the seam here, so a version (or any future) header is observed even on
+     * error responses.
+     *
+     * The body is read through {@link ResponseBodyReader}, which parses ONLY a body whose
+     * content-type says it is JSON. An infra 502/503/504 (load balancer, proxy, cold start on a
+     * scale-to-zero backend) serves HTML, and parsing that used to throw `SyntaxError: Unexpected
+     * token '<'` — discarding the status, so the caller could not tell a booting server from a broken
+     * client. It now becomes a synthesized ProtocolError translated BY STATUS, i.e. a real
+     * `HttpBadGatewayError` / `HttpServiceUnavailableError` / `HttpGatewayTimeoutError`.
+     *
+     * The try/catch stays, for a NARROWER job than before: a body that DECLARED json and was
+     * malformed still throws (that one is a genuine server bug), and the END marker must fire for it
+     * too — an unreported end leaves the app's progress bar spinning forever.
+     *
+     * `translated` is the HttpError subclass ClientErrorTranslator picked, and translateError RETURNS
+     * Error — so nothing in this seam is ever `unknown`.
+     */
+    private async endWithTypedFailure(response: Response, route: RouteMetadata, callId: string): Promise<Error> {
+        let translated: Error;
+        // webpieces-disable no-unmanaged-exceptions -- a malformed JSON error body must still report the END marker
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const protocolError = await this.bodyReader.readErrorBody(response, callId);
+            translated = ClientErrorTranslator.translateError(response, protocolError);
+        } catch (err: unknown) {
+            const error = toError(err);
+            // The response CLAIMED JSON and was not parseable — report that failure as the outcome.
+            this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
+            return error;
+        }
 
         this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, translated));
-        throw translated;
+        return translated;
     }
 }

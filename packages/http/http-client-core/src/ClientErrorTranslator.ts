@@ -11,6 +11,7 @@ import {
     HttpTimeoutError,
     HttpInternalServerError,
     HttpBadGatewayError,
+    HttpServiceUnavailableError,
     HttpGatewayTimeoutError,
 } from '@webpieces/core-util';
 
@@ -40,6 +41,7 @@ export class ClientErrorTranslator {
      * - 408 → HttpTimeoutError
      * - 500 → HttpInternalServerError
      * - 502 → HttpBadGatewayError
+     * - 503 → HttpServiceUnavailableError
      * - 504 → HttpGatewayTimeoutError
      * - 598 → HttpVendorError (with waitSeconds) - custom status code
      * - other → generic HttpError
@@ -91,6 +93,9 @@ export class ClientErrorTranslator {
 
             case 502:
                 return new HttpBadGatewayError(message);
+
+            case 503:
+                return new HttpServiceUnavailableError(message);
 
             case 504:
                 return new HttpGatewayTimeoutError(message);
