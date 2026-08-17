@@ -102,6 +102,7 @@ export {
     HttpForbiddenError,
     HttpTimeoutError,
     HttpBadGatewayError,
+    HttpServiceUnavailableError,
     HttpGatewayTimeoutError,
     HttpInternalServerError,
     HttpTooManyRequestsError,

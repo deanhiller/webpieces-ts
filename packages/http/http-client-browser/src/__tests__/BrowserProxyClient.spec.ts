@@ -8,6 +8,8 @@ import {
     ContextKey,
     Endpoint,
     HeaderRegistry,
+    HttpBadGatewayError,
+    HttpServiceUnavailableError,
     OfflineError,
     Public,
     Rpc,
@@ -97,7 +99,7 @@ function stubFetchNetworkReject(err: Error): void {
 /** Stub fetch with a body that is NOT JSON — an infra 502/504 serving an HTML error page. */
 function stubFetchNonJsonBody(status: number): void {
     const fetchMock = vi.fn(() =>
-        Promise.resolve(new Response('<html>502 Bad Gateway</html>', {
+        Promise.resolve(new Response(`<html><head><title>${status} from the load balancer</title></head></html>`, {
             status,
             headers: { 'Content-Type': 'text/html', 'x-myorg-server-version': '4.5.6' },
         })),
@@ -112,6 +114,11 @@ class RecordedCall {
         public readonly route: RouteMetadata,
         public readonly outcome?: RequestOutcome,
     ) {}
+}
+
+/** The ordinary client: no lifecycle listener, just the caller's view of a call. */
+function client(): PublicApi {
+    return factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
 }
 
 /** Build a client whose calls report their lifecycle to `listener`. */
@@ -291,7 +298,7 @@ describe('BrowserProxyClient ends the lifecycle even when no usable body ever ar
         stubFetchNonJsonBody(502);
         const listener = new RecordingListener();
 
-        // webpieces-disable no-unmanaged-exceptions -- the parse failure rethrows after the seam fires
+        // webpieces-disable no-unmanaged-exceptions -- the typed gateway error rethrows after the seam fires
         await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toBeDefined();
 
         const outcome = listener.onlyEnd();
@@ -299,5 +306,49 @@ describe('BrowserProxyClient ends the lifecycle even when no usable body ever ar
         expect(outcome.status).toBe(502);
         expect(outcome.error).toBeDefined();
         expect(outcome.headers?.get('x-myorg-server-version')).toBe('4.5.6');
+    });
+});
+
+/**
+ * END TO END, through the real proxy + fetch: the cold-start defect. A scale-to-zero backend answers
+ * with the load balancer's HTML page, which the client used to JSON.parse regardless of
+ * content-type — so a 502 reached the app as `SyntaxError: Unexpected token '<'`, the status gone,
+ * and the app's global handler classified booting infrastructure as a "Client Bug".
+ */
+describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra HTML body', () => {
+    it('a 502 HTML page rejects with HttpBadGatewayError, not SyntaxError', async () => {
+        stubFetchNonJsonBody(502);
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(HttpBadGatewayError);
+        expect(error).not.toBeInstanceOf(SyntaxError);
+        expect((error as HttpBadGatewayError).code).toBe(502);
+        // Names the call and what actually arrived, so the log line says which endpoint and why.
+        expect((error as Error).message).toContain('PublicApi.save');
+        expect((error as Error).message).toContain('text/html');
+    });
+
+    it('a 503 cold start rejects with HttpServiceUnavailableError — the "retry, it is waking" signal', async () => {
+        stubFetchNonJsonBody(503);
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(HttpServiceUnavailableError);
+        expect((error as HttpServiceUnavailableError).code).toBe(503);
+    });
+
+    it('a 2xx that is not JSON reports WHAT arrived instead of "Unexpected token \'<\'"', async () => {
+        stubFetchNonJsonBody(200);
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('PublicApi.save');
+        expect((error as Error).message).toContain('text/html');
+        expect((error as Error).message).not.toContain('Unexpected token');
     });
 });

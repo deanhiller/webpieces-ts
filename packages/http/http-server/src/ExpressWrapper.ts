@@ -268,6 +268,7 @@ export class ExpressWrapper {
      * - HttpTimeoutError → 408
      * - HttpInternalServerError → 500
      * - HttpBadGatewayError → 502
+     * - HttpServiceUnavailableError → 503 (generic branch: res.status(error.code))
      * - HttpGatewayTimeoutError → 504
      * - HttpVendorError → 598 (with waitSeconds)
      */
