@@ -7,9 +7,9 @@ output and **no readable log**, on a repo whose historical range for that job is
 as "CI is broken" and is unfalsifiable from the outside, because GitHub refuses to serve logs for an
 in-progress job, so the run must be cancelled BY HAND before anything can be read at all.
 
-**Source:**
-- `packages/…/code-rules/src/wp-ci.js:65` — `spawnSync(nxBin(root), args, { stdio: 'inherit', cwd: root })`
-- `packages/…/code-rules/src/wp-ci.js:121` — `runNx(root, ['affected', '--target=ci', ...passthrough])`
+**Source (this repo — the `.js` seen in a consumer's `node_modules` is build output of these):**
+- `packages/tooling/code-rules/src/wp-ci.ts` — `runNx()`: `spawnSync(nxBin(root), args, { stdio: 'inherit', cwd: root })`
+- `packages/tooling/code-rules/src/wp-ci.ts` — `runNx(root, ['affected', '--target=ci', ...passthrough])`
 
 Observed 2026-08-11 in `mealco-internal/monorepo-nx` on PR #900. Burned roughly three hours of
 investigation across **eleven CI runs**.
@@ -38,7 +38,7 @@ subsequent step `skipped`.
 **Nothing is stuck computing. Something is stuck existing.**
 
 GitHub Actions ends a step when the step's **stdout reaches EOF**, not when the shell exits.
-`wp-ci.js:65` passes `stdio: 'inherit'`, which hands the spawned `nx` process — and transitively every
+`runNx` passed `stdio: 'inherit'`, which hands the spawned `nx` process — and transitively every
 worker `nx` spawns — the step's **real stdout file descriptor**. If any grandchild survives `nx`'s exit,
 it still holds that fd open, so the pipe never closes and the step hangs forever with all work finished
 and a zero exit code already in hand.
@@ -88,18 +88,59 @@ Every one of these ran GREEN in isolation while the composed `webpieces:ci` hung
    period, print the surviving PIDs and command lines. That single log line would have replaced this
    entire investigation.
 
+### What shipped (fixes 3 + 4)
+
+`wp-ci` no longer uses `spawnSync`. `NxStepRunner` (`packages/tooling/code-rules/src/wp-ci-nx-runner.ts`)
+spawns each nx step **detached**, so the child is a process-group leader and the group id is a reliable
+handle on every worker it spawns — orphans get re-parented away from the process tree, so the group is the
+only thing that still identifies them. Once the step's child exits, `SurvivorWatchdog`
+(`wp-ci-survivors.ts`) polls `ps -A -o pid=,pgid=,args=` (identical spelling on macOS and Linux) until the
+group drains. If anything is still alive when the grace period expires, `SurvivorReporter` writes a banner
+with **every surviving pid and its full command line** straight to fd 2 with `fs.writeSync` — synchronous,
+because the failure being diagnosed is entangled stdio and a buffered `console.error` can be lost — then
+`ProcessGroupKiller` SIGKILLs the group (so the step's stdout finally reaches EOF instead of hanging) and
+`wp-ci` exits **75**, distinct from an ordinary red build.
+
+Grace period: **25 minutes** by default, one budget for the whole `wp-ci` process rather than per step,
+measured from `wp-ci` start. The client repo's CI step timeout is 30 minutes, so firing at 25 leaves
+headroom for the diagnostic to be printed and flushed before the outer timeout kills everything. Override
+with the env var `WP_CI_SURVIVOR_GRACE_MINUTES=<minutes>`. It is an env var and not a
+`webpieces.config.json` key on purpose: the config validator running against this repo is one release
+behind the source, so a brand-new config key is rejected as unknown and deadlocks the session — an env var
+ships in the same PR as its reader. A config key can be added in a follow-up PR after this release.
+
+If `ps` cannot be run at all, the scan degrades to a one-line warning and the real build result is passed
+through — the diagnostic must never replace the failure it is describing.
+
+Fixes 1 and 2 were **not** taken. Piping and forwarding output changes nx's TTY behaviour and colour
+handling for every consumer, and it hides rather than reports the leak; the group kill makes the step end
+anyway. `process.exit(code)` was already there.
+
 ## Secondary findings
 
 - **`wp-ci`'s own docstring and downstream comments are stale.** It documents `nx affected -t lint -t build`;
-  it actually runs `nx affected --target=ci` (`wp-ci.js:121`), i.e. the full nine-target chain
-  **including `test`**. `monorepo-nx`'s workflow comment (ONE-2077) repeats the stale claim.
+  it actually runs `nx affected --target=ci`, i.e. the full nine-target chain **including `test`**.
+  `monorepo-nx`'s workflow comment (ONE-2077) repeats the stale claim.
+  *Checked in ts40 source: `wp-ci.ts`'s docstring already says `nx affected --target=ci` and is correct.
+  The stale text is downstream, in `monorepo-nx`'s workflow comment — fix it there.*
 - **Validators run twice.** `wp-ci` runs the standalone validators itself and then `--target=ci`, which
   depends on `architecture:validate-complete` again. The second is a cache hit so it is cheap, but
   `Validating API Relations` genuinely appears twice per run.
 - **`no-file-import-cycles` runs madge over the `terraform` project and traverses 0 files**, then warns
   that its `excludeRegExp` matched nothing. Harmless, but pure noise in every log.
 
-## Status — the confirming probe has NOT run
+## Status
+
+**Fixed in this repo (webpieces-ts) by the PR that adds this file** — the loud diagnostic + group reap
+described above. That fix reaches consumers on the NEXT `@webpieces/nx-webpieces-rules` release; until
+they bump, `monorepo-nx`'s workaround stays.
+
+Everything below is the original report, kept because the mechanism is still a *hypothesis*: the shipped
+fix makes the failure **self-describing** rather than proving what the survivors are. The next time it
+fires, the banner names the pids and command lines, which is the evidence the probe below was going to
+collect.
+
+### The confirming probe has NOT run
 
 The probe (`ps -eo pid,ppid,etimes,stat,args`, an fd scan for whoever holds the step's stdout, and a
 process tree, all immediately after `wp-ci` returns) was queued on `monorepo-nx` PR #900 but **never
