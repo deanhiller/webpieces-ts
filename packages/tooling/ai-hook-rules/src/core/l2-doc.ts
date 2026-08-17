@@ -27,6 +27,40 @@ function notDoneRow(entry: L2NotDone): string {
     return `| ${entry.row} | ${entry.gap} | ${entry.why} |`;
 }
 
+/**
+ * The "Not done" body — a table when there are gaps, a SENTENCE when there are none.
+ *
+ * An empty table renders as a bare header with nothing under it, which reads like a rendering bug
+ * rather than like an achievement. "Every row is honoured" is a claim worth making in words, and it is
+ * the state this section exists to drive the layer towards.
+ */
+// webpieces-disable no-function-outside-class -- section builder for renderL2Doc below, in this render module
+function renderNotDoneBody(): string[] {
+    if (NOT_DONE.length === 0) {
+        return [
+            '**Nothing. Every row in the table above is a row the guards actually honour today.**',
+            '',
+            'That has not always been true, and the section stays here for when it stops being true again:',
+            'a row the code cannot yet honour is listed here rather than rendered as if it were live, the',
+            'same way L1 lists its unreachable `o` row. The three entries this section used to carry were',
+            'row 5\'s Bash half (now judged from the branch alone, above the cache divider) and the DIRTY-TREE',
+            'valves on rows 6 and 8 — both closed, because each of those rows cures with',
+            '`git checkout -b <new> origin/main`, which carries uncommitted changes onto the new branch. A',
+            'dirty tree never trapped anyone; the row 6 message just printed the one cure that could not run',
+            'dirty, and the fix was to print both.',
+        ];
+    }
+    return [
+        'Each row below describes INTENT the code has not caught up with. They are listed rather than',
+        'silently rendered as if they were live, the same way L1 lists its unreachable `o` row. Every one of',
+        `them currently exits at row ${L2_FAIL_OPEN_ROW} instead, so the log never claims the strict row fired.`,
+        '',
+        '| row | the gap | why it has not shipped |',
+        '|---|---|---|',
+        ...NOT_DONE.map(notDoneRow),
+    ];
+}
+
 // webpieces-disable no-function-outside-class -- pure row formatter for renderL2Doc below, in this render module
 function useCaseRow(useCase: L2UseCase): string {
     return `| ${useCase.num} | ${useCase.symptom} | ${useCase.state} | ${useCase.verdict} | ${useCase.fix} |`;
@@ -78,11 +112,19 @@ function renderHead(): string[] {
         '| **state B** — merged branch | `feature-branch-guard` | `read-stale-guard` | `merged-branch-bash-guard` |',
         '',
         'The split is TOOL WIRING, not policy. A Read names exactly one file; a Bash command is opaque; a',
-        'Write is neither. And the two Bash guards are not De Morgan duals — they differ in **polarity**',
-        '(merged is default-DENY + allowlist, stale-main is default-ALLOW + blocklist), in **quantifier**',
-        '(`every` segment must pass vs `some` segment triggers) and on the **empty command** (denies vs',
-        'allows). `pnpm build` is denied by one and allowed by the other. No single parameterised function',
-        'serves both, which is why the classes stay four while the switch became one.',
+        'Write is neither.',
+        '',
+        '**The two Bash guards used to differ in polarity, and no longer do.** merged-branch was',
+        'default-DENY + allowlist; stale-main was default-ALLOW + blocklist, so `pnpm build` was denied by',
+        'one and allowed by the other for the same reason — "you should not be working in this tree". That',
+        'asymmetry was a consequence of stale-main asking about FRESHNESS, where a blocklist of content',
+        'readers is the right shape. Once it asks about the BRANCH instead (row 5), the right shape is the',
+        'one merged-branch already had, and they now share it: `RecoveryAllowlist`, the row 4 skip list, as',
+        'a single implementation. Two skip lists drift, and the half that drifts is the half that wedges a',
+        'session on its own cure.',
+        '',
+        'They remain separate CLASSES because the states they detect are different — one reads the branch',
+        'name, the other the cached merged flag — and because each carries its own message.',
         '',
         '## The cache',
         '',
@@ -163,10 +205,12 @@ function renderTable(): string[] {
         'changed the same files you edited, git refuses the switch — `git stash` is on the skip list and',
         'clears it.',
         '',
-        'Row 6 is the only place the dirty argument ever had teeth, because there the cure is `git pull`,',
-        'which genuinely is not a clean fast-forward on a dirty tree. Even there, `git stash` → `git pull` →',
-        '`git stash pop` works. **So there is no dirty row anywhere** — see "Not done" for where the code',
-        'still disagrees.',
+        'Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure is `git pull`,',
+        'which genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND',
+        'cure — `git checkout -b <new> origin/main` — and that one works dirty for exactly the reason above.',
+        'The teeth were in the MESSAGE, which printed only the pull; it now prints both, labelled, so the',
+        'cure an agent reads is always one it can run. **So there is no dirty row anywhere, and no dirty',
+        'valve in the code either** — both were closed, and "Not done" is empty as a result.',
         '',
     ];
 }
@@ -263,13 +307,7 @@ function renderTail(): string[] {
     return [
         '## Not done — rows the guards do not yet honour',
         '',
-        'Each row below describes INTENT the code has not caught up with. They are listed rather than',
-        'silently rendered as if they were live, the same way L1 lists its unreachable `o` row. Every one of',
-        `them currently exits at row ${L2_FAIL_OPEN_ROW} instead, so the log never claims the strict row fired.`,
-        '',
-        '| row | the gap | why it has not shipped |',
-        '|---|---|---|',
-        ...NOT_DONE.map(notDoneRow),
+        ...renderNotDoneBody(),
         '',
         'This section is generated from `NOT_DONE` in `l2-rows.ts`, so closing a gap means deleting its entry',
         'and the doc follows — it cannot rot into a list of things that were fixed years ago.',

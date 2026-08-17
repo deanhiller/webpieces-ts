@@ -90,11 +90,10 @@ import { RecoveryAllowlist } from './recovery-allowlist';
  *             `gh pr view|list|status|checks`, `git stash`, every `wp-*` bin, installs.
  *
  * FAIL-OPEN is preserved where it still means anything: branch undeterminable → allow. The cache
- * valves (`no-sync-cache`, `origin-main-unknown`, `dirty-tree-on-main`) are gone from THIS guard
- * because it no longer reads the cache; read-stale-guard still opens them for the Read tool, where a
- * dirty tree genuinely does make the prescribed `git pull` unavailable (see the doc's "Not done").
- * Here the cure is `git checkout -b`, which CARRIES uncommitted work onto the new branch — so a dirty
- * tree traps nobody and needs no valve.
+ * valves (`no-sync-cache`, `origin-main-unknown`) are gone from THIS guard because it no longer reads
+ * the cache. There is no dirty-tree valve here and none in read-stale-guard either: the cure is
+ * `git checkout -b`, which CARRIES uncommitted work onto the new branch, so a dirty tree traps nobody
+ * in any L2 state. (`git stash` covers the residual where origin/main touched the same files.)
  */
 export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig> {
     constructor(config: BranchStateGuardConfig) { super(config, 'stale-main-bash-guard', BRANCH_STATE_GUARD_KEY); }

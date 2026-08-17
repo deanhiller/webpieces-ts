@@ -6,66 +6,67 @@ wins, exactly like the if/else chains the code already is.
 This file is the index. Each layer has its own document, because one file grew past the point where
 anyone could find anything in it.
 
-> **Where these documents come from — and where they are going.**
+<!-- BEGIN GENERATED — GuardIndexDoc.render() in ai-hook-rules/src/core/guard-index-doc.ts; run `pnpm guards:generate` -->
+> **GENERATED — do not hand-edit between the markers.** Rendered by `GuardIndexDoc.render()`
+> from `LAYER_GENERATION` (`ai-hook-rules/src/core/guard-index-doc.ts`); regenerate with
+> `pnpm guards:generate`. A spec byte-locks it.
 >
-> L0's fault table and allowlist are **generated** from the arrays the guard actually consults, and a
-> unit test byte-locks the rendered file, so that copy cannot drift.
->
-> L1's table, its use cases and their cures are generated and byte-locked the same way, from `L1_ROWS`.
->
-> **Every remaining layer file is hand-written TODAY and is being converted to the same mechanism.** Each
-> layer becomes an ordered array of row objects in code — tools, state, action, cure, and the use cases
-> that exercise the row — the doc is rendered from that array, and a test locks the two together. The
-> array is the thing the guard consults, so the doc cannot describe a guard the code does not implement.
->
-> Until a layer is converted, its file is hand-written and CAN go out of date. The code is the
-> authority; every layer file names the files and functions it describes, and those functions carry a
-> comment pointing back. **If the two disagree, the code wins and the document is the bug** — fix it in
-> the same PR that changed the behaviour.
+> This block used to be prose, and it drifted about the one subject it exists to report: it
+> claimed every layer but L0 and L1 was hand-written, ten lines above a table listing L2 as
+> generated. The index that tells you which docs to trust is the last place that can afford
+> to be wrong, so it is data now.
 
 ## Generation status
 
 | layer | source of truth | doc |
 |---|---|---|
-| L0 | `L0_FAULTS` + `L0_ALLOWLIST` | **PARTLY generated, byte-locked** — only the block between the `L0_DOC_BEGIN` / `L0_DOC_END` markers (~143 of 450 lines); regenerate with `pnpm guards:generate` |
-| L1 | `L1_ROWS` | **generated, byte-locked** — regenerate with `pnpm guards:generate` |
-| L2 | `L2_ROWS` | **generated, byte-locked** — regenerate with `pnpm guards:generate` |
-| L3, L4 | — | stubs |
+| L0 | `L0_FAULTS + L0_ALLOWLIST` | **PARTLY generated, byte-locked** — only the block between the `L0_DOC_BEGIN` / `L0_DOC_END` markers; every byte outside it is hand-written prose the splice preserves |
+| L1 | `L1_ROWS` | **generated whole, byte-locked** — table, use cases and cures all render from the array the runner dispatches on |
+| L2 | `L2_ROWS` | **generated whole, byte-locked** — table, use cases and the "Not done" gaps all render from the rows |
+| L3 | — | **hand-written** — not yet converted, so it CAN go out of date; the code is the authority |
+| L4 | — | **hand-written** — not yet converted, so it CAN go out of date; the code is the authority |
 
-One command regenerates all three: `pnpm guards:generate` rewrites L1 and L2 whole, SPLICES L0's marked
-block, and writes the shim template.
+One command regenerates every generated artifact: `pnpm guards:generate`. It rewrites the
+2 whole-file docs, SPLICES the marked blocks in L0's doc and in this file, writes the
+AI-facing copy of the L2 matrix, and renders the POSIX-sh shim template.
 
-For a WHOLE-file layer (L1, L2) the split is: **row data** lives in the array, **prose** lives as
-literal lines inside the renderer, there is no third place, and the byte-lock spec fails on any hand
-edit. **L0 is the exception on both counts**: everything outside its marker pair is hand-written prose
-that the splice preserves byte for byte and the spec deliberately permits you to edit. Two of those
-three sentences were stated here without qualification and were false for L0, which is the largest guard
-doc in the repo and the only one that has ever gone stale.
+For a WHOLE-file layer the split is: **row data** lives in the array, **prose** lives as literal
+lines inside the renderer, there is no third place, and the byte-lock spec fails on any hand
+edit. **The two SPLICED files are the exception**: everything outside their marker pairs is
+hand-written prose the splice preserves byte for byte, and the spec deliberately permits you to
+edit it.
 
-**L1 and L2 differ in one way worth knowing.** L1 DISPATCHES from its rows — the runner takes the first
-matching row and switches on its `blockId`, so deleting a row deletes a block. L2's four guard classes
-each own their own ladder (they diverge in polarity, quantifier and empty-command handling, deliberately),
-so L2 joins to its rows by REASON instead: every decision-log line carries `row=<n>` derived from the
-reason the guard logged, and a spec asserts the map is exhaustive against the guard sources. Rows L2
-cannot yet honour are listed in that doc's own "Not done" section rather than rendered as if they were live.
+**L1 and L2 differ in one way worth knowing.** L1 DISPATCHES from its rows — the runner takes the
+first matching row and switches on its `blockId`, so deleting a row deletes a block. L2's four
+guard classes each own their own ladder (they diverge in polarity, quantifier and empty-command
+handling, deliberately), so L2 joins to its rows by REASON instead: every decision-log line carries
+`row=<n>` derived from the reason the guard logged, plus the `cure=` that row prescribed, and a spec
+asserts the reason map is exhaustive against the guard sources.
+
+## The layers
+
+| layer | goal — the question it answers | config key | doc |
+|---|---|---|---|
+| **L0** | Is webpieces itself trustworthy right now? | *(none — deliberate, see below)* | [L0](guards/L0-tooling.md) |
+| **L1** | Is this call ours to judge, are the versions in sync, and is git run from the root? | *(none — deliberate, see below)* | [L1](guards/L1-location.md) |
+| **L2** | May I work here, and is what I read current? | `branch-state-guard` | [L2](guards/L2-branch-state.md) |
+| **L3** | Which dead branches and worktrees get reaped? | `branch-creation-guard` | [L3](guards/L3-branch-cleanup.md) |
+| **L4** | Does every merge and PR go through the gated flow? | `pr-lifecycle-guard` | [L4](guards/L4-pr-lifecycle.md) |
+
+<!-- END GENERATED — hand-written prose resumes here -->
 
 **How the generated files reach this repo's root, despite the one-release lag.** The runtime copy in
 `.webpieces/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine
 for consumers, wrong for the copy people read on GitHub. So the root files are **not** written by the
 runtime hook. They are byte-locked by a vitest spec that calls the local `render*Doc()` — and vitest
 resolves `@webpieces/*` to local source via `tsconfig.base.json` paths, so there is no lag at all. A
-stale root doc fails the affected build, exactly like `validate-architecture-unchanged`. No repo-detection
-hack, and consumers keep getting the published copy at block time.
+stale root doc fails the affected build, exactly like `validate-architecture-unchanged`. No
+repo-detection hack, and consumers keep getting the published copy at block time.
 
-## The layers
-
-| layer | goal — the question it answers | config key | doc |
-|---|---|---|---|
-| **L0** | Is webpieces itself trustworthy right now? | *(none — always on)* | [L0 — tooling integrity](guards/L0-tooling.md) |
-| **L1** | Is this call ours to judge, are the versions in sync, and is git run from the root? | *(none)* | [L1 — location](guards/L1-location.md) |
-| **L2** | May I work here, and is what I read current? | `branch-state-guard` | [L2 — branch state](guards/L2-branch-state.md) |
-| **L3** | Which dead branches and worktrees get reaped? | `branch-creation-guard` | [L3 — branch cleanup](guards/L3-branch-cleanup.md) |
-| **L4** | Does every merge and PR go through the gated flow? | `pr-lifecycle-guard` | [L4 — PR lifecycle](guards/L4-pr-lifecycle.md) |
+**Until a layer is converted, its file is hand-written and CAN go out of date.** The code is the
+authority; every layer file names the files and functions it describes, and those functions carry a
+comment pointing back. **If the two disagree, the code wins and the document is the bug** — fix it in
+the same PR that changed the behaviour.
 
 **L0 and L1 have no config key on purpose.** If L0 is off, nothing downstream can be trusted — you would
 be configuring the guards with a config file the validator could not check. L1's two structural blocks

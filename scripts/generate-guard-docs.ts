@@ -5,6 +5,7 @@ import { renderL1Doc } from '../packages/tooling/ai-hook-rules/src/core/l1-doc';
 import { renderL2Doc } from '../packages/tooling/ai-hook-rules/src/core/l2-doc';
 import { L0ToolingDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-tooling-doc';
 import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
+import { GuardIndexDoc } from '../packages/tooling/ai-hook-rules/src/core/guard-index-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
 
 /**
@@ -67,6 +68,12 @@ function main(): void {
     const l0 = path.join(root, 'guards', 'L0-tooling.md');
     fs.writeFileSync(l0, new L0ToolingDoc().splice(fs.readFileSync(l0, 'utf8')), 'utf8');
     wrote.push(l0);
+
+    // The INDEX, spliced like L0's doc. It reports which layer docs are generated, which makes it the
+    // one file that cannot afford to be wrong about generation — and it was, until this was added.
+    const index = path.join(root, 'GUARD_MATRIX.md');
+    fs.writeFileSync(index, new GuardIndexDoc().splice(fs.readFileSync(index, 'utf8')), 'utf8');
+    wrote.push(index);
 
     const templates = path.join(root, 'packages', 'tooling', 'ai-hook-rules', 'templates');
     const shim = path.join(templates, 'ai-hook.sh');

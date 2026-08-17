@@ -24,11 +24,19 @@ the rows in `ai-hook-rules/src/core/l2-rows.ts` · the shared cache in
 | **state B** — merged branch | `feature-branch-guard` | `read-stale-guard` | `merged-branch-bash-guard` |
 
 The split is TOOL WIRING, not policy. A Read names exactly one file; a Bash command is opaque; a
-Write is neither. And the two Bash guards are not De Morgan duals — they differ in **polarity**
-(merged is default-DENY + allowlist, stale-main is default-ALLOW + blocklist), in **quantifier**
-(`every` segment must pass vs `some` segment triggers) and on the **empty command** (denies vs
-allows). `pnpm build` is denied by one and allowed by the other. No single parameterised function
-serves both, which is why the classes stay four while the switch became one.
+Write is neither.
+
+**The two Bash guards used to differ in polarity, and no longer do.** merged-branch was
+default-DENY + allowlist; stale-main was default-ALLOW + blocklist, so `pnpm build` was denied by
+one and allowed by the other for the same reason — "you should not be working in this tree". That
+asymmetry was a consequence of stale-main asking about FRESHNESS, where a blocklist of content
+readers is the right shape. Once it asks about the BRANCH instead (row 5), the right shape is the
+one merged-branch already had, and they now share it: `RecoveryAllowlist`, the row 4 skip list, as
+a single implementation. Two skip lists drift, and the half that drifts is the half that wedges a
+session on its own cure.
+
+They remain separate CLASSES because the states they detect are different — one reads the branch
+name, the other the cached merged flag — and because each carries its own message.
 
 ## The cache
 
@@ -62,7 +70,7 @@ guards, meant at most one of the four values could ever reach a spawn.
 | 3 | `B R E` | **merge in progress** — L4 owns this state | 2 exempt | finish the merge: `pnpm wp-finish-upsert-pr` |
 | 4 | `B` | on the **skip list** — it gets you OUT, or tells you where you are | 1 allow | — |
 | 5 | `B E` | on `main` | 4 block | `git checkout -b <new> origin/main` |
-| 11 | `B R E` | **the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, the forge unreachable, or a dirty tree whose cure is not a clean fast-forward | 1 allow (fail-open) | — (nothing to fix; the refresher populates the cache for the next call) |
+| 11 | `B R E` | **the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, or the forge unreachable | 1 allow (fail-open) | — (nothing to fix; the refresher populates the cache for the next call) |
 | 6 | `R` | on `main`, behind `origin/main` | 4 block | `git pull origin main`, or `git checkout -b <new> origin/main` |
 | 7 | `R` | on `main`, current | 1 allow | — |
 | 8 | `B R E` | on a branch whose PR is **already merged** | 4 block | `git fetch origin main && git checkout -b <new> origin/main` |
@@ -112,10 +120,12 @@ comes with you, so nothing needs reading first and nothing is trapped. Residual:
 changed the same files you edited, git refuses the switch — `git stash` is on the skip list and
 clears it.
 
-Row 6 is the only place the dirty argument ever had teeth, because there the cure is `git pull`,
-which genuinely is not a clean fast-forward on a dirty tree. Even there, `git stash` → `git pull` →
-`git stash pop` works. **So there is no dirty row anywhere** — see "Not done" for where the code
-still disagrees.
+Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure is `git pull`,
+which genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND
+cure — `git checkout -b <new> origin/main` — and that one works dirty for exactly the reason above.
+The teeth were in the MESSAGE, which printed only the pull; it now prints both, labelled, so the
+cure an agent reads is always one it can run. **So there is no dirty row anywhere, and no dirty
+valve in the code either** — both were closed, and "Not done" is empty as a result.
 
 ## L2 use cases
 
@@ -137,7 +147,7 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 | 4 | The same command inside a linked worktree, where `git checkout main` fatals anyway | linked worktree — `main` is already checked out in the primary clone | BLOCK, and the message prints the worktree form rather than a cure git would refuse | `git fetch origin main`, then work off `origin/main` |
 | 5 | Reading and editing conflicted files during a 3-point merge, on a branch row 9 would block | merge markers on disk — `pnpm wp-start-update` has run and not finished | EXEMPT: everything is permitted, which is exactly what lets row 9 be strict | Resolve the conflicts, then `pnpm wp-finish-upsert-pr` |
 | 6 | `git status` / `gh pr view` while blocked, to work out where you are | any state — orientation is never "working here" | ALLOW: metadata tells you where you are without putting stale file CONTENT in context | None needed |
-| 7 | `git stash` to clear a dirty tree so the prescribed `git pull` can fast-forward | on a stale `main` with local modifications | ALLOW: the cure for the row that blocked you must itself never be blocked | None needed — then run the pull and `git stash pop` |
+| 7 | `git stash` when `git checkout -b <new> origin/main` refuses because `origin/main` touched the same files you edited | on a stale `main` or a merged branch, dirty tree, with an overlapping upstream change | ALLOW: the cure for the row that blocked you must itself never be blocked — and this is the residual step that makes rows 6 and 8 safe to block on a dirty tree | None needed — then re-run the checkout and `git stash pop` |
 | 8 | `pnpm wp-start-upsert-pr` on a branch whose fork point is broken | row 9 state, running the tool row 9 prescribes | ALLOW: every `wp-*` bin is on the skip list, so no row can block its own remedy | None needed |
 | 9 | An Edit or Write to any tracked file while `git rev-parse --abbrev-ref HEAD` says `main` | on `main`, any freshness | BLOCK: decided by one `git rev-parse`, with NO cache read, so it fires on the first tool call of the session | `git checkout -b <new> origin/main` — uncommitted work comes with you |
 | 10 | A Bash command that WRITES tracked files as a side effect — `npx expo install`, a formatter, codegen, `sed -i`, a `>` redirect | on `main`, and the write is incidental to a command whose stated purpose is something else | BLOCK: default-DENY on `main` plus row 4's skip list, so a command nobody thought to enumerate is caught by not being on the list — which is the only shape that could have caught this one | `git checkout -b <new> origin/main` BEFORE running anything that may write |
@@ -146,11 +156,12 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 | 25 | The FIRST command of a session, on `main`, before any cache exists | on `main`, cache absent — row 11 would fail open | BLOCK anyway: row 5 is ABOVE the cache divider and reads only `git rev-parse`, so it is armed on call #1. This is the case the cache-gated version could never catch | `git checkout -b <new> origin/main` |
 | 11 | The very first tool call of a session is allowed even on a badly stale `main` | no cache — the refresher is fire-and-forget and populates it for the NEXT call | ALLOW (fail-open), logged as `ALLOW_FAIL_OPEN` so abstentions stay countable | None — the second call is judged normally |
 | 12 | Guards quietly stand down on a plane, or when `gh` is unauthenticated or rate-limited | the forge could not be asked whether the PR is merged | ALLOW (fail-open) logged as `no-forge` — distinct from "asked, and it is not merged", which used to look identical in the trail | None — restore network/`gh auth` to re-arm the merged-branch policy |
-| 13 | A stale-`main` read is allowed because the tree is dirty | on `main`, behind `origin/main`, with local modifications | ALLOW (fail-open): the prescribed `git pull` is not a clean fast-forward on a dirty tree | `git stash` → `git pull origin main` → `git stash pop` |
 | 14 | Mid-rebase, every guard abstains | detached HEAD — there is no branch name to judge | ALLOW (fail-open), logged LOUDLY when the branch is unresolvable rather than merely detached | None — finish or abort the rebase |
+| 13 | The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits | on `main`, behind `origin/main`, dirty tree | BLOCK. This used to fail open, on the argument that the prescribed `git pull` is not a clean fast-forward when the tree is dirty. That was true of the MESSAGE, not the row: the cure cell always offered a second form, and it works dirty | `git checkout -b <new> origin/main` — uncommitted changes come with you onto the new branch. If git refuses because `origin/main` touched the same files, `git stash` first (never blocked), then retry, then `git stash pop` |
 | 15 | The Read tool refuses a file that exists, on a `main` 18 commits behind | on `main`, behind `origin/main`, clean tree | BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly | `git pull origin main`, or `git checkout -b <new> origin/main` |
 | 17 | Reading files on a `main` you just pulled | on `main`, and `origin/main` is an ancestor of HEAD | ALLOW: this is the ONE place a Read is judged differently from a Bash command, because a Read names exactly one file and can be evaluated precisely | None needed |
 | 18 | You keep working on the branch after its PR merged, and the next PR reopens code review already landed | branch whose PR is merged — `merged` is monotonic, so the cached flag is trusted with no TTL | BLOCK across all three tools | `git fetch origin main && git checkout -b <new> origin/main` |
+| 26 | You have uncommitted edits on a branch whose PR just merged | merged branch, dirty tree | BLOCK. This used to fail open too, and that valve never had an argument behind it — row 8's cure carries uncommitted work onto the fresh branch, so nothing was ever trapped. It was drift from the documented design, which `read-stale-guard`'s own class comment still described correctly | `git fetch origin main && git checkout -b <new> origin/main` — your edits come with you |
 | 19 | A shell-only session sails through on a merged branch | merged branch, Bash only — both FILE guards are file-scoped, so Bash reached neither | BLOCK: `merged-branch-bash-guard` exists because `branchAlreadyMerged` was being computed and logged on that very path, then thrown away | `git fetch origin main && git checkout -b <new> origin/main` |
 | 20 | Your branch and `origin/main` share no merge base — usually a branch cut from a squashed-away tip | no fork point | BLOCK: nothing built on this branch can be reasoned about relative to main | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
 | 21 | `origin/main` moved and changed the same files you edited | main-moved collision | BLOCK — and row 3 then exempts everything once the merge starts, which is what makes this safe | `pnpm wp-start-update`, resolve, `pnpm wp-finish-upsert-pr` |
@@ -215,14 +226,16 @@ standing down.
 
 ## Not done — rows the guards do not yet honour
 
-Each row below describes INTENT the code has not caught up with. They are listed rather than
-silently rendered as if they were live, the same way L1 lists its unreachable `o` row. Every one of
-them currently exits at row 11 instead, so the log never claims the strict row fired.
+**Nothing. Every row in the table above is a row the guards actually honour today.**
 
-| row | the gap | why it has not shipped |
-|---|---|---|
-| 8 | Row 8 blocks reads on a merged branch even when the tree is DIRTY. The code opens a dirty valve and fails open (`dirty-merged-branch`, logged at row 11). | The row is the ORIGINAL documented design — `git checkout -b <new> origin/main` carries uncommitted changes onto the fresh branch, so nothing is trapped — and `read-stale-guard`'s own class comment still states it. The code drifted, and closing the valve is a behaviour change that belongs in its own PR with its own evidence, not in a config collapse. |
-| 6 | Row 6 blocks reads on a stale `main` even when the tree is DIRTY. The code opens a dirty valve (`dirty-tree-on-main`, logged at row 11). | This is the one place the dirty argument has teeth: the cure is `git pull`, which genuinely is not a clean fast-forward on a dirty tree. `git stash` is on the skip list and clears it, so the strict form is reachable — but it is the same behaviour change, and the same separate PR. |
+That has not always been true, and the section stays here for when it stops being true again:
+a row the code cannot yet honour is listed here rather than rendered as if it were live, the
+same way L1 lists its unreachable `o` row. The three entries this section used to carry were
+row 5's Bash half (now judged from the branch alone, above the cache divider) and the DIRTY-TREE
+valves on rows 6 and 8 — both closed, because each of those rows cures with
+`git checkout -b <new> origin/main`, which carries uncommitted changes onto the new branch. A
+dirty tree never trapped anyone; the row 6 message just printed the one cure that could not run
+dirty, and the fix was to print both.
 
 This section is generated from `NOT_DONE` in `l2-rows.ts`, so closing a gap means deleting its entry
 and the doc follows — it cannot rot into a list of things that were fixed years ago.

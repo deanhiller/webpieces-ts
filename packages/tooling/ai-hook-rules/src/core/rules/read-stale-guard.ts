@@ -37,11 +37,17 @@ import { TreeRecovery } from './tree-recovery';
  * blocks the WRITE in state B; this guard is the read-side half of that same protection, and the
  * two share one recovery message via MergedBranchMessage.)
  *
- * THE DIRTY-TREE ASYMMETRY is deliberate. State A fails OPEN on a dirty tree because `git pull` is
- * then not a guaranteed fast-forward and the agent would be trapped away from the files it needs to
- * resolve the conflict. State B blocks ANYWAY, because its cure — `git checkout -b <new>
- * origin/main` — carries uncommitted changes onto the fresh branch, so there is nothing to resolve
- * and nothing to be trapped by.
+ * THERE IS NO DIRTY-TREE ASYMMETRY, and there is no dirty-tree valve in either state. Both used to
+ * fail open on uncommitted work; both now block. The argument for the state-A valve was that its cure,
+ * `git pull --ff-only`, is not a fast-forward on a dirty tree — true, but that is a fact about the
+ * MESSAGE, which printed only the pull. Row 6 has always carried a second cure, `git checkout -b <new>
+ * origin/main`, and that one CARRIES uncommitted changes onto the new branch, so the work comes with
+ * you and nothing is trapped. StaleMainMessage now prints both, labelled with which survives a dirty
+ * tree, so the block no longer has to be suppressed to keep the printed cure runnable. State B's valve
+ * never had an argument at all — its cure was always the branch form.
+ *
+ * Residual, in both states: if `origin/main` changed the same files you edited, git refuses the switch.
+ * `git stash` is on the L2 skip list and is never blocked, so the path out is stash → branch → pop.
  *
  * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `git pull origin main`,
  * `pnpm install`, any webpieces upgrade — is a Bash command, and this guard never looks at Bash.
@@ -55,23 +61,21 @@ import { TreeRecovery } from './tree-recovery';
  * State-A Bash counterpart (as merged-branch-bash-guard is State B's) and blocks only CONTENT-reading
  * commands, never the cure — which is why this guard can stay simple and Read-only.
  *
- * Everything here is FAIL-OPEN. A guard that blocks reads on bad data is far worse than one that
- * misses; every unknown resolves to "allow". The four deliberate escape valves:
+ * Everything here is FAIL-OPEN on data we could not ESTABLISH. A guard that blocks reads on bad data
+ * is far worse than one that misses; every unknown resolves to "allow". Note the dual, which is what
+ * the deleted dirty valve violated: never fail open on data you DID establish. A dirty tree is not an
+ * unknown — it is a known state with a known cure. The three deliberate escape valves:
  *
- *   1. DIRTY TREE  — uncommitted work on main means `git pull` is not a guaranteed fast-forward.
- *                    Blocking reads there would trap the agent: it could not read the files it
- *                    needs to resolve the very conflict blocking it. Allow. (State A ONLY — see
- *                    the dirty-tree asymmetry above.)
- *   2. CACHE LAG   — we do NOT compare hashes for equality. The cached `originMain` is written by
+ *   1. CACHE LAG   — we do NOT compare hashes for equality. The cached `originMain` is written by
  *                    the detached refresher and is arbitrarily old, so `local !== origin` stays
  *                    true for a while AFTER a successful pull, which would spin the agent forever.
  *                    Instead: is the cached origin/main an ANCESTOR of local main? If local main
  *                    already contains it, we are not behind. That flips the instant the pull lands,
  *                    with no refresher round-trip. This is the single most important line here.
- *   3. CONFIG READ — webpieces.config.json stays readable so the agent can always read-then-edit
+ *   2. CONFIG READ — webpieces.config.json stays readable so the agent can always read-then-edit
  *                    it to set `mode: OFF`. Its EDIT is already bypassed in runner.ts + hook-core;
  *                    this closes the read half of that same escape hatch.
- *   4. NO DATA     — no cache, cache for another branch, empty originMain (offline), or no local
+ *   3. NO DATA     — no cache, cache for another branch, empty originMain (offline), or no local
  *                    main at all (fresh clone / worktree) → allow.
  *
  * Runs from the Read fast path in hook-core (Read is neither a file-edit nor a bash payload, so it
@@ -90,7 +94,8 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         'This branch is stale to read from — reading it would give you pre-merge/out-of-date content.',
         'Get onto current code before reading anything else:',
         [
-            new Option('On main, behind origin/main → git pull origin main. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main. Then retry the read.', true),
+            new Option('On main, behind origin/main → git pull origin main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
+            new Option('If a checkout -b refuses because origin/main changed the same files you edited: git stash (never blocked), redo the checkout, then git stash pop.'),
             new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
             new Option('Still allowed right now: Bash that does not read repo files (installs, upgrades, builds, tests, the pull itself, git/gh metadata), all Write/Edit, and reading webpieces.config.json. Content-reading Bash (cat/grep/ls/…) is blocked too on a stale main — see stale-main-bash-guard.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
@@ -135,12 +140,14 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
-        // Escape valve 1 — a dirty tree means the pull is not a clean fast-forward; do not trap
-        // the agent away from the files it needs to resolve it.
-        if (this.isDirty(ctx.workspaceRoot)) {
-            return this.failOpen(ctx, branch, 'dirty-tree-on-main', cache);
-        }
-
+        // NO DIRTY VALVE. It used to fail open here, on the argument that the prescribed `git pull` is
+        // not a clean fast-forward on a dirty tree. That argument was about the MESSAGE, not the row:
+        // row 6's cure cell has always offered `git checkout -b <new> origin/main` as an alternative,
+        // and THAT works dirty — it carries uncommitted changes onto the new branch and lands you on
+        // current code, which is the whole point. The message now leads with it when the tree is dirty
+        // (StaleMainMessage.forReads), so the cure an agent reads is one it can actually run.
+        // Residual, same as row 8: if origin/main touched the files you edited, git refuses the switch
+        // — `git stash` is on the skip list and clears it. Two steps worst case, never a dead end.
         return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
     }
 
@@ -152,12 +159,12 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
      * merged`), so this path spawns nothing. No `gh` / offline → `mergedPr` is '' → not merged → allow,
      * which is the fail-open direction for free.
      *
-     * The DIRTY-TREE escape valve is the same one state A has, for the same reason: uncommitted work
-     * on a merged branch is work that exists nowhere else, and rescuing it means READING the files it
-     * touches. `git checkout -b <new> origin/main` usually carries those changes across — but when it
-     * does not (an overlapping change landed in main), a blocked read is an agent that cannot even
-     * see what it is about to lose. feature-branch-guard still blocks the EDITS, so the state is
-     * surfaced loudly either way; we just refuse to cut off the rescue path.
+     * NO DIRTY-TREE VALVE. `git checkout -b <new> origin/main` carries uncommitted changes onto the
+     * fresh branch, so the work comes with you and there is nothing to rescue by reading. When it does
+     * NOT (an overlapping change landed in main, so git refuses the switch), `git stash` is on the L2
+     * skip list and is never blocked: stash → branch → pop. The valve that used to sit here was drift
+     * from the documented design, not a decision — this docblock described the strict behaviour for
+     * releases while the code failed open.
      */
     private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
         const status = readMainSyncStatus(ctx.workspaceRoot, branch);
@@ -179,10 +186,10 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
                 ? this.allow(ctx, branch, 'clean-feature-branch', cache)
                 : this.failOpen(ctx, branch, 'no-forge', cache);
         }
-        if (this.isDirty(ctx.workspaceRoot)) {
-            return this.failOpen(ctx, branch, 'dirty-merged-branch', cache);
-        }
-
+        // NO DIRTY VALVE — and this one never had an argument behind it at all. Row 8's cure is
+        // `git fetch origin main && git checkout -b <new> origin/main`, which carries uncommitted work
+        // with you, so a dirty tree traps nobody. The valve was code drift from the documented design;
+        // read-stale-guard's own class comment said so while the code did the opposite.
         const pr = status.mergedPr !== '' ? status.mergedPr : '?';
         return this.block(
             ctx,
@@ -221,22 +228,6 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         return true; // unknown/failed → treat as "contained" so the guard allows
     }
 
-    private isDirty(workspaceRoot: string): boolean {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const out = execSync('git status --porcelain', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            return out.trim().length > 0;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            // Cannot tell → assume dirty, which is the fail-OPEN direction for this guard.
-            return true;
-        }
-    }
 
     private isConfigFile(relativePath: string): boolean {
         return relativePath === 'webpieces.config.json';
@@ -259,9 +250,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         }
     }
 
-    // Shared with stale-main-bash-guard (StaleMainMessage) so the two halves of the State-A block can
-    // never prescribe different cures. Its "still allowed" tail no longer promises EVERY Bash command:
-    // content-reading Bash is now blocked too, which is the whole point of the Bash counterpart.
+    // StaleMainMessage's remaining consumer. It used to be shared with stale-main-bash-guard so the two
+    // halves of the State-A block could never prescribe different cures; that guard now blocks on the
+    // BRANCH (row 5) rather than on staleness and carries its own message, so this is the only caller.
     private staleMainMessage(workspaceRoot: string): string {
         return new StaleMainMessage(workspaceRoot).forReads(this.behindCount(workspaceRoot));
     }

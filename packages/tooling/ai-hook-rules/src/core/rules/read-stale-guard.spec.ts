@@ -184,9 +184,34 @@ describe('read-stale-guard — fail-open escape valves', () => {
     });
 
     // ---- D2: dirty tree ------------------------------------------------------------------------
-    it('allows when the tree is dirty — a pull is not a clean fast-forward and the agent must be able to read', () => {
+    /*
+     * THE DIRTY VALVE IS CLOSED. It used to fail open here, reasoning that the prescribed
+     * `git pull --ff-only` is not a clean fast-forward on a dirty tree, so blocking would trap the
+     * agent away from the files it needed. That was true of the MESSAGE, not of the row: row 6 has
+     * always carried a second cure, `git checkout -b <new> origin/main`, which CARRIES uncommitted
+     * changes onto the new branch and lands you on current code. The message now prints both, so the
+     * block no longer has to be suppressed to keep the cure runnable.
+     */
+    it('BLOCKS when the tree is dirty — `git checkout -b` carries the work, so nothing is trapped', () => {
+        // `porcelain` is set to name the SCENARIO, not to drive the assertion: the guard no longer
+        // shells out for it at all. That is the strongest form of this test — the verdict is now
+        // independent of tree state by construction, not merely equal for both values of it.
         state.porcelain = ' M src/a.ts\n';
-        expect(rule().check(ctx()).length).toBe(0);
+        expect(rule().check(ctx()).length).toBe(1);
+        state.porcelain = '';
+        expect(rule().check(ctx()).length, 'clean and dirty must be judged alike').toBe(1);
+    });
+
+    it('prints BOTH cures, and says which one survives uncommitted changes', () => {
+        state.porcelain = ' M src/a.ts\n';
+        const message = rule().check(ctx())[0].message;
+        expect(message).toContain('git pull --ff-only origin main');
+        expect(message).toContain('git checkout -b <new-branch> origin/main');
+        expect(message).toContain('CLEAN TREE ONLY');
+        expect(message).toContain('UNCOMMITTED CHANGES');
+        // The residual: origin/main touched the same files, so git refuses the switch. `git stash` is
+        // on the skip list, so naming it here can never prescribe something a sibling guard denies.
+        expect(message).toContain('git stash');
     });
 
     // ---- D3: cache lag, the anti-spin guarantee ------------------------------------------------
@@ -232,7 +257,8 @@ describe('read-stale-guard — fail-open escape valves', () => {
 
 // ---- state B: an already-merged feature branch ---------------------------------------------------
 // Same damage as a stale main (the AI reads a PRE-MERGE snapshot), so the same tool gets blocked.
-// The one deliberate difference from state A is the dirty tree: here it still blocks.
+// State A and state B are now judged alike on a dirty tree — both block, because both cure with a
+// fresh branch that carries uncommitted work along.
 // On a feature branch, cache for THAT branch, PR merged. `main`-only axes (ancestorRc, localMain)
 // are irrelevant on this path.
 function mergedStatus(over: Partial<MainSyncStatus> = {}): MainSyncStatus {
@@ -282,14 +308,19 @@ describe('read-stale-guard — merged feature branch', () => {
         expect(message).toContain('merged-branch-bash-guard');
     });
 
-    // Same escape valve as state A, for the same reason: uncommitted work on a merged branch exists
-    // NOWHERE else, and rescuing it means reading the files it touches. The cure usually carries the
-    // changes across — but when it does not, a blocked read is an agent that cannot see what it is
-    // about to lose. feature-branch-guard still blocks the EDITS, so the state is surfaced anyway.
-    it('fails OPEN when the tree is dirty, so uncommitted work can still be read and rescued', () => {
+    /*
+     * The merged-branch dirty valve is closed too, and this one never had an argument behind it: row
+     * 8's cure is `git fetch origin main && git checkout -b <new> origin/main`, which carries
+     * uncommitted work with you. The valve was drift from the documented design — this class's own
+     * docblock described the strict behaviour the whole time the code did the opposite.
+     */
+    it('BLOCKS when the tree is dirty — the fresh-branch cure brings your edits along', () => {
         onMergedBranch();
+        // As in state A: the fixture documents the scenario; the guard no longer reads porcelain.
         state.porcelain = ' M src/a.ts\n';
-        expect(rule().check(ctx()).length).toBe(0);
+        expect(rule().check(ctx()).length).toBe(1);
+        state.porcelain = '';
+        expect(rule().check(ctx()).length, 'clean and dirty must be judged alike').toBe(1);
     });
 
     it('does not spawn git on this path either (.git/HEAD fast path)', () => {
