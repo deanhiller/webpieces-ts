@@ -193,8 +193,13 @@ describe('read-stale-guard — fail-open escape valves', () => {
      * block no longer has to be suppressed to keep the cure runnable.
      */
     it('BLOCKS when the tree is dirty — `git checkout -b` carries the work, so nothing is trapped', () => {
+        // `porcelain` is set to name the SCENARIO, not to drive the assertion: the guard no longer
+        // shells out for it at all. That is the strongest form of this test — the verdict is now
+        // independent of tree state by construction, not merely equal for both values of it.
         state.porcelain = ' M src/a.ts\n';
         expect(rule().check(ctx()).length).toBe(1);
+        state.porcelain = '';
+        expect(rule().check(ctx()).length, 'clean and dirty must be judged alike').toBe(1);
     });
 
     it('prints BOTH cures, and says which one survives uncommitted changes', () => {
@@ -311,8 +316,11 @@ describe('read-stale-guard — merged feature branch', () => {
      */
     it('BLOCKS when the tree is dirty — the fresh-branch cure brings your edits along', () => {
         onMergedBranch();
+        // As in state A: the fixture documents the scenario; the guard no longer reads porcelain.
         state.porcelain = ' M src/a.ts\n';
         expect(rule().check(ctx()).length).toBe(1);
+        state.porcelain = '';
+        expect(rule().check(ctx()).length, 'clean and dirty must be judged alike').toBe(1);
     });
 
     it('does not spawn git on this path either (.git/HEAD fast path)', () => {
