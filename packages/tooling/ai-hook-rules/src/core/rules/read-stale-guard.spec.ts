@@ -252,7 +252,8 @@ describe('read-stale-guard — fail-open escape valves', () => {
 
 // ---- state B: an already-merged feature branch ---------------------------------------------------
 // Same damage as a stale main (the AI reads a PRE-MERGE snapshot), so the same tool gets blocked.
-// The one deliberate difference from state A is the dirty tree: here it still blocks.
+// State A and state B are now judged alike on a dirty tree — both block, because both cure with a
+// fresh branch that carries uncommitted work along.
 // On a feature branch, cache for THAT branch, PR merged. `main`-only axes (ancestorRc, localMain)
 // are irrelevant on this path.
 function mergedStatus(over: Partial<MainSyncStatus> = {}): MainSyncStatus {
@@ -302,10 +303,6 @@ describe('read-stale-guard — merged feature branch', () => {
         expect(message).toContain('merged-branch-bash-guard');
     });
 
-    // Same escape valve as state A, for the same reason: uncommitted work on a merged branch exists
-    // NOWHERE else, and rescuing it means reading the files it touches. The cure usually carries the
-    // changes across — but when it does not, a blocked read is an agent that cannot see what it is
-    // about to lose. feature-branch-guard still blocks the EDITS, so the state is surfaced anyway.
     /*
      * The merged-branch dirty valve is closed too, and this one never had an argument behind it: row
      * 8's cure is `git fetch origin main && git checkout -b <new> origin/main`, which carries

@@ -200,10 +200,10 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed',
             'not-a-content-read (cure/build/metadata)'),
         new L2UseCase(7,
-            '`git stash` to clear a dirty tree so the prescribed `git pull` can fast-forward',
-            'on a stale `main` with local modifications',
-            'ALLOW: the cure for the row that blocked you must itself never be blocked',
-            'None needed — then run the pull and `git stash pop`',
+            '`git stash` when `git checkout -b <new> origin/main` refuses because `origin/main` touched the same files you edited',
+            'on a stale `main` or a merged branch, dirty tree, with an overlapping upstream change',
+            'ALLOW: the cure for the row that blocked you must itself never be blocked — and this is the residual step that makes rows 6 and 8 safe to block on a dirty tree',
+            'None needed — then re-run the checkout and `git stash pop`',
             'not-a-content-read (cure/build/metadata)'),
         new L2UseCase(8,
             '`pnpm wp-start-upsert-pr` on a branch whose fork point is broken',
@@ -244,7 +244,7 @@ export const L2_ROWS: readonly L2Row[] = [
             '`git checkout -b <new> origin/main`',
             'on-main'),
     ]),
-    new L2Row(L2_FAIL_OPEN_ROW, ['B', 'R', 'E'], '**the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, the forge unreachable, or a dirty tree whose cure is not a clean fast-forward', L2_FAIL_OPEN, '— (nothing to fix; the refresher populates the cache for the next call)', [
+    new L2Row(L2_FAIL_OPEN_ROW, ['B', 'R', 'E'], '**the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, or the forge unreachable', L2_FAIL_OPEN, '— (nothing to fix; the refresher populates the cache for the next call)', [
         new L2UseCase(11,
             'The very first tool call of a session is allowed even on a badly stale `main`',
             'no cache — the refresher is fire-and-forget and populates it for the NEXT call',

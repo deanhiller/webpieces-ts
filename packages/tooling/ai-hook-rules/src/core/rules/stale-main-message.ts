@@ -1,8 +1,7 @@
 import { atRoot } from '@webpieces/rules-config';
 
 /**
- * The "you are on a stale main" text, shared by the TWO guards that detect the state from the same
- * cached signal (`MainSyncStatus.localMain` vs `originMain`):
+ * The "you are on a stale main" text. ONE consumer today:
  *
  *   - read-stale-guard        blocks the Read tool     → {@link StaleMainMessage.forReads}
  *
@@ -14,10 +13,12 @@ import { atRoot } from '@webpieces/rules-config';
  * One source of truth on purpose (same reason as MergedBranchMessage): the cure is an instruction the
  * AI follows literally, so two drifting copies mean two behaviours for one repo state.
  *
- * The cure is `--ff-only` deliberately. A plain `git pull` on a stale main can start a MERGE, which
- * is the one thing redirect-how-to-merge-main exists to keep an AI away from; `--ff-only` either
- * fast-forwards (the case here, since the block only fires when the tree is clean and behind) or
- * fails loudly without touching anything.
+ * Cure 1 is `--ff-only` deliberately. A plain `git pull` on a stale main can start a MERGE, which is
+ * the one thing redirect-how-to-merge-main exists to keep an AI away from; `--ff-only` either
+ * fast-forwards or fails loudly without touching anything. It used to be the ONLY cure printed, on the
+ * strength of "the block only fires when the tree is clean and behind" — which stopped being true when
+ * the dirty valve was deleted, and was the reason that valve existed. Cure 2 (`git checkout -b`) is
+ * what makes the message correct on a dirty tree, so both are printed and each is labelled.
  */
 export class StaleMainMessage {
     /**
