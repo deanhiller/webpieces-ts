@@ -135,12 +135,14 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
-        // Escape valve 1 — a dirty tree means the pull is not a clean fast-forward; do not trap
-        // the agent away from the files it needs to resolve it.
-        if (this.isDirty(ctx.workspaceRoot)) {
-            return this.failOpen(ctx, branch, 'dirty-tree-on-main', cache);
-        }
-
+        // NO DIRTY VALVE. It used to fail open here, on the argument that the prescribed `git pull` is
+        // not a clean fast-forward on a dirty tree. That argument was about the MESSAGE, not the row:
+        // row 6's cure cell has always offered `git checkout -b <new> origin/main` as an alternative,
+        // and THAT works dirty — it carries uncommitted changes onto the new branch and lands you on
+        // current code, which is the whole point. The message now leads with it when the tree is dirty
+        // (StaleMainMessage.forReads), so the cure an agent reads is one it can actually run.
+        // Residual, same as row 8: if origin/main touched the files you edited, git refuses the switch
+        // — `git stash` is on the skip list and clears it. Two steps worst case, never a dead end.
         return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
     }
 
@@ -179,10 +181,10 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
                 ? this.allow(ctx, branch, 'clean-feature-branch', cache)
                 : this.failOpen(ctx, branch, 'no-forge', cache);
         }
-        if (this.isDirty(ctx.workspaceRoot)) {
-            return this.failOpen(ctx, branch, 'dirty-merged-branch', cache);
-        }
-
+        // NO DIRTY VALVE — and this one never had an argument behind it at all. Row 8's cure is
+        // `git fetch origin main && git checkout -b <new> origin/main`, which carries uncommitted work
+        // with you, so a dirty tree traps nobody. The valve was code drift from the documented design;
+        // read-stale-guard's own class comment said so while the code did the opposite.
         const pr = status.mergedPr !== '' ? status.mergedPr : '?';
         return this.block(
             ctx,
@@ -221,22 +223,6 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         return true; // unknown/failed → treat as "contained" so the guard allows
     }
 
-    private isDirty(workspaceRoot: string): boolean {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const out = execSync('git status --porcelain', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            return out.trim().length > 0;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            // Cannot tell → assume dirty, which is the fail-OPEN direction for this guard.
-            return true;
-        }
-    }
 
     private isConfigFile(relativePath: string): boolean {
         return relativePath === 'webpieces.config.json';

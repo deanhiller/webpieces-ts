@@ -257,12 +257,6 @@ export const L2_ROWS: readonly L2Row[] = [
             'ALLOW (fail-open) logged as `no-forge` — distinct from "asked, and it is not merged", which used to look identical in the trail',
             'None — restore network/`gh auth` to re-arm the merged-branch policy',
             'no-forge'),
-        new L2UseCase(13,
-            'A stale-`main` read is allowed because the tree is dirty',
-            'on `main`, behind `origin/main`, with local modifications',
-            'ALLOW (fail-open): the prescribed `git pull` is not a clean fast-forward on a dirty tree',
-            '`git stash` → `git pull origin main` → `git stash pop`',
-            'dirty-tree-on-main'),
         new L2UseCase(14,
             'Mid-rebase, every guard abstains',
             'detached HEAD — there is no branch name to judge',
@@ -271,6 +265,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'branch-undeterminable'),
     ]),
     new L2Row(6, ['R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`git pull origin main`, or `git checkout -b <new> origin/main`', [
+        new L2UseCase(13,
+            'The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits',
+            'on `main`, behind `origin/main`, dirty tree',
+            'BLOCK. This used to fail open, on the argument that the prescribed `git pull` is not a clean fast-forward when the tree is dirty. That was true of the MESSAGE, not the row: the cure cell always offered a second form, and it works dirty',
+            '`git checkout -b <new> origin/main` — uncommitted changes come with you onto the new branch. If git refuses because `origin/main` touched the same files, `git stash` first (never blocked), then retry, then `git stash pop`',
+            'on-stale-main'),
         new L2UseCase(15,
             'The Read tool refuses a file that exists, on a `main` 18 commits behind',
             'on `main`, behind `origin/main`, clean tree',
@@ -292,6 +292,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'branch whose PR is merged — `merged` is monotonic, so the cached flag is trusted with no TTL',
             'BLOCK across all three tools',
             '`git fetch origin main && git checkout -b <new> origin/main`',
+            'already-merged PR#'),
+        new L2UseCase(26,
+            'You have uncommitted edits on a branch whose PR just merged',
+            'merged branch, dirty tree',
+            'BLOCK. This used to fail open too, and that valve never had an argument behind it — row 8\'s cure carries uncommitted work onto the fresh branch, so nothing was ever trapped. It was drift from the documented design, which `read-stale-guard`\'s own class comment still described correctly',
+            '`git fetch origin main && git checkout -b <new> origin/main` — your edits come with you',
             'already-merged PR#'),
         new L2UseCase(19,
             'A shell-only session sails through on a merged branch',
@@ -379,8 +385,8 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     'no-sync-cache': L2_FAIL_OPEN_ROW,
     'stale-cross-branch-cache': L2_FAIL_OPEN_ROW,
     'origin-main-unknown': L2_FAIL_OPEN_ROW,
-    'dirty-tree-on-main': L2_FAIL_OPEN_ROW,
-    'dirty-merged-branch': L2_FAIL_OPEN_ROW,
+    // `dirty-tree-on-main` and `dirty-merged-branch` used to live here. Both valves are deleted: rows
+    // 6 and 8 now block on a dirty tree, because each row's cure carries uncommitted work with you.
     'no-forge': L2_FAIL_OPEN_ROW,
     // The config-edit bypass logged by the hook adapter before any guard runs — row 1, same universal
     // cure as the config READ above.
@@ -434,10 +440,15 @@ export class L2NotDone {
  * of these, so the trail never claims the strict row fired.
  */
 export const NOT_DONE: readonly L2NotDone[] = [
-    new L2NotDone(8,
-        'Row 8 blocks reads on a merged branch even when the tree is DIRTY. The code opens a dirty valve and fails open (`dirty-merged-branch`, logged at row 11).',
-        'The row is the ORIGINAL documented design — `git checkout -b <new> origin/main` carries uncommitted changes onto the fresh branch, so nothing is trapped — and `read-stale-guard`\'s own class comment still states it. The code drifted, and closing the valve is a behaviour change that belongs in its own PR with its own evidence, not in a config collapse.'),
-    new L2NotDone(6,
-        'Row 6 blocks reads on a stale `main` even when the tree is DIRTY. The code opens a dirty valve (`dirty-tree-on-main`, logged at row 11).',
-        'This is the one place the dirty argument has teeth: the cure is `git pull`, which genuinely is not a clean fast-forward on a dirty tree. `git stash` is on the skip list and clears it, so the strict form is reachable — but it is the same behaviour change, and the same separate PR.'),
+    // EMPTY, and that is the goal state: every row in the table is a row the guards actually honour.
+    //
+    // It held three entries. Row 5's `B` half shipped (on `main` is now judged from the branch alone,
+    // above the cache divider). Rows 6 and 8 held DIRTY-TREE valves, and both are now closed — each of
+    // those rows cures with `git checkout -b <new> origin/main`, which carries uncommitted changes onto
+    // the new branch, so a dirty tree never trapped anybody. The row 6 entry claimed the dirty argument
+    // "has teeth" there because its cure is `git pull`; that was a fact about the MESSAGE, which printed
+    // only the pull, and the fix was to print both cures rather than to suppress the block.
+    //
+    // Keep this array. An empty "Not done" is a claim worth making explicitly — the doc says so in as
+    // many words — and the next divergence between a row and its code belongs here, not in prose.
 ];
