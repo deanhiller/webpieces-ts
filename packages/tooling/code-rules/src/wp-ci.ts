@@ -13,9 +13,12 @@
  *
  * Repos reference this as a bin (`"webpieces:ci": "wp-ci"`) so the logic is versioned in
  * the npm package instead of copy-pasted into each repo's package.json (which drifts).
+ *
+ * Every nx step goes through NxStepRunner, which spawns it into its own process group and refuses
+ * to return until that group has drained — a step whose workers outlive it holds the CI step's
+ * stdout open and hangs the job forever with all work already green. See wp-ci-survivors.ts.
  */
 
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -25,6 +28,17 @@ import { loadAndValidate, InformAiError, RuleFailError, toError, RepoRootFinder,
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
 import { CONFIG_BINDINGS } from './code-rules-config-table';
+import { NxStepRunner } from './wp-ci-nx-runner';
+import {
+    GracePeriodResolver,
+    ProcessGroupKiller,
+    ProcessGroupScanner,
+    SurvivorReporter,
+    SurvivorWatchdog,
+} from './wp-ci-survivors';
+
+/** How often the watchdog re-runs `ps` while waiting for a finished step's process group to drain. */
+const SURVIVOR_POLL_INTERVAL_MILLIS = 1000;
 
 const NX_PLUGIN_NAME = '@webpieces/nx-webpieces-rules';
 
@@ -65,17 +79,6 @@ function isPluginRegistered(nxJsonPath: string): boolean {
         const error = toError(err);
         throw new InformAiError(`nx.json has invalid JSON — fix the file, then retry.\nParse error: ${error.message}\nFile: ${nxJsonPath}`);
     }
-}
-
-function nxBin(root: string): string {
-    const local = path.join(root, 'node_modules', '.bin', 'nx');
-    return fs.existsSync(local) ? local : 'nx';
-}
-
-function runNx(root: string, args: string[]): number {
-    const result = spawnSync(nxBin(root), args, { stdio: 'inherit', cwd: root });
-    if (typeof result.status === 'number') return result.status;
-    return 1;
 }
 
 async function runStandalone(cwd: string): Promise<number> {
@@ -128,15 +131,24 @@ async function main(): Promise<void> {
             process.exit(1);
         }
 
+        const gracePeriod = new GracePeriodResolver().resolve(process.env);
+        const runner = new NxStepRunner(
+            root,
+            gracePeriod,
+            new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS),
+            new SurvivorReporter(),
+            new ProcessGroupKiller(),
+        );
+
         // Run the architecture + code validators first (this also runs the wiring guard,
         // which fails loudly if nx.json no longer wires validators into the build).
         if (fs.existsSync(path.join(root, 'architecture'))) {
-            const validateCode = runNx(root, ['run', 'architecture:validate-complete']);
+            const validateCode = await runner.run(['run', 'architecture:validate-complete'], 'architecture:validate-complete');
             if (validateCode !== 0) process.exit(validateCode);
         }
 
         // Then the Gradle-style ci composite (lint + build + test) across affected projects.
-        const ciCode = runNx(root, ['affected', '--target=ci', ...passthrough]);
+        const ciCode = await runner.run(['affected', '--target=ci', ...passthrough], 'nx affected --target=ci');
         process.exit(ciCode);
     } catch (err: unknown) {
         const error = toError(err);
