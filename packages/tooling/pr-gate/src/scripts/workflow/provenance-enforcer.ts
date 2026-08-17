@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     prDirFor, reviewJsonPath, RequiredChecklist, PrGateConfig, ReviewJsonService,
-    SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_SKIPPED,
+    SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ProvenanceResult, ReviewerEvidence, ReviewerContext,
     ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
     ReviewerInstructionsService, InformAiError,
@@ -71,7 +71,6 @@ export class ProvenanceEnforcer {
     // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
     // eslint-disable-next-line @typescript-eslint/max-params
     enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
-        const errors: string[] = [];
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
         const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
         const context = this.contextFor(repoRoot, required, branch);
@@ -85,7 +84,7 @@ export class ProvenanceEnforcer {
         // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
         // that only ever appeared on success could not answer what the reviewers did the time it was refused.
         this.writeProvenanceRecord(repoRoot, required, result, report.evidence);
-        this.refuse(result.missing, blind, context);
+        this.refuse(result, blind, context);
         return report;
     }
 
@@ -100,11 +99,18 @@ export class ProvenanceEnforcer {
      * attribution failed — so telling an agent to "spawn each as its OWN subagent" makes it overwrite seven
      * verdicts with runs that are stamped identically and refused identically. That is a loop that destroys
      * evidence on every iteration, and it is what the previous single message guaranteed.
+     *
+     * The BLOCK decision is the STATUS, not the length of `missing`. Those agree today — but a
+     * `PROVENANCE_MISSING` that arrived carrying no names would otherwise be a silent pass: reported
+     * unverified and refused by nothing. Refusing on the status makes the unverified verdict block whatever
+     * else is true, and `detail` carries the wording when there are no names to word it from.
      */
-    private refuse(missing: readonly string[], blind: readonly string[], context: ReviewerContext): void {
+    private refuse(result: ProvenanceResult, blind: readonly string[], context: ReviewerContext): void {
+        const missing = result.missing;
         const neverRan = missing.filter((t: string): boolean => !fs.existsSync(context.verdictPaths[t] ?? ''));
         const unattributed = missing.filter((t: string): boolean => fs.existsSync(context.verdictPaths[t] ?? ''));
         const paragraphs: string[] = [];
+        if (result.status === PROVENANCE_MISSING && missing.length === 0) paragraphs.push(result.detail);
         if (neverRan.length > 0) {
             paragraphs.push(
                 `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${neverRan.join(', ')}`);
@@ -115,8 +121,9 @@ export class ProvenanceEnforcer {
         }
         if (paragraphs.length === 0) return;
         // The UNION, because one checklist can be both unattributed and blind, and counting the paragraphs
-        // is what printed "1 checklist(s) require …" above a list of seven names.
-        const atFault = new Set([...missing, ...blind]).size;
+        // is what printed "1 checklist(s) require …" above a list of seven names. Floored at 1 so the
+        // nameless-MISSING case above cannot announce "0 checklist(s) failed" and then refuse.
+        const atFault = Math.max(new Set([...missing, ...blind]).size, 1);
         throw new InformAiError(
             `${atFault} checklist(s) failed the reviewer-provenance check — fix, then re-run pnpm wp-finish-upsert-pr:\n\n` +
             paragraphs.map((e: string): string => `  • ${e}`).join('\n\n'));

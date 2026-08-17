@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
     PrGateConfig, RequiredChecklist, ReviewJsonService, ReviewProvenanceService,
-    ReviewerInstructionsService, SubagentProvenanceService, toError,
+    ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING,
 } from '@webpieces/rules-config';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -207,5 +207,46 @@ describe('ProvenanceEnforcer refusal wording', () => {
         expect(message).toMatch(/^2 checklist\(s\)/);
         expect(message).toMatch(/did not run on this branch \(spawn each as its OWN subagent[^)]*\): migrations-reviewer/);
         expect(message).toMatch(/cannot attribute to them: envvars-reviewer/);
+    });
+});
+
+/**
+ * A verdict that says UNVERIFIED must REFUSE, whatever else is true.
+ *
+ * Review finding: `enforce` refused on `result.missing`, so a `PROVENANCE_MISSING` carrying no names
+ * would have been a silent pass — reported unverified and blocked by nothing. Today's one construction
+ * site always passes the list, so this was a latent type hole rather than a live bug; `refuse` now keys
+ * on the STATUS and falls back to `detail`, which is what this pins.
+ */
+describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name list', () => {
+    it('throws for a MISSING verdict that carries no names, using its detail as the reason', () => {
+        const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
+        const provenance = new SubagentProvenanceService();
+        provenance.verifyDistinct = (): ProvenanceResult => namelessMissing;
+        const reviewJsonService = new ReviewJsonService();
+        const enforcer = new ProvenanceEnforcer(
+            new FixedBranchName(), provenance, new ReviewProvenanceService(),
+            new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
+        );
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+
+        expect(() => enforcer.enforce(
+            [new RequiredChecklist('envvars', 'envvars-reviewer', '', [])], 'dean/feat', repoRoot, new PrGateConfig()))
+            .toThrow(/transcripts unreadable this round/);
+    });
+
+    // …and never announces "0 checklist(s) failed" on the way out.
+    it('never reports a fault count of zero while refusing', () => {
+        const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
+        const provenance = new SubagentProvenanceService();
+        provenance.verifyDistinct = (): ProvenanceResult => namelessMissing;
+        const reviewJsonService = new ReviewJsonService();
+        const enforcer = new ProvenanceEnforcer(
+            new FixedBranchName(), provenance, new ReviewProvenanceService(),
+            new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
+        );
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+
+        expect(() => enforcer.enforce([], 'dean/feat', repoRoot, new PrGateConfig())).toThrow(/^1 checklist\(s\) failed/);
     });
 });

@@ -27,8 +27,18 @@ export class ProvenanceResult {
      */
     missing: string[];
 
+    /**
+     * `agentIds` and `missing` are REQUIRED, with no defaults.
+     *
+     * A default on `missing` is what made the dangerous state cheap to reach: the caller BLOCKS on this
+     * list, so a `PROVENANCE_MISSING` built without it would report unverified and refuse NOTHING — a
+     * silent pass, one forgotten argument away. Required parameters make the omission a compile error at
+     * every construction site, present and future. The remaining `missing: []` on a blocking status is
+     * caught by the caller, which refuses on the STATUS and falls back to `detail`; see
+     * ProvenanceEnforcer.refuse.
+     */
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(status: string, detail: string, agentIds: Record<string, string> = {}, missing: string[] = []) {
+    constructor(status: string, detail: string, agentIds: Record<string, string>, missing: string[]) {
         this.status = status;
         this.detail = detail;
         this.agentIds = agentIds;
@@ -189,7 +199,7 @@ export class SubagentProvenanceService {
     // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
     // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
     verifyDistinct(expectedAgentTypes: readonly string[], context: ReviewerContext): ProvenanceResult {
-        if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required');
+        if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required', {}, []);
         if (!this.inClaudeSession()) return this.skipped('reviewer subagents');
         const dirs = this.allSubagentsDirs();
         const missing: string[] = [];
@@ -204,7 +214,7 @@ export class SubagentProvenanceService {
             }
         }
         return missing.length === 0
-            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`, credited)
+            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`, credited, [])
             : new ProvenanceResult(PROVENANCE_MISSING,
                 `${missing.length} reviewer subagent(s) could not be attributed to this branch: ${missing.join(', ')}`,
                 credited, missing);
@@ -227,7 +237,7 @@ export class SubagentProvenanceService {
      *   3. verifyDistinct is the INTEGRITY signal and rightly blocks; this is a QUALITY signal. Conflating
      *      them would let a transcript-parsing quirk refuse a PR that a real reviewer really did review.
      *
-     * Returns [] outside a Claude Code session, matching verify/verifyDistinct's SKIP behavior.
+     * Returns [] outside a Claude Code session, matching verifyDistinct's SKIP behavior.
      */
     evidenceFor(context: ReviewerContext, agentIds: Record<string, string>): ReviewerEvidence[] {
         if (!this.inClaudeSession()) return [];
@@ -356,7 +366,8 @@ export class SubagentProvenanceService {
 
     private skipped(what: string): ProvenanceResult {
         return new ProvenanceResult(PROVENANCE_SKIPPED,
-            `CLAUDE_CODE_SESSION_ID not set — cannot verify ${what} ran (plain terminal / CI). Skipping the provenance check.`);
+            `CLAUDE_CODE_SESSION_ID not set — cannot verify ${what} ran (plain terminal / CI). Skipping the provenance check.`,
+            {}, []);
     }
 
     // The agentId of a matching subagent run for `agentType` on `branch`, searched across ALL sessions'
