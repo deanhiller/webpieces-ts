@@ -1,3 +1,22 @@
+> # ✅ RESOLVED — fixed **2026-08-17** on branch `dean/reviewer-credit-by-read-evidence`. Kept as a forensic record only.
+>
+> **What shipped, against the "Suggested fix" below:** the read-evidence channel, plus a stronger one the
+> report did not propose — the reviewer's own VERDICT PATH. `ReviewerContext.verdictPaths` gives
+> `.webpieces/pr-review/<slug>/review-<id>.json`, which is worktree-absolute, per-branch AND per-checklist,
+> so it proves more than `diffDir` (which proves only the branch). Either channel credits;
+> `isSidechain`/`spawnDepth`/the one-run-one-checklist exclusion are untouched, and the `branchOfCwd` gate
+> was NOT loosened, as the report insisted.
+>
+> **Deviation worth knowing:** credit does not require `readDiff && readDoc`. A checklist doc is not
+> branch-specific, so requiring it adds no attribution strength — only a new unrecoverable refusal for a
+> reviewer handed its doc another way, which is the same defect class this bug is. `readDoc` is still
+> recorded; `wroteVerdict` was added beside it in `provenance.json`.
+>
+> Both "Notes for whoever fixes it" items landed: stage ③ now splits "never ran" (spawn one) from "ran but
+> unattributable" (do NOT re-spawn, here is the cwd remedy), and the count is the union of checklists at
+> fault rather than the paragraph count that printed `1 checklist(s)` above seven names. Regression tests
+> (a) and (b) are asserted separately, as asked.
+
 # BUG: a reviewer spawned from the primary clone can never be credited for a worktree branch — `sidechainOnBranch`'s cwd fallback is gated off exactly where it is needed
 
 **Package:** `@webpieces/rules-config` (enforced by `@webpieces/pr-gate`)
