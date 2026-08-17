@@ -4,10 +4,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    SubagentProvenanceService, EvidenceRequest, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    SubagentProvenanceService, ReviewerContext, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
 } from './subagent-provenance';
 
 const svc = new SubagentProvenanceService();
+
+// The branch under review, with no materialized diff and no verdict paths — i.e. the ONLY credit
+// channels available are the two harness-stamped fields. Cases that exercise the third channel build
+// their own context.
+function ctx(branch: string): ReviewerContext {
+    return new ReviewerContext(branch);
+}
 const savedHome = process.env['HOME'];
 const savedSession = process.env['CLAUDE_CODE_SESSION_ID'];
 
@@ -29,44 +36,44 @@ function fakeHarness(sessionId: string, agentType: string, branch: string, spawn
 describe('SubagentProvenanceService', () => {
     it('skips (passes with a warning) when CLAUDE_CODE_SESSION_ID is unset', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        const res = svc.verify('checklist-reviewer', 'dean/feat');
+        const res = svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat'));
         expect(res.status).toBe(PROVENANCE_SKIPPED);
     });
 
     it('verifies OK when a matching subagent ran on this branch', () => {
         process.env['HOME'] = fakeHarness('sess-1', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1';
-        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('tolerates a leftover wpN branch-rename suffix', () => {
         process.env['HOME'] = fakeHarness('sess-2', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-2';
-        expect(svc.verify('checklist-reviewer', 'dean/feat-wp3').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat-wp3')).status).toBe(PROVENANCE_OK);
     });
 
     it('is MISSING when no subagent of that agentType ran', () => {
         process.env['HOME'] = fakeHarness('sess-3', 'some-other-agent', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-3';
-        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when spawnDepth < 1 (the main loop, not a subagent)', () => {
         process.env['HOME'] = fakeHarness('sess-4', 'checklist-reviewer', 'dean/feat', 0);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-4';
-        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when isSidechain is not true', () => {
         process.env['HOME'] = fakeHarness('sess-5', 'checklist-reviewer', 'dean/feat', 1, false);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-5';
-        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when the session has no subagents dir at all', () => {
         process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-empty-'));
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-none';
-        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 });
 
@@ -86,32 +93,32 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
     it('OK when every expected subagent ran as a distinct run', () => {
         process.env['HOME'] = fakeHarnessMulti('sess-d1', ['envvars-reviewer', 'migrations-reviewer'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d1';
-        expect(svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('MISSING (naming the culprit) when one expected subagent never ran', () => {
         process.env['HOME'] = fakeHarnessMulti('sess-d2', ['envvars-reviewer'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d2';
-        const res = svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], 'dean/feat');
+        const res = svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat'));
         expect(res.status).toBe(PROVENANCE_MISSING);
         expect(res.detail).toMatch(/migrations-reviewer/);
     });
 
     it('OK immediately for an empty expected set', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        expect(svc.verifyDistinct([], 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct([], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('is branch-scoped: a run recorded under a DIFFERENT session still counts (review once per branch)', () => {
         // The reviewer ran in session "old-session"; we are now in a NEW session "new-session".
         process.env['HOME'] = fakeHarnessMulti('old-session', ['checklist-migrations'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'new-session';
-        expect(svc.verifyDistinct(['checklist-migrations'], 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct(['checklist-migrations'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('SKIPPED without a session id', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        expect(svc.verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_SKIPPED);
+        expect(svc.verifyDistinct(['r'], ctx('dean/feat')).status).toBe(PROVENANCE_SKIPPED);
     });
 });
 
@@ -173,7 +180,7 @@ function harnessWithCwd(sessionId: string, agentType: string, gitBranch: string,
 function statusFor(sessionId: string, agentType: string, gitBranch: string, cwd: string, target: string): string {
     process.env['HOME'] = harnessWithCwd(sessionId, agentType, gitBranch, cwd);
     process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
-    return new SubagentProvenanceService().verifyDistinct([agentType], target).status;
+    return new SubagentProvenanceService().verifyDistinct([agentType], ctx(target)).status;
 }
 
 describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch contradicts it', () => {
@@ -222,7 +229,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify({ isSidechain: true, gitBranch: 'wrong' }) + '\n');
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-c6';
-        expect(new SubagentProvenanceService().verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(new SubagentProvenanceService().verifyDistinct(['r'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('does not consult git when gitBranch already agrees — even a primary-clone cwd still short-circuits', () => {
@@ -255,8 +262,8 @@ describe('SubagentProvenanceService.evidenceFor', () => {
     it('carries out the transcript path it read the counters from — the only place it is knowable', () => {
         process.env['HOME'] = fakeHarness('sess-e1', 'envvars-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e1';
-        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
-        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds));
+        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds);
         expect(evidence).toHaveLength(1);
         expect(evidence[0]?.transcriptPath).toMatch(/subagents[/\\]agent-abc\.jsonl$/);
     });
@@ -266,8 +273,8 @@ describe('SubagentProvenanceService.evidenceFor', () => {
         fs.rmSync(path.join(home, '.claude', 'projects', '-Some-Slug', 'sess-e2', 'subagents', 'agent-abc.jsonl'));
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e2';
-        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
-        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds));
+        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds);
         expect(evidence[0]?.transcriptPath).toBe('');
     });
 });
@@ -283,8 +290,8 @@ function modelsFor(sessionId: string, records: readonly object[]): string[] {
     appendRecords(home, sessionId, records);
     process.env['HOME'] = home;
     process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
-    const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
-    return svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds))[0]?.models ?? [];
+    const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
+    return svc.evidenceFor(ctx('dean/feat'), result.agentIds)[0]?.models ?? [];
 }
 
 /**
@@ -336,9 +343,136 @@ describe('SubagentProvenanceService.evidenceFor — which model actually reviewe
         ]);
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-m5';
-        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
-        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds))[0];
+        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds)[0];
         expect(evidence?.models).toEqual(['claude-opus-5']);
         expect(evidence?.toolCallCount).toBe(1);
+    });
+});
+
+/**
+ * THE PRIMARY-CLONE DEADLOCK.
+ *
+ * The harness stamps record 0 from the SPAWNING session's cwd — the Agent tool has no cwd parameter, so a
+ * subagent inherits its parent's. A session rooted in the primary clone that spawns a reviewer for a
+ * WORKTREE branch therefore gets `gitBranch` = the clone's branch and `cwd` = the clone, and NO respawn
+ * can produce anything else. Measured live: seven reviewers ran, wrote seven verdicts, and `provenance.json`
+ * recorded `reviewers: []`.
+ *
+ * Neither harness-stamped field may be loosened to fix it (a primary clone moves; crediting by "what is
+ * checked out now" credits stale reviewers by construction). So credit turns on what the reviewer TOUCHED:
+ * paths that are worktree-absolute and per-branch, which a reviewer of another branch cannot have.
+ */
+// One reviewer stamped with the PRIMARY CLONE's cwd and a non-matching gitBranch — the unfixable stamp —
+// whose transcript names `touched` in a tool input.
+function clonesStampWithTouch(sessionId: string, agentType: string, touched: string): string {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-touch-'));
+    const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType, spawnDepth: 1 }));
+    fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'),
+        JSON.stringify({ isSidechain: true, gitBranch: 'main', cwd: clone() }) + '\n' +
+        JSON.stringify({ message: { model: 'claude-opus-5', content: [{ type: 'tool_use', input: { file_path: touched } }] } }) + '\n');
+    return home;
+}
+
+function statusForTouch(sessionId: string, touched: string, context: ReviewerContext): string {
+    process.env['HOME'] = clonesStampWithTouch(sessionId, 'checklist-reviewer', touched);
+    process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
+    return new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], context).status;
+}
+
+const WT = '/Users/x/repo-one-2546/.webpieces/pr-review/feature-ONE-2546';
+const DIFF = `${WT}/diff`;
+const VERDICT = `${WT}/review-checklist-reviewer.json`;
+
+// A context for a branch materialized at WT, i.e. what wp-review-upsert-pr leaves behind.
+function worktreeContext(branch: string): ReviewerContext {
+    return new ReviewerContext(branch, DIFF, {}, { 'checklist-reviewer': VERDICT });
+}
+
+describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLONE is credited for what it touched', () => {
+    it('credits it for WRITING this branch’s verdict file, which no other branch’s reviewer can name', () => {
+        expect(statusForTouch('sess-t1', VERDICT, worktreeContext('feature/ONE-2546'))).toBe(PROVENANCE_OK);
+    });
+
+    // A `cat > <path>` heredoc names the path just as a Write does. The signal is that the path was NAMED,
+    // not which tool named it — inputs are matched as JSON-stringified substrings for exactly this reason.
+    it('credits a verdict written through Bash, not only through the Write tool', () => {
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-bash-'));
+        const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-t2', 'subagents');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'checklist-reviewer', spawnDepth: 1 }));
+        fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'),
+            JSON.stringify({ isSidechain: true, gitBranch: 'main', cwd: clone() }) + '\n' +
+            JSON.stringify({ message: { content: [{ type: 'tool_use', input: { command: `cat > ${VERDICT} <<'JSON'` } }] } }) + '\n');
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t2';
+        expect(new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
+            .toBe(PROVENANCE_OK);
+    });
+
+    // The second channel: a reviewer whose verdict was relayed by its parent still demonstrably read THIS
+    // branch's extracted diff. Refusing that would re-open a narrower version of the same deadlock.
+    it('credits it for READING this branch’s materialized diff', () => {
+        expect(statusForTouch('sess-t3', `${DIFF}/ALL.diff`, worktreeContext('feature/ONE-2546'))).toBe(PROVENANCE_OK);
+    });
+
+    it('records wroteVerdict on the evidence row, so the audit answers who wrote the verdict', () => {
+        process.env['HOME'] = clonesStampWithTouch('sess-t4', 'checklist-reviewer', VERDICT);
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t4';
+        const service = new SubagentProvenanceService();
+        const context = worktreeContext('feature/ONE-2546');
+        const result = service.verifyDistinct(['checklist-reviewer'], context);
+        const evidence = service.evidenceFor(context, result.agentIds)[0];
+        expect(evidence?.wroteVerdict).toBe(true);
+        expect(evidence?.readDiff).toBe(false);
+    });
+
+    // ─── The channel must not become a way to credit ANY old reviewer ────────────────────────────────
+    it('does NOT credit a reviewer that touched a DIFFERENT branch’s materialization', () => {
+        const other = '/Users/x/repo-one-9999/.webpieces/pr-review/feature-ONE-9999/review-checklist-reviewer.json';
+        expect(statusForTouch('sess-t5', other, worktreeContext('feature/ONE-2546'))).toBe(PROVENANCE_MISSING);
+    });
+
+    // Nothing was materialized and no verdict path is known, so there is nothing branch-specific to match
+    // on — the stamp-only rules decide, exactly as before this channel existed.
+    it('does NOT credit on an empty context, which would match every reviewer ever run', () => {
+        expect(statusForTouch('sess-t6', VERDICT, ctx('feature/ONE-2546'))).toBe(PROVENANCE_MISSING);
+    });
+
+    // Independence is unchanged: the main loop's own transcript is not a sidechain, so touching the verdict
+    // path from the coding agent still cannot self-certify.
+    it('does NOT credit the main loop even when it names the verdict path', () => {
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-main-'));
+        const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-t7', 'subagents');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'checklist-reviewer', spawnDepth: 1 }));
+        fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'),
+            JSON.stringify({ isSidechain: false, gitBranch: 'main', cwd: clone() }) + '\n' +
+            JSON.stringify({ message: { content: [{ type: 'tool_use', input: { file_path: VERDICT } }] } }) + '\n');
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t7';
+        expect(new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
+            .toBe(PROVENANCE_MISSING);
+    });
+
+    // The verdict path is per-CHECKLIST as well as per-branch, so one reviewer's verdict cannot credit a
+    // checklist it did not review.
+    it('does NOT credit checklist B for a reviewer that named checklist A’s verdict', () => {
+        process.env['HOME'] = clonesStampWithTouch('sess-t8', 'other-reviewer', VERDICT);
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t8';
+        const context = new ReviewerContext('feature/ONE-2546', '', {},
+            { 'other-reviewer': `${WT}/review-other-reviewer.json` });
+        expect(new SubagentProvenanceService().verifyDistinct(['other-reviewer'], context).status).toBe(PROVENANCE_MISSING);
+    });
+
+    it('names the unattributed checklists in `missing`, so the caller can word its own remedy', () => {
+        process.env['HOME'] = clonesStampWithTouch('sess-t9', 'checklist-reviewer', '/somewhere/else');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t9';
+        const res = new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546'));
+        expect(res.missing).toEqual(['checklist-reviewer']);
+        // …and no pre-worded imperative: the two failures need OPPOSITE instructions (see ProvenanceEnforcer).
+        expect(res.detail).not.toMatch(/spawn each as its OWN subagent/);
     });
 });

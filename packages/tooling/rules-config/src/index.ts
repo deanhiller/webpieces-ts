@@ -231,7 +231,7 @@ export {
 export {
     SubagentProvenanceService,
     ReviewerEvidence,
-    EvidenceRequest,
+    ReviewerContext,
     TranscriptScan,
     ProvenanceResult,
     PROVENANCE_OK,

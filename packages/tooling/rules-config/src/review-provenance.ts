@@ -56,6 +56,9 @@ export class ReviewerTranscript {
     docPath: string;
     readDiff: boolean;
     readDoc: boolean;
+    // Named its own verdict file in a tool input — the row's answer to "who wrote this verdict?", and the
+    // strongest of the two channels that can credit a reviewer whose harness-stamped cwd points elsewhere.
+    wroteVerdict: boolean;
     toolCallCount: number;
     offRepoSearches: number;
     /**
@@ -78,6 +81,7 @@ export class ReviewerTranscript {
         this.docPath = paths.docPath;
         this.readDiff = evidence.readDiff;
         this.readDoc = evidence.readDoc;
+        this.wroteVerdict = evidence.wroteVerdict;
         this.toolCallCount = evidence.toolCallCount;
         this.offRepoSearches = evidence.offRepoSearches;
         this.models = evidence.models;
