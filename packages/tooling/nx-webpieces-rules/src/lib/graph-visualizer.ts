@@ -87,7 +87,7 @@ export const CLIENT_DESIGN_LINKS_PLACEHOLDER = '__' + 'DESIGN_LINKS' + '__';
  * tarball but NOT in a source checkout. The error says that outright rather than surfacing a bare
  * ENOENT, because "the build has not run" and "the file is missing" look identical otherwise.
  */
-// webpieces-disable no-function-outside-class -- module-level resolver for the default injected into GraphVisualizer/generateRuntimeHtml; making it a class would need a container in a module both of them load eagerly
+// webpieces-disable no-function-outside-class -- module-level resolver for the default injected into GraphVisualizer/RuntimeHtmlPage; making it a class would need a container in a module both of them load eagerly
 export function readCompiledClient(name: string): string {
     const file = path.join(__dirname, name);
     if (!fs.existsSync(file)) {
