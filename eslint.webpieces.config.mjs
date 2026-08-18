@@ -27,7 +27,8 @@ export default [
             '@webpieces/no-json-property-primitive-type': 'error',
             // process.exit-outside-main is enforced by the config-driven webpieces rule
             // `no-process-exit-outside-main` (webpieces.config.json), NOT eslint — so it gets the
-            // gradual-rollout knobs (mode / ignoreModifiedUntilEpoch / disableAllowed / branch).
+            // gradual-rollout knobs (mode / turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch /
+            // disableAllowed).
         },
     },
 ];

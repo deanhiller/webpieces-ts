@@ -74,6 +74,6 @@ Export and call a **named function**; only a thin wrapper calls `main`.
 
 This is a config-driven webpieces rule (`webpieces.config.json` → `no-process-exit-outside-main`) with
 the standard knobs: `mode` (`OFF` | `NEW_AND_MODIFIED_CODE` | `NEW_AND_MODIFIED_FILES`),
-`ignoreModifiedUntilEpoch`, `ignoreRuleWhileOnBranch`, and `disableAllowed`. Start narrow
+`turnOffRuleUntilEpoch`, `turnOffRuleWhileOnBranch`, and `disableAllowed`. Start narrow
 (`NEW_AND_MODIFIED_FILES`, `disableAllowed: true`) and fix the codebase slowly — only new/modified code
 is flagged.

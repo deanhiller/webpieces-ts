@@ -15,7 +15,7 @@
             "description": "Whether // webpieces-disable no-implicit-any comments work. When false, no escape hatch.",
             "default": true
         },
-        "ignoreModifiedUntilEpoch": {
+        "turnOffRuleUntilEpoch": {
             "type": "number",
             "description": "Epoch seconds. Until this time, skip validation entirely. When expired, normal mode resumes. Omit when not needed."
         }

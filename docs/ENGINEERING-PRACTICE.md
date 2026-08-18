@@ -159,7 +159,7 @@ is the piece most orgs never build. Every rule carries three dials:
 "no-any-unknown": {
     "mode": "NEW_AND_MODIFIED_CODE",     // WHAT the rule looks at
     "disableAllowed": true,              // MAY an engineer opt out, with a written reason?
-    "ignoreModifiedUntilEpoch": 1783409251  // WHEN does it start biting
+    "turnOffRuleUntilEpoch": 1783409251  // WHEN does it start biting
 }
 ```
 
@@ -180,7 +180,7 @@ codebase converges on the standard at exactly the rate it is being worked on —
 which the conversion is actually cheap, because you are already in the file. Turn a rule on at
 `NEW_AND_MODIFIED_CODE` and the org's *newest* code is compliant tomorrow; the rest follows the churn.
 
-**`ignoreModifiedUntilEpoch` time-boxes a rollout.** A rule can be committed, wired, and visible while
+**`turnOffRuleUntilEpoch` time-boxes a rollout.** A rule can be committed, wired, and visible while
 still not blocking anyone until a date the org picked. It is the sanctioned way to announce a
 convention ahead of enforcing it — and unlike a "we'll turn it on later" Slack message, the date is in
 version control and it arrives by itself.
@@ -256,7 +256,7 @@ A sequence that does not produce a revolt:
    teach the org that the hook exists and is survivable.
 3. **Pick your two highest-pain code conventions** — the ones you have already lost a code review
    argument about twice. Set them to `NEW_AND_MODIFIED_CODE` with an
-   `ignoreModifiedUntilEpoch` two weeks out. Announce the date; let the machine be the one that
+   `turnOffRuleUntilEpoch` two weeks out. Announce the date; let the machine be the one that
    starts enforcing.
 4. **Set `disableAllowed: true` initially** for anything new. Watch the census. Promote to `false`
    only once the suppression count is near zero — that is your evidence the rule fits.

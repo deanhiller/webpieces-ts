@@ -9,14 +9,16 @@
  * local madge and CI runners corrupted their npx cache fetching it), this executor:
  *   - invokes the madge it bundles as a dependency (deterministic, no network),
  *   - is driven by webpieces.config.json like every other webpieces rule, so it
- *     supports an on/off `mode` and a time-boxed `ignoreModifiedUntilEpoch`.
+ *     supports an on/off `mode` and a time-boxed `turnOffRuleUntilEpoch`.
  *
  * Config (webpieces.config.json, rule key `no-file-import-cycles`):
  *   "no-file-import-cycles": {
  *       "mode": "RUN_EVERY_TIME",           // "OFF" disables the gate everywhere
- *       "ignoreModifiedUntilEpoch": 1771931925,  // epoch SECONDS; while now < epoch,
+ *       "turnOffRuleUntilEpoch": 1771931925,  // epoch SECONDS; while now < epoch,
  *                                            //   cycles are reported but the gate PASSES
  *                                            //   (warn, don't fail). After it, fails again.
+ *       "turnOffRuleWhileOnBranch": null,   // branch name; while that branch is checked out,
+ *                                            //   cycles are reported but the gate PASSES
  *       "ignoreTypeOnly": true,             // ignore `import type` re-export cycles
  *                                            //   (erased at compile time, harmless at runtime)
  *       "excludePackages": ["@db/entities"] // npm package names whose source trees madge
@@ -79,8 +81,8 @@ function loadMadge(): MadgeFn {
 
 /**
  * Decide whether the gate should still FAIL on cycles (true) or only warn
- * (false), considering the universal escape hatches: the ignoreModifiedUntilEpoch
- * grace window and ignoreRuleWhileOnBranch. Logs a one-line explanation when a
+ * (false), considering the universal escape hatches: the turnOffRuleUntilEpoch
+ * grace window and turnOffRuleWhileOnBranch. Logs a one-line explanation when a
  * hatch is active.
  */
 function isFailingActive(epoch: number | undefined, branch: string | undefined): boolean {
@@ -338,8 +340,9 @@ function reportCycles(projectName: string, cycles: string[][]): void {
     console.error('To exempt a path (generated code, a deliberate bidirectional model), add a pattern to');
     console.error(`"${RULE_NAME}".excludeRegExp in webpieces.config.json. Patterns match paths RELATIVE`);
     console.error('TO THE PROJECT, e.g. "^src/generated/" or "^src/modules/(item|category)/".');
-    console.error('To time-box a known cycle, a human can set "ignoreModifiedUntilEpoch"');
-    console.error(`(epoch seconds) on the "${RULE_NAME}" rule in webpieces.config.json.`);
+    console.error('To time-box a known cycle, a human can set "turnOffRuleUntilEpoch"');
+    console.error(`(epoch seconds) on the "${RULE_NAME}" rule in webpieces.config.json,`);
+    console.error(`or "turnOffRuleWhileOnBranch" (a branch name) to shelter one refactor branch.`);
     console.error(`To turn the gate off entirely, set "${RULE_NAME}".mode to "OFF".\n`);
 }
 
@@ -359,8 +362,11 @@ export default async function runExecutor(
     const projectConfig = context.projectsConfigurations?.projects[projectName];
     const projectRoot = projectConfig ? path.join(context.root, projectConfig.root) : context.root;
 
-    const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
-    const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
+    const epoch = rule?.options['turnOffRuleUntilEpoch'] as number | undefined;
+    // turnOffRuleWhileOnBranch is required-but-NULLABLE in the config (null = "always on"), so narrow
+    // to a branch NAME here; anything else means no branch scoping.
+    const rawBranch = rule?.options['turnOffRuleWhileOnBranch'];
+    const branch = typeof rawBranch === 'string' ? rawBranch : undefined;
     const ignoreTypeOnly = (rule?.options['ignoreTypeOnly'] as boolean | undefined) ?? false;
     const excludePackages = (rule?.options['excludePackages'] as string[] | undefined) ?? [];
     const userExcludeRegExp = (rule?.options['excludeRegExp'] as string[] | undefined) ?? [];

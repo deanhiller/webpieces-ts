@@ -18,7 +18,9 @@
  *   "validate-ts-in-src": {
  *       "mode": "NEW_AND_MODIFIED_FILES", // "OFF" disables the rule
  *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
- *       "allowedRootFiles": [...]
+ *       "allowedRootFiles": [...],
+ *       "turnOffRuleUntilEpoch": 0,       // epoch SECONDS; skip the rule until it passes
+ *       "turnOffRuleWhileOnBranch": null  // branch name; skip the rule while it is checked out
  *   }
  *
  * Usage: nx run architecture:validate-ts-in-src
@@ -36,7 +38,8 @@ export interface ValidateTsInSrcOptions {
     mode?: ValidateTsInSrcMode;
     excludePaths?: string[];
     allowedRootFiles?: string[];
-    ignoreModifiedUntilEpoch?: number;
+    turnOffRuleUntilEpoch?: number;
+    turnOffRuleWhileOnBranch?: string | null;
 }
 
 export interface ExecutorResult {
@@ -245,8 +248,11 @@ export default async function runExecutor(
     const rule = shared.rules.get('validate-ts-in-src');
 
     const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'NEW_AND_MODIFIED_FILES';
-    const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
-    const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
+    const epoch = rule?.options['turnOffRuleUntilEpoch'] as number | undefined;
+    // turnOffRuleWhileOnBranch is required-but-NULLABLE in the config (null = "always on"), so narrow
+    // to a branch NAME here; anything else means no branch scoping.
+    const rawBranch = rule?.options['turnOffRuleWhileOnBranch'];
+    const branch = typeof rawBranch === 'string' ? rawBranch : undefined;
     const effectiveMode = resolveMode(rawMode, epoch, branch);
 
     if (effectiveMode === 'OFF' || (rule && rule.isOff)) {

@@ -76,8 +76,9 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 //   turnOffRuleWhileOnBranch: null = always on; a branch name = disabled while that branch is checked out.
 //                             Required-but-nullable so its "unset" state is present-and-visible (null)
 //                             rather than omitted.
-// The earlier names `ignoreModifiedUntilEpoch` / `ignoreRuleWhileOnBranch` were RENAMED to these and are
-// no longer accepted — the validator flags them with a "renamed to X" hint (validate-config.ts).
+// The earlier spellings of these two fields were RENAMED to the names above and are no longer accepted —
+// the validator rejects them with a "renamed to X" hint. RENAMED_FIELD_ALIASES in validate-config.ts is
+// the ONE place in src/ a dead spelling may still be written (see escape-hatch-key-spelling.spec.ts).
 // ---------------------------------------------------------------------------
 export abstract class BaseRuleConfig {
     // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
@@ -582,8 +583,8 @@ export class NoJsFilesConfig extends BaseRuleConfig {
 // drifted dependencies.json, an unlocked version can be introduced by a file nobody in this diff
 // touched), so the only honest mode set is STRUCTURAL_MODES: RUN_EVERY_TIME (the default) or OFF.
 //
-// All five now honor the universal escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch,
-// and their ignore* aliases) via shouldSkipRule — the RuleGate is called with honorEpoch:true from
+// All five now honor the universal escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch)
+// via shouldSkipRule — the RuleGate is called with honorEpoch:true from
 // every executor. This lets a repo time-box or branch-scope a failing infrastructure check (e.g. hold
 // validate-packagejson off until an upgrade PR lands) with a one-value edit, instead of only the
 // blunt "mode": "OFF". Originally packagejson/versions-locked/eslint-sync were all-or-nothing on the
