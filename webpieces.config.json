@@ -248,7 +248,7 @@
             "mergeModeWhy": "NONE while the L2 guard changes are under human review — the repo owner asked for merge to be OFF so these PRs can be rejected rather than landing themselves. Stage 3 still repairs squash_merge_commit_title=PR_TITLE / squash_merge_commit_message=PR_BODY (SquashSettingsEnforcer), so a human clicking Merge on GitHub now writes the SAME bytes the tooling would have: the PR title plus the compact risk/flags body. That is what makes NONE safe here, and it is why the previous AUTO rationale (a UI merge would land raw branch commit messages) no longer holds. Flip back to AUTO to let wp-finish-upsert-pr land PRs again.",
             "mergeMode": "NONE",
             "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b",
-            "checklistsWhy": "backwards-compat-reviewer enforces this repo's INVERTED compatibility policy: a changed webpieces surface must make the OLD spelling stop compiling, with the error naming the new one. It is required because every consumer of these surfaces is a coding agent, and an agent picks whatever typechecks — a @deprecated tag is not part of the type, so a soft landing freezes callers instead of migrating them (issue #589: an agent wrote the widest auth grant onto an admin contract and asserted the framework had no role support). Patterns are deliberately COARSE — every framework package, every API contract, and the config itself — because the reviewer makes the content-level judgment by reading the diff.",
+            "checklistsWhy": "backwards-compat-reviewer enforces this repo's INVERTED compatibility policy: a changed webpieces surface must make the OLD spelling stop compiling, with the error naming the new one. It is required because every consumer of these surfaces is a coding agent, and an agent picks whatever typechecks — a @deprecated tag is not part of the type, so a soft landing freezes callers instead of migrating them (issue #589: an agent wrote the widest auth grant onto an admin contract and asserted the framework had no role support). Patterns are deliberately COARSE — every framework package, every API contract, and the config itself — because the reviewer makes the content-level judgment by reading the diff. error-output-reviewer enforces the ONE error contract across both rule engines: a failure is THROWN as a structured value (RuleFailError carrying Option[] cures, or InformAiError for plumbing) to the single top-level handler for the process, which renders it per audience. It is required over packages/** for the same reason — every consumer of this output is a coding agent, and a console.error in the middle of a validator cannot be rendered per audience, suppressed, or tested, and can print a cure that is unreachable because nothing type-checks a string literal against the code around it.",
             "checklists": [
                 {
                     "subagent": "backwards-compat-reviewer",
@@ -258,6 +258,14 @@
                         "libraries/apis/**",
                         "**/*Api.ts",
                         "webpieces.config.json"
+                    ],
+                    "required": true
+                },
+                {
+                    "subagent": "error-output-reviewer",
+                    "doc": ".claude/review/error-output.md",
+                    "patterns": [
+                        "packages/**"
                     ],
                     "required": true
                 }
