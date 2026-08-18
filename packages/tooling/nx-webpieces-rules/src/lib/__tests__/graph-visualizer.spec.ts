@@ -45,10 +45,11 @@ describe('generateDot', () => {
 
     it('lays every node out on its own dependency level (server/client not pinned)', () => {
         const dot = viz.generateDot(GRAPH);
-        // server2 L4, angular-site L3, http-client L2 — each alone on its rank here.
-        expect(dot).toContain('{ rank=same; "server2"; }');
-        expect(dot).toContain('{ rank=same; "angular-site"; }');
-        expect(dot).toContain('{ rank=same; "http-client"; }');
+        // server2 L4, angular-site L3, http-client L2 — each alone on its rank here, sharing the
+        // rank only with its level's invisible layout anchor.
+        expect(dot).toContain('{ rank=same; "__wp_layout_L4"; "server2"; }');
+        expect(dot).toContain('{ rank=same; "__wp_layout_L3"; "angular-site"; }');
+        expect(dot).toContain('{ rank=same; "__wp_layout_L2"; "http-client"; }');
     });
 
     it('treats an absent framework as an empty set and absent role as "lib"', () => {
@@ -81,6 +82,121 @@ describe('generateDot', () => {
         const dot = viz.generateDot({ 'no-design': { level: 0, dependsOn: [] } });
         expect(dot).not.toContain('URL=');
         expect(dot).not.toContain('target="_blank"');
+    });
+});
+
+/**
+ * The layout defect these pin: `{ rank=same; ... }` ties a level's boxes to one row but says
+ * NOTHING about where that row goes, so graphviz inferred each row's position from the edges. A
+ * level containing a box nothing visibly depends on (a leaf sdk, an api-lib whose consumers are
+ * hidden) was unconstrained, floated to rank 0, and dragged its whole level to the TOP — which is
+ * how L0 ended up above everything, and how an L0 lib ended up sharing a row with L6 servers.
+ */
+describe('generateDot level bands', () => {
+    /** The `{ rank=same; ... }` lines, in emission order. */
+    const rankLines = (dot: string): string[] =>
+        dot.split('\n').filter((line: string): boolean => line.includes('rank=same'));
+
+    /** The level of a rank line, read off the invisible anchor that pins it. */
+    const bandLevel = (line: string): number => {
+        const match = /__wp_layout_L(\d+)"/.exec(line);
+        return match === null ? -1 : Number(match[1]);
+    };
+
+    const LEAF_GRAPH: EnhancedGraph = {
+        // L2 servers. Nothing depends on them, and NOTHING depends on the two L0 sdks either —
+        // the exact shape that used to invert the graph.
+        'orders-manager': { level: 2, dependsOn: ['orders-api'], role: 'server' },
+        'public-api': { level: 2, dependsOn: ['orders-api'], role: 'server' },
+        'orders-api': { level: 1, dependsOn: ['core-util'], role: 'api-lib' },
+        'core-util': { level: 0, dependsOn: [], role: 'lib' },
+        'attio-sdk': { level: 0, dependsOn: [], role: 'lib' },
+        'claude-sdk': { level: 0, dependsOn: [], role: 'lib' },
+    };
+
+    it('emits the bands highest level first, descending, with L0 last', () => {
+        const levels = rankLines(viz.generateDot(LEAF_GRAPH)).map(bandLevel);
+        expect(levels).toEqual([2, 1, 0]);
+    });
+
+    it('puts every node of a level in that level band and no other — including leaf L0 libs', () => {
+        const lines = rankLines(viz.generateDot(LEAF_GRAPH));
+        const byLevel = new Map<number, string>(
+            lines.map((line: string): [number, string] => [bandLevel(line), line]));
+        expect(byLevel.get(2)).toBe('  { rank=same; "__wp_layout_L2"; "orders-manager"; "public-api"; }');
+        expect(byLevel.get(1)).toBe('  { rank=same; "__wp_layout_L1"; "orders-api"; }');
+        expect(byLevel.get(0)).toBe(
+            '  { rank=same; "__wp_layout_L0"; "attio-sdk"; "claude-sdk"; "core-util"; }');
+    });
+
+    it('chains the band anchors with invisible edges so the ordering is stated, not inferred', () => {
+        const dot = viz.generateDot(LEAF_GRAPH);
+        expect(dot).toContain('"__wp_layout_L2" -> "__wp_layout_L1" [style=invis, class="wp-layout"];');
+        expect(dot).toContain('"__wp_layout_L1" -> "__wp_layout_L0" [style=invis, class="wp-layout"];');
+    });
+
+    it('never draws the ordering chain through a real project box', () => {
+        const dot = viz.generateDot(LEAF_GRAPH);
+        for (const line of dot.split('\n')) {
+            if (!line.includes('style=invis')) continue;
+            if (!line.includes('->')) continue;
+            expect(line).toMatch(/"__wp_layout_[^"]*" -> "__wp_layout_[^"]*"/);
+        }
+    });
+
+    it('marks every layout node invisible and class-tagged so the page never shows or indexes it', () => {
+        const dot = viz.generateDot(LEAF_GRAPH);
+        expect(dot).toContain(
+            '"__wp_layout_L0" [style=invis, shape=point, width=0.01, height=0.01, label="", class="wp-layout"];');
+    });
+
+    it('chains whatever levels EXIST when the levels are not contiguous', () => {
+        const dot = viz.generateDot({
+            top: { level: 7, dependsOn: ['bottom'], role: 'server' },
+            bottom: { level: 0, dependsOn: [], role: 'lib' },
+        });
+        expect(rankLines(dot).map(bandLevel)).toEqual([7, 0]);
+        expect(dot).toContain('"__wp_layout_L7" -> "__wp_layout_L0" [style=invis, class="wp-layout"];');
+    });
+
+    it('keeps a hidden project out of its band without disturbing the ordering', () => {
+        const dot = viz.generateDot({
+            app: { level: 1, dependsOn: ['secret', 'core-util'], role: 'server' },
+            secret: { level: 0, dependsOn: [], role: 'lib', drawOnGraph: false },
+            'core-util': { level: 0, dependsOn: [], role: 'lib' },
+        });
+        expect(rankLines(dot)).toEqual([
+            '  { rank=same; "__wp_layout_L1"; "app"; }',
+            '  { rank=same; "__wp_layout_L0"; "core-util"; }',
+        ]);
+    });
+});
+
+/**
+ * A crowded row's outgoing edges used to be drawn straight through the boxes of the row below.
+ * A blank band next to a crowded one gives them a whole rank of vertical room to fan out in.
+ */
+describe('generateDot spacer bands', () => {
+    const wideGraph = (count: number): EnhancedGraph => {
+        const graph: EnhancedGraph = { 'core-util': { level: 0, dependsOn: [], role: 'lib' } };
+        for (let i = 0; i < count; i++) {
+            graph[`svc${i}`] = { level: 1, dependsOn: ['core-util'], role: 'server' };
+        }
+        return graph;
+    };
+
+    it('inserts a spacer band beside a crowded layer (> 10 boxes)', () => {
+        const dot = viz.generateDot(wideGraph(11));
+        expect(dot).toContain('"__wp_layout_spacer_L1_L0" [style=invis');
+        expect(dot).toContain('{ rank=same; "__wp_layout_spacer_L1_L0"; }');
+        expect(dot).toContain('"__wp_layout_L1" -> "__wp_layout_spacer_L1_L0" [style=invis, class="wp-layout"];');
+        expect(dot).toContain('"__wp_layout_spacer_L1_L0" -> "__wp_layout_L0" [style=invis, class="wp-layout"];');
+    });
+
+    it('leaves an ordinary-width layer alone (10 boxes is not crowded)', () => {
+        const dot = viz.generateDot(wideGraph(10));
+        expect(dot).not.toContain('__wp_layout_spacer');
+        expect(dot).toContain('"__wp_layout_L1" -> "__wp_layout_L0" [style=invis, class="wp-layout"];');
     });
 });
 
@@ -199,6 +315,14 @@ describe('generateHTML', () => {
         expect(html).toContain('angular');
         expect(html).toContain('express');
         expect(html).toContain('designed-lib');
+    });
+
+    it('skips the invisible layout scaffolding when indexing, so an anchor is never a dependency', () => {
+        const html = viz.generateHTML(viz.generateDot(GRAPH));
+        expect(html).toContain("LAYOUT_CLASS = 'wp-layout'");
+        // Both indexes must skip it — a layout node would pick up hover handlers, and a layout edge
+        // would chain two bands into one dependency that does not exist.
+        expect(html.match(/classList\.contains\(LAYOUT_CLASS\)/g)).toHaveLength(2);
     });
 
     it('wires up hover-highlight so connections bolden on box hover', () => {
