@@ -52,7 +52,7 @@ key is the same string as the Nx target name, lives in the `rules` section, and 
 `"mode": "RUN_EVERY_TIME"` (the default — behavior identical to before they were wired) or
 `"mode": "OFF"`.
 
-| Config key | `ignoreModifiedUntilEpoch` honored? |
+| Config key | `turnOffRuleUntilEpoch` honored? |
 |---|---|
 | `validate-architecture-unchanged` | ✅ — compares against the blessed graph, so today's drift can be grandfathered |
 | `validate-no-architecture-cycles` | ✅ — the existing cycle set can be grandfathered while a refactor lands |

@@ -34,7 +34,7 @@ the rule key `no-file-import-cycles`:
   "rules": {
     "no-file-import-cycles": {
       "mode": "ON",                            // "OFF" disables the gate everywhere
-      "ignoreModifiedUntilEpoch": 1771931925,  // epoch SECONDS — while now < epoch,
+      "turnOffRuleUntilEpoch": 1771931925,  // epoch SECONDS — while now < epoch,
                                                //   cycles are REPORTED but the build
                                                //   PASSES; after it, the gate fails again
       "ignoreTypeOnly": false                  // when true, ignore `import type`
@@ -50,9 +50,9 @@ Semantics, mirroring the method/file-size dated-disable model:
 | Situation                                   | Result                          |
 | ------------------------------------------- | ------------------------------- |
 | `mode: "OFF"`                               | Skipped (passes), no madge run  |
-| Cycle found, no `ignoreModifiedUntilEpoch`  | **Fails**                       |
-| Cycle found, `now < ignoreModifiedUntilEpoch` | Reported but **passes** (warn) |
-| Cycle found, `now >= ignoreModifiedUntilEpoch` | **Fails** again               |
+| Cycle found, no `turnOffRuleUntilEpoch`  | **Fails**                       |
+| Cycle found, `now < turnOffRuleUntilEpoch` | Reported but **passes** (warn) |
+| Cycle found, `now >= turnOffRuleUntilEpoch` | **Fails** again               |
 | No cycle                                    | Passes                          |
 
 The grace window lets you turn a strict gate on against an existing codebase

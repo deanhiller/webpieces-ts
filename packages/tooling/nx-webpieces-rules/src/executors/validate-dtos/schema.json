@@ -24,7 +24,7 @@
             "description": "Whether @deprecated field exemption works. When false, all fields must match.",
             "default": true
         },
-        "ignoreModifiedUntilEpoch": {
+        "turnOffRuleUntilEpoch": {
             "type": "number",
             "description": "Epoch seconds. Until this time, skip DTO validation entirely. When expired, normal mode resumes. Omit when not needed."
         }

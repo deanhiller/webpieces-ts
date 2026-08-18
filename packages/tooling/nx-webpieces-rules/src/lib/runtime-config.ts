@@ -6,7 +6,8 @@
  *
  *   "runtime-architecture": {
  *     "mode": "ON",                          // "OFF" disables the whole feature
- *     "ignoreModifiedUntilEpoch": 0,         // whole-rule punt (epoch seconds)
+ *     "turnOffRuleUntilEpoch": 0,            // whole-rule punt (epoch seconds)
+ *     "turnOffRuleWhileOnBranch": null,      // whole-rule punt while on a named branch
  *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ],
  *     "showExternalNodes": true,              // draw firestore/gmail/... as terminal nodes
  *     "externalApiPaths": ["libraries/apis/external/**"]  // where those vendor contracts live
@@ -25,8 +26,8 @@ export interface AllowedCycle {
 
 export interface RuntimeRuleConfig {
     off: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
+    turnOffRuleUntilEpoch?: number;
+    turnOffRuleWhileOnBranch?: string;
     allowedCycles: AllowedCycle[];
     /** Render the dashed external terminal nodes in the runtime viz (default true). */
     showExternalNodes: boolean;
@@ -43,8 +44,8 @@ export interface RuntimeRuleConfig {
  * defensively narrow arrays/numbers rather than threading `unknown` everywhere.
  */
 interface RuntimeRuleRaw {
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
+    turnOffRuleUntilEpoch?: number;
+    turnOffRuleWhileOnBranch?: string | null;
     allowedCycles?: AllowedCycle[];
     showExternalNodes?: boolean;
     externalApiPaths?: string[];
@@ -61,10 +62,12 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
     const raw = (rule?.options ?? {}) as RuntimeRuleRaw;
     return {
         off: rule?.isOff ?? false,
-        ignoreModifiedUntilEpoch:
-            typeof raw.ignoreModifiedUntilEpoch === 'number' ? raw.ignoreModifiedUntilEpoch : undefined,
-        ignoreRuleWhileOnBranch:
-            typeof raw.ignoreRuleWhileOnBranch === 'string' ? raw.ignoreRuleWhileOnBranch : undefined,
+        turnOffRuleUntilEpoch:
+            typeof raw.turnOffRuleUntilEpoch === 'number' ? raw.turnOffRuleUntilEpoch : undefined,
+        // turnOffRuleWhileOnBranch is required-but-NULLABLE in the config ("null" = always on), so a
+        // non-string (null) collapses to undefined, which shouldSkipRule treats as "no branch scoping".
+        turnOffRuleWhileOnBranch:
+            typeof raw.turnOffRuleWhileOnBranch === 'string' ? raw.turnOffRuleWhileOnBranch : undefined,
         allowedCycles: Array.isArray(raw.allowedCycles) ? raw.allowedCycles.filter(isUsableCycle) : [],
         // Opt-OUT: the external systems are the ones that page you at 3am, so they are drawn unless
         // a repo explicitly says its external surface is too noisy to be useful.
@@ -79,12 +82,12 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
 
 /**
  * Whole-rule report-only window honoring BOTH escape hatches: skip while on the
- * named branch (ignoreRuleWhileOnBranch) or until the epoch passes
- * (ignoreModifiedUntilEpoch). When `.skip` is true, problems are reported but
+ * named branch (turnOffRuleWhileOnBranch) or until the epoch passes
+ * (turnOffRuleUntilEpoch). When `.skip` is true, problems are reported but
  * the build is not failed.
  */
 export function runtimeReportOnly(config: RuntimeRuleConfig): SkipRuleResult {
-    return shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch);
+    return shouldSkipRule(config.turnOffRuleUntilEpoch, config.turnOffRuleWhileOnBranch);
 }
 
 /**

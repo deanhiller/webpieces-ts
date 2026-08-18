@@ -599,7 +599,7 @@ function createHelpTarget(): TargetConfiguration {
  * Uses the `validate-no-file-import-cycles` executor (which bundles madge as a
  * dependency) rather than a runtime `npx madge` fetch. The executor reads
  * webpieces.config.json so the gate can be turned on/off (`mode`) and
- * time-boxed (`ignoreModifiedUntilEpoch`) like every other webpieces rule.
+ * time-boxed (`turnOffRuleUntilEpoch`) like every other webpieces rule.
  *
  * Note `projectRoot` is intentionally unused now — the executor derives the
  * project root from the Nx context — but the param is kept for call-site

@@ -19,7 +19,7 @@ code and has read *none* of your conventions.
 
 So the conventions here are enforced at three points, each catching what the previous structurally
 cannot, and installed into a codebase that predates them via a **ratchet** (`NEW_AND_MODIFIED_*` mode
-+ `ignoreModifiedUntilEpoch`) that grandfathers legacy code and bites the moment you touch it — no
++ `turnOffRuleUntilEpoch`) that grandfathers legacy code and bites the moment you touch it — no
 migration project. That mechanism, packaged and reusable across companies, is the thing being built.
 
 ## What each package is
@@ -41,7 +41,7 @@ The engine is published; the **dials are per-repo**, in the root
 
 - **`mode`** — the ratchet. `OFF` → `NEW_AND_MODIFIED_CODE` → `…FILES` → `RUN_EVERY_TIME`. Scoping,
   not severity: how much of a diff (or the repo) the rule looks at.
-- **`ignoreModifiedUntilEpoch`** — time-boxes a rollout. A rule can be live and visible but not yet
+- **`turnOffRuleUntilEpoch`** — time-boxes a rollout. A rule can be live and visible but not yet
   biting until a date in version control that arrives by itself.
 - **`disableAllowed`** — whether a reasoned `// webpieces-disable <rule> -- <why>` escape hatch exists
   at all.
