@@ -30,7 +30,7 @@ const SPACER_MIN_BAND_SIZE = 10;
  * today; the class is how the DOT tells the browser client which elements are scaffolding, and the
  * client skips them when indexing so an anchor can never be walked as a dependency.
  */
-export const LAYOUT_CLASS = 'wp-layout';
+const LAYOUT_CLASS = 'wp-layout';
 
 /** Attributes shared by every invisible layout node (rank anchors and spacer bands). */
 const LAYOUT_NODE_ATTRS =
