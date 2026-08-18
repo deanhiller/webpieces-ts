@@ -34,6 +34,14 @@
  * systems, so a vendor we both call and are called by is ONE box. Those are the
  * entry points that wake a service up at 3am, and a graph built only from in-repo
  * callers cannot show them at all.
+ *
+ * EVERY node on the rendered page is clickable and opens the SHARED floating menu
+ * (graph-node-menu.ts — one implementation, also used by architecture/dependencies.html
+ * and every project's design.html). Its only item is Lock/Unlock: locking dims every
+ * other node and every edge and lights the locked box alone. There is no "View Design"
+ * item here — a node is a running service, queue, datastore or third-party system, not
+ * an nx project, so no design.html exists to point at and the item is absent rather than
+ * dead. This page has no lock dropdown, so the menu is the one and only lock control.
  */
 
 import * as fs from 'fs';
@@ -47,6 +55,7 @@ import type {
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { CLIENT_DOT_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
+import { GraphNodeMenu } from './graph-node-menu';
 import {
     LEVEL_COLORS,
     QUEUE_FILL,
@@ -554,19 +563,25 @@ export function generateRuntimeDot(
 }
 
 /**
- * Inline SVG swatches for the legend, hand-drawn to match what Graphviz emits for each shape.
+ * The runtime-architecture HTML page: its styles, the shared floating node menu, the graph host
+ * and the legend.
  *
- * Hand-drawn on purpose: the alternative is shelling out to Graphviz at generate time, which would
- * make writing the HTML depend on a `dot` binary being installed — a dependency this tool does not
- * otherwise have, since rendering happens in the browser.
+ * A CLASS rather than a bag of module functions so the client-text seam can be a constructor
+ * parameter the way GraphVisualizer's is: the default reads the COMPILED sibling, which exists in
+ * dist and in the published tarball but NOT in a source checkout, and a unit test running from
+ * source hands in the text itself instead of requiring the package to have been built first.
  */
-function generateRuntimeHtml(dot: string, title: string): string {
-    // The browser half lives in runtime-visualizer.client.ts (matching graph-visualizer.client.ts) rather than
-    // in a template literal here: it renders with @viz-js/viz v3 AND redraws every queue node as a
-    // true horizontal cylinder, which is more logic than belongs inline in a .ts string.
-    const script = readCompiledClient('runtime-visualizer.client.js')
-        .split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
-    return `<!DOCTYPE html>
+export class RuntimeHtmlPage {
+    /** The ONE floating-node-menu implementation, shared with dependencies.html and every design.html. */
+    private readonly nodeMenu = new GraphNodeMenu();
+
+    constructor(
+        private readonly clientJs: () => string =
+        (): string => readCompiledClient('runtime-visualizer.client.js'),
+    ) {}
+
+    render(dot: string, title: string): string {
+        return `<!DOCTYPE html>
 <html>
 <head>
     <!-- REQUIRED: the cron node's label is a literal ⏰, and the DOT is embedded in this file. With
@@ -575,9 +590,49 @@ function generateRuntimeHtml(dot: string, title: string): string {
     <meta charset="utf-8">
     <title>${title}</title>
     <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
-    <style>
+    <style>${this.styles()}</style>
+</head>
+<body>
+    <h1>${title}</h1>
+    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box and every arrow so one service, queue, datastore or external system stands alone; <strong>Unlock</strong> restores the whole picture.</p>
+    <div id="graph"></div>
+    ${legendHtml()}
+    <script>${this.nodeMenu.script()}</script>
+    <script>${this.script(dot)}</script>
+</body>
+</html>`;
+    }
+
+    /**
+     * The browser half lives in runtime-visualizer.client.ts (matching graph-visualizer.client.ts)
+     * rather than in a template literal here: it renders with @viz-js/viz v3, redraws every queue
+     * node as a true horizontal cylinder, and wires the shared node menu onto every box — more
+     * logic than belongs inline in a .ts string. The substitution is a blind split/join, so the
+     * placeholder must appear EXACTLY ONCE in the client.
+     */
+    private script(dot: string): string {
+        return this.clientJs().split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
+    }
+
+    /**
+     * Page styles, including the shared menu stylesheet: the clickable cursor + blue glow on every
+     * box, and the dim/undim rules the lock toggles, scoped to this page's `#graph` host. Those two
+     * blocks are shared verbatim with architecture/dependencies.html and every design.html.
+     *
+     * The legend swatches are hand-drawn inline SVG on purpose: the alternative is shelling out to
+     * Graphviz at generate time, which would make writing the HTML depend on a `dot` binary being
+     * installed — a dependency this tool does not otherwise have, since rendering is client-side.
+     */
+    private styles(): string {
+        return `
         body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
         h1 { text-align: center; color: #333; }
+        .hint { text-align: center; color: #555; margin: 0 0 16px; }
+        /* Every box is clickable and opens the shared floating menu, so the menu's own stylesheet
+         * carries the cursor + blue glow and the dim/undim rules the lock toggles. Shared verbatim
+         * with architecture/dependencies.html and every project's design.html. */
+        ${this.nodeMenu.styles()}
+        ${this.nodeMenu.dimStyles('#graph')}
         #graph { text-align: center; background: white; padding: 20px; border-radius: 8px; overflow-x: auto; }
         #graph svg { max-width: 100%; height: auto; }
         .legend {
@@ -609,16 +664,8 @@ function generateRuntimeHtml(dot: string, title: string): string {
         }
         .sw { flex: 0 0 auto; display: inline-flex; }
         code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
-        @media (max-width: 900px) { .legend-columns { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
-    <h1>${title}</h1>
-    <div id="graph"></div>
-    ${legendHtml()}
-    <script>${script}</script>
-</body>
-</html>`;
+        @media (max-width: 900px) { .legend-columns { grid-template-columns: 1fr; } }`;
+    }
 }
 
 export interface RuntimeVisualizationPaths {
@@ -641,7 +688,7 @@ export function writeRuntimeVisualization(
     fs.writeFileSync(dotPath, dot, 'utf-8');
 
     const htmlPath = path.join(outputDir, 'runtime-architecture.html');
-    fs.writeFileSync(htmlPath, generateRuntimeHtml(dot, title), 'utf-8');
+    fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(dot, title), 'utf-8');
 
     return { dotPath, htmlPath };
 }

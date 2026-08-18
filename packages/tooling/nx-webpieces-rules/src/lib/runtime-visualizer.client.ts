@@ -7,10 +7,12 @@
  * bin entry points, and linted like every other file here. (It used to be a committed .js asset
  * exempted from `no-js-files`; see graph-visualizer.client.ts for why that exemption is gone.)
  *
- * Two jobs:
+ * Three jobs:
  *   1. render the DOT with @viz-js/viz v3 (instance() resolves the WASM renderer, and
  *      renderSVGElement is then SYNCHRONOUS — v2's returned a promise);
- *   2. upgrade every queue node into a TRUE horizontal cylinder.
+ *   2. upgrade every queue node into a TRUE horizontal cylinder;
+ *   3. make every node clickable, opening the SHARED floating menu (graph-node-menu.ts — the same one
+ *      architecture/dependencies.html and every design.html use) whose only item here is Lock/Unlock.
  *
  * Why (2) is post-processing rather than a shape:
  *
@@ -163,7 +165,37 @@ class QueueCylinders {
     }
 }
 
-/** Renders the DOT, reshapes the queues, and reports a failure into the page rather than only the console. */
+/**
+ * Every node of the runtime graph opens the shared floating menu.
+ *
+ * There is exactly ONE item, and it is the lock. NO "View Design": a node here is a running SERVICE,
+ * a queue, a datastore or a third-party system, not an nx project, so there is no design.html to point
+ * at and the item is ABSENT rather than present-and-dead.
+ *
+ * LOCK means the literal thing the box shows: dim every other node and every edge, light the locked
+ * box alone. That is `WpNodeLock`, the same lock a design page uses — this page has no lock dropdown
+ * and no responsibilities list, so there is no second control for it to fall out of step with, and
+ * the menu label is derived from the lock's own state on every open.
+ */
+class RuntimeNodeMenu {
+    private readonly lock: WpNodeLock;
+
+    constructor(private readonly svg: SVGSVGElement) {
+        this.lock = new WpNodeLock(svg);
+    }
+
+    wire(): void {
+        WpNodeMenu.wire(this.svg, (name: string, node: SVGGElement): WpNodeMenuItem[] => {
+            const label = this.lock.isLocked(name) ? 'Unlock' : 'Lock';
+            return [new WpNodeMenuItem(label, (): void => { this.lock.toggle(name, node); })];
+        });
+    }
+}
+
+/**
+ * Renders the DOT, reshapes the queues, wires the node menu, and reports a failure into the page
+ * rather than only the console.
+ */
 class RuntimePage {
     render(): void {
         Viz.instance()
@@ -171,7 +203,11 @@ class RuntimePage {
                 const element = viz.renderSVGElement(__DOT__);
                 new QueueCylinders().applyTo(element);
                 const host = document.getElementById('graph');
-                if (host !== null) host.appendChild(element);
+                if (host === null) return;
+                host.appendChild(element);
+                // AFTER the cylinders: wiring reads each node's <title>, which the redraw leaves
+                // alone, but the clickable class belongs on the shape that is finally there.
+                new RuntimeNodeMenu(element).wire();
             })
             // webpieces-disable no-any-unknown -- a promise rejection reason is untyped BY THE LANGUAGE (any value can be thrown), and this browser script cannot import the repo's toError helper; it is stringified, never dereferenced
             .catch((err: unknown): void => {

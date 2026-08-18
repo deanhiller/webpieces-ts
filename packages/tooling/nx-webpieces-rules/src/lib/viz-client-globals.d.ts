@@ -46,6 +46,18 @@ declare class WpNodeMenu {
     static close(): void;
 }
 
+/**
+ * The dropdown-less lock, also from graph-node-menu.ts: dim every other box in one rendered graph and
+ * light the locked one. Used by the runtime page (and, from its own emitted script, by design.html);
+ * the architecture page does NOT use it — its lock is GraphHighlighter.setLock(), which also has a
+ * dropdown and a responsibilities list to keep in step.
+ */
+declare class WpNodeLock {
+    constructor(svg: SVGSVGElement);
+    isLocked(name: string): boolean;
+    toggle(name: string, nodeEl: SVGGElement): void;
+}
+
 /** The @viz-js/viz v3 UMD global the generated page loads from a CDN before this script runs. */
 declare const Viz: VizGlobal;
 

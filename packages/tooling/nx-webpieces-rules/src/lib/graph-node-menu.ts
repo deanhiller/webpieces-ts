@@ -1,23 +1,26 @@
 /**
- * The floating per-node menu, shared by BOTH generated graphs.
+ * The floating per-node menu, shared by ALL THREE generated graphs.
  *
  * There is exactly ONE implementation of the menu — its CSS, its positioning, its dismissal and the
- * click wiring that opens it — and both `architecture/dependencies.html` (graph-visualizer.ts) and
- * every project's `design.html` (di-graph/design-visualizer.ts) inline these same bytes. Duplicating
- * it into the two emitters is what this module exists to prevent.
+ * click wiring that opens it — and `architecture/dependencies.html` (graph-visualizer.ts), every
+ * project's `design.html` (di-graph/design-visualizer.ts) and `tmp/webpieces/runtime-architecture.html`
+ * (runtime-visualizer.ts) all inline these same bytes. Duplicating it into the three emitters is what
+ * this module exists to prevent.
  *
  * Why the browser code is emitted as a STRING here rather than living in a compiled `*.client.ts`
  * beside its emitter: `generateDesignHTML` is called straight from a source checkout (by the
  * di-graph-generate executor's unit tests) and has no injection seam for the client text, so a
  * `readCompiledClient` sibling would make the design page unbuildable from source. A string keeps one
- * copy reachable by both emitters with no build-order coupling.
+ * copy reachable by every emitter with no build-order coupling. The two pages that DO have a compiled
+ * client (`graph-visualizer.client.ts`, `runtime-visualizer.client.ts`) call into these classes as
+ * ambient globals — see viz-client-globals.d.ts.
  *
- * What the menu does NOT own is the LOCK BEHAVIOUR, because the two pages genuinely differ:
+ * What the menu does NOT own is the LOCK BEHAVIOUR, because the pages genuinely differ:
  *  - the architecture page already has a `#wp-lock` dropdown backed by GraphHighlighter (chain
  *    highlight + responsibilities filter), and its menu item drives that, so the two stay in sync;
- *  - a design page has neither dropdown nor responsibilities, so it uses `WpNodeLock` below —
- *    dim every other box in that graph, light the locked one.
- * Both spell the dim with the SAME class names and the SAME CSS from `dimStyles()`.
+ *  - a design page and the runtime page have neither dropdown nor responsibilities, so they use
+ *    `WpNodeLock` below — dim every other box in that graph, light the locked one.
+ * All three spell the dim with the SAME class names and the SAME CSS from `dimStyles()`.
  */
 export class GraphNodeMenu {
     /**
@@ -60,10 +63,15 @@ export class GraphNodeMenu {
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
         g.wp-node-clickable { cursor: pointer; }
+        /* Every shape Graphviz (or the runtime page's own queue-cylinder redraw) can emit for a node
+         * body: box/record -> polygon, circle -> ellipse, cylinder and the redrawn queue -> path. A
+         * shape left out of this list would be a box that is clickable but never looks it. */
         g.wp-node-clickable polygon,
-        g.wp-node-clickable ellipse { transition: stroke-width 0.12s ease, filter 0.12s ease; }
+        g.wp-node-clickable ellipse,
+        g.wp-node-clickable path { transition: stroke-width 0.12s ease, filter 0.12s ease; }
         g.wp-node-clickable:hover polygon,
-        g.wp-node-clickable:hover ellipse {
+        g.wp-node-clickable:hover ellipse,
+        g.wp-node-clickable:hover path {
             stroke: #1976d2;
             stroke-width: 5;
             filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
@@ -161,8 +169,8 @@ export class GraphNodeMenu {
     }
 
     /**
-     * The lock a DESIGN page uses: no dropdown and no responsibilities exist there, so locking a class
-     * box dims every other box in that design's graph and lights the locked one.
+     * The lock the DESIGN pages and the RUNTIME page use: neither has a dropdown or a responsibilities
+     * list, so locking a box dims every other box in that graph and lights the locked one.
      */
     private lockScript(): string {
         return `
