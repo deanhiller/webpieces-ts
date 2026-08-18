@@ -355,8 +355,10 @@
             "mergeInProgress": "pnpm wp-finish-upsert-pr"
         }
     },
+    "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. `.webpieces/**` is the TOOLING'S OWN state dir and is gitignored, so nothing under it can ever reach a branch: feature-branch-guard was blocking writes to `.webpieces/tasks.md` on main to protect main from a file git will never track, which cost a throwaway branch per edit.",
     "excludePaths": [
-        "repositories/**"
+        "repositories/**",
+        ".webpieces/**"
     ],
     "match-rules": [
         {
