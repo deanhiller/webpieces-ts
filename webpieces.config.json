@@ -31,7 +31,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "turnOffRuleUntilEpoch": 1783409251,
-            "turnOffRuleWhileOnBranch": null
+            "turnOffRuleWhileOnBranch": "dean/bump-webpieces-0-4-658"
         },
         "no-implicit-any": {
             "mode": "NEW_AND_MODIFIED_CODE",
