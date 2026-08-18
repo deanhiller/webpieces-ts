@@ -80,8 +80,21 @@ export class RuntimeVizOptions {
     ) {}
 }
 
+/**
+ * The DISPLAY name of a project/service: scope stripped. LABELS ONLY.
+ *
+ * Never an identity. `@scope/public-api` and `public-api` are two distinct projects that strip to
+ * the same string, and keying nodes or edges on that fuses them into one box (and draws the edge
+ * between them as a self-loop). See {@link serviceNodeId} and lib/graph-names.ts.
+ */
 function getShortName(name: string): string {
     return name.includes('/') ? name.split('/').pop()! : name;
+}
+
+/** The DOT identity of a runtime service: its project key, escaped — never the display name. */
+// webpieces-disable no-function-outside-class -- DOT id builder, matching getShortName in this file
+function serviceNodeId(name: string): string {
+    return dotValue(name);
 }
 
 /** Chunk a list into `\n`-separated label lines of at most APIS_PER_LABEL_LINE entries. */
@@ -144,8 +157,8 @@ function nodeLabel(name: string, svc: RuntimeService): string {
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
 function edgeDot(edge: RuntimeEdge): string {
-    const from = dotValue(getShortName(edge.from));
-    const to = dotValue(getShortName(edge.to));
+    const from = serviceNodeId(edge.from);
+    const to = serviceNodeId(edge.to);
     const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
     return `  "${from}" -> "${to}" [label="${dotValue(viaRaw)}"];\n`;
 }
@@ -255,13 +268,13 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
     // per-method queue at all, so it keeps the historical unnamed per-pair box.
     const byQueue = new Map<string, QueueEndpoints>();
     for (const edge of queued) {
-        const from = dotValue(getShortName(edge.from));
-        const to = dotValue(getShortName(edge.to));
+        const from = serviceNodeId(edge.from);
+        const to = serviceNodeId(edge.to);
         if (edge.queue === undefined) {
             // Kept RAW: recordValue already applies dotValue, so escaping here would double it.
             const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
             dot += queueBoxDot(
-                `queue__${from}__${to}`,
+                `queue__${dotId(edge.from)}__${dotId(edge.to)}`,
                 `${recordValue(viaRaw)}\\nqueue`,
                 [from],
                 [to],
@@ -358,7 +371,7 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
     let dot =
         '\n  // Entry points nothing in this repo calls: a clock, or a system outside the repo.\n';
     for (const trigger of triggers) {
-        const service = dotValue(getShortName(trigger.service));
+        const service = serviceNodeId(trigger.service);
         const label = dotValue(`${trigger.api}.${trigger.method}`);
         if (trigger.kind === 'cron') {
             const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
@@ -428,7 +441,7 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
             system.apis.length === 0 ? '' : ` [label="${labelList([...system.apis].sort())}"]`;
         for (const service of [...system.usedBy].sort()) {
             if (hidden.has(service)) continue;
-            dot += `  "${dotValue(getShortName(service))}" -> "system__${dotId(id)}"${via};\n`;
+            dot += `  "${serviceNodeId(service)}" -> "system__${dotId(id)}"${via};\n`;
         }
     }
     return dot;
@@ -453,7 +466,9 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
     for (const use of graph.unresolvedUses) {
         if (hidden.has(use.service)) continue;
         if (graph.apis[use.api]?.externalSystem !== undefined) continue;
-        const external = dotValue(getShortName(graph.apis[use.api]?.owner ?? use.api));
+        // Keyed on the OWNER's full name, never its short name: two scoped api-libs whose short
+        // names match are two external systems, and fusing them draws one box for both.
+        const external = graph.apis[use.api]?.owner ?? use.api;
         const key = `${use.service}${PAIR_SEP}${external}`;
         if (!apisByPair.has(key)) apisByPair.set(key, []);
         apisByPair.get(key)!.push(use.api);
@@ -461,13 +476,14 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
     if (apisByPair.size === 0) return '';
 
     let dot = '\n  // Systems outside this repo — no in-repo service implements these contracts.\n';
-    // The node ID is prefixed so an external library can never collide with a service of the same
-    // short name; only the label carries the bare name.
+    // The node ID is prefixed so an external library can never collide with a service, and built
+    // from the owner's FULL name so two same-short-named owners stay two boxes; only the label
+    // carries the bare name.
     const externals = new Set([...apisByPair.keys()].map((key: string) => key.split(PAIR_SEP)[1]));
     for (const external of [...externals].sort()) {
         dot +=
-            `  "external__${external}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
-            `color="${EXTERNAL_BORDER}", label="${external}\\n(external)"];\n`;
+            `  "external__${dotValue(external)}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
+            `color="${EXTERNAL_BORDER}", label="${dotValue(getShortName(external))}\\n(external)"];\n`;
     }
     for (const key of [...apisByPair.keys()].sort()) {
         const parts = key.split(PAIR_SEP);
@@ -477,7 +493,7 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
         // SOLID: this is a synchronous call that returns a value. Dashed is reserved for events, and
         // "outside the repo" is already said by the node's dashed border.
         dot +=
-            `  "${dotValue(getShortName(service))}" -> "external__${external}" ` +
+            `  "${serviceNodeId(service)}" -> "external__${dotValue(external)}" ` +
             `[label="${via}", color="${EXTERNAL_BORDER}"];\n`;
     }
     return dot;
@@ -507,7 +523,7 @@ export function generateRuntimeDot(
         if (hidden.has(name)) continue;
         const svc = graph.services[name];
         const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
-        dot += `  "${dotValue(getShortName(name))}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`;
+        dot += `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`;
     }
 
     dot += '\n';

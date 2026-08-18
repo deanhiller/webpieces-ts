@@ -8,6 +8,7 @@
  */
 
 import type { ProjectApiRelations } from './api-usage/api-relations';
+import { ProjectCycleDetector } from './graph-cycles';
 
 /**
  * Graph entry with level metadata plus AI-oriented metadata filled in by
@@ -103,17 +104,14 @@ export function computeTopologicalLayers(graph: Record<string, string[]>): strin
         }
 
         if (currentLayer.length === 0) {
-            // No progress made = circular dependency detected
-            const remaining = allProjects.filter((p) => !processed.has(p));
-
-            // Try to identify the cycle
-            const cycleInfo = findCycle(graph, remaining);
-
+            // No progress made = circular dependency. ProjectCycleDetector is the ONE cycle
+            // implementation in this package — it names every chain, in project keys, with the
+            // fix — so this reports through it rather than keeping a second, weaker DFS here.
+            new ProjectCycleDetector().assertAcyclic(graph, 'the project graph');
+            // Unreachable: Kahn only stalls on a cycle, and the assert above throws on every one.
+            const remaining = allProjects.filter((p: string): boolean => !processed.has(p));
             throw new Error(
-                `Circular dependency detected among: ${remaining.join(', ')}\n` +
-                    (cycleInfo ? `Cycle: ${cycleInfo}\n` : '') +
-                    'Fix: Remove one of the dependencies to break the cycle.'
-            );
+                `Topological sort stalled with no cycle to report — projects left unlayered: ${remaining.join(', ')}`);
         }
 
         // Sort alphabetically within layer for deterministic output
@@ -125,43 +123,6 @@ export function computeTopologicalLayers(graph: Record<string, string[]>): strin
     }
 
     return layers;
-}
-
-/**
- * Try to find and describe a cycle in the graph
- */
-function findCycle(graph: Record<string, string[]>, remaining: string[]): string | null {
-    const visited = new Set<string>();
-    const path: string[] = [];
-
-    function dfs(node: string): string | null {
-        if (path.includes(node)) {
-            const cycleStart = path.indexOf(node);
-            return [...path.slice(cycleStart), node].join(' -> ');
-        }
-        if (visited.has(node)) return null;
-
-        visited.add(node);
-        path.push(node);
-
-        const deps = graph[node] || [];
-        for (const dep of deps) {
-            if (remaining.includes(dep)) {
-                const result = dfs(dep);
-                if (result) return result;
-            }
-        }
-
-        path.pop();
-        return null;
-    }
-
-    for (const node of remaining) {
-        const cycle = dfs(node);
-        if (cycle) return cycle;
-    }
-
-    return null;
 }
 
 /**

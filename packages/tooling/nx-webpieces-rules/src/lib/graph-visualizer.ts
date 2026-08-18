@@ -15,8 +15,9 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
 import type { ApiRef, ApiRelation, ApiRelationKind } from './api-usage/api-relations';
-import { GraphNames } from './graph-names';
+import { GraphNames, NodeIdOwner } from './graph-names';
 import { LevelBand, LevelBandLayout } from './graph-level-bands';
+import { ProjectAdjacency, ProjectCycleDetector } from './graph-cycles';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { toError } from '../toError';
 
@@ -83,6 +84,7 @@ export class GraphVisualizer {
     private readonly names = new GraphNames();
     private readonly responsibilities = new ResponsibilitiesRenderer();
     private readonly bandLayout = new LevelBandLayout();
+    private readonly cycles = new ProjectCycleDetector();
 
     /**
      * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
@@ -198,6 +200,7 @@ export class GraphVisualizer {
      * Generate Graphviz DOT format from the graph
      */
     generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
+        this.assertDrawable(graph);
         let dot = 'digraph Architecture {\n';
         dot += '  rankdir=TB;\n';
         dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
@@ -220,6 +223,25 @@ export class GraphVisualizer {
     }
 
     /**
+     * Refuse to draw a graph that would render something false.
+     *
+     * Two conditions, both of which produced a confidently-wrong picture with no warning at all:
+     *  - two projects sharing a node id fuse into one box, which UNIONS their two rank sets and
+     *    collapses two whole dependency levels onto one row (see graph-names.ts);
+     *  - a cycle makes the level numbers every row is keyed on meaningless (see graph-cycles.ts).
+     */
+    private assertDrawable(graph: EnhancedGraph): void {
+        const owners: NodeIdOwner[] = [];
+        const adjacency: ProjectAdjacency = {};
+        for (const project of Object.keys(graph)) {
+            owners.push(new NodeIdOwner(project, graph[project].level));
+            adjacency[project] = graph[project].dependsOn ?? [];
+        }
+        this.names.assertUniqueNodeIds(owners);
+        this.cycles.assertAcyclic(adjacency, 'architecture/dependencies.json');
+    }
+
+    /**
      * The visible projects grouped into one band per dependency level, ordered HIGHEST LEVEL FIRST
      * so the emitted bands read top-to-bottom with L0 last (hidden projects are omitted, so no
      * stray rank=same name is emitted for an absent node). LevelBandLayout turns these into the
@@ -231,9 +253,9 @@ export class GraphVisualizer {
         for (const project of Object.keys(graph)) {
             if (this.isHidden(graph[project])) continue;
             const level = graph[project].level;
-            const names = byLevel.get(level);
-            if (names === undefined) byLevel.set(level, [this.names.getShortName(project)]);
-            else names.push(this.names.getShortName(project));
+            const nodeIds = byLevel.get(level);
+            if (nodeIds === undefined) byLevel.set(level, [this.names.getNodeId(project)]);
+            else nodeIds.push(this.names.getNodeId(project));
         }
         const levels = [...byLevel.keys()].sort((a: number, b: number): number => b - a);
         return levels.map((level: number): LevelBand =>
@@ -249,6 +271,7 @@ export class GraphVisualizer {
         for (const project of Object.keys(graph)) {
             const info = graph[project];
             if (this.isHidden(info)) continue;
+            const nodeId = this.names.getNodeId(project);
             const shortName = this.names.getShortName(project);
             const frameworks = info.framework ?? [];
             const role = info.role ?? 'lib';
@@ -258,7 +281,8 @@ export class GraphVisualizer {
             const link = href ? `, URL="${href}", target="_blank"` : '';
             const envSet = `[${frameworks.join(', ')}]`;
             const labelMeta = `L${info.level} · ${envSet} · ${role}`;
-            dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
+            // Identity is the project key; the LABEL is the pretty short name.
+            dot += `  "${nodeId}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
         }
         return dot;
     }
@@ -271,12 +295,12 @@ export class GraphVisualizer {
         for (const project of Object.keys(graph)) {
             const info = graph[project];
             if (this.isHidden(info)) continue;
-            const shortName = this.names.getShortName(project);
+            const nodeId = this.names.getNodeId(project);
             for (const dep of info.dependsOn || []) {
                 // Both endpoints must be visible — an edge to/from a hidden box
                 // is dropped so no connection dangles into empty space.
                 if (graph[dep] !== undefined && this.isHidden(graph[dep])) continue;
-                dot += this.edgeDot(shortName, this.names.getShortName(dep), info.apiRelations?.[dep]);
+                dot += this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]);
             }
         }
         return dot;
@@ -336,8 +360,10 @@ export class GraphVisualizer {
         let options = '';
         for (const project of projects) {
             if (this.isHidden(graph[project])) continue;
+            // The VALUE is the node id the SVG is keyed on; the TEXT stays the pretty short name.
+            const nodeId = this.names.getNodeId(project);
             const shortName = this.names.getShortName(project);
-            options += `<option value="${shortName}">L${graph[project].level} · ${shortName}</option>`;
+            options += `<option value="${nodeId}">L${graph[project].level} · ${shortName}</option>`;
         }
         return `<div class="wp-lock-control">
         <label for="wp-lock">🔒 Lock a box (dim the rest &amp; filter responsibilities):</label>

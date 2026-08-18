@@ -2,9 +2,12 @@
  * Runtime Cycles
  *
  * Enumerates ALL cycles in the runtime service graph using Tarjan's
- * strongly-connected-components algorithm. The existing graph-sorter `findCycle`
- * reports only one cycle; runtime validation needs every cycle so each can be
+ * strongly-connected-components algorithm. Runtime validation needs every cycle so each can be
  * checked against the per-cycle allowlist independently.
+ *
+ * This is the ONE SCC implementation in the package: `ProjectCycleDetector` (lib/graph-cycles.ts)
+ * calls it for the COMPILE-TIME project graph, where it likewise enumerates every cycle rather than
+ * stopping at the first.
  *
  * A cycle is any SCC with more than one node, or a single node with a self-edge.
  * Each cycle is keyed by its sorted, comma-joined node names so it can be
