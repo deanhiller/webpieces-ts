@@ -158,6 +158,46 @@ describe('generateDesignHTML', () => {
 });
 
 /**
+ * A design page's boxes are clickable too, through the very same shared menu the architecture graph
+ * uses (graph-node-menu.ts) — not a second copy of it.
+ */
+describe('generateDesignHTML node menu', () => {
+    function pageHtml(): string {
+        const graph = new DiGraph('helper-portal-svr');
+        graph.designs = [makeDesign()];
+        return generateDesignHTML(graph);
+    }
+
+    it('inlines the shared menu and wires every rendered box to open it', () => {
+        const html = pageHtml();
+        expect(html).toContain('class WpNodeMenu');
+        expect(html).toContain('class WpNodeMenuItem');
+        expect(html).toContain('wireNodeMenu(element)');
+        expect(html).toContain("querySelectorAll('g.node')");
+        expect(html).toContain('wp-node-menu');
+    });
+
+    it('dismisses on an outside click and on Escape', () => {
+        const html = pageHtml();
+        expect(html).toContain("document.addEventListener('click'");
+        expect(html).toContain("ev.key === 'Escape'");
+    });
+
+    it('omits View Design entirely — a class box has no design page of its own', () => {
+        expect(pageHtml()).not.toContain('View Design');
+    });
+
+    it('makes the only item Lock or Unlock, by that box\'s current lock state', () => {
+        const html = pageHtml();
+        expect(html).toContain("lock.isLocked(name) ? 'Unlock' : 'Lock'");
+        expect(html).toContain('class WpNodeLock');
+        // Locking dims every other box: the shared dim CSS, scoped to this page's graph containers.
+        expect(html).toContain('.graph svg.wp-dim .node');
+        expect(html).toContain("this.svg.classList.add('wp-dim')");
+    });
+});
+
+/**
  * A transient class is 1-to-many: every arrow into it resolves its OWN instance. design.html says
  * so with a real 3-box offset stack painted over the SVG. The DOT keeps a plain box — Graphviz's
  * box3d perspective glyph clashed with that flat stack and read as an extra "3D box" on top.

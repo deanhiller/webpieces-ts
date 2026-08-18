@@ -85,6 +85,15 @@ describe('design file emission — a project WITH a design root', () => {
         expect(parsed.designs.length).toBe(1);
     });
 
+    it('writes a design.html whose boxes carry the shared floating node menu', (): void => {
+        writeDesignFiles(projectRootAbs, PROJECT_ROOT, realGraph());
+        const html = fs.readFileSync(path.join(projectRootAbs, 'design.html'), 'utf-8');
+        expect(html).toContain('class WpNodeMenu');
+        expect(html).toContain('wireNodeMenu(element)');
+        // A class box has no design page of its own, so the item is absent — never dead.
+        expect(html).not.toContain('View Design');
+    });
+
     it('replaces a stale design rather than reaping it', (): void => {
         writeStaleDesignFiles();
         writeDesignFiles(projectRootAbs, PROJECT_ROOT, realGraph());

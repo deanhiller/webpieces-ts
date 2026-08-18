@@ -64,7 +64,7 @@ describe('generateDot', () => {
         expect(dot).toContain('label="odd\\n(L0 · [vue] · lib)"');
     });
 
-    it('makes a node with a design.json clickable, linking to design.html relative to architecture/', () => {
+    it('never emits a node URL — clicking a box opens the menu, it does not navigate', () => {
         const dot = viz.generateDot({
             'http-api': {
                 level: 0,
@@ -74,14 +74,38 @@ describe('generateDot', () => {
                 designFile: 'packages/http/http-api/design.json',
             },
         });
-        expect(dot).toContain('URL="../packages/http/http-api/design.html"');
-        expect(dot).toContain('target="_blank"');
-    });
-
-    it('leaves a node without a design.json non-clickable (no URL)', () => {
-        const dot = viz.generateDot({ 'no-design': { level: 0, dependsOn: [] } });
         expect(dot).not.toContain('URL=');
         expect(dot).not.toContain('target="_blank"');
+    });
+});
+
+/**
+ * "View Design" exists on a node's menu ONLY when that project really has a committed design.html,
+ * which is exactly "the graph entry carries a designFile (a generated design.json)".
+ */
+describe('designLinks', () => {
+    it('links a project with a design.json to its design.html, relative to architecture/', () => {
+        const links = viz.designLinks({
+            'http-api': {
+                level: 0,
+                dependsOn: [],
+                designFile: 'packages/http/http-api/design.json',
+            },
+        });
+        expect(links).toHaveLength(1);
+        expect(links[0].nodeId).toBe('http-api');
+        expect(links[0].href).toBe('../packages/http/http-api/design.html');
+    });
+
+    it('yields nothing for a project with no design.json — so its menu has no View Design item', () => {
+        expect(viz.designLinks({ 'no-design': { level: 0, dependsOn: [] } })).toEqual([]);
+    });
+
+    it('omits a hidden project even when it has a design.json', () => {
+        const links = viz.designLinks({
+            secret: { level: 0, dependsOn: [], drawOnGraph: false, designFile: 'svc/secret/design.json' },
+        });
+        expect(links).toEqual([]);
     });
 });
 
@@ -308,7 +332,7 @@ describe('generateDot drawOnGraph:false hiding', () => {
 
 describe('generateHTML', () => {
     it('renders a framework + role legend in three columns', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH));
+        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
         expect(html).toContain('legend-columns');
         expect(html).toContain('Fill = framework');
         expect(html).toContain('Border = role');
@@ -318,7 +342,7 @@ describe('generateHTML', () => {
     });
 
     it('skips the invisible layout scaffolding when indexing, so an anchor is never a dependency', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH));
+        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
         expect(html).toContain("LAYOUT_CLASS = 'wp-layout'");
         // Both indexes must skip it — a layout node would pick up hover handlers, and a layout edge
         // would chain two bands into one dependency that does not exist.
@@ -326,7 +350,7 @@ describe('generateHTML', () => {
     });
 
     it('wires up hover-highlight so connections bolden on box hover', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH));
+        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
         // The post-render wiring and its mouse handlers must be present. The logic is a CLASS now
         // (it was loose functions while the client was an unlinted .js asset), so this asserts the
         // class and its entry point rather than the old free function.
@@ -347,5 +371,70 @@ describe('generateHTML', () => {
         expect(html).toContain('outEdges');
         expect(html).toContain('visited');
         expect(html).toContain('stack');
+    });
+});
+
+/**
+ * Every box is clickable and opens the floating menu — the SAME menu (one implementation, in
+ * graph-node-menu.ts) that every project's design.html uses. Direct navigation is gone: a box no
+ * longer carries a URL, so "View Design" in the menu is the only way into a design page.
+ */
+describe('generateHTML node menu', () => {
+    const DESIGNED: EnhancedGraph = {
+        'http-api': {
+            level: 0,
+            dependsOn: [],
+            role: 'lib',
+            designFile: 'packages/http/http-api/design.json',
+        },
+        plain: { level: 0, dependsOn: [], role: 'lib' },
+    };
+
+    const htmlFor = (graph: EnhancedGraph): string =>
+        viz.generateHTML(viz.generateDot(graph), viz.designLinks(graph), 'T', viz.lockControl(graph));
+
+    it('inlines the shared menu implementation and wires every node to open it', () => {
+        const html = htmlFor(DESIGNED);
+        expect(html).toContain('class WpNodeMenu');
+        expect(html).toContain('class WpNodeMenuItem');
+        expect(html).toContain("querySelectorAll('g.node')");
+        expect(html).toContain('wireMenu');
+        expect(html).toContain('wp-node-menu');
+    });
+
+    it('dismisses on an outside click and on Escape', () => {
+        const html = htmlFor(DESIGNED);
+        expect(html).toContain("document.addEventListener('click'");
+        expect(html).toContain("ev.key === 'Escape'");
+        expect(html).toContain('WpNodeMenu.close()');
+    });
+
+    it('offers View Design for a project that HAS a design page, keyed by its node id', () => {
+        const html = htmlFor(DESIGNED);
+        expect(html).toContain("'View Design'");
+        expect(html).toContain('{"nodeId":"http-api","href":"../packages/http/http-api/design.html"}');
+    });
+
+    it('carries no link for a project with no design page, so its menu omits the item', () => {
+        const html = htmlFor({ plain: { level: 0, dependsOn: [], role: 'lib' } });
+        // The links payload is empty — nothing for the menu to build a View Design item from.
+        expect(html).toContain('for (const link of [])');
+        expect(html).not.toContain('"nodeId"');
+    });
+
+    it('makes the bottom item Lock or Unlock by the box the page is locked on right now', () => {
+        const html = htmlFor(DESIGNED);
+        expect(html).toContain("locked ? 'Unlock' : 'Lock'");
+        expect(html).toContain('isLocked');
+    });
+
+    it('routes menu and dropdown through ONE lock, so each reflects the other', () => {
+        const html = htmlFor(DESIGNED);
+        // setLock writes the dropdown's selection, then applies the highlight + card filter — and the
+        // dropdown's own change handler calls the same applyLock, so the two can never disagree.
+        expect(html).toContain('setLock');
+        expect(html).toContain('applyLock');
+        expect(html).toContain('lockSelect.value =');
+        expect(html).toContain('id="wp-lock"');
     });
 });
