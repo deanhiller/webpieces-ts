@@ -4,19 +4,11 @@
 the ONE top-level handler for its process, and the handler renders it for its audience. Nothing prints a
 failure, nothing swallows one, and nothing hand-formats the parts the framework owns.
 
-This is the checklist for `error-output-reviewer`. It is intended as a REQUIRED reviewer over every PR
-that touches `packages/**`. A 🔴 verdict BLOCKS the PR, so precision matters more than coverage: **a reviewer
-that goes red on correct code gets ignored, and then it is worth nothing.** Every section below tells you
-how to tell the real defect from the legitimate pattern that looks like it.
-
-> **Registration is a FOLLOW-UP PR, deliberately.** This doc and
-> `.claude/agents/error-output-reviewer.md` land first; the
-> `commands.pr-gate.checklists` entry that makes this reviewer required lands in the next PR. Not
-> because the published validator rejects it — it accepts the appended array element cleanly (verified
-> against `@webpieces/rules-config` 0.4.650) — but because a Claude Code session loads
-> `.claude/agents/*.md` at startup, so the agent type added by a PR is not spawnable inside that same
-> session. `wp-finish-upsert-pr`'s reviewer-provenance check then cannot attribute the verdict to the
-> reviewer, and rightly refuses. Register it from a session started after this lands.
+This is the checklist for `error-output-reviewer`, a REQUIRED reviewer over every PR that touches
+`packages/**` — registered in `commands.pr-gate.checklists` in `webpieces.config.json`. A 🔴 verdict
+BLOCKS the PR, so precision matters more than coverage: **a reviewer that goes red on correct code gets
+ignored, and then it is worth nothing.** Every section below tells you how to tell the real defect from
+the legitimate pattern that looks like it.
 
 ## The design being defended
 
