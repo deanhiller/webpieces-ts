@@ -21,6 +21,19 @@
 // scripts share a global scope, so they cannot each declare them. Do NOT spell the placeholder token
 // in a comment: the inliner is a blind split/join, so every literal occurrence gets the whole DOT.
 
+/**
+ * The class graph-visualizer.ts stamps on the invisible rank anchors, spacer bands and ordering
+ * edges that pin each level to its own row. They are layout scaffolding, not architecture, so the
+ * indexes below skip them: an anchor must never be walkable as a dependency, or hovering one box
+ * would light boxes it has nothing to do with.
+ *
+ * Graphviz drops `style=invis` elements from its SVG entirely (verified against the emitted SVG),
+ * so today nothing carrying this class reaches the DOM at all. The skip is the guarantee that the
+ * scaffolding stays inert if that ever stops being true — the DOT is the only place that decides
+ * what is scaffolding, and it says so with this class.
+ */
+const LAYOUT_CLASS = 'wp-layout';
+
 /** One traversal direction: the edges to light, and the nodes to walk on to. */
 class Direction {
     constructor(
@@ -62,6 +75,7 @@ class GraphHighlighter {
 
     private indexNodes(): void {
         this.svg.querySelectorAll('g.node').forEach((g: Element): void => {
+            if (g.classList.contains(LAYOUT_CLASS)) return;
             const title = g.querySelector('title');
             if (title !== null && title.textContent !== null) {
                 this.nodeByName.set(title.textContent.trim(), g as SVGGElement);
@@ -71,6 +85,7 @@ class GraphHighlighter {
 
     private indexEdges(): void {
         this.svg.querySelectorAll('g.edge').forEach((edge: Element): void => {
+            if (edge.classList.contains(LAYOUT_CLASS)) return;
             const title = edge.querySelector('title');
             const text = title === null ? null : title.textContent;
             if (text === null) return;

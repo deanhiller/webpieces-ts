@@ -16,6 +16,7 @@ import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
 import type { ApiRef, ApiRelation, ApiRelationKind } from './api-usage/api-relations';
 import { GraphNames } from './graph-names';
+import { LevelBand, LevelBandLayout } from './graph-level-bands';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { toError } from '../toError';
 
@@ -43,6 +44,7 @@ const ARCH_OUTPUT_DIR = 'architecture';
 
 /** Contracts named on one `implements` edge label before it truncates to "+N more". */
 const MAX_EDGE_LABEL_APIS = 4;
+
 
 export class VisualizationPaths {
     htmlPath: string;
@@ -80,6 +82,7 @@ export function readCompiledClient(name: string): string {
 export class GraphVisualizer {
     private readonly names = new GraphNames();
     private readonly responsibilities = new ResponsibilitiesRenderer();
+    private readonly bandLayout = new LevelBandLayout();
 
     /**
      * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
@@ -200,28 +203,11 @@ export class GraphVisualizer {
         dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
         dot += '  edge [fontname="Arial"];\n\n';
 
-        // Group projects by level (hidden projects are omitted from the ranks so
-        // no stray rank=same name is emitted for an absent node).
-        const levels: Record<number, string[]> = {};
-        for (const project of Object.keys(graph)) {
-            if (this.isHidden(graph[project])) continue;
-            const level = graph[project].level;
-            if (!levels[level]) levels[level] = [];
-            levels[level].push(project);
-        }
+        const bands = this.levelBands(graph);
 
         dot += this.dotNodes(graph);
         dot += '\n';
-
-        // Create same-rank subgraphs for each level
-        for (const projects of Object.values(levels)) {
-            dot += `  { rank=same; `;
-            for (const p of projects) {
-                dot += `"${this.names.getShortName(p)}"; `;
-            }
-            dot += '}\n';
-        }
-
+        dot += this.bandLayout.dot(bands);
         dot += '\n';
         dot += this.dotEdges(graph);
 
@@ -231,6 +217,27 @@ export class GraphVisualizer {
         dot += '}\n';
 
         return dot;
+    }
+
+    /**
+     * The visible projects grouped into one band per dependency level, ordered HIGHEST LEVEL FIRST
+     * so the emitted bands read top-to-bottom with L0 last (hidden projects are omitted, so no
+     * stray rank=same name is emitted for an absent node). LevelBandLayout turns these into the
+     * rank sets and the invisible chain that pins them — see graph-level-bands.ts for why the
+     * chain is required at all.
+     */
+    private levelBands(graph: EnhancedGraph): LevelBand[] {
+        const byLevel = new Map<number, string[]>();
+        for (const project of Object.keys(graph)) {
+            if (this.isHidden(graph[project])) continue;
+            const level = graph[project].level;
+            const names = byLevel.get(level);
+            if (names === undefined) byLevel.set(level, [this.names.getShortName(project)]);
+            else names.push(this.names.getShortName(project));
+        }
+        const levels = [...byLevel.keys()].sort((a: number, b: number): number => b - a);
+        return levels.map((level: number): LevelBand =>
+            new LevelBand(level, [...(byLevel.get(level) as string[])].sort()));
     }
 
     // Node lines: fill colored by framework env set (libType), border shaped by
@@ -479,7 +486,7 @@ export class GraphVisualizer {
             </div>
         </div>
         <div class="legend-item" style="margin-top: 15px;">
-            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>
+            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Every row is one dependency level and nothing else: the HIGHEST level is the top row, levels descend as you read down, and L0 — the foundation libraries everything else is built on — is always the bottom row. Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
     }
