@@ -36,7 +36,7 @@ import {
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
+import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 import { runNewMethods } from './validate-new-methods';
 
 interface MethodViolation {
@@ -420,7 +420,7 @@ export async function runModifiedMethods(
     const disableAllowed = options.disableAllowed ?? true;
 
     const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : { skip: false };
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : new SkipRuleResult(false);
     const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF

@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { isInsideNestedGitRepo, createCiTarget } from './plugin';
+import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
+import { ValidationTargets } from './validation-targets';
 
 function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-plugin-'));
@@ -72,5 +74,43 @@ describe('createCiTarget', () => {
         expect(withArch.dependsOn).toContain('architecture:validate-complete');
         const withoutArch = createCiTarget(['validate-no-file-import-cycles'], false);
         expect(withoutArch.dependsOn).not.toContain('architecture:validate-complete');
+    });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// A rule that turnOffRuleWhileOnBranch can switch off produces a BRANCH-DEPENDENT verdict, so a CACHED
+// target that runs one must carry the branch in its hash. Without this, a hatched branch caches a green
+// under hash H and any later PR that leaves the same files untouched hashes to H and replays it — the
+// relaxation escapes the branch that opted in. nx.json's sharedGlobals entry for webpieces.config.json is
+// the other half (it busts the cache when a hatch is EDITED); neither half is sufficient alone.
+// ---------------------------------------------------------------------------------------------------
+describe('branch identity is in the hash of every CACHED rule-running target', () => {
+    function hasBranchInputs(inputs: unknown): boolean {
+        const list = (inputs ?? []) as { env?: string }[];
+        return BRANCH_IDENTITY_INPUTS.every(want => list.some(got => JSON.stringify(got) === JSON.stringify(want)));
+    }
+
+    it('ci carries them', () => {
+        expect(hasBranchInputs(createCiTarget([], false).inputs)).toBe(true);
+    });
+
+    it('the cached workspace validators carry them', () => {
+        const targets = new ValidationTargets();
+        expect(hasBranchInputs(targets.noCycles().inputs)).toBe(true);
+        expect(hasBranchInputs(targets.packageJson().inputs)).toBe(true);
+        expect(hasBranchInputs(targets.versionsLocked().inputs)).toBe(true);
+    });
+
+    // Scoped, NOT global: an uncached target re-runs anyway, and pushing branch identity into
+    // sharedGlobals would make every task in the workspace hash branch-uniquely and destroy cross-branch
+    // cache reuse fleet-wide.
+    it('an UNCACHED validator is left alone', () => {
+        const tsInSrc = new ValidationTargets().tsInSrc();
+        expect(tsInSrc.cache).toBe(false);
+        expect(hasBranchInputs(tsInSrc.inputs)).toBe(false);
+    });
+
+    it('keys off the same env vars getCurrentBranch reads', () => {
+        expect(BRANCH_IDENTITY_INPUTS).toEqual([{ env: 'GITHUB_HEAD_REF' }, { env: 'WEBPIECES_BRANCH' }]);
     });
 });

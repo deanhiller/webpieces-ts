@@ -31,7 +31,7 @@ import {
     findNewMethodSignaturesInDiff,
 } from '@webpieces/rules-config';
 import { ExecutorResult } from './code-validator';
-import { shouldSkipRule } from './resolve-mode';
+import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 
 interface MethodViolation {
     file: string;
@@ -236,7 +236,7 @@ export async function runNewMethods(
     const disableAllowed = options.disableAllowed ?? true;
 
     const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : { skip: false };
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : new SkipRuleResult(false);
     const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF

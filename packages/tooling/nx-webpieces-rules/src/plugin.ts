@@ -29,6 +29,7 @@ import {
     createVisualizeRuntimeTarget,
     createValidateRuntimeArchitectureTarget,
 } from './runtime-targets';
+import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
 
@@ -573,6 +574,10 @@ export function createCiTarget(
     return {
         executor: 'nx:noop',
         cache: true,
+        // The branch is part of what `ci` asserts, because the rules it aggregates can be switched off by
+        // turnOffRuleWhileOnBranch. Its own cache entry is a noop, but a `ci` hash that ignores the branch
+        // is a green claim about a branch that was never checked. See branch-identity-inputs.ts.
+        inputs: ['default', ...BRANCH_IDENTITY_INPUTS],
         dependsOn,
         metadata: {
             technologies: ['nx'],
@@ -609,7 +614,9 @@ function createCircularDepsTarget(_projectRoot: string, _targetName: string): Ta
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-no-file-import-cycles',
         cache: true,
-        inputs: ['default'],
+        // BRANCH_IDENTITY_INPUTS: this gate honors turnOffRuleWhileOnBranch, and it is CACHED, so without
+        // the branch in its hash a hatched green replays onto branches the hatch never covered.
+        inputs: ['default', ...BRANCH_IDENTITY_INPUTS],
         outputs: [] as string[],
         metadata: {
             technologies: ['madge'],

@@ -18,7 +18,7 @@ import * as path from 'path';
 import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode, detectBase, getChangedFiles } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
+import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 
 interface FileViolation {
     file: string;
@@ -248,7 +248,7 @@ async function runValidatorImpl(
     const disableAllowed = options.disableAllowed ?? true;
 
     const rawMode: FileLimitMode = options.mode ?? 'NEW_AND_MODIFIED_FILES';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : { skip: false };
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : new SkipRuleResult(false);
     const mode: FileLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF

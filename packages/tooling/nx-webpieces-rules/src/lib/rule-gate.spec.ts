@@ -33,7 +33,10 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
     return dir;
 }
 
-const FUTURE_EPOCH = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+// 3 days out: a FUTURE epoch that is also comfortably inside the one-week cap the config validator
+// enforces (MAX_TURN_OFF_EPOCH_DAYS). A 30-day fixture now fails config validation before the skip is
+// reached, and a fixture ON the boundary would depend on how long the suite takes to get here.
+const FUTURE_EPOCH = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 3;
 
 describe('RuleGate', () => {
     it('runs the rule when it is RUN_EVERY_TIME (the shipped default)', () => {

@@ -16,6 +16,9 @@ export {
     SECTION_PLACEMENT_MARKER,
 } from './config-error-banner';
 export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG_PARSE_ATTEMPTS, CONFIG_PARSE_RETRY_MILLIS } from './config-file';
+// The PARSED-BUT-UNVALIDATED config shape. Exported for readers that walk the file generically rather
+// than through the typed config (the pr-gate active-hatch dashboard section reads every rule's hatches).
+export type { RawConfigFile } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
@@ -72,7 +75,7 @@ export { HOOK_GUARD_NAMES, BRANCH_STATE_GUARD_KEY, PR_LIFECYCLE_GUARD_KEY, isHoo
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
-export type { SkipRuleResult } from './skip-rule';
+export { SkipRuleResult } from './skip-rule';
 export {
     detectBase,
     resolveBase,

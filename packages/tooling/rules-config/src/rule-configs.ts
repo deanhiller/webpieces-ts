@@ -74,6 +74,10 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 //   turnOffRuleUntilEpoch:    0 = rule active (epoch in the past); a future unix epoch IN SECONDS =
 //                             temporarily disabled until that moment.
 //   turnOffRuleWhileOnBranch: null = always on; a branch name = disabled while that branch is checked out.
+//                             The name is matched EXACTLY (===). Globs/wildcards are NOT supported and
+//                             must not be added: a pattern would switch a rule off on branches nobody
+//                             enumerated. It is also ignored (loudly — shouldSkipRule throws) on a pull
+//                             request from a FORK, where the branch name is the contributor's to choose.
 //                             Required-but-nullable so its "unset" state is present-and-visible (null)
 //                             rather than omitted.
 // The earlier spellings of these two fields were RENAMED to the names above and are no longer accepted —
