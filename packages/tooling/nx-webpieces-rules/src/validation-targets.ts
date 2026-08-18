@@ -10,12 +10,14 @@
 
 import { TargetConfiguration } from '@nx/devkit';
 
+import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
+
 export class ValidationTargets {
     noCycles(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-no-architecture-cycles',
             cache: true,
-            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
+            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json', ...BRANCH_IDENTITY_INPUTS],
             metadata: {
                 technologies: ['nx'],
                 description: 'Validate the architecture has no circular project dependencies',
@@ -27,7 +29,7 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-packagejson',
             cache: true,
-            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/**/package.json'],
+            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/**/package.json', ...BRANCH_IDENTITY_INPUTS],
             metadata: {
                 technologies: ['nx'],
                 description: 'Validate package.json dependencies match project.json build dependencies',
@@ -71,7 +73,7 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-versions-locked',
             cache: true,
-            inputs: ['{workspaceRoot}/**/package.json'],
+            inputs: ['{workspaceRoot}/**/package.json', ...BRANCH_IDENTITY_INPUTS],
             metadata: {
                 technologies: ['nx'],
                 description:

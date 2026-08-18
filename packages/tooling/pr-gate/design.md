@@ -12,6 +12,7 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
+    ActiveHatchReport["ActiveHatchReport"]
     AgedTreeSweeper["AgedTreeSweeper"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
@@ -30,6 +31,7 @@ graph TD
     ChecklistScanner["ChecklistScanner"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
+    ConfigFile["ConfigFile"]
     Dashboard["Dashboard"]
     DevDeployRefs["DevDeployRefs"]
     DevDeployWatchHints["DevDeployWatchHints"]
@@ -86,6 +88,7 @@ graph TD
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
+    ActiveHatchReport --> ConfigFile
     AiBranchName --> BranchNaming
     BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
@@ -221,6 +224,7 @@ graph TD
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewerInstructionsService
     ReviewStageReceiptService --> ReviewJsonService
+    ReviewUpsertPrCommand --> ActiveHatchReport
     ReviewUpsertPrCommand --> AiBranchName
     ReviewUpsertPrCommand --> BuildAffected
     ReviewUpsertPrCommand --> BuildArtifactGate

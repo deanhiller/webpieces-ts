@@ -20,11 +20,50 @@ export { recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from '.
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from './to-error';
 
+/**
+ * The longest a `turnOffRuleUntilEpoch` may reach into the future: ONE WEEK. Poke it again next week to
+ * extend — that weekly re-set IS the intended workflow, not a workaround: it is what makes a rule that is
+ * off on purpose stay a decision somebody keeps making, instead of one nobody remembers.
+ *
+ * DELIBERATELY ASYMMETRIC with turnOffRuleWhileOnBranch, which has NO cap and must not get one. The epoch
+ * hatch is REPO-WIDE while it lasts, so a long window shelters every unrelated change that lands inside it
+ * (a fleet repo was found with max-file-lines/max-method-lines switched off until 2026-10-01 — 43 days
+ * out, six times this cap). The branch hatch fires only on ONE exact branch name — a big refactor
+ * legitimately runs 35+ days, and capping that would only interrupt the one branch that opted in.
+ */
+export const MAX_TURN_OFF_EPOCH_DAYS = 7;
+
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
+/**
+ * Reject a `turnOffRuleUntilEpoch` more than MAX_TURN_OFF_EPOCH_DAYS into the future.
+ *
+ * A PAST epoch is always valid: it is inert (it skips nothing), and every existing config is full of them.
+ * The BOUNDARY is inclusive — exactly MAX_TURN_OFF_EPOCH_DAYS out is accepted, only strictly beyond it is
+ * refused — so a config written as "now + 7 days" is never rejected by the second it took to save.
+ */
+// webpieces-disable no-function-outside-class -- module-scope validator helper, matching every other check in this file
+function epochCapError(label: string, value: number): string | null {
+    const maxEpoch = Math.floor(Date.now() / 1000) + MAX_TURN_OFF_EPOCH_DAYS * SECONDS_PER_DAY;
+    if (value <= maxEpoch) return null;
+    const daysOut = Math.round((value - Date.now() / 1000) / SECONDS_PER_DAY);
+    const maxDate = new Date(maxEpoch * 1000).toISOString().split('T')[0];
+    return (
+        `${label} "turnOffRuleUntilEpoch": ${value} is ${daysOut} days in the future — the maximum is ` +
+        `${MAX_TURN_OFF_EPOCH_DAYS} days. A rule switched off for longer than that is off for work nobody ` +
+        `had in mind when it was written, because this hatch is REPO-WIDE while it lasts.\n` +
+        `  CURE: set it to at most ${maxEpoch} (${maxDate}), then re-set it WEEKLY for as long as you ` +
+        `still need it — that renewal is the intended workflow, not a workaround. If the rule is off for ` +
+        `ONE branch's work, use "turnOffRuleWhileOnBranch": "<exact branch name>" instead; that one has ` +
+        `no cap.`
+    );
+}
+
 function valueHint(def: FieldDef, key?: string): string {
     // The two universal escape hatches, REQUIRED on every rule so they're always visible. Spell out the
     // "off" value so a fresh config seeds them in the active/no-op state (0 / null), not a placeholder.
     if (key === 'turnOffRuleUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
-    if (key === 'turnOffRuleWhileOnBranch') return 'null  (null = always on; a branch name disables the rule while that branch is checked out)';
+    if (key === 'turnOffRuleWhileOnBranch') return 'null  (null = always on; an EXACT branch name — no globs — disables the rule while that branch is checked out)';
     return def.enumValues
         ? `"${def.enumValues.join(' | ')}"`
         : def.type === 'string[]' ? '["<string>", ...]'
@@ -148,6 +187,47 @@ function renamedFieldError(scope: string, oldKey: string, newKey: string): strin
     return `${scope} Unknown field "${oldKey}" — it was renamed to "${newKey}". Rename it (the value carries over unchanged; for the branch hatch, use null when there is no branch).`;
 }
 
+/**
+ * Field-level errors for ONE configured rule entry: unknown/renamed/retired keys, type and enum
+ * mismatches, and the two-week cap on turnOffRuleUntilEpoch.
+ *
+ * Extracted out of validateWebpiecesConfig purely so that function stays inside max-method-lines; it is
+ * the same checks in the same order.
+ */
+// webpieces-disable no-any-unknown -- one config entry as opaque JSON; every field is typed-checked below
+// webpieces-disable no-function-outside-class -- module-scope validator helper, matching every other check in this file
+function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: Record<string, FieldDef>): string[] {
+    const errors: string[] = [];
+    for (const [key, value] of Object.entries(entry)) {
+        const fieldDef = schema[key];
+        if (!fieldDef) {
+            const renamedTo = RENAMED_FIELD_ALIASES[key];
+            if (renamedTo) {
+                errors.push(renamedFieldError(`[${ruleName}]`, key, renamedTo));
+                continue;
+            }
+            const retiredHint = RETIRED_FIELD_HINTS[`${ruleName}.${key}`];
+            const suffix = retiredHint ? ` ${retiredHint}` : '';
+            errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].${suffix}`);
+            continue;
+        }
+        // A nullable field (e.g. turnOffRuleWhileOnBranch) accepts JSON null in addition to its type.
+        if (value === null && fieldDef.nullable) continue;
+        if (fieldDef.type === 'string[]') {
+            if (!Array.isArray(value) || !value.every(v => typeof v === 'string'))
+                errors.push(`[${ruleName}] "${key}" must be string[], got ${typeof value}.`);
+        } else if (typeof value !== fieldDef.type) {
+            errors.push(`[${ruleName}] "${key}" must be ${fieldDef.type}, got ${typeof value}.`);
+        } else if (fieldDef.enumValues && !fieldDef.enumValues.includes(value as string)) {
+            errors.push(`[${ruleName}] "${key}" = "${value}" is not valid. Must be one of: ${fieldDef.enumValues.join(', ')}.`);
+        } else if (key === 'turnOffRuleUntilEpoch') {
+            const capError = epochCapError(`[${ruleName}]`, value as number);
+            if (capError) errors.push(capError);
+        }
+    }
+    return errors;
+}
+
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
@@ -174,30 +254,7 @@ export function validateWebpiecesConfig(
             if (!hasCustomRulesDir) errors.push(unknownRuleError(ruleName));
             continue;
         }
-        for (const [key, value] of Object.entries(entry)) {
-            const fieldDef = schema[key];
-            if (!fieldDef) {
-                const renamedTo = RENAMED_FIELD_ALIASES[key];
-                if (renamedTo) {
-                    errors.push(renamedFieldError(`[${ruleName}]`, key, renamedTo));
-                    continue;
-                }
-                const retiredHint = RETIRED_FIELD_HINTS[`${ruleName}.${key}`];
-                const suffix = retiredHint ? ` ${retiredHint}` : '';
-                errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].${suffix}`);
-                continue;
-            }
-            // A nullable field (e.g. turnOffRuleWhileOnBranch) accepts JSON null in addition to its type.
-            if (value === null && fieldDef.nullable) continue;
-            if (fieldDef.type === 'string[]') {
-                if (!Array.isArray(value) || !value.every(v => typeof v === 'string'))
-                    errors.push(`[${ruleName}] "${key}" must be string[], got ${typeof value}.`);
-            } else if (typeof value !== fieldDef.type) {
-                errors.push(`[${ruleName}] "${key}" must be ${fieldDef.type}, got ${typeof value}.`);
-            } else if (fieldDef.enumValues && !fieldDef.enumValues.includes(value as string)) {
-                errors.push(`[${ruleName}] "${key}" = "${value}" is not valid. Must be one of: ${fieldDef.enumValues.join(', ')}.`);
-            }
-        }
+        errors.push(...fieldErrors(ruleName, entry, schema));
         // Required fields must actually be present. Until now the loop above only checked
         // fields that WERE present, so an entry like `{}` (or one missing `mode` /
         // `turnOffRuleUntilEpoch`) slipped through. Every non-optional schema field is mandatory.
@@ -476,12 +533,16 @@ function validateMatchRule(entry: unknown, index: number): string[] {
 
     // Both escape hatches are REQUIRED on every match-rule too (same as keyed rules), so they are always
     // visible. turnOffRuleUntilEpoch: number (0 = active; a future unix-epoch in seconds = temporarily
-    // off). turnOffRuleWhileOnBranch: string | null (null = always on; a branch name disables the rule
-    // while that branch is checked out).
-    if (typeof e['turnOffRuleUntilEpoch'] !== 'number')
+    // off). turnOffRuleWhileOnBranch: string | null (null = always on; an EXACT branch name — matched
+    // with ===, never as a glob — disables the rule while that branch is checked out).
+    if (typeof e['turnOffRuleUntilEpoch'] !== 'number') {
         errors.push(`[match-rules] ${label}.turnOffRuleUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
+    } else {
+        const capError = epochCapError(`[match-rules] ${label}`, e['turnOffRuleUntilEpoch']);
+        if (capError) errors.push(capError);
+    }
     if (!(e['turnOffRuleWhileOnBranch'] === null || typeof e['turnOffRuleWhileOnBranch'] === 'string'))
-        errors.push(`[match-rules] ${label}.turnOffRuleWhileOnBranch must be a string or null (null = no branch / always on).`);
+        errors.push(`[match-rules] ${label}.turnOffRuleWhileOnBranch must be a string or null (null = no branch / always on; a string is an EXACT branch name, globs are not supported).`);
 
     // The old escape-hatch names were renamed — flag them precisely.
     for (const oldKey of Object.keys(RENAMED_FIELD_ALIASES)) {

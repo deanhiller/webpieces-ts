@@ -4,6 +4,7 @@ import {
     ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { REVIEW_STAGE } from '../workflow/build-gate-log';
@@ -77,6 +78,7 @@ export class ReviewUpsertPrCommand {
         private readonly briefingBuilder: ReviewerBriefingBuilder,
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly receipts: ReviewStageReceiptService,
+        private readonly activeHatchReport: ActiveHatchReport,
         // Injected only to RESOLVE + RENDER refusals (see refusals()). This stage never archives a verdict.
         private readonly reviewJsonService: ReviewJsonService,
     ) {}
@@ -98,7 +100,21 @@ export class ReviewUpsertPrCommand {
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
             briefings.map((b: ReviewerBriefing): string => b.subagent),
         ));
+        this.reportActiveHatches(repoRoot);
         this.report(repoRoot, featureName, scan, briefings, opts);
+    }
+
+    /**
+     * List every rule that is currently switched off in webpieces.config.json. NON-BLOCKING and printed
+     * before the instruction block, because it is context for the review rather than a step in it.
+     *
+     * A hatch is the one config change that makes the build QUIETER, so no gate, reviewer or red check
+     * will ever mention it — which is how a repo ends up with rules off for weeks that nobody chose to
+     * leave off. This is the only place in the flow that says so out loud.
+     */
+    private reportActiveHatches(repoRoot: string): void {
+        const hatches: ActiveHatch[] = this.activeHatchReport.scan(repoRoot);
+        process.stdout.write(this.activeHatchReport.render(hatches));
     }
 
     /**
