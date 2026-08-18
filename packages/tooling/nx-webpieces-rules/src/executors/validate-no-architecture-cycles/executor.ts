@@ -11,6 +11,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
+import { ProjectCycleDetector } from '../../lib/graph-cycles';
 import { RuleGate } from '../../lib/rule-gate';
 import { toError } from '../../toError';
 
@@ -40,11 +41,19 @@ export default async function runExecutor(
         console.log('📊 Generating dependency graph from project.json files...');
         const rawGraph = await generateGraph();
 
-        // Step 2: Topological sort (validates acyclic)
-        console.log('🔄 Checking for cycles (topological sort)...');
+        // Step 2: Enumerate EVERY cycle (Tarjan), then stratify.
+        //
+        // The detector runs first on purpose: the topological sort also refuses a cyclic graph, but
+        // reports one cycle and an undifferentiated "among: ..." list, so a repo with several cycles
+        // pays one full run per cycle to discover them all. It walks PROJECT KEYS, never display
+        // names — fusing `@scope/x` with `x` would invent a cycle that does not exist.
+        console.log('🔄 Checking for cycles (all strongly connected components)...');
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            sortGraphTopologically(rawGraph);
+            const detector = new ProjectCycleDetector();
+            detector.assertAcyclic(rawGraph, 'the nx project graph');
+            const graph = sortGraphTopologically(rawGraph);
+            detector.assertLevelsDescend(rawGraph, detector.levelsOf(graph), 'the freshly sorted graph');
             console.log('✅ No circular dependencies detected!');
 
             // Print summary
@@ -56,10 +65,6 @@ export default async function runExecutor(
             const error = toError(err);
             console.error('❌ Circular dependency detected!');
             console.error(error.message);
-            console.error('\nTo fix:');
-            console.error('  1. Review the cycle above');
-            console.error('  2. Break the cycle by refactoring dependencies');
-            console.error('  3. Run this check again');
             return { success: false };
         }
     } catch (err: unknown) {

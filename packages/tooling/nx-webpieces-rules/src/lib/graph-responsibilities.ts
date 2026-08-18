@@ -6,7 +6,7 @@
  * dependency level HIGH → LOW (top-level apps first, deepest libs last) so a
  * reader scrolls from the runnable servers/clients down into the libraries.
  *
- * Each card carries `data-node="<shortName>"` matching the graph box's title, so
+ * Each card carries `data-node="<projectKey>"` matching the graph box's title, so
  * the page script can filter the list to just the locked box's chain (see
  * graph-visualizer.client.ts). The summary paragraph is the `shortDescription`
  * already on each graph entry; the expanded body is the rendered markdown file.
@@ -60,12 +60,16 @@ export class ResponsibilitiesRenderer {
     }
 
     private renderCard(project: string, entry: GraphEntry, workspaceRoot: string): string {
+        // data-node is the graph box's IDENTITY (the project key, matching the SVG <title>); the
+        // heading stays the pretty short name. Keying the attribute on the short name is what let
+        // two same-named projects share one card's visibility — see graph-names.ts.
+        const nodeId = this.names.getNodeId(project);
         const shortName = this.names.getShortName(project);
         const summary = entry.shortDescription ?? '';
         const summaryHtml = summary ? ` — ${this.escapeHtml(summary)}` : '';
         const body = this.readBody(entry, workspaceRoot);
         return (
-            `<details class="wp-resp-card" data-node="${this.escapeHtml(shortName)}">` +
+            `<details class="wp-resp-card" data-node="${this.escapeHtml(nodeId)}">` +
             `<summary><span class="wp-resp-level">L${entry.level}</span> ` +
             `<strong>${this.escapeHtml(shortName)}</strong>${summaryHtml}</summary>` +
             `<div class="wp-resp-body">${body}</div>` +

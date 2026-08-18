@@ -11,6 +11,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { writeTemplate } from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
+import { ProjectCycleDetector } from '../../lib/graph-cycles';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { ProjectInfo } from '../../lib/project-info';
@@ -150,9 +151,21 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     console.log("📊 Generating dependency graph from nx's project graph...");
     const reducedGraph = await generateReducedGraph();
 
+    // Step 1b: The graph is a BUILD graph — refuse a cyclic one, naming EVERY cycle. This runs
+    // before the sort deliberately: the sort also refuses, but reports one cycle and an
+    // undifferentiated list of everything tangled with it, so a repo with several cycles pays one
+    // full regeneration per cycle to discover them.
+    console.log('🔄 Checking the project graph is acyclic...');
+    const cycles = new ProjectCycleDetector();
+    cycles.assertAcyclic(reducedGraph, 'the nx project graph');
+
     // Step 2: Topological sort (to assign levels for visualization)
     console.log('🔄 Computing topological layers...');
     const enhancedGraph = sortGraphTopologically(reducedGraph);
+    // ...and assert the stratification it just produced actually holds: every dependency strictly
+    // below its dependent. Safe to assert only because the graph was sorted a line ago — a stale
+    // committed file is never checked this way.
+    cycles.assertLevelsDescend(reducedGraph, cycles.levelsOf(enhancedGraph), 'the freshly sorted graph');
 
     // Step 3: Enrich with AI metadata (framework, shortDescription, file
     // pointers). This VALIDATES (responsibilities.md required per project)
