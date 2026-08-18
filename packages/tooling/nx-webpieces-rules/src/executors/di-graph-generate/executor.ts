@@ -151,7 +151,7 @@ export function removeDesignFiles(projectRootAbs: string): string[] {
  *
  * This is safe because nothing downstream distinguishes "empty file" from "no file", and that is by
  * design rather than luck: `graph-metadata.ts:hasGeneratedDesign()` documents that a MISSING or
- * unparseable design.json reads as "no design", so the architecture viz makes a box clickable only
+ * unparseable design.json reads as "no design", so a box's node menu gets a "View Design" item only
  * when `designs[]` is non-empty either way. `wp-design-visualize` likewise only fails when ZERO
  * design.json exist repo-wide.
  *

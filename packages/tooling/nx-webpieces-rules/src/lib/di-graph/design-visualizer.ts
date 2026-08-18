@@ -12,6 +12,10 @@ import * as path from 'path';
 import { DiDesign, DiGraph, DiNode } from './model';
 import { sortGraph } from './serializer';
 import { generateDesignDot, isStackedNode } from './dot';
+import { GraphNodeMenu } from '../graph-node-menu';
+
+/** The ONE floating-node-menu implementation, shared with architecture/dependencies.html. */
+const NODE_MENU = new GraphNodeMenu();
 
 export class DesignVisualizationPaths {
     constructor(
@@ -46,6 +50,7 @@ function pageStyles(): string {
         .back { max-width: 95%; margin: 0 auto 8px; }
         .back a { color: #1565C0; text-decoration: none; }
         .back a:hover { text-decoration: underline; }
+        .hint { text-align: center; color: #555; margin: 0 0 16px; }
         h2 { color: #333; margin-bottom: 4px; }
         .meta { color: #777; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
         .section { background: white; padding: 20px; border-radius: 8px;
@@ -56,6 +61,8 @@ function pageStyles(): string {
         .legend-item { margin: 8px 0; }
         .legend-box { display: inline-block; width: 20px; height: 20px;
                       border: 1px solid #ccc; margin-right: 10px; vertical-align: middle; }
+        ${NODE_MENU.styles()}
+        ${NODE_MENU.dimStyles('.graph')}
     `;
 }
 
@@ -125,16 +132,40 @@ function stackScript(): string {
     `;
 }
 
+/**
+ * Wire the shared floating menu onto every box of one rendered design graph.
+ *
+ * A class box has no design page of its own (design.html is per PROJECT, and this IS one), so no
+ * "View Design" item is ever built here — the item is absent, never dead. The bottom item is the
+ * lock: this page has no dropdown and no responsibilities list, so locking dims every other box in
+ * this graph and lights the locked one. Each graph on the page locks independently.
+ */
+// webpieces-disable no-function-outside-class -- pure emitter helper, matching every sibling in this file
+function menuWiringScript(): string {
+    return `
+        function wireNodeMenu(element) {
+            const lock = new WpNodeLock(element);
+            WpNodeMenu.wire(element, function (name, node) {
+                return [new WpNodeMenuItem(lock.isLocked(name) ? 'Unlock' : 'Lock', function () {
+                    lock.toggle(name, node);
+                })];
+            });
+        }
+    `;
+}
+
 function renderScript(entries: DesignGraphEntry[]): string {
     return `
         const graphs = ${JSON.stringify(entries)};
         ${stackScript()}
+        ${menuWiringScript()}
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)
                 .then(element => {
                     paintStacks(element, g.stackedIds);
                     document.getElementById(g.id).appendChild(element);
+                    wireNodeMenu(element);
                 })
                 .catch(err => {
                     console.error(err);
@@ -187,8 +218,10 @@ export function generateDesignHTML(graph: DiGraph, backHref?: string): string {
 <body>
     ${backLink}
     <h1>${htmlEscape(title)}</h1>
+    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box in that graph so one class stands alone; <strong>Unlock</strong> restores it.</p>
     ${pageLegend()}
     ${body}
+    <script>${NODE_MENU.script()}</script>
     <script>${renderScript(entries)}</script>
 </body>
 </html>`;

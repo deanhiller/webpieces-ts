@@ -18,6 +18,34 @@
  */
 declare const __DOT__: string;
 
+/**
+ * The design pages that EXIST, as JSON — substituted the same way `__DOT__` is. A node absent from
+ * it has no design.html, so its menu gets no "View Design" item at all.
+ *
+ * It is JSON, so its element type must be a structural declaration rather than one of the repo's
+ * data CLASSES: nothing constructs these in the browser, the page is handed them already parsed.
+ */
+declare const __DESIGN_LINKS__: DesignLinkJson[];
+
+interface DesignLinkJson {
+    nodeId: string;
+    href: string;
+}
+
+/**
+ * The shared floating node menu, emitted by graph-node-menu.ts into a <script> ahead of this one.
+ * Declared (not imported) because these are global scripts — see the header above.
+ */
+declare class WpNodeMenuItem {
+    constructor(label: string, onSelect: () => void);
+}
+
+declare class WpNodeMenu {
+    /** Give every `g.node` of `svg` a click that opens the menu with the items the callback builds. */
+    static wire(svg: SVGSVGElement, itemsFor: (name: string, node: SVGGElement) => WpNodeMenuItem[]): void;
+    static close(): void;
+}
+
 /** The @viz-js/viz v3 UMD global the generated page loads from a CDN before this script runs. */
 declare const Viz: VizGlobal;
 

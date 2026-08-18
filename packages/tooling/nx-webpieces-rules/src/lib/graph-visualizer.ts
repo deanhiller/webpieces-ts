@@ -19,6 +19,7 @@ import { GraphNames, NodeIdOwner } from './graph-names';
 import { LevelBand, LevelBandLayout } from './graph-level-bands';
 import { ProjectAdjacency, ProjectCycleDetector } from './graph-cycles';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
+import { GraphNodeMenu } from './graph-node-menu';
 import { toError } from '../toError';
 
 /**
@@ -47,6 +48,20 @@ const ARCH_OUTPUT_DIR = 'architecture';
 const MAX_EDGE_LABEL_APIS = 4;
 
 
+/**
+ * One node's design page, handed to the browser so the node menu can offer "View Design" for the
+ * boxes that HAVE one and omit the item entirely for the boxes that do not.
+ *
+ * The link is data on the PAGE now, not a `URL=` attribute in the DOT: a URL made viz.js wrap the
+ * box in an `<a>` and clicking navigated straight out, which the menu replaces.
+ */
+export class DesignLink {
+    constructor(
+        public readonly nodeId: string,
+        public readonly href: string
+    ) {}
+}
+
 export class VisualizationPaths {
     htmlPath: string;
 
@@ -61,6 +76,9 @@ export class VisualizationPaths {
  * replaced by the entire DOT too, bloating every generated page.
  */
 export const CLIENT_DOT_PLACEHOLDER = '__' + 'DOT' + '__';
+
+/** Same contract as CLIENT_DOT_PLACEHOLDER, for the node → design.html links the menu offers. */
+export const CLIENT_DESIGN_LINKS_PLACEHOLDER = '__' + 'DESIGN_LINKS' + '__';
 
 /**
  * Read a compiled browser client sitting beside this file.
@@ -85,6 +103,8 @@ export class GraphVisualizer {
     private readonly responsibilities = new ResponsibilitiesRenderer();
     private readonly bandLayout = new LevelBandLayout();
     private readonly cycles = new ProjectCycleDetector();
+    /** The ONE floating-node-menu implementation, shared with the per-project design pages. */
+    private readonly nodeMenu = new GraphNodeMenu();
 
     /**
      * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
@@ -186,14 +206,30 @@ export class GraphVisualizer {
     }
 
     /**
-     * Click-through href for a node: the project's committed design.html, made
+     * Href for a node's design page: the project's committed design.html, made
      * relative to architecture/dependencies.html. Returns null when the project
-     * has no generated DI design (no design.json → no clickable design page).
+     * has no generated DI design (no design.json → no design page exists).
      */
     private designHtmlHref(designFile: string | undefined): string | null {
         if (!designFile) return null;
         const designHtml = designFile.replace(/design\.json$/, 'design.html');
         return path.posix.relative(ARCH_OUTPUT_DIR, designHtml);
+    }
+
+    /**
+     * The design pages that EXIST, one entry per visible node that has one. A node absent from this
+     * list gets no "View Design" item at all — the item is never rendered dead or greyed out.
+     */
+    designLinks(graph: EnhancedGraph): DesignLink[] {
+        const links: DesignLink[] = [];
+        for (const project of Object.keys(graph)) {
+            const info = graph[project];
+            if (this.isHidden(info)) continue;
+            const href = this.designHtmlHref(info.designFile);
+            if (href === null) continue;
+            links.push(new DesignLink(this.names.getNodeId(project), href));
+        }
+        return links;
     }
 
     /**
@@ -263,9 +299,9 @@ export class GraphVisualizer {
     }
 
     // Node lines: fill colored by framework env set (libType), border shaped by
-    // role; the label shows the env set + role (e.g. [browser, node] · server). A
-    // node with a generated DI design also gets a URL so the rendered SVG box is
-    // clickable — it opens that project's committed design.html in a new tab.
+    // role; the label shows the env set + role (e.g. [browser, node] · server).
+    // No node carries a URL: EVERY box is clickable and opens the floating node
+    // menu instead, which is where a design page is reached (see designLinks).
     private dotNodes(graph: EnhancedGraph): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
@@ -277,12 +313,10 @@ export class GraphVisualizer {
             const role = info.role ?? 'lib';
             const color = this.frameworkColor(frameworks);
             const border = this.roleBorderAttrs(role);
-            const href = this.designHtmlHref(info.designFile);
-            const link = href ? `, URL="${href}", target="_blank"` : '';
             const envSet = `[${frameworks.join(', ')}]`;
             const labelMeta = `L${info.level} · ${envSet} · ${role}`;
             // Identity is the project key; the LABEL is the pretty short name.
-            dot += `  "${nodeId}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
+            dot += `  "${nodeId}" [fillcolor="${color}"${border}, label="${shortName}\\n(${labelMeta})"];\n`;
         }
         return dot;
     }
@@ -311,13 +345,14 @@ export class GraphVisualizer {
      */
     generateHTML(
         dot: string,
+        links: DesignLink[],
         title: string = 'Monorepo Dependency Architecture',
         lockControl: string = '',
         responsibilitiesHtml: string = ''
     ): string {
         const styles = this.styles();
         const legend = this.legend();
-        const script = this.script(dot);
+        const script = this.script(dot, links);
 
         return `<!DOCTYPE html>
 <html>
@@ -329,12 +364,13 @@ export class GraphVisualizer {
 </head>
 <body>
     <h1>${title}</h1>
-    <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
+    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below.</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     ${legend}
     ${lockControl}
     <div id="graph"></div>
     ${responsibilitiesHtml}
+    <script>${this.nodeMenu.script()}</script>
     <script>${script}</script>
 </body>
 </html>`;
@@ -376,33 +412,12 @@ export class GraphVisualizer {
         body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
         h1 { text-align: center; color: #333; }
         .hint { text-align: center; color: #555; margin: 0 0 16px; }
-        /* viz.js renders node URLs as <a> — only boxes with a design.html get
-         * one, so a:hover is a clickable-only signal. Make it pop clearly: a
-         * thicker border PLUS a blue glow lift the box off the page, so it is
-         * obvious which boxes you can click into vs. which you cannot. (A plain
-         * stroke bump is invisible on server/client boxes, whose resting border
-         * is already thick.) */
-        #graph a { cursor: pointer; }
-        #graph a polygon,
-        #graph a ellipse { transition: stroke-width 0.12s ease, filter 0.12s ease; }
-        #graph a:hover polygon,
-        #graph a:hover ellipse {
-            stroke: #1976d2;
-            stroke-width: 5;
-            filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
-        }
-        /* Hover-highlight (wired up in JS after viz.js renders). Hovering a node
-         * adds .wp-dim to the <svg> and .wp-focus/.wp-neighbor/.wp-hl to the
-         * connected box, its neighbors, and its edges. We ONLY dim: the connected
-         * subgraph keeps its exact normal look (full opacity), the rest recedes.
-         * The un-dim rules repeat "svg.wp-dim" so they out-specify the dim rule
-         * (which has an extra type selector) — else the subgraph stays dimmed. */
-        #graph .node, #graph .edge { transition: opacity 0.12s ease; }
-        #graph svg.wp-dim .node,
-        #graph svg.wp-dim .edge { opacity: 0.15; }
-        #graph svg.wp-dim .node.wp-focus,
-        #graph svg.wp-dim .node.wp-neighbor,
-        #graph svg.wp-dim .edge.wp-hl { opacity: 1; }
+        /* Every box is clickable (the floating node menu replaced direct
+         * navigation), so the menu's own stylesheet carries the cursor + blue
+         * glow, and the dim/undim rules a hover or a lock toggles. Both are
+         * shared verbatim with the per-project design pages. */
+        ${this.nodeMenu.styles()}
+        ${this.nodeMenu.dimStyles('#graph')}
         #graph {
             text-align: center;
             background: white;
@@ -589,8 +604,10 @@ export class GraphVisualizer {
      * ONCE in the client (never in one of its comments): every literal occurrence would otherwise be
      * replaced by the whole DOT.
      */
-    private script(dot: string): string {
-        return this.clientJs().split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
+    private script(dot: string, links: DesignLink[]): string {
+        return this.clientJs()
+            .split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot))
+            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER).join(JSON.stringify(links));
     }
 
     /**
@@ -598,8 +615,9 @@ export class GraphVisualizer {
      * architecture/dependencies.html, next to dependencies.json.
      *
      * This is a checked-in artifact, regenerated deterministically by
-     * architecture:generate so the boxes stay clickable into each project's
-     * design.html. The DOT is embedded in the HTML (rendered client-side by
+     * architecture:generate so every box keeps its menu, and the "View Design"
+     * item keeps pointing at each project's committed design.html as designs
+     * come and go. The DOT is embedded in the HTML (rendered client-side by
      * viz.js). Output is deterministic (sorted graph in → same bytes out) so git
      * only shows a diff when the architecture actually changed.
      */
@@ -616,7 +634,8 @@ export class GraphVisualizer {
 
         const lockControl = this.lockControl(graph);
         const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
-        const html = this.generateHTML(this.generateDot(graph, title), title, lockControl, responsibilities);
+        const html = this.generateHTML(
+            this.generateDot(graph, title), this.designLinks(graph), title, lockControl, responsibilities);
         const htmlPath = path.join(outputDir, 'dependencies.html');
         fs.writeFileSync(htmlPath, html, 'utf-8');
 

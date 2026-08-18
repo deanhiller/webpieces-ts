@@ -12,9 +12,13 @@
  * deleted, and the same cure applies. The logic is a CLASS now, which is what `no-function-outside-class`
  * was asking for all along; nothing needed a disable.
  *
- * Behaviour, unchanged: after Viz renders the SVG, hovering a box dims the rest and lights its full
+ * Behaviour: after Viz renders the SVG, hovering a box dims the rest and lights its full
  * ancestor+descendant chain; the #wp-lock dropdown PINS one box's chain (the dim survives mouse-leave)
  * and filters the responsibilities cards below the graph to just that chain. "All" clears the lock.
+ *
+ * CLICKING a box opens the shared floating node menu (graph-node-menu.ts, the same menu every
+ * project's design.html uses) — "View Design" only for a project that HAS a design.html, then
+ * Lock/Unlock. Menu and dropdown are one lock: both go through setLock(), so each reflects the other.
  */
 
 // The DOT placeholder and the `Viz` global are declared once in viz-client-globals.d.ts — both
@@ -65,12 +69,13 @@ class GraphHighlighter {
 
     constructor(private readonly svg: SVGSVGElement) {}
 
-    /** Index the SVG, then wire hover and the lock dropdown. */
+    /** Index the SVG, then wire hover, the lock dropdown, and the per-node floating menu. */
     wire(): void {
         this.indexNodes();
         this.indexEdges();
         this.wireHover();
         this.wireLock();
+        this.wireMenu();
     }
 
     private indexNodes(): void {
@@ -177,17 +182,63 @@ class GraphHighlighter {
     }
 
     private wireLock(): void {
-        const lockSelect = document.getElementById('wp-lock') as HTMLSelectElement | null;
+        const lockSelect = this.lockSelect();
         if (lockSelect === null) return;
         lockSelect.addEventListener('change', (): void => {
-            this.locked = lockSelect.value === '' ? null : lockSelect.value;
-            if (this.locked === null) {
-                this.clear();
-            } else {
-                const g = this.nodeByName.get(this.locked);
-                if (g !== undefined) this.highlight(this.locked, g);
+            this.applyLock(lockSelect.value === '' ? null : lockSelect.value);
+        });
+    }
+
+    private lockSelect(): HTMLSelectElement | null {
+        return document.getElementById('wp-lock') as HTMLSelectElement | null;
+    }
+
+    /** True when `name` is the box the page is currently locked on — what the menu labels itself by. */
+    isLocked(name: string): boolean {
+        return this.locked === name;
+    }
+
+    /**
+     * THE one lock entry point, so the dropdown and the node menu can never disagree: it sets the
+     * dropdown's selection, re-highlights, and re-filters the cards whichever of the two asked.
+     * `null` is "All (no lock)".
+     */
+    setLock(name: string | null): void {
+        const lockSelect = this.lockSelect();
+        if (lockSelect !== null) lockSelect.value = name === null ? '' : name;
+        this.applyLock(name);
+    }
+
+    private applyLock(name: string | null): void {
+        this.locked = name;
+        if (name === null) {
+            this.clear();
+        } else {
+            const g = this.nodeByName.get(name);
+            if (g !== undefined) this.highlight(name, g);
+        }
+        this.filterCards();
+    }
+
+    /**
+     * Every box opens the floating menu (the shared one both generated graphs use). "View Design" is
+     * only built when that project actually HAS a committed design.html; the bottom item is always
+     * Lock or Unlock, whichever applies to this box right now.
+     */
+    private wireMenu(): void {
+        const designs = new Map<string, string>();
+        for (const link of __DESIGN_LINKS__) designs.set(link.nodeId, link.href);
+        WpNodeMenu.wire(this.svg, (name: string): WpNodeMenuItem[] => {
+            const items: WpNodeMenuItem[] = [];
+            const href = designs.get(name);
+            if (href !== undefined) {
+                items.push(new WpNodeMenuItem('View Design', (): void => { window.open(href, '_blank'); }));
             }
-            this.filterCards();
+            const locked = this.isLocked(name);
+            items.push(new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', (): void => {
+                this.setLock(locked ? null : name);
+            }));
+            return items;
         });
     }
 

@@ -87,8 +87,8 @@ export function enrichGraph(
         // without one has NO design.json at all (di-graph-generate stopped writing
         // empty ones and reaps stale ones), and legacy repos may still carry an
         // empty `{ designs: [] }` until their next build — both must read the same
-        // way, and neither becomes clickable in the arch viz (designHtmlHref keys
-        // off designFile). See graph-visualizer.ts.
+        // way, and neither gets a "View Design" item on its node menu in the arch
+        // viz (designLinks keys off designFile). See graph-visualizer.ts.
         if (hasGeneratedDesign(workspaceRoot, info.root)) {
             entry.designFile = toRepoRelative(info.root, 'design.json');
         }
@@ -328,8 +328,8 @@ function toRepoRelative(projectRoot: string, fileName: string): string {
  * equivalence is load-bearing rather than incidental: di-graph-generate writes NO
  * file for a project without a design root (and reaps a stale one), so "absent"
  * is now the normal state for every plain lib and legacy service. Repos that have
- * not rebuilt since still carry `{ designs: [] }` files. Either way the arch viz
- * must not render the box as clickable. See design-file-emission.spec.ts.
+ * not rebuilt since still carry `{ designs: [] }` files. Either way the box's node
+ * menu must offer no "View Design" item. See design-file-emission.spec.ts.
  */
 function hasGeneratedDesign(workspaceRoot: string, projectRoot: string): boolean {
     const designPath = path.join(workspaceRoot, projectRoot, 'design.json');
