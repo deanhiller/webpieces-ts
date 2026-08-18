@@ -6,7 +6,7 @@ import { logRejection, extractRuleNames } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0_BLOCK, matrixL2Row } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { RepoRootFinder, renderRuleFailForAi } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
@@ -379,7 +379,7 @@ export async function runMain(mode: HookMode): Promise<void> {
 // webpieces-disable no-function-outside-class -- sibling of the module-scope hook entry points in this adapter; a lone class for one terminal boundary would break the file's shape
 function denyForCrash(error: Error, toolName: string): never {
     if (error instanceof RuleFailError) {
-        emitDeny(error.aiMessage, toolName, 'rule-crash');
+        emitDeny(renderRuleFailForAi(error), toolName, 'rule-crash');
     }
     if (error instanceof InformAiError) {
         emitDeny(error.message, toolName, 'bad-config-or-stdin');

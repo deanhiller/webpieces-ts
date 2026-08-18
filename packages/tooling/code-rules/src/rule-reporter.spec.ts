@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { RuleFailError } from '@webpieces/rules-config';
+import { RuleFailError, Option } from '@webpieces/rules-config';
 
 import { RuleReporter } from './rule-reporter';
 import { RuleRun, ExecutorResult } from './code-validator';
@@ -29,12 +29,12 @@ describe('RuleReporter.runValidators (per-run isolation)', () => {
 
     it('reports a thrown RuleFailError with its humanMessage', async () => {
         const spy = vi.spyOn(console, 'error');
-        const err = new RuleFailError('no-any', 'ai text', 7, 'x: any', ['use unknown'], 'HUMAN CI text');
+        const err = new RuleFailError('no-any', 'ai text', 7, 'x: any', [new Option('use unknown')], 'HUMAN CI text');
         await reporter.runValidators([fakeRun('no-any', () => { throw err; })]);
         const printed = spy.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
         expect(printed).toContain('[no-any]');
         expect(printed).toContain('HUMAN CI text');
-        expect(printed).toContain('Fix: use unknown');
+        expect(printed).toContain('Fix Option 1: use unknown');
     });
 
     it('reports a plain-Error bug as a validator crash', async () => {
@@ -44,7 +44,17 @@ describe('RuleReporter.runValidators (per-run isolation)', () => {
         expect(printed).toContain("Validator 'buggy' crashed: kaboom");
     });
 
-    it('honors a legacy run that returns {success:false} (back-compat)', async () => {
+    it('renders the preferred cure first-class, with the framework-owned label', async () => {
+        const spy = vi.spyOn(console, 'error');
+        const err = new RuleFailError('r', 'ai text', undefined, undefined,
+            [new Option('the right way', true), new Option('the other way')]);
+        await reporter.runValidators([fakeRun('r', () => { throw err; })]);
+        const printed = spy.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
+        expect(printed).toContain('Fix Option 1: (preferred) the right way');
+        expect(printed).toContain('Fix Option 2: the other way');
+    });
+
+    it('honors a legacy run that returns {success:false} (back-compat shim, pending deletion)', async () => {
         const result = await reporter.runValidators([
             fakeRun('legacy-fail', () => Promise.resolve({ success: false })),
             fakeRun('ok', () => Promise.resolve({ success: true })),

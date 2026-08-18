@@ -1,12 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ValidateTsInSrcConfig, isPathExcluded } from '@webpieces/rules-config';
+import { ValidateTsInSrcConfig, isPathExcluded, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',

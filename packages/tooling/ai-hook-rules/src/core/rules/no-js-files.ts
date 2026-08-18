@@ -1,9 +1,9 @@
-import { NoJsFilesConfig, isPathExcluded } from '@webpieces/rules-config';
+import { NoJsFilesConfig, isPathExcluded, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 
 export class NoJsFilesRule extends FileRuleBase<NoJsFilesConfig> {
     constructor(config: NoJsFilesConfig) { super(config, 'no-js-files', 'no-js-files'); }

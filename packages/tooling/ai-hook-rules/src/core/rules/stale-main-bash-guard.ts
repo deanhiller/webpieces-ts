@@ -1,15 +1,11 @@
 import { execSync } from 'child_process';
 
-import {
-    BranchStateGuardConfig,
-    BRANCH_STATE_GUARD_KEY,
-    DEFAULT_HANG_TIMEOUT_MINUTES,
-} from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, Option } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';

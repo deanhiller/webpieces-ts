@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { InformAiError, RuleFailError, toError, loadAndValidate, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { InformAiError, RuleFailError, renderRuleFailForHuman, toError, loadAndValidate, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
 
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof RuleFailError) {
-            console.error(error.humanMessage);
+            console.error(renderRuleFailForHuman(error));
         } else if (err instanceof InformAiError) {
             console.error(error.message);
         } else {

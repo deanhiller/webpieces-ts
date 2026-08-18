@@ -3,6 +3,7 @@ import * as fs from 'fs';
 
 import { InformAiError } from './inform-ai-error';
 import { RuleFailError } from './rule-fail-error';
+import { Option } from './fix-option';
 import { toError } from './to-error';
 
 // Universal "should this rule be skipped right now?" logic, shared by code-rules,
@@ -148,8 +149,8 @@ function readHeadRepoFullName(branchName: string): string | null {
                 `${eventPath} could not be read: ${error.message}`,
             undefined,
             undefined,
-            ['Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file.',
-             'Or clear turnOffRuleWhileOnBranch (set it to null) so no trust check is needed at all.'],
+            [new Option('Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file.', true),
+             new Option('Or clear turnOffRuleWhileOnBranch (set it to null) so no trust check is needed at all.')],
             undefined,
             error);
     }
@@ -158,12 +159,11 @@ function readHeadRepoFullName(branchName: string): string | null {
 /**
  * The fork refusal, as a `RuleFailError`.
  *
- * The cures are `fixHints` — a LIST — because the framework owns how they are labelled and numbered
- * (`rule-reporter.ts` prefixes each with "Fix: "; the hook runner folds them into its Violation). A
- * hand-numbered "WORKAROUNDS: 1. … 2. …" string literal, which is what this used to be, is exactly the
- * shape `FixHint`/`Option` exist to prevent. `FixHint` itself lives in `ai-hook-rules`, which
- * `rules-config` sits BELOW and cannot import, so `RuleFailError.fixHints` is the structured list
- * available at this layer.
+ * The cures are `fixOptions` — a LIST of `Option` — because the framework owns how they are labelled
+ * and numbered (`formatFixOptions` renders "Fix Option N:" and the "(preferred)" tag for BOTH engines).
+ * A hand-numbered "WORKAROUNDS: 1. … 2. …" string literal, which is what this used to be, is exactly
+ * the shape `Option` exists to prevent. `Option` lives HERE in `rules-config`, so the same class serves
+ * this build-time throw and `FixHint` in `ai-hook-rules` — one cure shape, one definition.
  *
  * `ruleName` is the HATCH, not the rule being evaluated: `shouldSkipRule` is handed only the two hatch
  * values and does not know whose rule it is deciding for — and the thing that failed genuinely is the
@@ -181,11 +181,16 @@ function forkRefusal(branchName: string, what: string): RuleFailError {
         undefined,
         undefined,
         [
-            'If the rule must be off for outside contributions too, use turnOffRuleUntilEpoch — it is TIME ' +
-                'based, so it cannot be self-granted by naming a branch. Keep the date short: it is repo-wide ' +
-                'while it lasts, so it also shelters unrelated work landing in the same window.',
-            'Otherwise clear turnOffRuleWhileOnBranch (set it to null) and fix the findings on the ' +
-                'contributed branch like any other.',
+            new Option(
+                'If the rule must be off for outside contributions too, use turnOffRuleUntilEpoch — it is TIME ' +
+                    'based, so it cannot be self-granted by naming a branch. Keep the date short: it is repo-wide ' +
+                    'while it lasts, so it also shelters unrelated work landing in the same window.',
+                true,
+            ),
+            new Option(
+                'Otherwise clear turnOffRuleWhileOnBranch (set it to null) and fix the findings on the ' +
+                    'contributed branch like any other.',
+            ),
         ],
     );
 }

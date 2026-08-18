@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 
-import { ExcludePaths, RuleFailError } from '@webpieces/rules-config';
+import { ExcludePaths, RuleFailError, Option } from '@webpieces/rules-config';
 
 import { migrate } from '../bin/setup';
 import { effectiveBashCwd, filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash, run } from './runner';
@@ -64,15 +64,18 @@ describe('runRuleCheck (N-legs: a rule may return violations OR throw; never pro
         expect(vs[0]?.message).toBe('msg');
     });
 
-    it('converts a thrown RuleFailError into a Violation with its line/snippet and folds in fix hints', () => {
-        const err = new RuleFailError('no-any-unknown', 'Avoid any here', 42, 'const x: any', ['use unknown', 'add a type']);
+    it('converts a thrown RuleFailError into a Violation with its line/snippet and folds in its cures', () => {
+        const err = new RuleFailError('no-any-unknown', 'Avoid any here', 42, 'const x: any',
+            [new Option('use unknown', true), new Option('add a type')]);
         const vs = runRuleCheck(ruleThatThrows('no-any-unknown', err), ctx);
         expect(vs).toHaveLength(1);
         expect(vs[0]?.line).toBe(42);
         expect(vs[0]?.snippet).toBe('const x: any');
         expect(vs[0]?.message).toContain('Avoid any here');
-        expect(vs[0]?.message).toContain('Fix: use unknown');
-        expect(vs[0]?.message).toContain('Fix: add a type');
+        // Framework-owned numbering + "(preferred)" tag — the SAME renderer report.ts uses for a
+        // rule's static FixHint, so a thrown cure and a declared cure read identically to the AI.
+        expect(vs[0]?.message).toContain('Fix Option 1: (preferred) use unknown');
+        expect(vs[0]?.message).toContain('Fix Option 2: add a type');
     });
 
     it('converts a thrown plain Error (a bug) into a visible "crashed" Violation, not a propagated throw', () => {

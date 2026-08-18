@@ -1,4 +1,4 @@
-import { RuleFailError, toError } from '@webpieces/rules-config';
+import { RuleFailError, toError, formatFixOptions } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { RuleRun, ExecutorResult } from './code-validator';
@@ -13,8 +13,13 @@ export class RuleReporter {
      * expected failure) OR a plain `Error` (a bug) — is caught, reported, and marks the whole run
      * failed, but the remaining runs STILL execute. One validator can no longer abort the CI run.
      *
-     * Back-compatible: runs that still `console.error(...)` + `return { success: false }` keep
-     * working; their `false` result flips the aggregate exactly as before.
+     * LEGACY, and still a back-compat shim: a run that reports its own failure by returning
+     * `{ success: false }` (usually after `console.error`-ing its own banner) still flips the
+     * aggregate. That is a SECOND spelling of "this validator failed" and it is scheduled for
+     * deletion, not blessed — the one spelling is to THROW a `RuleFailError` carrying `Option[]`
+     * cures, so this reporter renders it for the build-time audience. Removing the shim means
+     * `RuleRun.run` returning `Promise<void>` and `ExecutorResult` deleted (`code-validator.ts`);
+     * it waits only on the ~22 validators under `src/validate-*.ts` still returning the boolean.
      */
     async runValidators(runs: readonly RuleRun[]): Promise<ExecutorResult> {
         let anyFailed = false;
@@ -44,8 +49,10 @@ export class RuleReporter {
         if (err.line !== undefined) {
             console.error(`   L${String(err.line)}: ${err.snippet ?? ''}`);
         }
-        for (const hint of err.fixHints) {
-            console.error(`   Fix: ${hint}`);
+        // The "Fix Option N:"/"(preferred)" labels are framework-owned — same renderer the edit-time
+        // report uses — so a validator never hand-numbers its cures inside its message string.
+        for (const line of formatFixOptions(err.fixOptions, '   ')) {
+            console.error(line);
         }
         console.error('');
     }

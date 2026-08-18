@@ -1,6 +1,9 @@
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 export { InformAiError } from './inform-ai-error';
-export { RuleFailError } from './rule-fail-error';
+export { RuleFailError, renderRuleFailForAi, renderRuleFailForHuman } from './rule-fail-error';
+// THE one representation of a cure, shared by RuleFailError (build-time) and FixHint (edit-time), plus
+// the one renderer that owns the "Fix Option N:" numbering and the "(preferred)" tag.
+export { Option, formatFixOptions } from './fix-option';
 export { CliExitError } from './cli-exit-error';
 export { CliUsage, CliFlag, CliArgSet, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';

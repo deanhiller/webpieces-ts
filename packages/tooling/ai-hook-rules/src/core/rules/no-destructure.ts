@@ -1,9 +1,9 @@
-import { NoDestructureConfig, RULE_NAMES, isPathExcluded } from '@webpieces/rules-config';
+import { NoDestructureConfig, RULE_NAMES, isPathExcluded, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, DisableEscape, Option } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 

@@ -1,6 +1,7 @@
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { RuleGroup, Violation } from './types';
-import { FixHint, Option, DisableEscape } from './fix-hint';
+import { FixHint, DisableEscape } from './fix-hint';
+import { Option } from '@webpieces/rules-config';
 
 function report(fixHint: FixHint, violation: Violation): string {
     return formatReport('src/x.ts', [new RuleGroup('demo-rule', 'demo description', fixHint, [violation])]);

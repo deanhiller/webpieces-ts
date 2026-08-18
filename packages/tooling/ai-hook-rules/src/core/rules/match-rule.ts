@@ -1,9 +1,9 @@
-import { MatchRuleConfig, findMatchRuleViolations } from '@webpieces/rules-config';
+import { MatchRuleConfig, findMatchRuleViolations, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, Option, DisableEscape } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 /**
  * A single client-authored content guard from the `match-rules` array. Unlike the framework's

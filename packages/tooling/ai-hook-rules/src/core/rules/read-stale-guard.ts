@@ -2,18 +2,12 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-    BranchStateGuardConfig,
-    BRANCH_STATE_GUARD_KEY,
-    DEFAULT_HANG_TIMEOUT_MINUTES,
-    readMainSyncStatus,
-    MainSyncStatus,
-} from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';

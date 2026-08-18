@@ -1,5 +1,5 @@
 import type { RuleGroup, Violation } from './types';
-import type { Option } from './fix-hint';
+import { formatFixOptions } from '@webpieces/rules-config';
 
 /**
  * How the report names the tool it just blocked. Data-only, so a class (per CLAUDE.md).
@@ -53,13 +53,10 @@ export function formatReport(
         // mainMessage may be '' (guidance already on the violation line) \u2014 skip when empty.
         if (fh.mainMessage) for (const l of fh.mainMessage.split('\n')) lines.push(`  ${l}`);
         // "Fix Option N:" numbering + "(preferred)" are framework-owned so a multi-line message
-        // can never become fake options and authors never hand-write those labels.
-        fh.fixOptions.forEach((opt: Option, i: number) => {
-            const optLines = opt.text.split('\n');
-            const tag = opt.preferred ? '(preferred) ' : '';
-            lines.push(`  Fix Option ${String(i + 1)}: ${tag}${optLines[0]}`);
-            for (const l of optLines.slice(1)) lines.push(`    ${l}`);
-        });
+        // can never become fake options and authors never hand-write those labels. ONE renderer
+        // (`formatFixOptions`, in rules-config) serves this report, the thrown-rule path in
+        // runner.ts and the build-time console in code-rules.
+        for (const l of formatFixOptions(fh.fixOptions)) lines.push(l);
         // Framework-owned disable escape (only the 9 disable-able code-style rules set this).
         if (fh.escape) {
             lines.push(fh.escape.allowed
