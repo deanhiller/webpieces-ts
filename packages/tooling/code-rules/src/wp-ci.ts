@@ -24,7 +24,7 @@ import * as path from 'path';
 
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { loadAndValidate, InformAiError, RuleFailError, toError, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { loadAndValidate, InformAiError, RuleFailError, renderRuleFailForHuman, toError, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
 import { CONFIG_BINDINGS } from './code-rules-config-table';
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof RuleFailError) {
-            console.error(error.humanMessage);
+            console.error(renderRuleFailForHuman(error));
         } else if (err instanceof InformAiError) {
             console.error(error.message);
         } else {

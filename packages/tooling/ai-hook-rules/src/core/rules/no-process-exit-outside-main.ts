@@ -1,9 +1,9 @@
-import { NoProcessExitOutsideMainConfig, RULE_NAMES, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
+import { NoProcessExitOutsideMainConfig, RULE_NAMES, writeTemplateIfMissing, RepoRootFinder, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, Option, DisableEscape } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 const INSTRUCT_FILE = 'webpieces.noexitinmain.md';
 const EXIT_REGEX = /\bprocess\.exit\s*\(/;

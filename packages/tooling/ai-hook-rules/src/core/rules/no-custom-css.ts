@@ -1,9 +1,9 @@
-import { NoCustomCssConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { NoCustomCssConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, Option, DisableEscape } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 // Edit-time (regex/line) counterpart to the CI code-rule validate-no-custom-css. The hook has no TS
 // AST, so the `.ts` side matches the @Component style props by shape; the `.html` side matches inline

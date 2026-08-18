@@ -3,9 +3,8 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PrLifecycleGuardConfig, BranchStateGuardConfig } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig, BranchStateGuardConfig, Option } from '@webpieces/rules-config';
 import { BashContext } from '../types';
-import { Option } from '../fix-hint';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';
 

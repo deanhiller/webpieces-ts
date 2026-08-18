@@ -1,9 +1,9 @@
-import { CatchErrorPatternConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { CatchErrorPatternConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, Option, DisableEscape } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**

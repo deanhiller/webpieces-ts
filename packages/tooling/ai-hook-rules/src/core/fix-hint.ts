@@ -1,27 +1,4 @@
-/**
- * Structured fix guidance shown under a violation in a blocked-write / blocked-bash report.
- *
- * A rule authors its user-facing text once here: a required `violation` (the "what's wrong"
- * line — the rule-level default for the `→` line; a dynamic per-occurrence `Violation.message`
- * overrides it), a `mainMessage` (fix prose, or a lead-in to the options), an optional list of
- * genuinely distinct `fixOptions`, and — for the disable-able code-style rules — a framework-
- * owned `escape`.
- *
- * The framework (report.ts) — not the rule author — owns the "Fix Option N:" numbering, the
- * "(preferred)" tag, and the escape/`disableAllowed` rendering. So a multi-line message can
- * never be mis-split into fake options, and authors never hand-write those labels.
- */
-export class Option {
-    /** The fix text. May be multi-line; continuation lines are indented under the option. */
-    readonly text: string;
-    /** When true the framework prefixes the rendered option with "(preferred) ". */
-    readonly preferred: boolean;
-
-    constructor(text: string, preferred = false) {
-        this.text = text;
-        this.preferred = preferred;
-    }
-}
+import { Option } from '@webpieces/rules-config';
 
 /**
  * Framework-owned `// webpieces-disable` escape hatch for a rule, gated by the team's
@@ -39,6 +16,23 @@ export class DisableEscape {
     }
 }
 
+/**
+ * Structured fix guidance shown under a violation in a blocked-write / blocked-bash report.
+ *
+ * A rule authors its user-facing text once here: a required `violation` (the "what's wrong"
+ * line — the rule-level default for the `→` line; a dynamic per-occurrence `Violation.message`
+ * overrides it), a `mainMessage` (fix prose, or a lead-in to the options), an optional list of
+ * genuinely distinct `fixOptions`, and — for the disable-able code-style rules — a framework-
+ * owned `escape`.
+ *
+ * The framework (report.ts / `formatFixOptions`) — not the rule author — owns the "Fix Option N:"
+ * numbering, the "(preferred)" tag, and the escape/`disableAllowed` rendering. So a multi-line
+ * message can never be mis-split into fake options, and authors never hand-write those labels.
+ *
+ * `Option` is NOT defined here: it lives in `@webpieces/rules-config` (`fix-option.ts`) because
+ * `RuleFailError` — thrown by BOTH engines — carries the same class. One cure shape, one definition,
+ * one import path. Import it from `@webpieces/rules-config`, never from this module.
+ */
 export class FixHint {
     /** Required: the "what's wrong" line (rule-level default for the `→` line). */
     readonly violation: string;

@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
-import { CONFIG_FILENAME } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 import { run } from '../core/runner';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError } from '../core/types';
 import { toError } from '../core/to-error';
@@ -87,7 +87,7 @@ export default async function handler(
         // an unexpected bug. All reject (fail closed).
         let msg: string;
         if (error instanceof RuleFailError) {
-            msg = error.aiMessage;
+            msg = renderRuleFailForAi(error);
         } else if (error instanceof InformAiError) {
             msg = error.message;
         } else {

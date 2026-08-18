@@ -1,9 +1,9 @@
-import { NoUnmanagedExceptionsConfig, RULE_NAMES, RepoRootFinder } from '@webpieces/rules-config';
+import { NoUnmanagedExceptionsConfig, RULE_NAMES, RepoRootFinder, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
-import { FixHint, Option, DisableEscape } from '../fix-hint';
+import { FixHint, DisableEscape } from '../fix-hint';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 const INSTRUCT_FILE = 'webpieces.exceptions.md';

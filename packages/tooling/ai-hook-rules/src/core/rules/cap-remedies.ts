@@ -1,4 +1,5 @@
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
+import { Option } from '@webpieces/rules-config';
 
 /**
  * What branch-creation-guard says when a CAP is what blocked. TWO SHORT LINES, and never a

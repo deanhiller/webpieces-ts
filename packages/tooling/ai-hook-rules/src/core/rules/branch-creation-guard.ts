@@ -1,18 +1,11 @@
 import { execSync } from 'child_process';
 
-import {
-    BranchCreationGuardConfig,
-    DeletableBranch,
-    MergedBranchesCache,
-    MergedBranchesService,
-    WorktreeService,
-    readMainSyncStatus,
-} from '@webpieces/rules-config';
+import { BranchCreationGuardConfig, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus, Option } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 import { CapRemedies } from './cap-remedies';
 import { toError } from '../to-error';
 

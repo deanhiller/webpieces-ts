@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { VersionSyncGuard } from './version-sync';
@@ -604,7 +604,7 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
 
 // N-legs pattern: each rule runs independently so one rule can never abort the others. A rule may
 // EITHER return Violation[] OR throw — both accumulate here into visible violations the AI sees:
-//  - a thrown RuleFailError  → an expected, well-formed violation (its line/snippet/fixHints kept);
+//  - a thrown RuleFailError  → an expected, well-formed violation (its line/snippet/fixOptions kept);
 //  - a thrown plain Error    → a "crashed" violation (a bug, surfaced not swallowed).
 export function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashContext): readonly Violation[] {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -619,12 +619,13 @@ export function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashCo
     }
 }
 
-// A thrown RuleFailError carries its own AI-facing message + optional location and fix hints. Fold the
-// fix hints into the message because Violation has no fixHint field (RuleGroup's fixHint comes from the
-// rule definition, not a per-throw value).
+// A thrown RuleFailError carries its own AI-facing message + optional location and cures. Fold the
+// cures into the message because Violation has no fixHint field (RuleGroup's fixHint comes from the
+// rule definition, not a per-throw value). The "Fix Option N:"/"(preferred)" labels come from the ONE
+// framework-owned renderer, exactly as report.ts renders a rule's static FixHint — a rule never
+// hand-numbers its own cures.
 function violationFromRuleFail(error: RuleFailError): Violation {
-    const hints = error.fixHints.length > 0 ? `\n  Fix: ${error.fixHints.join('\n  Fix: ')}` : '';
-    return new Violation(error.line ?? 0, error.snippet ?? '', error.aiMessage + hints);
+    return new Violation(error.line ?? 0, error.snippet ?? '', renderRuleFailForAi(error));
 }
 
 function ruleMatchesFile(rule: Rule, relativePath: string): boolean {

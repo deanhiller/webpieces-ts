@@ -1,19 +1,11 @@
 import { execSync } from 'child_process';
 
-import {
-    BranchStateGuardConfig,
-    BRANCH_STATE_GUARD_KEY,
-    DEFAULT_HANG_TIMEOUT_MINUTES,
-    readMainSyncStatus,
-    squashRecoverySteps,
-    MainSyncStatus,
-    SyncFlowGuidance,
-} from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, squashRecoverySteps, MainSyncStatus, SyncFlowGuidance, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
-import { FixHint, Option } from '../fix-hint';
+import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';

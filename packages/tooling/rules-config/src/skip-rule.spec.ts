@@ -142,9 +142,9 @@ describe('shouldSkipRule refuses to honor a hatch on a fork pull request', () =>
         expect(() => shouldSkipRule(undefined, HATCH)).toThrow(/PULL REQUEST AUTHOR/);
     });
 
-    // The cures are STRUCTURED (RuleFailError.fixHints), so the framework owns their labelling — a
+    // The cures are STRUCTURED (RuleFailError.fixOptions), so the framework owns their labelling — a
     // hand-numbered "WORKAROUNDS: 1. … 2. …" literal is what this replaced.
-    it('carries its cures as fixHints, not as a hand-numbered string', () => {
+    it('carries its cures as fixOptions, not as a hand-numbered string', () => {
         writeEvent('outsider/monorepo');
 
         let thrown: RuleFailError | null = null;
@@ -158,7 +158,9 @@ describe('shouldSkipRule refuses to honor a hatch on a fork pull request', () =>
 
         expect(thrown).toBeInstanceOf(RuleFailError);
         expect(thrown?.ruleName).toBe('turnOffRuleWhileOnBranch');
-        expect(thrown?.fixHints.length).toBe(2);
+        expect(thrown?.fixOptions.length).toBe(2);
+        // The framework, not this rule, decides which cure leads — so the flag must survive the throw.
+        expect(thrown?.fixOptions[0]?.preferred).toBe(true);
         expect(thrown?.aiMessage).not.toMatch(/\n\s*[12]\./);
     });
 
