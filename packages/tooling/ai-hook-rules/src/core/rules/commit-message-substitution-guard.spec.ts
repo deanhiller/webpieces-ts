@@ -75,6 +75,21 @@ describe('commit-message-substitution-guard blocks an inline message the shell w
         expect(blocked('git commit -m "touch `x`" 2>&1 | tail -5')).toBe(true);
     });
 
+    /*
+     * A DELIBERATE false positive — see the guard's docstring. Single quotes really do suppress
+     * substitution, so this exact command is safe as written. It is blocked anyway because prose
+     * eventually contains an apostrophe, which closes the quote mid-sentence and drops the rest back
+     * into the shell's syntax; and because `-F` costs one Write call, so being wrong here is seconds
+     * against the twenty minutes being right saves.
+     *
+     * This test exists so the decision is met as a failing test rather than filed as a bug.
+     */
+    it('blocks a single-quoted message too, on purpose', () => {
+        expect(blocked("git commit -m 'a `backtick` here'")).toBe(true);
+        expect(blocked("git commit -m 'a $(substitution) here'")).toBe(true);
+        expect(blocked("git commit -m 'subject\nbody'")).toBe(true);
+    });
+
     // The incident's SECOND failure: the retry kept the same sentence. A guard that only fired on the
     // first attempt would have cost the same twenty minutes.
     it('fires again on a retry of the same command', () => {

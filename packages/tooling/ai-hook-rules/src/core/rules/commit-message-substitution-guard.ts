@@ -38,6 +38,22 @@ import { CommitMessageSubstitutionScan, MessageHazard, MessageHazardKind } from 
  * word, and the next hang will name an ordinary word too. So the rule matches backtick, `$(` and a
  * newline inside the message argument, and reads nothing at all into the surrounding sentence.
  *
+ * ─── It fires on a SINGLE-QUOTED message too, and that is deliberate ───────────────────────────────
+ * `git commit -m 'a `backtick` here'` is, strictly, safe: single quotes suppress substitution, so the
+ * shell would pass those backticks through literally. This guard blocks it anyway, and the false
+ * positive is the point rather than an oversight — do not "fix" it. Two reasons:
+ *
+ *   - single-quoting PROSE is fragile in the one way that matters. An English sentence eventually
+ *     contains an apostrophe ("doesn't", "the agent's"), which CLOSES the quote mid-message and drops
+ *     the rest of the sentence back into the shell's syntax — the exact state this guard exists to
+ *     prevent, reached by a message that looked safe when it was written.
+ *   - the cure is free. `-F` costs one Write tool call and works for every message, so being wrong
+ *     here spends seconds, while being right saves twenty minutes. A guard chooses its errors by what
+ *     each one COSTS, and these two costs are not close.
+ *
+ * `blocks a single-quoted message too` in the spec pins this, so a later reader meets the decision as
+ * a failing test rather than as a bug report.
+ *
  * ─── It matches the RAW command, and that is load-bearing ──────────────────────────────────────────
  * Every other bash guard here matches `ctx.commandCode`, which STRIPS heredoc bodies and quoted prose
  * precisely so a commit message merely MENTIONING `git push` is not read as a push. That stripping
