@@ -92,7 +92,7 @@ export class ReviewUpsertPrCommand {
 
         const mergeValidated = await this.finalizeAnyInProgressMerge(repoRoot);
         this.gitExec.assertCleanTree(repoRoot);
-        const buildPassedAt = this.runBuildGate(repoRoot);
+        const buildPassedAt = await this.runBuildGate(repoRoot);
 
         const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));  // '' — THIS command writes the context itself, after materializing
         const briefings = this.briefReviewers(repoRoot, featureName, scan, config);
@@ -149,12 +149,13 @@ export class ReviewUpsertPrCommand {
      * which is what lets `wp-finish-upsert-pr` skip its own gate when HEAD has not moved, so moving the gate
      * earlier did not turn one build into two.
      */
-    private runBuildGate(repoRoot: string): string {
-        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+    private async runBuildGate(repoRoot: string): Promise<string> {
+        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  Build gate',
             'pnpm wp-review-upsert-pr',
             'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
             REVIEW_STAGE,
+            false,
         ));
         // Repo-wide: the build must not have left anything uncommitted AND unstaged. Runs HERE, not in
         // finish, because this is the stage that ran buildCommand and is therefore holding the dirty

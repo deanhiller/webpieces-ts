@@ -28,7 +28,10 @@ function harness(): Harness {
     const calls: BuildGateOptions[] = [];
     // webpieces-disable no-any-unknown -- a test double standing in for the injected collaborator
     const gate = {
-        runBuildGate: (_root: string, opts: BuildGateOptions): void => { calls.push(opts); },
+        runBuildGate: (_root: string, opts: BuildGateOptions): Promise<void> => {
+            calls.push(opts);
+            return Promise.resolve();
+        },
     } as unknown as BuildAffected;
     // webpieces-disable no-any-unknown -- ditto; only resolveRepoRoot is exercised
     const roots = { resolveRepoRoot: (): string => '/repo' } as unknown as RepoRootFinder;
@@ -70,9 +73,20 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
     // it and report success, which would make a green terminal meaningless.
     // runBuildGate throws synchronously, before run() ever builds its promise, so the throw surfaces at
     // the call rather than as a rejection — and runMain, which invokes this, handles both alike.
-    it('propagates a failing build rather than swallowing it', () => {
+    /**
+     * The whole console contract of wp-build is "a heartbeat, then a pointer at .webpieces/build.log", so
+     * capture may not depend on the EXPERIMENTAL `~/.webpieces/config.json` opt-in that essentially no
+     * machine has — a wp-build that did not capture would have nothing to point at.
+     */
+    it('captures unconditionally, not on the experimental opt-in', async () => {
         const h = harness();
-        vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): never => { throw new Error('build failed'); });
-        expect((): Promise<void> => h.command.run()).toThrow('build failed');
+        await h.command.run();
+        expect(h.calls[0].alwaysCapture).toBe(true);
+    });
+
+    it('propagates a failing build rather than swallowing it', async () => {
+        const h = harness();
+        vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): Promise<void> => Promise.reject(new Error('build failed')));
+        await expect(h.command.run()).rejects.toThrow('build failed');
     });
 });

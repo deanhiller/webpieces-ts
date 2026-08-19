@@ -336,6 +336,17 @@ prints the command it resolved before running it, so you always know what actual
 whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only also
 compiles projects your change cannot reach.
 
+**The build's output goes to `.webpieces/build.log`, not to your terminal.** The console gets a
+heartbeat (`.webpieces/build.log size 100 lines`, plus `still` when the count has not moved) and then
+one summary — `Build success` or `Build Failed:`, the absolute `FullLog :` path, and a note that the
+previous run is kept as `.webpieces/build.log.bak`. Both are gitignored with the rest of `.webpieces/`.
+
+**So read the FILE; never re-run the build to see a different slice of it.** That is the whole reason
+the log exists: one measured session spent 23.9 minutes across nine builds, five of them with no code
+change in between, walking `| tail -50` → `> /tmp/file` → `| grep` → `| sed -n '1100,1230p'` over
+output that had already scrolled past. Every one of those is a `grep` of `.webpieces/build.log` now, and
+the run before it is still on disk as `.bak`.
+
 `wp-build` ships from `@webpieces/pr-gate`, so like every other `wp-*` bin it arrives with a RELEASE —
 see "Published vs local source" below. If `pnpm wp-build` says *command not found* in this repo, the pin
 in `pnpm-workspace.yaml` is simply older than the release that added it; run the resolved command it
