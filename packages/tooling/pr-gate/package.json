@@ -22,6 +22,7 @@
     },
     "publishConfig": {
         "bin": {
+            "wp-build": "./src/scripts/wp-build.js",
             "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
             "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
             "wp-start-update": "./src/scripts/wp-start-update.js",

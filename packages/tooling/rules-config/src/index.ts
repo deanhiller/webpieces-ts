@@ -55,14 +55,15 @@ export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConf
 // blocked. `PRUNE_UNKNOWN_COMMAND` (constants.ts) is the single spelling of that command.
 export { ConfigPruner, PruneResult, PrunedKey } from './config-pruner';
 export { validateChecklistDocs } from './checklist-docs-validator';
-// EXPERIMENTAL, and deliberately NOT an advertised knob. The OPTIONAL machine-local `~/.webpieces/config.json`:
-// absent (the normal state for every consumer) means all-defaults, silently; present means strictly validated,
-// with its own retirement table. `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS
-// in the hook guards, which is what keeps a rejection repairable.
+// The OPTIONAL machine-local `~/.webpieces/config.json`: absent (the normal state for every consumer) means
+// each key's declared default, silently; present means strictly validated, with its own retirement table.
+// `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS in the hook guards, which is
+// what keeps a rejection repairable. Its `experimental.*` keys are deliberately NOT advertised knobs — the one
+// exception is `whole-repo-build-guard`, which is a supported OPT-OUT and defaults ON.
 export {
     HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
-    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, WHOLE_REPO_BUILD_GUARD_DEFAULT,
 } from './home-config';
 // The orphan-directory sweep: the corpse an `nx g move` leaves on every clone, which git cannot remove
 // because an ignored dist/ or node_modules/ outlives every tracked file under it. See orphan-dir-scan.ts

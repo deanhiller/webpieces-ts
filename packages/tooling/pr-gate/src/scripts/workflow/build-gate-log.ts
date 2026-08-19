@@ -37,6 +37,9 @@ const STATUS_SUFFIX = '.status';
  */
 export const REVIEW_STAGE = 'review';
 export const FINISH_STAGE = 'finish';
+// `wp-build`, which is not a stage of the PR flow but runs the SAME gate (BuildAffected.runBuildGate).
+// Its own id so a developer's inner-loop build never overwrites the log stage ② or ③ is holding.
+export const BUILD_STAGE = 'build';
 
 /**
  * Captures the build gate's full output to `.webpieces/logs/`, and renders the small pointer the AI is

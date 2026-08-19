@@ -128,9 +128,11 @@ export function loadRules(
  *
  * Each rule here decides for ITSELF whether it acts, and the two do it differently on purpose:
  *
- *  - `whole-repo-build-guard` is EXPERIMENTAL and inert unless the optional machine-local
- *    `~/.webpieces/config.json` opts in, because building the whole workspace is a thing a person may
- *    legitimately want and a wrong block there costs them their shell.
+ *  - `whole-repo-build-guard` is ON by default and goes inert when the optional machine-local
+ *    `~/.webpieces/config.json` opts OUT. Building the whole workspace is a thing a person may
+ *    legitimately want, so the escape hatch stays — but it takes no file and no key to be in the
+ *    default state, which is the difference between this and the required-key release that blocked
+ *    every upgrading consumer's shell.
  *  - `commit-message-substitution-guard` acts unconditionally. Nobody legitimately wants a backtick
  *    expanded inside a commit message, and its cure (`git commit -F <file>`) is available for every
  *    input and can never itself match the guard — so there is nothing for a switch to rescue.
