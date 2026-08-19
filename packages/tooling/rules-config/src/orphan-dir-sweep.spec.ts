@@ -4,9 +4,9 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { describe, expect, it, vi } from 'vitest';
 
-import { OrphanDirScanner } from './orphan-dir-scan';
+import { OrphanCandidate, OrphanDirScanner } from './orphan-dir-scan';
 import { OrphanDirArchiver, TRASH_MANIFEST_FILE } from './orphan-dir-archive';
-import { OrphanDirSweeper } from './orphan-dir-sweep';
+import { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
 import { HomeConfig, HomeConfigService } from './home-config';
 
 /**
@@ -184,6 +184,33 @@ describe('OrphanDirArchiver — moves, never deletes', () => {
             path.join(repo.root, '.webpieces', 'trash', FIXED_SWEEP_ID, TRASH_MANIFEST_FILE), 'utf8');
         expect(raw).toContain('libraries/apis/moved-away-api');
         expect(raw).toContain('recoverCommand');
+    });
+
+    /**
+     * The manifest is the DURABLE copy of every `recover=` command, so losing it is the one failure here
+     * that costs somebody the ability to undo what just happened. It must never be silent. Forced by
+     * putting a FILE where the sweep directory needs to be, so the manifest write fails while the moves
+     * themselves succeed.
+     */
+    it('reports a manifest it could not write, and says the recover lines are the only copy', () => {
+        if (process.getuid !== undefined && process.getuid() === 0) return; // root defeats mode bits
+        const repo = new RepoFixture().seed();
+        const archiver = new OrphanDirArchiver();
+        const candidates = new OrphanDirScanner().scan(repo.root);
+        // The sweep directory stays writable so the MOVES still succeed — it is only the manifest that
+        // cannot be written, which is the case worth reporting: the directories are gone from where they
+        // were, and the durable record of how to put them back is what failed.
+        const sweepDir = path.join(archiver.trashRoot(repo.root), FIXED_SWEEP_ID);
+        fs.mkdirSync(sweepDir, { recursive: true });
+        fs.writeFileSync(path.join(sweepDir, TRASH_MANIFEST_FILE), 'existing', 'utf8');
+        fs.chmodSync(path.join(sweepDir, TRASH_MANIFEST_FILE), 0o400);
+        const result = archiver.archive(repo.root, candidates, FIXED_NOW);
+        expect(result.moved.length).toBeGreaterThan(0);
+        expect(result.manifestError).not.toBeNull();
+        const rendered = new OrphanSweepReport(true, candidates, result, 0).render();
+        expect(rendered).toContain('WARNING: the manifest could not be written');
+        expect(rendered).toContain('only copy');
+        expect(rendered).toContain('recover=');
     });
 
     it('sweep ids sort lexically in chronological order, so `ls -r` is newest-first', () => {

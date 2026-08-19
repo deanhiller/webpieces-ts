@@ -121,8 +121,10 @@ export class HomeConfig {
      * config at all: the author can run it live across their own clones for a release while every
      * colleague's repo is untouched, and neither state depends on a tracked key anybody must add.
      *
-     * Archiving is never deletion (see OrphanDirArchiver): directories move under `.webpieces/trash/`
-     * with a printed `recover=`, so the worst case for a false positive is a `mv` somebody undoes.
+     * The sweep itself never deletes (see OrphanDirArchiver): directories move under `.webpieces/trash/`
+     * with a printed `recover=`, so the worst case for a false positive is a `mv` somebody undoes. The
+     * ARCHIVE is reaped after 30 days, which is a real deletion — of the second copy, on a timer long
+     * enough that anything still wanted has been noticed.
      */
     orphanDirSweep: boolean;
 

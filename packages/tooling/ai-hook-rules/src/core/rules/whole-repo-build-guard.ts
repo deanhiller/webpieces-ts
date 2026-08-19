@@ -50,7 +50,7 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  * they had never asked for. An experimental feature is opted into from a machine-local file whose absent
  * state is byte-for-byte the old behaviour, or it is not experimental.
  *
- * Three states, and only three:
+ * Four states, and only four:
  *   - the file does not exist (essentially every consumer) → this guard is INERT. It blocks nothing and
  *     logs nothing, for every command, including the ones it would otherwise refuse.
  *   - the file exists and defines the key → the key's value decides.

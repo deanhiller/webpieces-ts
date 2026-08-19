@@ -8,10 +8,11 @@ import { injectable, bindingScopeValues } from 'inversify';
 // file runs for a user who has not created that OPTIONAL file — see `HomeConfigService`
 // (`@webpieces/rules-config`), which returns all-defaults silently when it is absent.
 //
-// That file has a second, REQUIRED key once it exists — `experimental.whole-repo-build-guard` — so the
-// smallest document enabling THIS feature is:
-//     { "experimental": { "whole-repo-build-guard": false, "buildGateLogCapture": true } }
-// `HomeConfigService` owns that rule and prints the same edit when the key is missing.
+// EVERY key in that file is optional, so the smallest document enabling THIS feature is just:
+//     { "experimental": { "buildGateLogCapture": true } }
+// Optional is not a convenience: the file is MACHINE-GLOBAL and the repos on one machine pin different
+// webpieces releases, so a REQUIRED key there has no satisfiable value — omitting it fails the new
+// release, adding it fails every older one. `HomeConfigService` owns that rule.
 //
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
 // The build gate already builds everything. When it fails, the pre-existing message says "run THIS exact
