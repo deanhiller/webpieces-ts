@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { NoCustomCssConfig } from '@webpieces/rules-config';
+import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
 
 import { EditContext } from '../types';
 import { NoCustomCssRule } from './no-custom-css';
@@ -80,5 +80,34 @@ describe('NoCustomCssRule escapes', () => {
     it('skips test files', () => {
         const v = rule().check(ctx('src/foo.spec.ts', `@Component({ styleUrls: ['x'] })`));
         expect(v).toHaveLength(0);
+    });
+});
+
+/**
+ * The other half of the `allowGlobs` fix. The CI validator's own spec asserts the same file, same config,
+ * passes there; these assert the hook reaches the same verdict THROUGH THE SAME CLASS. The exemption is one
+ * `NoCustomCssScope` in @webpieces/rules-config, so there is no second implementation left to drift.
+ */
+describe('NoCustomCssRule allowGlobs agrees with the shared scope', () => {
+    const DESIGN_HTML = `<span style="background: #E3F2FD;"></span>`;
+
+    it('exempts the generated design.html the CI validator exempts', () => {
+        expect(rule(['**/design.html']).check(ctx('services/grubhub-integration/design.html', DESIGN_HTML))).toHaveLength(0);
+    });
+
+    it('flags that same file once the glob is removed', () => {
+        expect(rule([]).check(ctx('services/grubhub-integration/design.html', DESIGN_HTML))).toHaveLength(1);
+    });
+
+    it('matches the scope verdict for every path', () => {
+        const cfg = new NoCustomCssConfig();
+        cfg.mode = 'NEW_AND_MODIFIED_CODE';
+        cfg.allowGlobs = ['**/design.html'];
+        const scope = new NoCustomCssScope(cfg);
+        const r = new NoCustomCssRule(cfg);
+        for (const file of ['services/x/design.html', 'apps/web/a.component.html', 'src/a.spec.ts']) {
+            const clean = r.check(ctx(file, DESIGN_HTML)).length === 0;
+            expect(clean).toBe(scope.isExempt(file));
+        }
     });
 });

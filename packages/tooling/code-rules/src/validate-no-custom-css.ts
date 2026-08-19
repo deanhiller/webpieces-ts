@@ -16,6 +16,10 @@
  * ESCAPE HATCH (a genuinely dynamic runtime value):
  *   .ts:   // webpieces-disable no-custom-css -- <reason>
  *   .html: <!-- webpieces-disable no-custom-css -- <reason> -->
+ *
+ * PATH EXEMPTION: `allowGlobs` in the rule's webpieces.config.json entry (a vendored kit copied verbatim
+ * with its own CSS, a generated artifact). It is applied by the shared `NoCustomCssScope`, the SAME class
+ * the edit-time hook rule consults — so the editor and CI agree on which paths the rule looks at.
  */
 
 import * as fs from 'fs';
@@ -25,6 +29,7 @@ import {
     hasDisable,
     RULE_NAMES,
     NoCustomCssConfig,
+    NoCustomCssScope,
     ModifiedCodeMode,
     detectBase,
     getChangedFiles,
@@ -37,7 +42,6 @@ import { shouldSkipRule } from './resolve-mode';
 
 // @Component decorator properties that inject hand-written CSS.
 const STYLE_PROPS = new Set(['styles', 'styleUrls', 'styleUrl']);
-const TEST_PATHS: RegExp[] = [/\.test\.ts$/, /\.spec\.ts$/, /__tests__\//];
 
 // Template patterns. `[style.width]="x"` is preceded by `[`, so the inline-style regex's
 // `(^|\s)style=` boundary keeps it apart from the binding forms.
@@ -65,8 +69,13 @@ export class CssHit {
 
 @injectable(bindingScopeValues.Singleton)
 export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
+    // The SAME exemption the edit-time hook rule applies per file — one class in @webpieces/rules-config,
+    // so `allowGlobs` cannot be honoured by the editor and ignored here (which is what it used to do).
+    private readonly pathScope: NoCustomCssScope;
+
     constructor(config: NoCustomCssConfig) {
         super(config, 'no-custom-css', 'no-custom-css');
+        this.pathScope = new NoCustomCssScope(config);
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
@@ -114,9 +123,16 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         return { success: false };
     }
 
-    /** A changed file this rule cares about: an Angular .ts/.tsx or .html, excluding test files. */
+    /**
+     * A changed file this rule cares about: an Angular .ts/.tsx or .html that the shared
+     * {@link NoCustomCssScope} does not exempt (a test source, or a configured `allowGlobs` match).
+     *
+     * This is the ONE place the changed-file set is narrowed, which is what makes the exemption
+     * impossible to apply in one mode and forget in the other — both `NEW_AND_MODIFIED_CODE` and
+     * `NEW_AND_MODIFIED_FILES` run over the list this predicate produced.
+     */
     isRelevantFile(file: string): boolean {
-        if (TEST_PATHS.some((re: RegExp) => re.test(file))) return false;
+        if (this.pathScope.isExempt(file)) return false;
         return file.endsWith('.html') || file.endsWith('.ts') || file.endsWith('.tsx');
     }
 
@@ -253,6 +269,10 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         console.error('');
         console.error('   To fix: delete the CSS and use Tailwind utility classes (arbitrary values like');
         console.error('   `bg-[#fffde7]` / `grid-cols-[2fr_2fr_2fr_48px]` cover the long tail).');
+        console.error('');
+        console.error('   Whole tree not yours to restyle (a vendored kit, a generated artifact)?');
+        console.error('   Add a glob to no-custom-css.allowGlobs in webpieces.config.json — it exempts the');
+        console.error('   path here and in the editor hook alike.');
         console.error('');
         console.error('   Escape hatch (genuinely dynamic runtime value, use sparingly):');
         console.error('   .ts   // webpieces-disable no-custom-css -- <reason>');
