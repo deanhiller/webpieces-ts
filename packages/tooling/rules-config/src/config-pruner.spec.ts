@@ -82,12 +82,13 @@ describe('case 1 — retired key, validator knows the retirement', () => {
         expect(error).toContain('that file is optional and is tracked by no repo');
     });
 
-    // Deleting the entry must not read as "and now the guard is off": it is ON by default for everyone,
-    // and the machine-local key is an OPT-OUT. An instruction that got this backwards would send an
-    // agent adding a `true` it does not need — or believing it had disabled something it had not.
-    it('says the guard is ON by default, and names the opt-out rather than an opt-in', () => {
-        expect(error).toContain('ON by default');
-        expect(error).toContain('"whole-repo-build-guard": false');
+    // Deleting the entry must not read as "and now you have lost the guard": it is OFF by default for
+    // everyone, and the machine-local key is an OPT-IN. An instruction that got this backwards would
+    // send an agent writing a `false` that changes nothing — or believing it had armed something it had
+    // not.
+    it('says the guard is OFF by default, and names the opt-in rather than an opt-out', () => {
+        expect(error).toContain('OFF by default');
+        expect(error).toContain('"whole-repo-build-guard": true');
     });
 
     it('prunes the key, and the config then validates', () => {

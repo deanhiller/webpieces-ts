@@ -31,8 +31,9 @@ export type ConfigSection = 'rules' | 'hookGuards';
  * retirement, a migration and prose churn for zero policy change.
  *
  * `whole-repo-build-guard` is NOT here: it has no webpieces.config.json entry at all (see
- * RETIRED_CONFIG_KEYS). It is ON by default for every tree, with a machine-local OPT-OUT in
- * ~/.webpieces/config.json, and ai-hook-rules runs it outside the config-driven rule set entirely.
+ * RETIRED_CONFIG_KEYS). It is EXPERIMENTAL and OFF for every tree until a machine opts in with
+ * `experimental.whole-repo-build-guard: true` in ~/.webpieces/config.json, and ai-hook-rules runs it
+ * outside the config-driven rule set entirely.
  */
 /**
  * The two POLICY keys shared by more than one class, as named constants.

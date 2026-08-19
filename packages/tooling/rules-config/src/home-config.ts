@@ -78,12 +78,12 @@ import { toError } from './to-error';
  * used to be a loud rejection; it is now a key nothing reads, so the flag keeps its default and nothing
  * about the machine's behaviour reveals the mistake.
  *
- * That bites HARDEST on a key whose default is ON, which `whole-repo-build-guard` now is
- * (WHOLE_REPO_BUILD_GUARD_DEFAULT). Misspell the OPT-OUT and the guard stays on while the author
- * believes they turned it off — a failure that argues with them rather than one they can shrug at. It is
- * the strongest reason the warning below is not optional decoration, and the reason `nearestKnownKey`
- * had to get fuzzier than the case-insensitive match it replaced: `gaurd` is a transposition, exactly
- * the class of typo an equality test cannot see.
+ * Every key here is an OPT-IN that defaults OFF, so a typo costs the author the feature they meant to
+ * switch on: misspell `whole-repo-build-guard` and the guard stays inert while they believe they armed
+ * it. That is the milder of the two failures — nothing they were doing stops working — but it is still
+ * invisible without a signal, which is why the warning below is not optional decoration, and why
+ * `nearestKnownKey` had to get fuzzier than the case-insensitive match it replaced: `gaurd` is a
+ * transposition, exactly the class of typo an equality test cannot see.
  *
  * That is mitigated, not eliminated, by making the ignore VISIBLE: every unknown key is printed once per
  * load as a `[webpieces]` warning on stderr, and `nearestKnownKey` upgrades that line with a "did you
@@ -114,10 +114,16 @@ import { toError } from './to-error';
  * default state. A repo-tracked config key cannot express that — an entry there is something every
  * consumer must add, on a schedule set by whoever bumps the release.
  *
- * Note which half of that was the outage. It was the REQUIRED KEY, not the on-by-default behaviour: the
- * failure was at config LOAD, before any command was judged. `whole-repo-build-guard` defaults ON again
- * today (see WHOLE_REPO_BUILD_GUARD_DEFAULT) and cannot reproduce it, because there is nothing to add
- * anywhere — the only file that could carry it is optional, and absent is a fully supported state.
+ * Note which half of that was the outage. It was the REQUIRED KEY: the failure was at config LOAD,
+ * before any command was judged. That is why every key here stays OPTIONAL and why an absent file
+ * returns all-defaults silently.
+ *
+ * The DEFAULT is settled separately, by a standing policy this file does not get to re-litigate: EVERY
+ * `experimental.*` flag ships OFF and stays OFF for two years. `whole-repo-build-guard` is one of them,
+ * so it is OFF unless a machine writes `{"experimental": {"whole-repo-build-guard": true}}`. A flag that
+ * defaults ON is not an experiment — it is a shipped behaviour that skipped its soak period, and it
+ * changes what every agent on every machine can do the moment they upgrade. Low uptake of an opt-in
+ * experiment is information ABOUT the experiment; it is not a licence to force it on everybody.
  */
 export const HOME_CONFIG_DIR = '.webpieces';
 export const HOME_CONFIG_FILE = 'config.json';
@@ -137,31 +143,17 @@ export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
 export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
 
 /**
- * `whole-repo-build-guard`'s value on a machine that does not name the key — including the machine with
- * no such file at all, which is essentially every machine. It is TRUE: the guard is ON by default.
+ * EVERY key's value when it is not named — including on the machine with no such file at all, which is
+ * essentially every machine. False, for all of them, with no exceptions and no per-key table.
  *
- * ─── Why this one key defaults ON, and why that is not the outage this file warns about ─────────────
- * The outage recorded below was a CONFIG-LOAD failure: the guard once required an entry under
- * `hookGuards` in the repo-tracked `webpieces.config.json`, so every consumer who upgraded without
- * adding it hit fault Y and had EVERY Bash call blocked, for a feature they had never asked for. The
- * shape of that failure is "you must edit a file to get your shell back". Nothing here reproduces it:
- * no file needs to exist, no key needs to be added, and the load path for an absent or silent file is
- * unchanged. What changes is only what the guard DOES once loaded — it refuses a command that would
- * build the whole monorepo, and hands back the scoped command in its place.
+ * That uniformity is the policy, not a coincidence: every `experimental.*` flag ships OFF and stays OFF
+ * for two years, so "this machine never opted in" is byte-for-byte the behaviour of having no file. ON
+ * requires an explicit `true`; absent, and an explicit `false`, are the same state.
  *
- * That is the behaviour the guard was written for, and OFF-by-default is why it never delivered it: a
- * guard nobody opts into never fires. The measured consequence is a sibling repo whose `ci:local`
- * verify chain ran three whole-world passes on every inner loop for months, while the correct command
- * sat unused in `commands.pr-gate.buildCommand`.
- *
- * The escape hatch stays, and it is one line: `{"experimental": {"whole-repo-build-guard": false}}`
- * turns it off for a machine, with no repo config involved.
+ * Named rather than written as a bare `false` at each call site so the reason travels with the value —
+ * and there is deliberately exactly ONE such constant, because a second one would be a second place a
+ * default is stated, free to disagree with this one.
  */
-export const WHOLE_REPO_BUILD_GUARD_DEFAULT = true;
-
-// Every OTHER key's value when it is not named. False — "this machine never opted in" — which for those
-// keys is byte-for-byte the behaviour of having no file at all. Named rather than written as a bare
-// `false` at each call site so the asymmetry with the constant above is visible where it is passed.
 const GUARD_OFF_WHEN_ABSENT = false;
 
 /**
@@ -195,10 +187,8 @@ export const ALLOWED_EXPERIMENTAL: readonly string[] = [
  * reasoning was sound for a single version and wrong for a shared file. It is optional now, along with
  * every other key.
  *
- * Absent then reads as each key's declared default. For every EXPERIMENTAL key that is false, which is
- * byte-for-byte the behaviour of having no file at all. `whole-repo-build-guard` is the one exception
- * and it defaults TRUE — it is no longer experimental — for the reason spelled out at
- * WHOLE_REPO_BUILD_GUARD_DEFAULT.
+ * Absent then reads as the ONE declared default, `GUARD_OFF_WHEN_ABSENT`: false, for every key without
+ * exception, which is byte-for-byte the behaviour of having no file at all.
  *
  * The other half of cross-version safety — an OLD release IGNORING a key a NEW one added, rather than
  * rejecting it — is solved by `warnUnknownKeys` below. The two halves are one invariant: for the set of
@@ -222,16 +212,15 @@ export class HomeConfig {
     buildGateLogCapture: boolean;
 
     /**
-     * NOT experimental, and ON unless this machine says otherwise: `WHOLE_REPO_BUILD_GUARD_DEFAULT`.
-     * When true, `whole-repo-build-guard` BLOCKS a Bash command that would build the WHOLE monorepo and
-     * hands back the repo's own scoped build command (`pnpm wp-build`). Setting it false makes the guard
-     * completely inert: no block, no log, no message.
+     * EXPERIMENTAL, and OFF unless this machine opts IN with an explicit `true`. When true,
+     * `whole-repo-build-guard` BLOCKS a Bash command that would build the WHOLE monorepo and hands back
+     * the repo's own scoped build command (`pnpm wp-build`). False — and absent, and no file at all —
+     * makes the guard completely inert: no block, no log, no message.
      *
-     * This is the guard's ONLY switch, and it is an OPT-OUT. There is deliberately no
+     * This is the guard's ONLY switch, and it is an OPT-IN. There is deliberately no
      * webpieces.config.json entry for it (see RETIRED_CONFIG_KEYS): a guard that every consumer must
      * ADD A KEY to avoid being blocked by is a guard that ships an outage on upgrade, which is exactly
-     * what happened. Defaulting ON here is the opposite shape — nothing has to be added anywhere, and
-     * see WHOLE_REPO_BUILD_GUARD_DEFAULT for why that distinction is the whole argument.
+     * what happened once. Living here means the default state needs no file, no key and no edit.
      */
     wholeRepoBuildGuard: boolean;
 
@@ -329,14 +318,13 @@ export class HomeConfigService {
      */
     load(homeDir: string = os.homedir()): HomeConfig {
         const raw = this.readIfPresent(this.configPath(homeDir));
-        // THE ABSENT-FILE STATE, and the ONE place it is constructed. Every EXPERIMENTAL flag is off;
-        // `whole-repo-build-guard` is NOT experimental any more and takes WHOLE_REPO_BUILD_GUARD_DEFAULT
-        // (true) — the same value a present file that does not name the key gets, so "no file" and "file
-        // that ignores this key" can never disagree. Spelled out rather than defaulted in the
-        // constructor — see the note there on why a defaulted parameter is a shim.
+        // THE ABSENT-FILE STATE, and the ONE place it is constructed. Every flag is off — the same value
+        // a present file that does not name the key gets, so "no file" and "file that ignores this key"
+        // can never disagree. Spelled out rather than defaulted in the constructor — see the note there
+        // on why a defaulted parameter is a shim.
         if (raw === null) {
             return new HomeConfig(
-                GUARD_OFF_WHEN_ABSENT, WHOLE_REPO_BUILD_GUARD_DEFAULT, GUARD_OFF_WHEN_ABSENT);
+                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -424,18 +412,18 @@ export class HomeConfigService {
         this.warnUnknownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`);
         return new HomeConfig(
             this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file, GUARD_OFF_WHEN_ABSENT),
-            this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file, WHOLE_REPO_BUILD_GUARD_DEFAULT),
+            this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file, GUARD_OFF_WHEN_ABSENT),
         );
     }
 
     /**
-     * An absent key falls back to `whenAbsent`, which every caller states OUT LOUD — there is no implicit
-     * "absent means false" any more, because `whole-repo-build-guard` defaults ON and a hidden default
-     * would put the two halves of that fact in different files.
+     * An absent key falls back to `whenAbsent`, which every caller states OUT LOUD by passing
+     * `GUARD_OFF_WHEN_ABSENT` — an implicit "absent means false" buried in this method would put the
+     * default and the key that carries it in different places, free to drift apart.
      *
-     * A PRESENT key of the wrong type is still an ERROR, and that is the line the unknown-key change
-     * deliberately did not move: `"whole-repo-build-guard": "yes"` is a file somebody wrote wrongly, not
+     * A PRESENT key of the wrong type is still an ERROR, and that is the line neither the unknown-key change
+     * nor this one moved: `"whole-repo-build-guard": "yes"` is a file somebody wrote wrongly, not
      * a file written for a different release. No release of webpieces has ever given this key a string
      * meaning, so there is no forward-compatibility story to protect and nothing is gained by guessing —
      * whereas guessing would turn a typed value into a silent fallback to the default, which is the very

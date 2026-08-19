@@ -472,8 +472,9 @@ export class PrLifecycleGuardConfig extends BaseRuleConfig {
 }
 
 // NOTE: there is deliberately no `WholeRepoBuildGuardConfig`. That guard has NO webpieces.config.json
-// entry — it is ON by default, and its only switch is the OPT-OUT `experimental.whole-repo-build-guard`
-// in the optional machine-local ~/.webpieces/config.json (see home-config.ts). The build command it prints
+// entry — it is EXPERIMENTAL and OFF by default, and its only switch is the OPT-IN
+// `experimental.whole-repo-build-guard: true` in the optional machine-local ~/.webpieces/config.json
+// (see home-config.ts). The build command it prints
 // is handed to it directly from `commands.pr-gate.buildCommand` by ai-hook-rules' runner. Re-adding a
 // config class here puts the guard back in RULE_SCHEMAS and makes it a fault-Y rule again.
 

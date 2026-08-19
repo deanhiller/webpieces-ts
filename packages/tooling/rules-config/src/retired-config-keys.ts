@@ -154,13 +154,13 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
     // consumer that upgraded hit fault Y — every Bash call blocked — for a feature nobody had opted into.
     // The REQUIRED KEY was the fault, not the default: the failure was at config LOAD, before any command
     // was judged. The switch now lives ONLY in the optional machine-local ~/.webpieces/config.json, where
-    // nothing has to be added to be in the default state — and the default is ON again, so deleting this
-    // entry loses nothing.
+    // nothing has to be added to be in the default state — and the default is OFF, as every experimental
+    // flag's is, so deleting this entry loses nothing.
     new RetiredConfigKey(
         RETIRED_SCOPE_RULE, 'whole-repo-build-guard', '~/.webpieces/config.json → experimental.whole-repo-build-guard',
         'DELETE this entry from webpieces.config.json — no repo config key controls this guard any more. ' +
-        'The guard is ON by default for everyone, with no file and no key required. To turn it OFF for ' +
-        'YOUR machine only, put {"experimental": {"whole-repo-build-guard": false}} in ' +
+        'The guard is OFF by default for everyone, with no file and no key required. To turn it ON for ' +
+        'YOUR machine only, put {"experimental": {"whole-repo-build-guard": true}} in ' +
         '~/.webpieces/config.json — that file is optional and is tracked by no repo.',
         '[whole-repo-build-guard]', true,
     ),

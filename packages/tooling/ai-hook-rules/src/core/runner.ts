@@ -411,8 +411,8 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
  * webpieces.config.json entry at all, so passing them through checkConfigSync would make every
  * consumer's next Bash call a fault-Y block ("this rule has no entry") for a feature nobody opted into
  * — which is exactly what whole-repo-build-guard did on its first release. Each one decides for itself
- * whether it acts: whole-repo-build-guard reads ~/.webpieces/config.json for a machine-local OPT-OUT
- * (absent means ON), commit-message-substitution-guard acts unconditionally (see loadKeylessBashRules).
+ * whether it acts: whole-repo-build-guard reads ~/.webpieces/config.json for a machine-local OPT-IN
+ * (absent means OFF), commit-message-substitution-guard acts unconditionally (see loadKeylessBashRules).
  *
  * They still honour excludePaths, and they do not run in `rules` mode (code-style-only hook).
  */

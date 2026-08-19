@@ -370,11 +370,18 @@ pnpm nx run-many -t ci -p a b        # a couple of projects, named explicitly
 
 `pnpm run build-all` (and `nx run-many` with no `-p`, `nx affected` with no `--base`, and a bare
 `pnpm exec vitest run`) is what `whole-repo-build-guard` refuses, naming `pnpm wp-build` in its place.
-That guard is **ON for every tree** — the only switch is the OPT-OUT
-`experimental.whole-repo-build-guard: false` in the optional, untracked `~/.webpieces/config.json`, and
-there is no `webpieces.config.json` entry for it. Nothing has to be created or added anywhere to get the
-default. The `build-all` script stays in `package.json` on purpose — a human running it once is fine; an
-agent running it in a loop is the problem, and a PreToolUse hook only ever sees the agent.
+That guard is **EXPERIMENTAL and OFF unless this machine opts in** — the one thing that turns it on is
+
+```json
+{ "experimental": { "whole-repo-build-guard": true } }
+```
+
+in the optional, untracked `~/.webpieces/config.json`. There is no `webpieces.config.json` entry for it.
+A missing file, a missing `experimental` section, a missing key and an explicit `false` are all the same
+state: OFF. That direction is policy — every `experimental.*` flag ships OFF and stays OFF for two
+years. The rule above holds either way: run `pnpm wp-build`, guard or no guard. The `build-all` script
+stays in `package.json` on purpose — a human running it once is fine; an agent running it in a loop is
+the problem, and a PreToolUse hook only ever sees the agent.
 
 ### Does `affected` cover the workspace-global validators?
 
@@ -725,8 +732,8 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
    backwards-compatible"). Delete it; the compile error is how callers get migrated.
 10. ❌ Building the whole monorepo (`pnpm run build-all`, `nx run-many` with no `-p`, `nx affected` with no
    `--base`, a bare `pnpm exec vitest run`). Run `pnpm wp-build`, or one project, or one spec file
-   (see "Build Verification"). `whole-repo-build-guard` is ON for every tree and names `pnpm wp-build`
-   in its refusal.
+   (see "Build Verification"). `whole-repo-build-guard` names `pnpm wp-build` in its refusal — when this
+   machine has opted into it via `~/.webpieces/config.json`.
 11. ❌ Hand-composing a verify chain (`format:check && webpieces:ci && test:affected` and friends), or
    adding a leg to `wp-build`. One command, one config value. Anything that must run on every build goes
    inside `commands.pr-gate.buildCommand`, so the PR gate runs it too.
