@@ -84,10 +84,10 @@ export class TreeRecovery {
         }
         // The primary clone. NO "never `git checkout main`" here: that is a WORKTREE-only truth, and
         // printing it in the primary clone forbids the shortest exit off a merged branch
-        // (`git checkout main && git pull origin main && pnpm wp-cleanup` — the exact command a human
-        // had to hand an agent that had wedged itself following this very message). Branching off
-        // origin/main is still what we RECOMMEND, because it works from any tree; it is no longer
-        // dressed up as the only legal move.
+        // (`pnpm wp-checkout-clean-main` — the one command form of the git pair a human had to hand an
+        // agent that had wedged itself following this very message). Branching off origin/main is still
+        // what we RECOMMEND, because it works from any tree; it is no longer dressed up as the only
+        // legal move.
         if (kind === 'branch') {
             return ['Start fresh — branch off origin/main (works from here and from any worktree):', ...branchForm];
         }
@@ -105,18 +105,32 @@ export class TreeRecovery {
      * worktrees whose directory is already gone (`git worktree remove` FAILS on those), and the
      * branch delete must come LAST because git refuses to delete a branch a worktree still holds.
      *
-     * The BRANCH form ends in `pnpm wp-cleanup`, not `git branch -d <branch>`. An agent reads a bare
-     * `-d`/`-D` as destructive and stops to ask permission, so the branch survives the turn and local
-     * branches pile up — the exact failure this whole cleanup path exists to prevent. wp-cleanup is
-     * one named command that deletes only provably-dead branches (and reaps every OTHER dead one at
-     * the same time), so it is safe to allowlist and never needs a judgement call.
+     * The BRANCH form is ONE command, `pnpm wp-checkout-clean-main`, and both halves of that matter.
+     *
+     * It does not end in `git branch -d <branch>`, because an agent reads a bare `-d`/`-D` as
+     * destructive and stops to ask permission, so the branch survives the turn and local branches pile
+     * up — the exact failure this whole cleanup path exists to prevent. The cleanup it runs deletes only
+     * provably-dead branches (and reaps every OTHER dead one at the same time), so it is safe to
+     * allowlist and never needs a judgement call.
+     *
+     * And it is not spelled `git checkout main && git pull origin main && pnpm wp-cleanup` any more,
+     * even though that pair is still perfectly legal to type. The one command is checkout + pull +
+     * cleanup + the orphan-directory sweep; the hand-chained form is the same thing minus the sweep, so
+     * printing both is two spellings of one intention where one silently does less, and the corpses the
+     * sweep exists to collect simply never got collected. See CheckoutCleanMainCommand's docblock for
+     * why going to main is the right moment to sweep.
+     *
+     * The RAW PAIR IS NOT GONE — it is still the L0 recovery cure (CHECKOUT_MAIN_PULL_CMD in
+     * `src/bin/l0-allowlist.ts`), because in an L0 block `node_modules` is exactly what is in doubt and
+     * a `pnpm wp-*` bin cannot be relied on to run. Two layers, two spellings, for a reason that is not
+     * back-compat: this is the WORKFLOW layer, where the bin is known to work.
      *
      * The WORKTREE form still spells out git commands: wp-cleanup deliberately reaps parked branches
      * only — a worktree-held branch is spared — so it cannot do this job, and the prune → remove →
      * delete ordering is the part that has to be exactly right.
      */
     cleanupSteps(kind: TreeKind, branch: string, worktreePath: string = '<worktree-dir>'): string[] {
-        const branchForm = `  ${this.at('git checkout main && git pull origin main && pnpm wp-cleanup')}`;
+        const branchForm = `  ${this.at('pnpm wp-checkout-clean-main')}`;
         const worktreeForm =
             `  git worktree prune && git worktree remove ${worktreePath} && git branch -D ${branch}`;
 
@@ -144,9 +158,16 @@ export class TreeRecovery {
      * Bring main up to date. In a linked worktree there is nothing to check out — `main` lives in
      * the primary clone — so the update is a plain fetch of the remote-tracking ref, which is all
      * you need to then branch off `origin/main`.
+     *
+     * The primary-clone form is `pnpm wp-checkout-clean-main`, not the `git checkout main && git pull
+     * origin main` pair it used to print, for the reason spelled out on cleanupSteps() above: the pair
+     * is that command minus the cleanup and the sweep, and an agent handed both types whichever it read
+     * last. The pair remains a legal thing to run — it is still the L0 recovery cure, where a `pnpm`
+     * bin cannot be trusted — but this is the workflow layer and it prescribes the one that finishes
+     * the job.
      */
     updateMainSteps(kind: TreeKind): string[] {
-        const branchForm = `  ${this.at('git checkout main && git pull origin main')}`;
+        const branchForm = `  ${this.at('pnpm wp-checkout-clean-main')}`;
         const worktreeForm = `  ${this.at('git fetch origin main')}        (then work off origin/main)`;
 
         if (kind === 'worktree') {
@@ -163,7 +184,7 @@ export class TreeRecovery {
             'Update main. Pick the form for the tree you are in:',
             '  - in the primary clone:',
             `  ${branchForm}`,
-            '  - in a linked worktree (`git checkout main` fatals there):',
+            '  - in a linked worktree (there is no `main` here to check out — it lives in the primary clone):',
             `  ${worktreeForm}`,
         ];
     }

@@ -30,6 +30,27 @@ function writeConfig(home: string, contents: string): string {
     return p;
 }
 
+/**
+ * Everything the loader wrote to stderr while `body` ran. The unknown-key WARNING is now the entire
+ * mitigation for ignoring a key, so it is a behaviour with tests, not incidental logging — which means
+ * the suite has to read the channel it actually goes to.
+ */
+function captureWarnings(body: () => void): string {
+    const original = process.stderr.write.bind(process.stderr);
+    let captured = '';
+    // webpieces-disable no-any-unknown -- matching node's own overloaded write() signature to restore it
+    process.stderr.write = ((chunk: unknown): boolean => { captured += String(chunk); return true; }) as
+        typeof process.stderr.write;
+    // webpieces-disable no-unmanaged-exceptions -- chokepoint: stderr MUST be restored even when body throws
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        body();
+    } finally {
+        process.stderr.write = original;
+    }
+    return captured;
+}
+
 function loadError(home: string): InformAiError {
     let caught: Error | null = null;
     // webpieces-disable no-unmanaged-exceptions -- chokepoint: the rejection IS the assertion subject
@@ -216,28 +237,6 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
         expect(msg).toContain('"true"');
     });
 
-    it('rejects an unknown top-level key, naming the only key the file accepts', () => {
-        const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimentl: { buildGateLogCapture: true } }));
-        const msg = loadError(home).message;
-        expect(msg).toContain('"experimentl" is not a known key');
-        expect(msg).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"`);
-    });
-
-    it('rejects an unknown key inside experimental, naming the valid key', () => {
-        const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCaptured: true } }));
-        const msg = loadError(home).message;
-        expect(msg).toContain('"experimental.buildGateLogCaptured" is not a known key');
-        expect(msg).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"`);
-    });
-
-    it('offers "did you mean" for a case-only typo', () => {
-        const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildgatelogcapture: true } }));
-        expect(loadError(home).message).toContain('Did you mean "experimental.buildGateLogCapture"?');
-    });
-
     it('rejects a non-boolean value, showing the value it got', () => {
         const home = fakeHome();
         writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: 'true' } }));
@@ -271,7 +270,7 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
     // agent that cannot work out the right shape has no exit.
     it('always names the file and says deleting it is a valid fix', () => {
         const home = fakeHome();
-        const p = writeConfig(home, JSON.stringify({ nope: 1 }));
+        const p = writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: 1 } }));
         const msg = loadError(home).message;
         expect(msg).toContain(p);
         expect(msg).toContain('deleting it outright is a valid fix');
@@ -310,14 +309,139 @@ describe('RETIRED_HOME_CONFIG_KEYS — the no-back-compat guard', () => {
         }
     });
 
-    // Retirement must be reported BEFORE "unknown key": the latter sends an agent DELETING a value it
-    // should be MOVING, which is the whole reason the table exists.
-    it('reports a retired key as retired rather than as unknown', () => {
+    /**
+     * RETIRED IS NOT "UNKNOWN", AND THIS IS THE ASSERTION THAT KEEPS THE TWO APART.
+     *
+     * Since an unrecognised key is now IGNORED with a warning, a retirement that fell through to the
+     * unknown path would not merely print the wrong words — it would silently drop a value the user
+     * wanted, while telling them their spelling might be off. The retirement table exists precisely
+     * because these keys carry a MIGRATION, so they must throw, and they must throw first.
+     */
+    it('reports a retired key as retired, and never as a merely-unrecognised one', () => {
         const home = fakeHome();
         writeConfig(home, JSON.stringify({ experimental: { captureBuildGateLog: true } }));
         const msg = loadError(home).message;
         expect(msg).toContain('is RETIRED');
-        expect(msg).not.toContain('is not a known key');
+        expect(msg).not.toContain('was IGNORED');
+    });
+
+    it('emits no unknown-key warning for a retired key — it throws before reaching that path', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { captureBuildGateLog: true } }));
+        const warnings = captureWarnings((): void => { loadError(home); });
+        expect(warnings).toBe('');
+    });
+});
+
+/**
+ * ══ FORWARD COMPATIBILITY — THE OTHER HALF OF "NO KEY MAY BE REQUIRED" ══════════════════════════════
+ *
+ * `~/.webpieces/config.json` is MACHINE-GLOBAL: ONE document, read by EVERY repo on the machine, and
+ * those repos pin DIFFERENT @webpieces releases. For the set of valid documents to be non-empty across
+ * all of them at once, BOTH of these must hold:
+ *
+ *   • omitting a key must not fail  → already guaranteed above ("accepts a file that omits ANY key")
+ *   • ADDING a key must not fail    → this block
+ *
+ * With only the first, adding any new key hard-blocked every repo on the machine still on an older
+ * release — an outage caused by opting in to an experimental flag. This is deliberately the OPPOSITE
+ * policy from webpieces.config.json, which is repo-tracked and therefore read by exactly one release;
+ * see the class docblock in home-config.ts for the full argument.
+ */
+describe('an UNKNOWN key is ignored, not rejected — because older releases share this file', () => {
+    it('loads a file carrying a key from a hypothetical newer release', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({
+            experimental: { 'whole-repo-build-guard': true, 'some-future-flag': true },
+        }));
+        const loaded = new HomeConfigService().load(home);
+        expect(loaded.wholeRepoBuildGuard).toBe(true);
+    });
+
+    it('ignores an unknown TOP-LEVEL section, so a future release may add one beside experimental', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({
+            preferences: { theme: 'dark' },
+            experimental: { [HOME_KEY_ORPHAN_DIR_SWEEP]: true },
+        }));
+        const loaded = new HomeConfigService().load(home);
+        expect(loaded.orphanDirSweep).toBe(true);
+    });
+
+    /**
+     * The cost of ignoring is that a TYPO now silently does nothing, and the warning is the entire
+     * mitigation for it. If these go red the change has become a silent one, which was never the deal.
+     */
+    it('WARNS that the key was ignored, naming it and the keys it does understand', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { 'some-future-flag': true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain('experimental.some-future-flag');
+        expect(warnings).toContain('IGNORED');
+        expect(warnings).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"`);
+    });
+
+    // The "understood here" list is rendered at the LEVEL the bad key was found, so a mistyped section
+    // is answered with the sections rather than with a list of flags that could not go there anyway.
+    it('warns about an unknown top-level key, listing the sections rather than the flags', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimentl: { buildGateLogCapture: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain('"experimentl"');
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}"?`);
+        expect(warnings).toContain(`Understood here: "${HOME_EXPERIMENTAL_SECTION}".`);
+    });
+
+    // The did-you-mean is what separates "you mistyped" from "this is newer than me", and it has to be
+    // fuzzier than the case-insensitive equality it replaced — a rejection used to be the signal, and
+    // now the suggestion is.
+    it('suggests the near match for a one-character typo', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCaptured: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+    });
+
+    it('suggests the near match for a case-only typo, as it always did', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { buildgatelogcapture: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+    });
+
+    // A genuinely NEW key must NOT be dressed up as a typo — that would send an agent "fixing" the
+    // spelling of a key that is spelled correctly for the release that introduced it.
+    it('does not guess a near match for a key that resembles nothing, and says why it might be there', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { 'telemetry-opt-in': true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).not.toContain('Did you mean');
+        expect(warnings).toContain('NEWER @webpieces');
+    });
+
+    /** An understood file stays completely silent — the absent-file promise extended to a valid one. */
+    it('says nothing at all when every key is understood', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_WHOLE_REPO_BUILD_GUARD]: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toBe('');
+    });
+
+    /**
+     * The one thing an unknown key must NOT do is change behaviour: a document of nothing but unknown
+     * keys has to read byte-for-byte like the no-file state — the same promise the absent-file block
+     * makes. Asserted against the DEFAULT constants rather than literal booleans, because
+     * `whole-repo-build-guard` defaults ON and hard-coding `false` here would silently re-assert the
+     * opt-in it stopped being.
+     */
+    it('leaves every flag at its default when the file contains only unknown keys', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { 'some-future-flag': true }, alsoFuture: true }));
+        const loaded = new HomeConfigService().load(home);
+        const absent = new HomeConfigService().load(fakeHome());
+        expect(loaded.wholeRepoBuildGuard).toBe(absent.wholeRepoBuildGuard);
+        expect(loaded.orphanDirSweep).toBe(absent.orphanDirSweep);
+        expect(loaded.buildGateLogCapture).toBe(absent.buildGateLogCapture);
     });
 });
 

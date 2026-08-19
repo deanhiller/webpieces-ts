@@ -50,8 +50,11 @@ import { RecoveryAllowlist } from './recovery-allowlist';
  *
  *   BLOCKED   `git checkout main`, `git switch main` — with or without flags — when no `git pull`
  *             appears anywhere in the SAME command.
- *   ALLOWED   `git checkout main && git pull origin main`, the pairing this forces, which is the
- *             exact line the post-merge cleanup flow already prescribes.
+ *   ALLOWED   `git checkout main && git pull origin main`, the pairing this forces — and
+ *             `pnpm wp-checkout-clean-main`, which IS that pairing with the cleanup and the
+ *             orphan-directory sweep welded on. The message prescribes the one command; the raw pair
+ *             stays legal because it is plain git and because it is the L0 recovery cure, where
+ *             `node_modules` is the thing in doubt and no `pnpm` bin can be relied on.
  *   ALLOWED   `git checkout -b <x> origin/main` (current by construction), `git checkout <sha>`,
  *             `git checkout -- <file>`, and any other branch.
  *
@@ -102,7 +105,8 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     private readonly recoveryList = new RecoveryAllowlist(this.scanner);
 
     readonly description =
-        'Block a bare `git checkout main` (chain the pull into the same command), and block Bash on ' +
+        'Block a bare `git checkout main` (use `pnpm wp-checkout-clean-main`, or chain the pull into ' +
+        'the same command), and block Bash on ' +
         'main outright — allowlisting only the commands that get you off it — so a session neither ' +
         'lands on main nor works there, whether or not main happens to be current.';
     override readonly defaultOptions = {
@@ -110,17 +114,18 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     };
     readonly fixHint = new FixHint(
         'Landing on `main` without pulling, or working on `main` at all, both put your work somewhere it does not belong.',
-        'Get onto a feature branch, or pair the checkout with the pull:',
+        'Get onto a feature branch, or go to main with the one command that pulls it too:',
         [
             // TREE-SHAPED, from the one source of tree-shaped cures. A static rule-level hint has no
             // workspace root, so it renders the 'unknown' kind — TreeRecovery's deliberate answer for
             // "we cannot detect the tree": both forms, each labelled. That matters here because the
-            // primary-clone form (`git checkout main && …`) is BLOCKED by redirect-how-to-merge-main
-            // inside a linked worktree, so a preferred option naming it unconditionally hands the AI a
-            // cure a sibling guard denies. The per-block message (pairingMessage) is detected and
-            // prints exactly one form; this is the fallback for the hint that cannot look.
+            // primary-clone form goes to `main`, and a linked worktree has no `main` to go to — it is
+            // checked out in the primary clone — so a preferred option naming it unconditionally hands
+            // the AI a cure that cannot work where it is standing. The per-block message
+            // (pairingMessage) is detected and prints exactly one form; this is the fallback for the
+            // hint that cannot look.
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
-                + '\nWhichever form applies, the pull must be in the SAME command as the checkout.', true),
+                + '\nIf you hand-roll the git instead, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
             new Option('Still allowed on main: everything that gets you OUT or tells you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, gh pr view|list|status|checks, git stash, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
@@ -217,7 +222,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         // docblock above — the reader of THIS text needs only what changes what they type.
         return 'Blocked: a bare `git checkout main` lands you on whatever local `main` you last had — '
             + 'stale files, plus a reverted @webpieces pin and guard shim, so the drift guard then '
-            + 'reports the drift BACKWARDS. Chain the pull into the same command:\n' + steps;
+            + 'reports the drift BACKWARDS. Go to main with the one command that also pulls it:\n' + steps;
     }
 
 

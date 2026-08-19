@@ -24,7 +24,21 @@ import { CHECKOUT_MAIN_PULL_CMD } from './l0-allowlist';
 // ON MAIN the forward move is `git checkout main && git pull origin main` — it ends ON main, merges
 // nothing into anything, is a no-op checkout when you are already there, and it is the ONE pull spelling
 // still on the L0 allowlist (see CHECKOUT_MAIN_PULL_BODY_ERE, which also records why it is a narrow
-// literal). It is word for word what stale-main-bash-guard prescribes.
+// literal).
+//
+// RAW GIT ON PURPOSE, and this is now the DIFFERENCE from the workflow guards rather than a match with
+// them. stale-main-bash-guard, merged-branch-message, TreeRecovery and the L2 rows all prescribe
+// `pnpm wp-checkout-clean-main` — the same pairing with `wp-cleanup` and the orphan-directory sweep
+// welded on, so the sweep actually runs. THIS message must NOT follow them: the fault it is reporting IS
+// that `node_modules` disagrees with the pin, which makes `node_modules` the untrustworthy thing, and
+// every `pnpm wp-*` bin resolves through it. An L0 cure may never be a command that has to load the
+// package it is repairing. Two layers, two spellings, and that is not the two-spellings shim — they are
+// cures for two different states, one of which has a working package manager and one of which does not.
+//
+// The rationale is recorded HERE, in the source, and deliberately NOT as a comment inside the rendered
+// shell: the committed `.claude/webpieces/ai-hook.sh` is byte-compared against renderShim() by the
+// committed-shim self-guard, so a comment-only change would fire that guard on every consumer's tree for
+// no behavioural reason — the exact churn the version stamp was removed to stop.
 //
 // ON A FEATURE BRANCH there is no honest forward move to name, and this deliberately does not invent
 // one. `pnpm install` aligns node_modules to YOUR branch pin and is the usual right answer, but it is a

@@ -48,14 +48,15 @@ export class MergedBranchMessage {
             ? '  - switching away: git checkout/switch <other-branch> (NOT `git checkout main` — it fatals ' +
               'in a worktree; use `git fetch origin main`), git worktree add/remove/prune'
             : '  - switching away: git checkout/switch <other-branch> — `main` included, so ' +
-              '`git checkout main && git pull origin main && pnpm wp-cleanup` is allowed and is the ' +
-              'shortest exit; also git worktree add/remove/prune';
+              '`pnpm wp-checkout-clean-main` (checkout main, pull it, reap dead branches and ' +
+              'worktrees, sweep orphan directories) is allowed and is the shortest exit; also ' +
+              'git worktree add/remove/prune';
         return [
             'Still allowed while this block is up (these get you OFF this branch — run one, then retry):',
             '  - the fresh-start / cleanup git commands above',
             '  - read-only orientation: git status|log|diff|show|branch, gh pr list|view|status, gh run view|list|watch',
             switching,
-            '  - pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
+            '  - pnpm wp-checkout-clean-main, pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
             '  - output shaping on any of the above: `… 2>&1 | tail -40`, `… | head -5`, `…; echo done`',
             '  - reading and editing webpieces.config.json (the mode-OFF escape hatch for these guards)',
             '',

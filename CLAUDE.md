@@ -657,20 +657,26 @@ to. Without repo-admin rights it prints the one `gh api` command to forward to a
 **Prefer `pnpm wp-land-pr` from the CLI** — it also archives the pre-squash tip and reaps the landed
 worktree — but the UI button is not wrong, which is the point.
 
-Once the PR merges, clean up. Pick the form for the tree you are in — `git checkout main` fatals in a
-linked worktree (`main is already checked out at <primary clone>`), so the two forms are not
-interchangeable:
+Once the PR merges, clean up. Pick the form for the tree you are in — a linked worktree has no `main` to
+check out (`main is already checked out at <primary clone>`), so the two forms are not interchangeable:
 
 - in the primary clone:
   ```bash
-  pnpm wp-land-pr && git checkout main && git pull origin main && pnpm wp-cleanup
+  pnpm wp-land-pr && pnpm wp-checkout-clean-main
   ```
 - in a linked worktree — land, then run the same cleanup **from the primary clone** (`wp-cleanup`
   deliberately spares the worktree you are standing in, so it cannot reap the one you are inside):
   ```bash
   pnpm wp-land-pr
-  pnpm wp-cleanup     # from the primary clone
+  pnpm wp-checkout-clean-main     # from the primary clone
   ```
+
+`wp-checkout-clean-main` is one command for one intention: fetch, check out `main`, `pull --ff-only`,
+`wp-cleanup`, then sweep the orphan directories an `nx g move` leaves on every clone. Do **not** hand-roll
+`git checkout main && git pull origin main && pnpm wp-cleanup` instead — that is the same command minus
+the sweep, which is exactly how the sweep never ran for anybody. (The raw pair is still legal git, and it
+is deliberately still the L0 version-drift cure, because in an L0 block `node_modules` is the thing in
+doubt and no `pnpm` bin can be relied on to load.)
 
 `wp-cleanup` reaps **worktrees first, then branches**, and that order is the whole fix: a worktree HOLDS
 its branch, so reaping the tree is what makes the branch reapable, and the branch pass then recomputes

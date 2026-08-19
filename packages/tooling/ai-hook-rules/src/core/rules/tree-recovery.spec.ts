@@ -106,14 +106,21 @@ describe('TreeRecovery.cleanupSteps', () => {
     });
 
     /**
-     * The primary-clone form hands out `pnpm wp-cleanup`, never a bare `git branch -d`. An agent
-     * treats a raw delete flag as destructive and stops to ask, so the branch survives the turn —
-     * which is precisely how local branches piled up while this advice was being printed correctly.
+     * The primary-clone form is the ONE command `pnpm wp-checkout-clean-main`, never a bare
+     * `git branch -d`. An agent treats a raw delete flag as destructive and stops to ask, so the branch
+     * survives the turn — which is precisely how local branches piled up while this advice was being
+     * printed correctly.
+     *
+     * And it is no longer the hand-chained `git checkout main && git pull origin main && pnpm
+     * wp-cleanup`: that is the same intention minus the orphan-directory sweep, so printing both was two
+     * spellings where one silently did less, and the sweep consequently never ran for anybody. The
+     * `not.toContain` on the raw pair is the pin for that — the WORKFLOW layer must stop teaching it.
+     * (L0 recovery still uses the raw pair; that is a different layer and has its own tests.)
      */
-    it('uses the checkout + wp-cleanup form in the primary clone, never a raw branch delete', () => {
+    it('uses the one-command form in the primary clone, never a raw branch delete or the hand-rolled pair', () => {
         const text = new TreeRecovery().cleanupSteps('branch', 'dean/x').join('\n');
-        expect(text).toContain('git checkout main');
-        expect(text).toContain('pnpm wp-cleanup');
+        expect(text).toContain('pnpm wp-checkout-clean-main');
+        expect(text).not.toContain('git checkout main && git pull origin main');
         expect(text).not.toContain('git branch -d');
         expect(text).not.toContain('git worktree remove');
     });
@@ -122,7 +129,7 @@ describe('TreeRecovery.cleanupSteps', () => {
     // worktree-held branches, so it cannot finish that job.
     it('gives both forms when unknown', () => {
         const text = new TreeRecovery().cleanupSteps('unknown', 'dean/x', '/work/x').join('\n');
-        expect(text).toContain('pnpm wp-cleanup');
+        expect(text).toContain('pnpm wp-checkout-clean-main');
         expect(text).toContain('git worktree remove /work/x');
         expect(text).toContain('git branch -D dean/x');
     });
@@ -136,15 +143,24 @@ describe('TreeRecovery.updateMainSteps', () => {
         expect(text).not.toContain('git pull origin main');
     });
 
-    it('keeps checkout+pull for the primary clone', () => {
+    /**
+     * The primary clone gets `pnpm wp-checkout-clean-main` — checkout, pull, cleanup and the
+     * orphan-directory sweep as one intention — and NOT the raw pair it used to print. The negative
+     * assertion is the load-bearing half: the raw pair is still allowed to RUN (it is plain git, and it
+     * is the L0 recovery cure), so the only thing that makes the one-command form win is that the
+     * guards stop teaching the other one.
+     */
+    it('prescribes the one command for the primary clone, not the hand-rolled pair', () => {
         const text = new TreeRecovery().updateMainSteps('branch').join('\n');
-        expect(text).toContain('git checkout main && git pull origin main');
+        expect(text).toContain('pnpm wp-checkout-clean-main');
+        expect(text).not.toContain('git checkout main && git pull origin main');
     });
 
     it('gives both forms when unknown', () => {
         const text = new TreeRecovery().updateMainSteps('unknown').join('\n');
-        expect(text).toContain('git checkout main && git pull origin main');
+        expect(text).toContain('pnpm wp-checkout-clean-main');
         expect(text).toContain('git fetch origin main');
+        expect(text).not.toContain('git checkout main && git pull origin main');
     });
 });
 

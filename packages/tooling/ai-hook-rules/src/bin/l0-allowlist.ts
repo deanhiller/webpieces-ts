@@ -200,11 +200,25 @@ export const FETCH_ALLOW_JS =
 //
 // `git checkout main && git pull origin main` ends on MAIN. The feature branch is not checked out, not
 // merged into, not touched at all: there is no fork point to destroy, on any branch, ever. That is what
-// earns it a terminal entry on a list where a bare `git pull origin main` no longer has one. It is also,
-// word for word, the cure `stale-main-bash-guard` calls its PREFERRED option, and it satisfies that
-// guard's "the pull must be in the SAME command" rule — so the guard that prescribes it and the
-// allowlist that admits it finally spell it identically. When the agent is ALREADY on main the checkout
-// is a harmless no-op, so this one literal covers the on-main case too and needs no second entry.
+// earns it a terminal entry on a list where a bare `git pull origin main` no longer has one. When the
+// agent is ALREADY on main the checkout is a harmless no-op, so this one literal covers the on-main case
+// too and needs no second entry.
+//
+// ─── WHY L0 KEEPS THE RAW GIT WHILE THE WORKFLOW LAYER MOVED TO `pnpm wp-checkout-clean-main` ─────────
+// `wp-checkout-clean-main` is this exact pairing with `wp-cleanup` and the orphan-directory sweep welded
+// on, and the WORKFLOW guards (stale-main-bash-guard's preferred cure, merged-branch-message,
+// TreeRecovery, the L2 rows) now prescribe it instead of these two git commands — one intention, one
+// spelling, and the sweep actually runs.
+//
+// THIS ENTRY DELIBERATELY DOES NOT FOLLOW THEM, and that is not the two-spellings shim it looks like.
+// The fault L0 is curing is `node_modules` disagreeing with the pin — which means `node_modules` is
+// PRECISELY the thing that cannot be trusted. A `pnpm wp-*` bin resolves through it, so the one class of
+// cure that may not appear on an L0 allowlist is a cure that has to load the package it is repairing.
+// Raw git needs nothing but git. Replacing this literal with the `pnpm` spelling would delete the only
+// working escape from a deadlock, in the one state where every other tool call is already denied.
+//
+// The two layers are therefore not two spellings of one thing; they are two different things that
+// happen to share a prefix. Read the L0 one as "get main, with no working package manager".
 //
 // A NARROW LITERAL, deliberately. The rationale above — `git checkout` is what CAUSES this drift, and a
 // fail-closed hatch should only contain cures — is intact: `main` is hard-coded, no flags are accepted,
@@ -224,7 +238,13 @@ export const CHECKOUT_MAIN_PULL_ALLOW_ERE =
 export const CHECKOUT_MAIN_PULL_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + CHECKOUT_MAIN_PULL_BODY_JS + CAPTURE_TAIL_JS_SRC);
 
-/** The exact bytes every message prescribing the on-main sync must print. */
+/**
+ * The exact bytes every L0 message prescribing the on-main sync must print.
+ *
+ * L0 ONLY. The workflow guards prescribe `pnpm wp-checkout-clean-main`; this constant is for the faults
+ * where `node_modules` is the thing under suspicion and no `pnpm` bin can be relied on to run. See the
+ * block comment above CHECKOUT_MAIN_PULL_BODY_ERE for the full argument, and do not "unify" the two.
+ */
 export const CHECKOUT_MAIN_PULL_CMD = 'git checkout main && git pull origin main';
 
 // The CURE for the committed-shim self-guard (now enforced by the binary — see committedShimStale

@@ -402,9 +402,14 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
         // Both tree kinds, each named, so no reader takes the wrong one silently.
         expect(text).toContain('in the primary clone:');
         expect(text).toContain('in a linked worktree');
-        expect(text).toContain('git checkout main && git pull origin main');
+        // The primary-clone form is `pnpm wp-checkout-clean-main` — the raw pair with wp-cleanup and
+        // the orphan-directory sweep welded on. The pair is still legal git and is still the L0
+        // recovery cure; the workflow layer simply stops teaching it (see TreeRecovery).
+        expect(text).toContain('pnpm wp-checkout-clean-main');
+        expect(text).not.toContain('git checkout main && git pull origin main');
         expect(text).toContain('git fetch origin main');
-        // The instruction that is this guard's whole point survives the rewrite.
+        // The instruction that is this guard's whole point survives the rewrite — now stated for the
+        // agent that hand-rolls the git anyway, since the prescribed form has nothing to chain.
         expect(text).toContain('the pull must be in the SAME command');
         // The worktree form must NOT be a separate unranked sibling option again — that split is
         // exactly what let a reader take the preferred, tree-blind one and get denied.

@@ -170,12 +170,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed — the edit proceeds',
             'config-bypass (feature-branch-guard skipped)'),
     ]),
-    new L2Row(2, ['B'], 'bare `git checkout main`, with no `git pull` chained into the same command', L2_BLOCK, '`git checkout main && git pull origin main`', [
+    new L2Row(2, ['B'], 'bare `git checkout main`, with no `git pull` chained into the same command', L2_BLOCK, '`pnpm wp-checkout-clean-main`', [
         new L2UseCase(3,
             '`git checkout main` after a merge, to start the next piece of work',
             'about to land on whatever local `main` you last had — 157 commits behind, in the incident',
             'BLOCK: decided from command TEXT alone, before the checkout, because the only `main` this could measure is the one it is about to leave',
-            '`git checkout main && git pull origin main` — the pull must be in the SAME command',
+            '`pnpm wp-checkout-clean-main` — checkout, pull, reap dead branches/worktrees, sweep orphan directories, in one command (hand-rolled, the pull must be in the SAME command as the checkout)',
             'bare checkout of main ('),
         new L2UseCase(4,
             'The same command inside a linked worktree, where `git checkout main` fatals anyway',

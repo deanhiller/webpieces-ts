@@ -187,9 +187,13 @@ describe('case 3 — the machine-local file is the one that is wrong', () => {
         throw new Error(`expected ${contents} to be rejected`);
     }
 
+    // An UNKNOWN flag is deliberately absent from this list: `~/.webpieces/config.json` is
+    // machine-global and shared by repos on different @webpieces releases, so a key this release has
+    // never heard of is IGNORED with a stderr warning rather than rejected (see home-config.ts). It
+    // produces no error, so it has no error text for this suite to check the labelling of. The three
+    // remaining rows are the ones that still reject.
     const cases: readonly string[] = [
         '{ not json',                                    // unparseable
-        '{"experimental":{"bogusFlag":true}}',           // unknown flag
         '{"experimental":{"whole-repo-build-guard":"yes"}}', // wrong TYPE for a known flag
         '{"experimental":{"captureBuildGateLog":true}}', // retired flag
     ];

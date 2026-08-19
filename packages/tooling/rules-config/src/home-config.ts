@@ -18,18 +18,69 @@ import { toError } from './to-error';
  * "not opted in", and returns all-defaults silently. That is not a fallback for a wrong shape; it is the
  * definition of "the user did not create this file".
  *
- * ─── PRESENT IS STRICT, EXACTLY LIKE webpieces.config.json ────────────────────────────────────────────
- * Once the bytes are readable, someone DELIBERATELY created this file, and from that point the same
- * policy applies as to webpieces.config.json (see `retired-config-keys.ts`): an unparseable document, an
- * unknown key, a misspelled key, a retired key or a wrong value TYPE is REJECTED with an error naming the
- * exact fix. No `??` fallback, no alias table, no "accepted for now". Every reader of this file is a
- * coding agent, and an accepted shape is never migrated — so a loud failure carrying the mechanical edit
- * is strictly cheaper than duality, and it is the delivery mechanism for the migration.
+ * ─── PRESENT IS STRICT ABOUT WHAT IT UNDERSTANDS, AND FORWARD-COMPATIBLE ABOUT WHAT IT DOES NOT ───────
+ * Once the bytes are readable, someone DELIBERATELY created this file, and three of the four failure
+ * modes are REJECTED exactly as webpieces.config.json rejects them (see `retired-config-keys.ts`), with
+ * an error naming the exact fix and no `??` fallback anywhere:
  *
- * Rejecting is self-recoverable here for the same reason it is for webpieces.config.json: a Write/Edit
- * targeting THIS path is an unconditional PASS in the hook guards (see `isHomeConfigPath`, wired into
- * ai-hook-rules' runner beside the webpieces.config.json pass), so an agent can always repair the file
- * the loader just rejected.
+ *   UNPARSEABLE   not JSON, or not a single JSON object          → REJECT
+ *   RETIRED KEY   listed in RETIRED_HOME_CONFIG_KEYS             → REJECT, carrying the migration
+ *   WRONG TYPE    a KNOWN key holding a non-boolean              → REJECT
+ *   UNKNOWN KEY   a key no version of this validator has heard of → IGNORED, with a warning
+ *
+ * ─── WHY THE LAST ROW DIFFERS FROM webpieces.config.json, WHICH STAYS STRICT ──────────────────────────
+ * The difference is not a softening of policy; it is that the two files have different CARDINALITY.
+ *
+ *   webpieces.config.json is REPO-TRACKED. One repo, one file, one pinned @webpieces release, and the
+ *   file moves through git in lockstep with the code that reads it. "One version reads this document" is
+ *   true by construction, so an unknown key there can only be a typo or a dead key — and rejecting it is
+ *   right, because it is the delivery mechanism for the migration.
+ *
+ *   THIS file is MACHINE-GLOBAL. ONE document, read by EVERY repo on the machine, and those repos pin
+ *   DIFFERENT releases — deliberately, since a repo's pin is tracked and moves when its own PR lands.
+ *   So "an unknown key" here has a second, entirely legitimate cause that cannot occur in the repo file:
+ *   a key a NEWER release added, being read by an OLDER one. Rejecting it means adding any key to this
+ *   file hard-blocks every repo on the machine that has not yet been upgraded — an outage produced by
+ *   opting IN to an experimental flag, which is the same shape of failure that moved these flags out of
+ *   webpieces.config.json in the first place (see the section below).
+ *
+ * This is the exact mirror of the already-settled rule that no key here may be REQUIRED. Both halves fall
+ * out of one fact: the set of valid documents must be non-empty for EVERY release on the machine at once.
+ *   • omit a new key → an old release must not demand it   (already true: every key is optional)
+ *   • add a new key  → an old release must not reject it   (this change)
+ * With only the first half, the set of valid files was still empty the moment a key was added.
+ *
+ * ─── WHAT THAT COSTS, AND WHAT PAYS FOR IT ────────────────────────────────────────────────────────────
+ * The cost is real and worth stating plainly: a TYPO now silently does nothing. `"whole-repo-build-gaurd"`
+ * used to be a loud rejection; it is now a key nothing reads, so the flag keeps its default and nothing
+ * about the machine's behaviour reveals the mistake.
+ *
+ * That bites HARDEST on a key whose default is ON, which `whole-repo-build-guard` now is
+ * (WHOLE_REPO_BUILD_GUARD_DEFAULT). Misspell the OPT-OUT and the guard stays on while the author
+ * believes they turned it off — a failure that argues with them rather than one they can shrug at. It is
+ * the strongest reason the warning below is not optional decoration, and the reason `nearestKnownKey`
+ * had to get fuzzier than the case-insensitive match it replaced: `gaurd` is a transposition, exactly
+ * the class of typo an equality test cannot see.
+ *
+ * That is mitigated, not eliminated, by making the ignore VISIBLE: every unknown key is printed once per
+ * load as a `[webpieces]` warning on stderr, and `nearestKnownKey` upgrades that line with a "did you
+ * mean" whenever the key is within a two-character edit of a known one — which is what a typo is, and
+ * what a key from a newer release is not. A warning naming a close match is the strongest signal
+ * available that does not also block a colleague on an older pin.
+ *
+ * The trade was taken this way round because the two mistakes are not symmetric. A typo costs its author
+ * one flag that did not turn on, discoverable the moment they check whether the feature is doing
+ * anything, on their own machine. A rejection costs every repo on the machine every tool call, and the
+ * person it blocks is usually not the person who edited the file.
+ *
+ * An unknown TOP-LEVEL key is ignored on the identical argument, and it is the more important half: a
+ * future release adding a second section (`preferences`, say) beside `experimental` would otherwise be
+ * unreadable by every older release on the machine, which is precisely the sequencing being deleted here.
+ *
+ * ─── REJECTING IS STILL SELF-RECOVERABLE, FOR THE THREE ROWS THAT STILL REJECT ────────────────────────
+ * A Write/Edit targeting THIS path is an unconditional PASS in the hook guards (see `isHomeConfigPath`,
+ * wired into ai-hook-rules' runner beside the webpieces.config.json pass), so an agent can always repair
+ * the file the loader just rejected.
  *
  * ─── WHY A MACHINE-LOCAL SWITCH LIVES HERE AND NOT IN webpieces.config.json ───────────────────────────
  * `whole-repo-build-guard` first shipped as an ordinary validated guard: `mode: 'ON'` by default AND an
@@ -90,8 +141,10 @@ export const WHOLE_REPO_BUILD_GUARD_DEFAULT = true;
 // `false` at each call site so the asymmetry with the constant above is visible where it is passed.
 const GUARD_OFF_WHEN_ABSENT = false;
 
-// The complete accepted shape. Anything not on these lists is an error, so adding a key means adding it
-// here — there is no place for an unvalidated key to hide.
+// The complete UNDERSTOOD shape. A key not on these lists is ignored with a warning rather than
+// rejected (see the class docblock: this document is machine-global and older releases must survive
+// meeting a newer release's key), so adding a key still means adding it here — a key absent from these
+// lists is never read at all, and the flag it was meant to set keeps the default above.
 const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
 const ALLOWED_EXPERIMENTAL: readonly string[] = [
     HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_ORPHAN_DIR_SWEEP,
@@ -116,9 +169,10 @@ const ALLOWED_EXPERIMENTAL: readonly string[] = [
  * and it defaults TRUE — it is no longer experimental — for the reason spelled out at
  * WHOLE_REPO_BUILD_GUARD_DEFAULT.
  *
- * The other half of cross-version safety — an OLD release ignoring a key a NEW one added, rather than
- * rejecting it — is NOT solved here. Adding a key still requires every repo on the machine to be moved
- * to a release that knows it.
+ * The other half of cross-version safety — an OLD release IGNORING a key a NEW one added, rather than
+ * rejecting it — is solved by `warnUnknownKeys` below. The two halves are one invariant: for the set of
+ * valid documents to be non-empty across every release installed on the machine, neither omitting a key
+ * nor adding one may be an error.
  */
 
 // Read errors that mean "the file is not there / not reachable" rather than "the file is wrong". Every
@@ -221,8 +275,12 @@ export const RETIRED_HOME_CONFIG_KEYS: readonly RetiredHomeConfigKey[] = [
 ];
 
 /**
- * Loads and STRICTLY validates `~/.webpieces/config.json`, and resolves whether a path IS that file (for
- * the guard carve-out that keeps a rejection repairable).
+ * Loads and validates `~/.webpieces/config.json`, and resolves whether a path IS that file (for the
+ * guard carve-out that keeps a rejection repairable).
+ *
+ * Strict about everything it UNDERSTANDS (a retired key, a known key of the wrong type, and a document
+ * that is not JSON all throw); forward-compatible about everything it does not (an unknown key is
+ * ignored with a warning). The class docblock at the top of this file has the reasoning.
  */
 @injectable(bindingScopeValues.Singleton)
 export class HomeConfigService {
@@ -233,7 +291,10 @@ export class HomeConfigService {
 
     /**
      * The preferences. Returns all-defaults, silently and without touching anything, when the file is not
-     * there. THROWS InformAiError, naming the fix, when a file that IS there is wrong.
+     * there. THROWS InformAiError, naming the fix, when a file that IS there is wrong in a way this
+     * release can be sure about — unparseable, a RETIRED key, or a KNOWN key of the wrong type. A key it
+     * simply does not recognise is ignored with a warning, because it may be a newer release's key and
+     * this file is shared by every repo on the machine.
      */
     load(homeDir: string = os.homedir()): HomeConfig {
         const raw = this.readIfPresent(this.configPath(homeDir));
@@ -322,14 +383,14 @@ export class HomeConfigService {
     // webpieces-disable no-any-unknown -- see parse(); the document is user-authored and unvalidated
     private validate(raw: Record<string, unknown>, file: string): HomeConfig {
         this.assertNotRetired(raw, file);
-        this.assertKnownKeys(Object.keys(raw), ALLOWED_TOP_LEVEL, '', file);
+        this.warnUnknownKeys(Object.keys(raw), ALLOWED_TOP_LEVEL, '');
         const section = raw[HOME_EXPERIMENTAL_SECTION];
         if (section !== undefined && (typeof section !== 'object' || section === null || Array.isArray(section))) {
             throw new InformAiError(this.error(file, `"${HOME_EXPERIMENTAL_SECTION}" must be a JSON object.`));
         }
         // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
         const experimental = (section ?? {}) as Record<string, unknown>;
-        this.assertKnownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`, file);
+        this.warnUnknownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`);
         return new HomeConfig(
             this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file, WHOLE_REPO_BUILD_GUARD_DEFAULT),
@@ -340,9 +401,17 @@ export class HomeConfigService {
     /**
      * An absent key falls back to `whenAbsent`, which every caller states OUT LOUD — there is no implicit
      * "absent means false" any more, because `whole-repo-build-guard` defaults ON and a hidden default
-     * would put the two halves of that fact in different files. A PRESENT key of the wrong type is still
-     * an error: that is a file somebody wrote wrongly, not a file written for a different release. This
-     * is the ONLY reader; see the every-key-is-optional note above for why there is no required variant.
+     * would put the two halves of that fact in different files.
+     *
+     * A PRESENT key of the wrong type is still an ERROR, and that is the line the unknown-key change
+     * deliberately did not move: `"whole-repo-build-guard": "yes"` is a file somebody wrote wrongly, not
+     * a file written for a different release. No release of webpieces has ever given this key a string
+     * meaning, so there is no forward-compatibility story to protect and nothing is gained by guessing —
+     * whereas guessing would turn a typed value into a silent fallback to the default, which is the very
+     * cost the unknown-key warning exists to bound.
+     *
+     * This is the ONLY reader; see the every-key-is-optional note above for why there is no required
+     * variant.
      */
     // webpieces-disable no-any-unknown -- see parse()
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -391,32 +460,91 @@ export class HomeConfigService {
     }
 
     /**
-     * Every accepted key, rendered from ALLOWED_EXPERIMENTAL rather than hand-listed. The hand-listed
-     * version named two keys and went stale the moment a third arrived, telling an agent its brand-new
-     * key was not accepted while the validator right above accepted it.
+     * The understood keys AT ONE LEVEL, rendered from the allow-list rather than hand-listed — and
+     * rendered at the level the reader's key was actually found, so a mistyped SECTION is answered with
+     * the sections and a mistyped FLAG with the flags. The hand-listed version named two keys and went
+     * stale the moment a third arrived, telling an agent its brand-new key was not accepted while the
+     * validator right above accepted it.
      */
-    private quotedExperimentalKeys(): string {
-        return ALLOWED_EXPERIMENTAL.map((key: string): string =>
-            `"${HOME_EXPERIMENTAL_SECTION}.${key}"`).join(', ');
+    private quotedKeys(allowed: readonly string[], prefix: string): string {
+        return allowed.map((key: string): string => `"${prefix}${key}"`).join(', ');
     }
 
-    private assertKnownKeys(found: string[], allowed: readonly string[], prefix: string, file: string): void {
+    /**
+     * An unknown key is IGNORED — see the class docblock for why this one file cannot reject it — but it
+     * is never SILENT. The warning is the entire mitigation for the cost of ignoring, so it says both
+     * things a reader needs: that the key did nothing, and what the understood keys are.
+     *
+     * ─── WHY THIS IS NOT THE "console side channel" SHAPE ────────────────────────────────────────────
+     * That shape is a rule or a library reporting a FAILURE — or a cure for one — by printing it instead
+     * of throwing a structured value to the one top-level handler. This is the opposite case, and the
+     * distinction is the entire subject of this change: an unknown key here is NOT a failure. The load
+     * SUCCEEDS, a valid HomeConfig is returned, every caller proceeds normally, and there is no cure the
+     * reader is obliged to apply — a key from a newer release is a CORRECT file being read by an older
+     * validator. There is no throw this could be, because throwing is precisely the behaviour being
+     * deleted here; and returning it would mean inventing a warnings channel through `load()` that no
+     * caller has any reason to render.
+     *
+     * stderr, not stdout, for the usual reason: this runs inside hooks whose stdout is a JSON decision
+     * and inside `wp-*` commands whose stdout is their real output, and neither may be polluted. It is
+     * the same channel, with the same `[webpieces]` prefix, that `state-dir-migration.announce` already
+     * uses in this package for the same category of finding — something a human may want to know about
+     * and is not required to act on.
+     */
+    private warnUnknownKeys(found: string[], allowed: readonly string[], prefix: string): void {
         for (const key of found) {
             if (allowed.includes(key)) continue;
-            throw new InformAiError(this.error(file,
-                `"${prefix}${key}" is not a known key.${this.didYouMean(key, allowed, prefix)} ` +
-                `The only keys this file accepts are ` +
-                `${this.quotedExperimentalKeys()}. ` +
-                `Fix the spelling or delete the key.`));
+            const near = this.nearestKnownKey(key, allowed);
+            const guess = near === ''
+                ? ' If it is a typo, fix the spelling; if it is from a NEWER @webpieces than this repo pins, upgrade this repo to use it.'
+                : ` Did you mean "${prefix}${near}"?`;
+            this.warn(
+                `"${prefix}${key}" is not a key this @webpieces release understands, so it was IGNORED ` +
+                `and had NO effect.${guess} Understood here: ${this.quotedKeys(allowed, prefix)}.`);
         }
     }
 
-    // A case-insensitive match is the overwhelmingly common typo and is worth naming outright.
-    private didYouMean(key: string, allowed: readonly string[], prefix: string): string {
+    // One shape for every non-fatal finding, matching state-dir-migration's `[webpieces] <what>:` prefix
+    // so a reader can tell at a glance which subsystem is talking.
+    private warn(message: string): void {
+        process.stderr.write(`[webpieces] ~/.webpieces/config.json: ${message}\n`);
+    }
+
+    /**
+     * The closest understood key within two edits, or '' when nothing is close.
+     *
+     * This used to be a case-insensitive EQUALITY test, which was adequate while an unknown key was a
+     * hard error — the error itself was the signal, and the suggestion only saved a reading. Now the
+     * suggestion IS the signal, so it has to catch the typos an equality test misses: a doubled letter,
+     * a dropped one, a transposition, a stray trailing `d` (`buildGateLogCaptured`). Two is the useful
+     * threshold — it covers every one of those and still refuses to guess for a genuinely new key, which
+     * is the case that must NOT be dressed up as a typo.
+     */
+    private nearestKnownKey(key: string, allowed: readonly string[]): string {
+        let best = '';
+        let bestDistance = 3;
         for (const candidate of allowed) {
-            if (candidate.toLowerCase() === key.toLowerCase()) return ` Did you mean "${prefix}${candidate}"?`;
+            const distance = this.editDistance(key.toLowerCase(), candidate.toLowerCase());
+            if (distance >= bestDistance) continue;
+            bestDistance = distance;
+            best = candidate;
         }
-        return '';
+        return best;
+    }
+
+    /** Ordinary Levenshtein distance, one row at a time — the key names are short and this runs once. */
+    private editDistance(a: string, b: string): number {
+        let previous: number[] = [];
+        for (let j = 0; j <= b.length; j += 1) previous.push(j);
+        for (let i = 1; i <= a.length; i += 1) {
+            const current: number[] = [i];
+            for (let j = 1; j <= b.length; j += 1) {
+                const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+                current.push(Math.min(substitution, previous[j] + 1, current[j - 1] + 1));
+            }
+            previous = current;
+        }
+        return previous[b.length];
     }
 
     // One shape for every rejection: what is wrong, in which file, and the fact that deleting the file is
