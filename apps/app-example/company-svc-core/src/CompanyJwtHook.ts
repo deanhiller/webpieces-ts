@@ -10,7 +10,9 @@ import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement
  *  - parseJwt: verify a user JWT with `jsonwebtoken` (secret from JWT_SECRET) → userId(`sub`) +
  *    roles(`roles` claim) + the USER_ID context entry. Minting a JWT is a login-controller concern.
  *  - authorizeJwt: default roles any-of (via super) PLUS the company rule that an `inOrg: true`
- *    requires an orgId claim.
+ *    requires an orgId claim. Both are async because {@link JwtHook} is: an app rule like `inOrg`
+ *    is a membership question a real service answers from a datastore. This one does not need to,
+ *    so its body awaits only `super`.
  *
  * OIDC is NOT wired here — the framework {@link DefaultOidcVerifier} handles service-to-service OIDC
  * by default, so a company service gets it for free. Shared secrets live on {@link CompanyAuthConfig}.
@@ -19,7 +21,7 @@ import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement
 export class CompanyJwtHook extends JwtHook {
     private readonly jwtSecret = process.env['JWT_SECRET'] ?? 'dev-insecure-jwt-secret-change-me';
 
-    override parseJwt(token: string): AuthValues {
+    override async parseJwt(token: string): Promise<AuthValues> {
         const claims = this.decode(token);
         const subject = claims['sub'] ?? claims['userId'];
         if (subject === undefined || subject === null || subject === '') {
@@ -36,8 +38,8 @@ export class CompanyJwtHook extends JwtHook {
      * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
      * without touching the framework.
      */
-    override authorizeJwt(values: AuthValues, requirement: JwtRequirement): void {
-        super.authorizeJwt(values, requirement); // roles any-of
+    override async authorizeJwt(values: AuthValues, requirement: JwtRequirement): Promise<void> {
+        await super.authorizeJwt(values, requirement); // roles any-of
         if (requirement['inOrg'] === true && !values.claims['orgId']) {
             throw new HttpForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');
         }

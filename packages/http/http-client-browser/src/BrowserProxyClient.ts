@@ -81,7 +81,7 @@ export class BrowserProxyClient extends ProxyClient {
      * 'shared-secret'`), which silently WAVED THROUGH any future AuthMode kind — the browser would
      * have bound a contract it cannot satisfy and failed on the first call instead of at bind time.
      * Adding `local-only` is what surfaced it: the third reader of the union should fail to compile
-     * on a sixth kind for the same reason the other two do.
+     * on a NEW kind for the same reason the other two do.
      */
     protected override assertEndpointSupported(authMeta: AuthMeta | undefined, methodName: string): void {
         const mode = authMeta?.mode;
@@ -109,6 +109,15 @@ export class BrowserProxyClient extends ProxyClient {
                     `Endpoint ${methodName} is @AuthWebhook('${mode.name}') — only ${mode.name} can call it, ` +
                     `because only ${mode.name} can produce the signature its WebhookAuthCallback verifies. It is not ` +
                     `callable from a webpieces client.`,
+                );
+            // @AuthApiKey is the same shape of refusal for a different reason: the credential is a
+            // CUSTOMER-held api key whose header names the app's ApiKeyHook chooses, so no webpieces
+            // client knows what to send — and a browser must not ship a customer's key at all.
+            case 'apikey':
+                throw new Error(
+                    `Endpoint ${methodName} is @AuthApiKey('${mode.name}') — its credential is a customer-held ` +
+                    `api key that a browser must never ship, and the header carrying it is the app's ApiKeyHook's ` +
+                    `choice, so no webpieces client can build the call. Only the partner holding the key calls it.`,
                 );
         }
     }

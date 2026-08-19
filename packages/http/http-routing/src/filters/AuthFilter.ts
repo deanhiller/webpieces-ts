@@ -5,7 +5,7 @@ import { AuthMode, EndpointNotFoundError, HttpBadRequestError, HttpUnauthorizedE
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from '../AuthConfig';
-import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK } from '../AuthHooks';
+import { ApiKeyHook, API_KEY_HOOK, JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK } from '../AuthHooks';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -43,13 +43,16 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  * default:
  *  - shared-secret → constant-time compare vs the {@link AuthConfig} secret VALUE (state). No
  *                    AuthConfig bound → no accepted secret → fail fast (401).
- *  - jwt           → the bound {@link JwtHook} (`parseJwt` + `authorizeJwt`). No JwtHook bound →
- *                    "not enabled" (401): JWT needs an app secret + payload shape.
+ *  - jwt           → the bound {@link JwtHook} (`parseJwt` + `authorizeJwt`, both awaited — an app's
+ *                    strategy may reach a JWKS or a datastore). No JwtHook bound → "not enabled"
+ *                    (401): JWT needs an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
  *  - webhook       → the bound {@link WebhookAuthCallback} verifies the VENDOR's signature over the retained
  *                    raw request. No WebhookAuthCallback bound → 401, like jwt: an unverified webhook is
  *                    never waved through because wiring was forgotten.
+ *  - apikey        → the bound {@link ApiKeyHook} looks the CUSTOMER's key up (async, over the whole
+ *                    header set) and returns the context to seed. No ApiKeyHook bound → 401, like jwt.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
  *                    a logged-out page still knows who is logged in; never fails.
  *  - local-only    → serve only when {@link RuntimeLocality} says this process is a developer's
@@ -78,6 +81,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // endpoint 401s, which is the ONE default that must not be the other way round.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(WEBHOOK_AUTH_CALLBACK) private readonly webhookAuthCallback?: WebhookAuthCallback,
+        // @optional: only bind an ApiKeyHook to enable @AuthApiKey endpoints. Unbound = every such
+        // endpoint 401s, for the same reason as the webhook hook above.
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
+        @optional() @inject(API_KEY_HOOK) private readonly apiKeyHook?: ApiKeyHook,
     ) {
         super();
     }
@@ -92,7 +99,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
         if (!mode || mode.kind === 'public') {
             // Public: best-effort parse so a logged-out page can still know the logged-in user.
-            this.bestEffortJwt(authHeader);
+            await this.bestEffortJwt(authHeader);
             this.reconcileWireTrust(/*callerVerified*/ false);
             this.rethrowDeferredBodyError();
             return nextFilter.invoke(meta);
@@ -100,7 +107,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
         switch (mode.kind) {
             case 'jwt':
-                this.enforceJwt(authHeader, mode.requirement);
+                await this.enforceJwt(authHeader, mode.requirement);
                 break;
             case 'oidc':
                 await this.enforceOidc(authHeader, mode.callers);
@@ -110,6 +117,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 break;
             case 'webhook':
                 await this.enforceWebhook(mode.name, meta);
+                break;
+            case 'apikey':
+                await this.enforceApiKey(mode.name, meta);
                 break;
             case 'local-only':
                 this.enforceLocalOnly(meta);
@@ -154,6 +164,42 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
+     * `@AuthApiKey(name)`: hand the app's {@link ApiKeyHook} the regime name and the inbound headers and
+     * let it look the CUSTOMER's key up. Three ways to fail, all 401, all before the controller:
+     *
+     * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior; an
+     *    unverified partner request must never be waved through because wiring was forgotten.
+     * 2. NO inbound request in scope — there are no headers to read, so there is nothing to verify. That
+     *    means a caller drove this route without publishing an HttpRequest; the message says so rather
+     *    than leaving a bare 401.
+     * 3. The hook threw — the key, or the key/organization pair, did not check out.
+     *
+     * On success the hook's {@link AuthValues} are stamped exactly as a jwt parse's are, which is what
+     * puts the resolved organization into `RequestContext` for every downstream repository call.
+     */
+    private async enforceApiKey(name: string, meta: MethodMeta): Promise<void> {
+        if (!this.apiKeyHook) {
+            log.warn(
+                `Refusing @AuthApiKey('${name}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
+                `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
+            );
+            throw new HttpUnauthorizedError('API-key auth is not enabled on this server');
+        }
+        const request = RequestContext.getRequest();
+        if (!request) {
+            log.warn(
+                `Refusing @AuthApiKey('${name}') endpoint ${meta.routeMeta.path}: no inbound HttpRequest is ` +
+                `in scope, so the hook has no headers to read. A spec driving this route in-process must ` +
+                `publish an HttpRequest carrying the api-key headers.`,
+            );
+            throw new HttpUnauthorizedError('API key cannot be verified: no inbound request was published');
+        }
+        // Throws HttpUnauthorizedError to deny. HttpRequest satisfies HeaderReader structurally.
+        const values = await this.apiKeyHook.verifyApiKey(name, request);
+        this.applyAuthValues(values);
+    }
+
+    /**
      * A body that failed to parse is held on the {@link RawRequest} and surfaces HERE, after auth, as
      * the 400 it always was — never before it.
      *
@@ -188,7 +234,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      *   localhost reaches it, and it has no authenticator, so nothing can ever vouch for an inbound
      *   trusted header. Any such header therefore rejects the request, which is exactly right.
      *
-     * An exhaustive switch with NO `default`, returning on every branch: a sixth AuthMode kind is a
+     * - `apikey` → FALSE. See the comment on that branch: the sender is a CUSTOMER.
+     *
+     * An exhaustive switch with NO `default`, returning on every branch: a new AuthMode kind is a
      * COMPILE error here (TS7030, no ending return) rather than silently landing on one posture. The
      * boolean expression this replaced defaulted every future mode to "not verified" — the safe
      * answer, but arrived at by accident rather than by decision.
@@ -207,6 +255,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             // key a vendor's payload could carry. Same answer as the OUTBOUND half
             // (DestinationTrust.forAuthMode), which is the invariant that keeps the two ends agreeing.
             case 'webhook':
+            // `apikey` authenticates the SENDER — but the sender is a CUSTOMER's codebase, not a peer
+            // service in this repo, so its forwarded trusted context is exactly what must NOT be
+            // believed: admitting it would let a partner assert another customer's org id on the wire.
+            // The hook's OWN derived entries still land (applyAuthValues), and reconcileWireTrust then
+            // admits an inbound trusted header only when the hook independently derived the same value.
+            case 'apikey':
             case 'local-only':
                 return false;
         }
@@ -216,7 +270,8 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * Decide what happens to the trusted keys that arrived on the WIRE and were held back by
      * {@link PendingWireTrust} (read that class for why they are held rather than written).
      *
-     * `callerVerified` — the endpoint authenticated the SENDER (`@AuthOidc`, `@AuthSharedSecret`).
+     * `callerVerified` — the endpoint authenticated the SENDER **as a peer service** (`@AuthOidc`,
+     * `@AuthSharedSecret`).
      * The sender is a service we trust, this is the service-to-service hop, and its forwarded
      * identity is admitted as-is. This is the case that makes propagating a verified userId across
      * internal services work.
@@ -250,7 +305,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      *   credential.
      * - NOTHING vouched for it — nobody derived this key at all, so there is no evidence behind a
      *   value a stranger typed. This is the common case, not the exotic one: the framework's
-     *   {@link DefaultJwtHook} stamps NO entries, and an app hook only stamps the keys it can prove,
+     *   {@link DefaultJwtHook} stamps NO entries, and an app hook (jwt or api-key) only stamps the keys it can prove,
      *   so any other trusted key a caller sends lands here.
      *
      * The pending value is discarded either way — the throw is what leaves the request.
@@ -301,7 +356,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         throw new EndpointNotFoundError(`No endpoint at ${meta.routeMeta.path}`);
     }
 
-    private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
+    private async enforceJwt(header: string | undefined, requirement: JwtRequirement): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
             throw new HttpUnauthorizedError('Authentication required');
@@ -309,9 +364,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         if (!this.jwtHook) {
             throw new HttpUnauthorizedError('User-JWT auth is not enabled on this server');
         }
-        const values = this.jwtHook.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
+        const values = await this.jwtHook.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
         this.applyAuthValues(values);
-        this.jwtHook.authorizeJwt(values, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
+        await this.jwtHook.authorizeJwt(values, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
     }
 
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
@@ -344,25 +399,25 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /** Parse a JWT if one is present, else do nothing — used on public routes; never throws. */
-    private bestEffortJwt(header: string | undefined): void {
+    private async bestEffortJwt(header: string | undefined): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!this.jwtHook || !token) {
             return;
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort on a public route: a bad/absent token just means "not logged in", must not fail the request
         try {
-            this.applyAuthValues(this.jwtHook.parseJwt(token));
+            this.applyAuthValues(await this.jwtHook.parseJwt(token));
         } catch (err: unknown) {
             const error = toError(err);
             log.debug('Best-effort JWT parse on a public endpoint failed (treating as anonymous): ', error);
         }
     }
 
-    /** Stamp the parsed user's context entries + the principal into the RequestContext. */
+    /** Stamp the authenticated caller's context entries + the principal into the RequestContext. */
     private applyAuthValues(values: AuthValues): void {
         for (const entry of values.entries) {
             // ContextTuple.key is a TRUSTED key by type, so this is the one sanctioned write of a
-            // proven identity: the app's JwtHook derived it from a credential we just verified.
+            // proven identity: the app's JwtHook or ApiKeyHook derived it from a credential we just verified.
             RequestContext.putTrusted(entry.key, entry.value);
         }
         RequestContext.put(PRINCIPAL_KEY, values);

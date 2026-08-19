@@ -45,6 +45,7 @@ export {
     AuthOidc,
     AuthSharedSecret,
     AuthWebhook,
+    AuthApiKey,
     AuthLocalOnly,
     MaskLog,
     getApiPath,

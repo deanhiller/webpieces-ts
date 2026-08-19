@@ -201,17 +201,16 @@ export abstract class ProxyClient {
     // ---------------------------------------------------------------- the call
 
     /**
-     * Make an HTTP request based on route metadata and arguments.
+     * FAIL FAST, PER METHOD, at call time: some endpoints exist for a caller that is not us, and this
+     * proxy could only ever build a request they are obliged to reject. Refusing here rather than at
+     * bind time means an api that MIXES such endpoints with normal ones still yields a working client
+     * for the normal ones; only calling the un-callable method throws.
      *
-     * All endpoints are POST-only. The request body is the first argument.
+     * @throws Error naming the endpoint, what it declared, and who its real caller is.
      */
-    // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
-    async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
-        // FAIL FAST: formPost endpoints exist ONLY for EXTERNAL inbound webhooks (e.g. Twilio is the
-        // caller — there is no webpieces client for them). This proxy JSON.stringifies the body, so
-        // calling one would silently send a wrong-encoded body. Refuse it here — PER METHOD, at call
-        // time — so an API mixing normal + formPost endpoints still gives a working client for the
-        // normal ones; only calling the formPost method throws.
+    private refuseEndpointNoClientCanCall(route: RouteMetadata): void {
+        // formPost exists ONLY for EXTERNAL inbound webhooks (e.g. Twilio is the caller). This proxy
+        // JSON.stringifies the body, so calling one would silently send a wrong-encoded body.
         if (route.formPost) {
             throw new Error(
                 `${this.apiName}.${route.methodName} is @Endpoint(..., { formPost: true }) — the ` +
@@ -220,11 +219,17 @@ export abstract class ProxyClient {
                 `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
             );
         }
-        // FAIL FAST, same shape and same reason: an @AuthWebhook endpoint is verified by the VENDOR's
-        // signature over the request, which no webpieces client can produce. Refusing here — per
-        // method, at call time — means an api that mixes webhook + normal endpoints still yields a
-        // working client for the normal ones.
         const authMode = route.authMeta?.mode;
+        // @AuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
+        // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
+        if (authMode?.kind === 'apikey') {
+            throw new Error(
+                `${this.apiName}.${route.methodName} is @AuthApiKey('${authMode.name}') — only the partner ` +
+                `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
+                `so a webpieces client has no credential to send.`,
+            );
+        }
+        // @AuthWebhook: verified by the VENDOR's signature over the request, which nothing here can produce.
         if (authMode?.kind === 'webhook') {
             throw new Error(
                 `${this.apiName}.${route.methodName} is @AuthWebhook('${authMode.name}') — only ` +
@@ -232,6 +237,16 @@ export abstract class ProxyClient {
                 `its WebhookAuthCallback verifies. It is not callable from a webpieces client.`,
             );
         }
+    }
+
+    /**
+     * Make an HTTP request based on route metadata and arguments.
+     *
+     * All endpoints are POST-only. The request body is the first argument.
+     */
+    // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
+    async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
+        this.refuseEndpointNoClientCanCall(route);
         // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
         const baseUrl = await this.resolveBaseUrl();
         const url = `${baseUrl}${route.path}`;

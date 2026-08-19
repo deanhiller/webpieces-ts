@@ -35,7 +35,7 @@ export class TestAuthConfig extends AuthConfig {
  */
 @injectable()
 export class TestJwtHook extends JwtHook {
-    override parseJwt(_token: string): AuthValues {
+    override async parseJwt(_token: string): Promise<AuthValues> {
         return new AuthValues('test-user', ['admin'], [new ContextTuple(WebpiecesCoreHeaders.USER_ID, 'test-user')]);
     }
 }

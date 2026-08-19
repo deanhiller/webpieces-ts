@@ -16,16 +16,28 @@ import { AuthValues } from './AuthConfig';
  *                     app-defined requirements carried by the SAME decorator, e.g.
  *                     `@AuthJwt({allRolesAllowed: true, inOrg: true})` →
  *                     `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
+ *
+ * BOTH ARE ASYNC, and both for the same reason: the strategy is the app's, and an app's strategy
+ * reaches the network. `parseJwt` may fetch a JWKS or call a provider SDK; `authorizeJwt`'s own
+ * motivating example — `@AuthJwt({allRolesAllowed: true, inOrg: true})` — is a membership question a
+ * real app answers from a datastore. A sync signature makes both of those unwritable, and it made
+ * `JwtHook` the last sync hook: {@link OidcHook.verifyOidc}, {@link WebhookAuthCallback.verify} and
+ * {@link ApiKeyHook.verifyApiKey} all return promises. An implementation that needs no I/O simply has
+ * no `await` in its body — {@link DefaultJwtHook} is exactly that and pays nothing for it.
  */
 export abstract class JwtHook {
-    /** Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw. */
-    abstract parseJwt(token: string): AuthValues;
+    /**
+     * Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw.
+     * ASYNC so an app can reach a JWKS endpoint or a provider SDK; see the class doc.
+     */
+    abstract parseJwt(token: string): Promise<AuthValues>;
 
     /**
      * DEFAULT authorization: enforce the endpoint's roles (any-of). Override to enforce app-defined
-     * requirements. Throw HttpForbiddenError to deny; return to allow.
+     * requirements. Throw HttpForbiddenError to deny; return to allow. ASYNC so an app-defined
+     * requirement can be answered from a datastore; see the class doc.
      */
-    authorizeJwt(values: AuthValues, requirement: JwtRequirement): void {
+    async authorizeJwt(values: AuthValues, requirement: JwtRequirement): Promise<void> {
         // rolesRequired is the ONE reader of the JwtRoles union: [] means the endpoint typed
         // `allRolesAllowed: true`, never "the field was missing" — that state no longer compiles.
         const roles = rolesRequired(requirement);
@@ -107,3 +119,71 @@ export abstract class WebhookAuthCallback {
  */
 // webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
 export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
+
+/**
+ * HeaderReader - read-only access to the inbound request's headers, and the ONLY thing an
+ * {@link ApiKeyHook} is handed besides the regime name.
+ *
+ * It is an INTERFACE, not a class, because it is behaviour rather than data (per the guidelines) —
+ * and it is NARROWER than {@link HttpRequest} on purpose. An api-key hook's job is to read the
+ * credential headers and look them up; giving it the whole request would also give it the retained
+ * raw bytes and the parsed body, none of which it has any business deciding authentication on.
+ * `HttpRequest` satisfies this structurally, so the framework passes the live request and a spec can
+ * pass a two-line stub.
+ */
+export interface HeaderReader {
+    /** First value of the header, by lowercased name, or undefined when absent. */
+    getHeader(name: string): string | undefined;
+}
+
+/**
+ * ApiKeyHook - the OPTIONAL mechanism behind `@AuthApiKey(name)`: authenticate a CUSTOMER-held api key
+ * against the app's own datastore and return the context to seed. Its DI token is the
+ * {@link API_KEY_HOOK} Symbol injected via `@inject(API_KEY_HOOK)` (a Symbol, because the app container
+ * uses autobind; rebindable in tests). The fourth hook, symmetric with {@link JwtHook} /
+ * {@link OidcHook} / {@link WebhookAuthCallback}:
+ *
+ * ```typescript
+ * // AppModule.ts, beside the CompanyJwtHook binding
+ * options.bind(API_KEY_HOOK).to(OneTabletApiKeyHook);
+ * ```
+ *
+ * When NO ApiKeyHook is bound, the framework {@link AuthFilter} 401s every `@AuthApiKey` endpoint,
+ * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
+ * one: the key regime lives in the app's datastore, under the app's hashing scheme, behind the app's
+ * choice of header names.
+ *
+ * THE ONE THING THIS HAS THAT `JwtHook.parseJwt` DOES NOT: it receives a {@link HeaderReader}, not one
+ * pre-extracted token. A real key regime validates the key TOGETHER WITH a second header — the
+ * organization the caller is acting for — and a hook handed one header's value physically cannot do
+ * that cross-check. The framework therefore configures no api-key header name: which headers carry the
+ * credential is the app's business. (Being ASYNC is no longer a difference — every hook here is, and
+ * for the same reason: an app's strategy reaches the network.)
+ *
+ * ONE hook serves EVERY regime: `name` selects which, so a server with a partner-api regime and an
+ * internal-tooling regime switches on it rather than binding a token per regime.
+ */
+export abstract class ApiKeyHook {
+    /**
+     * AUTHENTICATE one inbound request. Return who the caller is plus the {@link AuthValues.entries}
+     * the framework seeds into `RequestContext` via `putTrusted`, or throw
+     * {@link HttpUnauthorizedError} to deny.
+     *
+     * NOTE the seeded entries are TRUSTED context keys, so return only what THIS hook proved from the
+     * credential it just verified. Anything the caller merely asserted on the wire is not admitted by
+     * `@AuthApiKey` — the mode is deliberately caller-NOT-verified (see `AuthFilter.verifiesCaller`),
+     * because a customer is not an internal service.
+     *
+     * @param name    the string on the contract's `@AuthApiKey(name)` — which key regime this route is.
+     * @param headers the inbound request's headers; read as many as the regime needs.
+     */
+    abstract verifyApiKey(name: string, headers: HeaderReader): Promise<AuthValues>;
+}
+
+/**
+ * DI identifier for the optional {@link ApiKeyHook} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(API_KEY_HOOK)`
+ * correct — undefined when unbound. The ApiKeyHook class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const API_KEY_HOOK = Symbol.for('ApiKeyHook');

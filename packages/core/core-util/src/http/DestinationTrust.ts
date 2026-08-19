@@ -39,8 +39,9 @@ export class DestinationTrust {
     private static readonly VERIFIES_CALLER = new DestinationTrust(true);
 
     /**
-     * The destination cannot tell us from a browser with curl (@AuthJwt / @Public / @AuthLocalOnly /
-     * an endpoint with no declared mode), so trusted keys are omitted. Untrusted keys still travel.
+     * The destination cannot tell us from a browser with curl (@AuthJwt / @Public / @AuthWebhook /
+     * @AuthApiKey / @AuthLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
+     * Untrusted keys still travel.
      */
     private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false);
 
@@ -68,6 +69,11 @@ export class DestinationTrust {
             // direction — and a webpieces client cannot call such an endpoint anyway (it cannot mint
             // the vendor's signature). Trusted keys stay home.
             case 'webhook':
+            // @AuthApiKey authenticates a CUSTOMER, not a peer service. The holder of the key is
+            // another company's codebase, so nothing it forwards may be believed, and no webpieces
+            // client can call it anyway (the framework configures no api-key header — the app's hook
+            // owns which headers carry the credential). Trusted keys stay home.
+            case 'apikey':
             // @AuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
             // credential — so a browser with curl on the same laptop is indistinguishable from us.
             // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to

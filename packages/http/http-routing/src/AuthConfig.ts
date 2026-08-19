@@ -18,7 +18,8 @@ export class SharedSecrets {
 }
 
 /**
- * AuthValues - what {@link JwtHook.parseJwt} returns: the authenticated user's id + roles (used
+ * AuthValues - what {@link JwtHook.parseJwt} and {@link ApiKeyHook.verifyApiKey} resolve to (both are
+ * async): the authenticated caller's id + roles (used
  * by the framework to stamp a principal and enforce @AuthJwt({roles: [...]})) plus any extra context
  * entries the app wants set (orgId, tenant, ...). The framework sets `entries` into RequestContext
  * via {@link RequestContext.putTrusted}. Data-only structure (a class, per the guidelines).
@@ -39,7 +40,8 @@ export class AuthValues {
  * there is no verification code here. The verification MECHANISMS are separate optional hooks the
  * app binds when it needs them:
  *
- *  - user JWT  → bind a {@link JwtHook} (parseJwt + authorizeJwt).
+ *  - user JWT  → bind a {@link JwtHook} (async parseJwt + async authorizeJwt).
+ *  - api key   → bind an {@link ApiKeyHook} (async verifyApiKey over the request's headers).
  *  - OIDC      → bind an {@link OidcHook} to override the framework's default verifier; a server that
  *                binds nothing still verifies Google OIDC via the built-in {@link DefaultOidcVerifier}.
  *

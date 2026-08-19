@@ -132,7 +132,7 @@ const authHeader = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
 `AUTHORIZATION_HEADER` is "Deliberately NOT a ContextKey." Schemes are required and disambiguated:
 `Bearer` (JWT/OIDC) vs `Webpieces` (shared secret) — so a secret can't be accepted as a token.
 
-For a `jwt` route the filter calls `jwtHook.parseJwt(token)` → `applyAuthValues(values)`. The
+For a `jwt` route the filter calls `await jwtHook.parseJwt(token)` → `applyAuthValues(values)`. The
 `AuthValues` (`AuthConfig.ts`) carry `entries: ContextTuple[]`, and **this is where claims land in
 context**:
 
