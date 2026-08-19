@@ -526,13 +526,39 @@ export class HomeConfigService {
         for (const key of found) {
             if (allowed.includes(key)) continue;
             const near = this.nearestKnownKey(key, allowed);
-            const guess = near === ''
-                ? ' If it is a typo, fix the spelling; if it is from a NEWER @webpieces than this repo pins, upgrade this repo to use it.'
-                : ` Did you mean "${prefix}${near}"?`;
+            const guess = near !== ''
+                ? ` Did you mean "${prefix}${near}"?`
+                : this.nearRetiredHint(`${prefix}${key}`)
+                  || ' If it is a typo, fix the spelling; if it is from a NEWER @webpieces than this repo pins, upgrade this repo to use it.';
             this.warn(
                 `"${prefix}${key}" is not a key this @webpieces release understands, so it was IGNORED ` +
                 `and had NO effect.${guess} Understood here: ${this.quotedKeys(allowed, prefix)}.`);
         }
+    }
+
+    /**
+     * A near-miss of a RETIRED key, pointed at its migration — or '' when nothing retired is close.
+     *
+     * The gap this closes: `assertNotRetired` matches a retired key EXACTLY, so `captureBuildGateLog`
+     * throws with its rename instruction while `captureBuildGateLogg` — one stray character away, and a
+     * far likelier thing to type — falls through to the generic "IGNORED, might be from a newer release"
+     * line. That is the least helpful of the three answers offered to the reader whose intent is the
+     * clearest, so the retired table is consulted here too, at the same distance-2 threshold.
+     *
+     * It only ever produces a WARNING, never a throw: this release cannot know whether the reader meant
+     * the retired key or a newer one, and guessing wrong in the throwing direction is what the whole
+     * change is about. Known keys are matched first, so a typo of a LIVE key is never answered with a
+     * dead one.
+     */
+    private nearRetiredHint(dottedKey: string): string {
+        for (const entry of RETIRED_HOME_CONFIG_KEYS) {
+            if (this.editDistance(dottedKey.toLowerCase(), entry.key.toLowerCase()) > 2) continue;
+            const destination = entry.movedTo === ''
+                ? 'it was removed with no replacement'
+                : `it moved to "${entry.movedTo}"`;
+            return ` Did you mean the RETIRED key "${entry.key}"? If so, ${destination}. ${entry.instruction}`;
+        }
+        return '';
     }
 
     // One shape for every non-fatal finding, matching state-dir-migration's `[webpieces] <what>:` prefix

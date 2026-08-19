@@ -56,7 +56,11 @@ export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConf
 export { ConfigPruner, PruneResult, PrunedKey } from './config-pruner';
 export { validateChecklistDocs } from './checklist-docs-validator';
 // The OPTIONAL machine-local `~/.webpieces/config.json`: absent (the normal state for every consumer) means
-// each key's declared default, silently; present means strictly validated, with its own retirement table.
+// each key's declared default, silently; present means STRICT about what it understands and FORWARD-COMPATIBLE
+// about what it does not. A retired key (its own retirement table), a known key of the wrong TYPE and an
+// unparseable document all REJECT; a key this release simply does not recognise is IGNORED with a warning,
+// because the file is machine-global and the repos reading it pin different releases — rejecting a newer
+// release's key would hard-block every repo on the machine that is not yet on it. See home-config.ts.
 // `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS in the hook guards, which is
 // what keeps a rejection repairable. Its `experimental.*` keys are deliberately NOT advertised knobs — the one
 // exception is `whole-repo-build-guard`, which is a supported OPT-OUT and defaults ON.

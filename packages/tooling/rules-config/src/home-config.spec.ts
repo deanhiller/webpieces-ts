@@ -439,6 +439,35 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
     });
 
+    /**
+     * A near-miss of a RETIRED key gets that key's MIGRATION, not the generic "might be newer" line.
+     *
+     * `assertNotRetired` matches exactly, so `captureBuildGateLog` throws with its rename while
+     * `captureBuildGateLogg` — one character away, and the likelier thing to actually type — used to fall
+     * through to the least useful of the three answers. It stays a WARNING rather than becoming a throw:
+     * this release cannot know which key was meant, and guessing wrong in the throwing direction is the
+     * thing this whole change removes.
+     */
+    it('points a near-miss of a RETIRED key at its migration instruction', () => {
+        const retired = RETIRED_HOME_CONFIG_KEYS[0];
+        const typo = `${retired.key.split('.')[1]}g`;
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [typo]: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain(`RETIRED key "${retired.key}"`);
+        expect(warnings).toContain(retired.instruction);
+    });
+
+    // A live key always wins the suggestion — a typo of something that still exists must never be
+    // answered with a dead key's migration.
+    it('prefers a near KNOWN key over a near RETIRED one', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCaptur: true } }));
+        const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+        expect(warnings).not.toContain('RETIRED');
+    });
+
     // A genuinely NEW key must NOT be dressed up as a typo — that would send an agent "fixing" the
     // spelling of a key that is spelled correctly for the release that introduced it.
     it('does not guess a near match for a key that resembles nothing, and says why it might be there', () => {
