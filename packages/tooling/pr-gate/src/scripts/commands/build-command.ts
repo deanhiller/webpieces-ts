@@ -30,7 +30,15 @@ import { BUILD_STAGE } from '../workflow/build-gate-log';
  * exists, so reproducing it one level in would be self-defeating.
  *
  * Only `BuildGateOptions` differs from stage ② and stage ③ — the label, the command to re-run, the
- * headline, and the log-file stage id.
+ * headline, the log-file stage id, and `alwaysCapture`.
+ *
+ * ─── The output goes to a FILE, unconditionally ────────────────────────────────────────────────────
+ * `alwaysCapture: true` is the one behaviour wp-build does not share with the PR-flow stages, and it is
+ * the reason this bin is worth running: the build's full stdout+stderr land in `.webpieces/build.log`
+ * (previous run kept as `.webpieces/build.log.bak`), and the console gets a heartbeat plus a pointer at
+ * that file. A measured session burned ~19 minutes re-running `nx affected` five times with no code
+ * change in between, purely to see a different slice of output that had scrolled past. Reading a
+ * different slice must cost a `grep`, not a build — see BuildGateLog.
  */
 @injectable(bindingScopeValues.Singleton)
 export class BuildCommand {
@@ -43,12 +51,12 @@ export class BuildCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // runBuildGate announces the resolved command, runs it, and throws CliExitError on failure so
         // runMain owns the exit — the same three things it does for stage ② and stage ③.
-        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+        return this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  wp-build',
             'pnpm wp-build',
             'Build failed.',
             BUILD_STAGE,
+            true,
         ));
-        return Promise.resolve();
     }
 }

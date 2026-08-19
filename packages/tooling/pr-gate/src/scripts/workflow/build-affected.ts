@@ -21,15 +21,21 @@ export class BuildGateOptions {
     label: string;            // section header shown above the gate
     rerunCommand: string;     // command the AI re-runs after fixing the build
     failureHeadline: string;  // first line printed on failure
-    // WHICH stage's gate this is — REVIEW_STAGE or FINISH_STAGE. Required, with no default: it is part of
-    // the captured log's filename, and a default would silently make two stages share one log file.
+    // WHICH stage's gate this is — REVIEW_STAGE, FINISH_STAGE or BUILD_STAGE. Required, with no default:
+    // it decides the captured log's filename, and a default would silently make two stages share one file.
     stage: string;
+    // Capture regardless of the EXPERIMENTAL `~/.webpieces/config.json` opt-in. True for `wp-build`, whose
+    // entire contract IS the log file — its console output is a heartbeat and a pointer at that file, so a
+    // wp-build that did not capture would have nothing to point at. The PR-flow stages pass false and stay
+    // on the opt-in until the experiment lands for them too.
+    alwaysCapture: boolean;
 
-    constructor(label: string, rerunCommand: string, failureHeadline: string, stage: string) {
+    constructor(label: string, rerunCommand: string, failureHeadline: string, stage: string, alwaysCapture: boolean) {
         this.label = label;
         this.rerunCommand = rerunCommand;
         this.failureHeadline = failureHeadline;
         this.stage = stage;
+        this.alwaysCapture = alwaysCapture;
     }
 }
 
@@ -84,21 +90,21 @@ export class BuildAffected {
      * failure so the bin's main()/runMain owns the exit. Single source of truth: wp-start-upsert-pr and
      * wp-finish-upsert-pr both call THIS (only the BuildGateOptions differ).
      */
-    runBuildGate(repoRoot: string, opts: BuildGateOptions): void {
+    async runBuildGate(repoRoot: string, opts: BuildGateOptions): Promise<void> {
         const buildCommand = this.resolveBuildCommand(repoRoot);
         // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
         // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
         // only useful when the build FAILS, so it now lives solely on the failure path below.
         process.stdout.write(`\n${opts.label}: ${buildCommand}\n`);
-        // '' means NOT capturing, which is the case for every user who has not created the OPTIONAL
-        // `~/.webpieces/config.json`. Everything below then runs exactly the code it ran before this
-        // feature existed — same spawn, same message, no extra file, no extra line of output.
-        const logPath = this.isCaptureEnabled() ? this.buildLog.pathFor(repoRoot, opts.stage) : '';
+        // '' means NOT capturing: a PR-flow stage on a machine that has not created the OPTIONAL
+        // `~/.webpieces/config.json`. Everything below then runs exactly the code it ran before capture
+        // existed — same spawn, streamed to the terminal, same message, no extra file.
+        const logPath = opts.alwaysCapture || this.isCaptureEnabled() ? this.buildLog.pathFor(repoRoot, opts.stage) : '';
         const buildCode = logPath === ''
             ? this.runConfiguredBuildGate(repoRoot)
-            : this.buildLog.run(repoRoot, buildCommand, logPath);
+            : await this.buildLog.run(repoRoot, buildCommand, logPath);
         if (buildCode !== 0) throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath));
-        process.stdout.write('\n✅ Build passed.\n');
+        process.stdout.write(logPath === '' ? '\n✅ Build passed.\n' : this.buildLog.successMessage(logPath));
     }
 
     /**

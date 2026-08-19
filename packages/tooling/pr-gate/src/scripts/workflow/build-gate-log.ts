@@ -1,144 +1,232 @@
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { dotWebpieces } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
-// EXPERIMENTAL (opt-in via `~/.webpieces/config.json` → experimental.buildGateLogCapture). Nothing in this
-// file runs for a user who has not created that OPTIONAL file — see `HomeConfigService`
-// (`@webpieces/rules-config`), which returns all-defaults silently when it is absent.
-//
-// EVERY key in that file is optional, so the smallest document enabling THIS feature is just:
-//     { "experimental": { "buildGateLogCapture": true } }
-// Optional is not a convenience: the file is MACHINE-GLOBAL and the repos on one machine pin different
-// webpieces releases, so a REQUIRED key there has no satisfiable value — omitting it fails the new
-// release, adding it fails every older one. `HomeConfigService` owns that rule.
-//
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
-// The build gate already builds everything. When it fails, the pre-existing message says "run THIS exact
-// command to reproduce", and an AI agent obeys it — so the repo is built a SECOND time purely to see the
-// errors that scrolled past the first time. This captures the first build's output instead.
+// The build gate already builds everything. When the output only ever went to the CONSOLE, an agent that
+// wanted a different slice of it re-ran the WHOLE BUILD to get it: one measured session spent 23.9 minutes
+// across nine `nx affected` runs, five of them with NO code change in between — `| tail -50`, then
+// `> /tmp/file`, then `| grep`, then `| sed -n '1100,1230p'`. ~19 minutes spent re-reading a log.
 //
-// ─── Why a shell `tee` and not spawnSync's pipes ───────────────────────────────────────────────────────
-// spawnSync BUFFERS a piped stream and hands it over only after the child exits, so the human would watch
-// a silent terminal for the length of a full build. The output has to be split at the OS level, which is
-// what `tee` is. The gate keeps `stdio: 'inherit'`, so the terminal is byte-identical to today.
+// So the build's output is not streamed; it is REDIRECTED, in full, to a file whose path the caller is
+// handed on completion. Reading a different slice is then a `grep` of a FILE, not a second build.
 //
-// ─── Why an exit-status side file and not `pipefail` ───────────────────────────────────────────────────
-// In a pipeline the shell reports the LAST command's status, i.e. tee's, which is 0 whether the build
-// passed or failed. `set -o pipefail` and `${PIPESTATUS[0]}` are bash/zsh, and spawnSync's `shell: true`
-// gives `/bin/sh` — dash on Debian. Writing `$?` to a side file inside the group is plain POSIX and works
-// under every one of them. The redirect keeps it out of the pipe, so it never lands in the log.
-const STATUS_SUFFIX = '.status';
+// ─── Why a redirect and not `tee` ──────────────────────────────────────────────────────────────────────
+// An earlier cut of this used `cmd 2>&1 | tee log`, to keep the terminal byte-identical. That is what
+// makes the transcript expensive in the first place — an AI caller carries every line of it in context.
+// The redirect keeps the console to a handful of lines (a heartbeat, then a pointer at the file), which is
+// the entire productivity claim. Losing `tee` also deletes the `$?`-into-a-side-file dance it needed: in a
+// pipeline the shell reports TEE's status, which is 0 whether the build passed or failed, so the status
+// had to be smuggled out through a side file. With no pipe, the child's own exit code IS the answer.
+//
+// ─── Why async (`spawn`, not `spawnSync`) ──────────────────────────────────────────────────────────────
+// `spawnSync` blocks the event loop for the length of the build, so NOTHING can print while it runs — and
+// a silent terminal for 3–7 minutes is indistinguishable from a hang. The heartbeat is the reason this is
+// async, and it is why `run` returns a Promise and `BuildAffected.runBuildGate` is async with it.
+
+/** How often the heartbeat reports the log's size. Hardcoded: a knob here would be a knob the PR gate's
+ * own build never receives, and the two must stay the same command. */
+export const HEARTBEAT_MS = 10_000;
+
+/** How many trailing log lines the failure message echoes, so the immediate cause is visible without a
+ * second command. Small on purpose — the FULL log is one grep away and the message must not become the
+ * transcript it exists to replace. */
+export const FAILURE_TAIL_LINES = 20;
 
 /**
- * Which stage's gate is being captured. The value is part of the log FILENAME, so review and finish never
- * write the same file even at the same commit on the same branch.
+ * Which stage's gate is being captured. The value decides the log FILENAME.
  */
 export const REVIEW_STAGE = 'review';
 export const FINISH_STAGE = 'finish';
 // `wp-build`, which is not a stage of the PR flow but runs the SAME gate (BuildAffected.runBuildGate).
-// Its own id so a developer's inner-loop build never overwrites the log stage ② or ③ is holding.
 export const BUILD_STAGE = 'build';
 
+/** The one fixed log name — see BuildGateLog.fileNameFor for why only `wp-build` gets one. */
+export const BUILD_LOG_NAME = 'build.log';
+const BACKUP_SUFFIX = '.bak';
+
 /**
- * Captures the build gate's full output to `.webpieces/logs/`, and renders the small pointer the AI is
- * handed instead of a rebuild instruction.
+ * The heartbeat's state: the line count reported on the PREVIOUS tick, so a tick that has not moved can
+ * say so. Stateful per RUN, which is why it is constructed per run rather than injected.
  *
- * ─── Why the filename cannot collide ───────────────────────────────────────────────────────────────────
- * The path is `dotWebpieces.logsFile(repoRoot, 'build-gate-<stage>-<branch>-<shortSha>.log')`, and each
- * component rules out one class of concurrent writer:
- *   • the DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces/worktrees/<git worktree
- *     name>/logs/` in a linked worktree. Every worktree therefore has its own log directory already, which
- *     is what makes "N agents in N worktrees" safe by construction rather than by naming.
- *   • `<stage>` separates review from finish, the two gates that CAN run against one commit.
- *   • `<branch>` — a branch can be checked out in at most one worktree (git enforces it), so within one
- *     log directory the branch is effectively constant; it is in the name so a human reading the directory
- *     can tell whose log is whose, and so switching branches never appends to a stale file.
- *   • `<shortSha>` — a re-run at a NEW commit gets a new file, so the log a failure message points at is
- *     always the build for the code that failed. A re-run at the SAME commit deliberately TRUNCATES: it is
- *     the same build of the same tree, and the fresh one is the one worth reading.
- * The residual case is two agents running the same stage, at the same commit, in the SAME worktree,
- * simultaneously. That is already unsupported — both would be driving one git index and one merge state —
- * and it is the only case this scheme does not separate.
+ * `still` is the load-bearing word. A build that is linking, or waiting on a cold nx cache, produces no
+ * output for minutes; without `still` the caller sees the same number twice and cannot tell a stalled
+ * BUILD from a stalled REPORTER.
+ */
+export class BuildLogHeartbeat {
+    private previous: number | null = null;
+
+    constructor(private readonly logPath: string, private readonly displayPath: string) {}
+
+    /** One heartbeat line — `<path> size <n> lines`, plus ` still` when <n> has not moved. */
+    tick(): string {
+        const count = this.lineCount();
+        const still = this.previous !== null && count === this.previous ? ' still' : '';
+        this.previous = count;
+        return `${this.displayPath} size ${count} lines${still}`;
+    }
+
+    // Lines currently in the log. A log that does not exist yet is zero lines, not an error: the build may
+    // simply not have written its first byte, and a heartbeat may never be the reason a build stops.
+    private lineCount(): number {
+        if (!fs.existsSync(this.logPath)) return 0;
+        const body = fs.readFileSync(this.logPath, 'utf8');
+        if (body === '') return 0;
+        return body.split('\n').length - (body.endsWith('\n') ? 1 : 0);
+    }
+}
+
+/**
+ * Captures the build gate's full output to a file, reports progress while it runs, and renders the
+ * pointer the caller is handed instead of a rebuild instruction.
+ *
+ * ─── Two naming schemes, one rule each ─────────────────────────────────────────────────────────────────
+ *   • `wp-build` (BUILD_STAGE) writes ONE fixed path, `.webpieces/build.log`. It is fixed because a HUMAN
+ *     OR AN AGENT TYPES IT — `grep -n error .webpieces/build.log` has to be writable from memory, and a
+ *     name carrying a branch and a sha is not. History comes from the rotation below instead.
+ *   • stage ② and stage ③ write `logs/build-gate-<stage>-<branch>-<shortSha>.log`, because those two
+ *     gates CAN run against one commit and a failure message from one must not be pointing at a file the
+ *     other overwrote. Nobody types those names; the failure message prints them.
+ *
+ * ─── Rotation, everywhere ──────────────────────────────────────────────────────────────────────────────
+ * Every run moves an existing log to `<log>.bak` before writing, so the last TWO runs are always on disk.
+ * One rule for every stage: no branch, and the previous run of a re-run at the same commit survives
+ * instead of being truncated away.
+ *
+ * ─── Concurrency ───────────────────────────────────────────────────────────────────────────────────────
+ * The DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces/worktrees/<git worktree name>/`
+ * in a linked worktree — so "N agents in N worktrees" is safe by construction rather than by naming. The
+ * residual case is two builds in the SAME worktree at once, which is already unsupported: both would be
+ * driving one git index.
  */
 @injectable(bindingScopeValues.Singleton)
 export class BuildGateLog {
-    /** Absolute path of the log for `stage` at the current HEAD, creating the log directory. */
+    /** Absolute path of the log for `stage` at the current HEAD, creating its directory. */
     pathFor(repoRoot: string, stage: string): string {
-        const file = dotWebpieces.logsFile(repoRoot, this.fileNameFor(repoRoot, stage));
+        const file = this.resolvePath(repoRoot, stage);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         return file;
     }
 
     /** The same path WITHOUT creating anything, and '' when no such log exists. Used by finish's skip path. */
     existingLogFor(repoRoot: string, stage: string): string {
-        const file = dotWebpieces.logsFile(repoRoot, this.fileNameFor(repoRoot, stage));
+        const file = this.resolvePath(repoRoot, stage);
         return fs.existsSync(file) ? file : '';
     }
 
-    /** `build-gate-<stage>-<branch>-<shortSha>.log` — see the class docstring for why this cannot collide. */
+    /** `build.log` for `wp-build`; `build-gate-<stage>-<branch>-<shortSha>.log` for the PR-flow stages. */
     fileNameFor(repoRoot: string, stage: string): string {
+        if (stage === BUILD_STAGE) return BUILD_LOG_NAME;
         const branch = this.slug(this.git(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']));
         const sha = this.slug(this.git(repoRoot, ['rev-parse', '--short', 'HEAD']));
         return `build-gate-${this.slug(stage)}-${branch === '' ? 'nobranch' : branch}-${sha === '' ? 'nosha' : sha}.log`;
     }
 
-    /**
-     * Run `buildCommand` with its combined stdout+stderr streaming to the terminal AND appended in full to
-     * `logPath`. Returns the BUILD's exit code (not tee's). Nothing is truncated.
-     */
-    run(repoRoot: string, buildCommand: string, logPath: string): number {
-        const statusFile = `${logPath}${STATUS_SUFFIX}`;
-        fs.rmSync(statusFile, { force: true });
-        const result = spawnSync(this.wrap(buildCommand, logPath, statusFile),
-            { stdio: 'inherit', cwd: repoRoot, shell: true });
-        const fromFile = this.readStatus(statusFile);
-        fs.rmSync(statusFile, { force: true });
-        if (fromFile !== null) return fromFile;
-        // The side file never appeared ⇒ the shell died before the echo. The PIPELINE's status is tee's,
-        // which is 0, and reporting 0 there would call a dead build green — so fail CLOSED instead.
-        return result.status !== null && result.status !== 0 ? result.status : 1;
+    /** Where the PREVIOUS run of `logPath` is kept — always `<logPath>.bak`. */
+    backupPathFor(logPath: string): string {
+        return `${logPath}${BACKUP_SUFFIX}`;
     }
 
     /**
-     * The ENTIRE message the AI gets on a captured failure. Deliberately tiny: the whole point is that the
-     * agent reads ONE file rather than carrying a build transcript in its context.
+     * Move an existing log aside to `<log>.bak`, overwriting any previous backup. A missing log is the
+     * normal first-run state and is not an error.
+     */
+    rotate(logPath: string): void {
+        fs.mkdirSync(path.dirname(logPath), { recursive: true });
+        if (!fs.existsSync(logPath)) return;
+        fs.rmSync(this.backupPathFor(logPath), { force: true });
+        fs.renameSync(logPath, this.backupPathFor(logPath));
+    }
+
+    /**
+     * Run `buildCommand` with its stdout AND stderr redirected in full to `logPath`, printing a heartbeat
+     * to the console every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's exit code.
+     * Nothing is truncated and nothing is streamed.
+     */
+    async run(repoRoot: string, buildCommand: string, logPath: string): Promise<number> {
+        this.rotate(logPath);
+        const fd = fs.openSync(logPath, 'w');
+        const heartbeat = new BuildLogHeartbeat(logPath, this.displayPath(repoRoot, logPath));
+        const timer = setInterval((): void => { process.stdout.write(`${heartbeat.tick()}\n`); }, HEARTBEAT_MS);
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the timer and the fd MUST be released
+        // whatever the child does, and the exit code is returned rather than thrown so runBuildGate owns
+        // the one CliExitError.
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return await this.awaitExit(spawn(buildCommand, { cwd: repoRoot, shell: true, stdio: ['ignore', fd, fd] }), fd);
+        } finally {
+            clearInterval(timer);
+            fs.closeSync(fd);
+        }
+    }
+
+    /**
+     * The success summary: the caller is told WHERE the full output is, not handed the output.
+     */
+    successMessage(logPath: string): string {
+        return `\nBuild success\n${this.logPointer(logPath)}`;
+    }
+
+    /**
+     * The ENTIRE message the caller gets on a failed build. It names the log, echoes the last
+     * FAILURE_TAIL_LINES lines so the immediate cause needs no second command, and forbids the rebuild
+     * this whole file exists to prevent.
      *
      * The last sentence is not filler. If the log holds no visible failure then something upstream is wrong
-     * (a runner that died without printing, a truncated pipe), and the worst possible response is an agent
-     * guessing or rebuilding — so it is told to surface the contradiction to the human and stop.
+     * (a runner that died without printing, a truncated redirect), and the worst possible response is an
+     * agent guessing or rebuilding — so it is told to surface the contradiction to the human and stop.
      */
     failureMessage(buildCommand: string, logPath: string): string {
-        return `\n❌ The CI build failed. We ran\n\n` +
-            `    ${buildCommand} > ${logPath}\n\n` +
-            `and it failed, so read that file for the failures. Do NOT re-run the build to see them.\n` +
+        return `\nBuild Failed: ${buildCommand}\n${this.logPointer(logPath)}\n` +
+            `Last ${FAILURE_TAIL_LINES} lines of that log:\n${this.tail(logPath)}\n` +
+            `Read that FILE for the failures. Do NOT re-run the build to see them.\n` +
             `If you do not see failures in that log, report that to the user and stop.\n`;
     }
 
-    /**
-     * `{ ( <build> ) ; echo $? > <status> ; } 2>&1 | tee <log>` — written across LINES so a build command
-     * ending in a `#` comment cannot swallow what follows it.
-     *
-     * The inner `( … )` is load-bearing, not decoration. The left side of a pipeline is already a subshell,
-     * so a build command containing a plain `exit 7` (or any script that calls `exit`) would terminate that
-     * subshell OUTRIGHT — `echo $?` never runs, the side file never appears, and the only status left is
-     * tee's 0. The nested subshell absorbs the `exit`, so `$?` is the build's code every time.
-     */
-    private wrap(buildCommand: string, logPath: string, statusFile: string): string {
-        return `{\n(\n${buildCommand}\n)\necho $? > ${this.quote(statusFile)}\n} 2>&1 | tee ${this.quote(logPath)}`;
+    // The two lines that name the log, identical on success and failure so there is one thing to recognise.
+    private logPointer(logPath: string): string {
+        const name = path.basename(logPath);
+        return `FullLog : ${logPath}\n` +
+            `(${name} is backed up to ${name}${BACKUP_SUFFIX} every run so you have the last 2 builds of logs)\n`;
     }
 
-    // The build's own exit code, or null when the side file never appeared (the shell died before the echo).
-    private readStatus(statusFile: string): number | null {
-        if (!fs.existsSync(statusFile)) return null;
-        const parsed = Number.parseInt(fs.readFileSync(statusFile, 'utf8').trim(), 10);
-        return Number.isNaN(parsed) ? null : parsed;
+    // The log's last FAILURE_TAIL_LINES lines, or a plain statement that there are none. A log that cannot
+    // be read is reported AS that, never silently rendered as an empty tail.
+    private tail(logPath: string): string {
+        if (!fs.existsSync(logPath)) return `    (no log file at ${logPath})\n`;
+        const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter((l: string): boolean => l !== '');
+        if (lines.length === 0) return '    (the log is empty)\n';
+        return lines.slice(-FAILURE_TAIL_LINES).map((l: string): string => `    ${l}\n`).join('');
     }
 
-    // POSIX single-quoting: everything is literal inside '…', and a literal ' is spelled '\''.
-    private quote(value: string): string {
-        return `'${value.split("'").join(`'\\''`)}'`;
+    // Resolve, and wait for, the child's exit code. A spawn that never starts (a shell that is missing, a
+    // cwd that vanished) fails CLOSED to 1 — calling a build that never ran green is the one outcome that
+    // must be impossible — and the reason is APPENDED TO THE LOG, so the failure message's pointer still
+    // leads to it rather than to an empty file.
+    private awaitExit(child: ChildProcess, fd: number): Promise<number> {
+        return new Promise<number>((resolve: (code: number) => void): void => {
+            child.on('error', (err: Error): void => {
+                fs.writeSync(fd, `\nThe build command could not be started: ${err.message}\n`);
+                resolve(1);
+            });
+            child.on('close', (code: number | null): void => { resolve(code ?? 1); });
+        });
+    }
+
+    // The path as the heartbeat shows it: relative to the repo when it sits inside it (a linked worktree's
+    // state lives under the PRIMARY clone, so it often does not), absolute otherwise.
+    private displayPath(repoRoot: string, logPath: string): string {
+        const relative = path.relative(repoRoot, logPath);
+        return relative === '' || relative.startsWith('..') || path.isAbsolute(relative) ? logPath : relative;
+    }
+
+    private resolvePath(repoRoot: string, stage: string): string {
+        const name = this.fileNameFor(repoRoot, stage);
+        // `wp-build`'s log sits at the ROOT of the state dir, not under `logs/`, because it is the one log
+        // path a person types from memory. Everything else keeps the per-commit names in `logs/`.
+        return stage === BUILD_STAGE ? dotWebpieces.localFile(repoRoot, name) : dotWebpieces.logsFile(repoRoot, name);
     }
 
     // Anything that is not a filename-safe character becomes '-', so `dean/feat` cannot create directories.

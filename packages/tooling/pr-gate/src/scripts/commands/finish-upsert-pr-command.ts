@@ -189,7 +189,7 @@ export class FinishUpsertPrCommand {
         this.gitExec.assertCleanTree(repoRoot);
 
         // 3. Build gate, then post the gated body, then push (that ORDER — see GatedPrPublisher).
-        this.runOrSkipBuildGate(repoRoot, buildAlreadyGreen);
+        await this.runOrSkipBuildGate(repoRoot, buildAlreadyGreen);
         const base = this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
@@ -216,15 +216,16 @@ export class FinishUpsertPrCommand {
      * since stage ② verified it buys nothing and costs a full `nx affected`. That skip is what makes the
      * three-stage flow cost ONE build rather than two, and it is why moving the gate earlier was affordable.
      */
-    private runOrSkipBuildGate(repoRoot: string, alreadyGreen: boolean): void {
+    private async runOrSkipBuildGate(repoRoot: string, alreadyGreen: boolean): Promise<void> {
         if (alreadyGreen) {
             process.stdout.write('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n'
                 + this.skippedBuildLogNote(repoRoot));
             return;
         }
-        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
             FINISH_STAGE,
+            false,
         ));
     }
 

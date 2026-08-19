@@ -81,31 +81,33 @@ function gate(captureOn: boolean): BuildAffected {
     return new BuildAffected(new PinnedHomeConfig(captureOn), new BuildGateLog());
 }
 
-function opts(): BuildGateOptions {
-    return new BuildGateOptions('🛠️  Build gate', 'pnpm wp-review-upsert-pr', 'Build failed — nothing was briefed.', REVIEW_STAGE);
+/** The PR-flow stages pass alwaysCapture=false; `wp-build` is the one caller that passes true. */
+function opts(alwaysCapture = false): BuildGateOptions {
+    return new BuildGateOptions(
+        '🛠️  Build gate', 'pnpm wp-review-upsert-pr', 'Build failed — nothing was briefed.', REVIEW_STAGE, alwaysCapture);
 }
 
 /** Swallow the gate's own stdout so the suite output stays readable, and keep what it wrote. */
-function captureStdout(body: () => void): void {
+async function captureStdout(body: () => Promise<void>): Promise<void> {
     const real = process.stdout.write.bind(process.stdout);
     // webpieces-disable no-any-unknown -- matching node's overloaded write signature for a test double
     process.stdout.write = ((chunk: string): boolean => { written += chunk; return true; }) as typeof process.stdout.write;
     // webpieces-disable no-unmanaged-exceptions -- chokepoint: stdout MUST be restored even when the gate throws
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        body();
+        await body();
     } finally {
         process.stdout.write = real;
     }
 }
 
-function runExpectingFailure(affected: BuildAffected, dir: string): CliExitError {
+async function runExpectingFailure(affected: BuildAffected, dir: string, o: BuildGateOptions = opts()): Promise<CliExitError> {
     let caught: CliExitError | null = null;
-    captureStdout((): void => {
+    await captureStdout(async (): Promise<void> => {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the CliExitError IS the assertion subject
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            affected.runBuildGate(dir, opts());
+            await affected.runBuildGate(dir, o);
         } catch (err: unknown) {
             const error = toError(err);
             caught = error as CliExitError;
@@ -123,19 +125,20 @@ function runExpectingFailure(affected: BuildAffected, dir: string): CliExitError
  * byte-for-byte what it was before this feature existed.
  */
 describe('NO ~/.webpieces/config.json at all — today\'s behaviour, byte for byte', () => {
-    it('fails with the pre-existing text and writes no log file', () => {
+    it('fails with the pre-existing text and writes no log file', async () => {
         const dir = repoWithBuild('echo compiling; exit 4');
-        const err = runExpectingFailure(new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()), dir);
+        const err = await runExpectingFailure(
+            new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()), dir);
         expect(err.exitCode).toBe(4);
         expect(err.message).toContain('Run THIS exact command to reproduce and fix all errors');
         expect(err.message).not.toContain('.webpieces/logs');
         expect(fs.existsSync(path.join(dir, '.webpieces', 'logs'))).toBe(false);
     });
 
-    it('passes with the pre-existing two lines, and never throws over the missing file', () => {
+    it('passes with the pre-existing two lines, and never throws over the missing file', async () => {
         const dir = repoWithBuild('echo compiling');
-        captureStdout((): void => {
-            new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()).runBuildGate(dir, opts());
+        await captureStdout(async (): Promise<void> => {
+            await new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()).runBuildGate(dir, opts());
         });
         expect(written).toContain('🛠️  Build gate: echo compiling');
         expect(written).toContain('✅ Build passed.');
@@ -153,9 +156,9 @@ describe('build gate with capture OFF', () => {
      * The load-bearing case. Without the opt-in file the gate must behave EXACTLY as it did before this
      * feature existed: the old failure text, the old exit code, and NOTHING written to .webpieces/logs.
      */
-    it('keeps the pre-existing failure text and writes no log file', () => {
+    it('keeps the pre-existing failure text and writes no log file', async () => {
         const dir = repoWithBuild('echo compiling; exit 4');
-        const err = runExpectingFailure(gate(false), dir);
+        const err = await runExpectingFailure(gate(false), dir);
         expect(err.exitCode).toBe(4);
         expect(err.message).toContain('Build failed — nothing was briefed.');
         expect(err.message).toContain('Run THIS exact command to reproduce and fix all errors');
@@ -164,9 +167,9 @@ describe('build gate with capture OFF', () => {
         expect(fs.existsSync(path.join(dir, '.webpieces', 'logs'))).toBe(false);
     });
 
-    it('prints only the command and the pass line on success, and writes no log file', () => {
+    it('prints only the command and the pass line on success, and writes no log file', async () => {
         const dir = repoWithBuild('echo compiling');
-        captureStdout((): void => { gate(false).runBuildGate(dir, opts()); });
+        await captureStdout(async (): Promise<void> => { await gate(false).runBuildGate(dir, opts()); });
         expect(written).toContain('🛠️  Build gate: echo compiling');
         expect(written).toContain('✅ Build passed.');
         expect(written).not.toContain('.webpieces/logs');
@@ -179,29 +182,31 @@ describe('build gate with capture OFF', () => {
 });
 
 describe('build gate with capture ON (opted in)', () => {
-    it('on FAILURE hands back the small pointer, and the log holds the real output', () => {
+    it('on FAILURE hands back the pointer at the log, and the log holds the real output', async () => {
         const dir = repoWithBuild('echo TS2554-somewhere 1>&2; exit 4');
-        const err = runExpectingFailure(gate(true), dir);
+        const err = await runExpectingFailure(gate(true), dir);
         expect(err.exitCode).toBe(4);
 
         const logPath = new BuildGateLog().existingLogFor(dir, REVIEW_STAGE);
         expect(logPath).not.toBe('');
         expect(fs.readFileSync(logPath, 'utf8')).toContain('TS2554-somewhere');
 
-        expect(err.message).toContain('The CI build failed');
-        expect(err.message).toContain(`echo TS2554-somewhere 1>&2; exit 4 > ${logPath}`);
+        expect(err.message).toContain('Build Failed: echo TS2554-somewhere 1>&2; exit 4');
+        expect(err.message).toContain(`FullLog : ${logPath}`);
         expect(err.message).toContain('If you do not see failures in that log, report that to the user and stop.');
         // The point of the whole feature: it must NOT tell the agent to build again.
         expect(err.message).not.toContain('Run THIS exact command to reproduce');
-        expect(err.message).not.toContain('TS2554-somewhere\n');
     });
 
-    it('on SUCCESS adds no noise — same two lines as before, log written quietly', () => {
+    it('on SUCCESS says so and names the log, rather than reprinting the build', async () => {
         const dir = repoWithBuild('echo compiling');
-        captureStdout((): void => { gate(true).runBuildGate(dir, opts()); });
+        await captureStdout(async (): Promise<void> => { await gate(true).runBuildGate(dir, opts()); });
         expect(written).toContain('🛠️  Build gate: echo compiling');
-        expect(written).toContain('✅ Build passed.');
-        expect(written).not.toContain('.webpieces/logs');
+        expect(written).toContain('Build success');
+        expect(written).toContain(`FullLog : ${new BuildGateLog().existingLogFor(dir, REVIEW_STAGE)}`);
+        // Streaming the build to the console is exactly what made an agent re-run it; it must not happen.
+        // The command is ANNOUNCED (`…: echo compiling`), so the test is that no line IS the build's output.
+        expect(written.split('\n')).not.toContain('compiling');
         expect(fs.readFileSync(new BuildGateLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('compiling');
     });
 
@@ -210,9 +215,38 @@ describe('build gate with capture ON (opted in)', () => {
     });
 });
 
+/**
+ * `wp-build`'s contract IS the log file — its console output is a heartbeat and a pointer at that file —
+ * so it captures on a machine with no `~/.webpieces/config.json`, which is every machine.
+ */
+describe('alwaysCapture: the wp-build path, with the opt-in OFF', () => {
+    it('captures anyway and names the log on success', async () => {
+        const dir = repoWithBuild('echo compiling');
+        await captureStdout(async (): Promise<void> => { await gate(false).runBuildGate(dir, opts(true)); });
+        expect(written).toContain('Build success');
+        expect(written).toContain('FullLog : ');
+        expect(fs.readFileSync(new BuildGateLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('compiling');
+    });
+
+    it('captures anyway on failure, and still exits non-zero', async () => {
+        const dir = repoWithBuild('echo boom 1>&2; exit 4');
+        const err = await runExpectingFailure(gate(false), dir, opts(true));
+        expect(err.exitCode).toBe(4);
+        expect(err.message).toContain('Build Failed:');
+        expect(fs.readFileSync(new BuildGateLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('boom');
+    });
+});
+
 describe('BuildGateOptions', () => {
     // No default for `stage`: a default would silently let two stages share one log file.
     it('requires a stage', () => {
         expect(opts().stage).toBe(REVIEW_STAGE);
+    });
+
+    // No default for alwaysCapture either: whether the console is the output or the log is decides what
+    // the caller is handed, and that may never be inherited by accident.
+    it('requires an alwaysCapture decision', () => {
+        expect(opts().alwaysCapture).toBe(false);
+        expect(opts(true).alwaysCapture).toBe(true);
     });
 });
