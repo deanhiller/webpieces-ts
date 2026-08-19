@@ -425,3 +425,74 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
         expect(report).toContain(L1_ROWS[6].cure?.denyMention);
     });
 });
+
+/**
+ * ONE STORY ABOUT `git -C`, ACROSS EVERY SURFACE THAT NAMES IT.
+ *
+ * Four files talked about the same command and disagreed, which is the contradiction this describe pins
+ * shut:
+ *   • version-sync.ts PRESCRIBED `git -C <main tree> pull` as the FIRST cure for a version skew,
+ *   • runner.ts RECOMMENDED `git -C <dir>` as the directory-flag idiom, with no boundary at all,
+ *   • l1-rows.ts advertised `git -C <worktree> …` as ALWAYS permitted,
+ *   • while shim-deny-reason.ts told subagents, correctly, that `git -C <main>` is REFUSED.
+ * An agent that met the first three and then hit the fourth read the refusal as a fluke and retried.
+ * Measured 2026-08-19: 25 firings of trinary-version-skew across one session, 13 of them in a single
+ * subagent, every one of them on ordinary read-only work (grep, ls, find, git checkout -b).
+ *
+ * The settled story, which every message must now tell:
+ *   `git -C <dir INSIDE your own tree>`  → fine, and runner.ts's idiom advice is correct there.
+ *   `git -C <another tree>`              → refused to a subagent, and never the cure for a skew even
+ *                                          for a human, because a bare `pull` does not name a branch.
+ *
+ * Scanning SOURCE rather than rendered output is deliberate: a prescription can hide in a template that
+ * renders on only one branch of one guard, and that is exactly where the worst instance was hiding.
+ */
+describe('no surface prescribes cross-tree `git -C` as a cure', () => {
+    // The three message-bearing modules. shim-deny-reason.ts is excluded ON PURPOSE — it names
+    // `git -C <root>` in order to say it is REFUSED, which is the story being told, not a breach of it.
+    const SITES = ['version-sync.ts', 'runner.ts', 'l1-rows.ts'] as const;
+
+    const sourceOf = (site: string): string => fs.readFileSync(path.join(__dirname, site), 'utf8');
+
+    /**
+     * A PRESCRIPTION is `git -C` whose directory is INTERPOLATED — `${tree.mainRoot}`, `$ROOT`. That is
+     * what makes it read as a runnable command aimed at a real other tree. A literal placeholder like
+     * `git -C <dir>` is documentation of an idiom, and is judged by the boundary test below instead.
+     */
+    it('never interpolates a path into a `git -C` the reader is told to run', () => {
+        for (const site of SITES) {
+            const prescriptions = sourceOf(site)
+                .split('\n')
+                // Lines that RUN git from node are not messages to a reader; spawnSync takes an argv array.
+                .filter((line: string) => !line.includes('spawnSync'))
+                .filter((line: string) => /git -C \$\{|git -C \$[A-Z]/.test(line));
+            expect(prescriptions, `${site} prescribes cross-tree git -C`).toEqual([]);
+        }
+    });
+
+    /**
+     * Wherever the literal idiom IS taught, the sentence that bounds it must be in the SAME message.
+     *
+     * "Taught" means a line the READER sees, so `//` and ` *` comment lines are skipped: version-sync.ts
+     * names `git -C <dir> <sub>` in a comment explaining how its argv parser skips the flag, which
+     * teaches nobody an idiom and needs no caveat.
+     */
+    it('bounds the `git -C <dir>` idiom to this tree wherever it is taught', () => {
+        for (const site of SITES) {
+            const source = sourceOf(site);
+            const teaches = source
+                .split('\n')
+                .some((line: string) => line.includes('git -C <dir') && !/^\s*(\/\/|\*|\/\*)/.test(line));
+            if (!teaches) continue;
+            expect(source, `${site} teaches git -C without bounding it to this tree`).toContain('INSIDE this tree');
+            expect(source, `${site} teaches git -C without naming the cross-tree refusal`).toMatch(/another tree/i);
+        }
+    });
+
+    /** The skew guard's own report is the one that must be clean in BOTH of its branches. */
+    it('leaves no `git -C <path>` command in either branch of the skew report', () => {
+        const source = sourceOf('version-sync.ts');
+        expect(source).not.toContain('`git -C ${tree.mainRoot}');
+        expect(source).not.toContain('`git -C ${tree.root}');
+    });
+});

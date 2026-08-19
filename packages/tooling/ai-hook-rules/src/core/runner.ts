@@ -399,6 +399,8 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
         `   Fix Option 3: if the SECOND \`cd\` was there to point a tool at a directory, use that tool's own\n` +
         `                 directory flag instead — \`git -C <dir>\`, \`tar -C <dir>\`, \`npm --prefix <dir>\`,\n` +
         `                 \`npm pack --pack-destination <dir>\`, \`pnpm --dir <dir>\`. One \`cd\`, same result.\n` +
+        `                 ONLY for a dir INSIDE this tree. \`git -C <another tree>\` is REFUSED to a subagent,\n` +
+        `                 and is never the cure for a version skew — for that, tell the MAIN agent.\n` +
         `   Fix Option 4: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
         `                 moves nothing the guards judge; see EffectiveTree on why cwd cannot be assumed).`;
     return new BlockedResult(report);
