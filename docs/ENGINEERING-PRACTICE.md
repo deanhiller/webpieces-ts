@@ -126,12 +126,12 @@ PRs and merges go through the gated flow?". Alongside them sits `whole-repo-buil
 repo config key at all (don't build the whole monorepo — run `pnpm wp-build`). These encode process, not
 syntax: an agent physically cannot start work in the wrong place. Configured under `hookGuards` in
 `webpieces.config.json` — except `whole-repo-build-guard`, which has no repo-config entry at all: it is
-ON for every tree, and the only way to switch it off is per MACHINE, from the optional
-`~/.webpieces/config.json` (`experimental.whole-repo-build-guard: false`). That split is deliberate, and
+EXPERIMENTAL and OFF for every tree, and the only way to switch it on is per MACHINE, from the optional
+`~/.webpieces/config.json` (`experimental.whole-repo-build-guard: true`). That split is deliberate, and
 so is the direction of the default. A guard must never become something every consumer has to CONFIGURE
 before their next command works — that is the shape that once blocked every upgrading consumer's shell —
-but a guard nobody opts into never fires at all, which is how a sibling repo's `ci:local` went on running
-three whole-world passes per inner loop for months.
+and every `experimental.*` flag ships OFF for two years besides, because a flag that arrives switched on
+is not an experiment, it is a behaviour change delivered by an upgrade nobody asked for.
 
 **Build time — `packages/tooling/code-rules/`.** ~30 validators run from `wp-ci`, which the affected
 build (`pnpm nx affected --target=ci --base=<fork point>`) invokes per project. This catches anything

@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // The guard shells out ONLY to expand `$(git …)` inside the configured build command. Pin it so the
 // resolved-command assertions are about the guard's substitution, not this checkout's sha.
@@ -23,15 +26,18 @@ import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 
 const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
 
-// The guard is ON unless ~/.webpieces/config.json opts OUT. Pinning the home config here keeps the suite
-// off the developer's real one — a test that reads personal preferences passes or fails by accident — and
-// makes each test state the switch it is exercising rather than inheriting it.
+// The guard is OFF unless ~/.webpieces/config.json opts IN with an explicit `true`. Pinning the home
+// config here keeps the suite off the developer's real one — a test that reads personal preferences
+// passes or fails by accident, and a test that WRITES one destroys work — and makes each test state the
+// switch it is exercising rather than inheriting it. Nothing in this file touches a real HOME.
 // HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, orphanDirSweep).
 function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
         .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false));
 }
 
+// Most of this suite is about WHICH commands the guard refuses, which is only observable on a machine
+// that opted in — so the opt-in is pinned here, out loud, rather than being anybody's default.
 beforeEach(() => { pinHomeConfig(true); });
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -297,20 +303,19 @@ describe('whole-repo-build-guard picks its message from ~/.webpieces/config.json
 /**
  * ══ THE GATE — and the case that protects every consumer of these packages ══════════════════════════
  *
- * This guard is EXPERIMENTAL. Its ONE switch is `experimental.whole-repo-build-guard` in the OPTIONAL
- * machine-local ~/.webpieces/config.json, and essentially nobody has that file. For all of them the
- * guard must be INERT — no block, no message, no log line — for every command, INCLUDING the ones it
- * would otherwise refuse. The first release of this guard got that wrong in the other direction (it
- * shipped ON by default AND demanded a webpieces.config.json entry, so upgrading blocked every Bash
- * call), which is what these tests exist to prevent recurring.
+ * This guard is EXPERIMENTAL, and every `experimental.*` flag ships OFF and stays OFF for two years. Its
+ * ONE switch is `experimental.whole-repo-build-guard` in the OPTIONAL machine-local
+ * ~/.webpieces/config.json, and essentially nobody has that file. For all of them the guard must be
+ * INERT — no block, no message, no log line — for every command, INCLUDING the ones it would otherwise
+ * refuse. The first release of this guard got that wrong in the other direction (it shipped ON by
+ * default AND demanded a webpieces.config.json entry, so upgrading blocked every Bash call), which is
+ * what these tests exist to prevent recurring.
+ *
+ * ON requires the explicit boolean `true`. Absent file, absent section, absent key and an explicit
+ * `false` are ONE state, and it is OFF — indistinguishable from "this guard does not exist".
  */
-/**
- * The switch is an OPT-OUT: `experimental.whole-repo-build-guard: false` in ~/.webpieces/config.json.
- * Absent — no key, or no file at all, which is essentially every machine — reads ON, and the home-config
- * suite pins that default separately. OFF must be indistinguishable from "this guard does not exist".
- */
-describe('whole-repo-build-guard honours the machine-local opt-out', () => {
-    it('allows a command it would otherwise refuse, once a machine opts out', () => {
+describe('whole-repo-build-guard honours the machine-local opt-in', () => {
+    it('allows a command it would otherwise refuse, on a machine that never opted in', () => {
         pinHomeConfig(false);
         for (const command of ['pnpm run build-all', 'pnpm nx run-many --target=build', 'pnpm exec vitest run']) {
             expect(guard().check(ctx(command))).toEqual([]);
@@ -322,9 +327,45 @@ describe('whole-repo-build-guard honours the machine-local opt-out', () => {
         expect(guard().check(ctx('pnpm run build-all'))).toEqual([]);
     });
 
-    it('blocks the same command for a machine that has not opted out', () => {
+    it('blocks the same command once a machine opts in', () => {
         pinHomeConfig(true);
         expect(guard().check(ctx('pnpm run build-all')).length).toBe(1);
+    });
+
+    /**
+     * END-TO-END, through the REAL loader, against an EMPTY temp HOME — the state of essentially every
+     * machine. Not a stubbed HomeConfig: this is the one test that proves the guard's default with the
+     * loader's own absent-file path in the loop, so a default restated in the wrong place cannot hide
+     * behind a spy that supplies the answer.
+     *
+     * `homeDir` is injected rather than mutated: the loader takes it as a parameter, and no test may
+     * read — let alone write — the developer's real ~/.webpieces/config.json.
+     */
+    it('is OFF end-to-end for a machine with NO ~/.webpieces/config.json, through the real loader', () => {
+        const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-home-'));
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the temp HOME is removed either way
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // Drop the suite-wide opt-in spy FIRST: capturing `load` while it is still mocked would
+            // capture the mock, and calling it back would recurse until the stack died.
+            vi.restoreAllMocks();
+            const realLoad = HomeConfigService.prototype.load;
+            vi.spyOn(HomeConfigService.prototype, 'load')
+                .mockImplementation(function (this: HomeConfigService): HomeConfig {
+                    return realLoad.call(this, tmpHome);
+                });
+            expect(fs.existsSync(path.join(tmpHome, '.webpieces', 'config.json'))).toBe(false);
+            for (const command of ['pnpm run build-all', 'pnpm nx affected --target=ci', 'pnpm exec vitest run']) {
+                expect(guard().check(ctx(command)), command).toEqual([]);
+            }
+            // And the load itself never threw — the shape of the original outage was a config-LOAD
+            // failure on machines that had no such file. Called through `realLoad` with the temp HOME
+            // passed explicitly, so this asserts the loader and not the spy, and still never looks at
+            // the developer's real HOME.
+            expect(realLoad.call(new HomeConfigService(), tmpHome).wholeRepoBuildGuard).toBe(false);
+        } finally {
+            fs.rmSync(tmpHome, { recursive: true, force: true });
+        }
     });
 
     /**

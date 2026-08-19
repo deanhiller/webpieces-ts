@@ -7,7 +7,7 @@ import { toError } from './to-error';
 import {
     HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
-    HOME_KEY_ORPHAN_DIR_SWEEP, WHOLE_REPO_BUILD_GUARD_DEFAULT,
+    HOME_KEY_ORPHAN_DIR_SWEEP,
     ALLOWED_EXPERIMENTAL, ALLOWED_TOP_LEVEL,
 } from './home-config';
 
@@ -122,17 +122,27 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     /**
-     * whole-repo-build-guard reads ON with no file — it is not experimental any more, and OFF-by-default
-     * is precisely why it never fired (a guard nobody opts into prevents nothing).
-     *
-     * This is NOT the release that blocked every consumer's Bash calls. That one required an entry in the
-     * repo-tracked webpieces.config.json and failed at config LOAD when it was missing, so the cure was
-     * "edit a file to get your shell back". Here nothing has to exist, and the only thing that can be
-     * refused is a command that genuinely builds the world.
+     * whole-repo-build-guard reads OFF with no file. It is EXPERIMENTAL, and every experimental flag
+     * ships OFF and stays OFF for two years — a flag that arrives switched on is not an experiment, it
+     * is a behaviour change delivered by an upgrade nobody asked for.
      */
-    it('reports whole-repo-build-guard ON when the file does not exist', () => {
-        expect(new HomeConfigService().load(fakeHome()).wholeRepoBuildGuard).toBe(true);
-        expect(WHOLE_REPO_BUILD_GUARD_DEFAULT).toBe(true);
+    it('reports whole-repo-build-guard OFF when the file does not exist', () => {
+        expect(new HomeConfigService().load(fakeHome()).wholeRepoBuildGuard).toBe(false);
+    });
+
+    /**
+     * THE OUTAGE REGRESSION. The first release of this flag failed at config LOAD when nothing declared
+     * it, which blocked every tool call on every machine that had no such file — and "the file does not
+     * exist" is essentially every machine. Loading must therefore be silent and total: no throw, every
+     * flag readable, nothing written.
+     */
+    it('does not THROW at LOAD when the file is missing — the shape of the original outage', () => {
+        const home = fakeHome();
+        expect((): HomeConfig => new HomeConfigService().load(home)).not.toThrow();
+        const loaded = new HomeConfigService().load(home);
+        expect(loaded.wholeRepoBuildGuard).toBe(false);
+        expect(loaded.buildGateLogCapture).toBe(false);
+        expect(loaded.orphanDirSweep).toBe(false);
     });
 });
 
@@ -196,53 +206,76 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
             const home = fakeHome();
             writeConfig(home, JSON.stringify({ experimental }));
             const loaded = new HomeConfigService().load(home);
-            // Every PRESENT key was written `false`, so each assertion below reads the key's DECLARED
-            // default when it is the omitted one and `false` otherwise. Writing `false` rather than
-            // `true` is what keeps this meaningful for whole-repo-build-guard: with `true` both branches
-            // would evaluate to true and the loop would stop distinguishing "omitted" from "present".
-            expect(loaded.wholeRepoBuildGuard).toBe(
-                omitted === HOME_KEY_WHOLE_REPO_BUILD_GUARD ? WHOLE_REPO_BUILD_GUARD_DEFAULT : false);
+            // Every PRESENT key was written `false`, and every ABSENT key defaults false, so every flag
+            // reads false whichever one was omitted. That uniformity IS the policy — there is one
+            // declared default for the whole file and no per-key exception to keep in step.
+            expect(loaded.wholeRepoBuildGuard).toBe(false);
             expect(loaded.orphanDirSweep).toBe(false);
             expect(loaded.buildGateLogCapture).toBe(false);
         }
     });
 
     /**
-     * The empty document is the same case as no file at all, and the two must AGREE key for key —
-     * a machine that creates `{}` may not silently get different behaviour from one with no file.
-     * Experimental flags read off; `whole-repo-build-guard` reads its on-by-default value.
+     * The empty document — with no `experimental` section at all, and with an empty one — is the same
+     * case as no file at all, and all three must AGREE key for key: a machine that creates `{}` may not
+     * silently get different behaviour from one with no file. Every flag reads off.
      */
     it('accepts an empty document, reading exactly what the absent file reads', () => {
         for (const body of ['{}', JSON.stringify({ experimental: {} })]) {
             const home = fakeHome();
             writeConfig(home, body);
             const loaded = new HomeConfigService().load(home);
-            expect(loaded.wholeRepoBuildGuard).toBe(WHOLE_REPO_BUILD_GUARD_DEFAULT);
+            expect(loaded.wholeRepoBuildGuard).toBe(false);
             expect(loaded.orphanDirSweep).toBe(false);
             expect(loaded.buildGateLogCapture).toBe(false);
         }
     });
 
     /**
-     * THE PROMOTION, pinned. `whole-repo-build-guard` shipped OFF-by-default and therefore never fired:
-     * a guard nobody opts into does not prevent anything, which is how a sibling repo's `ci:local`
-     * verify chain went on running three whole-world passes per inner loop for months. It is ON for
-     * every tree now, and turning it off is one machine-local line — nothing has to be ADDED anywhere
-     * to be in the default state, which is what separates this from the required-key outage that got
-     * the repo-config spelling retired.
+     * THE DEFAULT, pinned from both sides. `whole-repo-build-guard` is EXPERIMENTAL, so it is OFF until
+     * a machine writes the boolean `true`, and it stays OFF for two years — that is a standing policy
+     * covering every `experimental.*` flag, not a judgement about this one. Absent, an `experimental`
+     * section that does not name it, and an explicit `false` are ONE state, and it is the same state as
+     * having no file: nothing has to be ADDED anywhere to be in it, which is also what separates this
+     * from the required-key outage that got the repo-config spelling retired.
      */
-    it('goes OFF only when a machine says so out loud', () => {
+    it('is ON only when a machine says true out loud', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_WHOLE_REPO_BUILD_GUARD]: false } }));
-        expect(new HomeConfigService().load(home).wholeRepoBuildGuard).toBe(false);
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_WHOLE_REPO_BUILD_GUARD]: true } }));
+        expect(new HomeConfigService().load(home).wholeRepoBuildGuard).toBe(true);
     });
 
+    it('stays OFF for an explicit false, for a sibling-only section, and for an empty one', () => {
+        for (const experimental of [
+            { [HOME_KEY_WHOLE_REPO_BUILD_GUARD]: false },
+            { [HOME_KEY_BUILD_GATE_LOG_CAPTURE]: true },
+            {},
+        ]) {
+            const home = fakeHome();
+            writeConfig(home, JSON.stringify({ experimental }));
+            expect(new HomeConfigService().load(home).wholeRepoBuildGuard).toBe(false);
+        }
+    });
+
+    /**
+     * Moving the DEFAULT to off did not move this line. A key present with a non-boolean value is a file
+     * somebody wrote wrongly, and it is REJECTED — never quietly read as the default, which would turn a
+     * typed value into a silent no-op.
+     */
     it('rejects a non-boolean whole-repo-build-guard, showing the value it got', () => {
         const home = fakeHome();
         writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': 'true' } }));
         const msg = loadError(home).message;
         expect(msg).toContain('must be the boolean');
         expect(msg).toContain('"true"');
+    });
+
+    it('rejects a NUMERIC whole-repo-build-guard too — every non-boolean is an error, not a default', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': 1 } }));
+        const msg = loadError(home).message;
+        expect(msg).toContain('must be the boolean');
+        expect(msg).toContain('1');
     });
 
     it('rejects a non-boolean value, showing the value it got', () => {
@@ -489,9 +522,8 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
     /**
      * The one thing an unknown key must NOT do is change behaviour: a document of nothing but unknown
      * keys has to read byte-for-byte like the no-file state — the same promise the absent-file block
-     * makes. Asserted against the DEFAULT constants rather than literal booleans, because
-     * `whole-repo-build-guard` defaults ON and hard-coding `false` here would silently re-assert the
-     * opt-in it stopped being.
+     * makes. Asserted against a freshly loaded ABSENT config rather than literal booleans, so it keeps
+     * comparing the two states to each other whatever the declared defaults become.
      */
     it('leaves every flag at its default when the file contains only unknown keys', () => {
         const home = fakeHome();

@@ -62,12 +62,12 @@ export { validateChecklistDocs } from './checklist-docs-validator';
 // because the file is machine-global and the repos reading it pin different releases — rejecting a newer
 // release's key would hard-block every repo on the machine that is not yet on it. See home-config.ts.
 // `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS in the hook guards, which is
-// what keeps a rejection repairable. Its `experimental.*` keys are deliberately NOT advertised knobs — the one
-// exception is `whole-repo-build-guard`, which is a supported OPT-OUT and defaults ON.
+// what keeps a rejection repairable. Every `experimental.*` key is an OPT-IN that defaults OFF, including
+// `whole-repo-build-guard`: ON requires an explicit `true`, and there is no per-key default to export.
 export {
     HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
-    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, WHOLE_REPO_BUILD_GUARD_DEFAULT,
+    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
 } from './home-config';
 // The orphan-directory sweep: the corpse an `nx g move` leaves on every clone, which git cannot remove
 // because an ignored dist/ or node_modules/ outlives every tracked file under it. See orphan-dir-scan.ts
