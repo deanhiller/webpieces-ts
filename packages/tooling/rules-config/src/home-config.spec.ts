@@ -163,16 +163,18 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
         ];
         for (const omitted of everyKey) {
             const experimental: Record<string, boolean> = {};
-            for (const key of everyKey) if (key !== omitted) experimental[key] = true;
+            for (const key of everyKey) if (key !== omitted) experimental[key] = false;
             const home = fakeHome();
             writeConfig(home, JSON.stringify({ experimental }));
             const loaded = new HomeConfigService().load(home);
-            // Omitting a key falls back to that key's DECLARED default, not to a blanket false: the two
-            // experimental keys default off, `whole-repo-build-guard` defaults ON.
+            // Every PRESENT key was written `false`, so each assertion below reads the key's DECLARED
+            // default when it is the omitted one and `false` otherwise. Writing `false` rather than
+            // `true` is what keeps this meaningful for whole-repo-build-guard: with `true` both branches
+            // would evaluate to true and the loop would stop distinguishing "omitted" from "present".
             expect(loaded.wholeRepoBuildGuard).toBe(
-                omitted === HOME_KEY_WHOLE_REPO_BUILD_GUARD ? WHOLE_REPO_BUILD_GUARD_DEFAULT : true);
-            expect(loaded.orphanDirSweep).toBe(omitted !== HOME_KEY_ORPHAN_DIR_SWEEP);
-            expect(loaded.buildGateLogCapture).toBe(omitted !== HOME_KEY_BUILD_GATE_LOG_CAPTURE);
+                omitted === HOME_KEY_WHOLE_REPO_BUILD_GUARD ? WHOLE_REPO_BUILD_GUARD_DEFAULT : false);
+            expect(loaded.orphanDirSweep).toBe(false);
+            expect(loaded.buildGateLogCapture).toBe(false);
         }
     });
 

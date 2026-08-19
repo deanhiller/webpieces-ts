@@ -336,6 +336,12 @@ prints the command it resolved before running it, so you always know what actual
 whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only also
 compiles projects your change cannot reach.
 
+`wp-build` ships from `@webpieces/pr-gate`, so like every other `wp-*` bin it arrives with a RELEASE —
+see "Published vs local source" below. If `pnpm wp-build` says *command not found* in this repo, the pin
+in `pnpm-workspace.yaml` is simply older than the release that added it; run the resolved command it
+wraps (`commands.pr-gate.buildCommand`) until the next publish + `pnpm install`. That is the ordinary
+one-release lag, not a broken install.
+
 **Do not assemble your own verify chain.** `wp-build` deliberately runs one command and adds no
 format/lint/test leg of its own, because that composition is exactly what drifts: a sibling repo's
 `ci:local` grew into `prettier --check .` + `wp-ci` + `nx affected -t test` with no `--base` — three

@@ -1,7 +1,8 @@
-import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { BuildAffected } from '../workflow/build-affected';
+import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { BUILD_STAGE } from '../workflow/build-gate-log';
 
 /**
  * `wp-build` — run THE project's build, and nothing else.
@@ -20,11 +21,16 @@ import { BuildAffected } from '../workflow/build-affected';
  * on every build belongs INSIDE `buildCommand`, where the PR gate runs it too; a leg added here would
  * be a leg the gate never sees, which is the same defect one level in.
  *
- * ─── ONE resolver ──────────────────────────────────────────────────────────────────────────────────
- * `BuildAffected.resolveBuildCommand` is the single code path that answers "what is this repo's build
- * command", and it is already the one the gate's own build stage calls. `wp-build` calls THAT rather
- * than re-reading the config key, because a second reader is a second thing that can drift — and drift
- * is the entire reason this bin exists.
+ * ─── ONE resolver, and ONE gate ────────────────────────────────────────────────────────────────────
+ * `BuildAffected.runBuildGate` is the single code path that resolves the command
+ * (`resolveBuildCommand`), announces it, runs it, honours `buildGateLogCapture`, and renders the
+ * failure. `wp-build` calls THAT — it does not re-read the config key and does not hand-write a second
+ * failure string. A second reader is a second thing that can drift, and a second failure message is a
+ * second thing that can teach a command the gate does not run; drift is the entire reason this bin
+ * exists, so reproducing it one level in would be self-defeating.
+ *
+ * Only `BuildGateOptions` differs from stage ② and stage ③ — the label, the command to re-run, the
+ * headline, and the log-file stage id.
  */
 @injectable(bindingScopeValues.Singleton)
 export class BuildCommand {
@@ -35,19 +41,14 @@ export class BuildCommand {
 
     run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        // Resolved through the gate's own resolver, then printed, so what ran is on the transcript and
-        // an agent reading back can see WHICH command produced the result it is looking at.
-        const buildCommand = this.buildAffected.resolveBuildCommand(repoRoot);
-        process.stdout.write(`\n▶ wp-build: ${buildCommand}\n\n`);
-        const code = this.buildAffected.runBuildAffected(repoRoot, buildCommand);
-        if (code !== 0) {
-            throw new CliExitError(code,
-                '\n❌ Build failed.\n\n' +
-                'Fix the errors above and re-run:\n\n' +
-                '    pnpm wp-build\n\n' +
-                'Narrower while you iterate: pnpm nx run <project>:ci, or pnpm exec vitest run <path>.\n');
-        }
-        process.stdout.write('\n✅ Build passed.\n');
+        // runBuildGate announces the resolved command, runs it, and throws CliExitError on failure so
+        // runMain owns the exit — the same three things it does for stage ② and stage ③.
+        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+            '🛠️  wp-build',
+            'pnpm wp-build',
+            'Build failed.',
+            BUILD_STAGE,
+        ));
         return Promise.resolve();
     }
 }
