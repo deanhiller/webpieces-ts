@@ -40,6 +40,7 @@ import { ReadStaleGuardRule } from './rules/read-stale-guard';
 import { MergedBranchBashGuardRule } from './rules/merged-branch-bash-guard';
 import { StaleMainBashGuardRule } from './rules/stale-main-bash-guard';
 import { WholeRepoBuildGuardRule } from './rules/whole-repo-build-guard';
+import { CommitMessageSubstitutionGuardRule } from './rules/commit-message-substitution-guard';
 import { MatchRule } from './rules/match-rule';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
@@ -107,7 +108,7 @@ function asConfigMap(config: WebpiecesRulesConfig): Record<string, BaseRuleConfi
     return config as unknown as Record<string, BaseRuleConfig | undefined>;
 }
 
-// webpieces-disable no-function-outside-class -- the module's entry point, beside loadMatchRules/loadExperimentalBashRules; this whole loader is module-scope functions and a lone class for one of them would break the file's shape
+// webpieces-disable no-function-outside-class -- the module's entry point, beside loadMatchRules/loadKeylessBashRules; this whole loader is module-scope functions and a lone class for one of them would break the file's shape
 export function loadRules(
     config: WebpiecesRulesConfig,
     workspaceRoot: string,
@@ -119,20 +120,27 @@ export function loadRules(
 }
 
 /**
- * The EXPERIMENTAL bash guards: rules that have NO webpieces.config.json entry, are switched only from
- * the optional machine-local `~/.webpieces/config.json`, and are therefore deliberately kept out of
- * `builtInConfigKeys`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y, "every built-in rule needs
- * an entry, or every Bash call is blocked") can never see them. That containment is the whole point:
- * whole-repo-build-guard shipped inside the config-driven set once and took every upgrading consumer's
- * shell down with it.
+ * The KEYLESS bash guards: rules that have NO webpieces.config.json entry, and are therefore
+ * deliberately kept out of `builtInConfigKeys`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y,
+ * "every built-in rule needs an entry, or every Bash call is blocked") can never see them. That
+ * containment is the whole point: whole-repo-build-guard shipped inside the config-driven set once and
+ * took every upgrading consumer's shell down with it.
  *
- * Each rule here decides for itself, from the home config, whether it does anything at all.
+ * Each rule here decides for ITSELF whether it acts, and the two do it differently on purpose:
+ *
+ *  - `whole-repo-build-guard` is EXPERIMENTAL and inert unless the optional machine-local
+ *    `~/.webpieces/config.json` opts in, because building the whole workspace is a thing a person may
+ *    legitimately want and a wrong block there costs them their shell.
+ *  - `commit-message-substitution-guard` acts unconditionally. Nobody legitimately wants a backtick
+ *    expanded inside a commit message, and its cure (`git commit -F <file>`) is available for every
+ *    input and can never itself match the guard — so there is nothing for a switch to rescue.
+ *
  * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
  * repo's gate actually runs.
  */
 // webpieces-disable no-function-outside-class -- sibling of loadRules/loadMatchRules in this module; the whole loader is module-scope functions and a lone class for this one would break the file's shape
-export function loadExperimentalBashRules(affectedBuildCommand: string): Rule[] {
-    return [new WholeRepoBuildGuardRule(affectedBuildCommand)];
+export function loadKeylessBashRules(affectedBuildCommand: string): Rule[] {
+    return [new WholeRepoBuildGuardRule(affectedBuildCommand), new CommitMessageSubstitutionGuardRule()];
 }
 
 // One MatchRule per entry of the `match-rules` array. Kept separate from loadRules (built-ins/custom)

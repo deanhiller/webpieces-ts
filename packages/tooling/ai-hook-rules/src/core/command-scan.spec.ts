@@ -116,3 +116,28 @@ describe('gitSubcommandOf — words already extracted by a caller', () => {
         expect(scanner.gitSubcommandOf([])).toBe(null);
     });
 });
+
+describe('gitSubcommandArgs — the tokens AFTER the subcommand', () => {
+    it('returns the arguments, with wrappers and git global flags already consumed', () => {
+        expect(scanner.gitSubcommandArgs('git commit -m msg', 'commit')).toEqual(['-m', 'msg']);
+        expect(scanner.gitSubcommandArgs('sudo git commit -am msg', 'commit')).toEqual(['-am', 'msg']);
+        expect(scanner.gitSubcommandArgs('git -C /some/path commit -m msg', 'commit')).toEqual(['-m', 'msg']);
+        expect(scanner.gitSubcommandArgs('GIT_AUTHOR_NAME=x git commit --amend', 'commit')).toEqual(['--amend']);
+    });
+
+    it('keeps a quoted argument as ONE token holding its literal text', () => {
+        expect(scanner.gitSubcommandArgs('git commit -m "two words"', 'commit')).toEqual(['-m', 'two words']);
+        expect(scanner.gitSubcommandArgs('git commit -m "line\nline"', 'commit')).toEqual(['-m', 'line\nline']);
+    });
+
+    it('is null for a different subcommand, a different program, or a mere mention', () => {
+        expect(scanner.gitSubcommandArgs('git merge-base origin/main HEAD', 'commit')).toBeNull();
+        expect(scanner.gitSubcommandArgs('echo "git commit -m x"', 'commit')).toBeNull();
+        expect(scanner.gitSubcommandArgs('git', 'commit')).toBeNull();
+        expect(scanner.gitSubcommandArgs('', 'commit')).toBeNull();
+    });
+
+    it('is an EMPTY array, not null, for the subcommand with no arguments', () => {
+        expect(scanner.gitSubcommandArgs('git commit', 'commit')).toEqual([]);
+    });
+});
