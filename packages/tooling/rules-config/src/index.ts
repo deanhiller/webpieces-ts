@@ -42,6 +42,9 @@ export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
+// THE one `no-custom-css` path exemption. Both engines that enforce the rule (the edit-time hook and the
+// CI validator) consult this class, so `allowGlobs` cannot be honoured by one half and ignored by the other.
+export { NoCustomCssScope } from './no-custom-css-scope';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
 export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
