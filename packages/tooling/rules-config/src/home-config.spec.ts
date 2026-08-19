@@ -8,6 +8,7 @@ import {
     HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
     HOME_KEY_ORPHAN_DIR_SWEEP, WHOLE_REPO_BUILD_GUARD_DEFAULT,
+    ALLOWED_EXPERIMENTAL, ALLOWED_TOP_LEVEL,
 } from './home-config';
 
 const dirs: string[] = [];
@@ -177,11 +178,18 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
      * So every key must load from a file that does not mention it. This test enumerates the accepted
      * keys one at a time and asserts each is independently omittable — it goes red the moment somebody
      * reintroduces a required read, which is the mistake this suite exists to prevent.
+     *
+     * IT WALKS `ALLOWED_EXPERIMENTAL` ITSELF, not a hand-written copy of it. That is the point of the
+     * export: a list restated here would cover the keys that existed the day it was written, so the NEXT
+     * key added to the loader would silently escape the invariant — and nobody would find out until an
+     * older release on somebody else's repo started rejecting the file. Walking the real constant makes a
+     * new key covered the moment it appears.
      */
     it('accepts a file that omits ANY given key — a required key would be unsatisfiable across versions', () => {
-        const everyKey: string[] = [
-            HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
-        ];
+        const everyKey: readonly string[] = ALLOWED_EXPERIMENTAL;
+        // A guard on the guard: an empty (or accidentally emptied) list would make the loop vacuous and
+        // this test green for the wrong reason.
+        expect(everyKey.length).toBeGreaterThan(0);
         for (const omitted of everyKey) {
             const experimental: Record<string, boolean> = {};
             for (const key of everyKey) if (key !== omitted) experimental[key] = false;
@@ -349,6 +357,28 @@ describe('RETIRED_HOME_CONFIG_KEYS — the no-back-compat guard', () => {
  * see the class docblock in home-config.ts for the full argument.
  */
 describe('an UNKNOWN key is ignored, not rejected — because older releases share this file', () => {
+    /**
+     * THE OTHER HALF OF THE INVARIANT, pinned the same way: walk `ALLOWED_EXPERIMENTAL` itself, write
+     * every known key alongside a key nothing has ever heard of, and assert the document still LOADS
+     * with each known key read correctly. Together with the omit-any-key test above, the pair says the
+     * whole rule — an OLD file loads on a NEW release, and a NEW file loads on an OLD one — and both
+     * automatically cover any key added to the loader later.
+     */
+    it('loads every known key correctly even when an unknown key sits beside them', () => {
+        expect(ALLOWED_EXPERIMENTAL.length).toBeGreaterThan(0);
+        const experimental: Record<string, boolean> = { 'a-key-from-the-future': true };
+        for (const key of ALLOWED_EXPERIMENTAL) experimental[key] = true;
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental, aSectionFromTheFuture: { nested: 1 } }));
+        const loaded = new HomeConfigService().load(home);
+        expect(loaded.wholeRepoBuildGuard).toBe(true);
+        expect(loaded.orphanDirSweep).toBe(true);
+        expect(loaded.buildGateLogCapture).toBe(true);
+        // …and the section that IS known is still the only one read, so a future sibling section cannot
+        // change what this release does.
+        expect(ALLOWED_TOP_LEVEL).toContain(HOME_EXPERIMENTAL_SECTION);
+    });
+
     it('loads a file carrying a key from a hypothetical newer release', () => {
         const home = fakeHome();
         writeConfig(home, JSON.stringify({

@@ -18,6 +18,29 @@ import { toError } from './to-error';
  * "not opted in", and returns all-defaults silently. That is not a fallback for a wrong shape; it is the
  * definition of "the user did not create this file".
  *
+ * ─── THE STANDING RULE, FOR WHOEVER EDITS THIS FILE NEXT ──────────────────────────────────────────────
+ * This file is MACHINE-GLOBAL: ONE document on the disk, read by EVERY repo on the machine, and those
+ * repos are pinned to DIFFERENT webpieces releases. Two rules follow, and they are not negotiable:
+ *
+ *   (a) NO KEY MAY EVER BE REQUIRED.  `readOptionalBoolean` is the ONLY reader. There is no
+ *       `readRequiredBoolean`, no `RequiredHomeFlag`, no `REQUIRED_HOME_FLAGS` — those existed once and
+ *       were deleted; do not reintroduce them under any name.
+ *   (b) AN UNKNOWN KEY IS IGNORED, never rejected.  `warnUnknownKeys` warns; nothing throws.
+ *
+ * Both halves are needed, and either one alone still leaves a file that some installed release rejects:
+ *
+ *   (a) covers the OLD FILE on a NEW release — a document written before a key existed, missing it.
+ *   (b) covers the NEW FILE on an OLD release — a document carrying a key that release never heard of.
+ *
+ * Break either one and every repo on the machine that is not on the newest release hard-blocks: a
+ * rejection here fails config load, and that denies every tool call in that repo until somebody upgrades
+ * all of them in lockstep. That is the outage this design exists to make impossible, and it is not
+ * hypothetical — it is the shape of the incident recorded at the bottom of this docblock.
+ *
+ * `home-config.spec.ts` pins both halves, and pins them by ENUMERATING `ALLOWED_EXPERIMENTAL` rather
+ * than by a hand-written list, so a key added later is covered by the invariant automatically instead of
+ * silently escaping it.
+ *
  * ─── PRESENT IS STRICT ABOUT WHAT IT UNDERSTANDS, AND FORWARD-COMPATIBLE ABOUT WHAT IT DOES NOT ───────
  * Once the bytes are readable, someone DELIBERATELY created this file, and three of the four failure
  * modes are REJECTED exactly as webpieces.config.json rejects them (see `retired-config-keys.ts`), with
@@ -141,12 +164,20 @@ export const WHOLE_REPO_BUILD_GUARD_DEFAULT = true;
 // `false` at each call site so the asymmetry with the constant above is visible where it is passed.
 const GUARD_OFF_WHEN_ABSENT = false;
 
-// The complete UNDERSTOOD shape. A key not on these lists is ignored with a warning rather than
-// rejected (see the class docblock: this document is machine-global and older releases must survive
-// meeting a newer release's key), so adding a key still means adding it here — a key absent from these
-// lists is never read at all, and the flag it was meant to set keeps the default above.
-const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
-const ALLOWED_EXPERIMENTAL: readonly string[] = [
+/**
+ * The complete UNDERSTOOD shape. A key not on these lists is ignored with a warning rather than
+ * rejected (see the class docblock: this document is machine-global and older releases must survive
+ * meeting a newer release's key), so adding a key still means adding it here — a key absent from these
+ * lists is never read at all, and the flag it was meant to set keeps the default above.
+ *
+ * EXPORTED so `home-config.spec.ts` can ENUMERATE them rather than restate them. The cross-version
+ * invariant ("every key is independently omittable") is only as good as the list the test walks, and a
+ * hand-written copy of that list means a NEW key silently escapes the invariant on the day it is added —
+ * which is the one failure mode nobody would notice until an older release started rejecting files.
+ * Walking the real constant makes the test cover a new key the moment it appears here.
+ */
+export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
+export const ALLOWED_EXPERIMENTAL: readonly string[] = [
     HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_ORPHAN_DIR_SWEEP,
 ];
 
