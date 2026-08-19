@@ -351,9 +351,12 @@ class RequestContextImpl {
 
     /**
      * Store a value under a RAW STRING key — the escape hatch for the framework's own reserved,
-     * UNREGISTERED slots ('__webpieces_http_request__', the AuthFilter principal, the Cloud Tasks
-     * schedule frame). Those are internal plumbing, not context keys, so they have no ContextKey and
-     * no trust level.
+     * UNREGISTERED slots ('__webpieces_http_request__', the Cloud Tasks schedule frame). Those are
+     * internal plumbing, not context keys, so they have no ContextKey and no trust level.
+     *
+     * The AuthFilter principal used to be one of these and is NOT any more: it is a proven fact, so
+     * it goes through `putTrusted` under `AUTHENTICATED_CALLER_KEY` like every other proven value.
+     * Reach for this only when the value genuinely has no trust level to state.
      *
      * REJECTS any name that belongs to a registered {@link ContextKey}. Without that check this
      * method is a complete bypass of the trust system — `put('userId', req.body.userId)` would forge

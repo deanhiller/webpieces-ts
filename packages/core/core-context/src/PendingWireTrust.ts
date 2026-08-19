@@ -35,7 +35,7 @@ export class PendingTrustedValue {
  * identity.
  *
  * That is not hypothetical on this codebase: the framework's own {@link DefaultJwtHook} returns an
- * EMPTY `AuthValues.entries`, so a fully verified `@AuthJwt` request stamps no context entries at
+ * EMPTY `AuthenticatedCaller.entries`, so a fully verified `@AuthJwt` request stamps no context entries at
  * all and would leave a forged `x-user-id` completely unopposed.
  *
  * ## The fix

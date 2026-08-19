@@ -12,8 +12,8 @@ import {
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
-import { ApiKeyHook, HeaderReader } from '../AuthHooks';
-import { AuthValues } from '../AuthConfig';
+import { ApiKeyHook } from '../AuthHooks';
+import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { WpResponse, Service } from '../Filter';
 
@@ -32,7 +32,7 @@ import { WpResponse, Service } from '../Filter';
 /** The organization the partner is acting for — a TRUSTED key, so only an authenticator may write it. */
 const ORG_ID = ContextKey.trusted<string>(
     'orgId',
-    'derived from a verified customer api key by an app-bound ApiKeyHook (a ContextTuple in AuthValues)',
+    'derived from a verified customer api key by an app-bound ApiKeyHook (a ContextTuple in AuthenticatedCaller)',
     'x-org-id',
 );
 
@@ -46,10 +46,13 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
     invoked = false;
     /** What the controller could read out of RequestContext, captured at the moment it ran. */
     orgIdSeenByController?: string;
+    /** The principal, read through the TRUSTED ContextKey that replaced the old magic string. */
+    callerSeenByController?: AuthenticatedCaller;
 
     async invoke(_meta: MethodMeta): Promise<WpResponse<unknown>> {
         this.invoked = true;
         this.orgIdSeenByController = RequestContext.getTrusted(ORG_ID);
+        this.callerSeenByController = RequestContext.getTrusted(AUTHENTICATED_CALLER_KEY);
         return new WpResponse<unknown>({});
     }
 }
@@ -57,29 +60,32 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 /**
  * Exactly what an app's hook is: read BOTH credential headers, cross-check them the way a datastore
  * lookup would, and return the context to seed. Nothing here is framework-configured — the header
- * names are this class's business, which is the whole reason `verifyApiKey` takes a reader.
+ * names are this class's business, which is the whole reason `verifyApiKey` takes the whole request.
  */
 class TestApiKeyHook extends ApiKeyHook {
     seenName?: string;
     seenKey?: string;
     seenOrgId?: string;
+    /** Proves the hook reaches the FULL HttpRequest surface, not a one-method header stub. */
+    seenAllKeyValues?: string[];
 
     /** name -> the ONE (key, org) pair this regime accepts; stands in for the datastore. */
     private readonly records = new Map<string, [string, string]>([
         ['onetablet-partner', ['live-key-123', 'org-777']],
     ]);
 
-    override async verifyApiKey(name: string, headers: HeaderReader): Promise<AuthValues> {
+    override async verifyApiKey(name: string, request: HttpRequest): Promise<AuthenticatedCaller> {
         // Async on purpose: a real hook awaits a datastore here.
         await Promise.resolve();
         this.seenName = name;
-        this.seenKey = headers.getHeader('x-api-key');
-        this.seenOrgId = headers.getHeader('x-org-id');
+        this.seenKey = request.getHeader('x-api-key');
+        this.seenOrgId = request.getHeader(ORG_ID); // by ContextKey, not just by raw name
+        this.seenAllKeyValues = request.getHeaderValues('x-api-key');
         const record = this.records.get(name);
         if (!record || record[0] !== this.seenKey || record[1] !== this.seenOrgId) {
             throw new HttpUnauthorizedError('api key / organization mismatch');
         }
-        return new AuthValues('apikey-1', [], [new ContextTuple(ORG_ID, record[1])]);
+        return new AuthenticatedCaller('apikey-1', [], [new ContextTuple(ORG_ID, record[1])]);
     }
 }
 
@@ -136,6 +142,9 @@ describe('AuthFilter enforces @AuthApiKey', () => {
         expect(hook.seenName).toBe('onetablet-partner');
         expect(hook.seenKey).toBe('live-key-123');
         expect(hook.seenOrgId).toBe('org-777');
+        // The hook holds the WHOLE HttpRequest, so `getHeaderValues` and the ContextKey overload of
+        // `getHeader` are both reachable — neither survived the one-method reader this replaced.
+        expect(hook.seenAllKeyValues).toEqual(['live-key-123']);
         expect(next.invoked).toBe(true);
     });
 
@@ -144,8 +153,25 @@ describe('AuthFilter enforces @AuthApiKey', () => {
 
         await runFilter(next, new TestApiKeyHook(), partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }));
 
-        // This is the point of reusing AuthValues: putTrusted, the path that already existed.
+        // This is the point of reusing AuthenticatedCaller: putTrusted, the path that already existed.
         expect(next.orgIdSeenByController).toBe('org-777');
+    });
+
+    /**
+     * The principal is a REAL trusted ContextKey, not the `'__webpieces_principal__'` magic string it
+     * replaced. That string was the one slot in a codebase of typed `ContextKey<V, Trust>` that a
+     * reader could reach without saying `getTrusted`, and it typed the value as `any` on the way out.
+     */
+    it('stamps the AuthenticatedCaller under a TRUSTED ContextKey the controller reads with getTrusted', async () => {
+        const next = new RecordingNext();
+
+        await runFilter(next, new TestApiKeyHook(), partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }));
+
+        expect(next.callerSeenByController?.userId).toBe('apikey-1');
+        // Context-only, never wire-propagable: an object principal has no honest header form, and
+        // forwarding one would hand the next hop a proof it never made.
+        expect(AUTHENTICATED_CALLER_KEY.httpHeader).toBeUndefined();
+        expect(AUTHENTICATED_CALLER_KEY.isTrusted()).toBe(true);
     });
 
     it('401s and NEVER enters the controller when the hook rejects the key/organization pair', async () => {

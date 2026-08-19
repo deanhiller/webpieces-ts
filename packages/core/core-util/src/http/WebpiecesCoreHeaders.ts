@@ -104,19 +104,19 @@ export class WebpiecesCoreHeaders {
      */
     static readonly ORG_ID = ContextKey.trusted<string>(
         'orgId',
-        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthValues)',
+        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthenticatedCaller)',
         'x-org-id',
     );
 
     static readonly USER_ID = ContextKey.trusted<string>(
         'userId',
-        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthValues)',
+        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthenticatedCaller)',
         'x-user-id',
     );
 
     static readonly USER_ROLES = ContextKey.trusted<string>(
         'roles',
-        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthValues)',
+        'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthenticatedCaller)',
         'x-webpieces-roles',
     );
 

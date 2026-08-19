@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
-import { JwtHook, AuthValues } from '@webpieces/http-routing';
+import { JwtHook, AuthenticatedCaller } from '@webpieces/http-routing';
 import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement, toError, WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
@@ -21,7 +21,7 @@ import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement
 export class CompanyJwtHook extends JwtHook {
     private readonly jwtSecret = process.env['JWT_SECRET'] ?? 'dev-insecure-jwt-secret-change-me';
 
-    override async parseJwt(token: string): Promise<AuthValues> {
+    override async parseJwt(token: string): Promise<AuthenticatedCaller> {
         const claims = this.decode(token);
         const subject = claims['sub'] ?? claims['userId'];
         if (subject === undefined || subject === null || subject === '') {
@@ -29,7 +29,7 @@ export class CompanyJwtHook extends JwtHook {
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
-        return new AuthValues(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
+        return new AuthenticatedCaller(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
     }
 
     /**
@@ -38,7 +38,7 @@ export class CompanyJwtHook extends JwtHook {
      * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
      * without touching the framework.
      */
-    override async authorizeJwt(values: AuthValues, requirement: JwtRequirement): Promise<void> {
+    override async authorizeJwt(values: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
         await super.authorizeJwt(values, requirement); // roles any-of
         if (requirement['inOrg'] === true && !values.claims['orgId']) {
             throw new HttpForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');

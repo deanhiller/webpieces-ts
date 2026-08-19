@@ -1,5 +1,5 @@
 import { injectable } from 'inversify';
-import { AuthConfig, JwtHook, AuthValues, SharedSecrets } from '@webpieces/http-routing';
+import { AuthConfig, JwtHook, AuthenticatedCaller, SharedSecrets } from '@webpieces/http-routing';
 import { ContextTuple, WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
@@ -35,7 +35,7 @@ export class TestAuthConfig extends AuthConfig {
  */
 @injectable()
 export class TestJwtHook extends JwtHook {
-    override async parseJwt(_token: string): Promise<AuthValues> {
-        return new AuthValues('test-user', ['admin'], [new ContextTuple(WebpiecesCoreHeaders.USER_ID, 'test-user')]);
+    override async parseJwt(_token: string): Promise<AuthenticatedCaller> {
+        return new AuthenticatedCaller('test-user', ['admin'], [new ContextTuple(WebpiecesCoreHeaders.USER_ID, 'test-user')]);
     }
 }

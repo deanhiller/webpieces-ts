@@ -163,13 +163,13 @@ describe('CapturedContext', () => {
         it('drops the framework RESERVED slots too — they carry no declared trust', () => {
             const captured = RequestContext.run(() => {
                 RequestContext.putUntrusted(TENANT, 'acme');
-                RequestContext.put('__webpieces_principal__', 'the-caller');
+                RequestContext.put('__webpieces_schedule_frame', 'the-frame');
                 return RequestContext.copyContext();
             });
 
             RequestContext.runWithContext(captured.withoutTrusted(), () => {
                 expect(RequestContext.getUntrusted(TENANT)).toBe('acme');
-                expect(RequestContext.get<string>('__webpieces_principal__')).toBeUndefined();
+                expect(RequestContext.get<string>('__webpieces_schedule_frame')).toBeUndefined();
             });
         });
 

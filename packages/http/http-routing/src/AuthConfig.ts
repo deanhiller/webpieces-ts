@@ -1,4 +1,4 @@
-import { ContextTuple } from '@webpieces/core-util';
+import { ContextKey, ContextTuple } from '@webpieces/core-util';
 
 /**
  * SharedSecrets - the accepted values for ONE `@AuthSharedSecret(name)`. BOTH secret1 AND secret2
@@ -18,13 +18,25 @@ export class SharedSecrets {
 }
 
 /**
- * AuthValues - what {@link JwtHook.parseJwt} and {@link ApiKeyHook.verifyApiKey} resolve to (both are
- * async): the authenticated caller's id + roles (used
- * by the framework to stamp a principal and enforce @AuthJwt({roles: [...]})) plus any extra context
- * entries the app wants set (orgId, tenant, ...). The framework sets `entries` into RequestContext
- * via {@link RequestContext.putTrusted}. Data-only structure (a class, per the guidelines).
+ * AuthenticatedCaller - what an authenticator PROVED about the caller of ONE request. Every hook
+ * that authenticates resolves to this: {@link JwtHook.parseJwt}, {@link ApiKeyHook.verifyApiKey} and
+ * {@link WebhookAuthCallback.verifyWebhook}. Four fields, three jobs:
+ *
+ *  - `userId`          — WHO the caller is, as the credential proved it.
+ *  - `roles` / `claims` — the AUTHORIZATION inputs: `roles` is what the framework's own any-of check
+ *                        reads, `claims` is the raw payload an app's {@link JwtHook.authorizeJwt}
+ *                        override reads for app-defined requirements (inOrg, tenant, ...).
+ *  - `entries`         — the TRUSTED CONTEXT to seed. The framework writes each one with
+ *                        {@link RequestContext.putTrusted}, so return only what THIS authenticator
+ *                        derived from the credential it just verified.
+ *
+ * NAMING, said out loud so it is not "fixed" back: it is deliberately NOT a `TrustedContextMap`.
+ * Three of the four fields are not context, and it is not a Map — it is the authenticated caller,
+ * and the context is one thing it carries.
+ *
+ * Data-only structure (a class, per the guidelines).
  */
-export class AuthValues {
+export class AuthenticatedCaller {
     constructor(
         public readonly userId: string,
         public readonly roles: string[] = [],
@@ -33,6 +45,30 @@ export class AuthValues {
         public readonly claims: Record<string, unknown> = {},
     ) {}
 }
+
+/**
+ * The context slot holding the {@link AuthenticatedCaller} the framework {@link AuthFilter} resolved
+ * for this request. A real TRUSTED {@link ContextKey}, written with `RequestContext.putTrusted` and
+ * read with `RequestContext.getTrusted` — it replaces a raw `'__webpieces_principal__'` string that
+ * was the one place in the codebase bypassing the typed context layer.
+ *
+ * `httpHeader` is deliberately UNDEFINED, so the key is context-only and NEVER travels. Two reasons,
+ * and either alone is decisive: the value is an OBJECT, which no HTTP header can carry; and a
+ * principal is proof THIS hop's authenticator produced, so forwarding it would hand the next service
+ * a "proven" caller nothing on that hop verified. The individual facts a downstream service needs
+ * (userId, orgId, roles) already propagate as their own transferred keys in
+ * {@link WebpiecesCoreHeaders}, gated by the caller-verified rule.
+ *
+ * `isLogged` is FALSE: it is an object carrying the raw credential claims, which has no business
+ * being serialized into a log line.
+ */
+export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
+    'authenticatedCaller',
+    'resolved by the framework AuthFilter from a credential an app-bound JwtHook, ApiKeyHook or WebhookAuthCallback verified',
+    /*httpHeader*/ undefined,
+    /*maskInLogs*/ false,
+    /*isLogged*/ false,
+);
 
 /**
  * AuthConfig - the app-provided SHARED-SECRET state the framework {@link AuthFilter} reads to
