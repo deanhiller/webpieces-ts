@@ -54,10 +54,13 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  *   - the file does not exist (essentially every consumer) → this guard is INERT. It blocks nothing and
  *     logs nothing, for every command, including the ones it would otherwise refuse.
  *   - the file exists and defines the key → the key's value decides.
- *   - the file exists and is unparseable, or does not define the key → HARD FAILURE naming the edit. A
- *     file someone deliberately created must be correct, and `HomeConfigService` requires that key
- *     precisely because guessing either way is wrong (see readRequiredBoolean). Editing that file is an
- *     unconditional PASS in the guards, so the block is always self-curable.
+ *   - the file exists but does NOT define the key → the guard is OFF, exactly as if there were no file.
+ *     Every key in that file is optional, because it is MACHINE-GLOBAL and the repos on one machine pin
+ *     different webpieces releases — a required key there is unsatisfiable (see home-config.ts). The
+ *     default can only fail towards "never opted in", which is the safe direction.
+ *   - the file exists and is unparseable, or a key it DOES define has the wrong type → HARD FAILURE
+ *     naming the edit. That is a file somebody wrote wrongly, not one written for another release.
+ *     Editing that file is an unconditional PASS in the guards, so the block is always self-curable.
  *
  * ─── Two messages, chosen by a DIFFERENT key ───────────────────────────────────────────────────────
  * `experimental.buildGateLogCapture` is a separate feature (the pr-gate captures its build's full output

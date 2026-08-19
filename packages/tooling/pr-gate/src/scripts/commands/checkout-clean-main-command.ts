@@ -22,7 +22,8 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * #1, an agent types whichever is accepted and the corpses accumulate forever.
  *
  * That swap is NOT in this change, and the reason is a constraint that outranks the shim rule: the raw
- * pair is a TERMINAL ENTRY ON THE L0 ALLOWLIST (`l0-allowlist.ts`, `CHECKOUT_MAIN_PULL_CMD`) — one of
+ * pair is a TERMINAL ENTRY ON THE L0 ALLOWLIST (`CHECKOUT_MAIN_PULL_CMD` in ai-hook-rules
+ * `src/bin/l0-allowlist.ts`, consumed as an L0 cure in `src/core/l0-matrix.ts`) — one of
  * the few commands still permitted while an L0 block denies every other tool call. In exactly that
  * state, `node_modules` is the thing that is untrustworthy, so a `pnpm wp-*` bin is the one kind of cure
  * that cannot be relied on to run. The same reasoning covers the L0 shim's own fix option in

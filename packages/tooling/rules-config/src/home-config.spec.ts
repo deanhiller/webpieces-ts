@@ -7,6 +7,7 @@ import { toError } from './to-error';
 import {
     HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+    HOME_KEY_ORPHAN_DIR_SWEEP,
 } from './home-config';
 
 const dirs: string[] = [];
@@ -138,18 +139,40 @@ describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
  */
 describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
     /**
-     * The one key that decides whether tool calls get BLOCKED must be SAID, not inferred. Guessing OFF
-     * silently drops a feature the author asked for; guessing ON blocks their shell. So a file that
-     * exists without it fails, naming the edit — and an empty document is that same case, not an
-     * "accepted default".
+     * ══ THE CROSS-VERSION INVARIANT — no key here may ever become REQUIRED ══════════════════════════
+     *
+     * This file is MACHINE-GLOBAL and the repos on a machine pin DIFFERENT webpieces releases. A
+     * required key makes the set of valid files EMPTY: omit it and the new release rejects the file,
+     * add it and every older release rejects it as unknown. Both rejections block.
+     *
+     * So every key must load from a file that does not mention it. This test enumerates the accepted
+     * keys one at a time and asserts each is independently omittable — it goes red the moment somebody
+     * reintroduces a required read, which is the mistake this suite exists to prevent.
      */
-    it('rejects a file that never defines whole-repo-build-guard, naming the edit', () => {
-        for (const body of ['{}', JSON.stringify({ experimental: {} }), JSON.stringify({ experimental: { buildGateLogCapture: true } })]) {
+    it('accepts a file that omits ANY given key — a required key would be unsatisfiable across versions', () => {
+        const everyKey: string[] = [
+            HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
+        ];
+        for (const omitted of everyKey) {
+            const experimental: Record<string, boolean> = {};
+            for (const key of everyKey) if (key !== omitted) experimental[key] = true;
+            const home = fakeHome();
+            writeConfig(home, JSON.stringify({ experimental }));
+            const loaded = new HomeConfigService().load(home);
+            expect(loaded.wholeRepoBuildGuard).toBe(omitted !== HOME_KEY_WHOLE_REPO_BUILD_GUARD);
+            expect(loaded.orphanDirSweep).toBe(omitted !== HOME_KEY_ORPHAN_DIR_SWEEP);
+            expect(loaded.buildGateLogCapture).toBe(omitted !== HOME_KEY_BUILD_GATE_LOG_CAPTURE);
+        }
+    });
+
+    /** The empty document is the same case: every flag off, which is the no-file behaviour exactly. */
+    it('accepts an empty document, reading every flag OFF', () => {
+        for (const body of ['{}', JSON.stringify({ experimental: {} })]) {
             const home = fakeHome();
             writeConfig(home, body);
-            const msg = loadError(home).message;
-            expect(msg).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_WHOLE_REPO_BUILD_GUARD}" is REQUIRED`);
-            expect(msg).toContain('"whole-repo-build-guard": false');
+            const loaded = new HomeConfigService().load(home);
+            expect(loaded.wholeRepoBuildGuard).toBe(false);
+            expect(loaded.orphanDirSweep).toBe(false);
         }
     });
 

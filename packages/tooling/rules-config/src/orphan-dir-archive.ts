@@ -56,8 +56,8 @@ export class OrphanDirArchiver {
             moved.push(new ArchivedOrphan(candidate.relativePath, destination,
                 `mv '${destination}' '${candidate.absolutePath}'`));
         }
-        this.writeManifest(sweepDir, sweepId, repoRoot, moved, failed);
-        return new OrphanSweepResult(sweepId, sweepDir, moved, failed);
+        const manifestError = this.writeManifest(sweepDir, sweepId, repoRoot, moved, failed);
+        return new OrphanSweepResult(sweepId, sweepDir, moved, failed, manifestError);
     }
 
     /**
@@ -171,9 +171,14 @@ export class OrphanDirArchiver {
     /**
      * The sweep's own record, beside what it took. Written even when every move failed, because "this
      * sweep tried and could not" is exactly the state somebody debugging needs to find on disk.
+     *
+     * Returns the failure message, or null on success. It is REPORTED rather than swallowed: the manifest
+     * is the durable copy of every `recover=` command, so losing it silently is the one failure here that
+     * costs somebody the ability to undo what just happened. Still never fatal — the directories are
+     * already safely moved by this point, and the recover lines are still printed to the terminal.
      */
     private writeManifest(sweepDir: string, sweepId: string, repoRoot: string,
-        moved: readonly ArchivedOrphan[], failed: readonly FailedOrphan[]): void {
+        moved: readonly ArchivedOrphan[], failed: readonly FailedOrphan[]): string | null {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the directories are already safely
         // moved by this point, and an unwritable manifest may not turn that success into a failure
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -181,9 +186,10 @@ export class OrphanDirArchiver {
             fs.mkdirSync(sweepDir, { recursive: true });
             fs.writeFileSync(path.join(sweepDir, TRASH_MANIFEST_FILE),
                 `${JSON.stringify(new OrphanSweepManifest(sweepId, repoRoot, moved, failed), null, 2)}\n`, 'utf8');
+            return null;
         } catch (err: unknown) {
             const error = toError(err);
-            void error;
+            return error.message;
         }
     }
 }
@@ -221,13 +227,20 @@ export class OrphanSweepResult {
     sweepDir: string;
     moved: readonly ArchivedOrphan[];
     failed: readonly FailedOrphan[];
+    /**
+     * Why the manifest could not be written, or null when it was. Non-null means the printed `recover=`
+     * lines are the ONLY copy — see writeManifest().
+     */
+    manifestError: string | null;
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(sweepId: string, sweepDir: string, moved: readonly ArchivedOrphan[],
-        failed: readonly FailedOrphan[]) {
+        failed: readonly FailedOrphan[], manifestError: string | null) {
         this.sweepId = sweepId;
         this.sweepDir = sweepDir;
         this.moved = moved;
         this.failed = failed;
+        this.manifestError = manifestError;
     }
 }
 

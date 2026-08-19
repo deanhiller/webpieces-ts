@@ -307,13 +307,13 @@ describe('whole-repo-build-guard does NOTHING without ~/.webpieces/config.json',
      */
     it('blocks with the loader’s own fix instruction when the home config is present but wrong', () => {
         vi.spyOn(HomeConfigService.prototype, 'load').mockImplementation((): never => {
-            throw new InformAiError('[~/.webpieces/config.json] "experimental.whole-repo-build-guard" is REQUIRED');
+            throw new InformAiError('[~/.webpieces/config.json] "experimental.whole-repo-build-guard" must be the boolean true or false, not "yes".');
         });
         const violations = guard().check(ctx('git status'));
         expect(violations.length).toBe(1);
         const message = violations[0].message ?? '';
         expect(message).toContain('~/.webpieces/config.json is present but unusable');
-        expect(message).toContain('"experimental.whole-repo-build-guard" is REQUIRED');
+        expect(message).toContain('"experimental.whole-repo-build-guard" must be the boolean');
     });
 
     it('reports a non-InformAiError failure too, rather than judging the command on a guess', () => {

@@ -8,16 +8,16 @@ import { HOME_EXPERIMENTAL_SECTION, HOME_KEY_ORPHAN_DIR_SWEEP, HomeConfigService
  * The orphan-directory sweep, end to end: find the corpses an `nx g move` left behind, and — only on a
  * machine that has explicitly opted in — archive them where they can be recovered.
  *
- * ─── WHY THE DEFAULT IS REPORT-ONLY, AND WHY THE FLAG IS REQUIRED ─────────────────────────────────────
- * `experimental.orphan-dir-sweep` in `~/.webpieces/config.json` is a REQUIRED boolean once that file
- * exists, and its absent-file value is false. That gives the author of this feature exactly one thing
- * nothing else can: they can run it live across all of their own clones for a release, while every
- * colleague pulling the same version gets a report and an untouched working tree.
+ * ─── WHY THE DEFAULT IS REPORT-ONLY ───────────────────────────────────────────────────────────────────
+ * `experimental.orphan-dir-sweep` in `~/.webpieces/config.json` defaults to false, like every other key
+ * in that optional, machine-local file. That gives the author of this feature exactly one thing nothing
+ * else can: they can run it live across all of their own clones for a release, while every colleague
+ * pulling the same version gets a report and an untouched working tree.
  *
- * Required rather than defaulted for the reason home-config.ts already states about
- * `whole-repo-build-guard`: a flag that only changes what a message SAYS may default; a flag that decides
- * whether a command RUNS may not. This one decides whether directories MOVE, which is a step further
- * again — nobody may discover this feature by finding their directories somewhere else.
+ * The default direction is the whole safety argument, and it only points one way: absent means REPORT.
+ * Nobody can discover this feature by finding their directories somewhere else — the machine has to say
+ * `true` out loud first, and the key is greppable precisely because the permissive state is a token
+ * rather than an absence.
  *
  * ─── WHY IT NEVER THROWS ──────────────────────────────────────────────────────────────────────────────
  * Every caller is a command whose real work is a checkout and a pull. Tidying is worth doing on the back
@@ -90,7 +90,8 @@ export class OrphanSweepReport {
         return `${this.heading()}\n`
             + `  Nothing was moved — archiving is off on this machine.\n`
             + `  To archive them (never delete: they move to .webpieces/trash/<sweepId>/ with a recover=\n`
-            + `  command printed for each), set this in ~/.webpieces/config.json:\n\n`
+            + `  command printed for each), add this key in ~/.webpieces/config.json — every key in that\n`
+            + `  file is optional, so this one line beside whatever is already there is the whole edit:\n\n`
             + `      { "${HOME_EXPERIMENTAL_SECTION}": { "${HOME_KEY_ORPHAN_DIR_SWEEP}": true } }\n`;
     }
 
@@ -105,6 +106,10 @@ export class OrphanSweepReport {
         }
         for (const failure of result.failed) {
             lines.push(`    SKIPPED ${failure.relativePath} — ${failure.reason}`);
+        }
+        if (result.manifestError !== null) {
+            lines.push(`  WARNING: the manifest could not be written — ${result.manifestError}`);
+            lines.push('  The recover= lines above are the only copy. Save them before closing this terminal.');
         }
         if (this.reapedSweeps > 0) {
             lines.push(`  reaped ${this.reapedSweeps} sweep(s) older than 30 days from the trash`);

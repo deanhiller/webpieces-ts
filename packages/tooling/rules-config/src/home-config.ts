@@ -65,31 +65,25 @@ const ALLOWED_EXPERIMENTAL: readonly string[] = [
 ];
 
 /**
- * One key that must be spelled out once `~/.webpieces/config.json` exists, paired with the sentence its
- * "you did not set this" error prints to explain what the two values MEAN. Data-only.
+ * ─── EVERY KEY IS OPTIONAL, AND THAT IS A HARD REQUIREMENT OF WHERE THIS FILE LIVES ───────────────────
+ * This file is MACHINE-GLOBAL: one document, read by every repo on the machine, and those repos pin
+ * DIFFERENT webpieces releases. A REQUIRED key cannot survive that, because it makes the set of valid
+ * files EMPTY:
  *
- * A class rather than a fourth parameter on readRequiredBoolean: the key and the sentence describing it
- * are one fact, and splitting them across the call site is how a message ends up explaining a different
- * flag than the one it checks — the exact failure the constants above already exist to prevent.
+ *   • omit the new key  → the NEW release rejects the file ("REQUIRED and not set")
+ *   • add the new key   → every OLDER release rejects the file ("not a known key")
+ *
+ * There is no third option, and both rejections block. `whole-repo-build-guard` was required for the
+ * reason recorded in #627 — a flag that decides whether a command RUNS should not be inferred — and that
+ * reasoning was sound for a single version and wrong for a shared file. It is optional now, along with
+ * every other key. The safety it was protecting is intact anyway: absent reads as FALSE, and false is
+ * byte-for-byte the behaviour of having no file at all, so a guessed default can only ever fail towards
+ * "this machine never opted in".
+ *
+ * The other half of cross-version safety — an OLD release ignoring a key a NEW one added, rather than
+ * rejecting it — is NOT solved here. Adding a key still requires every repo on the machine to be moved
+ * to a release that knows it.
  */
-export class RequiredHomeFlag {
-    key: string;
-    meaning: string;
-
-    constructor(key: string, meaning: string) {
-        this.key = key;
-        this.meaning = meaning;
-    }
-}
-
-const REQUIRED_WHOLE_REPO_BUILD_GUARD = new RequiredHomeFlag(HOME_KEY_WHOLE_REPO_BUILD_GUARD,
-    'false = the guard never blocks anything (identical to having no such file); true = a Bash command '
-    + 'that would build the WHOLE monorepo is refused, with the affected-scoped command printed in its place.');
-
-const REQUIRED_ORPHAN_DIR_SWEEP = new RequiredHomeFlag(HOME_KEY_ORPHAN_DIR_SWEEP,
-    'false = `wp-checkout-clean-main` only REPORTS the orphan directories it finds and moves nothing '
-    + '(identical to having no such file); true = it ARCHIVES them under `.webpieces/trash/<sweepId>/`, '
-    + 'each with a printed `recover=`. Nothing is ever deleted in either state.');
 
 // Read errors that mean "the file is not there / not reachable" rather than "the file is wrong". Every
 // one of these resolves to the all-defaults config, silently. Widened deliberately past ENOENT: the
@@ -292,40 +286,21 @@ export class HomeConfigService {
         this.assertKnownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`, file);
         return new HomeConfig(
             this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file),
-            this.readRequiredBoolean(experimental, REQUIRED_WHOLE_REPO_BUILD_GUARD, file),
-            this.readRequiredBoolean(experimental, REQUIRED_ORPHAN_DIR_SWEEP, file),
+            this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file),
+            this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file),
         );
     }
 
-    // An absent key is OFF — not setting a flag is not an error. A PRESENT key of the wrong type is.
+    /**
+     * An absent key is OFF. A PRESENT key of the wrong type is still an error — that is a file somebody
+     * wrote wrongly, not a file written for a different release. This is the ONLY reader; see the
+     * every-key-is-optional note above for why there is no required variant.
+     */
     // webpieces-disable no-any-unknown -- see parse()
     private readOptionalBoolean(experimental: Record<string, unknown>, key: string, file: string): boolean {
         const value = experimental[key];
         if (value === undefined) return false;
         return this.asBoolean(value, key, file, ' Remove the quotes, or delete the key.');
-    }
-
-    /**
-     * A key that MUST be spelled out once this file exists. `whole-repo-build-guard` decides whether tool
-     * calls are BLOCKED, and the two states are not equally recoverable: guessing OFF hides a feature the
-     * author asked for, guessing ON blocks their shell. So the file states it, or it fails naming the edit.
-     *
-     * The asymmetry with buildGateLogCapture is deliberate and is the whole lesson of #627: a flag that
-     * only changes what a message SAYS may default; a flag that decides whether a command RUNS may not.
-     * `orphan-dir-sweep` is the same kind for the same reason, one step further: it decides whether a
-     * command MOVES DIRECTORIES, and nobody may discover that by having it happen.
-     */
-    // webpieces-disable no-any-unknown -- see parse()
-    private readRequiredBoolean(experimental: Record<string, unknown>, flag: RequiredHomeFlag, file: string): boolean {
-        const value = experimental[flag.key];
-        if (value === undefined) {
-            throw new InformAiError(this.error(file,
-                `"${HOME_EXPERIMENTAL_SECTION}.${flag.key}" is REQUIRED once this file exists, and it is not ` +
-                `set. Add it, e.g.:\n\n` +
-                `    { "${HOME_EXPERIMENTAL_SECTION}": { "${flag.key}": false } }\n\n` +
-                flag.meaning));
-        }
-        return this.asBoolean(value, flag.key, file, ' Remove the quotes.');
     }
 
     // webpieces-disable no-any-unknown -- see parse()
