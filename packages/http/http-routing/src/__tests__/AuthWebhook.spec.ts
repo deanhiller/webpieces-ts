@@ -1,11 +1,13 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { HttpRequest, RawRequest, RequestContext } from '@webpieces/core-context';
+import { HttpRequest, PendingWireTrust, RawHttpRequest, RawRequest, RequestContext } from '@webpieces/core-context';
 import {
     ApiPath,
     AuthMeta,
     AuthWebhook,
+    ContextKey,
+    ContextTuple,
     Endpoint,
     HttpBadRequestError,
     HttpUnauthorizedError,
@@ -15,6 +17,7 @@ import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
 import { WebhookAuthCallback } from '../AuthHooks';
+import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { WpResponse, Service } from '../Filter';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
@@ -63,12 +66,27 @@ const WEBHOOK_ROUTE = new RouteMetadata(
     /*formPost*/ false, /*mask*/ undefined, /*rawBody*/ true,
 );
 
+/**
+ * The vendor ACCOUNT a signed payload belongs to — a TRUSTED key, so only an authenticator may write
+ * it. Proving the signature proves the account, which is exactly what `verifyWebhook` now returns.
+ */
+const VENDOR_ACCOUNT = ContextKey.trusted<string>(
+    'orgId',
+    'derived from a verified vendor signature by an app-bound WebhookAuthCallback (a ContextTuple in AuthenticatedCaller)',
+    'x-org-id',
+);
+
 /** Records whether the chain got past AuthFilter at all — i.e. whether the controller was entered. */
 class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
     invoked = false;
+    /** What the controller could read out of RequestContext, captured at the moment it ran. */
+    accountSeenByController?: string;
+    callerSeenByController?: AuthenticatedCaller;
 
     async invoke(_meta: MethodMeta): Promise<WpResponse<unknown>> {
         this.invoked = true;
+        this.accountSeenByController = RequestContext.getTrusted(VENDOR_ACCOUNT);
+        this.callerSeenByController = RequestContext.getTrusted(AUTHENTICATED_CALLER_KEY);
         return new WpResponse<unknown>({});
     }
 }
@@ -89,14 +107,21 @@ class TestWebhookAuthCallback extends WebhookAuthCallback {
         super();
     }
 
-    override async verify(name: string, request: HttpRequest, raw: RawRequest): Promise<void> {
+    /**
+     * `request.raw` is read with NO `!` and NO guard — that is the point of {@link RawHttpRequest}.
+     * AuthFilter checked the bytes are there once, and the type carries the result here.
+     */
+    override async verifyWebhook(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
         this.seenName = name;
-        this.seenBody = raw.rawBody;
-        this.seenUrl = raw.absoluteUrl;
+        this.seenBody = request.raw.rawBody;
+        this.seenUrl = request.raw.absoluteUrl;
         this.seenSignature = request.getHeader('sentry-hook-signature');
         if (!this.allow) {
             throw new HttpUnauthorizedError('signature mismatch');
         }
+        // Proving the signature proved WHICH vendor account this payload is for — a hook that could
+        // only return void had no way to say so, and the controller had to re-derive it.
+        return new AuthenticatedCaller('sentry-account', [], [new ContextTuple(VENDOR_ACCOUNT, 'org-777')]);
     }
 }
 
@@ -137,9 +162,15 @@ async function runFilter(
     next: RecordingNext,
     hook: WebhookAuthCallback | undefined,
     request: HttpRequest,
+    onTheWire: ContextTuple[] = [],
 ): Promise<WpResponse<unknown>> {
     return RequestContext.run(async () => {
         RequestContext.setRequest(request);
+        // Exactly what the TRANSPORT does with an inbound trusted header: stash it PENDING, never
+        // write it. The reconciliation these specs are about only happens because something stashed.
+        for (const tuple of onTheWire) {
+            PendingWireTrust.stash(tuple.key, String(tuple.value));
+        }
         return newAuthFilter(hook).filter(new MethodMeta(WEBHOOK_ROUTE), next);
     });
 }
@@ -199,6 +230,72 @@ describe('AuthFilter enforces @AuthWebhook', () => {
 
         expect(hook.seenBody?.equals(Buffer.from(body, 'utf8'))).toBe(true);
         expect(JSON.stringify(JSON.parse(body))).not.toBe(body); // the trap, stated out loud
+    });
+});
+
+/**
+ * NEW CAPABILITY. `verifyWebhook` returns an {@link AuthenticatedCaller} instead of `void`, so a
+ * vendor hook can say WHICH account the signature proved — and the framework seeds it through the
+ * SAME `putTrusted` path a jwt or api-key caller takes. Before this, the hook could prove the fact
+ * and had no way to hand it on; every controller re-derived it from the payload.
+ */
+describe('a webhook hook seeds TRUSTED context the controller reads back', () => {
+    it('puts the returned ContextTuple entries into RequestContext', async () => {
+        const next = new RecordingNext();
+
+        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{"title":"boom"}'));
+
+        expect(next.invoked).toBe(true);
+        expect(next.accountSeenByController).toBe('org-777');
+    });
+
+    it('stamps the caller under the TRUSTED ContextKey that replaced the principal magic string', async () => {
+        const next = new RecordingNext();
+
+        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'));
+
+        expect(next.callerSeenByController?.userId).toBe('sentry-account');
+        // Context-only: an object principal has no honest header form, and forwarding one would hand
+        // the next hop a proof it never made.
+        expect(AUTHENTICATED_CALLER_KEY.httpHeader).toBeUndefined();
+        expect(AUTHENTICATED_CALLER_KEY.isTrusted()).toBe(true);
+    });
+
+    it('stamps NOTHING when the signature fails — a rejected hook returns no caller at all', async () => {
+        const next = new RecordingNext();
+
+        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
+            .rejects.toThrow(HttpUnauthorizedError);
+        expect(next.accountSeenByController).toBeUndefined();
+    });
+});
+
+/**
+ * THE SECURITY REGRESSION, unchanged by the hook now returning a caller. `webhook` stays in the
+ * `false` branch of `verifiesCaller`: the sender is an outside VENDOR, not a peer service, so the
+ * trusted context headers arriving alongside a perfectly valid signature are NOT believed. Only a
+ * value the hook itself independently derived is admitted.
+ */
+describe('@AuthWebhook does NOT verify its caller, so forwarded trusted context is not believed', () => {
+    it('rejects an inbound trusted header the hook did not independently derive', async () => {
+        const next = new RecordingNext();
+        const victimKey = ContextKey.trusted<string>('userId', 'a verified user id', 'x-user-id');
+
+        await expect(runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
+            new ContextTuple(victimKey, 'someone-elses-user'),
+        ])).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
+        expect(next.invoked).toBe(false);
+    });
+
+    it('admits an inbound trusted header ONLY when the hook derived the very same value', async () => {
+        const next = new RecordingNext();
+
+        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
+            new ContextTuple(VENDOR_ACCOUNT, 'org-777'),
+        ]);
+
+        expect(next.invoked).toBe(true);
+        expect(next.accountSeenByController).toBe('org-777');
     });
 });
 

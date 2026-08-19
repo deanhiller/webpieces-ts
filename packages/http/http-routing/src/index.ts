@@ -63,7 +63,7 @@ export {
 
 // The transport-neutral request type (defined in core-context; this is http-routing's
 // public request — a transport adapter builds one and the chain reads it from RequestContext).
-export { HttpRequest, RawRequest } from '@webpieces/core-context';
+export { HttpRequest, RawHttpRequest, RawRequest } from '@webpieces/core-context';
 
 // Filter-chain primitives (absorbed from the former @webpieces/http-filters package)
 export { Filter, WpResponse, Service } from './Filter';
@@ -93,12 +93,12 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 //  - JwtHook / OidcHook / WebhookAuthCallback / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
-export { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from './AuthConfig';
+export { AuthConfig, AUTH_CONFIG, AuthenticatedCaller, AUTHENTICATED_CALLER_KEY, SharedSecrets } from './AuthConfig';
 export {
     JwtHook, JWT_HOOK,
     OidcHook, OIDC_HOOK,
     WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK,
-    ApiKeyHook, API_KEY_HOOK, HeaderReader,
+    ApiKeyHook, API_KEY_HOOK,
 } from './AuthHooks';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.

@@ -1,6 +1,6 @@
 import { JwtRequirement } from '@webpieces/core-util';
 import { JwtHook } from './AuthHooks';
-import { AuthValues } from './AuthConfig';
+import { AuthenticatedCaller } from './AuthConfig';
 
 /**
  * COMPILE-TIME assertions that {@link JwtHook} is ASYNC on BOTH halves, and that the old SYNC spelling
@@ -22,11 +22,11 @@ export class JwtHookCompileAssertions {
     /** The async spellings must keep compiling; asserted by the ABSENCE of an error. */
     legitimate(): void {
         void class extends JwtHook {
-            override async parseJwt(_token: string): Promise<AuthValues> {
-                return new AuthValues('u1');
+            override async parseJwt(_token: string): Promise<AuthenticatedCaller> {
+                return new AuthenticatedCaller('u1');
             }
 
-            override async authorizeJwt(_values: AuthValues, _requirement: JwtRequirement): Promise<void> {
+            override async authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): Promise<void> {
                 // An implementation that needs no I/O simply has no await — that is allowed and free.
             }
         };
@@ -35,18 +35,18 @@ export class JwtHookCompileAssertions {
     /** The SYNC spellings — what every implementor wrote before — must now be UNWRITABLE. */
     rejected(): void {
         void class extends JwtHook {
-            // @ts-expect-error parseJwt is async now: returning AuthValues instead of Promise<AuthValues> must not compile
-            override parseJwt(_token: string): AuthValues {
-                return new AuthValues('u1');
+            // @ts-expect-error parseJwt is async now: returning AuthenticatedCaller instead of Promise<AuthenticatedCaller> must not compile
+            override parseJwt(_token: string): AuthenticatedCaller {
+                return new AuthenticatedCaller('u1');
             }
         };
         void class extends JwtHook {
-            override async parseJwt(_token: string): Promise<AuthValues> {
-                return new AuthValues('u1');
+            override async parseJwt(_token: string): Promise<AuthenticatedCaller> {
+                return new AuthenticatedCaller('u1');
             }
 
             // @ts-expect-error authorizeJwt is async now: a void override must not compile either
-            override authorizeJwt(_values: AuthValues, _requirement: JwtRequirement): void {
+            override authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): void {
                 // an app rule enforced synchronously — the spelling this change deletes
             }
         };

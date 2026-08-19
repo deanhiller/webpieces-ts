@@ -454,11 +454,11 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  * with `jwt` on the caller-NOT-verified side, where an inbound trusted header is admitted only when
  * the hook independently derived the SAME value.
  *
- * WHY THE HOOK SEES THE HEADERS, NOT ONE TOKEN. A real key regime checks the key TOGETHER WITH a
+ * WHY THE HOOK SEES THE REQUEST, NOT ONE TOKEN. A real key regime checks the key TOGETHER WITH a
  * second header (the organization it is acting for), and `JwtHook.parseJwt` — handed one pre-extracted
- * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(name, headers)` gets a reader
- * instead, so the app owns which headers carry the credential and validates them as a PAIR. The
- * framework deliberately configures no header name: that cross-check is the entire point.
+ * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(name, request)` gets the whole
+ * inbound request instead, so the app owns which headers carry the credential and validates them as a
+ * PAIR. The framework deliberately configures no header name: that cross-check is the entire point.
  *
  * FAILS CLOSED: with no `ApiKeyHook` bound, every `@AuthApiKey` endpoint 401s, matching `JwtHook` and
  * `WebhookAuthCallback`.

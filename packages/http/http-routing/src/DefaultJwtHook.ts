@@ -1,7 +1,7 @@
 import { verify, JwtPayload } from 'jsonwebtoken';
 import { HttpUnauthorizedError, toError } from '@webpieces/core-util';
 import { JwtHook } from './AuthHooks';
-import { AuthValues } from './AuthConfig';
+import { AuthenticatedCaller } from './AuthConfig';
 
 /**
  * DefaultJwtHook - a batteries-included {@link JwtHook} for the common case: HS256 user JWTs signed
@@ -26,13 +26,13 @@ export class DefaultJwtHook extends JwtHook {
         this.secret = secret;
     }
 
-    override async parseJwt(token: string): Promise<AuthValues> {
+    override async parseJwt(token: string): Promise<AuthenticatedCaller> {
         const payload = this.verifyToken(token);
         const userId = payload.sub;
         if (!userId) {
             throw new HttpUnauthorizedError('JWT is missing the required "sub" (subject) claim');
         }
-        return new AuthValues(userId, this.extractRoles(payload), [], payload);
+        return new AuthenticatedCaller(userId, this.extractRoles(payload), [], payload);
     }
 
     /** Verify HS256 signature + expiry; translate jsonwebtoken's raw error into a framework 401. */

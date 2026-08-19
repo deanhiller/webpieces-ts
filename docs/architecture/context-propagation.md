@@ -132,20 +132,25 @@ const authHeader = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
 `AUTHORIZATION_HEADER` is "Deliberately NOT a ContextKey." Schemes are required and disambiguated:
 `Bearer` (JWT/OIDC) vs `Webpieces` (shared secret) — so a secret can't be accepted as a token.
 
-For a `jwt` route the filter calls `await jwtHook.parseJwt(token)` → `applyAuthValues(values)`. The
-`AuthValues` (`AuthConfig.ts`) carry `entries: ContextTuple[]`, and **this is where claims land in
-context**:
+For a `jwt` route the filter calls `await jwtHook.parseJwt(token)` → `applyAuthenticatedCaller(caller)`.
+The `AuthenticatedCaller` (`AuthConfig.ts`) carries `entries: ContextTuple[]`, and **this is where
+claims land in context**:
 
 ```ts
-for (const entry of values.entries) { RequestContext.putTrusted(entry.key, entry.value); }
-RequestContext.put(PRINCIPAL_KEY, values); // '__webpieces_principal__'
+for (const entry of caller.entries) { RequestContext.putTrusted(entry.key, entry.value); }
+RequestContext.putTrusted(AUTHENTICATED_CALLER_KEY, caller); // a TRUSTED ContextKey, context-only
 ```
+
+The same three lines run for `apikey` (`ApiKeyHook.verifyApiKey(name, request)`) and for `webhook`
+(`WebhookAuthCallback.verifyWebhook(name, rawHttpRequest)`) — every authenticating hook resolves to an
+`AuthenticatedCaller` and seeds context through this ONE path. `AUTHENTICATED_CALLER_KEY` has **no**
+`httpHeader`: the principal is proof THIS hop's authenticator made, and it never travels.
 
 - `DefaultJwtHook.ts` — HS256 shared-secret user JWTs; maps `sub → userId`, `roles` claim → roles.
 - `CompanyJwtHook.ts` (example app) — puts the `USER_ID` context entry explicitly and adds an
   `@AuthJwt({ allRolesAllowed: true, inOrg: true })` rule requiring an `orgId` claim:
   ```ts
-  return new AuthValues(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
+  return new AuthenticatedCaller(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
   ```
 
 So a verified JWT's identity claims become first-class context keys, which then log on every line

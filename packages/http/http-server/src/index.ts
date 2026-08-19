@@ -26,7 +26,7 @@ export {
     ApiClient,
     HttpRequest,
     AuthConfig,
-    AuthValues,
+    AuthenticatedCaller,
     SharedSecrets,
 } from '@webpieces/http-routing';
 // ExpressRouteHandler now lives in http-server (express adapter), not node-only http-routing

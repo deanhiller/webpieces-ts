@@ -21,7 +21,7 @@ export type { RestorableContext } from './CapturedContext';
 // a Node server without importing it. A browser never loads core-context → keeps the no-op.
 export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 // Transport-neutral request stored in the context (http-routing's request type; re-exported there)
-export { HttpRequest } from './HttpRequest';
+export { HttpRequest, RawHttpRequest } from './HttpRequest';
 // The verbatim bytes + absolute url a webhook SIGNATURE is computed over ({ rawBody: true } routes).
 export { RawRequest } from './RawRequest';
 
