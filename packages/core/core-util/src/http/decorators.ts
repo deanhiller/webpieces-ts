@@ -113,6 +113,7 @@ export type JwtRoles =
  * JwtRequirement - the {@link JwtRoles} decision PLUS any app-defined authorization fields, e.g.
  * `@AuthJwt({ allRolesAllowed: true, inOrg: true })`. The framework authenticates (JwtHook.parseJwt)
  * and enforces the roles any-of; the app overrides JwtHook.authorizeJwt to enforce its own fields.
+ * Both hook methods are ASYNC, so an app field like `inOrg` may be answered from a datastore.
  *
  * This was a SECOND decorator (`@Auth`) whose `roles` was optional — so `@Auth({})` reached the exact
  * widest grant that {@link JwtRoles} exists to make un-typeable. Folding it in leaves one decorator per
@@ -134,6 +135,9 @@ export type JwtRequirement = JwtRoles & { [field: string]: unknown };
  * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookAuthCallback`
  *                     verifies it, selected by `name`. The framework ships NO vendor crypto (see
  *                     {@link AuthWebhook}).
+ * - `apikey`        → a CUSTOMER holds the credential; the app's bound `ApiKeyHook` looks it up
+ *                     (async, over the whole header set) and returns the context to seed, selected
+ *                     by `name`. NOT a peer service — see {@link AuthApiKey}.
  * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
  *                     {@link RuntimeLocality} says this process is deployed. Authenticates NOBODY —
  *                     it is a deployment gate, not a credential.
@@ -144,11 +148,13 @@ export type AuthMode =
     | { kind: 'oidc'; callers: string[] }
     | { kind: 'shared-secret'; secretKey: string }
     | { kind: 'webhook'; name: string }
+    | { kind: 'apikey'; name: string }
     | { kind: 'local-only' };
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthLocalOnly) — one per credential kind.
+ * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthWebhook / @AuthApiKey / @AuthLocalOnly) —
+ * one per credential kind.
  *
  * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose
  * `authenticated`/`roles` getters "for back-compat with readers that only understand the user-JWT
@@ -425,6 +431,44 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
 }
 
 /**
+ * @AuthApiKey(name) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook` authenticates the
+ * inbound request against its own datastore and returns the `ContextTuple` entries the framework
+ * seeds into `RequestContext`. THE mode for a partner-facing contract consumed by other companies'
+ * codebases (POS vendors, back-office platforms, ETL pipelines).
+ *
+ * ```typescript
+ * @AuthApiKey('onetablet-partner')
+ * @ApiPath('/management/v1')
+ * abstract class ManagementApi { ... }
+ * ```
+ *
+ * `name` is a bare STRING selecting WHICH key regime this route belongs to, exactly as
+ * `@AuthSharedSecret(key)` and `@AuthWebhook(vendor)` already are — one hook serves several regimes,
+ * and an api contract is level 0, so it never references a verifier directly.
+ *
+ * WHY IT IS NOT `@AuthSharedSecret`. Shared-secret declares that AN INTERNAL SERVICE is on the other
+ * end, so the framework BELIEVES the trusted context headers that caller forwarded (see
+ * `DestinationTrust.forAuthMode` and `AuthFilter.verifiesCaller`). A customer is not an internal
+ * service: declaring a partner endpoint `@AuthSharedSecret` would let that partner assert someone
+ * else's org id on the wire and have it admitted — a privilege escalation. `apikey` therefore sits
+ * with `jwt` on the caller-NOT-verified side, where an inbound trusted header is admitted only when
+ * the hook independently derived the SAME value.
+ *
+ * WHY THE HOOK SEES THE HEADERS, NOT ONE TOKEN. A real key regime checks the key TOGETHER WITH a
+ * second header (the organization it is acting for), and `JwtHook.parseJwt` — handed one pre-extracted
+ * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(name, headers)` gets a reader
+ * instead, so the app owns which headers carry the credential and validates them as a PAIR. The
+ * framework deliberately configures no header name: that cross-check is the entire point.
+ *
+ * FAILS CLOSED: with no `ApiKeyHook` bound, every `@AuthApiKey` endpoint 401s, matching `JwtHook` and
+ * `WebhookAuthCallback`.
+ */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function AuthApiKey(name: string): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'apikey', name });
+}
+
+/**
  * @AuthLocalOnly() - this endpoint exists ONLY on a developer's machine. Off-local it is not
  * registered as a route at all, and if it is somehow reached it 404s. Class- or method-level.
  *
@@ -442,7 +486,7 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  * driven by this ONE declaration on the contract, which is where every other "who may call this"
  * fact already lives.
  *
- * It is DELIBERATELY a peer of @Public / @AuthJwt / @AuthOidc / @AuthSharedSecret rather than an
+ * It is DELIBERATELY a peer of @Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthApiKey rather than an
  * option on one of them: one decorator per credential kind, and "local-only" is a different kind of
  * gate — it authenticates nobody, it excludes an entire environment.
  *
@@ -610,7 +654,8 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
  */
 export const MISSING_AUTH_DECORATOR_FIX =
     "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
-    "@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthWebhook('vendor') / @AuthLocalOnly() to " +
+    "@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthWebhook('vendor') / @AuthApiKey('regime') / " +
+    '@AuthLocalOnly() to ' +
     'the class or method.';
 
 /**
@@ -647,7 +692,7 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         throw new Error(
             `Conflicting auth decorator on ${location}. ` +
             `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) / ` +
-            `@AuthWebhook(...) / @AuthLocalOnly() is allowed per target.`
+            `@AuthWebhook(...) / @AuthApiKey(...) / @AuthLocalOnly() is allowed per target.`
         );
     }
 }

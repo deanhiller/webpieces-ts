@@ -12,6 +12,11 @@ import { AuthValues } from './AuthConfig';
  * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. `authorizeJwt`
  * (role enforcement) is inherited from JwtHook. For RS256 + JWKS, a provider SDK, or a non-standard
  * payload, write your own JwtHook subclass instead.
+ *
+ * It satisfies {@link JwtHook}'s ASYNC signature with a body that awaits NOTHING, and that is the
+ * point rather than an oversight: HS256 against a local secret is pure CPU. The signature is async
+ * because the hook is the APP's seam and an app's strategy reaches the network — not because this
+ * implementation does. No fake await is added to justify it.
  */
 export class DefaultJwtHook extends JwtHook {
     private readonly secret: string;
@@ -21,7 +26,7 @@ export class DefaultJwtHook extends JwtHook {
         this.secret = secret;
     }
 
-    override parseJwt(token: string): AuthValues {
+    override async parseJwt(token: string): Promise<AuthValues> {
         const payload = this.verifyToken(token);
         const userId = payload.sub;
         if (!userId) {

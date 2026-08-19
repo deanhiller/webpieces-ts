@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
+    AuthApiKey,
     AuthOidc,
     AuthSharedSecret,
     ClientRegistry,
@@ -54,6 +55,17 @@ abstract class SharedSecretApi {
     @AuthSharedSecret('INTERNAL_API_SECRET')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
+        throw new Error('contract only');
+    }
+}
+
+@Rpc()
+@ApiPath('/management/v1')
+abstract class ApiKeyApi {
+    @Endpoint('/orders', 'rpc')
+    @AuthApiKey('onetablet-partner')
+    // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
+    listOrders(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
     }
 }
@@ -185,7 +197,9 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 /**
  * A browser holds no service credentials: it cannot mint an OIDC token as a runtime service
  * account, and it must never ship a shared secret. Both are rejected at createRpcClient(), not on the
- * first call in production.
+ * first call in production. `@AuthApiKey` is refused too, for the adjacent reason: the credential is a
+ * CUSTOMER's key (which a browser must never carry) and the header carrying it is the app's ApiKeyHook's
+ * choice, so no webpieces client knows what to send.
  */
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @AuthOidc contract', () => {
@@ -196,6 +210,11 @@ describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => 
     it('throws for an @AuthSharedSecret contract', () => {
         expect(() => factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')))
             .toThrow(/@AuthSharedSecret — a browser cannot hold service credentials/);
+    });
+
+    it('throws for an @AuthApiKey contract, naming the regime and who may actually call it', () => {
+        expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc')))
+            .toThrow(/@AuthApiKey\('onetablet-partner'\).*customer-held/s);
     });
 
     it('accepts a @Public contract and binds its routes', () => {
