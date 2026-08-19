@@ -94,8 +94,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig(false, false).buildGateLogCapture).toBe(false);
-        expect(new HomeConfig(false, false).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, false).buildGateLogCapture).toBe(false);
+        expect(new HomeConfig(false, false, false).wholeRepoBuildGuard).toBe(false);
     });
 
     // The guard whose ONLY switch lives in this file must read as OFF with no file — that is the entire
@@ -108,20 +108,20 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
 describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
     it('is ON for the exact documented shape', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, buildGateLogCapture: true } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': false, buildGateLogCapture: true } }));
         expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(true);
     });
 
     it('is OFF for an explicit false — declining a preference is not an error', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, buildGateLogCapture: false } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': false, buildGateLogCapture: false } }));
         expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
     });
 
     it('reads whole-repo-build-guard true and false, independently of buildGateLogCapture', () => {
         for (const on of [true, false]) {
             const home = fakeHome();
-            writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': on } }));
+            writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': on, 'orphan-dir-sweep': false } }));
             const loaded = new HomeConfigService().load(home);
             expect(loaded.wholeRepoBuildGuard).toBe(on);
             // The two keys are different features (#620's log capture vs this guard) and neither implies

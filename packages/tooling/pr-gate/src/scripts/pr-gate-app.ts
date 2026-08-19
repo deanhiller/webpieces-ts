@@ -5,6 +5,7 @@ import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
 import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
+import { CheckoutCleanMainCommand } from './commands/checkout-clean-main-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
@@ -29,6 +30,7 @@ export class PrGateApp {
         private readonly startUpsertPrCommand: StartUpsertPrCommand,
         private readonly finishUpsertPrCommand: FinishUpsertPrCommand,
         private readonly cleanupCommand: CleanupCommand,
+        private readonly checkoutCleanMainCommand: CheckoutCleanMainCommand,
         private readonly landPrCommand: LandPrCommand,
         private readonly checkPrCommand: CheckPrCommand,
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
@@ -99,6 +101,17 @@ export class PrGateApp {
     cleanup(): Promise<void> {
         this.assertNoResolveInProgress('wp-cleanup');
         return this.cleanupCommand.run();
+    }
+
+    /**
+     * `wp-checkout-clean-main`: go to main, fast-forward it, reap dead worktrees and branches, and sweep
+     * the orphan directories a project move leaves behind. Replaces `git checkout main && git pull
+     * origin main` outright — see CheckoutCleanMainCommand for why the old pair must stop being accepted
+     * rather than surviving beside this.
+     */
+    checkoutCleanMain(): Promise<void> {
+        this.assertNoResolveInProgress('wp-checkout-clean-main');
+        return this.checkoutCleanMainCommand.run();
     }
 
     /** `wp-land-pr`: squash-merge this branch's PR into main with the compact commit body. */

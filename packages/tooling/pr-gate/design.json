@@ -38,7 +38,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/atomic-file.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BranchArchiver",
@@ -46,7 +46,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-archiver.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BranchMutationLog",
@@ -54,7 +54,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BranchNaming",
@@ -70,7 +70,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-reaper.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "BuildAffected",
@@ -145,6 +145,14 @@
                     "level": 2
                 },
                 {
+                    "id": "CheckoutCleanMainCommand",
+                    "className": "CheckoutCleanMainCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/checkout-clean-main-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
@@ -158,7 +166,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts",
-                    "level": 1
+                    "level": 2
                 },
                 {
                     "id": "ConfigFile",
@@ -390,7 +398,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/merged-branches.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "OpenPrCheck",
@@ -398,6 +406,30 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts",
+                    "level": 2
+                },
+                {
+                    "id": "OrphanDirArchiver",
+                    "className": "OrphanDirArchiver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/orphan-dir-archive.ts",
+                    "level": 3
+                },
+                {
+                    "id": "OrphanDirScanner",
+                    "className": "OrphanDirScanner",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/orphan-dir-scan.ts",
+                    "level": 3
+                },
+                {
+                    "id": "OrphanDirSweeper",
+                    "className": "OrphanDirSweeper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/orphan-dir-sweep.ts",
                     "level": 2
                 },
                 {
@@ -598,7 +630,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "WorktreeReaper",
@@ -606,7 +638,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/worktree-reaper.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "WorktreeService",
@@ -614,7 +646,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/worktrees.ts",
-                    "level": 4
+                    "level": 5
                 }
             ],
             "edges": [
@@ -806,6 +838,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "CheckoutCleanMainCommand",
+                    "to": "CleanupCommand",
+                    "injection": "type",
+                    "token": "CleanupCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts#CleanupCommand",
+                    "paramName": "cleanupCommand",
+                    "paramType": "CleanupCommand"
+                },
+                {
+                    "from": "CheckoutCleanMainCommand",
+                    "to": "OrphanDirSweeper",
+                    "injection": "type",
+                    "token": "OrphanDirSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-sweep.ts#OrphanDirSweeper",
+                    "paramName": "orphanDirSweeper",
+                    "paramType": "OrphanDirSweeper"
+                },
+                {
+                    "from": "CheckoutCleanMainCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "CleanTmp",
@@ -1528,6 +1587,33 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "OrphanDirSweeper",
+                    "to": "HomeConfigService",
+                    "injection": "type",
+                    "token": "HomeConfigService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/home-config.ts#HomeConfigService",
+                    "paramName": "homeConfigService",
+                    "paramType": "HomeConfigService"
+                },
+                {
+                    "from": "OrphanDirSweeper",
+                    "to": "OrphanDirArchiver",
+                    "injection": "type",
+                    "token": "OrphanDirArchiver",
+                    "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-archive.ts#OrphanDirArchiver",
+                    "paramName": "archiver",
+                    "paramType": "OrphanDirArchiver"
+                },
+                {
+                    "from": "OrphanDirSweeper",
+                    "to": "OrphanDirScanner",
+                    "injection": "type",
+                    "token": "OrphanDirScanner",
+                    "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-scan.ts#OrphanDirScanner",
+                    "paramName": "scanner",
+                    "paramType": "OrphanDirScanner"
+                },
+                {
                     "from": "PrContextWriter",
                     "to": "DiffScope",
                     "injection": "type",
@@ -1553,6 +1639,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/check-pr-command.ts#CheckPrCommand",
                     "paramName": "checkPrCommand",
                     "paramType": "CheckPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "CheckoutCleanMainCommand",
+                    "injection": "type",
+                    "token": "CheckoutCleanMainCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/checkout-clean-main-command.ts#CheckoutCleanMainCommand",
+                    "paramName": "checkoutCleanMainCommand",
+                    "paramType": "CheckoutCleanMainCommand"
                 },
                 {
                     "from": "PrGateApp",

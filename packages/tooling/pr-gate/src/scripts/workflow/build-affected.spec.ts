@@ -27,7 +27,7 @@ class PinnedHomeConfig extends HomeConfigService {
     }
 
     override load(): HomeConfig {
-        return new HomeConfig(this.on, false);
+        return new HomeConfig(this.on, false, false);
     }
 }
 

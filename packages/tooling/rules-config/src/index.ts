@@ -60,9 +60,19 @@ export { validateChecklistDocs } from './checklist-docs-validator';
 // with its own retirement table. `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS
 // in the hook guards, which is what keeps a rejection repairable.
 export {
-    HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
+    HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, RequiredHomeFlag,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
+    HOME_KEY_ORPHAN_DIR_SWEEP,
 } from './home-config';
+// The orphan-directory sweep: the corpse an `nx g move` leaves on every clone, which git cannot remove
+// because an ignored dist/ or node_modules/ outlives every tracked file under it. See orphan-dir-scan.ts
+// for why the predicate is git's own `clean -Xdn` answer rather than a hand-rolled ignore walk.
+export { OrphanDirScanner, OrphanCandidate } from './orphan-dir-scan';
+export {
+    OrphanDirArchiver, ArchivedOrphan, FailedOrphan, OrphanSweepResult, OrphanSweepManifest,
+    TRASH_STATE_DIR, TRASH_MANIFEST_FILE, TRASH_RETENTION_DAYS,
+} from './orphan-dir-archive';
+export { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
 export {
     MatchRuleConfig,
     MatchRuleViolation,

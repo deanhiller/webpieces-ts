@@ -29,7 +29,7 @@ const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origi
 // HomeConfig(buildGateLogCapture, wholeRepoBuildGuard).
 function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
-        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard));
+        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false));
 }
 
 beforeEach(() => { pinHomeConfig(true); });
