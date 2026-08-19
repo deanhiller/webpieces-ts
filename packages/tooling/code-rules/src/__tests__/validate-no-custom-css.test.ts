@@ -111,3 +111,39 @@ describe('isRelevantFile', () => {
         expect(v.isRelevantFile('src/a.scss')).toBe(false);
     });
 });
+
+/**
+ * `allowGlobs` was declared in the schema, injected into this validator, honoured by the edit-time hook
+ * rule — and never read here. The result was silent: the key parsed, the editor went quiet, and CI kept
+ * failing on the exact files that had been exempted. These lock the two halves together.
+ */
+describe('isRelevantFile allowGlobs exemption', () => {
+    function withGlobs(globs: string[]): NoCustomCssValidator {
+        const config = new NoCustomCssConfig();
+        config.allowGlobs = globs;
+        return new NoCustomCssValidator(config);
+    }
+
+    it('exempts a path matched by allowGlobs, at any depth', () => {
+        const v = withGlobs(['**/design.html']);
+        expect(v.isRelevantFile('services/grubhub-integration/design.html')).toBe(false);
+        expect(v.isRelevantFile('design.html')).toBe(false);
+    });
+
+    it('leaves every other path alone', () => {
+        const v = withGlobs(['**/design.html']);
+        expect(v.isRelevantFile('services/grubhub-integration/other.html')).toBe(true);
+        expect(v.isRelevantFile('src/a.component.ts')).toBe(true);
+    });
+
+    it('exempts nothing when allowGlobs is absent or empty', () => {
+        expect(validator().isRelevantFile('services/x/design.html')).toBe(true);
+        expect(withGlobs([]).isRelevantFile('services/x/design.html')).toBe(true);
+    });
+
+    it('matches a directory prefix as well as a glob', () => {
+        const v = withGlobs(['vendor/fuse-kit']);
+        expect(v.isRelevantFile('vendor/fuse-kit/theme/a.html')).toBe(false);
+        expect(v.isRelevantFile('vendor/other/a.html')).toBe(true);
+    });
+});

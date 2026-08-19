@@ -3,8 +3,18 @@
  *
  * Builds one HTML page per project showing EVERY controller/root design as
  * its own Graphviz graph (rendered client-side with viz.js, same pipeline as
- * the architecture visualization). Output goes to tmp/webpieces/ — a view,
- * never committed (the committed artifacts are design.json/design.md).
+ * the architecture visualization).
+ *
+ * TWO destinations, and the difference is load-bearing:
+ *   - writeDesignVisualization() at the bottom of this file writes tmp/webpieces/ — a scratch view.
+ *   - the di-graph-generate executor writes <project>/design.html as a COMMITTED artifact, beside
+ *     design.json and design.md (executor.ts, DESIGN_FILES).
+ *
+ * This header used to claim design.html was "never committed". That was false, and believing it is
+ * precisely what went wrong downstream: a consuming repo hit no-custom-css on the inline style= this
+ * file emitted, concluded the artifact could not be tracked, and gitignored its own design.html
+ * rather than fixing the CSS here (ONE-2632). Treat everything emitted below as landing in a TRACKED
+ * file that the repo's own rule set scans.
  */
 
 import * as fs from 'fs';
@@ -59,8 +69,22 @@ function pageStyles(): string {
         .legend { margin: 20px auto; max-width: 700px; padding: 15px; background: white;
                   border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .legend-item { margin: 8px 0; }
+        .legend-note { margin-top: 15px; }
         .legend-box { display: inline-block; width: 20px; height: 20px;
                       border: 1px solid #ccc; margin-right: 10px; vertical-align: middle; }
+        /* One class per legend swatch. These were inline style= attributes until they were pulled
+           in here: no-custom-css bans inline style= on every .html it scans, so a committed
+           design.html could not pass the very rule set that generates it. The <style> block is not
+           scanned, so the colours live here and the artifact is trackable. */
+        .legend-box.root { background: #E3F2FD; }
+        .legend-box.klass { background: #F5F5F5; }
+        .legend-box.constant { background: #FFF3E0; }
+        .legend-box.unresolved { background: #FCE4EC; border-style: dashed; }
+        .legend-box.external { background: #EDE7F6; border: 3px double #5e35b1; }
+        .legend-box.api-client { background: #E1F5FE; border: 3px double #0277bd; }
+        .legend-box.stacked { background: #F5F5F5; margin-left: 12px;
+                              box-shadow: -5px -5px 0 -1px #fff, -5px -5px 0 0 #ccc,
+                                          -10px -10px 0 -1px #fff, -10px -10px 0 0 #ccc; }
         ${NODE_MENU.styles()}
         ${NODE_MENU.dimStyles('.graph')}
     `;
@@ -69,22 +93,22 @@ function pageStyles(): string {
 function pageLegend(): string {
     return `<div class="legend">
         <h2>Legend</h2>
-        <div class="legend-item"><span class="legend-box" style="background: #E3F2FD;"></span>
+        <div class="legend-item"><span class="legend-box root"></span>
             <strong>Design root</strong> — level 0, the @DocumentDesign entry class of the tree
-        <div class="legend-item"><span class="legend-box" style="background: #F5F5F5;"></span>
+        <div class="legend-item"><span class="legend-box klass"></span>
             <strong>Class</strong> — injectable class (constructor injection)</div>
-        <div class="legend-item"><span class="legend-box" style="background: #FFF3E0;"></span>
+        <div class="legend-item"><span class="legend-box constant"></span>
             <strong>Constant / dynamic</strong> — toConstantValue / toDynamicValue leaf</div>
-        <div class="legend-item"><span class="legend-box" style="background: #FCE4EC; border-style: dashed;"></span>
+        <div class="legend-item"><span class="legend-box unresolved"></span>
             <strong>Unresolved</strong> — token the analyzer could not resolve</div>
-        <div class="legend-item"><span class="legend-box" style="background: #EDE7F6; border: 3px double #5e35b1;"></span>
+        <div class="legend-item"><span class="legend-box external"></span>
             <strong>External</strong> — class from a published package outside this workspace; shown as a boundary, not expanded</div>
-        <div class="legend-item"><span class="legend-box" style="background: #E1F5FE; border: 3px double #0277bd;"></span>
+        <div class="legend-item"><span class="legend-box api-client"></span>
             <strong>API client</strong> — generated <code>createApiClient</code> proxy (service/network boundary); shown as a boundary, not expanded</div>
-        <div class="legend-item"><span class="legend-box" style="background: #F5F5F5; margin-left: 12px; box-shadow: -5px -5px 0 -1px #fff, -5px -5px 0 0 #ccc, -10px -10px 0 -1px #fff, -10px -10px 0 0 #ccc;"></span>
+        <div class="legend-item"><span class="legend-box stacked"></span>
             <strong>Stack of boxes</strong> — a TRANSIENT class: every arrow into it resolves its OWN
             instance. A single box is a singleton, whose arrows all share one instance.</div>
-        <div class="legend-item" style="margin-top: 15px;">
+        <div class="legend-item legend-note">
             <em>One graph per controller/root; a shared dependency appears in each root's tree.
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>`;

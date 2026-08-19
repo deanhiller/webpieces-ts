@@ -242,3 +242,43 @@ describe('transient nodes render as a stack of instances', () => {
         expect(html).toContain('[-5, -10]');
     });
 });
+
+/**
+ * design.html is a COMMITTED artifact in consuming repos, so it is scanned by the very rule set that
+ * generates it. no-custom-css bans inline `style=` on every .html it sees, and a `<style>` block
+ * survives only because CSS syntax happens not to match its three template regexes — not because the
+ * block is skipped. So the legend swatch colours have to live in the stylesheet, not on the elements.
+ * Without this the file can never be tracked: every regeneration reopens the same CI failure, and the
+ * repo's only recourse is to gitignore its own artifact (ONE-2632).
+ */
+describe('generateDesignHTML emits no inline style= attribute', () => {
+    // Copied verbatim from RE_INLINE_STYLE in code-rules/src/validate-no-custom-css.ts — the rule's
+    // OWN scan pattern, and the source of truth. It is a private const there, not exported, and adding
+    // a public export to a published package just to share it with a test is a worse trade than this
+    // copy. If that regex is ever widened, widen this one: otherwise this suite stays green while the
+    // generated artifact starts failing CI, which is the exact silence ONE-2632 was.
+    const RE_INLINE_STYLE = /(^|\s)style\s*=\s*["']/;
+
+    function pageLines(): string[] {
+        const graph = new DiGraph('helper-portal-svr');
+        graph.designs = [makeDesign()];
+        return generateDesignHTML(graph, '../../architecture/dependencies.html').split('\n');
+    }
+
+    it('has zero lines that no-custom-css would flag', () => {
+        const flagged = pageLines().filter((line: string) => RE_INLINE_STYLE.test(line));
+        expect(flagged).toEqual([]);
+    });
+
+    it('still paints every legend swatch, now via a class in the <style> block', () => {
+        const html = pageLines().join('\n');
+        for (const cls of ['root', 'klass', 'constant', 'unresolved', 'external', 'api-client', 'stacked']) {
+            expect(html).toContain(`<span class="legend-box ${cls}"></span>`);
+            expect(html).toContain(`.legend-box.${cls} {`);
+        }
+        // The colours themselves survived the move off the elements.
+        expect(html).toContain('.legend-box.root { background: #E3F2FD; }');
+        expect(html).toContain('.legend-box.unresolved { background: #FCE4EC; border-style: dashed; }');
+        expect(html).toContain('.legend-note { margin-top: 15px; }');
+    });
+});
