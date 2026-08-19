@@ -29,6 +29,7 @@ graph TD
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
     ChecklistScanner["ChecklistScanner"]
+    CheckoutCleanMainCommand["CheckoutCleanMainCommand"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     ConfigFile["ConfigFile"]
@@ -61,6 +62,9 @@ graph TD
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
+    OrphanDirArchiver["OrphanDirArchiver"]
+    OrphanDirScanner["OrphanDirScanner"]
+    OrphanDirSweeper["OrphanDirSweeper"]
     PrCommentUpserter["PrCommentUpserter"]
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
@@ -109,6 +113,9 @@ graph TD
     ChecklistScanner --> DiffScope
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
+    CheckoutCleanMainCommand --> CleanupCommand
+    CheckoutCleanMainCommand --> OrphanDirSweeper
+    CheckoutCleanMainCommand --> RepoRootFinder
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
@@ -189,9 +196,13 @@ graph TD
     MergedBranchesService --> DotWebpieces
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    OrphanDirSweeper --> HomeConfigService
+    OrphanDirSweeper --> OrphanDirArchiver
+    OrphanDirSweeper --> OrphanDirScanner
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand
+    PrGateApp --> CheckoutCleanMainCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishPushDevCommand
     PrGateApp --> FinishUpdateCommand

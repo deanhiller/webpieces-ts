@@ -182,7 +182,7 @@ describe('case 3 — the machine-local file is the one that is wrong', () => {
     const cases: readonly string[] = [
         '{ not json',                                    // unparseable
         '{"experimental":{"bogusFlag":true}}',           // unknown flag
-        '{"experimental":{}}',                           // required flag missing
+        '{"experimental":{"whole-repo-build-guard":"yes"}}', // wrong TYPE for a known flag
         '{"experimental":{"captureBuildGateLog":true}}', // retired flag
     ];
 

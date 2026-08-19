@@ -53,11 +53,37 @@ export const HOME_KEY_BUILD_GATE_LOG_CAPTURE = 'buildGateLogCapture';
 // second name for one thing. It is a DIFFERENT key from buildGateLogCapture, which is #620's build-log
 // feature and merely selects WHICH refusal this guard prints.
 export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
+// The on/off switch for the orphan-directory sweep `wp-checkout-clean-main` runs. Named for the thing
+// it switches, exactly as the guard key above is — one name, greppable from either end.
+export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
 
 // The complete accepted shape. Anything not on these lists is an error, so adding a key means adding it
 // here — there is no place for an unvalidated key to hide.
 const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
-const ALLOWED_EXPERIMENTAL: readonly string[] = [HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE];
+const ALLOWED_EXPERIMENTAL: readonly string[] = [
+    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_ORPHAN_DIR_SWEEP,
+];
+
+/**
+ * ─── EVERY KEY IS OPTIONAL, AND THAT IS A HARD REQUIREMENT OF WHERE THIS FILE LIVES ───────────────────
+ * This file is MACHINE-GLOBAL: one document, read by every repo on the machine, and those repos pin
+ * DIFFERENT webpieces releases. A REQUIRED key cannot survive that, because it makes the set of valid
+ * files EMPTY:
+ *
+ *   • omit the new key  → the NEW release rejects the file ("REQUIRED and not set")
+ *   • add the new key   → every OLDER release rejects the file ("not a known key")
+ *
+ * There is no third option, and both rejections block. `whole-repo-build-guard` was required for the
+ * reason recorded in #627 — a flag that decides whether a command RUNS should not be inferred — and that
+ * reasoning was sound for a single version and wrong for a shared file. It is optional now, along with
+ * every other key. The safety it was protecting is intact anyway: absent reads as FALSE, and false is
+ * byte-for-byte the behaviour of having no file at all, so a guessed default can only ever fail towards
+ * "this machine never opted in".
+ *
+ * The other half of cross-version safety — an OLD release ignoring a key a NEW one added, rather than
+ * rejecting it — is NOT solved here. Adding a key still requires every repo on the machine to be moved
+ * to a release that knows it.
+ */
 
 // Read errors that mean "the file is not there / not reachable" rather than "the file is wrong". Every
 // one of these resolves to the all-defaults config, silently. Widened deliberately past ENOENT: the
@@ -85,13 +111,31 @@ export class HomeConfig {
      */
     wholeRepoBuildGuard: boolean;
 
-    // BOTH required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    /**
+     * EXPERIMENTAL. When true, `wp-checkout-clean-main` ARCHIVES the orphan directories it finds — the
+     * package directories left behind on every clone by an `nx g move`, which git cannot remove because
+     * an ignored `dist/` or `node_modules/` survives the deletion of every tracked file under them.
+     *
+     * False — and the all-defaults value for a machine with no such file — means the sweep only REPORTS
+     * what it found and moves nothing. That asymmetry is the point of shipping this behind the home
+     * config at all: the author can run it live across their own clones for a release while every
+     * colleague's repo is untouched, and neither state depends on a tracked key anybody must add.
+     *
+     * The sweep itself never deletes (see OrphanDirArchiver): directories move under `.webpieces/trash/`
+     * with a printed `recover=`, so the worst case for a false positive is a `mv` somebody undoes. The
+     * ARCHIVE is reaped after 30 days, which is a real deletion — of the second copy, on a timer long
+     * enough that anything still wanted has been noticed.
+     */
+    orphanDirSweep: boolean;
+
+    // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The absent-file
     // state is constructed in exactly one place — load()'s absent-file branch.
-    constructor(buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean) {
+    constructor(buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean, orphanDirSweep: boolean) {
         this.buildGateLogCapture = buildGateLogCapture;
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
+        this.orphanDirSweep = orphanDirSweep;
     }
 }
 
@@ -157,7 +201,7 @@ export class HomeConfigService {
         // THE ABSENT-FILE STATE, and the ONE place it is constructed: every flag off, i.e. every
         // behaviour this machine had before the file existed. Spelled out rather than defaulted in the
         // constructor — see the note there on why a defaulted parameter is a shim.
-        if (raw === null) return new HomeConfig(false, false);
+        if (raw === null) return new HomeConfig(false, false, false);
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
 
@@ -244,39 +288,21 @@ export class HomeConfigService {
         this.assertKnownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`, file);
         return new HomeConfig(
             this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file),
-            this.readRequiredBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file),
+            this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file),
+            this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file),
         );
     }
 
-    // An absent key is OFF — not setting a flag is not an error. A PRESENT key of the wrong type is.
+    /**
+     * An absent key is OFF. A PRESENT key of the wrong type is still an error — that is a file somebody
+     * wrote wrongly, not a file written for a different release. This is the ONLY reader; see the
+     * every-key-is-optional note above for why there is no required variant.
+     */
     // webpieces-disable no-any-unknown -- see parse()
     private readOptionalBoolean(experimental: Record<string, unknown>, key: string, file: string): boolean {
         const value = experimental[key];
         if (value === undefined) return false;
         return this.asBoolean(value, key, file, ' Remove the quotes, or delete the key.');
-    }
-
-    /**
-     * A key that MUST be spelled out once this file exists. `whole-repo-build-guard` decides whether tool
-     * calls are BLOCKED, and the two states are not equally recoverable: guessing OFF hides a feature the
-     * author asked for, guessing ON blocks their shell. So the file states it, or it fails naming the edit.
-     *
-     * The asymmetry with buildGateLogCapture is deliberate and is the whole lesson of #627: a flag that
-     * only changes what a message SAYS may default; a flag that decides whether a command RUNS may not.
-     */
-    // webpieces-disable no-any-unknown -- see parse()
-    private readRequiredBoolean(experimental: Record<string, unknown>, key: string, file: string): boolean {
-        const value = experimental[key];
-        if (value === undefined) {
-            throw new InformAiError(this.error(file,
-                `"${HOME_EXPERIMENTAL_SECTION}.${key}" is REQUIRED once this file exists, and it is not set. ` +
-                `Add it, e.g.:\n\n` +
-                `    { "${HOME_EXPERIMENTAL_SECTION}": { "${key}": false } }\n\n` +
-                `false = the guard never blocks anything (identical to having no such file); true = a Bash ` +
-                `command that would build the WHOLE monorepo is refused, with the affected-scoped command ` +
-                `printed in its place.`));
-        }
-        return this.asBoolean(value, key, file, ' Remove the quotes.');
     }
 
     // webpieces-disable no-any-unknown -- see parse()
@@ -315,14 +341,23 @@ export class HomeConfigService {
         return (section as Record<string, unknown>)[parts[1]] !== undefined;
     }
 
+    /**
+     * Every accepted key, rendered from ALLOWED_EXPERIMENTAL rather than hand-listed. The hand-listed
+     * version named two keys and went stale the moment a third arrived, telling an agent its brand-new
+     * key was not accepted while the validator right above accepted it.
+     */
+    private quotedExperimentalKeys(): string {
+        return ALLOWED_EXPERIMENTAL.map((key: string): string =>
+            `"${HOME_EXPERIMENTAL_SECTION}.${key}"`).join(', ');
+    }
+
     private assertKnownKeys(found: string[], allowed: readonly string[], prefix: string, file: string): void {
         for (const key of found) {
             if (allowed.includes(key)) continue;
             throw new InformAiError(this.error(file,
                 `"${prefix}${key}" is not a known key.${this.didYouMean(key, allowed, prefix)} ` +
                 `The only keys this file accepts are ` +
-                `"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_WHOLE_REPO_BUILD_GUARD}" and ` +
-                `"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}". ` +
+                `${this.quotedExperimentalKeys()}. ` +
                 `Fix the spelling or delete the key.`));
         }
     }
