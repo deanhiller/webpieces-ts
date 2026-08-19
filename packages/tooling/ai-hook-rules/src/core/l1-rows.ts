@@ -270,7 +270,7 @@ export const L1_ROWS: readonly L1Row[] = [
             'inspection inside a SKEWED worktree still runs — `cd <worktree> && ls`/`cat`/`grep`',
             '`w` / `n` / `y` — row 8 does not match',
             'ALLOW (handed to L2)',
-            'none — inspection is always open; so are the `Read` tool, `git -C <worktree> …` and `git show <branch>:<file>`, none of which move you',
+            'none — inspection is always open; so are the `Read` tool, `git -C <dir INSIDE this tree> …` and `git show <branch>:<file>`, none of which move you. `git -C <ANOTHER tree>` is a different matter: the harness refuses cross-tree git to a subagent, so it is never the cure for a skew — tell the MAIN agent instead',
             new L1Classification('w', true, true, false, false)),
     ]),
     new L1Row(5, 'pw', '-', '-', 'y', 'sub', ACT_BLOCK, '`cd <root> && <original>`',

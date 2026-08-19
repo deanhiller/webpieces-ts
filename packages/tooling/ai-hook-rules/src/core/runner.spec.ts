@@ -488,6 +488,24 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
         expect(report).toContain('git -C <dir>');
         expect(report).toContain('--pack-destination');
     });
+
+    /**
+     * ONE STORY ABOUT `git -C`, TOLD THE SAME WAY EVERYWHERE. This message is the most-seen of the three
+     * places that name it — it fires on any non-literal `cd` — and it recommended `git -C <dir>` with no
+     * caveat at all, while shim-deny-reason.ts was simultaneously telling subagents that `git -C <another
+     * tree>` is REFUSED. An agent that met both concluded the refusal was a fluke and retried.
+     *
+     * The advice itself is correct and stays: a `git -C` pointed INSIDE your own tree is the right idiom
+     * for the second `cd`. Only the boundary was missing, and it costs two lines. The version-skew case
+     * is called out by name because that is the one where the wrong reading is most expensive — the deny
+     * repeats on every subsequent tool call.
+     */
+    it('caveats `git -C` to this tree, so it is never read as the cure for a cross-tree skew', () => {
+        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('ONLY for a dir INSIDE this tree');
+        expect(report).toContain('`git -C <another tree>` is REFUSED to a subagent');
+        expect(report).toContain('never the cure for a version skew');
+    });
 });
 
 // A config that will not load must not trap the tools needed to repair it. The hard failure is kept

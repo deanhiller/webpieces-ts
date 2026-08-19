@@ -132,8 +132,9 @@ describe('VersionSyncGuard — when it fires', () => {
         expect(report).not.toBeNull();
         expect(report).toContain('0.4.616');
         expect(report).toContain('0.4.624');
-        // The cure has to name the MAIN clone, not the worktree the agent is standing in.
-        expect(report).toContain(`git -C ${dirs.main} pull`);
+        // The cure has to name the MAIN clone, not the worktree the agent is standing in — and it is
+        // addressed to the main agent, because cross-tree git is refused to a subagent.
+        expect(report).toContain(`Tell main agent: \`cd ${dirs.main} && git checkout main && git pull\``);
     });
 
     it('stays silent for a resident agent once the two trees agree', () => {
@@ -255,13 +256,45 @@ describe('VersionSyncGuard — the message', () => {
         expect(reportFor()).toContain('node_modules/@webpieces/nx-webpieces-rules');
     });
 
-    /** The cure is a GIT cure: the pin is tracked, so the same hash gives the same version. */
-    it('leads with the git cure and installs in each tree that has a node_modules', () => {
+    /**
+     * The cure is a GIT cure — the pin is tracked, so the same hash gives the same version — but it is a
+     * cure the READER CANNOT RUN, and the old text hid that by leading with `git -C <main> pull`.
+     *
+     * Two defects rode on that one line, and it printed ABOVE the escalation block, so it was read first:
+     *  (a) a worktree-isolated subagent cannot run cross-tree git at all — the harness refuses it, so the
+     *      only cure printed was the only thing the reader could not do;
+     *  (b) a bare `git pull` moves whatever branch that tree has checked out, and the primary clone is
+     *      normally on a feature branch. It pulls the feature branch, the manifest never moves, the pin
+     *      never converges, and this guard fires again. Naming main is what makes it converge.
+     * Measured 2026-08-19: this deny fired 25 times across one session (13 in a single subagent) on
+     * ordinary read-only work — grep, ls, find, git checkout -b. Nothing that tree could type would clear
+     * it, which is why every step is now an ASK.
+     */
+    it('prescribes a cure that NAMES main and is addressed to the main agent, not cross-tree git', () => {
         const report = reportFor();
-        expect(report).toContain('git -C');
+        expect(report).toContain('git checkout main && git pull');
         expect(report).toContain('pnpm install');
-        expect(report).toContain('A worktree MAY have its');
+        expect(report).toContain('A worktree MAY have its own node_modules');
         expect(report).toContain('what it may not have is a DIFFERENT @webpieces version');
+    });
+
+    /**
+     * THE REPETITION IS THE DELIVERABLE, and this is the assertion that stops someone "tidying" it away.
+     * A shared header followed by bare numbered steps reads, to an agent skimming ONE line, as a command
+     * list for that agent to execute — which is precisely the failure being fixed. Every step therefore
+     * begins with the same four words, so no single line can be misread as the reader's own action.
+     */
+    it('prefixes EVERY numbered step with `Tell main agent:` — individually, not under one header', () => {
+        const steps = reportFor()
+            .split('\n')
+            .filter((line: string) => /^\s+\d+\. /.test(line));
+        expect(steps.length).toBe(4);
+        for (const step of steps) expect(step).toMatch(/^\s+\d+\. Tell main agent: /);
+    });
+
+    /** The closer: forwarding is not a formality, it is the only thing that unblocks this tree. */
+    it('says outright that nothing here moves until the main tree does', () => {
+        expect(reportFor()).toContain('THEN AND ONLY THEN will this worktree — and every other subagent — work again.');
     });
 
     /**
@@ -314,11 +347,17 @@ describe('VersionSyncGuard — the message', () => {
     });
 
     /**
-     * THE 35-FIRING INCIDENT (2026-08-19). The chain worked: guard denied → subagent forwarded the ask
+     * THE 25-FIRING INCIDENT (2026-08-19). The chain worked: guard denied → subagent forwarded the ask
      * verbatim → the coordinator relayed the pull+install. Nothing was lost except turns — the subagent
-     * then KEPT MAKING TOOL CALLS and re-fired this identical deny 35 times in ONE transcript, because
-     * nothing in the message said that forwarding ENDS the turn. Every retry buried the forwarded ask
-     * further up the scrollback. The block is not transient; no command from this tree slips past it.
+     * then KEPT MAKING TOOL CALLS and re-fired this identical deny, because nothing in the message said
+     * that forwarding ENDS the turn. Every retry buried the forwarded ask further up the scrollback. The
+     * block is not transient; no command from this tree slips past it.
+     *
+     * COUNTED FROM THE TRANSCRIPTS, not remembered: 13 firings in one subagent
+     * (agent-ab3cdc82f4e63d7ef), 6 and 2 in two siblings, 2 each in two parent sessions — 25 across the
+     * session. An earlier revision of this comment said "35 in one transcript"; that number was never
+     * measured and is corrected here, because a wrong number in a comment justifying a design is worse
+     * than no number at all.
      */
     it('tells the subagent to STOP and not retry, because retrying re-fires this identical deny', () => {
         const report = reportFor();
@@ -334,15 +373,21 @@ describe('VersionSyncGuard — the message', () => {
     });
 
     /**
-     * The budget rose from 24 to 30 for the forwardable escalation block, and then from 30 to 38 for the
-     * STOP beat. Both are trades made with eyes open. The 24-line version WAS read and still dead-ended,
-     * because the four lines it spent on "report to your coordinator" carried no ask. The 30-line version
-     * was forwarded correctly and STILL cost 35 firings in one transcript, because it never said that
-     * forwarding ends the turn. A diet is there so the message gets read, not so it stays short while
-     * omitting the part that ends the block — and 35 copies of a 30-line report is not a diet either.
+     * The budget rose from 24 to 30 for the forwardable escalation block, then 30 to 38 for the STOP
+     * beat, and now 38 to 42 for the `Tell main agent:` FIX list. Every one is a trade made with eyes
+     * open. The 24-line version WAS read and still dead-ended, because the four lines it spent on "report
+     * to your coordinator" carried no ask. The 30-line version was forwarded correctly and STILL looped,
+     * because it never said that forwarding ends the turn. The 38-line version led with `git -C <main>
+     * pull` — a command its reader cannot run, aimed at a branch it does not name — so it read as
+     * something to TRY, and every try re-fired the deny.
+     *
+     * The four lines bought here are the per-step `Tell main agent:` prefix. They are literally
+     * repetition, and that is the point: a reader who skims exactly one numbered line must still see the
+     * line is not their own action. A diet is there so the message gets read, not so it stays short while
+     * omitting the part that ends the block — and 25 copies of a 38-line report is not a diet either.
      */
     it('stays on the L0 message diet — short enough to be read, not skimmed', () => {
-        expect(reportFor().split('\n').length).toBeLessThanOrEqual(38);
+        expect(reportFor().split('\n').length).toBeLessThanOrEqual(42);
     });
 });
 
@@ -400,15 +445,33 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         expect(report).toContain('tell me when it is complete');
     });
 
-    /** The 35-firing incident is branch-independent — a bump-skew subagent loops exactly the same way. */
+    /** The 25-firing incident is branch-independent — a bump-skew subagent loops exactly the same way. */
     it('carries the same STOP / do-not-retry beat', () => {
         const report = bumpReport();
         expect(report).toContain('STOP WORKING NOW');
         expect(report).toContain('RETRYING IS THE BUG');
     });
 
+    /**
+     * SAME TREATMENT, SAME REASON. This branch never printed `git -C`, so defect (b) — a bare pull that
+     * does not name main — could not reach it. But its own text already conceded "BOTH need the main
+     * tree", and it then listed those two ways out as bare numbered steps, which is exactly the shape a
+     * skimming subagent reads as its own to-do list. The prefix is therefore not decoration carried over
+     * for symmetry: it is the same fix for the same misreading, and one branch spelling it differently
+     * would teach that the prefix is stylistic.
+     */
+    it('prefixes EVERY numbered step with `Tell main agent:` here too', () => {
+        const steps = bumpReport()
+            .split('\n')
+            .filter((line: string) => /^\s+\d+\. /.test(line));
+        expect(steps.length).toBe(3);
+        for (const step of steps) expect(step).toMatch(/^\s+\d+\. Tell main agent: /);
+        expect(bumpReport()).toContain('THEN AND ONLY THEN will this worktree');
+    });
+
+    /** Budget: 38 → 42, same trade as the generic branch — see the comment on its diet assertion. */
     it('stays on the message diet in this branch too', () => {
-        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(38);
+        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(42);
     });
 });
 

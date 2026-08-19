@@ -144,13 +144,33 @@ export class VersionSyncGuard {
     }
 
     /**
-     * The cure list, which is NOT the same list in both directions.
+     * The cure list, which is NOT the same list in both directions — but which, in BOTH directions, is a
+     * list of things the reader ASKS FOR rather than runs.
      *
-     * The ordinary skew is two trees sitting on different commits of main, and there `git pull` both +
-     * `pnpm install` genuinely converges them — the pin is tracked, so the same hash gives the same
-     * version. That cure is WRONG, and worse than useless, when the branch bumped the pin ON PURPOSE:
-     * pulling would revert the deliverable, and an install cannot move a pin in either tree. Printing
-     * the git cure first in that case is what sent a real upgrade agent round the loop below.
+     * The ordinary skew is two trees sitting on different commits of main. The pin is tracked, so putting
+     * both trees on the same commit and installing genuinely converges them. That cure is WRONG, and worse
+     * than useless, when the branch bumped the pin ON PURPOSE: pulling would revert the deliverable, and
+     * an install cannot move a pin in either tree. Printing the git cure first in that case is what sent a
+     * real upgrade agent round the loop below.
+     *
+     * WHAT THIS BLOCK IS NOT ALLOWED TO SAY, in either branch: `git -C <the main tree> pull`. Two defects
+     * rode on that one line, and it was printed ABOVE the escalation block, so it was the first thing read.
+     *   (a) A worktree-isolated SUBAGENT — the overwhelmingly common reader of this deny — CANNOT run
+     *       cross-tree git at all; the harness refuses it (shim-deny-reason.ts records the same
+     *       measurement). The one printed cure was the one thing the reader could not perform.
+     *   (b) A bare `git pull` acts on whatever branch that tree currently has checked out, and the primary
+     *       clone is normally sitting on a feature branch. It pulls the feature branch, the manifest never
+     *       moves, the pin never converges, and this guard fires again. The cure has to NAME main:
+     *       `cd <main> && git checkout main && git pull`.
+     * So every step is prefixed `Tell main agent:` — INDIVIDUALLY, not under one shared header. That
+     * repetition is deliberate and is the deliverable: a reader who skims exactly one of these lines must
+     * still see it is not their own action. Do not factor it out.
+     *
+     * The FIX block still prints ABOVE the escalation block, on purpose. Moving it below would split the
+     * numbered steps from the versions they refer to, and the one place caps are spent on ENDING the turn
+     * (STOP WORKING NOW / RETRYING IS THE BUG) has to stay last and stay unique — a second STOP beat
+     * competing with it is exactly the wall-of-text regression the L0 message diet exists to prevent.
+     * Labelling carries the "not yours to run" fact instead, which is what the caps header does.
      */
     private fixLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
         if (bump) {
@@ -160,20 +180,30 @@ export class VersionSyncGuard {
                 `     • \`git pull\` here would revert the bump, which is the whole deliverable.`,
                 `     • Wiping this tree's node_modules does NOT help — the two PINS still disagree, and the`,
                 `       L0 drift guard blocks in this guard's place.`,
-                `   Two ways out, and BOTH need the main tree:`,
-                `     1. Redo this task in the MAIN tree — a version bump cannot be done in a worktree at all.`,
-                `     2. Or raise the MAIN tree's pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, then continue here.`,
+                `   FIX — YOU CANNOT DO THIS FROM HERE. BOTH ways out need the MAIN tree, and cross-tree`,
+                `   git is REFUSED to a subagent, so every step below is something you ASK FOR, not run:`,
+                `     1. Tell main agent: this task has to be redone in the MAIN tree ${tree.mainRoot}`,
+                `        — a version bump cannot be done in a worktree at all.`,
+                `     2. Tell main agent: OR raise the MAIN tree's pin to ${this.show(quartet.worktree.pinned).trim()} in`,
+                `        ${tree.mainRoot}/${WORKSPACE_MANIFEST} and run \`pnpm install\` there.`,
+                `     3. Tell main agent: to tell you when that is complete.`,
+                `   THEN AND ONLY THEN will this worktree — and every other subagent — work again.`,
             ];
         }
         return [
-            `   FIX (usually just git — the pin is TRACKED, so the same commit gives the same version):`,
-            `     1. \`git -C ${tree.mainRoot} pull\` and \`git -C ${tree.root} pull\` onto the same main,`,
-            `        then \`pnpm install\` in each tree that has a node_modules. A worktree MAY have its`,
-            `        own; what it may not have is a DIFFERENT @webpieces version from the main tree.`,
-            `     2. Or work in the MAIN tree instead — it is never blocked by this guard.`,
-            `     3. Or, if this tree genuinely needs a DIFFERENT version, use a separate CLONE, not a`,
-            `        worktree: a clone gets its own governance. (This is the answer to "I need a different`,
-            `        version", never to "I need to install here" — installing here is fine.)`,
+            `   FIX — YOU CANNOT DO THIS FROM HERE. Cross-tree git is REFUSED to a subagent, and a bare`,
+            `   \`git pull\` moves whatever branch that tree is on — so the cure must NAME main, in main:`,
+            `     1. Tell main agent: \`cd ${tree.mainRoot} && git checkout main && git pull\``,
+            `     2. Tell main agent: then run \`pnpm install\` in ${tree.mainRoot}`,
+            `     3. Tell main agent: then report back what \`ls ${tree.mainRoot}/node_modules/@webpieces\``,
+            `        shows, so we know whether the hook shim needs re-upgrading too.`,
+            `     4. Tell main agent: to tell you when ALL of that is complete.`,
+            `   THEN AND ONLY THEN will this worktree — and every other subagent — work again.`,
+            `   The two structural escapes, if converging the trees is not what the coordinator wants:`,
+            `     • Do the work in the MAIN tree instead — it is never blocked by this guard.`,
+            `     • Or use a separate CLONE, not a worktree, if this tree genuinely needs a DIFFERENT`,
+            `       version: a clone gets its own governance. A worktree MAY have its own node_modules, so`,
+            `       installing here is fine; what it may not have is a DIFFERENT @webpieces version.`,
         ];
     }
 
@@ -201,7 +231,8 @@ export class VersionSyncGuard {
      * the event that unblocks this subagent and it has no way to observe it otherwise.
      *
      * And it has to say STOP, in caps, because forwarding is only half of what the subagent must do. One
-     * measured transcript re-fired this identical deny 35 TIMES: the subagent read it, escalated exactly
+     * measured subagent transcript re-fired this identical deny 13 TIMES (25 across the whole session,
+     * counting two sibling subagents and two parent sessions): the subagent read it, escalated exactly
      * as asked — and then kept making tool calls, because nothing here said that forwarding ENDS the
      * turn. Every retry cost a round trip and pushed the one message that mattered further up the
      * scrollback. The block is not transient and no command from this tree slips past it, so retrying is
@@ -220,8 +251,10 @@ export class VersionSyncGuard {
               ]
             : [
                   `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
-                  `     > \`git pull && pnpm install\` there, so both trees are on the same release, and to tell me`,
-                  `     > when it is complete so I can continue working. I cannot reach that tree from here.`,
+                  `     > \`git checkout main && git pull && pnpm install\` there — it must NAME main, since a bare`,
+                  `     > pull moves whatever branch that tree is on — so both trees are on the same release, and`,
+                  `     > to tell me when it is complete so I can continue working, and what`,
+                  `     > \`ls node_modules/@webpieces\` shows there. I cannot reach that tree from here.`,
               ];
         return [
             `   SUBAGENT? You cannot fix the main tree from here. Forward this to your coordinator verbatim:`,
@@ -230,8 +263,9 @@ export class VersionSyncGuard {
             ...ask,
             `   THEN STOP WORKING NOW. Forwarding that message IS the end of your turn: make NO further tool`,
             `   calls and do NOT retry this one — RETRYING IS THE BUG. Every retry re-fires this identical`,
-            `   deny and buries the ask above; one transcript did it 35 times. Nothing you can do from this`,
-            `   tree clears it. WAIT for the main agent to confirm it is done, then resume — nothing between.`,
+            `   deny and buries the ask above; one subagent did it 13 times, 25 across that whole session.`,
+            `   Nothing you can do from this tree clears it. WAIT for the main agent to confirm it is done,`,
+            `   then resume — nothing between.`,
         ];
     }
 
