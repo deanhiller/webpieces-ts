@@ -48,7 +48,7 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
         expect(h.calls.length).toBe(1);
     });
 
-    it('tells the agent to re-run wp-build, the same verb it just ran', async () => {
+    it('tells the agent to re-run `pnpm wp-build`, the same verb it just ran', async () => {
         const h = harness();
         await h.command.run();
         expect(h.calls[0].rerunCommand).toBe('pnpm wp-build');
