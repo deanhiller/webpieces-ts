@@ -6,7 +6,7 @@ import { buildContexts, buildBashContext } from './build-context';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
 import { gitFromSubdirBlock } from './force-to-root';
-import { loadRules, loadMatchRules, loadExperimentalBashRules, globMatches, GuardHintCommands } from './load-rules';
+import { loadRules, loadMatchRules, loadKeylessBashRules, globMatches, GuardHintCommands } from './load-rules';
 import { missingDirectoryBlock } from './missing-directory';
 import { MatchRule } from './rules/match-rule';
 import { branchStateHangTimeout, maybeRefreshMainSync } from './main-sync-timeout';
@@ -405,19 +405,20 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
 }
 
 /**
- * The EXPERIMENTAL bash guards, deliberately kept OUT of the config-driven rule set. They have no
+ * The KEYLESS bash guards, deliberately kept OUT of the config-driven rule set. They have no
  * webpieces.config.json entry at all, so passing them through checkConfigSync would make every
  * consumer's next Bash call a fault-Y block ("this rule has no entry") for a feature nobody opted into
- * — which is exactly what whole-repo-build-guard did on its first release. Each one reads
- * ~/.webpieces/config.json for itself and does nothing at all without it.
+ * — which is exactly what whole-repo-build-guard did on its first release. Each one decides for itself
+ * whether it acts: whole-repo-build-guard reads ~/.webpieces/config.json and does nothing at all
+ * without it, commit-message-substitution-guard acts unconditionally (see loadKeylessBashRules).
  *
  * They still honour excludePaths, and they do not run in `rules` mode (code-style-only hook).
  */
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function experimentalBashRules(loaded: LoadedConfig, mode: HookMode, relativePath: string): readonly Rule[] {
+function keylessBashRules(loaded: LoadedConfig, mode: HookMode, relativePath: string): readonly Rule[] {
     if (mode === 'rules') return [];
     return filterByExcludedPaths(
-        loadExperimentalBashRules(loaded.prGate.buildCommand), relativePath, loaded.excludePaths,
+        loadKeylessBashRules(loaded.prGate.buildCommand), relativePath, loaded.excludePaths,
     );
 }
 
@@ -458,8 +459,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const rules = filterByExcludedPaths(
         filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode), relativeCwd, loaded.excludePaths,
     );
-    const experimental = experimentalBashRules(loaded, mode, relativeCwd);
-    if (rules.length === 0 && experimental.length === 0) return null;
+    const keyless = keylessBashRules(loaded, mode, relativeCwd);
+    if (rules.length === 0 && keyless.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
@@ -475,7 +476,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     maybeRefreshMainSync(rules, tree.root, branchStateHangTimeout(loaded.rulesConfig));
 
     const ctx = buildBashContext(command, tree);
-    const groups = runBashRules([...rules, ...experimental], ctx);
+    const groups = runBashRules([...rules, ...keyless], ctx);
     if (groups.length === 0) {
         // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
         // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log

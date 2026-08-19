@@ -145,7 +145,33 @@ export class CommandScanner {
      */
     gitSubcommandOf(words: readonly string[]): string | null {
         const tokens = this.stripPrefixes(words);
-        if (tokens.length === 0 || tokens[0] !== 'git') return null;
+        const at = this.gitSubcommandIndex(tokens);
+        return at === -1 ? null : tokens[at];
+    }
+
+    /**
+     * The ARGUMENTS following `git <subcommand>` in this segment, or null when the segment does not
+     * invoke that subcommand.
+     *
+     * `gitSubcommand` answers *which* subcommand; a guard that judges the subcommand's own flags needs
+     * the tokens after it, and slicing them in the guard would mean re-deriving where the subcommand
+     * sits — i.e. re-deriving the `sudo` / `env VAR=x` / `-C <path>` skipping this class exists to own.
+     * `git -C /x commit -m "msg"` yields `['-m', 'msg']`, never `['/x', 'commit', '-m', 'msg']`.
+     *
+     * The tokens are QUOTE-STRIPPED (see tokenize), so a quoted argument arrives as ONE token holding
+     * its literal text — newlines, backticks and all. That is what makes an argument's CONTENT
+     * inspectable at all.
+     */
+    gitSubcommandArgs(segment: string, subcommand: string): readonly string[] | null {
+        const tokens = this.stripPrefixes(this.tokenize(segment));
+        const at = this.gitSubcommandIndex(tokens);
+        if (at === -1 || tokens[at] !== subcommand) return null;
+        return tokens.slice(at + 1);
+    }
+
+    /** Index of the subcommand token in already-prefix-stripped words, or -1 when git is not invoked. */
+    private gitSubcommandIndex(tokens: readonly string[]): number {
+        if (tokens.length === 0 || tokens[0] !== 'git') return -1;
 
         let i = 1;
         while (i < tokens.length) {
@@ -153,9 +179,9 @@ export class CommandScanner {
             if (GIT_FLAGS_WITH_VALUE.has(token)) { i += 2; continue; }
             // `--git-dir=/x` style (value attached) and any other global flag.
             if (token.startsWith('-')) { i++; continue; }
-            return token;
+            return i;
         }
-        return null;
+        return -1;
     }
 
     /** True when this segment actually invokes `git <subcommand>`. */
