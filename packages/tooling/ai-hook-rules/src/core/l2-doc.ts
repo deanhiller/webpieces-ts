@@ -268,7 +268,7 @@ function renderNotes(): string[] {
         '| group | commands |',
         '|---|---|',
         '| get out | `git checkout -b <new> origin/main` · `git switch -c <new> origin/main` · `git switch <other>` · `git worktree add … -b <new> origin/main` |',
-        '| make `main` current | `git pull` · `git fetch` · `git checkout main && git pull origin main` *(paired only)* |',
+        '| make `main` current | `pnpm wp-checkout-clean-main` *(the prescribed form — also reaps dead branches/worktrees and sweeps orphan directories)* · `git pull` · `git fetch` · `git checkout main && git pull origin main` *(paired only; still allowed, and still the L0 recovery cure, where no `pnpm` bin can be trusted)* |',
         '| orient | `git status\\|log\\|diff\\|branch` · `gh pr view\\|list\\|status\\|checks` |',
         '| park work | `git stash` |',
         '| repair / tooling | `pnpm wp-start-update` · `pnpm wp-start-upsert-pr` · the `wp-*` bins |',

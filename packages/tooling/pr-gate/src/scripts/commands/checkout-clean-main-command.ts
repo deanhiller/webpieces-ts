@@ -18,28 +18,26 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * ─── ITS RELATIONSHIP TO `git checkout main && git pull origin main` (READ BEFORE "DELETING" THAT) ────
  * That pair was already the enforced spelling: bare `git checkout main` is blocked precisely so the pull
  * rides along. This command is the same pairing with cleanup and the sweep welded on, and the WORKFLOW
- * messages should prescribe this instead — two spellings where one sweeps and one does not is shim shape
+ * messages now prescribe this instead — two spellings where one sweeps and one does not is shim shape
  * #1, an agent types whichever is accepted and the corpses accumulate forever.
  *
- * That swap is NOT in this change, and the reason is a constraint that outranks the shim rule: the raw
- * pair is a TERMINAL ENTRY ON THE L0 ALLOWLIST (`CHECKOUT_MAIN_PULL_CMD` in ai-hook-rules
+ * The raw pair is NOT deleted, and the reason is a constraint that outranks the shim rule: it is a
+ * TERMINAL ENTRY ON THE L0 ALLOWLIST (`CHECKOUT_MAIN_PULL_CMD` in ai-hook-rules
  * `src/bin/l0-allowlist.ts`, consumed as an L0 cure in `src/core/l0-matrix.ts`) — one of
  * the few commands still permitted while an L0 block denies every other tool call. In exactly that
  * state, `node_modules` is the thing that is untrustworthy, so a `pnpm wp-*` bin is the one kind of cure
  * that cannot be relied on to run. The same reasoning covers the L0 shim's own fix option in
- * `templates/ai-hook.sh`.
+ * `templates/ai-hook.sh` (rendered from `src/bin/shim-drift-fix.ts`).
  *
- * So the end state is TWO LAYERS, not a deletion:
- *   • L0 recovery (l0-allowlist, ai-hook.sh, l0-matrix)  → keeps the raw pair. It is not a shim there;
- *     it is the only thing that works when the package manager's output is what is in doubt.
- *   • the WORKFLOW layer (stale-main-bash-guard's preferred cure, merged-branch-message, tree-recovery,
- *     the L2 rows/doc, CLAUDE.md's "Finishing a Feature") → prescribes `pnpm wp-checkout-clean-main`,
- *     and stops printing the pair.
+ * So the end state is TWO LAYERS, not a deletion, and it is now in place:
+ *   • L0 recovery (l0-allowlist, shim-drift-fix, l0-matrix) → keeps the raw pair. It is not a shim
+ *     there; it is the only thing that works when the package manager's output is what is in doubt.
+ *   • the WORKFLOW layer (stale-main-bash-guard's preferred cure, merged-branch-message/-bash-guard,
+ *     TreeRecovery's cleanupSteps and updateMainSteps, the L2 rows/doc, CLAUDE.md's "Finishing a
+ *     Feature") → prescribes `pnpm wp-checkout-clean-main`, and no longer prints the pair.
  *
- * The second bullet is ~20 files of intertwined guard text with specs pinning exact strings, and it
- * lands as its own change — deliberately after this one, so the bin exists in a published release
- * before any guard names it. Until then both spellings work and only this one sweeps; that is a known,
- * recorded gap, not an oversight.
+ * The pair remains ALLOWED as a Bash command in both layers — this changed what the guards TEACH, not
+ * what they permit. Blocking it would have deleted the L0 escape along with the shim.
  *
  * ─── WHY GOING TO MAIN IS THE RIGHT MOMENT TO SWEEP ───────────────────────────────────────────────────
  * The corpses appear when git moves the working tree onto a base where the tracked files under some

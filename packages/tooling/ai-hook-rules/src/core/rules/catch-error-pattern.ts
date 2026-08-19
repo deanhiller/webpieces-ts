@@ -15,29 +15,23 @@ const CATCH_PATTERN = /\bcatch\s*\(\s*(\w+)(?:\s*:\s*(\w+))?\s*\)/;
 /**
  * Matches the required toError first statement (with or without comment-out).
  * Group 1 = variable name, group 2 = param passed to toError
+ *
+ * The optional `//` prefix is what makes Fix Option 2 — "to explicitly ignore the error, write
+ * `//const error = toError(err);`" — a real escape. It is only reachable when the pattern is tested
+ * against the RAW source line; see findToErrorStatement() for why both line arrays are needed.
  */
 const TO_ERROR_PATTERN = /^\s*(?:\/\/\s*)?const\s+(\w+)\s*=\s*toError\(\s*(\w+)\s*\)\s*;?\s*$/;
+
+/**
+ * What `stripTsNoise` leaves behind where a `//` comment was: the two slashes, then blanks to the end of
+ * the line. Trimming a stripped comment line therefore yields `//`, not `''`. See findToErrorStatement().
+ */
+const COMMENT_REMNANT = /\/\/\s*$/;
 
 interface ToErrorMatch {
     varName: string;
     paramName: string;
     lineIndex: number;
-}
-
-function findToErrorStatement(lines: readonly string[], startIndex: number): ToErrorMatch | 'not-found' | 'end-of-content' {
-    for (let j = startIndex; j < lines.length; j += 1) {
-        const line = lines[j].trim();
-        if (line === '' || line === '{') continue;
-
-        const match = TO_ERROR_PATTERN.exec(line);
-        if (match) {
-            return { varName: match[1], paramName: match[2], lineIndex: j };
-        }
-        // First non-blank line is not a toError call
-        return 'not-found';
-    }
-    // Ran off the end of the edit content — can't validate further
-    return 'end-of-content';
 }
 
 export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig> {
@@ -97,7 +91,7 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
             }
 
             // Find next non-blank line after the catch opening to check for toError
-            const toErrorResult = findToErrorStatement(lines, i + 1);
+            const toErrorResult = this.findToErrorStatement(ctx, i + 1);
             if (toErrorResult === 'not-found') {
                 violations.push(new V(
                     lineNum,
@@ -126,5 +120,49 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
         }
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
+    }
+
+    /**
+     * The first statement of the catch block, judged against BOTH line arrays — and that pairing is the
+     * whole fix for a bug that made this rule refuse the exact cure it prescribes.
+     *
+     * The rule FINDS catch clauses in `ctx.strippedLines`, which is right: a `catch (e) {` inside a
+     * comment is not a catch clause. But it used to also LOOK FOR the toError statement there, and
+     * stripping deletes `//const error = toError(err);` down to an empty line — so Fix Option 2, the
+     * documented way to say "this error is deliberately ignored", was reported as "no toError statement"
+     * every single time. TO_ERROR_PATTERN's optional `//` prefix could never match, because nothing
+     * carrying a `//` ever reached it. 34 catches in this repo already use that form.
+     *
+     * So: the RAW line decides whether the commented form is present, and the STRIPPED line decides what
+     * counts as "the first statement" (a blank line, a `{`, or an unrelated comment is skipped past).
+     * Raw is tested first because it is the only array in which the comment form survives; a live
+     * statement with a trailing comment (`const error = toError(err); // why`) fails the raw test on the
+     * `$` anchor and is then matched on its stripped form, which is exactly the intent.
+     *
+     * COMMENT_REMNANT is the other half of that, and it is a property of the stripper: `stripTsNoise`
+     * KEEPS the `//` marker and blanks only what follows it, so a stripped comment line trims to `//`
+     * rather than to the empty string. Without normalizing that away, `//` is neither blank nor a `{`,
+     * so it was taken for the first statement — which is the mechanical reason a commented-out toError
+     * reported "no toError statement", and the reason a trailing `// why` on a LIVE toError reported the
+     * same. One replace fixes both, in the one place the question is asked.
+     */
+    private findToErrorStatement(ctx: EditContext, startIndex: number): ToErrorMatch | 'not-found' | 'end-of-content' {
+        const stripped = ctx.strippedLines;
+        for (let j = startIndex; j < stripped.length; j += 1) {
+            const rawMatch = TO_ERROR_PATTERN.exec((ctx.lines[j] ?? '').trim());
+            if (rawMatch) return { varName: rawMatch[1], paramName: rawMatch[2], lineIndex: j };
+
+            const line = stripped[j].replace(COMMENT_REMNANT, '').trim();
+            // Blank, an opening brace, or a comment that stripping emptied — none of these is the first
+            // statement, so keep looking.
+            if (line === '' || line === '{') continue;
+
+            const match = TO_ERROR_PATTERN.exec(line);
+            if (match) return { varName: match[1], paramName: match[2], lineIndex: j };
+            // First real statement is not a toError call
+            return 'not-found';
+        }
+        // Ran off the end of the edit content — can't validate further
+        return 'end-of-content';
     }
 }

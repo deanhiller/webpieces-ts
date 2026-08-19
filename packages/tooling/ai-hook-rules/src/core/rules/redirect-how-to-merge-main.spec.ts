@@ -181,7 +181,9 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-main-'));
         const message = rule.check(ctx('git merge --ff-only origin/main', root))[0].message;
         expect(message).toContain('bring MAIN itself up to date');
-        expect(message).toContain('git checkout main && git pull origin main');
+        // The one command that goes to main, pulls it, reaps dead branches/worktrees and sweeps the
+        // orphan directories — not the hand-chained pair it used to print (see TreeRecovery).
+        expect(message).toContain('pnpm wp-checkout-clean-main');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -270,10 +272,17 @@ describe('redirect-how-to-merge-main — the pull path', () => {
         const hint = new StaleMainBashGuardRule(new BranchStateGuardConfig()).fixHint;
         const preferred = hint.fixOptions.filter((o: Option): boolean => o.preferred);
         expect(preferred.length).toBe(1);
-        const cure = /git checkout main && git pull origin main/.exec(preferred[0].text);
+        // The prescribed cure is now the ONE command, extracted from that guard's own hint rather than
+        // copied here, so a future edit that drifts away from what THIS guard accepts turns it red.
+        const cure = /pnpm wp-checkout-clean-main/.exec(preferred[0].text);
         expect(cure).not.toBeNull();
         expect(rule.check(ctx(cure === null ? '' : cure[0], repo)).length).toBe(0);
-        // …and the same cure carrying the flags an agent habitually appends, which is the form that
+        // THE HAND-ROLLED PAIR STAYS ALLOWED HERE, and that is deliberate rather than leftover. The
+        // guards stopped TEACHING it, but it is plain git and it is the L0 version-drift cure — the one
+        // state where node_modules is what is broken and no `pnpm` bin can be relied on to load. Turning
+        // "no longer prescribed" into "now blocked" would delete the only escape from that deadlock.
+        expect(rule.check(ctx('git checkout main && git pull origin main', repo)).length).toBe(0);
+        // …and the same pair carrying the flags an agent habitually appends, which is the form that
         // was blocked in the field.
         expect(rule.check(ctx('git checkout -q main && git pull -q origin main', repo)).length).toBe(0);
     });

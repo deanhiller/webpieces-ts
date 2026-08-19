@@ -82,6 +82,11 @@ export class BranchSwitchScan {
      * True only for landing on an EXISTING branch named `main` — the form that can hand you a stale
      * tree, and the form `git checkout main && git pull origin main` uses. `-b`/`-B`/`-c`/`-C` are
      * excluded because they create the branch here and now.
+     *
+     * This scan reads raw GIT, and it has to keep doing so even though the workflow messages now
+     * prescribe `pnpm wp-checkout-clean-main` instead: what the guards recommend is not what an agent
+     * necessarily types, the raw pair is still allowed and is still the L0 recovery cure, and a scan
+     * that stopped recognising it would stop catching the bare `git checkout main` it exists to catch.
      */
     landsOnExistingMain(segment: string): boolean {
         const target = this.targetOf(segment);

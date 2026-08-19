@@ -123,10 +123,16 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
         if (switches.some((s: BranchSwitch): boolean => !this.switches.isExistingMain(s))) {
             return this.block(ctx, segment, 'Blocked: this command switches to a feature branch and then pulls main into it.');
         }
-        // The recommended `git checkout main && git pull origin main` — but ONLY in the primary
-        // clone. Inside a linked worktree that checkout FATALS ("'main' is already checked out at
-        // <primary>"), so waving it through here hands the AI a command that cannot work and costs
+        // The hand-rolled `git checkout main && git pull origin main` — still ALLOWED, but ONLY in the
+        // primary clone. Inside a linked worktree that checkout FATALS ("'main' is already checked out
+        // at <primary>"), so waving it through here hands the AI a command that cannot work and costs
         // it a turn to discover. Steer to the fetch, which is all a worktree needs.
+        //
+        // Note this rule stays a pure ALLOW for the raw pair and always will: the workflow layer now
+        // PRESCRIBES `pnpm wp-checkout-clean-main` (see TreeRecovery.updateMainSteps, which block()
+        // below renders), but prescribing is not blocking. The pair is plain git, and it is the L0
+        // recovery cure — a state in which no `pnpm` bin can be trusted to run — so making it a block
+        // here would delete the only escape from a deadlock. What changed is what the guards TEACH.
         if (switches.length > 0) {
             if (this.recovery.kindOf(ctx.workspaceRoot) !== 'worktree') return null;
             // block() appends updateMainSteps for the tree we are in — don't say it twice here.

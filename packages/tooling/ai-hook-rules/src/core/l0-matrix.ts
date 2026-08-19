@@ -179,6 +179,12 @@ export const L0_FAULTS: readonly L0Fault[] = [
             // no longer on the L0 allowlist at all (see CHECKOUT_MAIN_PULL_BODY_ERE). This spelling ends
             // ON main, which is why it is safe from any branch — and it is a no-op checkout when you are
             // already there.
+            //
+            // And it is RAW GIT on purpose, where the workflow guards now say `pnpm wp-checkout-clean-main`
+            // instead. The fault being cured here is `node_modules` disagreeing with the pin, so
+            // `node_modules` is the untrustworthy thing — and every `pnpm wp-*` bin resolves through it.
+            // An L0 cure may never be a command that has to load the package it is repairing. See the
+            // long note on CHECKOUT_MAIN_PULL_BODY_ERE in bin/l0-allowlist.ts.
             bashCure(CHECKOUT_MAIN_PULL_CMD, false,
                 'node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so '
                 + 'sync first and install second; a bare install would downgrade you'),

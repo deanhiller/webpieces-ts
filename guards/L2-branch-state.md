@@ -66,7 +66,7 @@ guards, meant at most one of the four values could ever reach a spawn.
 | # | tools | state | act | cure |
 |---|---|---|---|---|
 | 1 | `B R E` | on the **global allowlist** (inert command, or a universal cure such as reading/editing `webpieces.config.json`) | 1 allow | — |
-| 2 | `B` | bare `git checkout main`, with no `git pull` chained into the same command | 4 block | `git checkout main && git pull origin main` |
+| 2 | `B` | bare `git checkout main`, with no `git pull` chained into the same command | 4 block | `pnpm wp-checkout-clean-main` |
 | 3 | `B R E` | **merge in progress** — L4 owns this state | 2 exempt | finish the merge: `pnpm wp-finish-upsert-pr` |
 | 4 | `B` | on the **skip list** — it gets you OUT, or tells you where you are | 1 allow | — |
 | 5 | `B E` | on `main` | 4 block | `git checkout -b <new> origin/main` |
@@ -143,7 +143,7 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 |---|---|---|---|---|
 | 1 | You are blocked by some other L2 row, and need to turn the policy off to get anything done | any state — this row is ahead of every block | ALLOW: reading and editing `webpieces.config.json` is never blocked, so the mode-OFF cure is always reachable | Edit `webpieces.config.json` → `hookGuards` → `branch-state-guard` → `"mode": "OFF"` |
 | 2 | A Write to `webpieces.config.json` while on `main`, which row 5 would otherwise block | on `main`, editing the one file that can disable the guard | ALLOW: the hook adapter bypasses feature-branch-guard for this path before any guard runs | None needed — the edit proceeds |
-| 3 | `git checkout main` after a merge, to start the next piece of work | about to land on whatever local `main` you last had — 157 commits behind, in the incident | BLOCK: decided from command TEXT alone, before the checkout, because the only `main` this could measure is the one it is about to leave | `git checkout main && git pull origin main` — the pull must be in the SAME command |
+| 3 | `git checkout main` after a merge, to start the next piece of work | about to land on whatever local `main` you last had — 157 commits behind, in the incident | BLOCK: decided from command TEXT alone, before the checkout, because the only `main` this could measure is the one it is about to leave | `pnpm wp-checkout-clean-main` — checkout, pull, reap dead branches/worktrees, sweep orphan directories, in one command (hand-rolled, the pull must be in the SAME command as the checkout) |
 | 4 | The same command inside a linked worktree, where `git checkout main` fatals anyway | linked worktree — `main` is already checked out in the primary clone | BLOCK, and the message prints the worktree form rather than a cure git would refuse | `git fetch origin main`, then work off `origin/main` |
 | 5 | Reading and editing conflicted files during a 3-point merge, on a branch row 9 would block | merge markers on disk — `pnpm wp-start-update` has run and not finished | EXEMPT: everything is permitted, which is exactly what lets row 9 be strict | Resolve the conflicts, then `pnpm wp-finish-upsert-pr` |
 | 6 | `git status` / `gh pr view` while blocked, to work out where you are | any state — orientation is never "working here" | ALLOW: metadata tells you where you are without putting stale file CONTENT in context | None needed |
@@ -194,7 +194,7 @@ Principle: **these get you OUT or tell you where you are.** They are not "workin
 | group | commands |
 |---|---|
 | get out | `git checkout -b <new> origin/main` · `git switch -c <new> origin/main` · `git switch <other>` · `git worktree add … -b <new> origin/main` |
-| make `main` current | `git pull` · `git fetch` · `git checkout main && git pull origin main` *(paired only)* |
+| make `main` current | `pnpm wp-checkout-clean-main` *(the prescribed form — also reaps dead branches/worktrees and sweeps orphan directories)* · `git pull` · `git fetch` · `git checkout main && git pull origin main` *(paired only; still allowed, and still the L0 recovery cure, where no `pnpm` bin can be trusted)* |
 | orient | `git status\|log\|diff\|branch` · `gh pr view\|list\|status\|checks` |
 | park work | `git stash` |
 | repair / tooling | `pnpm wp-start-update` · `pnpm wp-start-upsert-pr` · the `wp-*` bins |
