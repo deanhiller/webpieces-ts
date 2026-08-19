@@ -522,9 +522,8 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
     /**
      * The one thing an unknown key must NOT do is change behaviour: a document of nothing but unknown
      * keys has to read byte-for-byte like the no-file state — the same promise the absent-file block
-     * makes. Asserted against the DEFAULT constants rather than literal booleans, because
-     * `whole-repo-build-guard` defaults ON and hard-coding `false` here would silently re-assert the
-     * opt-in it stopped being.
+     * makes. Asserted against a freshly loaded ABSENT config rather than literal booleans, so it keeps
+     * comparing the two states to each other whatever the declared defaults become.
      */
     it('leaves every flag at its default when the file contains only unknown keys', () => {
         const home = fakeHome();
