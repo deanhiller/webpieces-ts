@@ -187,20 +187,51 @@ export class VersionSyncGuard {
      *
      * So the escalation is rendered as literal text to forward, with the versions and the direction
      * already filled in. A human cannot sit with every agent; the deny has to carry the whole ask.
+     *
+     * The ask is ROUTED THROUGH THE MAIN AGENT rather than phrased as a command, and that distinction is
+     * the whole point of this block. `git -C <mainRoot> pull` reads like something you run from wherever
+     * you are standing — so a subagent reads it, tries it, and only then discovers that CROSS-TREE GIT IS
+     * REFUSED to a worktree-isolated agent (same measurement shim-deny-reason.ts records: the harness
+     * blocks `git -C <other tree>`, and it is git specifically). This skew needs a git pull in main, so
+     * the one printed cure was the one thing this session cannot perform. Be precise about that and do
+     * NOT overstate it into "you cannot reach that tree at all" — a local `cd <main> && pnpm install`
+     * measurably DOES run, it simply cannot move main onto a different commit, which is what a skew
+     * requires. The actor who can is the MAIN AGENT running in the MAIN git worktree, so the forwarded
+     * text asks for exactly that — and asks to be TOLD WHEN IT IS DONE, because "the work happened" is
+     * the event that unblocks this subagent and it has no way to observe it otherwise.
+     *
+     * And it has to say STOP, in caps, because forwarding is only half of what the subagent must do. One
+     * measured transcript re-fired this identical deny 35 TIMES: the subagent read it, escalated exactly
+     * as asked — and then kept making tool calls, because nothing here said that forwarding ENDS the
+     * turn. Every retry cost a round trip and pushed the one message that mattered further up the
+     * scrollback. The block is not transient and no command from this tree slips past it, so retrying is
+     * never a strategy; it is the bug. The caps are spent ONLY on that beat (STOP WORKING NOW / NO
+     * further tool calls / RETRYING IS THE BUG / WAIT) — shouting the whole report would just restore
+     * the wall of text the L0 message diet exists to prevent.
      */
     private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
         const ask = bump
             ? [
                   `     > A \`pnpm install\` in main will NOT fix this — main's PIN has to move. Pick one:`,
                   `     >  (a) I redo this task in the MAIN tree (a version bump cannot be done in a worktree), or`,
-                  `     >  (b) you raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and I continue here.`,
+                  `     >  (b) you TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to`,
+                  `     >      raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and to tell me when it is complete`,
+                  `     >      so I can continue here. I cannot reach that tree from here.`,
               ]
-            : [`     > Please \`git -C ${tree.mainRoot} pull\` then \`pnpm install\` there, so both trees are on`, `     > the same release. I cannot reach that tree from here.`];
+            : [
+                  `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
+                  `     > \`git pull && pnpm install\` there, so both trees are on the same release, and to tell me`,
+                  `     > when it is complete so I can continue working. I cannot reach that tree from here.`,
+              ];
         return [
             `   SUBAGENT? You cannot fix the main tree from here. Forward this to your coordinator verbatim:`,
             `     > My worktree ${tree.root} is on @webpieces ${this.show(quartet.worktree.pinned).trim()};`,
             `     > the main tree ${tree.mainRoot} is on ${this.show(quartet.main.pinned).trim()}.`,
             ...ask,
+            `   THEN STOP WORKING NOW. Forwarding that message IS the end of your turn: make NO further tool`,
+            `   calls and do NOT retry this one — RETRYING IS THE BUG. Every retry re-fires this identical`,
+            `   deny and buries the ask above; one transcript did it 35 times. Nothing you can do from this`,
+            `   tree clears it. WAIT for the main agent to confirm it is done, then resume — nothing between.`,
         ];
     }
 

@@ -293,7 +293,39 @@ describe('VersionSyncGuard — the message', () => {
         expect(report).toContain('My worktree');
         expect(report).toContain('is on @webpieces 0.4.612');
         expect(report).toContain('is on 0.4.616');
+        expect(report).toContain('TELL THE MAIN AGENT in the MAIN git worktree');
+        expect(report).toContain('git pull && pnpm install');
+        expect(report).toContain('tell me');
         expect(report).toContain('I cannot reach that tree from here');
+    });
+
+    /**
+     * `git -C <mainRoot> pull` reads as a command you could run from anywhere, and an isolated subagent
+     * has NO PATH to that tree at all — it cannot cd there, read it, or install into it. So the forwarded
+     * ask must name the actor who can (the main agent, in the main git worktree) and must ask to be told
+     * when that is DONE, since finishing is the only event that unblocks this tree.
+     */
+    it('routes the ask through the MAIN AGENT rather than phrasing it as a command the subagent could run', () => {
+        const report = reportFor();
+        expect(report).toContain('TELL THE MAIN AGENT');
+        expect(report).toContain('so I can continue working');
+        // The old phrasing handed the subagent a command aimed at a tree it cannot reach.
+        expect(report).not.toContain('Please `git -C');
+    });
+
+    /**
+     * THE 35-FIRING INCIDENT (2026-08-19). The chain worked: guard denied → subagent forwarded the ask
+     * verbatim → the coordinator relayed the pull+install. Nothing was lost except turns — the subagent
+     * then KEPT MAKING TOOL CALLS and re-fired this identical deny 35 times in ONE transcript, because
+     * nothing in the message said that forwarding ENDS the turn. Every retry buried the forwarded ask
+     * further up the scrollback. The block is not transient; no command from this tree slips past it.
+     */
+    it('tells the subagent to STOP and not retry, because retrying re-fires this identical deny', () => {
+        const report = reportFor();
+        expect(report).toContain('STOP WORKING NOW');
+        expect(report).toContain('NO further tool');
+        expect(report).toContain('RETRYING IS THE BUG');
+        expect(report).toContain('WAIT for the main agent');
     });
 
     /** The obvious wrong fix: downgrade main so it matches. That breaks every other tree. */
@@ -302,13 +334,15 @@ describe('VersionSyncGuard — the message', () => {
     });
 
     /**
-     * The budget rose from 24 to 30 for the forwardable escalation block, and that is a trade made with
-     * eyes open: the 24-line version WAS read, and it still dead-ended, because the four lines it spent
-     * on "report to your coordinator" carried no ask. A diet is there so the message gets read, not so
-     * it stays short while omitting the part that ends the block.
+     * The budget rose from 24 to 30 for the forwardable escalation block, and then from 30 to 38 for the
+     * STOP beat. Both are trades made with eyes open. The 24-line version WAS read and still dead-ended,
+     * because the four lines it spent on "report to your coordinator" carried no ask. The 30-line version
+     * was forwarded correctly and STILL cost 35 firings in one transcript, because it never said that
+     * forwarding ends the turn. A diet is there so the message gets read, not so it stays short while
+     * omitting the part that ends the block — and 35 copies of a 30-line report is not a diet either.
      */
     it('stays on the L0 message diet — short enough to be read, not skimmed', () => {
-        expect(reportFor().split('\n').length).toBeLessThanOrEqual(30);
+        expect(reportFor().split('\n').length).toBeLessThanOrEqual(38);
     });
 });
 
@@ -361,10 +395,20 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         expect(report).toContain("main's PIN has to move");
         expect(report).toContain("raise main's catalog pin to 0.4.638");
         expect(report).toContain('a version bump cannot be done in a worktree');
+        // Same defect, same cure: option (b) is something only the MAIN AGENT can perform.
+        expect(report).toContain('TELL THE MAIN AGENT in the MAIN git worktree');
+        expect(report).toContain('tell me when it is complete');
+    });
+
+    /** The 35-firing incident is branch-independent — a bump-skew subagent loops exactly the same way. */
+    it('carries the same STOP / do-not-retry beat', () => {
+        const report = bumpReport();
+        expect(report).toContain('STOP WORKING NOW');
+        expect(report).toContain('RETRYING IS THE BUG');
     });
 
     it('stays on the message diet in this branch too', () => {
-        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(30);
+        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(38);
     });
 });
 
