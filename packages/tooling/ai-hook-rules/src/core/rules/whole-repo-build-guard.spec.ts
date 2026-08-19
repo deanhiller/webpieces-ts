@@ -23,10 +23,10 @@ import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 
 const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
 
-// The guard is EXPERIMENTAL and OFF unless ~/.webpieces/config.json turns it on, so every test about
-// what it BLOCKS has to opt in first. Pinning the home config here also keeps the suite off the
-// developer's real one — a test that reads personal preferences passes or fails by accident.
-// HomeConfig(buildGateLogCapture, wholeRepoBuildGuard).
+// The guard is ON unless ~/.webpieces/config.json opts OUT. Pinning the home config here keeps the suite
+// off the developer's real one — a test that reads personal preferences passes or fails by accident — and
+// makes each test state the switch it is exercising rather than inheriting it.
+// HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, orphanDirSweep).
 function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
         .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false));
@@ -121,6 +121,18 @@ describe('whole-repo-build-guard leaves narrow work alone', () => {
         expect(blocked(GATE_COMMAND)).toBe(false);
         expect(blocked('pnpm nx affected --target=ci --base origin/main')).toBe(false);
         expect(blocked('pnpm nx affected -t ci --base=abc123')).toBe(false);
+    });
+
+    /**
+     * `pnpm wp-build` is the ONE command the refusal now hands out, and it runs
+     * `commands.pr-gate.buildCommand` through the gate's own resolver. A guard that blocked its own cure
+     * would be worse than no guard: the agent follows the instruction and is refused for obeying.
+     */
+    it('allows pnpm wp-build — the command its own refusal prints', () => {
+        expect(blocked('pnpm wp-build')).toBe(false);
+        expect(blocked('wp-build')).toBe(false);
+        expect(blocked('pnpm exec wp-build')).toBe(false);
+        expect(blocked('./node_modules/.bin/wp-build')).toBe(false);
     });
 
     it('allows a single project or target', () => {
@@ -237,6 +249,18 @@ describe('whole-repo-build-guard message', () => {
         expect(message).toContain('pnpm nx affected --target=ci --base=abc1234def');
     });
 
+    /**
+     * The refusal names `pnpm wp-build` — ONE thing to type — and shows what it resolves to beside it.
+     * Handing over only the raw nx incantation is how repos ended up hand-composing verify chains that
+     * drifted into building the world; handing over only the bin would hide which command actually ran.
+     */
+    it('names pnpm wp-build, with the command it resolves to alongside', () => {
+        const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
+        expect(message).toContain('pnpm wp-build');
+        expect(message).toContain('pnpm nx affected --target=ci --base=abc1234def');
+        expect(guard().fixHint.mainMessage).toContain('pnpm wp-build');
+    });
+
     it('stays short — a guard message is read mid-task, not studied', () => {
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message.split('\n').length).toBeLessThanOrEqual(6);
@@ -280,22 +304,25 @@ describe('whole-repo-build-guard picks its message from ~/.webpieces/config.json
  * shipped ON by default AND demanded a webpieces.config.json entry, so upgrading blocked every Bash
  * call), which is what these tests exist to prevent recurring.
  */
-describe('whole-repo-build-guard does NOTHING without ~/.webpieces/config.json', () => {
-    // The absent file yields the all-defaults HomeConfig — exactly what HomeConfigService returns when
-    // ~/.webpieces (or the file inside it) does not exist, which the home-config suite pins separately.
-    it('allows a command it would otherwise refuse, when there is no home config', () => {
+/**
+ * The switch is an OPT-OUT: `experimental.whole-repo-build-guard: false` in ~/.webpieces/config.json.
+ * Absent — no key, or no file at all, which is essentially every machine — reads ON, and the home-config
+ * suite pins that default separately. OFF must be indistinguishable from "this guard does not exist".
+ */
+describe('whole-repo-build-guard honours the machine-local opt-out', () => {
+    it('allows a command it would otherwise refuse, once a machine opts out', () => {
         pinHomeConfig(false);
         for (const command of ['pnpm run build-all', 'pnpm nx run-many --target=build', 'pnpm exec vitest run']) {
             expect(guard().check(ctx(command))).toEqual([]);
         }
     });
 
-    it('is off for an explicit false, exactly as it is for the absent file', () => {
+    it('stays off regardless of the unrelated build-log key', () => {
         pinHomeConfig(false, true);
         expect(guard().check(ctx('pnpm run build-all'))).toEqual([]);
     });
 
-    it('blocks the same command once the switch is true', () => {
+    it('blocks the same command for a machine that has not opted out', () => {
         pinHomeConfig(true);
         expect(guard().check(ctx('pnpm run build-all')).length).toBe(1);
     });

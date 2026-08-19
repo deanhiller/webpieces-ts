@@ -323,17 +323,24 @@ export class MyRoutes implements Routes {
 
 ## Build Verification (CRITICAL)
 
-**RULE: verify with the AFFECTED build. Never build the whole monorepo.**
+**RULE: verify with `pnpm wp-build`. Never build the whole monorepo, and never hand-compose a verify
+chain of your own.**
 
 ```bash
-pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)
+pnpm wp-build
 ```
 
-That is not "a faster build-all" — it is **the command the PR gate itself runs**
-(`commands.pr-gate.buildCommand` in `webpieces.config.json`). That is the whole argument: a green
-result locally is evidence about the gate, because it is the same command over the same scope. A
-whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only
-also compiles projects your change cannot reach.
+That runs `commands.pr-gate.buildCommand` from `webpieces.config.json` **verbatim** — through the same
+resolver the PR gate's own build stage uses, so a green result locally is evidence about the gate. It
+prints the command it resolved before running it, so you always know what actually ran. A
+whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only also
+compiles projects your change cannot reach.
+
+**Do not assemble your own verify chain.** `wp-build` deliberately runs one command and adds no
+format/lint/test leg of its own, because that composition is exactly what drifts: a sibling repo's
+`ci:local` grew into `prettier --check .` + `wp-ci` + `nx affected -t test` with no `--base` — three
+whole-world passes on every inner loop, none of them the command the gate runs. If something must run on
+every build, it belongs *inside* `buildCommand`, where the gate runs it too.
 
 Tighter loops, for while you are actually writing code:
 
@@ -345,12 +352,12 @@ pnpm nx run-many -t ci -p a b        # a couple of projects, named explicitly
 ```
 
 `pnpm run build-all` (and `nx run-many` with no `-p`, `nx affected` with no `--base`, and a bare
-`pnpm exec vitest run`) is what `whole-repo-build-guard` refuses, printing the affected command in its
-place. That guard is **EXPERIMENTAL and OFF unless this machine opts in** — its only switch is
-`experimental.whole-repo-build-guard` in the optional, untracked `~/.webpieces/config.json`; there is no
-`webpieces.config.json` entry for it. The rule above holds either way: run the affected build, guard or
-no guard. The `build-all` script stays in `package.json` on purpose — a human running it once is fine;
-an agent running it in a loop is the problem.
+`pnpm exec vitest run`) is what `whole-repo-build-guard` refuses, naming `pnpm wp-build` in its place.
+That guard is **ON for every tree** — the only switch is the OPT-OUT
+`experimental.whole-repo-build-guard: false` in the optional, untracked `~/.webpieces/config.json`, and
+there is no `webpieces.config.json` entry for it. Nothing has to be created or added anywhere to get the
+default. The `build-all` script stays in `package.json` on purpose — a human running it once is fine; an
+agent running it in a loop is the problem, and a PreToolUse hook only ever sees the agent.
 
 ### Does `affected` cover the workspace-global validators?
 
@@ -694,6 +701,9 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
    or just left exported "so existing code compiles" (see "NO webpieces surface is released
    backwards-compatible"). Delete it; the compile error is how callers get migrated.
 10. ❌ Building the whole monorepo (`pnpm run build-all`, `nx run-many` with no `-p`, `nx affected` with no
-   `--base`, a bare `pnpm exec vitest run`). Run the affected build, or one project, or one spec file
-   (see "Build Verification"). `whole-repo-build-guard` names the command to run instead — when this
-   machine has opted into it via `~/.webpieces/config.json`.
+   `--base`, a bare `pnpm exec vitest run`). Run `pnpm wp-build`, or one project, or one spec file
+   (see "Build Verification"). `whole-repo-build-guard` is ON for every tree and names `pnpm wp-build`
+   in its refusal.
+11. ❌ Hand-composing a verify chain (`format:check && webpieces:ci && test:affected` and friends), or
+   adding a leg to `wp-build`. One command, one config value. Anything that must run on every build goes
+   inside `commands.pr-gate.buildCommand`, so the PR gate runs it too.

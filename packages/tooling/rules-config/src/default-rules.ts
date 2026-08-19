@@ -74,10 +74,12 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     },
     'pr-lifecycle-guard': { mode: 'ON' },
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and
-    // HOOK_GUARD_NAMES with it. It is EXPERIMENTAL and switched only from the optional machine-local
-    // ~/.webpieces/config.json (`experimental.whole-repo-build-guard`). Adding it back here would make it
-    // a rule every consumer must configure — which is fault Y, i.e. every Bash call blocked on upgrade,
-    // which is exactly what it did the first time. See RETIRED_CONFIG_KEYS.
+    // HOOK_GUARD_NAMES with it. It is ON by default and turned off only from the optional machine-local
+    // ~/.webpieces/config.json (`experimental.whole-repo-build-guard: false`). Adding it back here would
+    // make it a rule every consumer must CONFIGURE — which is fault Y, i.e. every Bash call blocked on
+    // upgrade, which is exactly what it did the first time. That fault was the required KEY, not the
+    // default; being on by default from a file nobody has to create cannot reproduce it. See
+    // RETIRED_CONFIG_KEYS.
     //
     // branch-state-guard ships ON, INCLUDING its Read-blocking half.
     //

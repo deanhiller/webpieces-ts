@@ -89,6 +89,14 @@
                     "level": 2
                 },
                 {
+                    "id": "BuildCommand",
+                    "className": "BuildCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/build-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "BuildGateLog",
                     "className": "BuildGateLog",
                     "kind": "class",
@@ -748,6 +756,24 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "BuildCommand",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "BuildCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "CheckPrCommand",
@@ -1630,6 +1656,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "BuildCommand",
+                    "injection": "type",
+                    "token": "BuildCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/build-command.ts#BuildCommand",
+                    "paramName": "buildCommand",
+                    "paramType": "BuildCommand"
                 },
                 {
                     "from": "PrGateApp",

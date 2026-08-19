@@ -572,7 +572,10 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
     it('ALLOWS everything once the two trees agree — the block is the skew, not the worktree', () => {
         const dirs = stage('0.4.616');
         expect(runBash('pnpm build', dirs.resident, 'guards')).toBeNull();
-        expect(runBash('pnpm test', dirs.resident, 'guards')).toBeNull();
+        // NOT `pnpm test`: at a workspace root that is the whole suite, and whole-repo-build-guard is ON
+        // by default now, so it would be refused for its SCOPE — which has nothing to do with skew and
+        // would make this test pass or fail for the wrong reason. A narrowed run is the honest probe.
+        expect(runBash('pnpm exec vitest run packages/core', dirs.resident, 'guards')).toBeNull();
     });
 
     it('never blocks the look or the cure, so the resident agent is never deadlocked', () => {

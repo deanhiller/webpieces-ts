@@ -42,22 +42,30 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  * that reads like the guard's advice was wrong. Only `$(git …)` is expanded, and only read-only git;
  * anything else is left verbatim.
  *
- * ─── EXPERIMENTAL: the ONLY switch is ~/.webpieces/config.json ─────────────────────────────────────
- * `experimental.whole-repo-build-guard` (a boolean) decides whether this guard blocks anything at all.
- * There is NO webpieces.config.json entry — deliberately, and the reason is a live incident: this guard
- * first shipped as an ordinary validated guard with `mode: 'ON'` by default AND a required entry under
- * `hookGuards`, so every consumer that upgraded hit fault Y — EVERY Bash call blocked — for a feature
- * they had never asked for. An experimental feature is opted into from a machine-local file whose absent
- * state is byte-for-byte the old behaviour, or it is not experimental.
+ * ─── ON BY DEFAULT, with ONE machine-local opt-out ─────────────────────────────────────────────────
+ * `experimental.whole-repo-build-guard` in `~/.webpieces/config.json` is this guard's only switch, and
+ * it is an OPT-OUT: absent means ON (`WHOLE_REPO_BUILD_GUARD_DEFAULT`), `false` turns it off for this
+ * machine. Nothing has to be created, added or edited anywhere to be in the default state.
  *
- * Four states, and only four:
- *   - the file does not exist (essentially every consumer) → this guard is INERT. It blocks nothing and
- *     logs nothing, for every command, including the ones it would otherwise refuse.
- *   - the file exists and defines the key → the key's value decides.
- *   - the file exists but does NOT define the key → the guard is OFF, exactly as if there were no file.
- *     Every key in that file is optional, because it is MACHINE-GLOBAL and the repos on one machine pin
- *     different webpieces releases — a required key there is unsatisfiable (see home-config.ts). The
- *     default can only fail towards "never opted in", which is the safe direction.
+ * It shipped OFF-by-default first, and that is why it never did its job. A guard nobody opts into never
+ * fires: a sibling repo's `ci:local` verify chain ran `prettier --check .`, `wp-ci` and
+ * `nx affected -t test` with NO `--base` — three whole-world passes on every inner loop — for months,
+ * while the correct scoped command sat unused in `commands.pr-gate.buildCommand`.
+ *
+ * There is still NO webpieces.config.json entry, and the reason is a live incident that is often
+ * misread as an argument against defaulting ON. This guard first shipped with `mode: 'ON'` by default
+ * AND a REQUIRED entry under `hookGuards`, and every consumer that upgraded hit fault Y — EVERY Bash
+ * call blocked — for a feature they had never asked for. The fault was the REQUIRED KEY: the failure
+ * was at config LOAD, before any command was judged, and the cure was "edit a file to get your shell
+ * back". Defaulting ON from an OPTIONAL machine-local file is the opposite shape. The only thing that
+ * can be refused here is a command that genuinely builds the world, and the refusal hands over the
+ * scoped command that replaces it.
+ *
+ * Three states, and only three:
+ *   - the file does not exist (essentially every machine) → the guard is ON.
+ *   - the file exists → the key's value decides when it is named, and ON when it is not. Every key in
+ *     that file is optional, because it is MACHINE-GLOBAL and the repos on one machine pin different
+ *     webpieces releases — a required key there is unsatisfiable (see home-config.ts).
  *   - the file exists and is unparseable, or a key it DOES define has the wrong type → HARD FAILURE
  *     naming the edit. That is a file somebody wrote wrongly, not one written for another release.
  *     Editing that file is an unconditional PASS in the guards, so the block is always self-curable.
@@ -120,7 +128,7 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
         return new FixHint(
             'That command builds the WHOLE monorepo. Build only what your change affects.',
             'Build the affected projects, or one project, or one spec file — never the workspace:\n' +
-            `  ${command}   # the gate's own build\n` +
+            `  pnpm wp-build   # the gate's own build; runs: ${command}\n` +
             '  pnpm nx run <project>:ci   # one project\n' +
             '  pnpm exec vitest run <path>   # one suite\n' +
             'Turn this guard off for this machine by setting "experimental": ' +
@@ -135,9 +143,9 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
         // whatever command happens to be running, because a broken opt-in file is not a build question.
         if (home instanceof Error) return this.blockOnBrokenHomeConfig(ctx, home);
 
-        // THE EXPERIMENTAL GATE, and the state of essentially every consumer. Silent on purpose: no
-        // block, no log, no file touched — "no ~/.webpieces/config.json" must be indistinguishable from
-        // "this guard does not exist".
+        // THE OPT-OUT. True for every machine that has not said otherwise, including every machine with
+        // no `~/.webpieces/config.json` at all. Opting out is silent on purpose: no block, no log, no
+        // file touched — `false` must be indistinguishable from "this guard does not exist".
         this.homeConfigError = '';
         if (!home.wholeRepoBuildGuard) return [];
 
@@ -154,8 +162,8 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
 
     /**
      * The home config, or the Error explaining why it is unusable. NOT a boolean: "absent" is already
-     * folded into the returned HomeConfig (all-defaults, guard off), so the only thing left to
-     * distinguish is "present and wrong", which must be reported rather than swallowed.
+     * folded into the returned HomeConfig (each key's default — for this guard, ON), so the only thing
+     * left to distinguish is "present and wrong", which must be reported rather than swallowed.
      */
     private loadHome(): HomeConfig | Error {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: a rejected home config is converted
@@ -191,8 +199,11 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
                 + 'log file, and names that file if it fails. Read the file; do not rebuild.\n'
                 + 'Need a check before then: pnpm exec vitest run <path>.';
         }
+        // `pnpm wp-build` FIRST, with the command it resolves to shown beside it. One thing to type, and
+        // it runs `commands.pr-gate.buildCommand` through the gate's own resolver — so this refusal can
+        // never teach a command the gate does not run, however the project reconfigures it.
         return 'Blocked: that builds the WHOLE monorepo. Build only what your change affects:\n\n'
-            + `    ${this.resolvedCommand}\n\n`
+            + `    pnpm wp-build   # runs: ${this.resolvedCommand}\n\n`
             + 'Narrower still: pnpm nx run <project>:ci, or pnpm exec vitest run <path>.';
     }
 

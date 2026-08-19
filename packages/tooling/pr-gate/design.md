@@ -22,6 +22,7 @@ graph TD
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
     BuildArtifactGate["BuildArtifactGate"]
+    BuildCommand["BuildCommand"]
     BuildGateLog["BuildGateLog"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistCommentRenderer["ChecklistCommentRenderer"]
@@ -103,6 +104,8 @@ graph TD
     BuildArtifactGate --> BuildAffected
     BuildArtifactGate --> GeneratedArtifactRegistry
     BuildArtifactGate --> GitExec
+    BuildCommand --> BuildAffected
+    BuildCommand --> RepoRootFinder
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
@@ -201,6 +204,7 @@ graph TD
     OrphanDirSweeper --> OrphanDirScanner
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
+    PrGateApp --> BuildCommand
     PrGateApp --> CheckPrCommand
     PrGateApp --> CheckoutCleanMainCommand
     PrGateApp --> CleanupCommand
