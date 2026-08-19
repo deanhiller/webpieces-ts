@@ -1,7 +1,7 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -186,19 +186,37 @@ export class BuildGateLog {
     }
 
     // The two lines that name the log, identical on success and failure so there is one thing to recognise.
+    // The backup line says what is TRUE RIGHT NOW: on the very first build in a tree there is no `.bak`
+    // yet, and pointing a reader at a file that does not exist is the small lie that costs a wasted `cat`.
     private logPointer(logPath: string): string {
         const name = path.basename(logPath);
-        return `FullLog : ${logPath}\n` +
-            `(${name} is backed up to ${name}${BACKUP_SUFFIX} every run so you have the last 2 builds of logs)\n`;
+        const backedUp = fs.existsSync(this.backupPathFor(logPath))
+            ? `(${name} is backed up to ${name}${BACKUP_SUFFIX} every run so you have the last 2 builds of logs)`
+            : `(the previous ${name} is kept as ${name}${BACKUP_SUFFIX} on every run — this is the first, so there is none yet)`;
+        return `FullLog : ${logPath}\n${backedUp}\n`;
     }
 
-    // The log's last FAILURE_TAIL_LINES lines, or a plain statement that there are none. A log that cannot
-    // be read is reported AS that, never silently rendered as an empty tail.
+    /**
+     * The log's last FAILURE_TAIL_LINES lines, or a plain statement of why there are none.
+     *
+     * A read that fails is REPORTED, never allowed to throw: this renders the message for a build that has
+     * ALREADY failed, so an I/O error escaping here would replace the real failure with the renderer's own
+     * — the caller would lose the build error and be handed a filesystem error instead. The full log is
+     * still named on the line above, so nothing is hidden by degrading to one line.
+     */
     private tail(logPath: string): string {
         if (!fs.existsSync(logPath)) return `    (no log file at ${logPath})\n`;
-        const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter((l: string): boolean => l !== '');
-        if (lines.length === 0) return '    (the log is empty)\n';
-        return lines.slice(-FAILURE_TAIL_LINES).map((l: string): string => `    ${l}\n`).join('');
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: see above, the failure renderer may not
+        // replace the build's failure with its own.
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter((l: string): boolean => l !== '');
+            if (lines.length === 0) return '    (the log is empty)\n';
+            return lines.slice(-FAILURE_TAIL_LINES).map((l: string): string => `    ${l}\n`).join('');
+        } catch (err: unknown) {
+            const error = toError(err);
+            return `    (could not read ${logPath}: ${error.message})\n`;
+        }
     }
 
     // Resolve, and wait for, the child's exit code. A spawn that never starts (a shell that is missing, a

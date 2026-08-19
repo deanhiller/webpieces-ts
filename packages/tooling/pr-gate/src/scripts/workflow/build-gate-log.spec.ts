@@ -236,12 +236,28 @@ describe('BuildGateLog messages', () => {
      * SIZE is the feature. These messages replace "re-run the build yourself", so if the pointer ever
      * grows into a transcript it has defeated its own purpose. The tail is bounded for the same reason.
      */
-    it('names the log and the backup on success, in three lines', () => {
-        const msg = new BuildGateLog().successMessage('/abs/.webpieces/build.log');
+    it('names the log and the backup on success, in three lines', async () => {
+        const dir = repo('dean/x');
+        const log = new BuildGateLog();
+        const p = log.pathFor(dir, BUILD_STAGE);
+        await log.run(dir, 'echo first-run', p);
+        await log.run(dir, 'echo second-run', p);
+        const msg = log.successMessage(p);
         expect(msg).toContain('Build success');
-        expect(msg).toContain('FullLog : /abs/.webpieces/build.log');
+        expect(msg).toContain(`FullLog : ${p}`);
         expect(msg).toContain('(build.log is backed up to build.log.bak every run so you have the last 2 builds of logs)');
         expect(msg.trim().split('\n').length).toBe(3);
+    });
+
+    // The FIRST build in a tree has no .bak, and a pointer at a file that does not exist is a wasted read.
+    it('does not claim a backup that does not exist yet', async () => {
+        const dir = repo('dean/x');
+        const log = new BuildGateLog();
+        const p = log.pathFor(dir, BUILD_STAGE);
+        await log.run(dir, 'echo only-run', p);
+        const msg = log.successMessage(p);
+        expect(msg).toContain('this is the first, so there is none yet');
+        expect(msg).not.toContain('is backed up to build.log.bak every run');
     });
 
     it('on failure names the command, the log, and echoes a bounded tail', () => {
@@ -255,6 +271,21 @@ describe('BuildGateLog messages', () => {
         expect(msg).toContain('line-199');
         expect(msg).not.toContain('line-0\n');
         expect(msg.split('\n').filter((l: string): boolean => l.startsWith('    line-')).length).toBe(FAILURE_TAIL_LINES);
+    });
+
+    /**
+     * This renders the message for a build that has ALREADY failed. If reading the log threw, the caller
+     * would be handed a filesystem error INSTEAD of the build failure — the one outcome that loses the
+     * thing they were told to read.
+     */
+    it('reports an unreadable log rather than throwing over it', () => {
+        const dir = repo('dean/x');
+        const log = new BuildGateLog();
+        const p = log.pathFor(dir, BUILD_STAGE);
+        fs.mkdirSync(p);  // exists, but readFileSync cannot read a directory
+        const msg = log.failureMessage('pnpm build', p);
+        expect(msg).toContain(`could not read ${p}`);
+        expect(msg).toContain(`FullLog : ${p}`);
     });
 
     it('says so rather than showing an empty tail when there is no log to read', () => {
