@@ -56,10 +56,15 @@
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
         g.wp-node-clickable { cursor: pointer; }
+        /* Every shape Graphviz (or the runtime page's own queue-cylinder redraw) can emit for a node
+         * body: box/record -> polygon, circle -> ellipse, cylinder and the redrawn queue -> path. A
+         * shape left out of this list would be a box that is clickable but never looks it. */
         g.wp-node-clickable polygon,
-        g.wp-node-clickable ellipse { transition: stroke-width 0.12s ease, filter 0.12s ease; }
+        g.wp-node-clickable ellipse,
+        g.wp-node-clickable path { transition: stroke-width 0.12s ease, filter 0.12s ease; }
         g.wp-node-clickable:hover polygon,
-        g.wp-node-clickable:hover ellipse {
+        g.wp-node-clickable:hover ellipse,
+        g.wp-node-clickable:hover path {
             stroke: #1976d2;
             stroke-width: 5;
             filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
