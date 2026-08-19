@@ -77,6 +77,10 @@ class ToolingSourceScan {
         const toolingDir = path.join(this.repoRoot, 'packages', 'tooling');
         for (const entry of fs.readdirSync(toolingDir, { withFileTypes: true })) {
             if (!entry.isDirectory()) continue;
+            // Skipped HERE as well as inside collect(): this loop hands each child to collect() as a
+            // ROOT, and collect() only screens the names it iterates — so a root's own name is never
+            // tested by it.
+            if (entry.name === '.webpieces') continue;
             // The WHOLE package, not just src/. The three files this change had to fix by hand — two
             // README.md and rules-config/templates/webpieces.noexitinmain.md — all sit outside src/,
             // and a doc that teaches a rejected key is the same defect one level out (shim shape #6).
@@ -111,7 +115,12 @@ class ToolingSourceScan {
     private collect(dir: string): void {
         if (!fs.existsSync(dir)) return;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+            // `.webpieces` is the GITIGNORED per-repo state dir (hook audit logs, PR-review scratch).
+            // Those logs quote whatever code a hook saw, so one that ever touched the retired spelling
+            // parks that string on the developer's disk forever. Scanning it made this ratchet fail
+            // LOCALLY while CI — a fresh checkout with no logs — stayed green, which is the worst
+            // shape a guard can have. Only tracked source is in scope here.
+            if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.webpieces') continue;
             const full = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 this.collect(full);
