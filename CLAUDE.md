@@ -336,15 +336,24 @@ prints the command it resolved before running it, so you always know what actual
 whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only also
 compiles projects your change cannot reach.
 
-**The build's output goes to `.webpieces/build.log`, not to your terminal.** The console gets a
-heartbeat (`.webpieces/build.log size 100 lines`, plus `still` when the count has not moved) and then
-one summary — `Build success` or `Build Failed:`, the absolute `FullLog :` path, and a note that the
-previous run is kept as `.webpieces/build.log.bak`. Both are gitignored with the rest of `.webpieces/`.
+**The build's output goes to a log FILE, not to your terminal.** The console gets a heartbeat (`… size
+100 lines`, plus `still` when the count has not moved) and then one summary — `Build success` or
+`Build Failed:`, the absolute `FullLog :` path, and a note that the previous run is kept beside it as
+`build.log.bak`. Both are gitignored with the rest of `.webpieces/`.
+
+**Read the log at the absolute `FullLog :` path THIS run printed — never type a path from memory.**
+`.webpieces/` tooling state is worktree-namespaced *inside the primary clone*, not duplicated per
+worktree. So the log is `<primary>/.webpieces/build.log` only when you are standing in the primary
+clone; from a linked worktree — the normal case for a subagent — it is
+`<primary>/.webpieces/worktrees/<worktree-name>/build.log`, and a relative `.webpieces/build.log` in the
+worktree does not exist at all. Those two are illustrations of why you read the printed path, not a
+lookup table: `grep -n error "<the FullLog path>"` always works, and a remembered relative path silently
+greps nothing.
 
 **So read the FILE; never re-run the build to see a different slice of it.** That is the whole reason
 the log exists: one measured session spent 23.9 minutes across nine builds, five of them with no code
 change in between, walking `| tail -50` → `> /tmp/file` → `| grep` → `| sed -n '1100,1230p'` over
-output that had already scrolled past. Every one of those is a `grep` of `.webpieces/build.log` now, and
+output that had already scrolled past. Every one of those is a `grep` of the `FullLog :` file now, and
 the run before it is still on disk as `.bak`.
 
 `wp-build` ships from `@webpieces/pr-gate`, so like every other `wp-*` bin it arrives with a RELEASE —
