@@ -73,7 +73,10 @@ export const CLASSIFICATION_IN_USE = 'in-use';
  * `in-use` would tell wp-cleanup to shut up about exactly the ones a human might want to act on.
  *
  *  - PRUNABLE   — the directory is already gone; `git worktree prune` is the reap, not `remove`.
- *  - LOCKED     — a human ran `git worktree lock`. Explicitly "do not touch"; never promptable.
+ *  - LOCKED     — a `git worktree lock` is standing and whatever took it still is: a running Claude
+ *                 agent, or a reason we cannot attribute to anybody. Never promptable. A lock whose
+ *                 Claude agent is provably DEAD is not this — it is judged on its branch like any
+ *                 unlocked tree, and cleared on the way out (see agent-worktree-lock.ts).
  *  - CURRENT    — the worktree the command is running IN. Removing your own cwd is a self-destruct.
  *  - DETACHED   — detached HEAD, so there is no branch to judge and no branch to archive.
  */
@@ -169,6 +172,16 @@ export class DeletableWorktree {
     pr: number;
     deletable: boolean;
     classification: string;
+    /**
+     * This worktree still carries a `git worktree lock` that the reap must CLEAR before it can remove
+     * the directory — set only for a lock whose Claude agent is provably gone (see
+     * agent-worktree-lock.ts). Never set for a human lock or a live agent's: those are spared outright
+     * and never reach the reaper at all.
+     *
+     * A field rather than a constructor parameter for the same reason ReapedWorktree.archiveTag is:
+     * it is an annotation on an already-computed verdict, not one of the things the verdict IS.
+     */
+    unlockBeforeRemove: boolean = false;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(

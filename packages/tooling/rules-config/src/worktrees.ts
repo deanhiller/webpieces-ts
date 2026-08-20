@@ -22,6 +22,7 @@ import { toError } from './to-error';
 // main worktree. Keys are space-separated; `detached`, `bare` and `locked` may appear bare (no value).
 const WORKTREE_KEY = 'worktree ';
 const BRANCH_KEY = 'branch ';
+const LOCKED_KEY = 'locked ';
 const REFS_HEADS = 'refs/heads/';
 
 // Data-only (per CLAUDE.md, classes for data).
@@ -33,15 +34,36 @@ export class Worktree {
     isMain: boolean;
     // git already knows this worktree's directory is gone; `git worktree prune` will clear it.
     prunable: boolean;
-    // A human ran `git worktree lock`. Explicitly "do not touch".
+    // Somebody ran `git worktree lock`. WHO is a question only `lockReason` can answer.
     locked: boolean;
+    /**
+     * The `--reason` text verbatim, '' when the lock carried none.
+     *
+     * Load-bearing, not decoration: the Claude Code agent harness locks every worktree it opens for a
+     * subagent and writes a machine-readable reason naming the agent and its pid. Without this field
+     * `locked` collapsed a live agent, a dead agent and a human into one verdict, and wp-cleanup
+     * reported all three as "locked by a human". See agent-worktree-lock.ts.
+     */
+    lockReason: string;
 
-    constructor(path: string, branch: string, isMain: boolean, prunable: boolean, locked: boolean) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        path: string,
+        branch: string,
+        isMain: boolean,
+        prunable: boolean,
+        locked: boolean,
+        // REQUIRED, with no default. A 5-arg construction would silently mean "no reason recorded",
+        // which routes straight back to the bug this exists to fix — every agent lock unreadable and
+        // its worktree spared forever. A missing argument must be a compile error, not a quiet ''.
+        lockReason: string,
+    ) {
         this.path = path;
         this.branch = branch;
         this.isMain = isMain;
         this.prunable = prunable;
         this.locked = locked;
+        this.lockReason = lockReason;
     }
 }
 
@@ -144,14 +166,16 @@ export class WorktreeService {
         let branch = '';
         let prunable = false;
         let locked = false;
+        let lockReason = '';
 
         const flush = (): void => {
             if (path === '') return;
-            trees.push(new Worktree(path, branch, trees.length === 0, prunable, locked));
+            trees.push(new Worktree(path, branch, trees.length === 0, prunable, locked, lockReason));
             path = '';
             branch = '';
             prunable = false;
             locked = false;
+            lockReason = '';
         };
 
         for (const raw of out.split('\n')) {
@@ -167,8 +191,10 @@ export class WorktreeService {
                 branch = ref.startsWith(REFS_HEADS) ? ref.slice(REFS_HEADS.length) : ref;
             } else if (line === 'prunable' || line.startsWith('prunable ')) {
                 prunable = true;
-            } else if (line === 'locked' || line.startsWith('locked ')) {
+            } else if (line === LOCKED_KEY.trim() || line.startsWith(LOCKED_KEY)) {
                 locked = true;
+                // `locked` alone is a lock with no --reason; `locked <text>` carries the reason verbatim.
+                lockReason = line.slice(LOCKED_KEY.length).trim();
             }
         }
         flush();

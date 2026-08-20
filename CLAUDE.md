@@ -714,7 +714,8 @@ its verdicts against the post-removal truth. Do not hand-run `git worktree prune
 It removes only what it can PROVE is dead: a worktree whose directory is already gone, or whose branch
 is dead by a merged PR (its own, or the one it snapshots); a branch that is merged, is a squash-merge
 backup of a merged one, or has no commits of its own. Everything short of that is spared or offered as a
-question — a LOCKED worktree, the one you are standing in, a detached HEAD, and any branch not provably
+question — a worktree LOCKED by something still there (whoever the lock reason names, or a claude agent
+whose pid is still running), the one you are standing in, a detached HEAD, and any branch not provably
 merged (including one with no commits yet, which is what every worktree looks like while an agent is
 still working in it). Every removal is logged with its pre-delete SHA and a `recover=` command that
 brings back both the directory and its branch. Do not stop to ask whether it is safe to run — it is the

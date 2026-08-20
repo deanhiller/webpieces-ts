@@ -55,7 +55,7 @@ export class WorktreeCleanupSection {
      * classification order the branch prompt uses, because it is literally the same verdict on the
      * branch the worktree holds.
      *
-     * Deliberately excluded: LOCKED (a human already said do not touch), CURRENT (removing your own cwd
+     * Deliberately excluded: LOCKED (a lock is standing and we cannot say whose), CURRENT (removing your own cwd
      * is not a thing to offer), DETACHED (no branch, so nothing to archive and nothing to judge) and
      * PRUNABLE (already provably dead — it is in the auto-reap list, not this one).
      */

@@ -14,6 +14,7 @@ appears in each root's tree.
 graph TD
     ActiveHatchReport["ActiveHatchReport"]
     AgedTreeSweeper["AgedTreeSweeper"]
+    AgentWorktreeLockReader["AgentWorktreeLockReader"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
     BranchArchiver["BranchArchiver"]
@@ -93,6 +94,7 @@ graph TD
     SubagentProvenanceService["SubagentProvenanceService"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
+    WorktreeLockVerdicts["WorktreeLockVerdicts"]
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
     ActiveHatchReport --> ConfigFile
@@ -201,6 +203,7 @@ graph TD
     MergeState --> DotWebpieces
     MergedBranchesService --> AtomicFile
     MergedBranchesService --> DotWebpieces
+    MergedBranchesService --> WorktreeLockVerdicts
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
     OrphanDirSweeper --> HomeConfigService
@@ -279,6 +282,7 @@ graph TD
     StartUpsertPrCommand --> RunUpdate
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper
+    WorktreeLockVerdicts --> AgentWorktreeLockReader
     WorktreeReaper --> BranchArchiver
     WorktreeReaper --> BranchMutationLog
     WorktreeReaper --> WorktreeService

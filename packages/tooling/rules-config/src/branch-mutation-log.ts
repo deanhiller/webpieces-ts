@@ -149,9 +149,13 @@ export class BranchMutationLog {
         if (event.oldMain !== '' || event.newMain !== '') parts.push(`oldMain=${event.oldMain || '?'} newMain=${event.newMain || '?'}`);
         if (event.conflict) parts.push('conflict=true');
         if (event.conflictFiles.length > 0) parts.push(`conflictFiles=${event.conflictFiles.length}(${event.conflictFiles.join(',')})`);
-        if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
         // Emitted as one unit so the hash is never separated from the command that undoes the delete.
         // Prefer the archive TAG as the recover ref when there is one — it does not expire.
+        //
+        // AHEAD OF `outcome=` DELIBERATELY. The line is capped at MAX_DETAIL_LEN, and the two absolute
+        // worktree paths a REAP_WORKTREE carries already put a real reap within a few characters of
+        // that cap — so whichever token comes last is the one that silently loses its tail. Prose
+        // describing what happened is the affordable loss; the command that undoes it is not.
         if (event.worktreePath !== '') {
             parts.push(this.worktreeDetail(event));
         } else if (event.sha !== '' && event.archiveTag !== '') {
@@ -162,6 +166,7 @@ export class BranchMutationLog {
         } else if (event.sha !== '') {
             parts.push(`sha=${event.sha} recover=git branch ${event.fromBranch || '?'} ${event.sha}`);
         }
+        if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
         for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
         return parts.join(' ');
     }

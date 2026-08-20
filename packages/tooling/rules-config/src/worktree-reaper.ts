@@ -242,6 +242,15 @@ export class WorktreeReaper {
         const archive = this.archiveBranch(repoRoot, target, retention, sha);
         if (!archive.ok) return this.archiveFailed(repoRoot, verb, target, sha, archive);
 
+        // A worktree left LOCKED by an agent that has since died: git refuses `worktree remove` while
+        // the lock stands, so clearing it is part of the removal rather than a separate decision. The
+        // decision was already made upstream — merged-branches.ts sets this ONLY for a lock whose pid
+        // is provably gone, and a lock held by a live agent or by anything unrecognised never gets a
+        // verdict that reaches here. A failed unlock is not reported on its own: the removal that
+        // follows fails with git's own words, which is the message a human can actually act on.
+        const unlockedOk = target.unlockBeforeRemove && target.classification !== CLASSIFICATION_PRUNABLE
+            && this.capture(repoRoot, ['worktree', 'unlock', target.path]).ok;
+
         const removed = target.classification === CLASSIFICATION_PRUNABLE
             ? this.capture(repoRoot, ['worktree', 'prune'])
             : this.capture(repoRoot, ['worktree', 'remove', target.path]);
@@ -256,9 +265,14 @@ export class WorktreeReaper {
         result.archiveTag = archive.tag;
         result.branchDeleted = branchDeleted;
 
+        // The audit line records the unlock too: overriding a `git worktree lock` is the one step here
+        // a reader could be surprised by, so it must be in the log next to the SHA and the recover=.
+        // Reads the RESULT rather than asserting the attempt: a log line claiming an unlock that git
+        // refused would be the same species of untrue message this whole change is removing.
+        const unlocked = unlockedOk ? 'unlocked stale agent lock, ' : '';
         this.log(repoRoot, verb, target, sha, archive.tag, branchDeleted
-            ? `removed worktree and deleted branch (${target.reason})`
-            : `removed worktree; branch '${target.branch}' survived (git refused the delete)`);
+            ? `${unlocked}removed worktree and deleted branch (${target.reason})`
+            : `${unlocked}removed worktree; branch '${target.branch}' survived (git refused the delete)`);
         return result;
     }
 

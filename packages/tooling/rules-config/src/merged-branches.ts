@@ -6,6 +6,7 @@ import { AtomicFile } from './atomic-file';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
 import { Worktree, WorktreeService } from './worktrees';
+import { WorktreeLockVerdicts } from './worktree-lock-verdicts';
 import {
     CacheFreshness,
     CACHE_STALE_AFTER_MS,
@@ -144,6 +145,10 @@ interface RawWorktree {
     deletable?: boolean;
     // Absent before worktree verdicts carried a classification — revives to 'never-proposed'.
     classification?: string;
+    // Absent before stale agent locks were recognised — revives to false, i.e. "there is no lock to
+    // clear", which is the fail-safe direction: the removal fails loudly instead of overriding a lock
+    // this release cannot see a reason for.
+    unlockBeforeRemove?: boolean;
 }
 
 interface RawCache {
@@ -176,6 +181,7 @@ export class MergedBranchesService {
         private readonly worktrees: WorktreeService = new WorktreeService(),
         private readonly dotDir: DotWebpieces = dotWebpieces,
         private readonly atomicFile: AtomicFile = new AtomicFile(),
+        private readonly locks: WorktreeLockVerdicts = new WorktreeLockVerdicts(),
     ) {}
 
     /**
@@ -339,10 +345,11 @@ export class MergedBranchesService {
      *
      * A worktree is deletable when its directory is already gone (`prunable`), or when its branch is
      * dead by the very same proof the branch cap uses — a MERGED PR, its own or that of the branch it
-     * snapshots. Nothing else. It is spared when it is LOCKED (a human said "do not touch"), when it is
-     * the worktree we are standing in right now (removing your own cwd is not a thing to suggest to an
-     * agent), or when its branch is anything short of provably merged — INCLUDING a branch with no
-     * commits yet, which is what every worktree looks like while an agent is working in it.
+     * snapshots. Nothing else. It is spared when it is LOCKED BY SOMETHING STILL THERE (see
+     * lockVerdict), when it is the worktree we are standing in right now (removing your own cwd is not
+     * a thing to suggest to an agent), or when its branch is anything short of provably merged —
+     * INCLUDING a branch with no commits yet, which is what every worktree looks like while an agent
+     * is working in it.
      */
     private classifyWorktrees(
         repoRoot: string,
@@ -360,21 +367,24 @@ export class MergedBranchesService {
                     CLASSIFICATION_PRUNABLE));
                 continue;
             }
-            if (tree.locked) {
+            // A dead agent's lock returns null here and the worktree is judged on its branch below,
+            // exactly like an unlocked one — with `unlockBeforeRemove` set so the reap clears the lock.
+            const staleLock = tree.locked ? this.locks.staleAgentLock(tree) : null;
+            if (tree.locked && staleLock === null) {
                 out.push(new DeletableWorktree(
-                    tree.path, tree.branch, 'locked by a human — do not touch', 0, false,
-                    CLASSIFICATION_LOCKED));
+                    tree.path, tree.branch, this.locks.sparedReason(tree), 0, false, CLASSIFICATION_LOCKED));
                 continue;
             }
             if (tree.path === repoRoot) {
-                out.push(new DeletableWorktree(
-                    tree.path, tree.branch, 'you are standing in it', 0, false, CLASSIFICATION_CURRENT));
+                out.push(this.locks.annotate(new DeletableWorktree(
+                    tree.path, tree.branch, 'you are standing in it', 0, false, CLASSIFICATION_CURRENT),
+                staleLock));
                 continue;
             }
             if (tree.branch === '') {
-                out.push(new DeletableWorktree(
+                out.push(this.locks.annotate(new DeletableWorktree(
                     tree.path, '', 'detached HEAD — no branch to check, so a human must decide', 0, false,
-                    CLASSIFICATION_DETACHED));
+                    CLASSIFICATION_DETACHED), staleLock));
                 continue;
             }
 
@@ -382,9 +392,9 @@ export class MergedBranchesService {
             // group probably-dead worktrees exactly the way it groups probably-dead branches, instead of
             // inventing a second, parallel notion of "how dead is this".
             const verdict = this.classify(repoRoot, tree.branch, prs);
-            out.push(new DeletableWorktree(
+            out.push(this.locks.annotate(new DeletableWorktree(
                 tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable,
-                verdict.entry.classification));
+                verdict.entry.classification), staleLock));
         }
 
         return out;
@@ -634,14 +644,18 @@ export class MergedBranchesService {
 
     private reviveWorktrees(raw: RawWorktree[] | undefined): DeletableWorktree[] {
         if (!raw) return [];
-        return raw.map((entry: RawWorktree): DeletableWorktree => new DeletableWorktree(
-            entry.path ?? '',
-            entry.branch ?? '',
-            entry.reason ?? '',
-            entry.pr ?? 0,
-            entry.deletable ?? false,
-            entry.classification ?? CLASSIFICATION_NEVER_PROPOSED,
-        ));
+        return raw.map((entry: RawWorktree): DeletableWorktree => {
+            const verdict = new DeletableWorktree(
+                entry.path ?? '',
+                entry.branch ?? '',
+                entry.reason ?? '',
+                entry.pr ?? 0,
+                entry.deletable ?? false,
+                entry.classification ?? CLASSIFICATION_NEVER_PROPOSED,
+            );
+            verdict.unlockBeforeRemove = entry.unlockBeforeRemove ?? false;
+            return verdict;
+        });
     }
 
     // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.

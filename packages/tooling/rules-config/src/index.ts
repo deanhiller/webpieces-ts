@@ -364,6 +364,11 @@ export {
     WorktreeService,
 } from './worktrees';
 export {
+    AgentWorktreeLock,
+    AgentWorktreeLockReader,
+} from './agent-worktree-lock';
+export { WorktreeLockVerdicts } from './worktree-lock-verdicts';
+export {
     ReapedBranch,
     ReapResult,
     BranchReaper,
