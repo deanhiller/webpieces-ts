@@ -13,6 +13,32 @@ import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSec
  */
 
 describe('migrate', () => {
+    // Seeded EMPTY, and specifically NOT with a `.webpieces/**` glob. That exemption lives in code
+    // (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list), so a glob here would
+    // be a second and weaker spelling of it — and the next two tests are why a seed could never be the
+    // mechanism anyway: the migrator never rewrites a list a consumer already has.
+    it('seeds excludePaths EMPTY when the key is absent — the state-dir skip is code, not a glob', () => {
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        expect(result.config.excludePaths).toEqual([]);
+        expect(result.changes.some(c => c.includes('added excludePaths ([])'))).toBe(true);
+    });
+
+    it('leaves an EXISTING excludePaths array untouched — seeding never reaches an established repo', () => {
+        const result = migrate({
+            rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } },
+            excludePaths: ['repositories/**'],
+        });
+        expect(result.config.excludePaths).toEqual(['repositories/**']);
+    });
+
+    it('leaves an existing EMPTY excludePaths array empty — it is a choice, not a missing key', () => {
+        const result = migrate({
+            rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } },
+            excludePaths: [],
+        });
+        expect(result.config.excludePaths).toEqual([]);
+    });
+
     it('moves guards from rules → hookGuards and a top-level pr-gate → commands', () => {
         const result = migrate({
             rules: {

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { describe, expect, it, type TestContext } from 'vitest';
 
 /** The budget vitest.setup.mts grants every `packages/tooling/**` spec. Keep in step with that file. */
-const TOOLING_TIMEOUT_MS = 120_000;
+const TOOLING_TIMEOUT_MS = 240_000;
 
 /**
  * Proves vitest.setup.mts actually grants `packages/tooling/**` its longer timeout budget.
@@ -44,7 +44,8 @@ describe('the packages/tooling timeout budget from vitest.setup.mts', () => {
  * This is the regression test for the way the first cut of this change failed. A third argument on
  * `it()`/`beforeAll()` overrides `vi.setConfig` from a setup file, and
  * `branch-creation-guard.e2e.spec.ts` carried `}, 60_000)` on the exact hook that was timing out — so the
- * one file most in need of 120s was the only one still capped, at 60s, against a 46s idle measurement.
+ * one file most in need of the budget was the only one still capped, at 60s, against a 46s idle
+ * measurement. (That same hook is why the budget went 120s → 240s; see vitest.setup.mts.)
  * The commit that "fixed" the timeouts shipped with that file still broken and a comment claiming
  * otherwise, and the build went red again with the fix supposedly in place.
  *

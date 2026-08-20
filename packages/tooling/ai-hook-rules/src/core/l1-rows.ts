@@ -232,13 +232,13 @@ export const L1_ROWS: readonly L1Row[] = [
                 'a worktree on an older branch pins `0.4.612` while the main tree runs `0.4.616`, and `cd <wt> && pnpm build` is blocked',
                 '`w` / `n` / `n` — row 8',
                 'BLOCK_AI_CURE',
-                'Option 1 (preferred): `git pull` BOTH trees onto the same main, then `pnpm install` in each tree that has a node_modules — the pin is tracked, so the same commit gives both trees the same version<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a DIFFERENT version, use a separate CLONE — a clone gets its own governance. That is the answer to "I need a different version", never to "I need to install here": a worktree MAY have its own node_modules (nx, vitest and the eslint plugin all load from it), it just may not hold a different @webpieces version<br>Do NOT: lower the MAIN tree\'s pin to match — that downgrades every tree, including this session\'s own governor',
+                'Option 1 (preferred): the MAIN tree is AHEAD, so this is YOURS and it is a one-line edit — raise THIS tree\'s catalog pin in `pnpm-workspace.yaml` to what main already runs, then `pnpm install` here if this tree has a node_modules. That edit is on the L0 allowlist, so it is typable while the block is up, and nothing has to move in the main tree<br>Option 2: do the work in the main tree, which this guard never blocks<br>Option 3: if the tree genuinely needs a DIFFERENT version, use a separate CLONE — a clone gets its own governance. That is the answer to "I need a different version", never to "I need to install here": a worktree MAY have its own node_modules (nx, vitest and the eslint plugin all load from it), it just may not hold a different @webpieces version<br>Do NOT: lower the MAIN tree\'s pin to match — that downgrades every tree, including this session\'s own governor. And do NOT reach for `pnpm install` BEFORE the edit: this tree\'s pin is the stale side, so installing first materializes the OLD release',
                 new L1Classification('w', true, false, false, false)),
             new L1UseCase(16,
                 'a SUBAGENT hits the same block inside `.claude/worktrees/agent-XXXX`',
                 '`w` / `n` / `n` — row 8; in-repo placement is still `w`',
                 'BLOCK_AI_CURE',
-                'A subagent CANNOT fix this alone — the main tree is outside its tree, and a worktree-isolated agent may not even still be in the tree it was launched in (measured: auto-reaped at a turn boundary, resumed on the primary). Report to the coordinator: "my worktree is on X, the main tree is on Y — one of us must move"<br>Do NOT: expect exemption because it sits under the repo — K is git\'s `--git-common-dir` answer, not a path test',
+                'READ THE DIRECTION FIRST — the deny prints it. If the MAIN tree is AHEAD (the common case) a subagent fixes this ITSELF, here, by raising this tree\'s pin to what main already runs; there is nothing to escalate and the deny prints no escalation. Only when main is BEHIND, or when this branch bumped the pin on purpose, is the subagent stuck — the main tree is outside its tree, and a worktree-isolated agent may not even still be in the tree it was launched in (measured: auto-reaped at a turn boundary, resumed on the primary). Then, and only then, forward the deny\'s verbatim ask to the coordinator and STOP<br>Do NOT: expect exemption because it sits under the repo — K is git\'s `--git-common-dir` answer, not a path test',
                 new L1Classification('w', true, false, false, false)),
         ]),
     new L1Row(4, 'pw', '-', '-', 'n', '-', ACT_DOWN, 'force-to-root has no jurisdiction', null, null, [
@@ -329,8 +329,8 @@ export const L1_ROWS: readonly L1Row[] = [
 ];
 
 /**
- * The use cases that exercise something that is NOT a row: the excludePaths FILTER (2, 3, 4) and the L0
- * allowlist that runs ahead of L1 (15).
+ * The use cases that exercise something that is NOT a row: the excludePaths FILTER (2, 3, 4, 20) and the
+ * L0 allowlist that runs ahead of L1 (15).
  *
  * They are use cases of L1 all the same — "exempt" is what emerges when the filter empties the rule
  * list, and case 15 is the invariant that a cure stays reachable from every tree — so they stay in the
@@ -352,6 +352,11 @@ export const L1_UNROWED_USE_CASES: readonly L1UseCase[] = [
         'filter, on the TARGET path',
         '→ L2',
         'none — for file tools the cwd is irrelevant; do NOT `cd` anywhere to "fix" it'),
+    new L1UseCase(20,
+        'Write `.webpieces/worktrees/agent-＊/pr-review/…/review-＊.json` allowed on main, with `excludePaths` empty',
+        'filter — `.webpieces/` is HARD-CODED exempt (`isWebpiecesStateDir`), ahead of the config list',
+        'ALLOW_EXEMPT',
+        'none needed — the dir is gitignored, so no config can put it back under governance'),
     new L1UseCase(15,
         '`cd <worktree> && pnpm install` still runs while row 8 is live — it is the CURE',
         'L0 allowlist, ahead of L1',

@@ -93,16 +93,17 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 |---|---|---|
 | 1 | any Read | PASS |
 | 2 | a Write/Edit whose target is webpieces.config.json | PASS |
-| 3 | pnpm|npm install | ALLOW |
-| 4 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
-| 5 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
-| 6 | git checkout main && git pull origin main | ALLOW |
-| 7 | pnpm exec wp-upgrade-shim | ALLOW |
-| 8 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 9 | pnpm wp-prune-unknown-config | ALLOW |
-| 10 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 11 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
-| 12 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 3 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS |
+| 4 | pnpm|npm install | ALLOW |
+| 5 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
+| 6 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
+| 7 | git checkout main && git pull origin main | ALLOW |
+| 8 | pnpm exec wp-upgrade-shim | ALLOW |
+| 9 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
+| 10 | pnpm wp-prune-unknown-config | ALLOW |
+| 11 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
+| 12 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 13 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

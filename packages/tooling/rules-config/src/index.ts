@@ -40,7 +40,7 @@ export { AtomicFile } from './atomic-file';
 export { atRoot } from './at-root';
 export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
-export { ExcludePaths } from './exclude-hook-paths';
+export { ExcludePaths, isWebpiecesStateDir } from './exclude-hook-paths';
 export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 // THE one `no-custom-css` path exemption. Both engines that enforce the rule (the edit-time hook and the
 // CI validator) consult this class, so `allowGlobs` cannot be honoured by one half and ignored by the other.

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { shimStaleRecoveryDecision } from './hook-core';
@@ -33,6 +35,27 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
         }
     });
 
+    /**
+     * ...and the same for the two MANIFESTS a @webpieces pin lives in. A stale shim is cured by an
+     * install, and an install materializes whatever the pin says — so the pin has to be reachable from
+     * inside the block for the same reason the config does. `package.json` used to sit on the DENY list
+     * here purely as "not webpieces.config.json"; it is on the allowlist in its own right now.
+     */
+    it('passes an edit to a tree ROOT\'s pnpm-workspace.yaml / package.json through (the version pin)', () => {
+        // A REAL root, because the entry is scoped by the sibling webpieces.config.json — the one test
+        // that admits the main clone AND every worktree while excluding every project manifest.
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-shim-stale-'));
+        fs.writeFileSync(path.join(root, CONFIG_FILENAME), '{}\n');
+        for (const tool of ['Write', 'Edit', 'MultiEdit']) {
+            for (const name of ['pnpm-workspace.yaml', 'package.json']) {
+                expect(shimStaleRecoveryDecision(tool, '', path.join(root, name)), `${tool} ${name}`).toBe('pass');
+            }
+        }
+        // …and a project manifest, which has no config beside it, is NOT on the list.
+        fs.mkdirSync(path.join(root, 'packages', 'lib'), { recursive: true });
+        expect(shimStaleRecoveryDecision('Edit', '', path.join(root, 'packages', 'lib', 'package.json'))).toBe('deny');
+    });
+
     it('denies all OTHER work: a chained cure, an unrelated command, and edits to other files', () => {
         const deny: Array<[string, string, string]> = [
             ['Bash', `${RESTORE_SHIM_CMD} && git status --short`, ''], // the audit-log && spelling
@@ -40,7 +63,7 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
             ['Bash', 'pnpm build', ''],
             ['Write', '', '/repo/src/index.ts'],
             ['Edit', '', '/repo/README.md'],
-            ['MultiEdit', '', '/repo/package.json'],                   // NOT webpieces.config.json
+            ['MultiEdit', '', '/repo/src/Config.ts'],                  // NOT webpieces.config.json
         ];
         for (const [tool, cmd, file] of deny) {
             expect(shimStaleRecoveryDecision(tool, cmd, file), `${tool} ${cmd} ${file}`).toBe('deny');
