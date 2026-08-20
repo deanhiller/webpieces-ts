@@ -39,7 +39,7 @@ describe('filterByExcludedPaths', () => {
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
 
-    it('keeps every rule when the list is empty (enforce everywhere — the seeded default)', () => {
+    it('keeps every rule when the list is empty (enforce everywhere, bar the one hard-coded skip below)', () => {
         const kept = filterByExcludedPaths([codeRule, guard], 'vendor/lib/x.ts', new ExcludePaths([]));
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
@@ -47,6 +47,40 @@ describe('filterByExcludedPaths', () => {
     it('keeps everything when the list is empty even on a would-be-excluded path', () => {
         const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', new ExcludePaths([]));
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
+    });
+
+    // The `.webpieces/` skip is HARD-CODED, ahead of the config list, and these cases are the reason:
+    // every one of them was a live block against the tooling's own gitignored state. The motivating
+    // one is the third — wp-review-upsert-pr tells a reviewer subagent to write its verdict under
+    // `<primary>/.webpieces/worktrees/…`, feature-branch-guard resolved that to the PRIMARY clone and
+    // judged the primary's branch, so the reviewer was denied whenever the primary sat on main.
+    it('drops EVERY rule under .webpieces/ even with an EMPTY excludePaths', () => {
+        const ex = new ExcludePaths([]);
+        expect(filterByExcludedPaths([codeRule, guard], '.webpieces/tasks.md', ex)).toEqual([]);
+    });
+
+    it('drops EVERY rule for the BARE .webpieces directory — the form a `.webpieces/**` glob misses', () => {
+        expect(filterByExcludedPaths([codeRule, guard], '.webpieces', new ExcludePaths([]))).toEqual([]);
+    });
+
+    it('drops EVERY rule for a reviewer verdict written into a worktree namespace', () => {
+        const path = '.webpieces/worktrees/agent-abc123/pr-review/dean-feature/review-1.json';
+        expect(filterByExcludedPaths([codeRule, guard], path, new ExcludePaths([]))).toEqual([]);
+    });
+
+    // FIRST SEGMENT ONLY. A sibling whose name merely starts with the same characters, and a nested
+    // `.webpieces` belonging to something else, both stay governed — the skip is about THE state dir
+    // at the workspace root, not about the string.
+    it('keeps every rule for a path that only LOOKS like the state dir', () => {
+        const ex = new ExcludePaths([]);
+        expect(names(filterByExcludedPaths([codeRule, guard], '.webpieces-notes/x.ts', ex))).toEqual(['max-file-lines', 'feature-branch-guard']);
+        expect(names(filterByExcludedPaths([codeRule, guard], 'packages/.webpieces/x.ts', ex))).toEqual(['max-file-lines', 'feature-branch-guard']);
+    });
+
+    // '' is what the BASH path passes when the command has no leading `cd` (effectiveCwd === root).
+    // A skip that matched it would exempt every bash guard in the repo.
+    it('keeps every rule for the repo root itself', () => {
+        expect(names(filterByExcludedPaths([codeRule, guard], '', new ExcludePaths([])))).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
 });
 

@@ -329,8 +329,8 @@ export const L1_ROWS: readonly L1Row[] = [
 ];
 
 /**
- * The use cases that exercise something that is NOT a row: the excludePaths FILTER (2, 3, 4) and the L0
- * allowlist that runs ahead of L1 (15).
+ * The use cases that exercise something that is NOT a row: the excludePaths FILTER (2, 3, 4, 20) and the
+ * L0 allowlist that runs ahead of L1 (15).
  *
  * They are use cases of L1 all the same — "exempt" is what emerges when the filter empties the rule
  * list, and case 15 is the invariant that a cure stays reachable from every tree — so they stay in the
@@ -352,6 +352,11 @@ export const L1_UNROWED_USE_CASES: readonly L1UseCase[] = [
         'filter, on the TARGET path',
         '→ L2',
         'none — for file tools the cwd is irrelevant; do NOT `cd` anywhere to "fix" it'),
+    new L1UseCase(20,
+        'Write `.webpieces/worktrees/agent-＊/pr-review/…/review-＊.json` allowed on main, with `excludePaths` empty',
+        'filter — `.webpieces/` is HARD-CODED exempt (`isWebpiecesStateDir`), ahead of the config list',
+        'ALLOW_EXEMPT',
+        'none needed — the dir is gitignored, so no config can put it back under governance'),
     new L1UseCase(15,
         '`cd <worktree> && pnpm install` still runs while row 8 is live — it is the CURE',
         'L0 allowlist, ahead of L1',

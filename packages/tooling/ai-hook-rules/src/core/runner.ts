@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isWebpiecesStateDir, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { VersionSyncGuard } from './version-sync';
@@ -44,6 +44,9 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
 // governs a path or it does not. Per-rule carve-outs live in the rule's own `excludePaths`.
 // This is L1's FILTER (not a table row) — see guards/L1-location.md.
 export function filterByExcludedPaths(rules: readonly Rule[], relativePath: string, ex: ExcludePaths): readonly Rule[] {
+    // webpieces' OWN gitignored state dir is never governed, config or no config. Ahead of the list on
+    // purpose — see isWebpiecesStateDir for why it is code and not a seeded glob.
+    if (isWebpiecesStateDir(relativePath)) return [];
     if (ex.paths.some((p: string): boolean => globMatches(p, relativePath))) return [];
     return rules;
 }
