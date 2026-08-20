@@ -18,6 +18,7 @@ graph TD
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
     DotWebpieces["DotWebpieces"]
+    InstructAiDocSet["InstructAiDocSet"]:::many
     MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
     RepoRootFinder["RepoRootFinder"]
@@ -45,6 +46,7 @@ graph TD
     RulesConfigDesign --> TemplateWriter
     TemplateWriter --> AtomicFile
     TemplateWriter --> DotWebpieces
+    TemplateWriter --> InstructAiDocSet
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

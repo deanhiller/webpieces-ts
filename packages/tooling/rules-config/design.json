@@ -57,6 +57,14 @@
                     "level": 2
                 },
                 {
+                    "id": "InstructAiDocSet",
+                    "className": "InstructAiDocSet",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/instruct-ai-docs.ts",
+                    "level": 2
+                },
+                {
                     "id": "MainSyncFileStore",
                     "className": "MainSyncFileStore",
                     "kind": "class",
@@ -292,6 +300,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "TemplateWriter",
+                    "to": "InstructAiDocSet",
+                    "injection": "type",
+                    "token": "InstructAiDocSet",
+                    "tokenKey": "class:packages/tooling/rules-config/src/instruct-ai-docs.ts#InstructAiDocSet",
+                    "paramName": "docs",
+                    "paramType": "InstructAiDocSet"
                 }
             ],
             "unresolved": []

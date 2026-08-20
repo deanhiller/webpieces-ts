@@ -342,13 +342,14 @@ compiles projects your change cannot reach.
 `build.log.bak`. Both are gitignored with the rest of `.webpieces/`.
 
 **Read the log at the absolute `FullLog :` path THIS run printed — never type a path from memory.**
-`.webpieces/` tooling state is worktree-namespaced *inside the primary clone*, not duplicated per
-worktree. So the log is `<primary>/.webpieces/build.log` only when you are standing in the primary
-clone; from a linked worktree — the normal case for a subagent — it is
-`<primary>/.webpieces/worktrees/<worktree-name>/build.log`, and a relative `.webpieces/build.log` in the
-worktree does not exist at all. Those two are illustrations of why you read the printed path, not a
-lookup table: `grep -n error "<the FullLog path>"` always works, and a remembered relative path silently
-greps nothing.
+`grep -n error "<the FullLog path>"` always works; a remembered relative path silently greps nothing,
+which reads exactly like a clean build.
+
+Where that file actually lands — primary clone vs linked worktree, `wp-build` vs the PR gate's stages —
+is **`.webpieces/instruct-ai/webpieces.buildlog.md`**, regenerated on every `wp-*` command. Read it
+there rather than here: the namespacing is webpieces' to change, this file is hand-written, and a path
+copied into a hand-written file is exactly the thing that goes stale under us (see the corollary in
+"webpieces.config.json is NEVER released backwards-compatible").
 
 **So read the FILE; never re-run the build to see a different slice of it.** That is the whole reason
 the log exists: one measured session spent 23.9 minutes across nine builds, five of them with no code

@@ -178,7 +178,8 @@ flow are not interchangeable.
 - `wp-start-update` **pairs with** `wp-finish-update`. `wp-start-upsert-pr` **pairs with**
   `wp-review-upsert-pr` then `wp-finish-upsert-pr` — in the PR flow the middle command is not optional,
   and it is what validates a conflict resolution. A start from one pair plus a finish from the other is not a flow — if you are
-  unsure which run you are in, the generated `webpieces.mergeprocess.md` names your exact finish command.
+  unsure which run you are in, read `webpieces.mergeprocess.md`: once a merge has conflicted its opening
+  block is a live handback and names your exact finish command (before that it says it is a reference copy).
 - **An open PR MUST use flow B.** The 3-point merge rewrites this branch (squashes onto main and
   force-pushes a new generation), so the open PR's history is blown away and has to be re-pointed in the
   same run. Flow A never touches the PR, so running it with a PR open would strand that PR on the OLD
@@ -445,9 +446,28 @@ Who does what on the conflict path:
   validation). `git add -u` stages only your tracked resolutions and **refuses** if any
   untracked file is present — commit or delete those first, the tool will not sweep them in.
 
-The two docs cooperate: **this file** is the always-present overview of both paths;
-**`webpieces.mergeprocess.md`** is written *only when there is a conflict* and lists the exact files
-to resolve for that specific merge.
+The two docs cooperate: **this file** is the overview of both paths; **`webpieces.mergeprocess.md`** is
+the merge process itself. It is written beside this one on every `wp-*` command, so the link always
+resolves — as a reference copy while nothing is conflicted, and rewritten in place by `wp-start-*` with
+this run's branch, `MERGE_DIR`, finish command and conflicted-file list the moment a merge does conflict.
+Its opening lines say which of the two you are looking at.
+
+## Sibling docs in this directory
+
+Every doc named here is written into `.webpieces/instruct-ai/` together with this one — a doc and
+everything it links to always land as a set, so a link from this page never points at a file that is not
+there.
+
+| doc | read it when |
+|---|---|
+| `webpieces.mergeprocess.md` | a 3-point merge conflicted, or you want the resolution procedure |
+| `webpieces.buildlog.md` | you need the build's output — **the log is a FILE, and the path is the one `FullLog :` printed this run** |
+| `webpieces.location-matrix.md` | a guard decision or log line says `layer=L1 row=<n>` — L1 is location: jurisdiction, version skew, and git-from-the-root |
+| `webpieces.branch-state-matrix.md` | it says `layer=L2 row=<n>` — L2 is branch state: may I work here, is what I read current |
+| `webpieces.guard-matrix.md` | it says `layer=L0` or names a fault code — L0 is whether webpieces itself is trustworthy right now |
+
+The three matrices are generated from the very arrays the guards dispatch on, so a row on the page is
+the row that judged your call — not a description of it.
 
 ## Before you trust a push
 
