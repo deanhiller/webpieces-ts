@@ -5,6 +5,7 @@ import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHo
 import { buildContexts, buildBashContext } from './build-context';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
+import { ExcludedPathEscapeHint } from './excluded-path-escape';
 import { gitFromSubdirBlock } from './force-to-root';
 import { loadRules, loadMatchRules, loadKeylessBashRules, globMatches, GuardHintCommands } from './load-rules';
 import { missingDirectoryBlock } from './missing-directory';
@@ -477,8 +478,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     // Keyed on the JUDGED tree, so a worktree's cache is refreshed rather than the primary clone's.
     maybeRefreshMainSync(rules, tree.root, branchStateHangTimeout(loaded.rulesConfig));
 
-    const ctx = buildBashContext(command, tree);
-    const groups = runBashRules([...rules, ...keyless], ctx);
+    const groups = runBashRules([...rules, ...keyless], buildBashContext(command, tree));
     if (groups.length === 0) {
         // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
         // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log
@@ -492,7 +492,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
-    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
+    const report = new ExcludedPathEscapeHint(workspaceRoot, tree.effectiveCwd).render(command, loaded.excludePaths)
+        + formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }
 

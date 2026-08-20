@@ -420,6 +420,56 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
     });
 });
 
+// A bash DENY must advertise the escape the agent already has: a path the command names that
+// excludePaths exempts is reachable this instant through Read/Write, with no git operation at all.
+// The stanza leads the report because the agent acts on the first actionable thing it reads.
+describe('runBash — the deny body advertises the Read/Write escape for an excluded path', () => {
+    let outer: string;
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-esc-')));
+        initRepo(outer);
+        fs.mkdirSync(nodePath.join(outer, '.webpieces'), { recursive: true });
+        fs.mkdirSync(nodePath.join(outer, 'repositories', 'plain'), { recursive: true });
+    });
+
+    afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
+
+    it('prepends the stanza — ABOVE the git remedies — when the command names an excluded path', () => {
+        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+        const report = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards') as BlockedResult).report;
+        expect(report.startsWith('✅ YOU CAN USE THE READ/WRITE TOOLS RIGHT NOW')).toBe(true);
+        expect(report).toContain('Your command referenced: .webpieces/tasks.md');
+        expect(report).toContain('.webpieces/**');   // the ACTUAL configured globs, not an example
+        expect(report).toContain('gated flow');      // the verdict is unchanged — still the push block
+    });
+
+    it("normalises an ABSOLUTE path the same way (the live incident's shape)", () => {
+        writeGuardConfig(outer, ['.webpieces/**']);
+        const command = `git push origin HEAD && cat ${nodePath.join(outer, '.webpieces', 'tasks.md')}`;
+        const report = (runBash(command, outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('Your command referenced: .webpieces/tasks.md');
+    });
+
+    it('does NOT prepend the stanza when the command names no excluded path', () => {
+        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        expect(report).not.toContain('READ/WRITE TOOLS RIGHT NOW');
+        expect(report.startsWith('❌')).toBe(true);
+    });
+
+    it('offers the `cd` only when the directory itself matches — never the <dir>/** trap', () => {
+        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+
+        const withCd = (runBash('git push origin HEAD && cat repositories/plain/notes.md', outer, 'guards') as BlockedResult).report;
+        expect(withCd).toContain('cd repositories/plain &&');
+
+        const noCd = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards') as BlockedResult).report;
+        expect(noCd).not.toContain('cd .webpieces &&');
+        expect(noCd).toContain('A `cd` CANNOT rescue bash here');
+    });
+});
+
 // ONE legal shape for relocating a command. Every command rejected here was already being JUDGED from
 // the shell cwd — the rejection replaces a silent misdirect, it does not tighten any verdict.
 describe('runBash — a `cd` must come first, with a literal path (misplacedCdBlock)', () => {
