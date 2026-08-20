@@ -19,6 +19,7 @@ import { L0_ALLOW_JS, L0_CURE_ALLOW_JS, isRootManifest } from '../bin/shim';
 import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC, L0_FAULT_NONE } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import { L1Classification, firstMatchingL1Row, L1_PRESTAGE_ROW } from './l1-rows';
+import { withLocationMatrixPointer } from './l1-matrix-doc';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup, RuleFailError, InformAiError,
@@ -313,10 +314,10 @@ function l1Classify(command: string, tree: EffectiveTree): L1Classification {
     );
 }
 
-// The structural L1 blocks, in order: the misplaced-`cd` PRE-STAGE, then version skew
-// (row 8), then force-to-root (row 5). None is a configurable rule — they are decided from the command
-// text, the resolved tree and the caller, so they run as one step here rather than as three
-// near-identical stanzas in runBashInternal.
+// The structural L1 blocks, in order: the misplaced-`cd` PRE-STAGE, then version skew (row 8), then
+// force-to-root (row 5). None is a configurable rule — they are decided from the command text, the
+// resolved tree and the caller, so they run as one step here rather than as three near-identical
+// stanzas in runBashInternal.
 //
 // For the two TREE-BASED blocks the ORDER and the CHOICE are not written here: they come from L1_ROWS
 // (l1-rows.ts), the same array guards/L1-location.md is rendered from. Classify, take the first
@@ -328,44 +329,43 @@ function l1Classify(command: string, tree: EffectiveTree): L1Classification {
 // misplacedCdBlock is deliberately OUTSIDE that lookup, and runs ahead of it, for the reason its own
 // docblock gives: it decides from command TEXT, before a tree has been resolved, and the other two
 // reason FROM the resolved tree. Classifying it would mean asking L1_ROWS a question whose answer the
-// classification itself depends on. It is the same shape as L2's `bareCheckoutOfMain` pre-stage.
-//
-// It is therefore ROW 0 — "pre-stage, decided from command text" — rather than a row among 1-6. That
-// keeps it IN the table (the drift this table exists to prevent) without pretending it is classified
-// over the same five dimensions, which is the thing that cannot be true. `L1_PRESTAGE_ROW` is the
-// number the doc prints and the number `row=` logs, so the two still join.
+// classification itself depends on. It is the same shape as L2's `bareCheckoutOfMain` pre-stage. It is
+// therefore ROW 0 — "pre-stage, decided from command text" — rather than a row among 1-6, which keeps
+// it IN the table (the drift this table exists to prevent) without pretending it is classified over the
+// same five dimensions. `L1_PRESTAGE_ROW` is the number the doc prints and `row=` logs, so the two join.
 //
 // THIS FUNCTION IS THE ONE PLACE L1 REPORTS. It is the only scope holding the classification, the
 // matched row, the resolved tree and the agent at once — so logging here, BEFORE the early return,
 // is what finally records the outcomes that were previously invisible: the exempt row and the three
 // hand-downs wrote nothing at all, which is why "L1 had no objection" could not be observed and
-// "show me every L1 decision" had no answer. The three block helpers no longer log for themselves.
+// "show me every L1 decision" had no answer. The three block helpers no longer log for themselves —
+// and, for the same reason, none of them knows about the matrix POINTER either: every deny is stamped
+// with it HERE, from the same scope and the same row number, so deny and log line cannot disagree.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree): BlockedResult | null {
     const misplacedCd = misplacedCdBlock(command, tree);
     if (misplacedCd !== null) {
         logL1(tree, command, 'BLOCK_AI_CURE', L1_PRESTAGE_ROW, 'cd-must-be-first', 'cd not leading/literal');
-        return misplacedCd;
+        return withLocationMatrixPointer(misplacedCd, tree.root, L1_PRESTAGE_ROW);
     }
 
     const row = firstMatchingL1Row(l1Classify(command, tree));
     const rowNum = String(row.num);
     if (row.blockId === null) {
         // ALLOW_EXEMPT stops here; ALLOW means "no objection, handed down to L2". Recording the
-        // difference is the point — see Verdict. Neither is a claim that the call actually ran: the
-        // other parallel hook may still have denied it.
+        // difference is the point — see Verdict. Neither claims the call RAN: the other parallel hook
+        // may still have denied it.
         logL1(tree, command, row.action.kind === 'exempt' ? 'ALLOW_EXEMPT' : 'ALLOW', rowNum, '-', row.why);
         return null;
     }
     logL1(tree, command, 'BLOCK_AI_CURE', rowNum, row.blockId, row.why);
-    if (row.blockId === 'missing-directory') return missingDirectoryBlock(command, tree);
-    if (row.blockId === 'trinary-version-skew') return versionSkewBlock(command, tree);
-    return gitFromSubdirBlock(command, tree, isGitOrGhCommand(command));
+    if (row.blockId === 'missing-directory') return withLocationMatrixPointer(missingDirectoryBlock(command, tree), tree.root, rowNum);
+    if (row.blockId === 'trinary-version-skew') return withLocationMatrixPointer(versionSkewBlock(command, tree), tree.root, rowNum);
+    return withLocationMatrixPointer(gitFromSubdirBlock(command, tree, isGitOrGhCommand(command)), tree.root, rowNum);
 }
 
-// One L1 line, into L1's OWN stream. `row` is the number the generated doc prints, so a reader who
-// sees `row=5` can open guards/L1-location.md at row 5 and read the state, the cure and the use cases
-// that row is supposed to cover.
+// One L1 line, into L1's OWN stream. `row` is the number the generated doc prints, so a reader who sees
+// `row=5` can open the L1 matrix at row 5 — the deny for that same call names it by absolute path.
 // eslint-disable-next-line @typescript-eslint/max-params -- the six fields of one log line, and a class here would break this file's shape
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions
 function logL1(tree: EffectiveTree, command: string, verdict: Verdict, row: string, rule: string, why: string): void {
