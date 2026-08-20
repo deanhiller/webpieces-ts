@@ -633,6 +633,14 @@
                     "level": 3
                 },
                 {
+                    "id": "WorkingTreeGate",
+                    "className": "WorkingTreeGate",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/working-tree-gate.ts",
+                    "level": 2
+                },
+                {
                     "id": "WorktreeCleanupSection",
                     "className": "WorktreeCleanupSection",
                     "kind": "class",
@@ -891,6 +899,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "CheckoutCleanMainCommand",
+                    "to": "WorkingTreeGate",
+                    "injection": "type",
+                    "token": "WorkingTreeGate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/working-tree-gate.ts#WorkingTreeGate",
+                    "paramName": "workingTreeGate",
+                    "paramType": "WorkingTreeGate"
                 },
                 {
                     "from": "CleanTmp",

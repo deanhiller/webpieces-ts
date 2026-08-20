@@ -8,6 +8,7 @@ import {
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
+import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -57,6 +58,7 @@ export class CheckoutCleanMainCommand {
         private readonly repoRootFinder: RepoRootFinder,
         private readonly cleanupCommand: CleanupCommand,
         private readonly orphanDirSweeper: OrphanDirSweeper,
+        private readonly workingTreeGate: WorkingTreeGate,
     ) {}
 
     async run(): Promise<void> {
@@ -66,8 +68,9 @@ export class CheckoutCleanMainCommand {
             await this.sweepOnly(repoRoot);
             return;
         }
-        this.assertTreeIsClean(repoRoot);
+        const untracked = this.workingTreeGate.assertNoTrackedChanges(repoRoot);
         this.goToMain(repoRoot);
+        this.reportUntracked(untracked);
         await this.cleanupCommand.run();
         this.sweep(repoRoot);
     }
@@ -95,17 +98,14 @@ export class CheckoutCleanMainCommand {
     }
 
     /**
-     * Refuse on a dirty tree instead of carrying the changes onto main. `git checkout` would happily
-     * bring uncommitted work along, and the one place nobody wants to discover their work is on main.
+     * Say which untracked files were let through, AFTER the move — so nobody has to wonder whether the
+     * files still sitting in their tree came along for the ride. Printed rather than refused on: see
+     * `WorkingTreeGate` for why an untracked file is not the hazard a tracked one is.
      */
-    private assertTreeIsClean(repoRoot: string): void {
-        const status = this.git(repoRoot, ['status', '--porcelain']);
-        if (status === null || status.trim() === '') return;
-        throw new CliExitError(1,
-            `${SEP}❌ Uncommitted or untracked changes\n${SEP}\n`
-            + 'Going to main would carry them along. Commit them on this branch, or stash them, then\n'
-            + 're-run. The webpieces tooling never commits your work for you.\n\n'
-            + `${status}`);
+    private reportUntracked(untracked: UntrackedFiles): void {
+        const rendered = untracked.render();
+        if (rendered === '') return;
+        process.stdout.write(`\n${rendered}`);
     }
 
     /**
@@ -137,15 +137,6 @@ export class CheckoutCleanMainCommand {
         const rendered = report.render();
         if (rendered === '') return;
         process.stdout.write(`\n${rendered}`);
-    }
-
-    /** Captured git output, or null when git could not be run or exited non-zero. */
-    private git(repoRoot: string, args: string[]): string | null {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], {
-            encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-        });
-        if (result.error !== undefined || result.status !== 0) return null;
-        return result.stdout;
     }
 
     /** git with its output going straight to the terminal — for the commands whose progress is the point. */
