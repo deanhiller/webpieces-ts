@@ -4,6 +4,7 @@ import * as path from 'path';
 import { renderL1Doc } from '../packages/tooling/ai-hook-rules/src/core/l1-doc';
 import { renderL2Doc } from '../packages/tooling/ai-hook-rules/src/core/l2-doc';
 import { L0ToolingDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-tooling-doc';
+import { LOCATION_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l1-matrix-doc';
 import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
 import { GuardIndexDoc } from '../packages/tooling/ai-hook-rules/src/core/guard-index-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
@@ -48,6 +49,12 @@ function main(): void {
     const doc = path.join(root, 'guards', 'L1-location.md');
     fs.writeFileSync(doc, renderL1Doc(), 'utf8');
     wrote.push(doc);
+
+    // The DELIVERED copy of the same bytes, for the same reason the L2 one exists below: `guards/` is a
+    // path in THIS repo, and a consumer repo told "L1 row 6" has no such directory to read.
+    const l1Template = path.join(root, 'packages', 'tooling', 'rules-config', 'templates', LOCATION_MATRIX_DOC);
+    fs.writeFileSync(l1Template, renderL1Doc(), 'utf8');
+    wrote.push(l1Template);
 
     const l2 = path.join(root, 'guards', 'L2-branch-state.md');
     fs.writeFileSync(l2, renderL2Doc(), 'utf8');

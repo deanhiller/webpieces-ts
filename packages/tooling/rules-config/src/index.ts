@@ -47,6 +47,11 @@ export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 export { NoCustomCssScope } from './no-custom-css-scope';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
+// The instruct-ai docs are delivered as a SET: writing one writes the transitive closure of the docs it
+// links to, so a doc and everything it points at always land together. See instruct-ai-docs.ts.
+export { InstructAiDoc, InstructAiDocSet, MergeProcessDoc } from './instruct-ai-docs';
+export { MERGE_PROCESS_DOC, MergeProcessText, MergeRun, ReferenceMergeRun } from './merge-process-doc';
+export { BUILD_LOG_DOC } from './build-log-doc';
 export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 export { validateCommandsSection } from './commands-section-validators';
 export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFIX } from './config-key-rules';

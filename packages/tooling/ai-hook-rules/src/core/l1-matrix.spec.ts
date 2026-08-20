@@ -10,9 +10,12 @@ import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { MissingDirectoryGuard } from './missing-directory';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { isGitOrGhCommand } from './runner';
+import { loadTemplate } from '@webpieces/rules-config';
+
 import { renderL1Doc } from './l1-doc';
+import { LOCATION_MATRIX_DOC } from './l1-matrix-doc';
 import {
-    L1Classification, L1Kind, L1Row, L1UseCase, L1_ROWS, L1_UNROWED_USE_CASES,
+    L1Classification, L1Kind, L1Row, L1UseCase, L1_ROWS, L1_PRESTAGE_ROW, L1_UNROWED_USE_CASES,
     allL1UseCases, firstMatchingL1Row,
 } from './l1-rows';
 
@@ -307,6 +310,36 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
             expect(doc, `use case ${useCase.num} symptom`).toContain(useCase.symptom);
             expect(doc, `use case ${useCase.num} fix`).toContain(useCase.fix);
         }
+    });
+
+    /**
+     * THE DELIVERED COPY. `guards/` is a path in webpieces' own repo; a consumer repo has no such
+     * directory, so for 1,457 logged `layer=L1 row=<n>` decisions across nine repos there was nowhere
+     * to look a row up. `webpieces.location-matrix.md` is that lookup, and it is the SAME bytes.
+     */
+    it('is delivered as webpieces.location-matrix.md, byte for byte', () => {
+        expect(loadTemplate(LOCATION_MATRIX_DOC), 'run `pnpm guards:generate`').toBe(renderL1Doc());
+        expect(loadTemplate(LOCATION_MATRIX_DOC)).toBe(fs.readFileSync(L1_DOC, 'utf8'));
+    });
+
+    /**
+     * EVERY ROW NUMBER L1 CAN EMIT HAS AN ENTRY. The audit's finding was not "the table is wrong", it
+     * was "an agent told row 6 has nowhere to look it up" — so the assertion is about the DELIVERED
+     * page and about the numbers that reach a LOG, which includes the pre-stage row 0 (it is not in
+     * `L1_ROWS`, it is decided from command text before a tree is resolved, and it still logs `row=0`).
+     */
+    it('gives every row number L1 can log a row in the delivered matrix', () => {
+        const delivered = loadTemplate(LOCATION_MATRIX_DOC);
+        const emittable = [L1_PRESTAGE_ROW, ...L1_ROWS.map((row: L1Row): number => row.num)];
+        for (const num of emittable) {
+            expect(delivered, `row=${num} has no row in ${LOCATION_MATRIX_DOC}`).toContain(`\n| ${num} | `);
+        }
+    });
+
+    it('tells a reader how a `row=` in the L1 log joins back to the table', () => {
+        const doc = renderL1Doc();
+        expect(doc).toContain('## How a log line joins to a row');
+        expect(doc).toContain('.webpieces/logs/L1-location/<writer>.log');
     });
 
     // The prose sections are literal lines in the renderer, and this is the one that must never be

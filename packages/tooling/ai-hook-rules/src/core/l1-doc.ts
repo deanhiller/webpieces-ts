@@ -25,7 +25,11 @@ function tableRow(row: L1Row): string {
     // Row 6 has no `why` — an EMPTY cell is `| |`, not `|  |`. Two spaces would render the same in a
     // browser and fail the byte-lock, which is the whole point of locking bytes rather than markdown.
     const why = row.why === '' ? ' ' : ` ${row.why} `;
-    return `| ${row.num} | ${dims} | ${row.action.label} |${why}|`;
+    // The CURE column exists so a reader who arrived here from a `row=` in a log gets the remedy on the
+    // same line as the verdict, the way L2's matrix does. Only blocking rows have one; a row that hands
+    // down to L2 or exempts has nothing to cure, and says so rather than leaving the cell blank.
+    const cure = row.cure === null ? 'n/a — not a block' : row.cure.summary;
+    return `| ${row.num} | ${dims} | ${row.action.label} |${why}| ${cure} |`;
 }
 
 // webpieces-disable no-function-outside-class -- pure row formatter for renderL1Doc below, in this render module
@@ -44,9 +48,36 @@ export function renderL1Doc(): string {
     return [
         ...renderHead(),
         ...renderTable(),
+        ...renderLogJoin(),
         ...renderUseCases(),
         ...renderTail(),
     ].join('\n');
+}
+
+// How a `row=` in the L1 log joins back to the table above — the section this doc existed without for
+// 1,457 logged decisions across nine repos, none of which an agent could look up, because the DELIVERED
+// copy of this page did not exist either. L2's doc has carried the same section since its own delivery.
+// webpieces-disable no-function-outside-class -- prose section of renderL1Doc's string, beside it in this module
+function renderLogJoin(): string[] {
+    return [
+        '## How a log line joins to a row',
+        '',
+        'Every L1 decision is written to `.webpieces/logs/L1-location/<writer>.log` with `layer=L1` and',
+        '`row=<n>`, where `<n>` is a row number from the table above. So `row=6` means "this call was judged',
+        'by row 6" and you read the dimensions, the verdict, the reason and the cure straight off that line. Row `0` is',
+        'the pre-stage; it is in the table for exactly this reason.',
+        '',
+        '**The join is by DISPATCH, and that is the difference from L2.** L1 takes the FIRST matching row in',
+        '`L1_ROWS` and switches on it, so a row and a behaviour are the same object — delete the row and you',
+        'delete the block. L2\'s four guard classes each own their own ladder and join to their rows by REASON',
+        'instead (see `webpieces.branch-state-matrix.md`). A totality test walks all 80 classifications and',
+        'asserts each lands on exactly one row, so there is no verdict this page cannot explain.',
+        '',
+        'Row numbers are IDENTITY and are never reused: row 3 is retired (coordinator-in-worktree) and row 8',
+        'was added in its place rather than renumbering 4-7, because every `row=` already written to a log',
+        'would otherwise re-point.',
+        '',
+    ];
 }
 
 
@@ -197,14 +228,14 @@ function renderTable(): string[] {
         '',
         '## Table',
         '',
-        '| # | K | V | R | G | P | act | why |',
-        '|---|---|---|---|---|---|---|---|',
+        '| # | K | V | R | G | P | act | why | cure |',
+        '|---|---|---|---|---|---|---|---|---|',
         // Row 0 is the PRE-STAGE (`misplacedCdBlock`). It decides from command TEXT before a tree is
         // resolved, so it cannot be classified over the five dimensions rows 1-6 share — but it IS an
         // L1 block, and an L1 block the table did not describe is exactly the drift this table exists
         // to prevent. It is numbered 0, not 7, because it does not sit in the first-match scan; and it
         // is PRINTED because `row=0` in the L1 log has to join to something.
-        `| ${L1_PRESTAGE_ROW} | – | – | – | – | – | 4 block | a \`cd\` that is not leading + literal, judged before any tree is resolved |`,
+        `| ${L1_PRESTAGE_ROW} | – | – | – | – | – | 4 block | a \`cd\` that is not leading + literal, judged before any tree is resolved | \`cd <literal abs path> && <the rest>\` — ONE leading \`cd\`, or drop it |`,
         ...L1_ROWS.map(tableRow),
         '',
         'Rows 3, 5 and 7 are the structural blocks, and they run as ONE step (`l1LocationBlock` in `runner.ts`)',
