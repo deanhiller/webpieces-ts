@@ -22,9 +22,10 @@ import { toError } from './to-error';
  * This file is MACHINE-GLOBAL: ONE document on the disk, read by EVERY repo on the machine, and those
  * repos are pinned to DIFFERENT webpieces releases. Two rules follow, and they are not negotiable:
  *
- *   (a) NO KEY MAY EVER BE REQUIRED.  `readOptionalBoolean` is the ONLY reader. There is no
- *       `readRequiredBoolean`, no `RequiredHomeFlag`, no `REQUIRED_HOME_FLAGS` — those existed once and
- *       were deleted; do not reintroduce them under any name.
+ *   (a) NO KEY MAY EVER BE REQUIRED.  `readOptionalBoolean` and `readOptionalPositiveInteger` are the
+ *       ONLY readers, and BOTH are optional-by-construction. There is no `readRequiredBoolean`, no
+ *       `RequiredHomeFlag`, no `REQUIRED_HOME_FLAGS` — those existed once and were deleted; do not
+ *       reintroduce them under any name, in any type.
  *   (b) AN UNKNOWN KEY IS IGNORED, never rejected.  `warnUnknownKeys` warns; nothing throws.
  *
  * Both halves are needed, and either one alone still leaves a file that some installed release rejects:
@@ -48,7 +49,9 @@ import { toError } from './to-error';
  *
  *   UNPARSEABLE   not JSON, or not a single JSON object          → REJECT
  *   RETIRED KEY   listed in RETIRED_HOME_CONFIG_KEYS             → REJECT, carrying the migration
- *   WRONG TYPE    a KNOWN key holding a non-boolean              → REJECT
+ *   WRONG TYPE    a KNOWN key holding a value of the wrong type  → REJECT
+ *                 (a non-boolean for a boolean key; anything but a positive whole number for a
+ *                  numeric one — see `readOptionalPositiveInteger`)
  *   UNKNOWN KEY   a key no version of this validator has heard of → IGNORED, with a warning
  *
  * ─── WHY THE LAST ROW DIFFERS FROM webpieces.config.json, WHICH STAYS STRICT ──────────────────────────
@@ -141,6 +144,12 @@ export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
 // The on/off switch for the orphan-directory sweep `wp-checkout-clean-main` runs. Named for the thing
 // it switches, exactly as the guard key above is — one name, greppable from either end.
 export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
+/**
+ * How many builds may be live on this machine before `pnpm wp-build` refuses to start another. The FIRST
+ * NUMERIC key in this file — see `readOptionalPositiveInteger` for why "known key, wrong type → REJECT"
+ * applies to it exactly as it applies to the booleans.
+ */
+export const HOME_KEY_MAX_CONCURRENT_BUILDS = 'maxConcurrentBuilds';
 
 /**
  * EVERY key's value when it is not named — including on the machine with no such file at all, which is
@@ -157,6 +166,17 @@ export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
 const GUARD_OFF_WHEN_ABSENT = false;
 
 /**
+ * The one NON-boolean default, and the one key whose absent value is not `GUARD_OFF_WHEN_ABSENT`.
+ *
+ * Three, because contention between agents running full sweeps at once was measured at ~3.2x total test
+ * time (CLAUDE.md § "What actually makes builds slow"), and a fourth simultaneous build is well past the
+ * point where anybody gains anything. It is a NUMBER rather than an on/off flag because the useful
+ * machine-to-machine difference here is core count, not opinion — which is also why it is the one key in
+ * this file with a non-false default: "0 builds allowed" would be a machine that cannot build at all.
+ */
+export const DEFAULT_MAX_CONCURRENT_BUILDS = 3;
+
+/**
  * The complete UNDERSTOOD shape. A key not on these lists is ignored with a warning rather than
  * rejected (see the class docblock: this document is machine-global and older releases must survive
  * meeting a newer release's key), so adding a key still means adding it here — a key absent from these
@@ -169,8 +189,21 @@ const GUARD_OFF_WHEN_ABSENT = false;
  * Walking the real constant makes the test cover a new key the moment it appears here.
  */
 export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
-export const ALLOWED_EXPERIMENTAL: readonly string[] = [
+/**
+ * The understood `experimental.*` keys, SPLIT BY VALUE TYPE — because the spec walks these lists to build
+ * a sample document, and a sample that wrote `false` into a numeric key would be rejected by the very
+ * loader it is testing. Splitting them means a key added to either list is covered by the cross-version
+ * invariants automatically, with the right sample value, which is the whole reason the lists are exported.
+ *
+ * `ALLOWED_EXPERIMENTAL` stays the ONE list the validator warns against — derived from the two, never
+ * hand-maintained beside them, so it cannot fall out of step.
+ */
+export const ALLOWED_EXPERIMENTAL_BOOLEANS: readonly string[] = [
     HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_ORPHAN_DIR_SWEEP,
+];
+export const ALLOWED_EXPERIMENTAL_NUMBERS: readonly string[] = [HOME_KEY_MAX_CONCURRENT_BUILDS];
+export const ALLOWED_EXPERIMENTAL: readonly string[] = [
+    ...ALLOWED_EXPERIMENTAL_BOOLEANS, ...ALLOWED_EXPERIMENTAL_NUMBERS,
 ];
 
 /**
@@ -241,14 +274,31 @@ export class HomeConfig {
      */
     orphanDirSweep: boolean;
 
-    // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    /**
+     * How many builds may be live on this MACHINE before `pnpm wp-build` refuses to start another. Live
+     * is counted from `~/.webpieces/builds.log` — see `builds-log.ts`, and
+     * `decisions/0006-the-build-ledger-is-machine-global.md` for why that file lives outside any repo.
+     *
+     * `DEFAULT_MAX_CONCURRENT_BUILDS` when absent. The gate stages (`wp-review-upsert-pr`,
+     * `wp-finish-upsert-pr`) are NEVER refused whatever this says — blocking the sanctioned path is how
+     * you wedge a PR — though their builds do count toward what refuses an ad-hoc `wp-build`.
+     */
+    maxConcurrentBuilds: number;
+
+    // ALL FOUR required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
-    // typechecks with a changed meaning is exactly the shim this repo does not ship. The absent-file
-    // state is constructed in exactly one place — load()'s absent-file branch.
-    constructor(buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean, orphanDirSweep: boolean) {
+    // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
+    // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per CLAUDE.md § "NO
+    // webpieces surface is released backwards-compatible": the compile errors ARE the migration. The
+    // absent-file state is constructed in exactly one place — load()'s absent-file branch.
+    constructor(
+        buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean, orphanDirSweep: boolean,
+        maxConcurrentBuilds: number,
+    ) {
         this.buildGateLogCapture = buildGateLogCapture;
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
         this.orphanDirSweep = orphanDirSweep;
+        this.maxConcurrentBuilds = maxConcurrentBuilds;
     }
 }
 
@@ -324,7 +374,8 @@ export class HomeConfigService {
         // on why a defaulted parameter is a shim.
         if (raw === null) {
             return new HomeConfig(
-                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT);
+                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT,
+                DEFAULT_MAX_CONCURRENT_BUILDS);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -414,7 +465,41 @@ export class HomeConfigService {
             this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file, GUARD_OFF_WHEN_ABSENT),
+            this.readOptionalPositiveInteger(
+                experimental, HOME_KEY_MAX_CONCURRENT_BUILDS, file, DEFAULT_MAX_CONCURRENT_BUILDS),
         );
+    }
+
+    /**
+     * The NUMERIC sibling of {@link readOptionalBoolean}, and the same three rules apply unchanged: the
+     * key is OPTIONAL (absent → `whenAbsent`, stated out loud by the caller), a PRESENT value of the
+     * wrong type is an ERROR, and nothing here ever guesses.
+     *
+     * "Wrong type" is stricter than `typeof value === 'number'`, because for this key the wrong NUMBERS
+     * are as meaningless as the wrong types: `0` is a machine that may never build, `-1` and `2.5` are
+     * not counts of anything, and `NaN` compares false against every threshold and would silently
+     * disable the check. A positive integer is the only value that means something, so it is the only
+     * value accepted — and the rejection names the offending value, exactly as the boolean one does.
+     *
+     * This does NOT soften the machine-global forward-compatibility rule: an UNKNOWN key is still
+     * ignored with a warning. Only a key THIS release understands is type-checked, and no release of
+     * webpieces has ever given `maxConcurrentBuilds` a non-numeric meaning.
+     */
+    // webpieces-disable no-any-unknown -- see parse()
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private readOptionalPositiveInteger(
+        experimental: Record<string, unknown>, key: string, file: string, whenAbsent: number,
+    ): number {
+        const value = experimental[key];
+        if (value === undefined) return whenAbsent;
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+            throw new InformAiError(this.error(file,
+                `"${HOME_EXPERIMENTAL_SECTION}.${key}" must be a POSITIVE WHOLE NUMBER (1 or more), not ` +
+                `${JSON.stringify(value)}. Write it as a bare JSON number, e.g. ` +
+                `"${key}": ${String(whenAbsent)} — or delete the key to use the default of ` +
+                `${String(whenAbsent)}.`));
+        }
+        return value;
     }
 
     /**

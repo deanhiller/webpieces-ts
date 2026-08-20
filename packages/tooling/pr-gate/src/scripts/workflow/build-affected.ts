@@ -1,5 +1,7 @@
 import { spawnSync } from 'child_process';
-import { loadAndValidate, CliExitError, HomeConfigService, DEFAULT_BUILD_COMMAND } from '@webpieces/rules-config';
+import {
+    loadAndValidate, CliExitError, HomeConfigService, DEFAULT_BUILD_COMMAND, BuildsLog,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 
@@ -45,6 +47,7 @@ export class BuildAffected {
     constructor(
         private readonly homeConfig: HomeConfigService,
         private readonly buildLog: BuildGateLog,
+        private readonly buildsLog: BuildsLog,
     ) {}
 
     /**
@@ -69,26 +72,38 @@ export class BuildAffected {
     }
 
     /**
-     * Run the build gate. Returns the process exit code (0 = pass).
+     * Spawn the resolved build command, streamed to the terminal. Returns the exit code (0 = pass).
      *
-     * Prints NOTHING itself — `runBuildGate` announces the command in one line. This used to print its own
-     * `▶ Build gate: <cmd>` banner on top of that, so the command appeared twice in a row.
+     * PRIVATE, and that is the point. This and `runConfiguredBuildGate` used to be PUBLIC side doors that
+     * spawned `buildCommand` with no caller identity and no ledger row — so "run the build" had three
+     * spellings, two of which were invisible to `~/.webpieces/builds.log`. They are folded into this one
+     * private method, reachable only through `runBuildGate`, which means an unlogged build no longer
+     * COMPILES. That is the one-spelling rule from CLAUDE.md § "NO webpieces surface is released
+     * backwards-compatible" applied to a behaviour rather than a type.
+     *
+     * Prints NOTHING itself — `runBuildGate` announces the command in one line.
      */
-    runBuildAffected(repoRoot: string, buildCommand?: string): number {
-        const cmd = buildCommand !== undefined && buildCommand.trim() !== '' ? buildCommand : DEFAULT_BUILD_COMMAND;
+    private spawnBuild(repoRoot: string): number {
+        const configured = loadAndValidate(repoRoot).prGate.buildCommand;
+        const cmd = configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
         const result = spawnSync(cmd, { stdio: 'inherit', cwd: repoRoot, shell: true });
         return result.status ?? 1;
     }
 
-    /** Run the build gate using the project's configured command (PrGateConfig.buildCommand). */
-    runConfiguredBuildGate(repoRoot: string): number {
-        return this.runBuildAffected(repoRoot, loadAndValidate(repoRoot).prGate.buildCommand);
-    }
-
     /**
      * Run the configured build gate with consistent framing, throwing CliExitError(buildCode) on
-     * failure so the bin's main()/runMain owns the exit. Single source of truth: wp-start-upsert-pr and
-     * wp-finish-upsert-pr both call THIS (only the BuildGateOptions differ).
+     * failure so the bin's main()/runMain owns the exit. THE single source of truth for running a build:
+     * wp-build, wp-review-upsert-pr and wp-finish-upsert-pr all call THIS (only the BuildGateOptions
+     * differ), and there is no other way to reach the spawn.
+     *
+     * ─── EVERY BUILD ON THIS MACHINE IS LEDGERED FROM HERE ───────────────────────────────────────────
+     * A START row goes into `~/.webpieces/builds.log` before the spawn and a DONE row after it, in a
+     * `finally` so a throw on the failure path still closes the pair. `opts.stage` — `build` | `review` |
+     * `finish` — IS the caller id the row records; there is deliberately no second `caller` field, since
+     * two spellings of one fact is the shim CLAUDE.md rejects.
+     *
+     * The ledger is best-effort by construction (see BuildsLog): it can never throw, so no build can die
+     * because a log file was busy.
      */
     async runBuildGate(repoRoot: string, opts: BuildGateOptions): Promise<void> {
         const buildCommand = this.resolveBuildCommand(repoRoot);
@@ -100,9 +115,18 @@ export class BuildAffected {
         // `~/.webpieces/config.json`. Everything below then runs exactly the code it ran before capture
         // existed — same spawn, streamed to the terminal, same message, no extra file.
         const logPath = opts.alwaysCapture || this.isCaptureEnabled() ? this.buildLog.pathFor(repoRoot, opts.stage) : '';
-        const buildCode = logPath === ''
-            ? this.runConfiguredBuildGate(repoRoot)
-            : await this.buildLog.run(repoRoot, buildCommand, logPath);
+        const ticket = this.buildsLog.start(opts.stage, repoRoot);
+        let buildCode = 1;
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the DONE row must be written whether the
+        // build passed, failed, or the spawn itself blew up; the throw is re-raised untouched below
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            buildCode = logPath === ''
+                ? this.spawnBuild(repoRoot)
+                : await this.buildLog.run(repoRoot, buildCommand, logPath);
+        } finally {
+            this.buildsLog.finish(ticket, buildCode);
+        }
         if (buildCode !== 0) throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath));
         process.stdout.write(logPath === '' ? '\n✅ Build passed.\n' : this.buildLog.successMessage(logPath));
     }

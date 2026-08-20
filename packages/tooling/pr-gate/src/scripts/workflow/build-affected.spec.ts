@@ -3,7 +3,10 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CliExitError, HomeConfig, HomeConfigService, toError } from '@webpieces/rules-config';
+import {
+    BuildsLog, BuildTicket, CliExitError, DEFAULT_MAX_CONCURRENT_BUILDS, DotWebpieces, HomeConfig,
+    HomeConfigService, toError,
+} from '@webpieces/rules-config';
 import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
 import { RepoConfigFixture } from './repo-config-testkit';
@@ -27,7 +30,7 @@ class PinnedHomeConfig extends HomeConfigService {
     }
 
     override load(): HomeConfig {
-        return new HomeConfig(this.on, false, false);
+        return new HomeConfig(this.on, false, false, DEFAULT_MAX_CONCURRENT_BUILDS);
     }
 }
 
@@ -77,8 +80,32 @@ function repoWithBuild(command: string): string {
     return dir;
 }
 
+/**
+ * The REAL ledger, pointed at a throwaway HOME. `BuildsLog`'s public methods default `homeDir` to
+ * `os.homedir()`, which is right in production and unacceptable in a spec — an unpinned one would append
+ * a row to the DEVELOPER's `~/.webpieces/builds.log` every time this suite ran. Subclassing keeps the
+ * real code under test (rotation, locking, row rendering) while the bytes land in a temp directory.
+ */
+class TempHomeBuildsLog extends BuildsLog {
+    constructor(private readonly home: string) {
+        super(new DotWebpieces());
+    }
+
+    override start(by: string, startDir: string): BuildTicket {
+        return super.start(by, startDir, this.home);
+    }
+
+    override finish(ticket: BuildTicket, exitCode: number): void {
+        super.finish(ticket, exitCode, this.home);
+    }
+}
+
+function builds(): TempHomeBuildsLog {
+    return new TempHomeBuildsLog(homeWithNoConfig());
+}
+
 function gate(captureOn: boolean): BuildAffected {
-    return new BuildAffected(new PinnedHomeConfig(captureOn), new BuildGateLog());
+    return new BuildAffected(new PinnedHomeConfig(captureOn), new BuildGateLog(), builds());
 }
 
 /** The PR-flow stages pass alwaysCapture=false; `wp-build` is the one caller that passes true. */
@@ -128,7 +155,7 @@ describe('NO ~/.webpieces/config.json at all — today\'s behaviour, byte for by
     it('fails with the pre-existing text and writes no log file', async () => {
         const dir = repoWithBuild('echo compiling; exit 4');
         const err = await runExpectingFailure(
-            new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()), dir);
+            new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog(), builds()), dir);
         expect(err.exitCode).toBe(4);
         expect(err.message).toContain('Run THIS exact command to reproduce and fix all errors');
         expect(err.message).not.toContain('.webpieces/logs');
@@ -138,7 +165,7 @@ describe('NO ~/.webpieces/config.json at all — today\'s behaviour, byte for by
     it('passes with the pre-existing two lines, and never throws over the missing file', async () => {
         const dir = repoWithBuild('echo compiling');
         await captureStdout(async (): Promise<void> => {
-            await new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()).runBuildGate(dir, opts());
+            await new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog(), builds()).runBuildGate(dir, opts());
         });
         expect(written).toContain('🛠️  Build gate: echo compiling');
         expect(written).toContain('✅ Build passed.');
@@ -147,7 +174,7 @@ describe('NO ~/.webpieces/config.json at all — today\'s behaviour, byte for by
     });
 
     it('reports capture as disabled', () => {
-        expect(new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog()).isCaptureEnabled()).toBe(false);
+        expect(new BuildAffected(new NoHomeConfigFile(homeWithNoConfig()), new BuildGateLog(), builds()).isCaptureEnabled()).toBe(false);
     });
 });
 

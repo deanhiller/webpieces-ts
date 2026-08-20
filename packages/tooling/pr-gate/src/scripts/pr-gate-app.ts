@@ -10,7 +10,7 @@ import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
-import { BuildCommand } from './commands/build-command';
+import { BuildCommand, BuildOptions } from './commands/build-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { PushDevStateStore } from './workflow/push-dev-state';
@@ -80,8 +80,8 @@ export class PrGateApp {
      * command, resolved by the same resolver, that the PR gate's build stage runs. Not blocked during a
      * `wp-push-dev --resolve`: it mutates nothing and reads no branch state.
      */
-    build(): Promise<void> {
-        return this.buildCommand.run();
+    build(opts: BuildOptions = new BuildOptions()): Promise<void> {
+        return this.buildCommand.run(opts);
     }
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */

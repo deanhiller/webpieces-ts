@@ -20,7 +20,7 @@ vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>
     };
 });
 
-import { HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 
@@ -33,7 +33,7 @@ const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origi
 // HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, orphanDirSweep).
 function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
-        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false));
+        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false, DEFAULT_MAX_CONCURRENT_BUILDS));
 }
 
 // Most of this suite is about WHICH commands the guard refuses, which is only observable on a machine

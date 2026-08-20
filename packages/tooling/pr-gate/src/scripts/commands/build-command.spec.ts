@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { RepoRootFinder } from '@webpieces/rules-config';
+import {
+    BuildsLog, DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RepoRootFinder,
+    RunningBuild, RuleFailError, toError,
+} from '@webpieces/rules-config';
 
-import { BuildCommand } from './build-command';
+import { BuildCommand, BuildOptions, TOO_MANY_CONCURRENT_BUILDS } from './build-command';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { BUILD_STAGE, REVIEW_STAGE, FINISH_STAGE } from '../workflow/build-gate-log';
 
@@ -24,7 +27,14 @@ class Harness {
  * tests pin the two properties that stop it becoming another such chain: it goes through the SAME gate
  * the PR flow uses, and it adds nothing of its own.
  */
-function harness(): Harness {
+/** N live builds, as `BuildsLog.running()` would report them. */
+function liveBuilds(count: number): RunningBuild[] {
+    return Array.from({ length: count }, (_unused: unknown, i: number): RunningBuild =>
+        new RunningBuild(`id-${String(i)}`, 'build', '/repo', 'primary', '/repo', 'dean/x', 999_000 + i,
+            Date.now() - 30_000));
+}
+
+function harness(alreadyRunning = 0): Harness {
     const calls: BuildGateOptions[] = [];
     // webpieces-disable no-any-unknown -- a test double standing in for the injected collaborator
     const gate = {
@@ -35,7 +45,32 @@ function harness(): Harness {
     } as unknown as BuildAffected;
     // webpieces-disable no-any-unknown -- ditto; only resolveRepoRoot is exercised
     const roots = { resolveRepoRoot: (): string => '/repo' } as unknown as RepoRootFinder;
-    return new Harness(new BuildCommand(gate, roots), gate, calls);
+    // The ledger and the preference file are both stubbed so the suite can never read — or write — the
+    // developer's real `~/.webpieces`, and so the refusal threshold is a fact of the test rather than of
+    // whatever else the machine happens to be building.
+    // webpieces-disable no-any-unknown -- test doubles for the injected collaborators
+    const buildsLog = { running: (): RunningBuild[] => liveBuilds(alreadyRunning) } as unknown as BuildsLog;
+    // webpieces-disable no-any-unknown -- ditto
+    const homeConfig = {
+        load: (): HomeConfig => new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS),
+    } as unknown as HomeConfigService;
+    return new Harness(new BuildCommand(gate, roots, buildsLog, homeConfig), gate, calls);
+}
+
+/** The refusal, caught and typed. Fails loudly if the build was allowed to start. */
+function refusal(command: BuildCommand, opts: BuildOptions): RuleFailError {
+    let caught: Error | null = null;
+    // webpieces-disable no-unmanaged-exceptions -- chokepoint: the refusal IS the assertion subject
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        void command.run(opts);
+    } catch (err: unknown) {
+        const error = toError(err);
+        caught = error;
+    }
+    if (caught === null) throw new Error('wp-build was expected to REFUSE and did not');
+    expect(caught).toBeInstanceOf(RuleFailError);
+    return caught as RuleFailError;
 }
 
 describe('wp-build runs the project build through the ONE shared gate', () => {
@@ -88,5 +123,64 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
         const h = harness();
         vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): Promise<void> => Promise.reject(new Error('build failed')));
         await expect(h.command.run()).rejects.toThrow('build failed');
+    });
+});
+
+/**
+ * The back-pressure half. CPU contention between agents building at once was measured at ~3.2x total
+ * test time, so the fourth simultaneous build helps nobody — but the REFUSAL is only ever aimed at the
+ * ad-hoc `wp-build`. The gate stages have no equivalent check at all: refusing there wedges a PR that
+ * has nowhere else to go, which is why the count lives in this command and not in `runBuildGate`.
+ */
+describe('wp-build refuses to pile onto a machine that is already at its build limit', () => {
+    it('runs normally while the machine is under the limit', async () => {
+        const h = harness(DEFAULT_MAX_CONCURRENT_BUILDS - 1);
+        await h.command.run();
+        expect(h.calls.length).toBe(1);
+    });
+
+    it('refuses at the limit, and does NOT start the build', () => {
+        const h = harness(DEFAULT_MAX_CONCURRENT_BUILDS);
+        expect(refusal(h.command, new BuildOptions()).ruleName).toBe(TOO_MANY_CONCURRENT_BUILDS);
+        expect(h.calls.length).toBe(0);
+    });
+
+    /**
+     * The cures are `Option`s, rendered by the framework's `formatFixOptions`. This asserts the TEXT of
+     * each, and deliberately NOT a hand-numbered "1." / "2." in the message — numbering cures inside a
+     * string literal is an automatic review reject, and this is the test that would go red if somebody
+     * moved them back in there.
+     */
+    it('offers the gate flow first and `--force` LAST, as Options the framework numbers', () => {
+        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, new BuildOptions());
+        expect(error.fixOptions.length).toBeGreaterThan(1);
+        expect(error.fixOptions[0].preferred).toBe(true);
+        expect(error.fixOptions[0].text).toContain('wp-review-upsert-pr');
+        const last = error.fixOptions[error.fixOptions.length - 1].text;
+        expect(last).toContain('really stuck');
+        expect(last).toContain('really really need wp-build');
+        expect(last).toContain('pnpm wp-build --force');
+        // The cures live in fixOptions, never pre-numbered into the message itself.
+        expect(error.aiMessage).not.toContain('Fix Option');
+    });
+
+    it('names the builds it found, so the reader can tell which tree to look at', () => {
+        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, new BuildOptions());
+        expect(error.aiMessage).toContain('/repo');
+        expect(error.aiMessage).toContain('dean/x');
+    });
+
+    /**
+     * `--force` skips the COUNT CHECK and nothing else — the BuildGateOptions handed to the gate are
+     * byte-for-byte the ones an unforced run passes, because `wp-build` runs `buildCommand` verbatim and
+     * a flag that changed the command would stop it being the command the PR gate runs.
+     */
+    it('--force builds anyway, with the identical gate options', async () => {
+        const forced = harness(DEFAULT_MAX_CONCURRENT_BUILDS * 3);
+        await forced.command.run(new BuildOptions(true));
+        const normal = harness();
+        await normal.command.run();
+        expect(forced.calls.length).toBe(1);
+        expect(forced.calls[0]).toEqual(normal.calls[0]);
     });
 });

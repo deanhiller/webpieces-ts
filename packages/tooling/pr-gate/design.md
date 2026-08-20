@@ -25,6 +25,7 @@ graph TD
     BuildArtifactGate["BuildArtifactGate"]
     BuildCommand["BuildCommand"]
     BuildGateLog["BuildGateLog"]
+    BuildsLog["BuildsLog"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistCommentRenderer["ChecklistCommentRenderer"]
     ChecklistDetector["ChecklistDetector"]
@@ -104,12 +105,16 @@ graph TD
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
     BuildAffected --> BuildGateLog
+    BuildAffected --> BuildsLog
     BuildAffected --> HomeConfigService
     BuildArtifactGate --> BuildAffected
     BuildArtifactGate --> GeneratedArtifactRegistry
     BuildArtifactGate --> GitExec
     BuildCommand --> BuildAffected
+    BuildCommand --> BuildsLog
+    BuildCommand --> HomeConfigService
     BuildCommand --> RepoRootFinder
+    BuildsLog --> DotWebpieces
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope

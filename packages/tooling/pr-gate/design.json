@@ -113,6 +113,14 @@
                     "level": 4
                 },
                 {
+                    "id": "BuildsLog",
+                    "className": "BuildsLog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/builds-log.ts",
+                    "level": 4
+                },
+                {
                     "id": "CheckPrCommand",
                     "className": "CheckPrCommand",
                     "kind": "class",
@@ -755,6 +763,15 @@
                 },
                 {
                     "from": "BuildAffected",
+                    "to": "BuildsLog",
+                    "injection": "type",
+                    "token": "BuildsLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/builds-log.ts#BuildsLog",
+                    "paramName": "buildsLog",
+                    "paramType": "BuildsLog"
+                },
+                {
+                    "from": "BuildAffected",
                     "to": "HomeConfigService",
                     "injection": "type",
                     "token": "HomeConfigService",
@@ -800,12 +817,39 @@
                 },
                 {
                     "from": "BuildCommand",
+                    "to": "BuildsLog",
+                    "injection": "type",
+                    "token": "BuildsLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/builds-log.ts#BuildsLog",
+                    "paramName": "buildsLog",
+                    "paramType": "BuildsLog"
+                },
+                {
+                    "from": "BuildCommand",
+                    "to": "HomeConfigService",
+                    "injection": "type",
+                    "token": "HomeConfigService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/home-config.ts#HomeConfigService",
+                    "paramName": "homeConfig",
+                    "paramType": "HomeConfigService"
+                },
+                {
+                    "from": "BuildCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "BuildsLog",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "CheckPrCommand",

@@ -68,3 +68,55 @@ before running it — so a green result locally is evidence about the gate.
 Do not hand-compose a verify chain of your own, and do not add a leg to `wp-build`. Anything that must
 run on every build belongs *inside* `buildCommand`, where the gate runs it too. For the inner loop, run
 the one spec file you are changing.
+
+---
+
+# The MACHINE-WIDE ledger: `~/.webpieces/builds.log`
+
+The file above is *this build's output*. This one is a different question: **what is this whole computer
+building right now, and what has it been building?** Several agents run here at once, across several
+clones and worktrees of several repos, and every one of them can fire the same `buildCommand`.
+
+Every build — `wp-build` and both PR-gate stages — appends two rows to one append-only file:
+
+```
+START         id=<uuid>  t=<iso>  ms=<epoch>  by=<build|review|finish>  repo=…  tree=…  cwd=…  branch=…  pid=…  wp=<version>
+DONE-SUCCESS  id=<uuid>  …  took=<ms>  pid=…
+DONE-FAIL     id=<uuid>  …  took=<ms>  exit=<n>  pid=…
+```
+
+Tab-separated, one line each, deliberately short. `id` is what pairs a START with its DONE; `pid` is what
+says whether an unpaired START is a build still running or one that died without writing its DONE row.
+
+## Grep recipes
+
+```bash
+grep START      ~/.webpieces/builds.log     # every build this machine has started
+grep DONE-FAIL  ~/.webpieces/builds.log     # every RED build, with its exit code
+grep <uuid>     ~/.webpieces/builds.log     # one build's START and DONE together
+grep 'by=build' ~/.webpieces/builds.log     # ad-hoc wp-build runs, vs by=review / by=finish
+```
+
+A `START` with no matching `DONE-` is a build that is **still running, or that died**. Rotation is 1 MB
+across five generations (`builds.log.1` … `.5`), so an older window is `grep … ~/.webpieces/builds.log.*`.
+
+## The refusal you may meet
+
+When this machine is already running its limit of builds (3 by default), **`pnpm wp-build` refuses** and
+lists them, with age, tree and branch. That is not a bug and it is not a reason to retry — a fourth
+concurrent build makes all four slower (contention was measured at ~3.2x total test time).
+
+Do what the refusal's first cure says: **run the gate you were going to run anyway.**
+`pnpm wp-start-upsert-pr` → `pnpm wp-review-upsert-pr` runs the *same* `commands.pr-gate.buildCommand`,
+so its green is the same evidence — and it posts the PR at the end. The gate stages are never refused.
+
+Raising the limit on a machine that genuinely has the cores is one key in the optional, untracked
+`~/.webpieces/config.json`:
+
+```json
+{ "experimental": { "maxConcurrentBuilds": 5 } }
+```
+
+`pnpm wp-build --force` skips the concurrency check — and *only* that check; the command it then runs is
+byte-for-byte the same. It is the LAST option for a reason: reach for it when you genuinely cannot use a
+gate, not to get past a wait.
