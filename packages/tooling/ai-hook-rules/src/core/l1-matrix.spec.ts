@@ -5,15 +5,17 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { isAllowed } from '../bin/shim';
+import { migrate } from '../bin/setup';
+import { BlockedResult } from './types';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { MissingDirectoryGuard } from './missing-directory';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
-import { isGitOrGhCommand } from './runner';
+import { isGitOrGhCommand, runBash } from './runner';
 import { loadTemplate } from '@webpieces/rules-config';
 
 import { renderL1Doc } from './l1-doc';
-import { LOCATION_MATRIX_DOC } from './l1-matrix-doc';
+import { LOCATION_MATRIX_DOC, locationMatrixPointer } from './l1-matrix-doc';
 import {
     L1Classification, L1Kind, L1Row, L1UseCase, L1_ROWS, L1_PRESTAGE_ROW, L1_UNROWED_USE_CASES,
     allL1UseCases, firstMatchingL1Row,
@@ -336,6 +338,42 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
         }
     });
 
+    /**
+     * THE POINTER — the half that makes the delivered copy reachable at the moment of the deny.
+     *
+     * A doc that always exists still helps nobody if the deny does not name it: a blocked agent reads
+     * the deny text and nothing else. L0 and L2 have named theirs for releases; L1 shipped the table
+     * (PR #696) and not the pointer, which is the gap these assertions pin shut.
+     */
+    it('points the reader at the doc only when it was actually written', () => {
+        expect(locationMatrixPointer('', '6')).toBe('');
+        expect(locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '6'))
+            .toContain('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md');
+    });
+
+    // The row is the point: a bare "read this doc" is a page, a row number is the two lines that
+    // explain this exact verdict — and it is the SAME number the L1 log line carries.
+    it('names the row that judged the call, including the pre-stage row 0', () => {
+        expect(locationMatrixPointer('/tmp/x.md', '6')).toContain('ROW 6');
+        expect(locationMatrixPointer('/tmp/x.md', L1_PRESTAGE_ROW)).toContain(`ROW ${L1_PRESTAGE_ROW}`);
+    });
+
+    // Interpolated into a REASON="…" shell assignment and then printf'd into a JSON string, exactly as
+    // L0's and L2's are: a quote or backslash corrupts the decision payload, not merely the prose.
+    it('emits a JSON-safe pointer', () => {
+        const pointer = locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '5');
+        expect(pointer).not.toContain('"');
+        expect(pointer).not.toContain('\\');
+    });
+
+    // An absolute path or it is not a pointer — the shell's cwd is not the governed root and cannot be
+    // assumed, which is why L1's own messages name <root> explicitly rather than saying "cd first".
+    it('keeps the path absolute, and starts on its own line so the house report shape holds', () => {
+        const pointer = locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '5');
+        expect(pointer.startsWith('\n')).toBe(true);
+        expect(pointer).toContain(' /repo/');
+    });
+
     it('tells a reader how a `row=` in the L1 log joins back to the table', () => {
         const doc = renderL1Doc();
         expect(doc).toContain('## How a log line joins to a row');
@@ -527,5 +565,86 @@ describe('no surface prescribes cross-tree `git -C` as a cure', () => {
         const source = sourceOf('version-sync.ts');
         expect(source).not.toContain('`git -C ${tree.mainRoot}');
         expect(source).not.toContain('`git -C ${tree.root}');
+    });
+});
+
+/**
+ * THE DENY NAMES THE MATRIX — end to end, through the real runner.
+ *
+ * The delivered table (above) fixed the record; this fixes the experience. A blocked agent reads the
+ * deny text and nothing else, so a table the deny does not name is indistinguishable from one that does
+ * not exist. L0 and L2 have named theirs for releases; L1 — the layer emitting by far the most `row=` —
+ * shipped the table and no pointer, and that is the regression these pin shut.
+ *
+ * Both branches of `l1LocationBlock` are driven: the row-0 PRE-STAGE (decided from command text before
+ * a tree is resolved, and therefore the deny path most easily left out of a centralised pointer) and a
+ * TREE-BASED row reached through `firstMatchingL1Row`.
+ */
+describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
+    let outer: string;
+    let matrixPath: string;
+
+    // loadAndValidate demands a FULLY valid config, so it is built with the installer's own seeder
+    // rather than hand-rolled — the same shape runner.spec.ts uses, and for the same reason.
+    function writeGuardConfig(root: string): void {
+        // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
+        const config = migrate({}).config as Record<string, any>;
+        config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
+        for (const name of Object.keys(config.hookGuards)) config.hookGuards[name].mode = 'OFF';
+        config.excludePaths = [];
+        fs.writeFileSync(path.join(root, 'webpieces.config.json'), JSON.stringify(config));
+    }
+
+    function initTempRepo(dir: string): void {
+        fs.mkdirSync(dir, { recursive: true });
+        const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'pipe' }); };
+        git('init', '-b', 'main');
+        git('config', 'core.hooksPath', '/dev/null');   // never this machine's global hooks
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'test');
+        fs.writeFileSync(path.join(dir, 'f.txt'), 'x');
+        git('add', '-A');
+        git('commit', '-m', 'init');
+    }
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1ptr-')));
+        initTempRepo(outer);
+        writeGuardConfig(outer);
+        matrixPath = path.join(outer, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC);
+    });
+
+    it(`row ${L1_PRESTAGE_ROW} (the misplaced-\`cd\` pre-stage): absolute path + the row`, () => {
+        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('must come FIRST');
+        expect(report).toContain(matrixPath);
+        expect(report).toContain(`ROW ${L1_PRESTAGE_ROW}`);
+    });
+
+    it('row 5 (git from a subdirectory, force-to-root): absolute path + the row', () => {
+        const sub = path.join(outer, 'packages', 'http');
+        fs.mkdirSync(sub, { recursive: true });
+        const report = (runBash(`cd ${sub} && git status`, outer, 'guards') as BlockedResult).report;
+        expect(report).toContain(matrixPath);
+        expect(report).toContain('ROW 5');
+    });
+
+    // Lazy: the doc is written on a BLOCK and nowhere else, so an agent that was never blocked never
+    // pays for a file it will not read.
+    it('writes the matrix only on a block', () => {
+        const clean = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1ptr-ok-')));
+        initTempRepo(clean);
+        writeGuardConfig(clean);
+        expect(runBash('pnpm build && pnpm test', clean, 'guards')).toBeNull();
+        expect(fs.existsSync(path.join(clean, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC))).toBe(false);
+    });
+
+    // The DELIVERED text, not merely the pure function: it is interpolated into a JSON decision
+    // payload, where a quote corrupts the decision rather than merely the prose.
+    it('adds nothing to the deny that could corrupt the JSON payload', () => {
+        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards') as BlockedResult).report;
+        const pointer = report.slice(report.indexOf('The full L1 location matrix'));
+        expect(pointer).not.toContain('"');
+        expect(pointer).not.toContain('\\');
     });
 });
