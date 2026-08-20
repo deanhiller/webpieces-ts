@@ -45,6 +45,12 @@ export class UntrackedFiles {
  * Now the refusal only ever names tracked changes, so `git stash` — the cure it prints — always resolves
  * it, by construction.
  *
+ * That is true about the FILES and not about the CHECKOUT: git itself aborts a switch when an untracked
+ * file sits at a path the destination branch TRACKS. Letting untracked files through is what makes that
+ * abort reachable, and `MainCheckout` is where it is handled — it reacts to git's own refusal by stashing
+ * with `-u`, retrying, and shouting about it. This gate does not predict that case, deliberately: git's
+ * rules for it are the authority, and re-deriving them here would drift from the git actually installed.
+ *
  * ─── WHY `--untracked-files=no` AND `ls-files -z` RATHER THAN PARSING `??` ─────────────────────────────
  * The decision half asks git the tracked-only question directly, so no line of porcelain output is ever
  * parsed to make it. The reporting half asks `ls-files --others --exclude-standard -z`, which emits bare
