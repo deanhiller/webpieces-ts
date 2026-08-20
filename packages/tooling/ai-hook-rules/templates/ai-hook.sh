@@ -19,7 +19,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BS='\'                      # one literal backslash, so no \u001b / \n escape sits in this source
 ESC="${BS}u001b"           # the 6 chars: backslash u 0 0 1 b — Claude Code parses \u001b → ESC
 NL="${BS}n"                # the 2 chars: backslash n — parsed as a real newline inside the JSON string
-WP_STILL_ALLOWED="Still allowed while this block is up:${NL}  - any Read${NL}  - any Write/Edit whose target is webpieces.config.json${NL}  - every command on the L0 allowlist, including the Fix Options below${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."
+WP_STILL_ALLOWED="Still allowed while this block is up:${NL}  - any Read${NL}  - any Write/Edit whose target is webpieces.config.json, pnpm-workspace.yaml or package.json${NL}  - every command on the L0 allowlist, including the Fix Options below${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."
 # The BIN is resolved by walking UP from ROOT (as Node does), and BIN_ROOT records which tree supplied
 # it — the version-drift guard below compares THIS tree's pin against THAT tree's installed version.
 BIN_ROOT="$ROOT"
@@ -66,6 +66,53 @@ if [ -f "$ROOT/package.json" ]; then
   # pass over pnpm-lock.yaml emits "<catalog> <@webpieces/pkg> <version>" lines for the sh lookup below;
   # \047 is a single quote (so this awk program carries none and stays safely single-quotable in sh).
   WP_CATALOGS=""
+  WP_WS_CATALOGS=""
+  # THE PIN LIVES IN pnpm-workspace.yaml, and the LOCK is only the fallback (2026-08-20).
+  #
+  # L0 used to learn the pin from pnpm-lock.yaml's `catalogs:` alone, while L1's WebpiecesVersions.readPin
+  # reads pnpm-workspace.yaml. Two notions of "the pin", and the gap is exactly where the cure lands: an
+  # agent told to raise this tree's pin edits pnpm-workspace.yaml, re-runs, and L0 still reports the OLD
+  # number — because only `pnpm install` rewrites the lock — so it concludes the edit did nothing and
+  # reaches for something worse. Reading the workspace manifest FIRST makes the edit visible immediately.
+  #
+  # It resolves the same two YAML shapes readPin does, and that is not optional: a repo pinning the whole
+  # @webpieces family in lockstep writes the version ONCE as `&wp 0.4.669` and aliases the rest as `*wp`,
+  # so an anchor-blind read silently nulls the leg on precisely the repos that pin most carefully. Both
+  # `catalog:` (the default catalog) and `catalogs:` (named ones) are walked. A value that is not a plain
+  # digit-version (a range) is NOT emitted, so a loose pinner falls through to the lock rather than being
+  # compared against an incomparable spec.
+  if grep -Eq '"@webpieces/[^"]*"[[:space:]]*:[[:space:]]*"catalog:' "$ROOT/package.json" 2>/dev/null && [ -f "$ROOT/pnpm-workspace.yaml" ]; then
+    WP_WS_CATALOGS="$(awk '
+      { n=0; while (substr($0,n+1,1)==" ") n++; c=substr($0,n+1) }
+      c=="" || substr(c,1,1)=="#" { next }
+      {
+        ai=index(c,":")
+        if (ai>0) {
+          av=substr(c,ai+1); sub(/^[ \t]+/,"",av)
+          if (substr(av,1,1)=="&") {
+            an=substr(av,2); sub(/[ \t].*/,"",an)
+            sub(/^&[^ \t]+[ \t]*/,"",av)
+            sub(/[ \t]+#.*/,"",av); gsub(/["\047]/,"",av); sub(/[ \t].*/,"",av)
+            if (an!="" && av!="") anch[an]=av
+          }
+        }
+      }
+      n==0 { mode=(c ~ /^catalog: *$/)?1:((c ~ /^catalogs: *$/)?2:0); cat=(mode==1)?"default":""; next }
+      mode==0 { next }
+      mode==2 && c ~ /^[^:]+: *$/ { cat=c; sub(/: *$/,"",cat); gsub(/["\047 ]/,"",cat); next }
+      {
+        ki=index(c,":")
+        if (ki<=0) next
+        k=substr(c,1,ki-1); gsub(/["\047 ]/,"",k)
+        if (substr(k,1,11)!="@webpieces/") next
+        v=substr(c,ki+1); sub(/^[ \t]+/,"",v); sub(/^&[^ \t]+[ \t]*/,"",v)
+        sub(/[ \t]+#.*/,"",v); gsub(/["\047]/,"",v); sub(/[ \t].*/,"",v)
+        if (v=="") next
+        nn++; key[nn]=cat " " k; ali[nn]=(substr(v,1,1)=="*")?substr(v,2):""; val[nn]=v
+      }
+      END { for (i=1;i<=nn;i++) { vv=(ali[i]=="")?val[i]:anch[ali[i]]; if (vv ~ /^[0-9]/) print key[i] " " vv } }
+    ' "$ROOT/pnpm-workspace.yaml" 2>/dev/null)"
+  fi
   if grep -Eq '"@webpieces/[^"]*"[[:space:]]*:[[:space:]]*"catalog:' "$ROOT/package.json" 2>/dev/null && [ -f "$ROOT/pnpm-lock.yaml" ]; then
     WP_CATALOGS="$(awk '
       { n=0; while (substr($0,n+1,1)==" ") n++; c=substr($0,n+1) }
@@ -90,7 +137,8 @@ if [ -f "$ROOT/package.json" ]; then
     case "$WP_DECL" in
       catalog:*)
         WP_CAT="${WP_DECL#catalog:}"; [ -n "$WP_CAT" ] || WP_CAT="default"
-        WP_DECL="$(printf '%s\n' "$WP_CATALOGS" | awk -v c="$WP_CAT" -v p="@webpieces/$WP_NAME" '$1==c && $2==p {print $3; exit}')"
+        WP_DECL="$(printf '%s\n' "$WP_WS_CATALOGS" | awk -v c="$WP_CAT" -v p="@webpieces/$WP_NAME" '$1==c && $2==p {print $3; exit}')"
+        [ -n "$WP_DECL" ] || WP_DECL="$(printf '%s\n' "$WP_CATALOGS" | awk -v c="$WP_CAT" -v p="@webpieces/$WP_NAME" '$1==c && $2==p {print $3; exit}')"
         [ -n "$WP_DECL" ] || continue ;;
       [0-9]*) : ;;
       *) continue ;;
@@ -111,15 +159,29 @@ if [ -f "$ROOT/package.json" ]; then
 $(sed -n 's/.*"@webpieces\/\([A-Za-z0-9._-]*\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1 \2/p' "$ROOT/package.json")
 WPEOF
 fi
-# THE CURE FOR A BORROWED node_modules RUNS IN THIS TREE, NOT WHEREVER THE BIN CAME FROM. A bare
-# 'pnpm install' typed while the shell sits in the primary clone installs into the primary, changes
-# nothing in the worktree being judged, and re-fires the identical fault — the four-cure straddle
-# recorded above committedShimStale(). When the bin was inherited, prescribe the cd and say why.
-WP_INSTALL_CMD="pnpm install"
-WP_BORROW_NOTE=""
+# A BORROWED BIN IS NOT SINGLE-TREE DRIFT, SO L0 MUST NOT ANSWER IT (2026-08-20).
+#
+# RESOLVE_BIN_SH walks UP for the bin, so in a linked worktree with no node_modules of its own BIN_ROOT
+# is the MAIN tree. The scan above then compares $ROOT's DECLARED pin against $BIN_ROOT's INSTALLED
+# version — a CROSS-TREE comparison it was reporting as fault D, single-tree drift. Everything
+# downstream of that mislabel was wrong:
+#   • the cure. 'pnpm install' cannot "align node_modules" in a tree that has none; it MANUFACTURES one,
+#     at this tree's stale pin. That is precisely the state L1 row 8 (trinary-version-skew) blocks, so
+#     the L0 cure created the next block. One measured agent was walked from a pin disagreement, through
+#     'pnpm install' offered as "(preferred) ... usually right", to a DOWNGRADED engine and a total block.
+#   • the analysis. Row 8 already reads all FOUR versions (both trees' pins and both installs), already
+#     knows which direction to move, already detects a deliberate pin bump, and already carries the
+#     escalate-and-STOP protocol. It could never run: ai-hook.sh hard-exits on any sh-side fault, so D
+#     PREEMPTED the guard that had the right answer.
+# So: when the bin came from another tree, raise NO fault here and let the binary run. D stays exactly as
+# it was when ROOT == BIN_ROOT — that IS single-tree drift, and row 8 cannot see it (VersionSyncGuard
+# only applies to a linked worktree compared against a DIFFERENT main tree). Coverage does not gap: if
+# the two pins agree but the two installs differ, row 8's quartet still has two distinct members and it
+# still fires. X / U / K are untouched — a MISSING or CRASHED bin is about the bin, not about a version.
 if [ "$BIN_ROOT" != "$ROOT" ]; then
-  WP_INSTALL_CMD="cd $ROOT && pnpm install"
-  WP_BORROW_NOTE="${NL}  NOTE: this tree ($ROOT) has NO node_modules of its own, so the guard binary was inherited from $BIN_ROOT by walking up. TWO cures are real and they fix DIFFERENT things: A makes THIS tree work now, B stops the two trees disagreeing. A - run the command above HERE. That is legitimate and it does work; a worktree NEEDS its own node_modules anyway (nx, vitest and the eslint plugin all execute in this tree and load from it). B - get $BIN_ROOT onto the same @webpieces version: put both trees on the same git hash (the pin is tracked) and run ONE 'pnpm install' there. If you are a SUBAGENT, B is the half you cannot do: it needs both trees on the same git hash, and CROSS-TREE GIT is refused to you here (a local 'cd' + install does run - it is git -C another tree that is blocked). So ESCALATE B: TELL THE MAIN AGENT in the MAIN git worktree ($BIN_ROOT) to run 'git pull && pnpm install' there so both trees are on the same @webpieces version, and to tell you when it is complete so you can continue. If you escalate instead of doing A, that forwarding IS the end of your turn: STOP WORKING NOW, make NO further tool calls and do NOT retry - RETRYING IS THE BUG, because every retry re-fires this identical deny and buries the ask. WAIT for that confirmation, then resume. The rule is NOT no-install-here: it is that this tree's @webpieces must EQUAL $BIN_ROOT's, because doing only A leaves two trees on two releases (the trinary-version-skew guard then BLOCKS rather than letting it pass unnoticed). Adding an ordinary third-party dependency here changes none of that - only a differing @webpieces version does. If this tree genuinely needs a DIFFERENT version, use a separate clone rather than a worktree."
+  DRIFT_PKG=""
+  DRIFT_DECLARED=""
+  DRIFT_INSTALLED=""
 fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
@@ -290,6 +352,16 @@ case "$FILE" in
   */webpieces.config.json|webpieces.config.json)
     wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
+  */pnpm-workspace.yaml|pnpm-workspace.yaml|*/package.json|package.json)
+    # A manifest AT THE ROOT OF A GOVERNED TREE, which is the only place the version pin lives. The test
+    # is the sibling webpieces.config.json — TRACKED, so the main clone has one and every worktree has its
+    # own — and NOT $ROOT, which names whichever tree supplied this shim and would deny the other's.
+    # Basename alone would be far worse here than in the JS half: this arm is TERMINAL (exit 0, the bin
+    # never runs), so every packages/**/package.json would be editable with nothing judging it.
+    if [ -f "$(dirname -- "$FILE")/webpieces.config.json" ]; then
+      wp_log "$WP_FAULT" ALLOW-MANIFEST  # raising the pin must be typable from inside the block
+      exit 0
+    fi ;;
 esac
 if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/ai-hook-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
@@ -344,24 +416,24 @@ elif [ -n "$DRIFT_PKG" ]; then
   if [ "$DRIFT_DIR" = older ]; then
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin${NL}    run EXACTLY: '$WP_INSTALL_CMD'${WP_BORROW_NOTE}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin${NL}    run EXACTLY: 'pnpm install'${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   else
     # NEWER, or undecidable — the same choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.
     DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
     [ "$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
     WP_BRANCH="$(git -C "$ROOT" branch --show-current 2>/dev/null)"
-    [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
-    if [ "$WP_BRANCH" = main ]; then
-      WP_FIX="  Fix Option 1: (preferred) you are on main and want what origin pins - move forward${NL}    run EXACTLY: 'git checkout main && git pull origin main', then 'pnpm install'${NL}  Fix Option 2: you mean to stay on this code - the downgrade is the point${NL}    run EXACTLY: 'pnpm install'"
+    WP_PIN_EDIT="edit $ROOT/pnpm-workspace.yaml - the catalog line for $DRIFT_PKG, or that dependency in $ROOT/package.json if this repo pins directly - and set it to $DRIFT_INSTALLED, then run 'pnpm install'"
+    if [ -z "$WP_BRANCH" ]; then
+      WP_FIX="  Fix Option 1: (preferred) HEAD is DETACHED here, so a pin edit would belong to no branch - get onto main instead, whose pin is already at or ahead of what is installed, so the drift clears with no edit at all${NL}    run EXACTLY: 'git checkout main && git pull origin main', then 'pnpm install'${NL}  Fix Option 2: you mean to stay on this exact commit - the downgrade to $DRIFT_DECLARED is the point${NL}    run EXACTLY: 'pnpm install'"
+    elif [ "$WP_BRANCH" = main ]; then
+      WP_FIX="  Fix Option 1: (preferred) go FORWARD - keep what is installed and raise the pin to match it${NL}    ${WP_PIN_EDIT}${NL}    That edit is ALLOWED while this block is up, and the install then only rewrites the lock - nothing is downgraded, because the pin now names what is already on disk.${NL}  Fix Option 2: you are on main and want what origin pins instead${NL}    run EXACTLY: 'git checkout main && git pull origin main', then 'pnpm install'"
     else
-      WP_LOG_PATHS="$WP_LOG_DIR/L0-shim/"
-      [ "$WP_PRIMARY_LOG_DIR" = "$WP_LOG_DIR" ] || WP_LOG_PATHS="${WP_LOG_PATHS}${NL}      and, for the primary clone: $WP_PRIMARY_LOG_DIR/L0-shim/"
-      WP_FIX="  Fix Option 1: (preferred) off main, align node_modules to YOUR branch pin - usually right${NL}    run EXACTLY: 'pnpm install'${NL}  Fix Option 2: you actually need the NEWER pin ON THIS BRANCH - there is no cure to run, and this guard will not invent one${NL}    Do NOT reach for 'git pull origin main': pulling main into a feature branch destroys the fork point the build gate --base and the PR review diff are computed from, and the guards block it.${NL}    You hit a weird case of needing a downgrade. Contact Dean - he needs the audit logs to understand why you are downgrading, so the guard logic can account for it.${NL}    L0 audit logs: $WP_LOG_PATHS"
+      WP_FIX="  Fix Option 1: (preferred) go FORWARD - keep what is installed and raise THIS branch's pin to match it${NL}    ${WP_PIN_EDIT}${NL}    That edit is ALLOWED while this block is up, and the install then only rewrites the lock - nothing is downgraded, because the pin now names what is already on disk.${NL}  Fix Option 2: you mean to align node_modules to YOUR branch pin - that is a DOWNGRADE to $DRIFT_DECLARED, so pick it only if you meant to${NL}    run EXACTLY: 'pnpm install'${NL}    Do NOT reach for 'git pull origin main': pulling main into a feature branch destroys the fork point the build gate --base and the PR review diff are computed from, and the guards block it."
     fi
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → $DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}${WP_FIX}${WP_BORROW_NOTE}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → $DRIFT_NOTE. That may be exactly what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}${WP_FIX}${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:

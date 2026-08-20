@@ -69,16 +69,17 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 |---|---|---|---|
 | 1 | any Read | PASS | no — it repairs nothing, so L1 still judges it |
 | 2 | a Write/Edit whose target is webpieces.config.json | PASS | no — it repairs nothing, so L1 still judges it |
-| 3 | pnpm\|npm install | ALLOW | yes — it REPAIRS the tooling |
-| 4 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW | yes — it REPAIRS the tooling |
-| 5 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
-| 6 | git checkout main && git pull origin main | ALLOW | yes — it REPAIRS the tooling |
-| 7 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
-| 8 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
-| 9 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
-| 10 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
-| 11 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
-| 12 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
+| 3 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS | no — it repairs nothing, so L1 still judges it |
+| 4 | pnpm\|npm install | ALLOW | yes — it REPAIRS the tooling |
+| 5 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW | yes — it REPAIRS the tooling |
+| 6 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
+| 7 | git checkout main && git pull origin main | ALLOW | yes — it REPAIRS the tooling |
+| 8 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
+| 9 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
+| 10 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
+| 11 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
+| 12 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
+| 13 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a
@@ -138,6 +139,7 @@ to carry the first.
 | `PASS-BIN-BLOCK` | no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked |
 | `ALLOW-READ` | allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran) |
 | `ALLOW-CONFIG` | allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here |
+| `ALLOW-MANIFEST` | allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here |
 | `ALLOW-CURE` | a Bash entry of the allowlist matched — ALLOW |
 | `DENY` | fault X, not on the allowlist — BLOCK_AI_CURE |
 | `DENY-UNDECLARED` | fault U, not on the allowlist — BLOCK_AI_CURE |

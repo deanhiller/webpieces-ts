@@ -68,6 +68,7 @@ export const SHIM_LOG_VERDICTS: readonly ShimLogVerdict[] = [
     new ShimLogVerdict('PASS-BIN-BLOCK', 'no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked'),
     new ShimLogVerdict('ALLOW-READ', 'allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran)'),
     new ShimLogVerdict('ALLOW-CONFIG', 'allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here'),
+    new ShimLogVerdict('ALLOW-MANIFEST', 'allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here'),
     new ShimLogVerdict('ALLOW-CURE', 'a Bash entry of the allowlist matched — ALLOW'),
     new ShimLogVerdict('DENY', 'fault X, not on the allowlist — BLOCK_AI_CURE'),
     new ShimLogVerdict('DENY-UNDECLARED', 'fault U, not on the allowlist — BLOCK_AI_CURE'),

@@ -31,7 +31,7 @@ import { BranchCreationGuardRule } from './branch-creation-guard';
 /**
  * SLOW BY NATURE: `git init`, a commit, then six `git worktree add` calls in `beforeAll`, plus the
  * `git worktree list --porcelain` reads under test. 46s standalone on an IDLE machine — within 10% of the
- * 45s global before anything else runs, and it is the HOOK that runs out, not any `it()`. It gets 120s
+ * 45s global before anything else runs, and it is the HOOK that runs out, not any `it()`. It gets the tooling budget
  * from vitest.setup.mts, which grants that to every `packages/tooling/**` suite.
  */
 
@@ -50,7 +50,7 @@ const worktrees = new WorktreeService();
 const merged = new MergedBranchesService(worktrees);
 
 /**
- * NO explicit timeout here, deliberately — it takes the 120s that vitest.setup.mts grants every
+ * NO explicit timeout here, deliberately — it takes the budget that vitest.setup.mts grants every
  * `packages/tooling/**` spec.
  *
  * This hook does REAL work: `git init`, a commit, SIX `git worktree add` calls that each check out a
@@ -60,7 +60,7 @@ const merged = new MergedBranchesService(worktrees);
  *
  * It used to carry `}, 60_000)`. That was WORSE than no annotation once the class-wide budget existed: an
  * explicit third argument OVERRIDES `vi.setConfig` from a setup file, so the one hook most in need of the
- * 120s was the only one silently capped at 60s — against a 46s idle measurement, i.e. 14s of margin under
+ * budget was the only one silently capped at 60s — against a 46s idle measurement, i.e. 14s of margin under
  * exactly the load the budget exists to survive. Do not re-add a number here; raise it in
  * vitest.setup.mts for the whole class or not at all.
  */

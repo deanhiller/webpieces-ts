@@ -87,7 +87,7 @@ function residentTree(main: string, wt: string): EffectiveTree {
  * copying the fixtures into the other spec) keeps ONE definition of what a skewed worktree looks like.
  */
 export function renderVersionSyncRow8Report(): string {
-    const dirs = pair('0.4.616', '0.4.612');
+    const dirs = pair('0.4.612', '0.4.616');
     return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
 }
 
@@ -245,9 +245,120 @@ describe('VersionSyncGuard — the FOURTH version', () => {
     });
 });
 
+/**
+ * THE DECISION TABLE, one case per row.
+ *
+ * The four versions in play are: (1) the main tree's pin, (2) the main tree's INSTALL — the binary that
+ * judges every tree, so the governor — (3) this worktree's pin, and (4) this worktree's install when it
+ * has one. Every disagreement between them has exactly ONE right actor and ONE right direction, and the
+ * whole failure this table exists to end is a message that names the wrong one:
+ *
+ *   A  1 != 2                    main agent  — `pnpm install` in main, no pull
+ *   B  2 > 3                     THIS TREE   — raise this tree's pin to 2, no escalation
+ *   C  2 < 3, not a bump         main agent  — checkout main, pull, install there
+ *   C' 2 < 3 because of a bump   main agent  — raise MAIN's pin; an install cannot move one
+ *   D  1 == 2 == 3, 4 differs    THIS TREE   — `pnpm install` here, the only case a bare install is right
+ *
+ * B is the common one, and it is what the old message got backwards: it printed C's escalation for it,
+ * so an agent whose entire fix was a one-line edit was told to stop and wait for a main agent with
+ * nothing to do.
+ */
+describe('VersionSyncGuard — the decision table', () => {
+    /** A — the MAIN tree disagrees with ITSELF. Nothing here is wrong and nothing here can help. */
+    it('A: main pin != main install → ask for an install in main, and do NOT ask for a pull', () => {
+        const base = tmp();
+        const main = path.join(base, 'main');
+        const wt = path.join(base, 'wt');
+        writePin(main, '0.4.616');
+        writeInstalled(main, '0.4.620');   // main's own two legs disagree
+        writePin(wt, '0.4.620');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+        expect(report).toContain('THE MAIN TREE IS INTERNALLY INCONSISTENT');
+        expect(report).toContain(`Tell main agent: run \`pnpm install\` in ${main}`);
+        expect(report).toContain('no pull is needed');
+        // The heavier checkout+pull cure belongs to C. Printing it here invites a main agent to move
+        // main's COMMIT for a fault that is not about main's commit at all.
+        expect(report).not.toContain('git checkout main && git pull');
+    });
+
+    /**
+     * B — THE COMMON CASE, and the one the old message got backwards. The governing tree already RUNS
+     * the newer release, so nothing has to move there: the whole fix is a one-line edit to a tracked
+     * file THIS tree owns. There is nobody to ask, so there is no escalation to print.
+     */
+    it('B: main install > worktree pin → a self-serve pin edit, and NO escalation at all', () => {
+        const dirs = pair('0.4.616', '0.4.612');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        expect(report).toContain('THIS ONE IS YOURS, AND YOU CAN DO IT RIGHT HERE');
+        expect(report).toContain(`Edit ${dirs.wt}/pnpm-workspace.yaml`);
+        expect(report).toContain('set it to 0.4.616');
+        expect(report).toContain('That edit is ALLOWED');
+        // THE OMISSION IS THE DELIVERABLE. An escalation on a cure the reader can perform teaches it to
+        // stop and wait for a main agent who has nothing to do — which is what actually happened.
+        expect(report).not.toContain('Forward this to your coordinator');
+        expect(report).not.toContain('STOP WORKING NOW');
+        expect(report).not.toContain('Tell main agent');
+    });
+
+    /** B, with a fourth leg: the tree HAS its own node_modules, so the edit is followed by an install. */
+    it('B: names the install too when this tree has its own node_modules', () => {
+        const dirs = pair('0.4.616', '0.4.612');
+        writeInstalled(dirs.wt, '0.4.612');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        expect(report).toContain('Then run `pnpm install` HERE');
+    });
+
+    it('B: says there is nothing to install when this tree has no node_modules', () => {
+        const dirs = pair('0.4.616', '0.4.612');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        expect(report).toContain('there is nothing to install');
+    });
+
+    /**
+     * B ON A DETACHED HEAD. The fix is an edit to a TRACKED file, and on a detached HEAD that edit
+     * belongs to no branch and survives nothing — so it is not offered. Get onto a branch first.
+     */
+    it('B: on a DETACHED HEAD, says get onto a branch instead of prescribing an orphaned edit', () => {
+        const base = tmp();
+        const main = path.join(base, 'main');
+        const wt = path.join(base, 'wt');
+        writePin(main, '0.4.616');
+        writeInstalled(main, '0.4.616');
+        writePin(wt, '0.4.612');
+        run(wt, ['init', '-q']);
+        run(wt, ['add', '.']);
+        run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
+        run(wt, ['checkout', '-q', '--detach']);
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+        expect(report).toContain('GET ONTO A BRANCH FIRST');
+        expect(report).toContain('HEAD is DETACHED');
+        expect(report).not.toContain('That edit is ALLOWED');
+    });
+
+    /** C — main is genuinely older. Only the main agent can move it, so this one DOES escalate. */
+    it('C: main install < worktree pin → the main-agent pull cure, and an escalation', () => {
+        const dirs = pair('0.4.612', '0.4.616');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        expect(report).toContain(`Tell main agent: \`cd ${dirs.main} && git checkout main && git pull\``);
+        expect(report).toContain('Forward this to your coordinator verbatim');
+        expect(report).toContain('STOP WORKING NOW');
+    });
+
+    /** D — every pin agrees; only this tree's own node_modules lags. One command, here, no escalation. */
+    it('D: pins all agree, only this tree\'s install lags → `pnpm install` HERE, no escalation', () => {
+        const dirs = pair('0.4.616', '0.4.616');
+        writeInstalled(dirs.wt, '0.4.500');
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        expect(report).toContain('THIS ONE IS YOURS, AND IT IS ONE COMMAND');
+        expect(report).toContain(`Run \`pnpm install\` HERE, in ${dirs.wt}`);
+        expect(report).not.toContain('Forward this to your coordinator');
+        expect(report).not.toContain('Tell main agent');
+    });
+});
+
 describe('VersionSyncGuard — the message', () => {
     const reportFor = (): string => {
-        const dirs = pair('0.4.616', '0.4.612');
+        const dirs = pair('0.4.612', '0.4.616');
         return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
     };
 
@@ -324,8 +435,8 @@ describe('VersionSyncGuard — the message', () => {
         const report = reportFor();
         expect(report).toContain('Forward this to your coordinator verbatim');
         expect(report).toContain('My worktree');
-        expect(report).toContain('is on @webpieces 0.4.612');
-        expect(report).toContain('is on 0.4.616');
+        expect(report).toContain('is on @webpieces 0.4.616');
+        expect(report).toContain('is on 0.4.612');
         expect(report).toContain('TELL THE MAIN AGENT in the MAIN git worktree');
         expect(report).toContain('git pull && pnpm install');
         expect(report).toContain('tell me');
@@ -445,6 +556,24 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         expect(report).toContain('tell me when it is complete');
     });
 
+    /**
+     * WHO MAY UPGRADE WEBPIECES AT ALL — the fact this branch was missing.
+     *
+     * A bump agent reading the 42-line version learned WHAT to ask for and never learned that it is the
+     * wrong agent for the job. "Only main agents in worktrees can do this" is not derivable from
+     * anything on screen; without it the block reads as a missing permission to route around, and
+     * routing around is what burns the turn. It is said in the subagent's own words, before the closing
+     * STOP beat, which stays last and unique.
+     */
+    it('tells a subagent upgrading webpieces that it is the wrong agent for the job', () => {
+        const report = bumpReport();
+        expect(report).toContain('If you are a subagent upgrading webpieces, STOP — only main agents in worktrees can do');
+        expect(report).toContain('main has an earlier version of');
+        expect(report).toContain('You MUST tell the main agent to pull main and');
+        // The turn-ending beat still comes AFTER it and is still the last word.
+        expect(report.indexOf('only main agents in worktrees')).toBeLessThan(report.indexOf('STOP WORKING NOW'));
+    });
+
     /** The 25-firing incident is branch-independent — a bump-skew subagent loops exactly the same way. */
     it('carries the same STOP / do-not-retry beat', () => {
         const report = bumpReport();
@@ -469,9 +598,21 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         expect(bumpReport()).toContain('THEN AND ONLY THEN will this worktree');
     });
 
-    /** Budget: 38 → 42, same trade as the generic branch — see the comment on its diet assertion. */
+    /**
+     * Budget: 38 → 42 for the `Tell main agent:` prefix, and now 42 → 46 for the four lines that say a
+     * subagent MUST NOT be the one upgrading webpieces.
+     *
+     * Same trade as every earlier one, made with eyes open. The 42-line version told the reader WHAT to
+     * ask for and never said WHO may perform it, and "only main agents in worktrees can do this" is not
+     * a fact an agent can derive: it looks exactly like a missing permission to route around, and an
+     * agent that reads it that way spends its turn hunting for the route. Four lines that close that
+     * door are cheaper than the turns spent walking through it.
+     *
+     * Note this is the BUMP branch alone. `main-ahead` — the common case — got SHORTER, because it
+     * dropped the escalation block entirely: there is nobody to escalate to when the fix is yours.
+     */
     it('stays on the message diet in this branch too', () => {
-        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(42);
+        expect(bumpReport().split('\n').length).toBeLessThanOrEqual(46);
     });
 });
 

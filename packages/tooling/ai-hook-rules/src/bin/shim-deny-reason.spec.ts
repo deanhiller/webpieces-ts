@@ -233,7 +233,7 @@ describe('no guard surface may tell an agent a worktree gets no node_modules of 
     const surfaces = new Map<string, string>([
         ['L0 fault-S deny', shimStaleDenyReason('0.4.624', '/tmp/wp-root',
             [SHIM_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], true)],
-        ['the rendered shim (D/X/U/K + WP_BORROW_NOTE)', renderShim()],
+        ['the rendered shim (D/X/U/K)', renderShim()],
         ['the L1 doc (row 8 remedy + the evaluation order)', renderL1Doc()],
         // THE LAST GAP, and the surface most likely to regrow the phrase: VersionSyncGuard IS L1 row 8,
         // i.e. the guard that talks about worktrees for a living, and it was pinned only by a single

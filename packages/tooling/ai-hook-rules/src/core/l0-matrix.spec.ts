@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { loadTemplate } from '@webpieces/rules-config';
+import * as fs from 'fs';
+import * as path from 'path';
+import { CONFIG_FILENAME, loadTemplate } from '@webpieces/rules-config';
 
 import {
     L0AllowEntry, L0Call, L0_ALLOWLIST, L0_ALLOW_ERE, L0_ALLOW_JS, L0_CURE_ALLOW_JS,
@@ -13,6 +15,26 @@ import { MATRIX_L0_BLOCK } from './decision-log';
 import { L0Cure, L0Fault, L0_FAULTS, GUARD_MATRIX_DOC, renderGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 
 const kit = new ShimTestkit();
+
+/**
+ * A REAL governed tree root, because the manifest entry of the allowlist is answered off DISK.
+ *
+ * `isRootManifest` asks whether a `webpieces.config.json` sits BESIDE the manifest — the one test that
+ * admits the main clone and every worktree without needing to know which tree you are in. A fabricated
+ * `/repo/...` path answers "no" and would make the manifest row of this matrix vacuously null, so the
+ * samples' `/repo` prefix is rewritten onto a staged root that actually holds the three files.
+ */
+const SAMPLE_ROOT = kit.mktmp();
+fs.writeFileSync(path.join(SAMPLE_ROOT, CONFIG_FILENAME), '{}\n');
+fs.writeFileSync(path.join(SAMPLE_ROOT, 'pnpm-workspace.yaml'), 'catalog: {}\n');
+fs.writeFileSync(path.join(SAMPLE_ROOT, 'package.json'), '{}\n');
+fs.mkdirSync(path.join(SAMPLE_ROOT, 'packages', 'lib'), { recursive: true });
+fs.writeFileSync(path.join(SAMPLE_ROOT, 'packages', 'lib', 'package.json'), '{}\n');
+
+/** Every `/repo/...` sample path, rewritten onto the staged root above. Bash calls carry no path. */
+function real(call: L0Call): L0Call {
+    return new L0Call(call.toolName, call.command, call.filePath.replace(/^\/repo/, SAMPLE_ROOT));
+}
 
 // Calls that are on NO entry of the list — the BLOCK row of the matrix.
 const NOT_ALLOWED: readonly L0Call[] = [
@@ -33,7 +55,14 @@ const NOT_ALLOWED: readonly L0Call[] = [
     new L0Call('Bash', 'git status && rm -rf /', ''),
     new L0Call('Bash', 'git -c core.pager=evil status', ''),
     new L0Call('Edit', '', '/repo/src/index.ts'),
-    new L0Call('Write', '', '/repo/package.json'),
+    // `/repo/package.json` used to sit here. It is a MANIFEST now — one of the two files a @webpieces
+    // pin lives in — and L1 row 8's report has always promised that editing it stays possible while a
+    // block is up. The promise had no carve-out behind it; it does now, so the call belongs on the
+    // `pass` row instead. `pass`, not `allow`: L1/L2 still judge the edit.
+    new L0Call('Edit', '', '/repo/src/pnpm-workspace.yaml.ts'), // a NAME containing the manifest is not the manifest
+    // AS WIDE AS THE CURE AND NO WIDER. A monorepo has one package.json per project; the version pin is
+    // in NONE of them. Only the two files with a webpieces.config.json beside them are on the list.
+    new L0Call('Edit', '', '/repo/packages/lib/package.json'),
 ];
 
 /**
@@ -57,12 +86,13 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
 
     it('answers each call with exactly one of pass | allow | null, the same answer under every fault', () => {
         for (const call of allCalls) {
-            const outcome = isAllowed(call.toolName, call.command, call.filePath);
+            const r = real(call);
+            const outcome = isAllowed(r.toolName, r.command, r.filePath);
             expect([null, 'pass', 'allow']).toContain(outcome);
             // isAllowed takes NO fault parameter — that is the invariant. Re-asking it once per fault
             // is what makes the "no second dimension" claim a test rather than a comment.
             for (const fault of L0_FAULTS) {
-                const again = isAllowed(call.toolName, call.command, call.filePath);
+                const again = isAllowed(r.toolName, r.command, r.filePath);
                 expect(again, `fault ${fault.code} changed the outcome for: ${call.command || call.filePath}`).toBe(outcome);
             }
         }
@@ -74,11 +104,13 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
             // `pnpm wp-install-ai-hooks --target=project`, the non-interactive form) is pinned as an
             // extra sample precisely so a later tightening of the pattern cannot make it untypable.
             for (const s of entry.allSamples()) {
-                expect(isAllowed(s.toolName, s.command, s.filePath), `entry: ${entry.label} / ${s.command || s.filePath}`).toBe(entry.kind);
+                const r = real(s);
+                expect(isAllowed(r.toolName, r.command, r.filePath), `entry: ${entry.label} / ${s.command || s.filePath}`).toBe(entry.kind);
             }
         }
         for (const call of NOT_ALLOWED) {
-            expect(isAllowed(call.toolName, call.command, call.filePath), `must block: ${call.command || call.filePath}`).toBeNull();
+            const r = real(call);
+            expect(isAllowed(r.toolName, r.command, r.filePath), `must block: ${call.command || call.filePath}`).toBeNull();
         }
     });
 
@@ -98,12 +130,13 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
 
     it('maps the three outcomes onto the shim-stale adapter one-for-one', () => {
         for (const entry of L0_ALLOWLIST) {
-            const s = entry.sample;
+            const s = real(entry.sample);
             const expected = entry.kind === 'pass' ? 'pass' : 'allow-cure';
             expect(shimStaleRecoveryDecision(s.toolName, s.command, s.filePath)).toBe(expected);
         }
         for (const call of NOT_ALLOWED) {
-            expect(shimStaleRecoveryDecision(call.toolName, call.command, call.filePath)).toBe('deny');
+            const r = real(call);
+            expect(shimStaleRecoveryDecision(r.toolName, r.command, r.filePath)).toBe('deny');
         }
     });
 });
@@ -125,7 +158,8 @@ describe('cure reachability — every fault names at least one cure the allowlis
             expect(fault.cures.length).toBeGreaterThan(0);
             for (const cure of fault.cures) {
                 const c: L0Call = cure.call;
-                expect(isAllowed(c.toolName, c.command, c.filePath), `cure is DENIED by L0: ${cure.mention}`).not.toBeNull();
+                const r = real(c);
+                expect(isAllowed(r.toolName, r.command, r.filePath), `cure is DENIED by L0: ${cure.mention}`).not.toBeNull();
                 expect(fault.denyText, `deny text never names the cure: ${cure.mention}`).toContain(cure.mention);
             }
         });
@@ -184,6 +218,76 @@ describe('cure reachability — every fault names at least one cure the allowlis
  * wrong for anything else — so read-only orientation joined the list as a NON-cure, and this pins that.
  * Without it, adding `pwd` would have deleted force-to-root for `git status` on a healthy repo.
  */
+/**
+ * THE MANIFEST ENTRY IS SCOPED TO A TREE ROOT, and the two engines must agree on where that is.
+ *
+ * `isRootManifest` asks one question — does a `webpieces.config.json` sit beside this manifest — and the
+ * sh half asks it as `[ -f "$(dirname -- "$FILE")/webpieces.config.json" ]`. That definition is what
+ * admits the MAIN clone and every linked WORKTREE (the config is tracked, so each tree has its own)
+ * while excluding every project manifest under `packages/`. Anchoring to one root would deny a
+ * worktree's own cure; anchoring to the shim's `$ROOT` would deny whichever tree did not supply the
+ * shim. A divergence between the two engines here is the "L0 acquires holes nothing reports" failure
+ * hook-core's header warns about, so both are driven over the same fixture.
+ */
+describe('L0 manifest entry — a tree ROOT only, and sh and JS agree on which', () => {
+    /** A governed tree: config + both manifests at the root, and a project manifest that is not one. */
+    function stageTree(): string {
+        const root = kit.mktmp();
+        fs.writeFileSync(path.join(root, CONFIG_FILENAME), '{}\n');
+        fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'catalog: {}\n');
+        fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
+        fs.mkdirSync(path.join(root, 'packages', 'lib'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'packages', 'lib', 'package.json'), '{}\n');
+        return root;
+    }
+
+    it('passes the ROOT pnpm-workspace.yaml and package.json', () => {
+        const root = stageTree();
+        for (const name of ['pnpm-workspace.yaml', 'package.json']) {
+            expect(isAllowed('Edit', '', path.join(root, name)), name).toBe('pass');
+        }
+    });
+
+    it('passes a WORKTREE root\'s manifests too — the config is tracked, so every tree has one', () => {
+        const root = stageTree();
+        const wt = path.join(root, '.claude', 'worktrees', 'agent-x');
+        fs.mkdirSync(wt, { recursive: true });
+        fs.writeFileSync(path.join(wt, CONFIG_FILENAME), '{}\n');
+        fs.writeFileSync(path.join(wt, 'pnpm-workspace.yaml'), 'catalog: {}\n');
+        expect(isAllowed('Edit', '', path.join(wt, 'pnpm-workspace.yaml'))).toBe('pass');
+    });
+
+    it('does NOT pass a project package.json — no webpieces.config.json beside it', () => {
+        const root = stageTree();
+        expect(isAllowed('Edit', '', path.join(root, 'packages', 'lib', 'package.json'))).toBeNull();
+    });
+
+    /**
+     * THE TWO ENGINES, over the identical fixture. The sh half is TERMINAL where the JS half is a
+     * `pass`, so they cannot be compared by outcome name — what must agree is WHICH FILES are on the
+     * list, which is what `denied` measures on each side.
+     */
+    it('sh and JS answer the same for root, worktree-root and project manifests', () => {
+        const root = stageTree();
+        const wt = path.join(root, '.claude', 'worktrees', 'agent-x');
+        fs.mkdirSync(wt, { recursive: true });
+        fs.writeFileSync(path.join(wt, CONFIG_FILENAME), '{}\n');
+        fs.writeFileSync(path.join(wt, 'package.json'), '{}\n');
+        const cases: readonly [string, boolean][] = [
+            [path.join(root, 'pnpm-workspace.yaml'), true],
+            [path.join(root, 'package.json'), true],
+            [path.join(wt, 'package.json'), true],
+            [path.join(root, 'packages', 'lib', 'package.json'), false],
+        ];
+        for (const [file, onList] of cases) {
+            expect(isAllowed('Edit', '', file) === 'pass', `JS: ${file}`).toBe(onList);
+            // The sh half runs with NO bin installed (fault X), so the allowlist is what decides.
+            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', file));
+            expect(out.isDenied(), `sh: ${file}`).toBe(!onList);
+        }
+    });
+});
+
 describe('L0 cure subset — the unconditional L1 bypass carries repairs only', () => {
     it('marks every repair entry as a cure and the orientation entry as not one', () => {
         const bash = L0_ALLOWLIST.filter((e: L0AllowEntry): boolean => e.js !== null);

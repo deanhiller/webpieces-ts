@@ -92,38 +92,82 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
     });
 
     /**
-     * THE INVERSE DRIFT ON A FEATURE BRANCH — audit finding C6, the shape this message used to get wrong.
+     * THE INVERSE DRIFT ON A FEATURE BRANCH — the shape this message used to get exactly backwards.
      *
-     * It prescribed a bare `git pull origin main` regardless of branch, and the L0 allowlist terminally
-     * ALLOWED it, so the guard talked an agent into merging main into its feature branch and then waved
-     * the command past redirect-how-to-merge-main. The fork point that destroys is what the build gate's
-     * `--base` and the PR review diff read, so nothing fails at the time.
+     * Two revisions, two defects. It first prescribed a bare `git pull origin main` on every branch,
+     * which the L0 allowlist terminally ALLOWED, so the guard talked an agent into merging main into its
+     * feature branch and waved the command past redirect-how-to-merge-main. That was replaced by
+     * `pnpm install` as "(preferred) ... usually right" — an option that is BY CONSTRUCTION a downgrade,
+     * since this branch of the message only renders when node_modules is the NEWER side. One measured
+     * agent took it, dropped two releases, and the older engine then blocked every Bash call.
      *
-     * We have never observed a feature branch that genuinely needs the NEWER pin (every drift event
-     * logged in this repo is the other direction), so the message does NOT invent a cure for it: it names
-     * the install that aligns to the branch pin, says the pull is not an option, and hands over the audit
-     * log paths so the case can actually be designed for.
+     * The forward move — keep what is installed, raise the pin to match — is Option 1 on every arm now.
+     * It is a FILE EDIT, which is exactly why it could not be offered before: editing
+     * pnpm-workspace.yaml was not on the L0 allowlist, so the guard would have prescribed a call it then
+     * denied. It is on the list now, so the cure is performable from inside the block.
      */
-    it('on a FEATURE branch, refuses to prescribe a pull and escalates with the audit log paths', () => {
+    it('on a FEATURE branch, leads with the FORWARD move (raise the pin), not the downgrade', () => {
         const root = kit.stageBranch(kit.stageDriftRoot('0.3.270', '0.3.272'), 'dean/some-feature');
         const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
-        expect(reason).toContain('off main, align node_modules to YOUR branch pin');
+        expect(reason).toContain("Fix Option 1: (preferred) go FORWARD");
+        expect(reason).toContain(`edit ${root}/pnpm-workspace.yaml`);
+        expect(reason).toContain('set it to 0.3.272');       // the INSTALLED (newer) side is the target
+        expect(reason).toContain('That edit is ALLOWED while this block is up');
+        // The downgrade is still offered — it is sometimes what you meant — but it is Option 2 and it
+        // says the word out loud rather than calling itself "usually right".
+        expect(reason).toContain('Fix Option 2: you mean to align node_modules to YOUR branch pin');
+        expect(reason).toContain('that is a DOWNGRADE to 0.3.270');
         expect(reason).toContain("Do NOT reach for 'git pull origin main'");
-        expect(reason).toContain('You hit a weird case of needing a downgrade. Contact Dean - he needs the audit logs to understand why you are downgrading, so the guard logic can account for it.');
-        // The ask is only actionable if the logs can be found, so the deny prints the real directory.
-        expect(reason).toContain(`${root}/.webpieces/logs/L0-shim/`);
         expect(reason).not.toContain(CHECKOUT_MAIN_PULL_CMD); // the on-main cure is not offered off main
     });
 
     /**
-     * A root with no git dir at all (and a detached HEAD, which `--show-current` also reports as '')
-     * must land on the CONSERVATIVE half. Assuming main and prescribing a pull is the failure this whole
-     * change is about, so "we could not tell" has to behave like "not main".
+     * ON MAIN the forward move is offered TWO ways, and the pin edit is still first: raising the pin
+     * keeps what is installed, while pulling origin adopts whatever origin pins. Both go forward; only
+     * one of them needs the network.
      */
-    it('treats an unknown branch (no git dir / detached HEAD) as NOT main', () => {
+    it('on MAIN, offers the pin edit first and the origin pull second — both forward', () => {
+        const root = kit.stageBranch(kit.stageDriftRoot('0.3.270', '0.3.272'), 'main');
+        const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
+        expect(reason).toContain('Fix Option 1: (preferred) go FORWARD');
+        expect(reason).toContain('set it to 0.3.272');
+        expect(reason).toContain(`Fix Option 2: you are on main and want what origin pins instead`);
+        expect(reason).toContain(`run EXACTLY: '${CHECKOUT_MAIN_PULL_CMD}', then 'pnpm install'`);
+        expect(reason.indexOf('Fix Option 1')).toBeLessThan(reason.indexOf('Fix Option 2'));
+    });
+
+    /**
+     * THE DETACHED-HEAD ARM, which is new. A root with no git dir at all — and a real detached HEAD,
+     * which `--show-current` also reports as '' — used to fall into the feature-branch half. That was
+     * wrong twice over: Option 1 there is a pin EDIT, and on a detached HEAD an edit belongs to no
+     * branch and survives nothing; and the fork-point warning is meaningless with no branch to fork.
+     *
+     * So it gets its own arm, and it is the ONE arm whose preferred cure is the checkout — precisely
+     * because it has no branch to edit. origin's pin is at or ahead of what is installed, so getting
+     * onto main clears the drift with no edit at all.
+     */
+    it('gives a detached HEAD / unknown branch its own arm: get onto main, do not orphan an edit', () => {
         const reason = kit.runShim(kit.stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
-        expect(reason).toContain('You hit a weird case of needing a downgrade');
-        expect(reason).not.toContain(CHECKOUT_MAIN_PULL_CMD);
+        expect(reason).toContain('HEAD is DETACHED here, so a pin edit would belong to no branch');
+        expect(reason).toContain(`run EXACTLY: '${CHECKOUT_MAIN_PULL_CMD}', then 'pnpm install'`);
+        expect(reason).toContain('Fix Option 2: you mean to stay on this exact commit');
+        expect(reason).not.toContain('go FORWARD'); // the orphaned edit is not offered here
+    });
+
+    /**
+     * THE DEAD END THAT IS GONE. Every arm used to be able to reach "there is no cure to run, and this
+     * guard will not invent one ... Contact Dean", which handed a blocked agent a human to wait for. The
+     * forward move was always available; it simply was not typable. It is now, so the dead end is
+     * deleted rather than softened — and this asserts the strings cannot come back.
+     */
+    it.each([['dean/some-feature'], ['main'], ['']])('names a cure on every arm (branch=%s)', (branch: string) => {
+        const base = kit.stageDriftRoot('0.3.270', '0.3.272');
+        const root = branch === '' ? base : kit.stageBranch(base, branch);
+        const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
+        expect(reason).not.toContain('there is no cure to run');
+        expect(reason).not.toContain('Contact Dean');
+        expect(reason).not.toContain('You hit a weird case of needing a downgrade');
+        expect(reason).toContain('Fix Option 1: (preferred)');
     });
 
     /**
@@ -154,9 +198,9 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
             const reason = kit.runShim(kit.stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
             expect(reason).toContain('could not be ordered automatically - compare them yourself');
             expect(reason).not.toContain('node_modules is OLDER, so the pin is what you want');
-            // The staged root is not on main, so it gets the branch-appropriate half — the point being
-            // that an undecidable ORDER never turns into a guessed BRANCH.
-            expect(reason).toContain('off main, align node_modules to YOUR branch pin');
+            // The staged root has no git dir, so `--show-current` answers '' and it gets the DETACHED
+            // arm — the point being that an undecidable ORDER never turns into a guessed BRANCH.
+            expect(reason).toContain('HEAD is DETACHED here');
         });
 
     it('does not false-positive on a range pin (^ / ~ / workspace:*) — only exact pins are compared', () => {
@@ -179,80 +223,53 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
  * the guard must permit that cure — denying it deadlocks the assistant against its own fix — while
  * still failing closed on everything else.
  */
-/**
- * pnpm CATALOGS. When a repo pins @webpieces via a catalog (`"@webpieces/pr-gate": "catalog:"`) there is
- * NO digit-version in package.json for the scraper to see — the guard was BLIND to it, so DRIFT_PKG
- * stayed empty and the stale bin ran (the 2026-07 "0.3.369 vs 0.4.405" incident). The fix resolves
- * `catalog:` / `catalog:<name>` through pnpm-lock.yaml's top-level `catalogs:` block before comparing.
- */
-function stageCatalogRoot(spec: string, catalogsYaml: string, installed: string): string {
-    const root = kit.mktmp();
-    const binDir = path.join(root, 'node_modules', '.bin');
-    fs.mkdirSync(binDir, { recursive: true });
-    fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\nprintf EXECED\n', { mode: 0o755 });
-    fs.writeFileSync(path.join(root, 'package.json'),
-        JSON.stringify({ dependencies: { '@webpieces/pr-gate': spec } }, null, 2) + '\n');
-    fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), catalogsYaml);
-    const manifestDir = path.join(root, 'node_modules', '@webpieces', 'pr-gate');
-    fs.mkdirSync(manifestDir, { recursive: true });
-    fs.writeFileSync(path.join(manifestDir, 'package.json'),
-        JSON.stringify({ name: '@webpieces/pr-gate', version: installed }, null, 2) + '\n');
-    return root;
-}
-
-// A pnpm-lock.yaml v9 fragment whose top-level `catalogs:` block pins pr-gate in a default and a named
-// catalog — the exact shape the shim's awk pass walks (catalog → pkg → version, 2-space indented).
-const LOCK_CATALOGS = `lockfileVersion: '9.0'
-
-catalogs:
-  default:
-    '@webpieces/pr-gate':
-      specifier: 0.4.405
-      version: 0.4.405
-  legacy:
-    '@webpieces/pr-gate':
-      specifier: 0.3.1
-      version: 0.3.1
-
-importers:
-  .: {}
-`;
-
-describe('version-drift guard — resolving pnpm CATALOG specs (the catalog-blind bug)', () => {
-    it('DENIES when a bare `catalog:` pin (resolved via the default catalog) drifts from node_modules', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.3.369'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        expect(out.stdout).not.toContain('EXECED'); // the stale bin was NOT run — the guard was NOT blind
-        expect(out.isDenied()).toBe(true);
-        const reason = out.denyReason();
-        expect(reason).toContain('version drift');
-        expect(reason).toContain('@webpieces/pr-gate@0.4.405'); // declared side, resolved from the catalog
-        expect(reason).toContain('0.3.369');                    // installed side
-    });
-
-    it('resolves a NAMED catalog (`catalog:legacy`) to that catalog\'s version, not the default', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:legacy', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        expect(out.isDenied()).toBe(true);
-        expect(out.denyReason()).toContain('@webpieces/pr-gate@0.3.1'); // the legacy catalog, not 0.4.405
-    });
-
-    it('execs the bin (no drift) when the catalog-resolved version matches what is installed', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        expect(out.stdout).toBe('EXECED');
-    });
-
-    it('does NOT false-positive when the catalog cannot be resolved (unknown catalog name → skip)', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:doesnotexist', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        expect(out.stdout).toBe('EXECED'); // best-effort: a spec we cannot resolve is skipped, never guessed
-    });
-
-    it('does NOT false-positive when there is no lockfile to resolve the catalog against', () => {
-        const root = stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.3.369');
-        fs.rmSync(path.join(root, 'pnpm-lock.yaml'));
-        expect(kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).stdout).toBe('EXECED');
-    });
-});
-
 describe('version-drift guard — permitting the CURE for each direction', () => {
+    /**
+     * THE MANIFEST ESCAPE, end to end through the real shim. The forward cure is an EDIT of
+     * pnpm-workspace.yaml, so it has to survive the block that prescribes it — the same reason
+     * webpieces.config.json has always been carved out.
+     */
+    it.each([['pnpm-workspace.yaml'], ['package.json']])(
+        'ALLOWS an Edit of a tree ROOT\'s %s during drift — the forward cure is a file edit', (name: string) => {
+            const root = kit.stageDriftRoot('0.3.270', '0.3.272');
+            fs.writeFileSync(path.join(root, 'webpieces.config.json'), '{}\n');
+            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', `${root}/${name}`));
+            expect(out.isDenied()).toBe(false);
+            expect(out.stdout.trim()).toBe('');
+        });
+
+    /**
+     * AS WIDE AS THE CURE AND NO WIDER, in the engine where it matters most. This arm is TERMINAL — the
+     * shim `exit 0`s and the guard bin never runs — so a basename match would hand every project, app and
+     * library package.json in a monorepo an unguarded edit under every fault. The test is the sibling
+     * webpieces.config.json, which a tree root has and a project directory does not.
+     */
+    it.each([['pnpm-workspace.yaml'], ['package.json']])(
+        'DENIES an Edit of a NON-root %s during drift — no webpieces.config.json beside it', (name: string) => {
+            const root = kit.stageDriftRoot('0.3.270', '0.3.272');
+            fs.writeFileSync(path.join(root, 'webpieces.config.json'), '{}\n');
+            const nested = path.join(root, 'packages', 'lib');
+            fs.mkdirSync(nested, { recursive: true });
+            expect(kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(nested, name))).isDenied()).toBe(true);
+        });
+
+    /**
+     * A WORKTREE ROOT is a tree root too, and this is why the test is the sibling config rather than the
+     * shim's `$ROOT`: a worktree agent's case-B cure edits ITS OWN pin, and webpieces.config.json is
+     * TRACKED, so every linked worktree has one. Here the shim is invoked from the PARENT tree while the
+     * edit targets the nested worktree's root — the straddle `$ROOT` would have got wrong.
+     */
+    it('ALLOWS an Edit of a WORKTREE root manifest even when the shim came from the parent tree', () => {
+        const root = kit.stageDriftRoot('0.3.270', '0.3.272');
+        fs.writeFileSync(path.join(root, 'webpieces.config.json'), '{}\n');
+        const wt = path.join(root, '.claude', 'worktrees', 'agent-x');
+        fs.mkdirSync(wt, { recursive: true });
+        fs.writeFileSync(path.join(wt, 'webpieces.config.json'), '{}\n');
+        const out = kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(wt, 'pnpm-workspace.yaml')));
+        expect(out.isDenied()).toBe(false);
+        expect(out.stdout.trim()).toBe('');
+    });
+
     it('still allows `pnpm install` through during drift so node_modules can be synced', () => {
         const out = kit.runShim(kit.stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('pnpm install'));
         expect(out.isDenied()).toBe(false);
