@@ -25,6 +25,14 @@
                     "level": 5
                 },
                 {
+                    "id": "AgentWorktreeLockReader",
+                    "className": "AgentWorktreeLockReader",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/agent-worktree-lock.ts",
+                    "level": 6
+                },
+                {
                     "id": "AiBranchName",
                     "className": "AiBranchName",
                     "kind": "class",
@@ -655,6 +663,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts",
                     "level": 3
+                },
+                {
+                    "id": "WorktreeLockVerdicts",
+                    "className": "WorktreeLockVerdicts",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/worktree-lock-verdicts.ts",
+                    "level": 5
                 },
                 {
                     "id": "WorktreeReaper",
@@ -1630,6 +1646,15 @@
                 },
                 {
                     "from": "MergedBranchesService",
+                    "to": "WorktreeLockVerdicts",
+                    "injection": "type",
+                    "token": "WorktreeLockVerdicts",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktree-lock-verdicts.ts#WorktreeLockVerdicts",
+                    "paramName": "locks",
+                    "paramType": "WorktreeLockVerdicts"
+                },
+                {
+                    "from": "MergedBranchesService",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
@@ -2329,6 +2354,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/worktree-reaper.ts#WorktreeReaper",
                     "paramName": "reaper",
                     "paramType": "WorktreeReaper"
+                },
+                {
+                    "from": "WorktreeLockVerdicts",
+                    "to": "AgentWorktreeLockReader",
+                    "injection": "type",
+                    "token": "AgentWorktreeLockReader",
+                    "tokenKey": "class:packages/tooling/rules-config/src/agent-worktree-lock.ts#AgentWorktreeLockReader",
+                    "paramName": "agentLocks",
+                    "paramType": "AgentWorktreeLockReader"
                 },
                 {
                     "from": "WorktreeReaper",
