@@ -27,6 +27,26 @@ import { TreeRecovery } from './tree-recovery';
  * fire-and-forget spawns the refresher so the NEXT call is fresh. Runs in the GUARDS hook (it's a
  * hookGuard); file-scoped, so only Write/Edit/MultiEdit are guarded — Bash passes through so the AI
  * can still run `pnpm wp-start-upsert-pr` and the rest of the recovery flow.
+ *
+ * ── STATE 1 IS UNCONDITIONAL, AND `B` NO LONGER TRACKS `E` HERE ──────────────────────────────────
+ *
+ * Earlier docblocks in this family argued that the Bash half of "on `main`" should match this one
+ * exactly — one `git rev-parse`, no cache, so it fires on the first call of a session. That argument
+ * has been split, deliberately, and the two halves now differ:
+ *
+ *   `E` (here)                 blocks on ANY `main`, current or stale.
+ *   `B` (stale-main-bash-guard) blocks only once local `main` is KNOWN BEHIND `origin/main`.
+ *
+ * The hazards are not the same hazard. A WRITE on `main` puts work where it cannot be reviewed, cannot
+ * be reverted as a unit, and is one `git checkout` from being lost — none of which depends on how
+ * current `main` is, so nothing about freshness could make this block right or wrong. A READ or a
+ * BUILD on a CURRENT `main` harms nothing at all, and denying it strands the agent immediately after
+ * `pnpm wp-checkout-clean-main` — the very command this repo prescribes — put it there.
+ *
+ * So do NOT "restore the symmetry" by gating this on the cache. That would make writes on `main`
+ * permitted for the whole first call of every session (the cache is populated for the NEXT call), and
+ * permanently in a multi-worktree repo where another tree can hold the refresh lock. That ordering is
+ * the most load-bearing thing in the L2 table, which is why row 5 sits ABOVE the cache divider.
  */
 export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     // NAME is this class's operator identity (every `rule=` in the log, every deny header);
@@ -174,7 +194,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
      * ONE CURE, and it is the dirty-safe one. This half used to print `git pull origin main` and then
      * "create a feature branch" — but this guard fires on a WRITE, so uncommitted work is the LIKELY
      * state, and a pull is exactly the form that is not a clean fast-forward there. Its two siblings
-     * (stale-main-bash-guard's row-5 deny, StaleMainMessage.forReads) both prescribe
+     * (stale-main-bash-guard's rows-6/7 deny, StaleMainMessage.forReads) both prescribe
      * `git fetch origin main && git checkout -b <new> origin/main`, which fetches AND carries the
      * uncommitted work onto the new branch. Three halves of one row printing one cure is the point:
      * a fragile cure is a defect here even when it often happens to work.

@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import type { BashContext } from '../types';
 import { CommandScanner, CommandSegment } from '../command-scan';
 import { ShellSegmentScan, SegmentVerdict } from './shell-segment-scan';
@@ -18,6 +20,14 @@ import { ContentReadScan } from './content-read-scan';
 // where only stale CONTENT is the hazard. The guards docblock is right that the two polarities cannot
 // collapse into one function — but the allowlist itself was never the reason they could not, and
 // sharing it is what makes row 5's `B` half affordable at all.
+//
+// WHAT BELONGS ON THIS LIST — one question, asked of the COMMAND, not of your sympathy for it:
+// **does it read or write repo content?** If it cannot do either, it cannot be "working here", so it
+// belongs here regardless of what else it does. That is why `curl`/`wget` and `gh` are on it: they talk
+// to a network, not to the working tree, and a session parked in an L2 state still has to be able to
+// close a PR, comment on one, or fetch a URL. It is also why the exclusions are the FORMS that write a
+// local file (`curl -o`, `gh repo clone`, `gh pr checkout`, any `> file` redirect) rather than whole
+// programs: the write is the hazard, not the binary.
 //
 // EVERY segment must pass. One `… && scripts/local.sh start` in a chain denies the whole command,
 // because the chain runs it. Segments are judged by ROLE first: shell STRUCTURE (`for … in`, `do`,
@@ -72,23 +82,58 @@ export class RecoveryAllowlist {
 
         const gitSub = this.scanner.gitSubcommandOf(verdict.words);
         if (gitSub !== null) return ALLOWED_GIT_SUBCOMMANDS.has(gitSub);
-        if (this.isGhInspection(verdict)) return true;
+        if (this.isGh(verdict)) return true;
+        if (this.isNetworkClient(verdict)) return true;
         return this.isPackageRecovery(verdict);
     }
 
-    // Read-only / status `gh` invocations used for orientation, INCLUDING `gh run view|list|watch` —
-    // watching CI is precisely what you do while parked. gh writes (pr create/merge, run
-    // cancel/rerun, api POSTs) are governed by pr-creation-or-push-guard / pr-merge-guard and are NOT
-    // allowlisted here.
-    private isGhInspection(verdict: SegmentVerdict): boolean {
+    /**
+     * `gh` GENERALLY — it talks to GitHub, not to the working tree.
+     *
+     * This used to be an allowlist of read-only actions (`gh pr view|list|status|checks`, `gh run
+     * view`), which fell over the moment an agent needed `gh pr close`, `gh pr comment` or `gh api`
+     * from a parked session: those change something on GitHub and NOTHING in this tree, so the branch
+     * state cannot be an argument against them. The exclusions are therefore the `gh` subcommands that
+     * write LOCAL files — a clone, a checkout, a download — plus any segment carrying a `> file`
+     * redirect.
+     *
+     * gh commands that are wrong for OTHER reasons stay wrong: `gh pr create`/`push` is governed by
+     * pr-creation-or-push-guard and `gh pr merge` by pr-merge-guard. Those are separate policies and
+     * this list was never what enforced them.
+     *
+     * YES, THIS ONE SUBLIST IS A BLOCKLIST, and that is the opposite polarity to the guard around it.
+     * The argument against a blocklist elsewhere is that the hazardous set is UNBOUNDED — any program
+     * can write a file as a side effect of doing something else, so no enumeration could ever be
+     * complete. `gh`'s surface is not: it is one vendor's CLI, its verbs are documented, and writing
+     * into the working tree is the rare exception rather than the ambient default. A new `gh`
+     * subcommand that clones or downloads is a known, greppable maintenance point — `GH_LOCAL_FILE_WRITES`
+     * — where "every future program that might write" is not.
+     */
+    private isGh(verdict: SegmentVerdict): boolean {
         const words = verdict.words;
-        if (words.length === 0 || words[0] !== 'gh') return false;
+        if (words.length === 0 || path.basename(words[0]) !== 'gh') return false;
+        if (this.shell.redirectsToFile(words)) return false;
         const top = words[1];
         if (top === undefined) return false;
         const action = words[2];
-        const readActions = GH_READ_ACTIONS.get(top);
-        if (readActions !== undefined) return action !== undefined && readActions.has(action);
-        return GH_READ_TOPLEVEL.has(top);
+        const localWrites = GH_LOCAL_FILE_WRITES.get(top);
+        if (localWrites === undefined) return true;
+        return action === undefined || !localWrites.has(action);
+    }
+
+    /**
+     * `curl` / `wget` — a network fetch reads a URL, not this repo.
+     *
+     * Excluded: the forms that name a local FILE to write (`curl -o`, `curl -O`, `wget -O`, an
+     * `--output-dir`/`-P`, or a `> file` redirect), because those are how a fetch becomes a write into
+     * the tree. A bare `wget <url>` still drops its download into the cwd; that CREATES an untracked
+     * file rather than modifying tracked content, which is the line this list draws everywhere else.
+     */
+    private isNetworkClient(verdict: SegmentVerdict): boolean {
+        const words = verdict.words;
+        if (words.length === 0 || !NETWORK_CLIENTS.has(path.basename(words[0]))) return false;
+        if (this.shell.redirectsToFile(words)) return false;
+        return !words.some((word: string): boolean => OUTPUT_FILE_FLAGS.has(word));
     }
 
     // pnpm/npm/yarn recovery bins: the `wp-*` cleanup/gated commands and package installs (a chained
@@ -112,17 +157,28 @@ const ALLOWED_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
     'grep',
 ]);
 
-// Read-only actions per `gh` topic. `run` is here because `gh run view <id>` was blocked outright in
-// the field while `gh pr view` beside it succeeded — both are read-only, and CI watching is the normal
-// thing to do while parked. The WRITE actions of the same topics (pr create/merge/close, run
-// cancel/rerun/delete) are simply absent, so they still fall through to the block.
-const GH_READ_ACTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-    ['pr', new Set(['list', 'view', 'status', 'checks', 'diff'])],
-    ['run', new Set(['list', 'view', 'watch'])],
-    ['issue', new Set(['list', 'view', 'status'])],
+// The `gh` subcommands that write LOCAL files — the only ones the branch state has anything to say
+// about. Everything else `gh` does happens on GitHub's side. (`gh pr create` / `gh pr merge` are absent
+// on purpose: they are remote calls, and their policies live in pr-creation-or-push-guard and
+// pr-merge-guard, which run whatever this list says.)
+const GH_LOCAL_FILE_WRITES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+    ['repo', new Set(['clone', 'fork', 'sync'])],
+    ['pr', new Set(['checkout'])],
+    ['run', new Set(['download'])],
+    ['release', new Set(['download'])],
+    ['gist', new Set(['clone'])],
+    ['codespace', new Set(['cp'])],
+    ['attestation', new Set(['download'])],
 ]);
-// Read-only top-level `gh` commands.
-const GH_READ_TOPLEVEL: ReadonlySet<string> = new Set(['status', 'auth', 'browse', 'repo', 'search']);
+
+// Network clients: they read a URL, not the tree.
+const NETWORK_CLIENTS: ReadonlySet<string> = new Set(['curl', 'wget']);
+// The flags that turn a fetch into a local file write. `-O` is curl's remote-name AND wget's
+// output-document; both write, so one entry covers both.
+const OUTPUT_FILE_FLAGS: ReadonlySet<string> = new Set([
+    '-o', '--output', '-O', '--remote-name', '--remote-name-all', '--output-dir', '--create-dirs',
+    '--output-document', '-P', '--directory-prefix',
+]);
 
 const PACKAGE_MANAGERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'npx', 'pnpx', 'yarn']);
 const PACKAGE_INSTALL_VERBS: ReadonlySet<string> = new Set(['install', 'ci', 'add', 'i']);

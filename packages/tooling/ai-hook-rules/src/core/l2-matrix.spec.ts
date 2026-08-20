@@ -65,11 +65,24 @@ describe('L2 rows — the table itself', () => {
         expect(onMain).toBeLessThan(divider);
     });
 
-    it('judges `R` separately from `B`/`E` in exactly one place — rows 6/7 on main', () => {
+    /*
+     * ON `main`, `B` TRACKS `R` — NOT `E`. Row 5 is the unconditional WRITE block, judged from the
+     * branch alone above the cache divider; rows 6/7 are the freshness-gated pair, and Bash sits there
+     * with Read because a build on a CURRENT `main` is harmless while a WRITE never is. Pinned as a
+     * shape, because "restore the symmetry" is the edit that would either strand agents on a current
+     * `main` again or let writes through on the first call of a session.
+     */
+    it('makes row 5 the WRITE-only block and rows 6/7 the freshness pair for B and R', () => {
+        const toolsOf = (num: number): readonly L2Tool[] =>
+            (L2_ROWS.find((r: L2Row): boolean => r.num === num) as L2Row).tools;
+        expect(toolsOf(5)).toEqual(['E']);
+        expect(toolsOf(6)).toEqual(['B', 'R']);
+        expect(toolsOf(7)).toEqual(['B', 'R']);
+        // No row judges Read alone any more — every state a Read is judged in also judges Bash.
         const readOnlyRows = L2_ROWS
             .filter((r: L2Row): boolean => r.tools.length === 1 && r.tools[0] === 'R')
             .map((r: L2Row): number => r.num);
-        expect(readOnlyRows).toEqual([6, 7]);
+        expect(readOnlyRows).toEqual([]);
     });
 
     it('gives every blocking row a LITERAL cure, and every allowing row none', () => {
@@ -292,9 +305,10 @@ describe('L2 use cases', () => {
 
     /*
      * The NOT_DONE rows are the ones a reader is most likely to misread as live behaviour, so each gap
-     * must have a use case on its row showing what actually happens today. Case 10 (the `npx expo
-     * install`-on-main write) is the row-5 instance; it says in its own verdict cell that the code does
-     * not yet judge it.
+     * must have a use case on its row showing what actually happens today. NOT_DONE is empty right now,
+     * so this asserts nothing about any row — it is armed for the next divergence. (Case 10, the
+     * `npx expo install`-on-main write, was that instance while row 5's Bash half was a gap; it now
+     * lives on row 6, the row that judges Bash on `main`.)
      */
     it('gives every Not-done row a use case on that row', () => {
         for (const entry of NOT_DONE) {

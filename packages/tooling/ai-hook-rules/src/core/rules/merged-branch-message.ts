@@ -54,7 +54,8 @@ export class MergedBranchMessage {
         return [
             'Still allowed while this block is up (these get you OFF this branch — run one, then retry):',
             '  - the fresh-start / cleanup git commands above',
-            '  - read-only orientation: git status|log|diff|show|branch, gh pr list|view|status, gh run view|list|watch',
+            '  - read-only orientation: git status|log|diff|show|branch',
+            '  - gh GENERALLY (pr view, pr close, pr comment, api, run watch — it talks to GitHub, not to this tree), and curl/wget; NOT gh repo clone / pr checkout / run download, curl -o, or any `> file`, which write here',
             switching,
             '  - pnpm wp-checkout-clean-main, pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
             '  - output shaping on any of the above: `… 2>&1 | tail -40`, `… | head -5`, `…; echo done`',
