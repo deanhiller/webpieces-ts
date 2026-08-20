@@ -1,6 +1,13 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { CONFIG_FILENAME, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
+
+// The two MANIFESTS a version pin lives in, named once so the allowlist, isAllowed(), the rendered shim
+// and the runner cannot drift into four spellings. See isRootManifest: a tree ROOT's copy of these only.
+export const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
+export const PACKAGE_MANIFEST = 'package.json';
+export const MANIFEST_FILENAMES: ReadonlySet<string> = new Set([WORKSPACE_MANIFEST, PACKAGE_MANIFEST]);
 
 // ---------------------------------------------------------------------------
 // THE L0 ALLOWLIST — the vocabulary (the named cure patterns, each an ERE+JS twin pair), the ONE union
@@ -524,6 +531,26 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     new L0AllowEntry('any Read', 'pass', false, null, null, new L0Call('Read', '', 'README.md')),
     new L0AllowEntry(`a Write/Edit whose target is ${CONFIG_FILENAME}`, 'pass', false, null, null,
         new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`)),
+    // THE MANIFEST ESCAPE, and it is an escape L1 row 8 already PROMISED before it existed. Its report
+    // says "STILL ALLOWED HERE: ... edits to pnpm-workspace.yaml / package.json / webpieces.config.json"
+    // and its docblock calls that one of "two structurally independent escapes" — but only
+    // CONFIG_FILENAME was ever carved out, so the promised cure was untypable from inside the block. The
+    // pin lives in pnpm-workspace.yaml's catalog, so an agent whose ONLY correct move is "raise this
+    // tree's pin to what the governing tree already installs" could not make it.
+    //
+    // TOOL-SHAPED on purpose (`ere`/`js` both null, like the two entries above): no regex can express
+    // "an Edit whose target is this file", and a Bash-shaped entry would face the shadowing and
+    // single-non-cure-entry invariants that only apply to commands.
+    //
+    // `pass`, never `allow`, and be precise about what that buys. It is L0 declining to be TERMINAL, so
+    // the call falls through to whatever runs next — it is NOT a promise that L1/L2 then judge the edit.
+    // The runner carves the same two files out on its own edit path (an early `return null`, beside the
+    // webpieces.config.json pass). Scoped by isRootManifest, so it admits the root of the MAIN tree and
+    // of every worktree — and no other package.json in the repo.
+    new L0AllowEntry(`a Write/Edit whose target is a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin`,
+        'pass', false, null, null,
+        new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
+        [new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`)]),
     new L0AllowEntry('pnpm|npm install', 'allow', true, INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
         new L0Call('Bash', 'pnpm install', '')),
     new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', true, RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
@@ -630,11 +657,42 @@ export const READ_TOOLS: ReadonlySet<string> = new Set(['Read']);
  *   - 'allow' → terminal; bypass everything, because a cure must stay reachable even when a downstream
  *               guard would block it.
  *   - null    → not on the list.
+ *
+ * `CONFIG_FILENAME` stays a basename match on purpose — one per tree; narrowing it is its own question.
  */
 // webpieces-disable no-function-outside-class -- pure predicate over the exported allowlist data, in the dependency-free shim module (it must load on a corrupt tree, so it cannot depend on DI)
 export function isAllowed(toolName: string, command: string, filePath: string): 'pass' | 'allow' | null {
     if (READ_TOOLS.has(toolName)) return 'pass';
     if (path.basename(filePath) === CONFIG_FILENAME) return 'pass';
+    if (isRootManifest(filePath)) return 'pass';
     if (L0_ALLOW_JS.test(command.trim())) return 'allow';
     return null;
+}
+
+/**
+ * Is `filePath` the `package.json` / `pnpm-workspace.yaml` at the ROOT OF A GOVERNED TREE — the only two
+ * files the version cure ever edits?
+ *
+ * AS WIDE AS THE CURE AND NO WIDER. A basename match would put EVERY project, app and library
+ * `package.json` on the L0 allowlist, and at L0 that is worse than it sounds: the sh half treats a hit
+ * as TERMINAL (`exit 0`, the guard bin never runs), so each of those would be editable under fault
+ * D/X/U/K with nothing downstream judging it. BUT IT MUST ADMIT EVERY TREE, not one — a worktree
+ * agent's cure edits ITS OWN root manifest, and the shim's `$ROOT` names whichever tree supplied the
+ * shim (governingShimRoot's straddle), so neither a basename nor a fixed root is the right test.
+ *
+ * The test is: its own directory must ALSO hold a `webpieces.config.json`. That file is TRACKED, so the
+ * main clone has one and every linked worktree has its own — the same definition `runner.ts` uses
+ * (`dirname(configPath)`), without knowing which tree you stand in. A project manifest deep under
+ * `packages/` has no config beside it and is excluded. The sh twin is one `[ -f ... ]` test.
+ */
+// webpieces-disable no-function-outside-class -- pure fs+path predicate beside isAllowed in the dependency-free shim module
+export function isRootManifest(filePath: string): boolean {
+    if (!MANIFEST_FILENAMES.has(path.basename(filePath))) return false;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return fs.existsSync(path.join(path.dirname(filePath), CONFIG_FILENAME));
+    } catch (err: unknown) {
+        //const error = toError(err); best-effort on a blocking path: unreadable is NOT a root manifest
+        return false;
+    }
 }

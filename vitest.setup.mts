@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 /**
- * Per-file timeout budget: the `packages/tooling/**` suites get 120s, everything else keeps the 45s
+ * Per-file timeout budget: the `packages/tooling/**` suites get 240s, everything else keeps the 45s
  * global from vitest.config.mts.
  *
  * ─── Why a whole class of files, not a per-file annotation ──────────────────────────────────────────
@@ -39,11 +39,11 @@ import * as path from 'path';
  * worst offenders — `publish-packages.spec.ts` runs the real release script, so its ~28 `npm publish`
  * spawns ARE the artifact under test and cannot be batched the way ShimTestkit batched greps.
  *
- * ─── Why 120s, and why this does not hide hangs ────────────────────────────────────────────────────
+ * ─── Why a long budget, and why it does not hide hangs ─────────────────────────────────────────────
  * From the worst MEASURED time (93.5s) plus headroom — deliberately not "double the default to 90s",
  * which would still have failed that observation. It costs nothing on the happy path: a passing tooling
  * suite finishes in seconds and never touches the ceiling. And it does not weaken hang detection, which
- * is what a timeout is really for: a wedged spawn or a deadlock never returns AT ALL, so it trips 120s
+ * is what a timeout is really for: a wedged spawn or a deadlock never returns AT ALL, so it trips
  * exactly as it tripped 45s — only later. What 45s was actually catching here was honest slow work.
  *
  * The 400+ runtime/app tests are untouched and keep failing fast at 45s, which is the point of scoping
@@ -53,8 +53,21 @@ import * as path from 'path';
  * vitest reports it at FILE level — `Test Files 1 failed` alongside `Tests 0 failed` — and WHICH tests
  * blow up MOVES between runs. Zero failed assertions plus a shifting victim list means contention, not a
  * defect. Confirm by running the file alone; if it passes, it belongs to this class.
+ *
+ * ─── 120s → 240s (2026-08-20), and why the number moved rather than the offender ───────────────────
+ * `branch-creation-guard.e2e.spec.ts` crossed 120s in its `beforeAll` on two consecutive PR-gate runs —
+ * 127.0s and 131.9s — while the SAME file passed standalone twice in the same session (1114/1114). That
+ * is this class's own signature, and the offender's docblock already anticipates the request: "Do not
+ * re-add a number here; raise it in vitest.setup.mts for the whole class or not at all."
+ *
+ * It is a hook doing six real `git worktree add` calls, so its cost is spawn count times contention, and
+ * contention is what grew: the L0 shim suites now drive `/bin/sh` over a dozen more staged trees than
+ * they did. Annotating that one file would re-create the exact per-file override this class was built to
+ * replace — and would silently cap the ONE hook most in need of the budget. 240s keeps the property that
+ * makes a long timeout safe: a wedged spawn or a deadlock never returns AT ALL, so it still trips, only
+ * later; honest slow work is all that 120s was catching here.
  */
-const TOOLING_TIMEOUT_MS = 120_000;
+const TOOLING_TIMEOUT_MS = 240_000;
 
 // The one path segment that selects the class. A plain literal so `grep -rn '/packages/tooling/'` finds
 // this decision along with everything else scoped to that tree.

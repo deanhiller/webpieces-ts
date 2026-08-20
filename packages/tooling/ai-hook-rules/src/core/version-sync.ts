@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 
+import { WORKSPACE_MANIFEST } from '../bin/l0-allowlist';
 import { EffectiveTree } from './effective-tree';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces-versions';
@@ -34,8 +35,14 @@ import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces
  *   1. WORK IN THE MAIN TREE — a main-tree-targeted command cannot classify as `worktree`, so it never
  *      reaches this guard at all. No allowlist entry can break it because none is involved.
  *   2. EDIT THE MANIFESTS — `pnpm-workspace.yaml` / `package.json` edits are carved out in the runner
- *      the same way `webpieces.config.json` already is, so the cure is typable from inside the block.
+ *      (`runInternal`, beside the `webpieces.config.json` pass) and on the L0 allowlist
+ *      (`MANIFEST_FILENAMES` / `isAllowed`), so the cure is typable from inside the block.
  * Reads and read-only inspection are never blocked either, so an agent can always look before it fixes.
+ *
+ * THAT SECOND ESCAPE WAS FICTION UNTIL 2026-08-20, and this docblock asserted it anyway. Only
+ * `CONFIG_FILENAME` was ever carved out, so the one cure the report told a blocked agent to perform —
+ * raise this tree's pin — was itself blocked. It is real now, and the `main-ahead` branch of `fixLines`
+ * is what spends it. A future edit that narrows either carve-out has to change this text too.
  *
  * ─── The MAIN tree is `tree.mainRoot`, never `tree.governedRoot` ───────────────────────────────────
  * The two differ for exactly the reader this guard is for. `governedRoot` is walked up from the payload
@@ -46,8 +53,32 @@ import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces
  * it is the same answer from every checkout. Measured 2026-08-10: a worktree on 0.4.624 with its own
  * install, a main clone on 0.4.616, and not one word from this guard.
  */
-/** The one file a pin lives in — named here so the "did this branch bump it" check cannot drift from it. */
-const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
+/** One version reduced to what an order compare needs. Data-only → a class, per CLAUDE.md. */
+class VersionParts {
+    constructor(
+        /** The numeric core, most-significant first. */
+        readonly core: readonly number[],
+        /** The pre-release suffix INCLUDING its leading `-`, or '' for a plain release. */
+        readonly pre: string,
+    ) {}
+}
+
+/**
+ * WHICH of the five states this skew is. The whole point of naming them is that they do NOT share a
+ * cure, and printing the wrong one is what walked a real agent backwards through a downgrade:
+ *
+ *   `main-inconsistent` — the MAIN tree disagrees with ITSELF (its pin ≠ its own node_modules). Nothing
+ *                         about this worktree is wrong; only the main agent can fix it, with one install.
+ *   `bump`              — this branch RAISED the pin on purpose. The deliverable is the pin, so every
+ *                         ordinary cure would revert it. Main has to come up to meet it.
+ *   `main-ahead`        — the governing tree already RUNS a newer release than this tree's pin asks for.
+ *                         This is the common case, and it is the ONE case the worktree fixes ITSELF, by
+ *                         raising its own pin. No escalation, nobody to ask, nothing to wait for.
+ *   `worktree-stale`    — every PIN agrees and so does main's install; only this tree's OWN node_modules
+ *                         lags. The one state where a bare `pnpm install` HERE is exactly right.
+ *   `main-behind`       — main is genuinely older and must move forward. Only the main agent can pull it.
+ */
+type SkewCase = 'main-inconsistent' | 'bump' | 'main-ahead' | 'worktree-stale' | 'main-behind';
 
 export class VersionSyncGuard {
     private readonly inspection = new ReadOnlyInspectionScan();
@@ -123,7 +154,12 @@ export class VersionSyncGuard {
     // if each one argues its case. State the skew, show every version WITH its file, give the git cure
     // first, then the two structural escapes, then what is still allowed.
     private report(tree: EffectiveTree, quartet: VersionQuartet): string {
-        const bump = this.isDeliberateBump(tree, quartet);
+        const skew = this.classify(tree, quartet);
+        // The two SELF-SERVE cases print NO escalation, and that omission is the deliverable rather than
+        // a saving: an escalation block on a cure the reader can perform HERE teaches it to stop and wait
+        // for a main agent who has nothing to do. The other three genuinely need the main tree to move.
+        const selfServe = skew === 'main-ahead' || skew === 'worktree-stale';
+        const escalation = selfServe ? [] : ['', ...this.escalationLines(tree, quartet, skew)];
         return [
             `❌ @webpieces version SKEW — this worktree and the main tree disagree, so work here is blocked.`,
             '',
@@ -132,15 +168,73 @@ export class VersionSyncGuard {
             `   Whichever tree's hooks are live, one of these two releases lints, validates and builds`,
             `   this worktree — and it may be the one this manifest does not ask for.`,
             '',
-            ...this.fixLines(tree, quartet, bump),
-            '',
-            ...this.escalationLines(tree, quartet, bump),
+            ...this.fixLines(tree, quartet, skew),
+            ...escalation,
             '',
             `   STILL ALLOWED HERE: every Read, read-only inspection, \`pnpm install\`, \`git pull\`/\`fetch\`,`,
             `   and edits to pnpm-workspace.yaml / package.json / webpieces.config.json.`,
             `   Do NOT lower the MAIN tree's pin to match — that downgrades every tree, including this`,
             `   session's own governor.`,
         ].join('\n');
+    }
+
+    /**
+     * WHICH of the five states this is — asked ONCE, so the FIX block and the escalation block can never
+     * describe two different diagnoses of the same skew.
+     *
+     * Order is not arbitrary. `main-inconsistent` is asked FIRST because it is a fault in the governing
+     * tree itself: comparing this worktree against a tree that disagrees with itself picks a direction
+     * out of two numbers that are not yet one answer. `bump` next, because a deliberate raise is the one
+     * shape where the direction is real but every ordinary cure is harmful.
+     */
+    private classify(tree: EffectiveTree, quartet: VersionQuartet): SkewCase {
+        const mainPin = quartet.main.pinned;
+        const mainInstalled = quartet.main.installed;
+        if (mainPin !== null && mainInstalled !== null && mainPin !== mainInstalled) return 'main-inconsistent';
+        if (this.isDeliberateBump(tree, quartet)) return 'bump';
+        const wtPin = quartet.worktree.pinned;
+        if (mainInstalled !== null && wtPin === mainInstalled && quartet.worktree.installed !== null) return 'worktree-stale';
+        return this.compare(mainInstalled, wtPin) > 0 ? 'main-ahead' : 'main-behind';
+    }
+
+    /**
+     * SEMVER ORDER of two versions: 1 when `a` is newer, -1 when older, 0 when equal OR undecidable.
+     *
+     * 0 is the FAIL-SAFE answer and every caller must read it as "no opinion": an unreadable leg, a
+     * dist-tag, two different pre-releases, or build metadata (which carries no precedence) all land
+     * there, and `classify` then falls to `main-behind`, the branch that ASKS rather than acts. Guessing
+     * a direction is how a downgrade gets prescribed, and this repo has already paid for that once.
+     *
+     * The same rules the shim's awk compare uses, so L0 and L1 cannot order one pair two ways: build
+     * metadata stripped, numeric cores compared component-wise, and a pre-release sorting BELOW its
+     * release.
+     */
+    private compare(a: string | null, b: string | null): number {
+        if (a === null || b === null || a === b) return 0;
+        const aParts = this.parts(a);
+        const bParts = this.parts(b);
+        if (aParts === null || bParts === null) return 0;
+        const width = Math.max(aParts.core.length, bParts.core.length);
+        for (let i = 0; i < width; i++) {
+            const av = aParts.core[i] ?? 0;
+            const bv = bParts.core[i] ?? 0;
+            if (av !== bv) return av < bv ? -1 : 1;
+        }
+        if (aParts.pre === bParts.pre) return 0;
+        if (aParts.pre !== '' && bParts.pre === '') return -1;
+        if (aParts.pre === '' && bParts.pre !== '') return 1;
+        return 0;
+    }
+
+    /** One version split into its numeric core and its pre-release suffix, or null if it is not numeric. */
+    private parts(version: string): VersionParts | null {
+        const noBuild = version.replace(/\+.*$/, '');
+        const core = noBuild.replace(/-.*$/, '');
+        if (!/^[0-9]+(\.[0-9]+)*$/.test(core)) return null;
+        return new VersionParts(
+            core.split('.').map((n: string): number => Number(n)),
+            noBuild.slice(core.length),
+        );
     }
 
     /**
@@ -172,8 +266,22 @@ export class VersionSyncGuard {
      * competing with it is exactly the wall-of-text regression the L0 message diet exists to prevent.
      * Labelling carries the "not yours to run" fact instead, which is what the caps header does.
      */
-    private fixLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
-        if (bump) {
+    private fixLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
+        if (skew === 'main-inconsistent') return this.mainInconsistentFix(tree, quartet);
+        if (skew === 'main-ahead') return this.mainAheadFix(tree, quartet);
+        if (skew === 'worktree-stale') {
+            // Every PIN agrees, and so does main's install. The ONLY disagreeing leg is this tree's own
+            // node_modules — so this is the one state where a bare `pnpm install` HERE is not a guess,
+            // is not a downgrade, and needs nobody's permission. Saying so plainly matters because the
+            // other cases all warn AGAINST reaching for it.
+            return [
+                `   FIX — THIS ONE IS YOURS, AND IT IS ONE COMMAND. Every pin already agrees; only this`,
+                `   tree's own node_modules lags at ${this.show(quartet.worktree.installed).trim()}.`,
+                `     1. Run \`pnpm install\` HERE, in ${tree.root}.`,
+                `   Nothing needs to move in the main tree and there is nobody to ask.`,
+            ];
+        }
+        if (skew === 'bump') {
             return [
                 `   THIS BRANCH BUMPED THE PIN ON PURPOSE (${this.show(quartet.main.pinned).trim()} → ${this.show(quartet.worktree.pinned).trim()}), so the usual cures do NOT apply:`,
                 `     • \`pnpm install\` cannot help in EITHER tree — an install materializes a pin, never moves one.`,
@@ -205,6 +313,90 @@ export class VersionSyncGuard {
             `       version: a clone gets its own governance. A worktree MAY have its own node_modules, so`,
             `       installing here is fine; what it may not have is a DIFFERENT @webpieces version.`,
         ];
+    }
+
+    /**
+     * CASE A — the MAIN tree disagrees with ITSELF: its `node_modules` is on one version while its own
+     * `pnpm-workspace.yaml` pins another. Nothing in this worktree is wrong, and nothing this worktree
+     * does can help.
+     *
+     * The cure is deliberately the SMALL one. The generic branch prints `git checkout main && git pull`
+     * first, and that is over-prescribed here: both halves of the disagreement are already in that tree,
+     * so an install materializes the pin it already has and the skew is gone. Printing the pull as well
+     * invites a main agent to move main's commit for a fault that is not about main's commit at all.
+     */
+    private mainInconsistentFix(tree: EffectiveTree, quartet: VersionQuartet): readonly string[] {
+        return [
+            `   THE MAIN TREE IS INTERNALLY INCONSISTENT — its node_modules is on ${this.show(quartet.main.installed).trim()} but its own`,
+            `   pin says ${this.show(quartet.main.pinned).trim()}. That is not this worktree's fault and not this worktree's to fix.`,
+            `   FIX — YOU CANNOT DO THIS FROM HERE. Cross-tree git is REFUSED to a subagent:`,
+            `     1. Tell main agent: run \`pnpm install\` in ${tree.mainRoot} — no pull is needed, both`,
+            `        halves are already in that tree.`,
+            `     2. Tell main agent: to tell you when that is complete.`,
+            `   THEN AND ONLY THEN will this worktree — and every other subagent — work again.`,
+        ];
+    }
+
+    /**
+     * CASE B — the MAIN tree already RUNS a newer release than this tree's pin asks for. This is the
+     * common case, and it is the one the old message got exactly backwards.
+     *
+     * It is the ONLY case a worktree fixes ITSELF. Nothing needs to move in the main tree — the version
+     * the guards will judge this tree by is already installed there — so the entire fix is to raise this
+     * tree's own pin to match, which is a one-line edit to a TRACKED file this tree owns. Printing an
+     * escalation here (as every earlier revision did) tells an agent to stop and wait for a main agent
+     * who has nothing to do, which is how a five-minute edit became a stalled turn.
+     *
+     * The edit is typable from inside the block because pnpm-workspace.yaml is on the L0 allowlist and
+     * carved out in the runner's edit path. That carve-out and this text ship together on purpose: a
+     * message prescribing a blocked call is the failure shape this repo has been burned by most often.
+     *
+     * ON A DETACHED HEAD the edit has no branch to belong to, so it is not offered — an edit that
+     * survives nothing is worse than no edit. Get onto a branch, then read this message again.
+     */
+    private mainAheadFix(tree: EffectiveTree, quartet: VersionQuartet): readonly string[] {
+        const target = this.show(quartet.main.installed).trim();
+        if (this.isDetachedHead(tree.root)) {
+            return [
+                `   FIX — GET ONTO A BRANCH FIRST. \`git branch --show-current\` is empty in ${tree.root}, so`,
+                `   HEAD is DETACHED and the one-line pin edit below would belong to no branch at all.`,
+                `     1. Check out a branch here, then re-run this command.`,
+                `     2. The fix is then yours alone: set ${WORKSPACE_MANIFEST}'s catalog pin to ${target}.`,
+                `   Nothing needs to move in the main tree — it already runs ${target}.`,
+            ];
+        }
+        const install = quartet.worktree.installed !== null
+            ? [`     2. Then run \`pnpm install\` HERE — this tree has its own node_modules, so it must be`,
+                `        materialized at ${target} too.`]
+            : [`     2. Nothing else. This tree has no node_modules of its own, so there is nothing to install.`];
+        return [
+            `   FIX — THIS ONE IS YOURS, AND YOU CAN DO IT RIGHT HERE. The main tree is AHEAD: it already`,
+            `   runs ${target}, so nothing has to move there and there is nobody to ask.`,
+            `     1. Edit ${tree.root}/${WORKSPACE_MANIFEST} — the catalog line for`,
+            `        ${UMBRELLA_PACKAGE} — and set it to ${target}. That edit is ALLOWED`,
+            `        right now, from inside this block.`,
+            ...install,
+            `   Do NOT run a bare \`pnpm install\` first: this tree's pin is the STALE side, so installing`,
+            `   before the edit materializes the OLD release and this guard fires again.`,
+        ];
+    }
+
+    /**
+     * Is HEAD DETACHED in this tree — i.e. is there no branch for a pin edit to belong to?
+     *
+     * `branch --show-current`, NOT `rev-parse --abbrev-ref HEAD`: it answers on an UNBORN branch (which
+     * every freshly-created worktree is until its first commit, and where `rev-parse` fatals) and prints
+     * EMPTY on a detached HEAD, which is exactly the distinction case B needs.
+     *
+     * A git FAILURE is NOT detached, and the difference is load-bearing: `--show-current` prints nothing
+     * in both situations, so keying off the output alone would tell anyone whose tree git cannot read
+     * (no repo, a broken index, git absent) that their HEAD is detached — a confident diagnosis of a
+     * state nobody measured. Only an exit-0-with-empty-output is detached; anything else falls back to
+     * the ordinary branch wording, whose worst case is prescribing an edit that turns out to be moot.
+     */
+    private isDetachedHead(root: string): boolean {
+        const result = spawnSync('git', ['-C', root, 'branch', '--show-current'], { encoding: 'utf8' });
+        return result.status === 0 && (result.stdout ?? '').trim() === '';
     }
 
     /**
@@ -240,32 +432,58 @@ export class VersionSyncGuard {
      * further tool calls / RETRYING IS THE BUG / WAIT) — shouting the whole report would just restore
      * the wall of text the L0 message diet exists to prevent.
      */
-    private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, bump: boolean): readonly string[] {
-        const ask = bump
-            ? [
-                  `     > A \`pnpm install\` in main will NOT fix this — main's PIN has to move. Pick one:`,
-                  `     >  (a) I redo this task in the MAIN tree (a version bump cannot be done in a worktree), or`,
-                  `     >  (b) you TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to`,
-                  `     >      raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and to tell me when it is complete`,
-                  `     >      so I can continue here. I cannot reach that tree from here.`,
-              ]
-            : [
-                  `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
-                  `     > \`git checkout main && git pull && pnpm install\` there — it must NAME main, since a bare`,
-                  `     > pull moves whatever branch that tree is on — so both trees are on the same release, and`,
-                  `     > to tell me when it is complete so I can continue working, and what`,
-                  `     > \`ls node_modules/@webpieces\` shows there. I cannot reach that tree from here.`,
-              ];
+    private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
         return [
             `   SUBAGENT? You cannot fix the main tree from here. Forward this to your coordinator verbatim:`,
             `     > My worktree ${tree.root} is on @webpieces ${this.show(quartet.worktree.pinned).trim()};`,
             `     > the main tree ${tree.mainRoot} is on ${this.show(quartet.main.pinned).trim()}.`,
-            ...ask,
+            ...this.askLines(tree, quartet, skew),
             `   THEN STOP WORKING NOW. Forwarding that message IS the end of your turn: make NO further tool`,
             `   calls and do NOT retry this one — RETRYING IS THE BUG. Every retry re-fires this identical`,
             `   deny and buries the ask above; one subagent did it 13 times, 25 across that whole session.`,
             `   Nothing you can do from this tree clears it. WAIT for the main agent to confirm it is done,`,
             `   then resume — nothing between.`,
+        ];
+    }
+
+    /**
+     * The forwardable ASK, one per case that needs one. `main-ahead` never reaches here — it has nothing
+     * to ask for — so the three shapes below cover every escalating case.
+     *
+     * The bump ask carries the upgrade sentence VERBATIM as Dean wrote it, because it answers the one
+     * question an upgrade agent gets wrong: "webpieces cannot be upgraded from a worktree" is not a
+     * missing permission it can route around, it is a property of who governs whom. Its `STOP` is about
+     * the ROLE ("you are the wrong agent for this task"); the caps beat at the end of the block is about
+     * the TURN ("forwarding ends it"). Two different instructions, and the closer stays last and unique.
+     */
+    private askLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
+        if (skew === 'bump') {
+            return [
+                `     > A \`pnpm install\` in main will NOT fix this — main's PIN has to move. Pick one:`,
+                `     >  (a) I redo this task in the MAIN tree (a version bump cannot be done in a worktree), or`,
+                `     >  (b) you TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to`,
+                `     >      raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and to tell me when it is complete`,
+                `     >      so I can continue here. I cannot reach that tree from here.`,
+                `   If you are a subagent upgrading webpieces, STOP — only main agents in worktrees can do`,
+                `   this. Otherwise your main agent must \`git pull\` main: main has an earlier version of`,
+                `   webpieces pinned and must upgrade. You MUST tell the main agent to pull main and`,
+                `   \`pnpm install\`.`,
+            ];
+        }
+        if (skew === 'main-inconsistent') {
+            return [
+                `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
+                `     > \`pnpm install\` there — its node_modules is on ${this.show(quartet.main.installed).trim()} but its own pin says`,
+                `     > ${this.show(quartet.main.pinned).trim()}, so no pull is needed — and to tell me when it is complete so I can`,
+                `     > continue working. I cannot reach that tree from here.`,
+            ];
+        }
+        return [
+            `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
+            `     > \`git checkout main && git pull && pnpm install\` there — it must NAME main, since a bare`,
+            `     > pull moves whatever branch that tree is on — so both trees are on the same release, and`,
+            `     > to tell me when it is complete so I can continue working, and what`,
+            `     > \`ls node_modules/@webpieces\` shows there. I cannot reach that tree from here.`,
         ];
     }
 

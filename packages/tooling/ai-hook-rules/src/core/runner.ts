@@ -15,7 +15,7 @@ import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
-import { L0_ALLOW_JS, L0_CURE_ALLOW_JS } from '../bin/shim';
+import { L0_ALLOW_JS, L0_CURE_ALLOW_JS, isRootManifest } from '../bin/shim';
 import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC, L0_FAULT_NONE } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import { L1Classification, firstMatchingL1Row, L1_PRESTAGE_ROW } from './l1-rows';
@@ -115,13 +115,13 @@ function runInternal(
         return null;
     }
 
-    // …and the same unconditional PASS for the OPTIONAL machine-local `~/.webpieces/config.json`, for the
-    // identical reason. That file is strictly validated when it exists (HomeConfigService), so a bad key
-    // in it makes a `wp-*` command fail with an instruction to edit it — and a guard that then blocked
-    // that edit would wedge the agent inside the failure. webpieces.config.json is immune to exactly this
-    // because of the pass above; the home config gets the same immunity rather than a different answer.
-    // Matches the absolute, `~/`, `$HOME/` and `${HOME}/` spellings alike (see isHomeConfigPath).
-    if (new HomeConfigService().isHomeConfigPath(input.filePath)) {
+    // …and the same PASS for the machine-local `~/.webpieces/config.json` (a bad key there fails a `wp-*`
+    // command with an instruction to edit it, so blocking the edit would wedge the agent inside the
+    // failure) and for the two ROOT MANIFESTS a pin lives in — L1 row 8 PROMISED that edit and its cure IS
+    // it. isRootManifest, never a basename: this returns EARLY, so basename would unrule every
+    // package.json in the repo. It admits any tree's root (the config sits beside it), which is what a
+    // worktree's own cure needs — the same tree `workspaceRoot` above already names.
+    if (isRootManifest(input.filePath) || new HomeConfigService().isHomeConfigPath(input.filePath)) {
         return null;
     }
 
