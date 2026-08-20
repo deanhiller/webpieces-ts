@@ -1,3 +1,30 @@
+> # ✅ RESOLVED — fixed by hard-coding the `.webpieces/` skip. Kept as the forensic record.
+>
+> `filterByExcludedPaths` (`ai-hook-rules/src/core/runner.ts`) now drops every rule for any path whose
+> FIRST SEGMENT is `.webpieces`, **before** the `excludePaths` list is consulted — see
+> `isWebpiecesStateDir` in `rules-config/src/exclude-hook-paths.ts`. The verdict path this report is
+> about (`<primary>/.webpieces/worktrees/agent-＊/pr-review/…/review-＊.json`) therefore never reaches
+> `FeatureBranchGuardRule.check()` at all, so there is no branch left to judge and no tree to resolve it
+> against. That closes the whole class rather than this one path: `.webpieces/` is gitignored in every
+> consumer, so nothing under it can reach a branch, be reviewed, be reverted, or be lost to a checkout,
+> and every justification the branch-state guard prints there was vacuous.
+>
+> **Why the fix is not the config change this report proposed.** The consuming repo could already put
+> `.webpieces/**` in its own `excludePaths` — and this repo had — but that leaves the exemption OPTIONAL
+> on the one directory the TOOLING ITSELF asks an agent to write to, and `wp-install-ai-hooks` never
+> rewrites an `excludePaths` array that already exists, so no seed would ever have reached an
+> established repo. Hard-coding it fixes every consumer on the next pin bump. There is deliberately NO
+> seeded glob — the skip is code only. `wp-install-ai-hooks` still seeds `excludePaths` EMPTY, because a
+> `".webpieces/**"` entry would be a second and WEAKER spelling of the same decision: the glob matcher
+> compiles it to an anchored regex that misses the bare `.webpieces` directory the predicate matches, and
+> a config entry invites a consumer to delete it and believe the exemption went with it.
+>
+> **Still open, and deliberately not fixed here:** the underlying tree-resolution asymmetry this report
+> diagnoses in §3 — a write judged against the primary clone's live branch — is untouched. It simply has
+> no reachable trigger under `.webpieces/` any more. See also
+> `bug-bash-guards-judge-the-shell-cwd-not-the-paths-the-command-touches.md`, which is why the Bash path
+> is exempted by the shell's cwd rather than by the file the command names.
+
 # BUG: feature-branch-guard judges a reviewer subagent's verdict write against the PRIMARY clone's live branch — the same write flips ALLOW→BLOCK as unrelated sessions move `main`
 
 **Package:** `@webpieces/ai-hook-rules` (`FeatureBranchGuardRule`) + `@webpieces/pr-gate`

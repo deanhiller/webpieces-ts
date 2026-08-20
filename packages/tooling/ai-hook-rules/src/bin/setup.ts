@@ -176,6 +176,12 @@ function seedCommands(): Json {
 
 // Required excludePaths block: ONE glob list suppressing hook enforcement per file path. Seeded empty
 // (enforce everywhere) — a client adds paths (e.g. "repositories/**") to exempt vendored trees.
+//
+// Deliberately NOT seeded with webpieces' own `.webpieces/` state dir. That exemption lives in CODE
+// (`isWebpiecesStateDir`, consulted by `filterByExcludedPaths` ahead of this list and regardless of it),
+// and a glob here would be a second, weaker spelling of it — weaker because `.webpieces/**` compiles to
+// an anchored regex that misses the bare directory the predicate matches, and because a config entry
+// invites a consumer to delete it and believe the exemption went with it.
 // webpieces-disable no-function-outside-class -- sibling of the other seed* helpers; this module is config-shape builders by design
 function seedExcludePaths(): string[] {
     return [];
@@ -198,7 +204,7 @@ function migrateExcludePaths(raw: unknown, changes: string[]): string[] {
         return merged;
     }
     changes.push('added excludePaths ([])');
-    return [];
+    return seedExcludePaths();
 }
 
 /** One retired flat command string and the guardHints field it becomes. Data-only (per CLAUDE.md). */
