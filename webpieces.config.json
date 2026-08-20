@@ -363,10 +363,9 @@
             "mergeInProgress": "pnpm wp-finish-upsert-pr"
         }
     },
-    "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. `.webpieces/**` is SCHEDULED FOR DELETION and is the ONE thing in this file kept purely for the one-release lag. The tooling's own gitignored state dir is now skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), and there is deliberately no seeded glob for it anywhere — a config entry would be a second and WEAKER spelling, since `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. But the hooks RUNNING against this repo are the previous published release, which does not have that predicate yet, so deleting the entry today would re-block exactly what the code fix exists to unblock: feature-branch-guard blocked writes to `.webpieces/tasks.md` on main to protect main from a file git will never track, and blocked a reviewer subagent's verdict under `.webpieces/worktrees/**` by judging the PRIMARY clone's branch. DELETE THIS ENTRY in the follow-up PR after the release that ships isWebpiecesStateDir.",
+    "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike \u2014 see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling \u2014 `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
     "excludePaths": [
-        "repositories/**",
-        ".webpieces/**"
+        "repositories/**"
     ],
     "match-rules": [
         {
