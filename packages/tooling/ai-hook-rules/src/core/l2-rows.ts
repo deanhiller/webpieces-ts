@@ -147,13 +147,16 @@ export class L2Row {
  * scan, row 5 is one `git rev-parse`. Row 11 is the cache divider. Rows 6-10 all read the cache.
  *
  * THE ORDER OF ROW 5 IS THE MOST LOAD-BEARING THING IN THIS TABLE. Put "on main" BELOW the divider and
- * writes on `main` are permitted for the whole first call of every session — and permanently in a
+ * WRITES on `main` are permitted for the whole first call of every session — and permanently in a
  * multi-worktree repo, where another tree may hold the cache lock indefinitely.
  *
- * `B` tracks `E` everywhere; `R` is judged separately in exactly ONE place, rows 6/7 on `main`. A Read
- * names exactly one file so the guard can evaluate it precisely; a Bash command is opaque and gets the
- * conservative answer. Reading a CURRENT `main` is fine — the problem is that `main` is almost always
- * behind.
+ * `B` AND `E` PART COMPANY ON `main`, and rows 5/6/7 are where. A WRITE on `main` is wrong at any
+ * freshness — the work lands somewhere unreviewable and unrevertable — so row 5 is `E` only, judged on
+ * the branch alone, above the divider. A READ or a BUILD on a CURRENT `main` is harmless, and blocking
+ * it strands the agent right after `pnpm wp-checkout-clean-main` put it there; so `B` joins `R` on the
+ * FRESHNESS-gated pair below the divider (row 6 behind → block, row 7 current → allow), where "cannot
+ * tell" fails open at row 11 by construction. `B` and `R` still differ in SHAPE inside row 6: a Read
+ * names one file and is judged precisely, a Bash command is opaque and gets default-deny plus row 4.
  */
 export const L2_ROWS: readonly L2Row[] = [
     new L2Row(1, ['B', 'R', 'E'], 'on the **global allowlist** (inert command, or a universal cure such as reading/editing `webpieces.config.json`)', L2_ALLOW, '—', [
@@ -205,6 +208,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'ALLOW: the cure for the row that blocked you must itself never be blocked — and this is the residual step that makes rows 6 and 8 safe to block on a dirty tree',
             'None needed — then re-run the checkout and `git stash pop`',
             'not-a-content-read (cure/build/metadata)'),
+        new L2UseCase(28,
+            '`gh pr close 123`, `gh pr comment`, `gh api …` or a `curl` while parked on a stale `main` or a merged branch',
+            'blocked state, running something that touches GitHub or a URL and nothing in this tree',
+            'ALLOW: the skip list asks one question — does this read or write repo CONTENT? `gh` talks to GitHub and `curl`/`wget` talk to a network, so the branch state has nothing to say about them. The forms that write a local file (`gh repo clone`, `gh pr checkout`, `curl -o`, any `> file`) are excluded, and `gh pr create`/`merge` remain governed by their own guards',
+            'None needed',
+            'not-a-content-read (cure/build/metadata)'),
         new L2UseCase(8,
             '`pnpm wp-start-upsert-pr` on a branch whose fork point is broken',
             'row 9 state, running the tool row 9 prescribes',
@@ -212,35 +221,17 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed',
             'merged-branch recovery/inspection (allowlisted)'),
     ]),
-    new L2Row(5, ['B', 'E'], 'on `main`', L2_BLOCK, '`git checkout -b <new> origin/main`', [
+    new L2Row(5, ['E'], 'on `main`', L2_BLOCK, '`git checkout -b <new> origin/main`', [
         new L2UseCase(9,
             'An Edit or Write to any tracked file while `git rev-parse --abbrev-ref HEAD` says `main`',
             'on `main`, any freshness',
             'BLOCK: decided by one `git rev-parse`, with NO cache read, so it fires on the first tool call of the session',
             '`git checkout -b <new> origin/main` — uncommitted work comes with you',
             'on-main'),
-        new L2UseCase(10,
-            'A Bash command that WRITES tracked files as a side effect — `npx expo install`, a formatter, codegen, `sed -i`, a `>` redirect',
-            'on `main`, and the write is incidental to a command whose stated purpose is something else',
-            'BLOCK: default-DENY on `main` plus row 4\'s skip list, so a command nobody thought to enumerate is caught by not being on the list — which is the only shape that could have caught this one',
-            '`git checkout -b <new> origin/main` BEFORE running anything that may write',
-            'on-main'),
-        new L2UseCase(24,
-            'A build or a test run on a `main` that is perfectly up to date',
-            'on `main`, current — no staleness anywhere',
-            'BLOCK: freshness is not the question for the BLOCK. Reading `main` to plan stays open; what is closed is WORKING here, because the feature branch is the unit of work — and when `main` is behind instead, the reads are out of date too. The cure is a new branch off `origin/main`, which fetches, so it is right in both states',
-            '`git checkout -b <new> origin/main`',
-            'on-main'),
-        new L2UseCase(16,
-            'Read is blocked, so the session reaches for `cat`, `grep` and `ls` instead — and describes a CI workflow set missing a whole workflow that existed upstream',
-            'the SIDE DOOR: same tree, different tool',
-            'BLOCK. This case used to be judged by row 6 (a stale-content blocklist on the Bash side); row 5 now subsumes it, because being on `main` is already the finding and no enumeration of readers is needed. The log used to read "read-stale-guard handled", which is worse than no guard — it looks covered',
-            '`git checkout -b <new> origin/main`',
-            'on-main'),
         new L2UseCase(25,
-            'The FIRST command of a session, on `main`, before any cache exists',
+            'The FIRST edit of a session, on `main`, before any cache exists',
             'on `main`, cache absent — row 11 would fail open',
-            'BLOCK anyway: row 5 is ABOVE the cache divider and reads only `git rev-parse`, so it is armed on call #1. This is the case the cache-gated version could never catch',
+            'BLOCK anyway: row 5 is ABOVE the cache divider and reads only `git rev-parse`, so it is armed on call #1. This is why the row is `E` only and must never be gated on the cache',
             '`git checkout -b <new> origin/main`',
             'on-main'),
     ]),
@@ -257,6 +248,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'ALLOW (fail-open) logged as `no-forge` — distinct from "asked, and it is not merged", which used to look identical in the trail',
             'None — restore network/`gh auth` to re-arm the merged-branch policy',
             'no-forge'),
+        new L2UseCase(27,
+            'A build, a `cat` or a `curl` on `main`, on the first Bash call of a session',
+            'on `main`, cache absent — so whether `main` is behind is UNKNOWN',
+            'ALLOW (fail-open), logged `ALLOW_FAIL_OPEN`. `B` on `main` is judged by rows 6/7 and therefore lands here when the cache cannot answer; the WRITE half is not, which is why row 5 sits above this divider',
+            'None — the second call is judged normally',
+            'no-sync-cache'),
         new L2UseCase(14,
             'Mid-rebase, every guard abstains',
             'detached HEAD — there is no branch name to judge',
@@ -264,7 +261,7 @@ export const L2_ROWS: readonly L2Row[] = [
             'None — finish or abort the rebase',
             'branch-undeterminable'),
     ]),
-    new L2Row(6, ['R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`git pull origin main`, or `git checkout -b <new> origin/main`', [
+    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`git pull origin main`, or `git checkout -b <new> origin/main`', [
         new L2UseCase(13,
             'The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits',
             'on `main`, behind `origin/main`, dirty tree',
@@ -277,12 +274,30 @@ export const L2_ROWS: readonly L2Row[] = [
             'BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly',
             '`git pull origin main`, or `git checkout -b <new> origin/main`',
             'on-stale-main'),
+        new L2UseCase(16,
+            'Read is blocked, so the session reaches for `cat`, `grep` and `ls` instead — and describes a CI workflow set missing a whole workflow that existed upstream',
+            'the SIDE DOOR: same tree, same staleness, different tool',
+            'BLOCK: `B` is judged here beside `R`, so closing the Read tool no longer opens a shell-shaped hole. The log used to read "read-stale-guard handled", which is worse than no guard — it looks covered',
+            '`git checkout -b <new> origin/main`',
+            'on-stale-main'),
+        new L2UseCase(10,
+            'A Bash command that WRITES tracked files as a side effect — `npx expo install`, a formatter, codegen, `sed -i`, a `>` redirect',
+            'on a `main` known to be BEHIND, and the write is incidental to a command whose stated purpose is something else',
+            'BLOCK: inside this row `B` is default-DENY plus row 4\'s skip list, never a blocklist of readers — a command nobody thought to enumerate is caught by not being on the list, which is the only shape that could have caught this one',
+            '`git checkout -b <new> origin/main` BEFORE running anything that may write',
+            'on-stale-main'),
     ]),
-    new L2Row(7, ['R'], 'on `main`, current', L2_ALLOW, '—', [
+    new L2Row(7, ['B', 'R'], 'on `main`, current', L2_ALLOW, '—', [
         new L2UseCase(17,
             'Reading files on a `main` you just pulled',
             'on `main`, and `origin/main` is an ancestor of HEAD',
-            'ALLOW: this is the ONE place a Read is judged differently from a Bash command, because a Read names exactly one file and can be evaluated precisely',
+            'ALLOW: ancestry, not hash equality, so the allow arrives the instant the pull lands rather than when the detached refresher next runs',
+            'None needed',
+            'local-main-contains-origin (up to date)'),
+        new L2UseCase(24,
+            '`curl`, `gh pr close` or a test run, immediately after `pnpm wp-checkout-clean-main` landed you on a perfectly current `main`',
+            'on `main`, current — no staleness anywhere',
+            'ALLOW. This used to BLOCK, from the branch alone: the tool the repo prescribes put the agent here, and the guard whose name says STALE then refused everything off a narrow allowlist for a reason that had nothing to do with staleness. WRITES here are still blocked, by row 5 — that hazard is real at any freshness',
             'None needed',
             'local-main-contains-origin (up to date)'),
     ]),
@@ -367,9 +382,10 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // Row 4 — the skip list, in its two live spellings.
     'merged-branch recovery/inspection (allowlisted)': 4,
     'not-a-content-read (cure/build/metadata)': 4,
-    // Row 5 — never work on main.
+    // Row 5 — never WRITE on main, at any freshness. `E` only; the Bash half is rows 6/7.
     'on-main': 5,
-    // Row 6/7 — the ONE place a Read is judged differently from a Bash command.
+    // Row 6/7 — freshness, for `B` and `R` alike. Both guards log these two literals: read-stale-guard
+    // for the Read tool, stale-main-bash-guard for Bash. Same cache, same ancestry test, one verdict.
     'on-stale-main': 6,
     'local-main-contains-origin (up to date)': 7,
     // Row 9 — the two unhealthy-fork states.
@@ -442,8 +458,11 @@ export class L2NotDone {
 export const NOT_DONE: readonly L2NotDone[] = [
     // EMPTY, and that is the goal state: every row in the table is a row the guards actually honour.
     //
-    // It held three entries. Row 5's `B` half shipped (on `main` is now judged from the branch alone,
-    // above the cache divider). Rows 6 and 8 held DIRTY-TREE valves, and both are now closed — each of
+    // It held three entries. Row 5's `B` half shipped and then MOVED: on `main`, a write is judged from
+    // the branch alone (row 5, above the divider) while Bash is judged on freshness beside the Read tool
+    // (rows 6/7), because a build on a CURRENT `main` harms nothing and denying it stranded agents on
+    // the very `main` `pnpm wp-checkout-clean-main` had just handed them. Rows 6 and 8 held DIRTY-TREE
+    // valves, and both are now closed — each of
     // those rows cures with `git checkout -b <new> origin/main`, which carries uncommitted changes onto
     // the new branch, so a dirty tree never trapped anybody. The row 6 entry claimed the dirty argument
     // "has teeth" there because its cure is `git pull`; that was a fact about the MESSAGE, which printed

@@ -125,34 +125,36 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
     });
 
     /*
-     * The message names the BRANCH, not the staleness. An agent told "you are 18 commits behind"
-     * reaches for `git pull`, lands on a CURRENT main, and is still on main — the cure it needs is a
-     * new branch, and that is what row 5's cure cell has always said.
+     * The message names the STALENESS — which is what the guard's name promised — and the cure is a
+     * new branch, because that is the form that works on a dirty tree and moves the work somewhere
+     * reviewable at the same time. No commit count: an agent told "18 commits behind" reaches for a
+     * pull, lands on a CURRENT main, and is still on main.
      */
-    it('names the branch as the finding, and the cure is a new branch', () => {
+    it('names the staleness as the finding, and the cure is a new branch', () => {
         const message = rule().check(ctx('cat src/app.ts'))[0].message;
-        expect(message).toContain('you are on `main`');
+        expect(message).toContain('local `main` is BEHIND origin/main');
         expect(message).toContain('git checkout -b <new-branch> origin/main');
         expect(message).not.toContain('commit(s) behind');
     });
 
     /*
-     * The three things the flat "`main` is not a place to work" version could not say, and which sent
-     * readers away thinking the guard was overreaching on their `grep`:
+     * What the text must still say, and what it must no longer say.
      *
-     *   1. reading main to PLAN is legitimate and is not what got blocked;
-     *   2. the FEATURE BRANCH is the unit of work — the rule stated positively;
-     *   3. a main that is BEHIND makes the reads wrong too, so "I am only reading" is not an argument
-     *      for skipping the cure. That is the sentence that turns the block into the thing that makes
-     *      the next hour correct, and it was missing entirely.
+     * KEEPS: reading main to PLAN is legitimate; the FEATURE BRANCH is the unit of work; the cure
+     * fetches, so it makes the reads true as well as moving you off main.
+     *
+     * DROPS, because it is now FALSE: "whether or not it is current". A current main is not blocked at
+     * all — the guard fires only once being behind is established — and a refusal that claimed
+     * otherwise was unanswerable on a main the prescribed cleanup command had just pulled.
      */
-    it('says reading-to-plan is allowed, names the feature branch as the unit of work, and gives the stale-reads reason', () => {
+    it('says reading-to-plan is fine, names the feature branch as the unit of work, and no longer claims a CURRENT main is blocked', () => {
         const message = rule().check(ctx('cat src/app.ts'))[0].message;
-        expect(message).toContain('Reading main to PLAN is fine');
-        expect(message).toContain('the feature branch is the unit of work');
-        expect(message).toContain('if main is BEHIND origin/main your reads are out of date too');
-        expect(message).toContain('The cure fetches');
-        // The flat claim is GONE, not softened — it is the sentence that read as "you may not be here".
+        expect(message).toContain('reading main to PLAN is fine');
+        expect(message).toContain('The feature branch is the unit of work');
+        expect(message).toContain('the cure fetches');
+        expect(message).toContain('A CURRENT main is not blocked');
+        // The two sentences from the branch-only era, gone rather than softened.
+        expect(message).not.toContain('whether or not it is current');
         expect(message).not.toContain('`main` is not a place to work');
     });
 
@@ -228,6 +230,44 @@ describe('stale-main-bash-guard — never wedges the session', () => {
     });
 });
 
+/**
+ * THE WIDENED SKIP LIST. The principle is one question — does this read or write repo CONTENT? — and
+ * `gh` and `curl`/`wget` answer no: they talk to GitHub and to the network. Before this, `gh pr close`
+ * and `curl` were denied on a stale main by a guard that had nothing to say about either.
+ */
+describe('stale-main-bash-guard — the skip list covers what cannot touch the tree', () => {
+    it('allows gh GENERALLY, not just the read-only inspections', () => {
+        expect(blocked('gh pr close 123')).toBe(false);
+        expect(blocked('gh pr comment 123 --body hi')).toBe(false);
+        expect(blocked('gh api repos/o/r/pulls')).toBe(false);
+        expect(blocked('gh run watch 55')).toBe(false);
+        expect(blocked('gh pr view 1 && gh issue list')).toBe(false);
+    });
+
+    it('still denies the gh subcommands that write LOCAL files', () => {
+        expect(blocked('gh repo clone o/r')).toBe(true);
+        expect(blocked('gh pr checkout 123')).toBe(true);
+        expect(blocked('gh run download 55')).toBe(true);
+    });
+
+    it('allows curl and wget', () => {
+        expect(blocked('curl -s https://example.com/health')).toBe(false);
+        expect(blocked('wget https://example.com/x.json')).toBe(false);
+        expect(blocked('curl -s https://example.com | jq .version')).toBe(false);
+    });
+
+    it('denies the fetch forms that write a named local file', () => {
+        expect(blocked('curl -o src/app.ts https://example.com/x')).toBe(true);
+        expect(blocked('curl https://example.com/x > src/app.ts')).toBe(true);
+        expect(blocked('gh api repos/o/r > out.json')).toBe(true);
+    });
+
+    // Every segment must pass — a network client cannot launder the command it is chained to.
+    it('does not launder a blocked segment chained to an allowed one', () => {
+        expect(blocked('curl -s https://example.com/x && cat src/app.ts')).toBe(true);
+    });
+});
+
 // Same fail-open discipline as every sibling guard: block only on data we are sure of.
 describe('stale-main-bash-guard — fail-open valves', () => {
     it('allows when the branch cannot be determined', () => {
@@ -241,33 +281,45 @@ describe('stale-main-bash-guard — fail-open valves', () => {
     });
 
     /*
-     * THE CACHE VALVES ARE GONE, and their absence is the change. Row 5 is decided from one
-     * `git rev-parse`, so none of these states can reach it — which is the whole point: the cache is
-     * populated for the NEXT call, so a cache-gated block is off on the first call of every session,
-     * exactly when an agent is most likely to still be standing on `main`.
+     * THE CACHE VALVES ARE BACK, and their return is the change. The block means "what you would read
+     * here is out of date", so it can only fire on a freshness we have ESTABLISHED. Unknown → allow,
+     * logged ALLOW_FAIL_OPEN. Current → allow. Both used to block, from the branch alone.
      */
-    it('blocks with NO cache at all — this is the first-call case the old version could never catch', () => {
+    it('allows with NO cache at all — the first Bash call of a session cannot know main is behind', () => {
         state.status = null;
-        expect(blocked('cat src/app.ts')).toBe(true);
+        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('pnpm run build-all')).toBe(false);
     });
 
-    it('blocks when origin/main is unknown (offline) — freshness is not the question', () => {
+    it('allows when origin/main is unknown (offline) — nothing to compare against', () => {
         state.status = staleMainStatus({ originMain: '' });
-        expect(blocked('cat src/app.ts')).toBe(true);
+        expect(blocked('cat src/app.ts')).toBe(false);
     });
 
-    it('blocks on a PERFECTLY CURRENT main — main is not where WORK happens either way', () => {
-        state.containsExit = 0;
-        expect(blocked('cat src/app.ts')).toBe(true);
+    it('allows when the cache holds another branch — a shape bug degrades to an allow', () => {
+        state.status = staleMainStatus({ branch: 'dean/other' });
+        expect(blocked('cat src/app.ts')).toBe(false);
     });
 
     /*
-     * No dirty valve, and none is needed. The valve existed because row 6's cure is `git pull`, which
-     * is not a clean fast-forward on a dirty tree. Row 5's cure is `git checkout -b`, which CARRIES
-     * uncommitted work onto the new branch — so a dirty tree traps nobody. read-stale-guard still
-     * opens the valve for the Read tool, where the pull really is the cure.
+     * THE POST-CURE DEAD END, which is why this whole change exists: `pnpm wp-checkout-clean-main`
+     * leaves you on a perfectly current main, and the guard whose name says STALE then refused
+     * everything off a narrow allowlist. WRITES here are still blocked — by feature-branch-guard, which
+     * is unconditional on purpose (see its docblock).
      */
-    it('blocks on a DIRTY tree — `git checkout -b` carries the work with you, so nothing is trapped', () => {
+    it('allows EVERYTHING on a main that is current — including a build and an install', () => {
+        state.containsExit = 0;   // the cached origin/main IS an ancestor of HEAD
+        expect(blocked('cat src/app.ts')).toBe(false);
+        expect(blocked('pnpm run build-all')).toBe(false);
+        expect(blocked('npx vitest run')).toBe(false);
+        expect(blocked('gh pr close 123')).toBe(false);
+    });
+
+    /*
+     * No dirty valve, and none is needed. The cure printed here is `git checkout -b`, which CARRIES
+     * uncommitted work onto the new branch — so a dirty tree traps nobody.
+     */
+    it('blocks on a DIRTY tree when main is behind — `git checkout -b` carries the work with you', () => {
         state.dirty = ' M src/app.ts\n';
         expect(blocked('cat src/app.ts')).toBe(true);
     });

@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from 'child_process';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,6 +16,7 @@ import { writeBranchStateMatrixDoc, branchStateMatrixPointer } from '../l2-matri
 import { L0_FAULT_NONE } from '../l0-fault-codes';
 import { MergedBranchMessage } from './merged-branch-message';
 import { StaleMainMessage } from './stale-main-message';
+import { MainFreshness } from './main-freshness';
 import { TreeRecovery } from './tree-recovery';
 
 /**
@@ -52,8 +53,10 @@ import { TreeRecovery } from './tree-recovery';
  * That scoping is also this guard's HOLE, and it is closed elsewhere rather than here: leaving Bash
  * entirely alone let a session `cat`/`grep`/`ls` the same stale tree the Read block was rejecting,
  * for a whole session, while the logs read "read-stale-guard handled". stale-main-bash-guard is the
- * State-A Bash counterpart (as merged-branch-bash-guard is State B's) and blocks only CONTENT-reading
- * commands, never the cure — which is why this guard can stay simple and Read-only.
+ * State-A Bash counterpart (as merged-branch-bash-guard is State B's): in the SAME state this guard
+ * blocks — `main`, KNOWN BEHIND `origin/main` by the ancestry test below — it default-denies Bash and
+ * allowlists only the commands that get you out, so the cure is never blocked and this guard can stay
+ * simple and Read-only.
  *
  * Everything here is FAIL-OPEN on data we could not ESTABLISH. A guard that blocks reads on bad data
  * is far worse than one that misses; every unknown resolves to "allow". Note the dual, which is what
@@ -79,6 +82,9 @@ import { TreeRecovery } from './tree-recovery';
 export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     constructor(config: BranchStateGuardConfig) { super(config, 'read-stale-guard', BRANCH_STATE_GUARD_KEY); }
 
+    // The ancestry test and the cache summary, shared with stale-main-bash-guard — see main-freshness.ts.
+    private readonly freshness = new MainFreshness();
+
     readonly description = 'Block reads on a branch that is stale to read from — a `main` behind origin/main, or a feature branch whose PR is already merged.';
     override readonly files = ['**/*'];
     override readonly defaultOptions = {
@@ -91,7 +97,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             new Option('On main, behind origin/main → git pull origin main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
             new Option('If a checkout -b refuses because origin/main changed the same files you edited: git stash (never blocked), redo the checkout, then git stash pop.'),
             new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
-            new Option('Still allowed right now: Bash that does not read repo files (installs, upgrades, builds, tests, the pull itself, git/gh metadata), all Write/Edit, and reading webpieces.config.json. Content-reading Bash (cat/grep/ls/…) is blocked too on a stale main — see stale-main-bash-guard.'),
+            new Option('Still allowed right now: reading webpieces.config.json, and the Bash commands that get you OUT or tell you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs. Everything ELSE through Bash is blocked in this same state (a main that is behind → stale-main-bash-guard; a merged branch → merged-branch-bash-guard), and Write/Edit on main is blocked by feature-branch-guard however current main is. There is no side door: get onto a branch off origin/main.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -130,7 +136,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         if (status.originMain === '') return this.failOpen(ctx, branch, 'origin-main-unknown', cache);
 
         // Escape valve 2 — ancestry, NOT equality. See the class comment.
-        if (this.contains(ctx.workspaceRoot, status.originMain)) {
+        if (this.freshness.containsOriginMain(ctx.workspaceRoot, status.originMain)) {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
@@ -205,23 +211,6 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         );
     }
 
-    // Is `commit` an ancestor of (i.e. already contained in) HEAD? Local-only and fast — no network.
-    //
-    // spawnSync, not execSync, precisely because the EXIT CODE is the answer and we must tell three
-    // outcomes apart: 0 = ancestor (up to date), 1 = cleanly NOT an ancestor (genuinely behind),
-    // anything else = git could not answer (bad/pruned object, not a repo) which must fail OPEN.
-    // execSync collapses 1 and "git broke" into the same thrown Error, so it cannot make that call.
-    // Arg-array form also means the commit hash is never parsed by a shell.
-    private contains(workspaceRoot: string, commit: string): boolean {
-        const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], {
-            cwd: workspaceRoot,
-            encoding: 'utf8',
-        });
-        if (result.status === 0) return true;
-        if (result.status === 1) return false;
-        return true; // unknown/failed → treat as "contained" so the guard allows
-    }
-
 
     private isConfigFile(relativePath: string): boolean {
         return relativePath === 'webpieces.config.json';
@@ -252,8 +241,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     }
 
     private cacheSummary(status: MainSyncStatus): string {
-        const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
-        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} merged=${merged} ts=${status.timestamp}`;
+        return this.freshness.summarize(status);
     }
 
     /**

@@ -65,7 +65,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
         'Get onto a fresh branch off origin/main, then retry:',
         [
             new Option('git fetch origin main && git checkout -b <new-branch> origin/main (in a worktree: git worktree add ../<dir> -b <new> origin/main). Then re-run your command.', true),
-            new Option('Still allowed here: recovery/cleanup git, read-only git status|log|diff|show|branch and gh pr list|view, switching branches/worktrees, pnpm wp-checkout-clean-main and pnpm wp-cleanup, and installs/upgrades.'),
+            new Option('Still allowed here: recovery/cleanup git, read-only git status|log|diff|show|branch, gh GENERALLY (it talks to GitHub, not to this tree — but not gh repo clone / pr checkout / run download, which write local files), curl/wget without -o/-O or a > redirect, switching branches/worktrees, pnpm wp-checkout-clean-main and pnpm wp-cleanup, and installs/upgrades.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );

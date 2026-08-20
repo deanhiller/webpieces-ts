@@ -133,9 +133,29 @@ describe('merged-branch-bash-guard — allows recovery / cleanup / inspection', 
         expect(allowed('pnpm test')).toBe(false);
     });
 
-    it('does NOT allowlist gh writes (governed by the PR guards)', () => {
-        expect(allowed('gh pr create --title x')).toBe(false);
-        expect(allowed('gh pr merge 194')).toBe(false);
+    /*
+     * `gh` GENERALLY — it talks to GitHub, not to this tree, so the BRANCH state has nothing to say
+     * about it. That includes the writes: `gh pr create` and `gh pr merge` are still refused, by
+     * pr-creation-or-push-guard and pr-merge-guard, which is where those policies live. Passing this
+     * allowlist is not passing those. What IS refused here is the `gh` that writes a LOCAL file.
+     */
+    it('allowlists gh writes too — their policies live in the PR guards, not in this list', () => {
+        expect(allowed('gh pr create --title x')).toBe(true);
+        expect(allowed('gh pr merge 194')).toBe(true);
+        expect(allowed('gh pr close 194')).toBe(true);
+    });
+
+    it('does NOT allowlist the gh subcommands that write LOCAL files', () => {
+        expect(allowed('gh repo clone o/r')).toBe(false);
+        expect(allowed('gh pr checkout 194')).toBe(false);
+        expect(allowed('gh run download 55')).toBe(false);
+        expect(allowed('gh api repos/o/r > out.json')).toBe(false);
+    });
+
+    // A URL is not this repo. The forms that name a local file to write are excluded.
+    it('allowlists curl/wget, but not the forms that write a local file', () => {
+        expect(allowed('curl -s https://example.com/health')).toBe(true);
+        expect(allowed('curl -o src/app.ts https://example.com/x')).toBe(false);
     });
 });
 
@@ -188,11 +208,13 @@ describe('merged-branch-bash-guard — judges each SEGMENT, not the raw string',
 
     // Read-only, and watching CI is exactly what you do while parked on a just-merged branch. `gh run
     // view <id>` was blocked BARE in the field while `gh pr view` beside it succeeded.
-    it('allows read-only gh run inspection, but not its write actions', () => {
+    it('allows gh run inspection AND its remote writes — neither touches this tree', () => {
         expect(allowed('gh run view 123456')).toBe(true);
         expect(allowed('gh run list --limit 5 | head -3')).toBe(true);
         expect(allowed('gh run watch 123456')).toBe(true);
-        expect(allowed('gh run cancel 123456')).toBe(false);
+        expect(allowed('gh run cancel 123456')).toBe(true);
+        // `gh run download` is the one that lands files in the working tree.
+        expect(allowed('gh run download 123456')).toBe(false);
     });
 });
 

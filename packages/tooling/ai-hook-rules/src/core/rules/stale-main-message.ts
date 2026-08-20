@@ -6,9 +6,10 @@ import { atRoot } from '@webpieces/rules-config';
  *   - read-stale-guard        blocks the Read tool     → {@link StaleMainMessage.forReads}
  *
  * It had a second consumer, `forBash`, for the days when stale-main-bash-guard blocked CONTENT reads
- * on a stale main. That guard now blocks at row 5 on the branch alone — being on `main` is the whole
- * finding, and staleness does not enter into it — so it carries its own message and this variant was
- * deleted rather than left as an unreachable second spelling.
+ * on a stale main. That guard judges the SAME state again today (rows 6/7 — `main`, known behind), but
+ * its verdict shape is different: default-deny plus the row 4 skip list rather than a per-file call,
+ * and its cure is the branch form alone because a Bash session cannot be cured by staying put. So it
+ * carries its own message and this variant was deleted rather than left as a second spelling.
  *
  * One source of truth on purpose (same reason as MergedBranchMessage): the cure is an instruction the
  * AI follows literally, so two drifting copies mean two behaviours for one repo state.

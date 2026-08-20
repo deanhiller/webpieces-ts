@@ -83,8 +83,16 @@ export class ShellSegmentScan {
         return words.slice(i);
     }
 
-    // `>`, `>>`, `>out.txt`, `2>log` — but NOT `2>&1`/`1>&2`, which merely rewire fds.
-    private redirectsToFile(words: readonly string[]): boolean {
+    /**
+     * `>`, `>>`, `>out.txt`, `2>log` — but NOT `2>&1`/`1>&2`, which merely rewire fds.
+     *
+     * PUBLIC because RecoveryAllowlist asks the same question of a segment it is about to allow on the
+     * strength of the program name alone (`curl`, `gh`): those cannot touch the tree by themselves, but
+     * `curl … > src/x.ts` can. One implementation, so the two callers cannot disagree about what
+     * counts as a redirect — the `2>&1` carve-out above is exactly the kind of detail a second copy
+     * gets wrong.
+     */
+    redirectsToFile(words: readonly string[]): boolean {
         return words.some((word: string): boolean => REDIRECT_TO_FILE.test(word));
     }
 }
