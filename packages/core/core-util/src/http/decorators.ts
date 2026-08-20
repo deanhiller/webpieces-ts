@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { MaskSpec, MaskMode } from './LogFieldMask';
 import { DEFAULT_CALLER_KIND, ENDPOINT_CALLER_KEY, ExternalCaller, ExternalSystemKind, getEndpointCaller } from './external-caller';
+// The TYPE layer these decorators attach — split out for file size only (see auth-mode.ts).
+import { ApiKeyCredentials, AuthMeta, AuthMode, JwtRequirement } from './auth-mode';
 
 /**
  * Metadata keys for storing API routing information.
@@ -83,92 +85,6 @@ export interface ExternalEndpointOptions extends EndpointOptions {
     calledBy: string;
     /** What that caller IS; picks the node's shape. Defaults to `'saas'` (see DEFAULT_CALLER_KIND). */
     callerKind?: ExternalSystemKind;
-}
-
-/**
- * The role decision for a JWT endpoint, as a union the COMPILER enforces — one spelling per decision,
- * every broken combination a compile error:
- *
- * ```typescript
- * @AuthJwt({ roles: ['admin'] })            // ✅ role-gated (any-of)
- * @AuthJwt({ allRolesAllowed: true })       // ✅ every authenticated user, said out loud
- * @AuthJwt({})                              // ❌ pick a branch
- * @AuthJwt({ roles: [] })                   // ❌ needs at least one role
- * ```
- *
- * `allRolesAllowed` exists ONLY on the wide branch (the dangerous half must be a greppable token, and
- * the narrow branch rejects it as a redundant second spelling); `roles` is a NON-EMPTY tuple so
- * "declared roles, passed none" — the old optional `string[]`'s silent widest grant — cannot be written.
- * All six bad cases are pinned in `AuthJwtCompileAssertions.ts` — a COMPILED file, not a spec: tsc
- * fails the build (TS2578) if any starts compiling. A spec cannot do this (see that file's header).
- *
- * WHY a type rather than the runtime `throw` this replaced: `.claude/review/backwards-compatibility.md`
- * shim shapes #4 and #5. Not restated here — three copies of one rationale is three things to drift.
- */
-export type JwtRoles =
-    | { allRolesAllowed: true; roles?: never }
-    | { roles: readonly [string, ...string[]]; allRolesAllowed?: never };
-
-/**
- * JwtRequirement - the {@link JwtRoles} decision PLUS any app-defined authorization fields, e.g.
- * `@AuthJwt({ allRolesAllowed: true, inOrg: true })`. The framework authenticates (JwtHook.parseJwt)
- * and enforces the roles any-of; the app overrides JwtHook.authorizeJwt to enforce its own fields.
- * Both hook methods are ASYNC, so an app field like `inOrg` may be answered from a datastore.
- *
- * This was a SECOND decorator (`@Auth`) whose `roles` was optional — so `@Auth({})` reached the exact
- * widest grant that {@link JwtRoles} exists to make un-typeable. Folding it in leaves one decorator per
- * credential kind and closes that route by construction.
- */
-// webpieces-disable no-any-unknown -- app-defined authorization fields (inOrg, tenant, ...)
-export type JwtRequirement = JwtRoles & { [field: string]: unknown };
-
-/**
- * The service-to-service / user auth mode of an endpoint. Discriminated union so a filter can
- * `switch (mode.kind)` and get the data it needs, exhaustively.
- *
- * - `public`        → no auth check
- * - `jwt`           → user JWT; `requirement` carries the compiler-enforced role decision
- *                     ({@link JwtRoles}) plus any app-defined authorization fields
- * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
- *                     `callers` is the allow-list of caller SAs ('self' = this service's SA)
- * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
- * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookAuthCallback`
- *                     verifies it, selected by `name`. The framework ships NO vendor crypto (see
- *                     {@link AuthWebhook}).
- * - `apikey`        → a CUSTOMER holds the credential; the app's bound `ApiKeyHook` looks it up
- *                     (async, over the whole header set) and returns the context to seed, selected
- *                     by `name`. NOT a peer service — see {@link AuthApiKey}.
- * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
- *                     {@link RuntimeLocality} says this process is deployed. Authenticates NOBODY —
- *                     it is a deployment gate, not a credential.
- */
-export type AuthMode =
-    | { kind: 'public' }
-    | { kind: 'jwt'; requirement: JwtRequirement }
-    | { kind: 'oidc'; callers: string[] }
-    | { kind: 'shared-secret'; secretKey: string }
-    | { kind: 'webhook'; name: string }
-    | { kind: 'apikey'; name: string }
-    | { kind: 'local-only' };
-
-/**
- * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthWebhook / @AuthApiKey / @AuthLocalOnly) —
- * one per credential kind.
- *
- * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose
- * `authenticated`/`roles` getters "for back-compat with readers that only understand the user-JWT
- * model" — deleted, because nothing read them: every reader (AuthFilter, BrowserProxyClient,
- * ProxyClient) switches on `mode.kind`, which is the whole point of the discriminated union. A
- * flattened view of a union is a second spelling of it, and the flattened one silently answers
- * `authenticated: true` for oidc and shared-secret too.
- */
-export class AuthMeta {
-    mode: AuthMode;
-
-    constructor(mode: AuthMode) {
-        this.mode = mode;
-    }
 }
 
 /**
@@ -431,20 +347,38 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
 }
 
 /**
- * @AuthApiKey(name) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook` authenticates the
- * inbound request against its own datastore and returns the `ContextTuple` entries the framework
- * seeds into `RequestContext`. THE mode for a partner-facing contract consumed by other companies'
- * codebases (POS vendors, back-office platforms, ETL pipelines).
+ * @AuthApiKey(regime, credentials) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook`
+ * authenticates the inbound request against its own datastore and returns the `ContextTuple` entries
+ * the framework seeds into `RequestContext`. THE mode for a partner-facing contract consumed by other
+ * companies' codebases (POS vendors, back-office platforms, ETL pipelines).
  *
  * ```typescript
- * @AuthApiKey('onetablet-partner')
+ * @AuthApiKey('onetablet-partner', [
+ *     { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+ *     { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
+ * ])
  * @ApiPath('/management/v1')
  * abstract class ManagementApi { ... }
  * ```
  *
- * `name` is a bare STRING selecting WHICH key regime this route belongs to, exactly as
+ * `regime` is a bare STRING selecting WHICH key regime this route belongs to, exactly as
  * `@AuthSharedSecret(key)` and `@AuthWebhook(vendor)` already are — one hook serves several regimes,
  * and an api contract is level 0, so it never references a verifier directly.
+ *
+ * `credentials` DECLARES where the credential rides ({@link ApiKeyCredential}), so a spec generator
+ * reading route auth metadata can emit `components.securitySchemes` instead of a human hand-writing
+ * them into a manifest. It is a NON-EMPTY, ORDERED list rather than one credential because a real
+ * regime authenticates a PAIR — the key names a customer, a second header names which of that
+ * customer's organizations the request acts on, and a mismatch is a 401. Its OpenAPI form is two
+ * schemes plus ONE security-requirement object holding BOTH keys (an AND); a LIST of two objects
+ * would mean "either alone suffices", which is a load-bearing difference a single-credential shape
+ * cannot even express. ORDER IS SIGNIFICANT and preserved: it is the order the credentials are
+ * presented in the published document.
+ *
+ * The list can never be EMPTY — a contract that declares a key regime and then names no credential
+ * would generate a document with no security block, which is the exact silent failure this argument
+ * exists to remove. That is a compile error, not a runtime throw (see {@link JwtRoles}'s non-empty
+ * tuple, the same device for the same reason).
  *
  * WHY IT IS NOT `@AuthSharedSecret`. Shared-secret declares that AN INTERNAL SERVICE is on the other
  * end, so the framework BELIEVES the trusted context headers that caller forwarded (see
@@ -456,16 +390,17 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  *
  * WHY THE HOOK SEES THE REQUEST, NOT ONE TOKEN. A real key regime checks the key TOGETHER WITH a
  * second header (the organization it is acting for), and `JwtHook.parseJwt` — handed one pre-extracted
- * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(name, request)` gets the whole
+ * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(regime, request)` gets the whole
  * inbound request instead, so the app owns which headers carry the credential and validates them as a
- * PAIR. The framework deliberately configures no header name: that cross-check is the entire point.
+ * PAIR. `credentials` does NOT change that: the framework reads no header from it and performs no
+ * extraction. It is DECLARATION for readers of the contract, and enforcement stays entirely the hook's.
  *
  * FAILS CLOSED: with no `ApiKeyHook` bound, every `@AuthApiKey` endpoint 401s, matching `JwtHook` and
  * `WebhookAuthCallback`.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthApiKey(name: string): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'apikey', name });
+export function AuthApiKey(regime: string, credentials: ApiKeyCredentials): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'apikey', regime, credentials });
 }
 
 /**
@@ -654,7 +589,8 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
  */
 export const MISSING_AUTH_DECORATOR_FIX =
     "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
-    "@AuthOidc(...callers) / @AuthSharedSecret(key) / @AuthWebhook('vendor') / @AuthApiKey('regime') / " +
+    '@AuthOidc(...callers) / @AuthSharedSecret(key) / ' +
+    "@AuthWebhook('vendor') / @AuthApiKey('regime', [{in: 'header', name: 'x-api-key'}]) / " +
     '@AuthLocalOnly() to ' +
     'the class or method.';
 

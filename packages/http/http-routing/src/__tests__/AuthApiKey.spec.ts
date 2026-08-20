@@ -38,7 +38,11 @@ const ORG_ID = ContextKey.trusted<string>(
 
 const API_KEY_ROUTE = new RouteMetadata(
     'POST', '/management/v1/orders', 'listOrders', 'ManagementController',
-    new AuthMeta({ kind: 'apikey', name: 'onetablet-partner' }), 'ManagementApi',
+    new AuthMeta({
+        kind: 'apikey',
+        regime: 'onetablet-partner',
+        credentials: [{ in: 'header', name: 'x-api-key' }, { in: 'header', name: 'x-organization-id' }],
+    }), 'ManagementApi',
 );
 
 /** Records whether the chain got past AuthFilter at all — i.e. whether the controller was entered. */
@@ -246,7 +250,11 @@ describe('@AuthApiKey does NOT verify its caller, so forwarded trusted context i
      * endpoint would 401 in a way that looks like a framework bug — which is why one spec asserts both.
      */
     it('omits trusted keys outbound too — DestinationTrust puts apikey with jwt, not with shared-secret', () => {
-        const trust = DestinationTrust.forAuthMode({ kind: 'apikey', name: 'onetablet-partner' });
+        const trust = DestinationTrust.forAuthMode({
+            kind: 'apikey',
+            regime: 'onetablet-partner',
+            credentials: [{ in: 'header', name: 'x-api-key' }],
+        });
 
         expect(trust.allows(ORG_ID)).toBe(false);
         expect(trust.allows(ContextKey.untrusted<string>('actionId', 'x-action-id'))).toBe(true);

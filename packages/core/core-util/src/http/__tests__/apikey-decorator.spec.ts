@@ -11,6 +11,7 @@ import {
     assertEveryEndpointHasAuthMode,
     getAuthMode,
 } from '../../index';
+import type { ApiKeyCredential, AuthMode } from '../../index';
 
 /**
  * The CONTRACT half of `@AuthApiKey` (the enforcement half is pinned in http-routing's
@@ -22,7 +23,16 @@ import {
  * `@AuthWebhook('sentry')` and `@AuthOidc('gmail-push')` already are.
  */
 
-@AuthApiKey('onetablet-partner')
+/**
+ * The credential list is what a spec generator reads. This one is the REAL Management API shape: a key
+ * AND the organization id it acts for, validated together by the hook, ANDed in the published document.
+ */
+const MANAGEMENT_CREDENTIALS = [
+    { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+    { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
+] as const;
+
+@AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
 @ApiPath('/management/v1')
 abstract class ManagementApi {
     @Endpoint('/orders', 'rpc')
@@ -31,10 +41,10 @@ abstract class ManagementApi {
     }
 }
 
-/** Per-METHOD, and a second regime on the same server — `name` is what tells the one hook them apart. */
+/** Per-METHOD, and a second regime on the same server — `regime` tells the one hook them apart. */
 @ApiPath('/mixed')
 abstract class MixedApi {
-    @AuthApiKey('internal-tooling')
+    @AuthApiKey('internal-tooling', [{ in: 'bearer', description: 'Send the tooling key as a bearer token.' }])
     @Endpoint('/tooling', 'rpc')
     tooling(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -53,7 +63,7 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
 
         expect(mode?.kind).toBe('apikey');
         if (mode?.kind === 'apikey') {
-            expect(mode.name).toBe('onetablet-partner');
+            expect(mode.regime).toBe('onetablet-partner');
         }
     });
 
@@ -71,7 +81,7 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
             @ApiPath('/x')
             abstract class TwoModesApi {
                 @Public()
-                @AuthApiKey('onetablet-partner')
+                @AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
                 @Endpoint('/y', 'rpc')
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -94,7 +104,7 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
             @ApiPath('/x')
             abstract class TwoModesApi {
                 @Public()
-                @AuthApiKey('onetablet-partner')
+                @AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
                 @Endpoint('/y', 'rpc')
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -115,21 +125,87 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
  * customer forwarded, i.e. let a partner assert another customer's org id and have it admitted.
  */
 describe('DestinationTrust classifies apikey as NOT caller-verifying (trusted keys stay home)', () => {
+    const APIKEY_MODE: AuthMode = {
+        kind: 'apikey',
+        regime: 'onetablet-partner',
+        credentials: [{ in: 'header', name: 'x-api-key' }],
+    };
     const USER_ID = ContextKey.trusted<string>('userId', 'jwt claim `sub`', 'x-user-id');
     const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
     it('omits a TRUSTED key for an apikey destination', () => {
-        expect(DestinationTrust.forAuthMode({ kind: 'apikey', name: 'onetablet-partner' }).allows(USER_ID))
-            .toBe(false);
+        expect(DestinationTrust.forAuthMode(APIKEY_MODE).allows(USER_ID)).toBe(false);
     });
 
     it('still lets UNTRUSTED keys travel', () => {
-        expect(DestinationTrust.forAuthMode({ kind: 'apikey', name: 'onetablet-partner' }).allows(TENANT))
-            .toBe(true);
+        expect(DestinationTrust.forAuthMode(APIKEY_MODE).allows(TENANT)).toBe(true);
     });
 
     it('lands in the OPPOSITE bucket from shared-secret, which is the whole point of a mode of its own', () => {
         expect(DestinationTrust.forAuthMode({ kind: 'shared-secret', secretKey: 'peer' }).allows(USER_ID))
             .toBe(true);
+    });
+});
+
+/**
+ * THE GENERATOR CONTRACT. A spec generator (`openapi-from-webpieces`, being ported here) reads NOTHING
+ * but this: the regime, and the ORDERED credential list, each entry carrying `in` / `name` /
+ * `description`. From it both OpenAPI scheme forms and — crucially — the ANDed security requirement are
+ * derivable, which is what removes the hand-written `securitySchemes` block that silently drifts from
+ * the hook's own header constants.
+ *
+ * This is asserted at the METADATA level rather than by emitting OpenAPI, because webpieces ships no
+ * generator yet: the point is to give the port a shape to code against before it exists here.
+ */
+describe('the auth metadata a spec generator reads off a contract', () => {
+    it('exposes the regime and the ORDERED credential list, verbatim', () => {
+        const mode = getAuthMode(ManagementApi, 'listOrders');
+        if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
+
+        expect(mode.regime).toBe('onetablet-partner');
+        // ORDER is significant: it is the order the credentials appear in the published document.
+        expect(mode.credentials).toEqual([
+            { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+            { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
+        ]);
+    });
+
+    /**
+     * TWO credentials is the case the old one-string form could not express at all, and the case that
+     * decides AND vs OR downstream: both must be presented, so a generator emits ONE requirement object
+     * with TWO keys. A LIST of two objects would tell every partner that either header alone suffices.
+     */
+    it('carries BOTH halves of a pair, so a generator can AND them rather than OR them', () => {
+        const mode = getAuthMode(ManagementApi, 'listOrders');
+        if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
+
+        expect(mode.credentials).toHaveLength(2);
+        const headerNames = mode.credentials.map((c: ApiKeyCredential) => c.name);
+        expect(headerNames).toEqual(['x-api-key', 'x-organization-id']);
+    });
+
+    /**
+     * The bearer form carries NO name — its location IS `Authorization`. A generator branches on `in`
+     * to pick `{type: apiKey, in, name}` vs `{type: http, scheme: bearer}`; this is what tells it which,
+     * with no guessing and no way for a contract to have claimed both.
+     */
+    it('distinguishes a bearer credential, which has a location but no header name', () => {
+        const mode = getAuthMode(MixedApi, 'tooling');
+        if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
+
+        expect(mode.credentials).toEqual([
+            { in: 'bearer', description: 'Send the tooling key as a bearer token.' },
+        ]);
+        expect(mode.credentials[0].name).toBeUndefined();
+    });
+
+    /**
+     * The prescription is the API as far as the next reader is concerned (shim shape #6), so it must
+     * teach the two-argument form — an agent copying `@AuthApiKey('regime')` out of it gets a compile
+     * error and no idea why.
+     */
+    it('the missing-auth prescription teaches the credential list, not the deleted one-arg form', () => {
+        expect(MISSING_AUTH_DECORATOR_FIX)
+            .toContain("@AuthApiKey('regime', [{in: 'header', name: 'x-api-key'}])");
     });
 });

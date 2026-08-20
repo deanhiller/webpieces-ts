@@ -115,7 +115,7 @@ export class BrowserProxyClient extends ProxyClient {
             // client knows what to send — and a browser must not ship a customer's key at all.
             case 'apikey':
                 throw new Error(
-                    `Endpoint ${methodName} is @AuthApiKey('${mode.name}') — its credential is a customer-held ` +
+                    `Endpoint ${methodName} is @AuthApiKey('${mode.regime}') — its credential is a customer-held ` +
                     `api key that a browser must never ship, and the header carrying it is the app's ApiKeyHook's ` +
                     `choice, so no webpieces client can build the call. Only the partner holding the key calls it.`,
                 );

@@ -116,7 +116,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 await this.enforceWebhook(mode.name, meta);
                 break;
             case 'apikey':
-                await this.enforceApiKey(mode.name, meta);
+                await this.enforceApiKey(mode.regime, meta);
                 break;
             case 'local-only':
                 this.enforceLocalOnly(meta);
@@ -177,8 +177,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `@AuthApiKey(name)`: hand the app's {@link ApiKeyHook} the regime name and the inbound headers and
-     * let it look the CUSTOMER's key up. Three ways to fail, all 401, all before the controller:
+     * `@AuthApiKey(regime, credentials)`: hand the app's {@link ApiKeyHook} the regime name and the inbound
+     * headers and let it look the CUSTOMER's key up. The declared `credentials` are NOT read here — they
+     * describe the contract for generators; the hook owns extraction. Three ways to fail, all 401, all
+     * before the controller:
      *
      * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior; an
      *    unverified partner request must never be waved through because wiring was forgotten.
@@ -190,10 +192,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * On success the hook's {@link AuthenticatedCaller} is stamped exactly as a jwt parse's is, which is
      * what puts the resolved organization into `RequestContext` for every downstream repository call.
      */
-    private async enforceApiKey(name: string, meta: MethodMeta): Promise<void> {
+    private async enforceApiKey(regime: string, meta: MethodMeta): Promise<void> {
         if (!this.apiKeyHook) {
             log.warn(
-                `Refusing @AuthApiKey('${name}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
+                `Refusing @AuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
                 `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
             );
             throw new HttpUnauthorizedError('API-key auth is not enabled on this server');
@@ -201,7 +203,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         const request = RequestContext.getRequest();
         if (!request) {
             log.warn(
-                `Refusing @AuthApiKey('${name}') endpoint ${meta.routeMeta.path}: no inbound HttpRequest is ` +
+                `Refusing @AuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no inbound HttpRequest is ` +
                 `in scope, so the hook has no headers to read. A spec driving this route in-process must ` +
                 `publish an HttpRequest carrying the api-key headers.`,
             );
@@ -209,7 +211,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         // Throws HttpUnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
         // the key against a second header (the organization the customer is acting for).
-        const caller = await this.apiKeyHook.verifyApiKey(name, request);
+        const caller = await this.apiKeyHook.verifyApiKey(regime, request);
         this.applyAuthenticatedCaller(caller);
     }
 
