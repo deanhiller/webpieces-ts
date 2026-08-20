@@ -1,5 +1,5 @@
 import { AnyContextKey } from '../ContextKey';
-import { AuthMode } from './decorators';
+import { AuthMode } from './auth-mode';
 
 /**
  * DestinationTrust - the OUTBOUND half of the trust model: may a TRUSTED context key
@@ -71,8 +71,9 @@ export class DestinationTrust {
             case 'webhook':
             // @AuthApiKey authenticates a CUSTOMER, not a peer service. The holder of the key is
             // another company's codebase, so nothing it forwards may be believed, and no webpieces
-            // client can call it anyway (the framework configures no api-key header — the app's hook
-            // owns which headers carry the credential). Trusted keys stay home.
+            // client can call it anyway (the framework extracts no api-key header — the app's hook
+            // owns which headers carry the credential; the contract's `credentials` list only DESCRIBES
+            // them). Trusted keys stay home.
             case 'apikey':
             // @AuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
             // credential — so a browser with curl on the same laptop is indistinguishable from us.

@@ -142,7 +142,8 @@ export abstract class WebhookAuthCallback {
 export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
 
 /**
- * ApiKeyHook - the OPTIONAL mechanism behind `@AuthApiKey(name)`: authenticate a CUSTOMER-held api key
+ * ApiKeyHook - the OPTIONAL mechanism behind `@AuthApiKey(regime, credentials)`: authenticate a
+ * CUSTOMER-held api key
  * against the app's own datastore and return the context to seed. Its DI token is the
  * {@link API_KEY_HOOK} Symbol injected via `@inject(API_KEY_HOOK)` (a Symbol, because the app container
  * uses autobind; rebindable in tests). The fourth hook, symmetric with {@link JwtHook} /
@@ -161,12 +162,14 @@ export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
  * THE ONE THING THIS HAS THAT `JwtHook.parseJwt` DOES NOT: it receives the whole {@link HttpRequest},
  * not one pre-extracted token. A real key regime validates the key TOGETHER WITH a second header — the
  * organization the caller is acting for — and a hook handed one header's value physically cannot do
- * that cross-check. The framework therefore configures no api-key header name: which headers carry the
+ * that cross-check. The framework therefore EXTRACTS no api-key header: which headers carry the
  * credential is the app's business, and `getHeader` / `getHeaderValues` read as many as the regime
- * needs. (Being ASYNC is no longer a difference — every hook here is, and for the same reason: an
+ * needs. The contract's `credentials` list DECLARES those header names for readers and spec
+ * generators — it is documentation of the regime, never an instruction to this hook, so the hook
+ * stays the single place the pair is actually validated. (Being ASYNC is no longer a difference — every hook here is, and for the same reason: an
  * app's strategy reaches the network.)
  *
- * ONE hook serves EVERY regime: `name` selects which, so a server with a partner-api regime and an
+ * ONE hook serves EVERY regime: `regime` selects which, so a server with a partner-api regime and an
  * internal-tooling regime switches on it rather than binding a token per regime.
  */
 export abstract class ApiKeyHook {
@@ -180,11 +183,12 @@ export abstract class ApiKeyHook {
      * `@AuthApiKey` — the mode is deliberately caller-NOT-verified (see `AuthFilter.verifiesCaller`),
      * because a customer is not an internal service.
      *
-     * @param name    the string on the contract's `@AuthApiKey(name)` — which key regime this route is.
+     * @param regime  the first argument of the contract's `@AuthApiKey(regime, credentials)` — which key
+     *                regime this route belongs to.
      * @param request the inbound request; read as many headers as the regime needs with
      *                `getHeader` / `getHeaderValues`, either by raw name or by {@link ContextKey}.
      */
-    abstract verifyApiKey(name: string, request: HttpRequest): Promise<AuthenticatedCaller>;
+    abstract verifyApiKey(regime: string, request: HttpRequest): Promise<AuthenticatedCaller>;
 }
 
 /**

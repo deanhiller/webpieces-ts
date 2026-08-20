@@ -63,7 +63,7 @@ abstract class SharedSecretApi {
 @ApiPath('/management/v1')
 abstract class ApiKeyApi {
     @Endpoint('/orders', 'rpc')
-    @AuthApiKey('onetablet-partner')
+    @AuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     listOrders(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');

@@ -63,12 +63,14 @@ export {
     assertEveryExternalEndpointDeclaresCaller,
     assertEveryWebhookEndpointRetainsRawBody,
     validateNoConflictingDecorators,
-    AuthMeta,
     METADATA_KEYS,
 } from './http/decorators';
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
-export type { AuthMode, EndpointKind, JwtRoles, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+// The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
+export { AuthMeta } from './http/auth-mode';
+export type { AuthMode, ApiKeyCredential, ApiKeyCredentials, JwtRoles, JwtRequirement } from './http/auth-mode';
 // API kind (RPC vs PubSub/Cloud Tasks) + queue naming. Split out of decorators.ts for file size only;
 // one-way dependency api-kind -> decorators, and the barrel keeps the surface identical.
 export {

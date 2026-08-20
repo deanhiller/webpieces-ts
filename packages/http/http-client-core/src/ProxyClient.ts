@@ -224,7 +224,7 @@ export abstract class ProxyClient {
         // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
         if (authMode?.kind === 'apikey') {
             throw new Error(
-                `${this.apiName}.${route.methodName} is @AuthApiKey('${authMode.name}') — only the partner ` +
+                `${this.apiName}.${route.methodName} is @AuthApiKey('${authMode.regime}') — only the partner ` +
                 `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
                 `so a webpieces client has no credential to send.`,
             );

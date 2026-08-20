@@ -1,5 +1,5 @@
 import { MaskSpec } from './LogFieldMask';
-import { AuthMeta } from './decorators';
+import { AuthMeta } from './auth-mode';
 
 /**
  * Route metadata stored per-method at runtime.
