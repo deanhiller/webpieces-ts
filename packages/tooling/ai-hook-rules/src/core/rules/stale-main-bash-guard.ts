@@ -64,10 +64,12 @@ import { RecoveryAllowlist } from './recovery-allowlist';
  * CONTENT-READING Bash when it was. Both halves of that were wrong, and the table always said so —
  * row 5 reads `B E` / on `main` / block, with the cure `git checkout -b <new> origin/main`.
  *
- * FRESHNESS IS THE WRONG QUESTION. `main` is not a place to work even when it is perfectly current.
- * Staleness changes what you would READ; it does not change whether this is the branch to work on,
- * and the cure is not `git pull` but a new branch. Gating the block on the cache meant a current
- * `main` was treated as a fine place to run a build, an installer or a codegen step.
+ * FRESHNESS IS THE WRONG QUESTION *for the block*, though it is the reason the block costs nothing.
+ * `main` is not a place to WORK even when it is perfectly current, so the cure is not `git pull` but
+ * a new branch; gating the block on the cache meant a current `main` was treated as a fine place to
+ * run a build, an installer or a codegen step. And when `main` IS behind, the other half applies —
+ * reads taken here are out of date, so there is no state in which staying put is the better move.
+ * That is what the deny text says out loud, so "I was only reading" stops being an argument.
  *
  * THE CACHE IS THE WRONG PRECONDITION. It is written by a fire-and-forget refresher that populates it
  * for the NEXT call, so the FIRST call of every session has none — and in a multi-worktree repo
@@ -127,7 +129,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
                 + '\nIf you hand-roll the git instead, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
-            new Option('Still allowed on main: everything that gets you OUT or tells you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, gh pr view|list|status|checks, git stash, every wp-* bin, installs, and reading webpieces.config.json.'),
+            new Option('Still allowed on main: the Read tool, so you can read main while you PLAN (read-stale-guard closes it only once main falls BEHIND origin/main, because stale reads are worthless) — plus everything that gets you OUT or tells you where you are: git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, gh pr view|list|status|checks, git stash, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -201,17 +203,35 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     }
 
     /**
-     * The row 5 deny. Deliberately SHORT, and deliberately NOT about staleness.
+     * The row 5 deny. Deliberately SHORT.
      *
-     * The old message opened by reporting how many commits behind `main` was, which invited exactly
-     * the wrong cure — an agent that reads "behind" reaches for `git pull`, ends up on a CURRENT
-     * `main`, and is still on `main`. The finding is the branch, so that is the first thing said.
+     * The oldest version opened by reporting how many commits behind `main` was, which invited
+     * exactly the wrong cure — an agent that reads "behind" reaches for `git pull`, ends up on a
+     * CURRENT `main`, and is still on `main`. The finding is the branch, so that is said first.
+     *
+     * The version after that swung too far the other way: a flat "`main` is not a place to work",
+     * printed in answer to a `grep`. That reads as overreach precisely because it is not true of
+     * READING — an agent that has just landed a PR and is orienting itself on `main` is doing the
+     * right thing, and the Read tool is deliberately left open for it (read-stale-guard closes it
+     * only once `main` falls BEHIND). So the text now says three things the flat version could not:
+     *
+     *   1. reading `main` to PLAN is legitimate, and Bash is default-deny here only because a
+     *      command's stated purpose never says whether it also WRITES (row 5 use case 10);
+     *   2. the FEATURE BRANCH is the unit of work — the positive form of the rule;
+     *   3. STALENESS, which is the strongest argument and used to be missing entirely: if local
+     *      `main` is behind, the reads are out of date too, so "I am only reading" is not a reason
+     *      to skip the cure. The cure FETCHES, so it makes the reads true as well as moving you off
+     *      `main` — which is why judging on the branch alone, before freshness is known, is the
+     *      correct call rather than a crude approximation.
      */
     private onMainMessage(workspaceRoot: string): string {
-        return 'Blocked: you are on `main`. `main` is not a place to work — whether or not it is '
-            + 'current — because work here cannot be reviewed, cannot be reverted as a unit, and is '
-            + 'one `git checkout` away from being lost. This is judged from the branch alone, so it '
-            + 'fires on the first command of a session, before any freshness is known.\n'
+        return 'Blocked: you are on `main`. Reading main to PLAN is fine — the Read tool stays open '
+            + "while main is current; Bash is default-deny here only because a command's stated "
+            + 'purpose never says whether it also WRITES. What main is not is a place to WORK: the '
+            + 'feature branch is the unit of work, reviewable and revertable. Judged from the branch '
+            + 'alone, before freshness is known — right either way: if main is BEHIND origin/main '
+            + 'your reads are out of date too, so planning here is wasted as well. The cure fetches, '
+            + 'so it makes your reads true as well as moving you off main.\n'
             + `Start a branch (uncommitted work comes with you):\n  cd '${workspaceRoot}' && git fetch origin main && git checkout -b <new-branch> origin/main`;
     }
 

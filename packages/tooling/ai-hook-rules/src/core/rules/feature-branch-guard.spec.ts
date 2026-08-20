@@ -51,11 +51,27 @@ describe('feature-branch-guard', () => {
         expect(rule().check(ctx('../outside.ts')).length).toBe(0);
     });
 
-    it('blocks on main (synchronous, no cache needed)', () => {
+    /*
+     * Row 5's Write half. The text carries the same three points as the Bash half's deny, told for
+     * THIS surface: the WRITE is what was blocked (reading to plan is not), the feature branch is the
+     * unit of work, and a `main` that is behind makes the reads wrong too — so the pull is not an
+     * extra step. The old flat "You should not be working on main." said none of that.
+     */
+    it('blocks on main (synchronous, no cache needed) and explains which half is blocked', () => {
         state.branch = 'main';
         const violations = rule().check(ctx());
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('should not be working on main');
+        const message = violations[0].message;
+        expect(message).toContain('this is a WRITE on main');
+        expect(message).toContain('Reading main to PLAN is fine');
+        expect(message).toContain('the feature branch is the unit of work');
+        expect(message).toContain('BEHIND origin/main');
+        expect(message).not.toContain('You should not be working on main.');
+        // ONE cure across all three halves of row 5, and it is the DIRTY-SAFE one — this guard fires
+        // on a WRITE, so uncommitted work is the likely state and `git pull` is not a fast-forward
+        // there. `checkout -b` carries the work onto the new branch instead.
+        expect(message).toContain('git fetch origin main && git checkout -b <new-branch> origin/main');
+        expect(message).not.toContain('Do a `git pull origin main`');
     });
 
     it('allows when no cache exists yet (fail-open)', () => {

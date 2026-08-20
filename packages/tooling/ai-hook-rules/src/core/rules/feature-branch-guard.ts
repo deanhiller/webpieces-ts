@@ -162,13 +162,32 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         }
     }
 
+    /**
+     * The Write/Edit half of row 5. Same three points as stale-main-bash-guard's deny, told for THIS
+     * surface: reading main while you plan is legitimate and is not what got blocked; the feature
+     * branch is the unit of work; and a `main` that is behind makes the reads wrong too, so getting
+     * current is not an extra step, it is what makes the plan you are about to write against correct.
+     *
+     * Per-surface, deliberately: this guard sees only Write/Edit, so it says the WRITE was blocked.
+     * (read-stale-guard is the one that can close Read, and only once `main` falls behind.)
+     *
+     * ONE CURE, and it is the dirty-safe one. This half used to print `git pull origin main` and then
+     * "create a feature branch" — but this guard fires on a WRITE, so uncommitted work is the LIKELY
+     * state, and a pull is exactly the form that is not a clean fast-forward there. Its two siblings
+     * (stale-main-bash-guard's row-5 deny, StaleMainMessage.forReads) both prescribe
+     * `git fetch origin main && git checkout -b <new> origin/main`, which fetches AND carries the
+     * uncommitted work onto the new branch. Three halves of one row printing one cure is the point:
+     * a fragile cure is a defect here even when it often happens to work.
+     */
     private onMainMessage(): string {
         const convention = this.config.branchNamingConvention ?? '{whoami}/{featurename}';
         return [
-            'You should not be working on main.',
-            'Do a `git pull origin main` to get latest, then create a feature branch based on the naming convention.',
-            `Branch naming convention (from webpieces.config.json): ${convention}`,
-            'Example: git checkout -b ' + convention.replace(/<[^>]+>/g, 'value'),
+            'Blocked: this is a WRITE on main. Reading main to PLAN is fine — writing here is not, because the feature branch is the unit of work: reviewable, revertable, and not one `git checkout` from being lost.',
+            'And if local main is BEHIND origin/main, what you read here was out of date too — so the fetch below is not an extra step, it is what makes your reads true.',
+            'Branch off origin/main (it fetches first, and uncommitted work comes with you):',
+            '  git fetch origin main && git checkout -b <new-branch> origin/main',
+            `Name <new-branch> by the convention (from webpieces.config.json): ${convention}`,
+            'Example: git fetch origin main && git checkout -b ' + convention.replace(/<[^>]+>/g, 'value') + ' origin/main',
         ].join('\n');
     }
 

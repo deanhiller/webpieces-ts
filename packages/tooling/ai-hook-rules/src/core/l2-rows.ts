@@ -228,7 +228,7 @@ export const L2_ROWS: readonly L2Row[] = [
         new L2UseCase(24,
             'A build or a test run on a `main` that is perfectly up to date',
             'on `main`, current — no staleness anywhere',
-            'BLOCK: freshness is not the question. `main` is not a place to work even when current, and the cure is a new branch, not a pull',
+            'BLOCK: freshness is not the question for the BLOCK. Reading `main` to plan stays open; what is closed is WORKING here, because the feature branch is the unit of work — and when `main` is behind instead, the reads are out of date too. The cure is a new branch off `origin/main`, which fetches, so it is right in both states',
             '`git checkout -b <new> origin/main`',
             'on-main'),
         new L2UseCase(16,
