@@ -361,6 +361,14 @@
                     "level": 2
                 },
                 {
+                    "id": "MainCheckout",
+                    "className": "MainCheckout",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts",
+                    "level": 2
+                },
+                {
                     "id": "MergeBodyTempFile",
                     "className": "MergeBodyTempFile",
                     "kind": "class",
@@ -881,6 +889,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts#CleanupCommand",
                     "paramName": "cleanupCommand",
                     "paramType": "CleanupCommand"
+                },
+                {
+                    "from": "CheckoutCleanMainCommand",
+                    "to": "MainCheckout",
+                    "injection": "type",
+                    "token": "MainCheckout",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts#MainCheckout",
+                    "paramName": "mainCheckout",
+                    "paramType": "MainCheckout"
                 },
                 {
                     "from": "CheckoutCleanMainCommand",

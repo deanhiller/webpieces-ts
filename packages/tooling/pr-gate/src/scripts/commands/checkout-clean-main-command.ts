@@ -1,13 +1,12 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 import {
-    CliExitError,
     OrphanDirSweeper,
     RepoRootFinder,
     dotWebpieces,
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
+import { MainCheckout, StashedFiles } from './main-checkout';
 import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -59,6 +58,7 @@ export class CheckoutCleanMainCommand {
         private readonly cleanupCommand: CleanupCommand,
         private readonly orphanDirSweeper: OrphanDirSweeper,
         private readonly workingTreeGate: WorkingTreeGate,
+        private readonly mainCheckout: MainCheckout,
     ) {}
 
     async run(): Promise<void> {
@@ -69,10 +69,11 @@ export class CheckoutCleanMainCommand {
             return;
         }
         const untracked = this.workingTreeGate.assertNoTrackedChanges(repoRoot);
-        this.goToMain(repoRoot);
-        this.reportUntracked(untracked);
+        const stashed = this.mainCheckout.goToMain(repoRoot, untracked);
+        this.reportUntracked(untracked, stashed);
         await this.cleanupCommand.run();
         this.sweep(repoRoot);
+        this.reportStashed(stashed);
     }
 
     /**
@@ -101,31 +102,26 @@ export class CheckoutCleanMainCommand {
      * Say which untracked files were let through, AFTER the move — so nobody has to wonder whether the
      * files still sitting in their tree came along for the ride. Printed rather than refused on: see
      * `WorkingTreeGate` for why an untracked file is not the hazard a tracked one is.
+     *
+     * Silent when the checkout had to stash: those files are NOT sitting in the tree any more, and
+     * "nothing about them changed" would be a lie. `reportStashed` speaks for that case instead.
      */
-    private reportUntracked(untracked: UntrackedFiles): void {
+    private reportUntracked(untracked: UntrackedFiles, stashed: StashedFiles): void {
+        if (!stashed.isEmpty()) return;
         const rendered = untracked.render();
         if (rendered === '') return;
         process.stdout.write(`\n${rendered}`);
     }
 
     /**
-     * Checkout main and fast-forward it. `--ff-only` rather than a `reset --hard`, deliberately: a
-     * developer or an agent that accidentally committed to local main would have that work silently
-     * destroyed by a reset, and the whole point of this command is that it is safe to run without
-     * thinking. A refusal to fast-forward is a real condition a human should see and decide about.
+     * The stash banner goes LAST, on purpose. It is the one thing in this command's output a reader
+     * must not miss — their files left the working tree — and the cleanup and sweep that follow the
+     * checkout print enough to scroll it away if it were emitted where it happened.
      */
-    private goToMain(repoRoot: string): void {
-        this.run_(repoRoot, ['fetch', 'origin', 'main']);
-        if (this.run_(repoRoot, ['checkout', 'main']) !== 0) {
-            throw new CliExitError(1, `${SEP}❌ Could not check out main\n${SEP}\n`
-                + 'git refused the checkout — its message is above.\n');
-        }
-        if (this.run_(repoRoot, ['pull', '--ff-only', 'origin', 'main']) !== 0) {
-            throw new CliExitError(1, `${SEP}❌ Local main could not fast-forward\n${SEP}\n`
-                + 'Local main has commits that origin/main does not, so it is not a clean copy of the\n'
-                + 'remote. Nothing was reset — those commits may be the only copy. Inspect them with\n'
-                + '`git log origin/main..main` and decide what they are before going further.\n');
-        }
+    private reportStashed(stashed: StashedFiles): void {
+        const rendered = stashed.render();
+        if (rendered === '') return;
+        process.stdout.write(`\n${rendered}`);
     }
 
     /**
@@ -137,11 +133,5 @@ export class CheckoutCleanMainCommand {
         const rendered = report.render();
         if (rendered === '') return;
         process.stdout.write(`\n${rendered}`);
-    }
-
-    /** git with its output going straight to the terminal — for the commands whose progress is the point. */
-    private run_(repoRoot: string, args: string[]): number {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8', stdio: 'inherit' });
-        return result.status === null ? 1 : result.status;
     }
 }

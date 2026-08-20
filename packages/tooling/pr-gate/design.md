@@ -56,6 +56,7 @@ graph TD
     HomeConfigService["HomeConfigService"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
+    MainCheckout["MainCheckout"]
     MergeBodyTempFile["MergeBodyTempFile"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
@@ -118,6 +119,7 @@ graph TD
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
     CheckoutCleanMainCommand --> CleanupCommand
+    CheckoutCleanMainCommand --> MainCheckout
     CheckoutCleanMainCommand --> OrphanDirSweeper
     CheckoutCleanMainCommand --> RepoRootFinder
     CheckoutCleanMainCommand --> WorkingTreeGate
