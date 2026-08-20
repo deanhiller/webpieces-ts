@@ -90,6 +90,7 @@ graph TD
     StartUpsertPrCommand["StartUpsertPrCommand"]
     StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
+    WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
@@ -119,6 +120,7 @@ graph TD
     CheckoutCleanMainCommand --> CleanupCommand
     CheckoutCleanMainCommand --> OrphanDirSweeper
     CheckoutCleanMainCommand --> RepoRootFinder
+    CheckoutCleanMainCommand --> WorkingTreeGate
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
