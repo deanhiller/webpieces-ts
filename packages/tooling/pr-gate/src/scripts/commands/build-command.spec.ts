@@ -57,6 +57,14 @@ function harness(alreadyRunning = 0): Harness {
     return new Harness(new BuildCommand(gate, roots, buildsLog, homeConfig), gate, calls);
 }
 
+/**
+ * The ordinary, un-forced invocation. Spelled once, here, because `BuildOptions.force` is REQUIRED —
+ * there is no bare `new BuildOptions()` to drift against it.
+ */
+function unforced(): BuildOptions {
+    return new BuildOptions(false);
+}
+
 /** The refusal, caught and typed. Fails loudly if the build was allowed to start. */
 function refusal(command: BuildCommand, opts: BuildOptions): RuleFailError {
     let caught: Error | null = null;
@@ -82,13 +90,13 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
      */
     it('delegates to runBuildGate rather than resolving or spawning anything itself', async () => {
         const h = harness();
-        await h.command.run();
+        await h.command.run(unforced());
         expect(h.calls.length).toBe(1);
     });
 
     it('tells the agent to re-run `pnpm wp-build`, the same verb it just ran', async () => {
         const h = harness();
-        await h.command.run();
+        await h.command.run(unforced());
         expect(h.calls[0].rerunCommand).toBe('pnpm wp-build');
     });
 
@@ -98,7 +106,7 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
      */
     it('captures under its own stage id, never the review or finish one', async () => {
         const h = harness();
-        await h.command.run();
+        await h.command.run(unforced());
         expect(h.calls[0].stage).toBe(BUILD_STAGE);
         expect(h.calls[0].stage).not.toBe(REVIEW_STAGE);
         expect(h.calls[0].stage).not.toBe(FINISH_STAGE);
@@ -115,14 +123,14 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
      */
     it('captures unconditionally, not on the experimental opt-in', async () => {
         const h = harness();
-        await h.command.run();
+        await h.command.run(unforced());
         expect(h.calls[0].alwaysCapture).toBe(true);
     });
 
     it('propagates a failing build rather than swallowing it', async () => {
         const h = harness();
         vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): Promise<void> => Promise.reject(new Error('build failed')));
-        await expect(h.command.run()).rejects.toThrow('build failed');
+        await expect(h.command.run(unforced())).rejects.toThrow('build failed');
     });
 });
 
@@ -135,13 +143,13 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
 describe('wp-build refuses to pile onto a machine that is already at its build limit', () => {
     it('runs normally while the machine is under the limit', async () => {
         const h = harness(DEFAULT_MAX_CONCURRENT_BUILDS - 1);
-        await h.command.run();
+        await h.command.run(unforced());
         expect(h.calls.length).toBe(1);
     });
 
     it('refuses at the limit, and does NOT start the build', () => {
         const h = harness(DEFAULT_MAX_CONCURRENT_BUILDS);
-        expect(refusal(h.command, new BuildOptions()).ruleName).toBe(TOO_MANY_CONCURRENT_BUILDS);
+        expect(refusal(h.command, unforced()).ruleName).toBe(TOO_MANY_CONCURRENT_BUILDS);
         expect(h.calls.length).toBe(0);
     });
 
@@ -152,7 +160,7 @@ describe('wp-build refuses to pile onto a machine that is already at its build l
      * moved them back in there.
      */
     it('offers the gate flow first and `--force` LAST, as Options the framework numbers', () => {
-        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, new BuildOptions());
+        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, unforced());
         expect(error.fixOptions.length).toBeGreaterThan(1);
         expect(error.fixOptions[0].preferred).toBe(true);
         expect(error.fixOptions[0].text).toContain('wp-review-upsert-pr');
@@ -165,7 +173,7 @@ describe('wp-build refuses to pile onto a machine that is already at its build l
     });
 
     it('names the builds it found, so the reader can tell which tree to look at', () => {
-        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, new BuildOptions());
+        const error = refusal(harness(DEFAULT_MAX_CONCURRENT_BUILDS).command, unforced());
         expect(error.aiMessage).toContain('/repo');
         expect(error.aiMessage).toContain('dean/x');
     });
@@ -179,7 +187,7 @@ describe('wp-build refuses to pile onto a machine that is already at its build l
         const forced = harness(DEFAULT_MAX_CONCURRENT_BUILDS * 3);
         await forced.command.run(new BuildOptions(true));
         const normal = harness();
-        await normal.command.run();
+        await normal.command.run(unforced());
         expect(forced.calls.length).toBe(1);
         expect(forced.calls[0]).toEqual(normal.calls[0]);
     });

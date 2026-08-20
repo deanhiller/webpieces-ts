@@ -80,7 +80,7 @@ export class PrGateApp {
      * command, resolved by the same resolver, that the PR gate's build stage runs. Not blocked during a
      * `wp-push-dev --resolve`: it mutates nothing and reads no branch state.
      */
-    build(opts: BuildOptions = new BuildOptions()): Promise<void> {
+    build(opts: BuildOptions): Promise<void> {
         return this.buildCommand.run(opts);
     }
 

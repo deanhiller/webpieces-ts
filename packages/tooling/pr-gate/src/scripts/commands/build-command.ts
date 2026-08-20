@@ -20,7 +20,12 @@ export const TOO_MANY_CONCURRENT_BUILDS = 'too-many-concurrent-builds';
 export class BuildOptions {
     force: boolean;
 
-    constructor(force = false) {
+    // REQUIRED, no default. `new BuildOptions()` and `new BuildOptions(false)` would be two spellings of
+    // one decision, and the bare form would keep compiling unchanged if this class ever grew a second
+    // field — silently meaning "not forced" at a call site that was never revisited. That is the same
+    // argument HomeConfig's constructor makes about its own four required parameters; a defaulted
+    // parameter is exactly the shim this repo does not ship.
+    constructor(force: boolean) {
         this.force = force;
     }
 }
@@ -70,7 +75,7 @@ export class BuildCommand {
         private readonly homeConfig: HomeConfigService,
     ) {}
 
-    run(opts: BuildOptions = new BuildOptions()): Promise<void> {
+    run(opts: BuildOptions): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         if (!opts.force) this.assertMachineHasRoom();
         // runBuildGate announces the resolved command, runs it, and throws CliExitError on failure so
