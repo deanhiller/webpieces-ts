@@ -137,6 +137,26 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
     });
 
     /*
+     * The three things the flat "`main` is not a place to work" version could not say, and which sent
+     * readers away thinking the guard was overreaching on their `grep`:
+     *
+     *   1. reading main to PLAN is legitimate and is not what got blocked;
+     *   2. the FEATURE BRANCH is the unit of work — the rule stated positively;
+     *   3. a main that is BEHIND makes the reads wrong too, so "I am only reading" is not an argument
+     *      for skipping the cure. That is the sentence that turns the block into the thing that makes
+     *      the next hour correct, and it was missing entirely.
+     */
+    it('says reading-to-plan is allowed, names the feature branch as the unit of work, and gives the stale-reads reason', () => {
+        const message = rule().check(ctx('cat src/app.ts'))[0].message;
+        expect(message).toContain('Reading main to PLAN is fine');
+        expect(message).toContain('the feature branch is the unit of work');
+        expect(message).toContain('if main is BEHIND origin/main your reads are out of date too');
+        expect(message).toContain('The cure fetches');
+        // The flat claim is GONE, not softened — it is the sentence that read as "you may not be here".
+        expect(message).not.toContain('`main` is not a place to work');
+    });
+
+    /*
      * The matrix pointer is BEST-EFFORT: this workspace root does not exist, so the doc cannot be
      * written and the pointer is correctly empty. What must survive that is the deny itself — a guard
      * whose doc delivery failed still has to say what to do. (The pointer's own content is pinned in
@@ -236,7 +256,7 @@ describe('stale-main-bash-guard — fail-open valves', () => {
         expect(blocked('cat src/app.ts')).toBe(true);
     });
 
-    it('blocks on a PERFECTLY CURRENT main — `main` is not a place to work either way', () => {
+    it('blocks on a PERFECTLY CURRENT main — main is not where WORK happens either way', () => {
         state.containsExit = 0;
         expect(blocked('cat src/app.ts')).toBe(true);
     });
