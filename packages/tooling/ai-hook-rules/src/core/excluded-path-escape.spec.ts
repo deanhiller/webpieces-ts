@@ -138,4 +138,25 @@ describe('ExcludedPathEscapeHint — the stanza', () => {
         expect(stanza).toContain('A `cd` CANNOT rescue bash here');
         expect(stanza).toContain('[".webpieces", ".webpieces/**"]');
     });
+
+    // The stanza fires on ANY rule block whose command names an exempt path, and that block may be for
+    // something Read/Write cannot do — `git push … && cat .webpieces/tasks.md` is blocked for the PUSH.
+    // So the claim is scoped to the FILE; it must never say the remedies below became optional.
+    it('scopes the claim to the referenced file, not to the whole command', () => {
+        const stanza = hintAt().render('git push origin HEAD && cat .webpieces/tasks.md', DOT_WEBPIECES);
+        expect(stanza).toContain('Anything ELSE this command does');
+        expect(stanza).toContain('still needs the');
+        expect(stanza).not.toContain('remedies below are only');
+    });
+
+    // A workspace-ROOT-level file has no directory to name: `dirname` is `.`, and prescribing
+    // excludePaths: ["."] would read as "exempt the whole repo" AND would not work (the relative cwd at
+    // the root is '', which matches no glob). Say nothing about bash rather than something false.
+    it('says nothing about bash for a ROOT-level file — no `.` directory advice', () => {
+        const stanza = hintAt().render('cat NOTES.md', new ExcludePaths(['*.md']));
+        expect(stanza).toContain('Your command referenced: NOTES.md');
+        expect(stanza).not.toContain('CANNOT rescue bash');
+        expect(stanza).not.toContain('"."');
+        expect(stanza).not.toContain('cd . &&');
+    });
 });

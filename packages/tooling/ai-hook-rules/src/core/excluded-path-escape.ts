@@ -189,19 +189,38 @@ export class ExcludedPathEscapeHint {
         lines.push('   These paths are in excludePaths and are exempt from every guard:');
         for (const glob of ex.paths) lines.push(`     ${glob}`);
         lines.push(`   Your command referenced: ${references.map((r: ExcludedPathReference): string => r.referencedPath).join(', ')}`);
-        lines.push('   Use Read/Write/Edit on it instead of bash. The remedies below are only');
-        lines.push('   needed for files OUTSIDE those directories.');
-        lines.push('');
-        for (const line of this.bashLines(references)) lines.push(line);
+        // Scoped to the FILE, deliberately. The stanza fires on any rule block whose command names an
+        // exempt path, and `git push … && cat .webpieces/tasks.md` is blocked for the push — for which
+        // Read/Write substitutes for nothing. Claiming the remedies below were optional would be false.
+        lines.push('   Read/Write/Edit reaches that file RIGHT NOW, with no git operation at all.');
+        lines.push('   Anything ELSE this command does — a git/gh operation, a build — still needs the');
+        lines.push('   remedies below.');
+        const bash = this.bashLines(references);
+        if (bash.length > 0) {
+            lines.push('');
+            for (const line of bash) lines.push(line);
+        }
         lines.push('');
         return lines.join('\n');
     }
 
-    // The bash half: the `cd` when one matches, and the honest refusal to invent one when none does.
+    // The bash half: the `cd` when one matches, the honest refusal to invent one when none does, and
+    // silence when there is not even a directory worth naming.
     private bashLines(references: readonly ExcludedPathReference[]): readonly string[] {
         const withCd = references.find((r: ExcludedPathReference): boolean => r.cdDirectory !== null);
-        if (withCd === undefined) return this.noCdLines(references[0]);
+        if (withCd !== undefined) return this.cdLines(withCd);
+        // A workspace-ROOT-level file — matched by a file-shaped glob like `*.md` — has no directory to
+        // name: `dirname` is `.`, which no excludePaths glob can usefully exempt (the relative cwd at
+        // the root is '', so `.` would never match) and which reads as "exempt the whole repo". Say
+        // nothing about bash rather than something false.
+        const nested = references.find(
+            (r: ExcludedPathReference): boolean => path.dirname(r.referencedPath) !== '.',
+        );
+        return nested === undefined ? [] : this.noCdLines(nested);
+    }
 
+    // A `cd` the guards will actually honour: its directory passed globMatches in the scan.
+    private cdLines(withCd: ExcludedPathReference): readonly string[] {
         return [
             '✅ OR KEEP USING BASH — put a `cd` into the excluded tree FIRST:',
             `     cd ${String(withCd.cdDirectory)} && <your command, writing \`${withCd.referencedPath}\` as \`${withCd.pathFromCdDirectory}\`>`,
