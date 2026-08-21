@@ -5,10 +5,11 @@ import * as path from 'path';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import {
-    HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
+    DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
     HOME_KEY_ORPHAN_DIR_SWEEP,
-    ALLOWED_EXPERIMENTAL, ALLOWED_TOP_LEVEL,
+    HOME_KEY_MAX_CONCURRENT_BUILDS,
+    ALLOWED_EXPERIMENTAL, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_TOP_LEVEL,
 } from './home-config';
 
 const dirs: string[] = [];
@@ -22,6 +23,22 @@ function fakeHome(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-homeconf-'));
     dirs.push(dir);
     return dir;
+}
+
+/**
+ * A sample value of the RIGHT TYPE for `key`, chosen off the exported type lists rather than hardcoded per
+ * key — which is what keeps the two cross-version invariants below covering a NEW key automatically.
+ *
+ * Two variants, because the invariants need both: `defaultValueFor` writes what the loader would have read
+ * anyway (so "present" and "absent" must agree), and `nonDefaultValueFor` writes something the loader
+ * cannot be reading by accident (so a key read correctly beside an unknown one is actually proven).
+ */
+function defaultValueFor(key: string): boolean | number {
+    return ALLOWED_EXPERIMENTAL_NUMBERS.includes(key) ? DEFAULT_MAX_CONCURRENT_BUILDS : false;
+}
+
+function nonDefaultValueFor(key: string): boolean | number {
+    return ALLOWED_EXPERIMENTAL_NUMBERS.includes(key) ? DEFAULT_MAX_CONCURRENT_BUILDS + 4 : true;
 }
 
 function writeConfig(home: string, contents: string): string {
@@ -117,8 +134,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig(false, false, false).buildGateLogCapture).toBe(false);
-        expect(new HomeConfig(false, false, false).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS).buildGateLogCapture).toBe(false);
+        expect(new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS).wholeRepoBuildGuard).toBe(false);
     });
 
     /**
@@ -201,17 +218,18 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
         // this test green for the wrong reason.
         expect(everyKey.length).toBeGreaterThan(0);
         for (const omitted of everyKey) {
-            const experimental: Record<string, boolean> = {};
-            for (const key of everyKey) if (key !== omitted) experimental[key] = false;
+            const experimental: Record<string, boolean | number> = {};
+            for (const key of everyKey) if (key !== omitted) experimental[key] = defaultValueFor(key);
             const home = fakeHome();
             writeConfig(home, JSON.stringify({ experimental }));
             const loaded = new HomeConfigService().load(home);
-            // Every PRESENT key was written `false`, and every ABSENT key defaults false, so every flag
-            // reads false whichever one was omitted. That uniformity IS the policy — there is one
-            // declared default for the whole file and no per-key exception to keep in step.
+            // Every PRESENT key was written its OWN declared default, and every ABSENT key reads that same
+            // default, so the loaded config is identical whichever key was omitted. That is the policy —
+            // "present at its default" and "absent" are one state, per key, with no exception to keep in step.
             expect(loaded.wholeRepoBuildGuard).toBe(false);
             expect(loaded.orphanDirSweep).toBe(false);
             expect(loaded.buildGateLogCapture).toBe(false);
+            expect(loaded.maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS);
         }
     });
 
@@ -399,14 +417,15 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
      */
     it('loads every known key correctly even when an unknown key sits beside them', () => {
         expect(ALLOWED_EXPERIMENTAL.length).toBeGreaterThan(0);
-        const experimental: Record<string, boolean> = { 'a-key-from-the-future': true };
-        for (const key of ALLOWED_EXPERIMENTAL) experimental[key] = true;
+        const experimental: Record<string, boolean | number> = { 'a-key-from-the-future': true };
+        for (const key of ALLOWED_EXPERIMENTAL) experimental[key] = nonDefaultValueFor(key);
         const home = fakeHome();
         writeConfig(home, JSON.stringify({ experimental, aSectionFromTheFuture: { nested: 1 } }));
         const loaded = new HomeConfigService().load(home);
         expect(loaded.wholeRepoBuildGuard).toBe(true);
         expect(loaded.orphanDirSweep).toBe(true);
         expect(loaded.buildGateLogCapture).toBe(true);
+        expect(loaded.maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS + 4);
         // …and the section that IS known is still the only one read, so a future sibling section cannot
         // change what this release does.
         expect(ALLOWED_TOP_LEVEL).toContain(HOME_EXPERIMENTAL_SECTION);
@@ -533,7 +552,44 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         expect(loaded.wholeRepoBuildGuard).toBe(absent.wholeRepoBuildGuard);
         expect(loaded.orphanDirSweep).toBe(absent.orphanDirSweep);
         expect(loaded.buildGateLogCapture).toBe(absent.buildGateLogCapture);
+        expect(loaded.maxConcurrentBuilds).toBe(absent.maxConcurrentBuilds);
     });
+});
+
+/**
+ * `maxConcurrentBuilds` is the FIRST numeric key in this file, so it gets the same three-part treatment
+ * every boolean key has: absent reads the declared default, a well-formed value is read through, and a
+ * PRESENT value this release cannot make sense of is REJECTED rather than guessed at.
+ *
+ * The rejection line is the one worth pinning. "Known key, wrong type → REJECT" is the rule the boolean
+ * reader already enforces, and it does NOT soften for a number: the values excluded here (a string, a
+ * float, zero, a negative) are not "a newer release's spelling" — no release of webpieces has ever given
+ * this key a meaning outside the positive integers — so ignoring them would silently disable the
+ * concurrency check on a machine whose owner thought they had configured it.
+ */
+describe('experimental.maxConcurrentBuilds — the first NUMERIC key', () => {
+    it('defaults to DEFAULT_MAX_CONCURRENT_BUILDS when the file is absent or does not name it', () => {
+        expect(new HomeConfigService().load(fakeHome()).maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS);
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: {} }));
+        expect(new HomeConfigService().load(home).maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS);
+    });
+
+    it('reads a positive whole number through', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_MAX_CONCURRENT_BUILDS]: 7 } }));
+        expect(new HomeConfigService().load(home).maxConcurrentBuilds).toBe(7);
+    });
+
+    it.each([['"5"'], ['true'], ['0'], ['-2'], ['2.5'], ['null'], ['[]']])(
+        'REJECTS %s, naming the key and the value', (bad: string): void => {
+            const home = fakeHome();
+            writeConfig(home, `{"experimental":{"${HOME_KEY_MAX_CONCURRENT_BUILDS}":${bad}}}`);
+            // loadError asserts the throw is an InformAiError, like every other rejection here.
+            const message = loadError(home).message;
+            expect(message).toContain(HOME_KEY_MAX_CONCURRENT_BUILDS);
+            expect(message).toContain('POSITIVE WHOLE NUMBER');
+        });
 });
 
 /**

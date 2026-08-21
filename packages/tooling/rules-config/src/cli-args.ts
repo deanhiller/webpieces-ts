@@ -29,8 +29,11 @@ export class CliFlag {
  * Usage descriptor for a `wp-*` bin. Data-only (classes-over-interfaces): a command name, its one-line
  * summary, and the flags it accepts. `CliArgs.classify` turns it into the `--help` / unknown-arg message.
  *
- * `flags` defaults to [] — the no-argument case stays a two-arg construction, which is what eight of the
- * nine `wp-*` bins are. A flag a command does not DECLARE here is still rejected with exit 2: that guard is
+ * `flags` defaults to [] — the no-argument case stays a two-arg construction, which is what MOST `wp-*`
+ * bins are. (Deliberately not a count: the last one written down went stale the next time a bin grew a
+ * flag, which is exactly the drift the corollary in CLAUDE.md is about.)
+ *
+ * A flag a command does not DECLARE here is still rejected with exit 2: that guard is
  * the reason this class exists (`wp-start-upsert-pr --help` once launched a squash-merge), and making it
  * flag-aware must not soften it.
  */
@@ -100,7 +103,7 @@ class CliScan {
 @injectable(bindingScopeValues.Singleton)
 export class CliArgs {
     // The help/usage block shown for `--help` and appended to an unknown-arg error. A command with no
-    // declared flags says so outright, because "takes no arguments" is the whole usage for eight of nine.
+    // declared flags says so outright, because "takes no arguments" is the whole usage for most of them.
     private usageText(usage: CliUsage): string {
         const head = `${usage.command} — ${usage.summary}\n\n`;
         if (usage.flags.length === 0) {

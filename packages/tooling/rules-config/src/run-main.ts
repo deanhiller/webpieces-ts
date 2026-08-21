@@ -1,4 +1,5 @@
 import { CliExitError } from './cli-exit-error';
+import { RuleFailError, renderRuleFailForHuman } from './rule-fail-error';
 
 /**
  * The SINGLE sanctioned `process.exit` site for every CLI bin. Each bin's entry collapses to:
@@ -21,7 +22,16 @@ export function runMain(main: () => Promise<void>): void {
             if (err.message) (err.exitCode === 0 ? process.stdout : process.stderr).write(err.message + '\n');
             process.exit(err.exitCode);
         }
-        process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n');
+        // A RULE refusal reaching a bin's top level goes through `renderRuleFailForHuman`, never through
+        // a bare `err.message`: `message` is only the `aiMessage`, so printing it would SILENTLY DROP
+        // every `Option` the rule attached — the rule would have said exactly how to proceed and the
+        // renderer would have thrown that away. Same "one renderer per audience" rule the ai-hook and
+        // code-rules handlers already follow, and it is what lets a rule state its cures as `Option[]`
+        // instead of hand-numbering them into a string literal.
+        const message = err instanceof RuleFailError
+            ? renderRuleFailForHuman(err)
+            : (err instanceof Error ? err.message : String(err));
+        process.stderr.write(message + '\n');
         process.exit(1);
     });
 }

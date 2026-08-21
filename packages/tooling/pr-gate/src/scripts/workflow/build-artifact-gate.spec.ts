@@ -3,8 +3,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { RepoRootFinder, toError } from '@webpieces/rules-config';
+import { BuildsLog, DotWebpieces, HomeConfigService, RepoRootFinder, toError } from '@webpieces/rules-config';
 import { BuildAffected } from './build-affected';
+import { BuildGateLog } from './build-gate-log';
 import { BuildArtifactGate, BuildArtifactVerdict } from './build-artifact-gate';
 import { GeneratedArtifactRegistry, GeneratedArtifacts, ARTIFACT_SOURCE_NX } from './generated-artifact-registry';
 import { GitExec } from './git-exec';
@@ -19,7 +20,7 @@ const KNOWN = new GeneratedArtifacts(
 function newGate(): BuildArtifactGate {
     const registry = new GeneratedArtifactRegistry();
     registry.seed(KNOWN);
-    return new BuildArtifactGate(new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, new BuildAffected());
+    return new BuildArtifactGate(new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, new BuildAffected(new HomeConfigService(), new BuildGateLog(), new BuildsLog(new DotWebpieces())));
 }
 
 // The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just

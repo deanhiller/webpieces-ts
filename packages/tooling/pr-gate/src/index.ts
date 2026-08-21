@@ -4,8 +4,13 @@
 // Public surface is intentionally small for now. The package mainly ships bin
 // commands (wp-start-update, wp-finish-update, wp-finish-upsert-pr, wp-start-upsert-pr).
 // The build gate and 3-point merge-info gathering are internal `workflow/` library functions
-// (runBuildAffected, gatherInfo), not bins. Shared library exports (dashboard gate computation,
-// etc.) back the dashboard those commands render.
+// (BuildAffected.runBuildGate, gatherInfo), not bins. Shared library exports (dashboard gate
+// computation, etc.) back the dashboard those commands render.
+//
+// `runBuildGate` is the ONLY way to run a build — the `runBuildAffected` / `runConfiguredBuildGate`
+// side doors it used to sit beside are gone, folded into one private spawn, because each of them
+// executed `buildCommand` with no caller identity and no `~/.webpieces/builds.log` row. One spelling,
+// and an unlogged build no longer compiles.
 
 export {
     GateResult,

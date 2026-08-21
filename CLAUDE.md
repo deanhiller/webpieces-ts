@@ -423,6 +423,15 @@ Practical consequence: a full `pnpm exec vitest run packages apps` sweep is expe
 contention. Run it **once**, before you post the PR — not after every edit. During the edit loop, run
 the one spec file you are changing.
 
+**Contention is now MEASURED, not guessed at, and `wp-build` acts on it.** Every build on this machine
+— `wp-build` and both PR-gate stages — writes a row to one machine-wide ledger, and `wp-build` REFUSES
+when the box is already at its limit rather than making a fourth build everybody's problem. The gate
+stages are never refused. When you meet that refusal, take its first cure: run the gate you were going
+to run anyway, which runs the same `buildCommand`. **`.webpieces/instruct-ai/webpieces.buildlog.md` has
+the ledger's location, its row format, the grep recipes, the limit's config key and the `--force`
+escape** — read it there, not here, for the reason in the corollary below: a path copied into this
+hand-written file is exactly what goes stale on the next release.
+
 **A green build is NOT the finish line.** None of those greens mean the work is ready for review.
 When the feature is actually complete, proceed to "Finishing a Feature" — do not stop at a green
 build.

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { OrphanCandidate, OrphanDirScanner } from './orphan-dir-scan';
 import { OrphanDirArchiver, TRASH_MANIFEST_FILE } from './orphan-dir-archive';
 import { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
-import { HomeConfig, HomeConfigService } from './home-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from './home-config';
 
 /**
  * A throwaway git repository on disk, because this feature's entire correctness claim is "git's own
@@ -74,7 +74,7 @@ class HomeConfigStub {
     /** Pins the machine-local flag without touching a real HOME, which no spec may ever read or write. */
     static withSweep(enabled: boolean): HomeConfigService {
         const service = new HomeConfigService();
-        vi.spyOn(service, 'load').mockReturnValue(new HomeConfig(false, false, enabled));
+        vi.spyOn(service, 'load').mockReturnValue(new HomeConfig(false, false, enabled, DEFAULT_MAX_CONCURRENT_BUILDS));
         return service;
     }
 }

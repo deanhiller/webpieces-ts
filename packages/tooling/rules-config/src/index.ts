@@ -75,8 +75,20 @@ export { validateChecklistDocs } from './checklist-docs-validator';
 export {
     HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
-    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_MAX_CONCURRENT_BUILDS,
+    DEFAULT_MAX_CONCURRENT_BUILDS,
 } from './home-config';
+// The MACHINE-WIDE build ledger, `~/.webpieces/builds.log`. THE one carve-out from
+// `no-machine-global-state.spec.ts`'s rule that webpieces writes only under `{repo}/.webpieces` — the
+// argument is in `decisions/0006-the-build-ledger-is-machine-global.md`, and the short form is that "how
+// many builds are burning this box's CPU" is a fact about the MACHINE, is not a cache of anything a
+// remote owns, and cannot be answered from a per-repo file because every linked worktree has its own
+// `.webpieces/` and would be blind to the sibling it is contending with. See builds-log.ts.
+export {
+    BuildsLog, BuildTicket, RunningBuild,
+    BUILDS_LOG_FILE, BUILDS_LOCK_FILE, BUILD_START, BUILD_DONE_SUCCESS, BUILD_DONE_FAIL,
+    MAX_BUILDS_LOG_BYTES, BUILDS_LOG_GENERATIONS, MAX_ROW_BYTES,
+} from './builds-log';
 // The orphan-directory sweep: the corpse an `nx g move` leaves on every clone, which git cannot remove
 // because an ignored dist/ or node_modules/ outlives every tracked file under it. See orphan-dir-scan.ts
 // for why the predicate is git's own `clean -Xdn` answer rather than a hand-rolled ignore walk.
