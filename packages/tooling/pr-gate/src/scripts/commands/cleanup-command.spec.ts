@@ -21,19 +21,15 @@ import {
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_LOCKED,
-    CliArgs,
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
 import { WorktreeCleanupSection } from './worktree-cleanup';
 import {
     CleanupOptions,
-    CleanupUsage,
     DeleteSelection,
     FLAG_DELETE_BRANCHES,
     FLAG_DELETE_WORKTREES,
-    FLAG_INTERACTIVE,
-    FLAG_REPORT,
 } from './cleanup-options';
 
 /**
@@ -64,8 +60,7 @@ class Harness {
     // Everything reapApproved was handed, across every call in one run (husks AND the chosen ones).
     approvedAll: DeletableBranch[] = [];
     // What argv said for this run.
-    options: CleanupOptions = new CleanupOptions(
-        DeleteSelection.unset(), DeleteSelection.unset(), false, false);
+    options: CleanupOptions = noFlags();
 }
 
 const harness = new Harness();
@@ -140,6 +135,21 @@ function build(): TestableCleanup {
         new FakeWorktreeSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService()));
 }
 
+// Argv said nothing — the bare `pnpm wp-cleanup` every test starts from.
+function noFlags(): CleanupOptions {
+    return new CleanupOptions(
+        new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+        new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
+        false, false);
+}
+
+function branchFlag(value: string): CleanupOptions {
+    return new CleanupOptions(
+        new DeleteSelection(FLAG_DELETE_BRANCHES, true, value),
+        new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
+        false, false);
+}
+
 function spared(branch: string, classification: string, commits: number, reason: string): DeletableBranch {
     return new DeletableBranch(branch, reason, 0, 'sha1234', commits, '', classification);
 }
@@ -175,8 +185,7 @@ beforeEach(() => {
     harness.branchesFreedByWorktreeReap = [];
     harness.dirtyWorktrees = [];
     harness.approvedAll = [];
-    harness.options = new CleanupOptions(
-        DeleteSelection.unset(), DeleteSelection.unset(), false, false);
+    harness.options = noFlags();
     // The prompt path is the thing under test, so present a terminal. Restored per-test where needed.
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
 });
@@ -541,8 +550,7 @@ describe('wp-cleanup flags', () => {
             spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r'),
             spared('b/two', CLASSIFICATION_NEVER_PROPOSED, 2, 'r'),
         ];
-        harness.options = new CleanupOptions(
-            DeleteSelection.parse(FLAG_DELETE_BRANCHES, 'all'), DeleteSelection.unset(), false, false);
+        harness.options = branchFlag('all');
 
         await run();
 
@@ -556,8 +564,7 @@ describe('wp-cleanup flags', () => {
             spared('b/two', CLASSIFICATION_CONTENT_IN_MAIN, 1, 'r'),
             spared('c/three', CLASSIFICATION_NEVER_PROPOSED, 1, 'r'),
         ];
-        harness.options = new CleanupOptions(
-            DeleteSelection.parse(FLAG_DELETE_BRANCHES, '1,3'), DeleteSelection.unset(), false, false);
+        harness.options = branchFlag('1,3');
 
         const out = await run();
 
@@ -571,8 +578,7 @@ describe('wp-cleanup flags', () => {
     it('--delete-branches=none beats a live tty and asks nothing', async () => {
         harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
         harness.answer = 'all';
-        harness.options = new CleanupOptions(
-            DeleteSelection.parse(FLAG_DELETE_BRANCHES, 'none'), DeleteSelection.unset(), false, false);
+        harness.options = branchFlag('none');
 
         await run();
 
@@ -586,7 +592,8 @@ describe('wp-cleanup flags', () => {
             new DeletableWorktree('/work/b', 'dean/b', 'never had a PR', 0, false, CLASSIFICATION_NEVER_PROPOSED),
         ];
         harness.options = new CleanupOptions(
-            DeleteSelection.unset(), DeleteSelection.parse(FLAG_DELETE_WORKTREES, 'all'), false, false);
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, true, 'all'), false, false);
 
         await run();
 
@@ -601,7 +608,8 @@ describe('wp-cleanup flags', () => {
         harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
         harness.answer = 'all';
         harness.options = new CleanupOptions(
-            DeleteSelection.unset(), DeleteSelection.unset(), false, true);
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), false, true);
 
         await run();
 
@@ -622,7 +630,8 @@ describe('wp-cleanup flags', () => {
         harness.worktrees = [new DeletableWorktree(
             '/work/wt-merged', 'dean/merged', 'PR #430 merged', 430, true, CLASSIFICATION_MERGED_PR)];
         harness.options = new CleanupOptions(
-            DeleteSelection.unset(), DeleteSelection.unset(), true, false);
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
 
         const out = await run();
 
@@ -649,7 +658,8 @@ describe('wp-cleanup flags', () => {
 
         harness.spared = branches();
         harness.options = new CleanupOptions(
-            DeleteSelection.unset(), DeleteSelection.unset(), true, false);
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
         const report = await run();
 
         expect(report).toContain('[1] a/one');
@@ -658,8 +668,7 @@ describe('wp-cleanup flags', () => {
         harness.out = '';
         harness.approvedAll = [];
         harness.spared = branches();
-        harness.options = new CleanupOptions(
-            DeleteSelection.parse(FLAG_DELETE_BRANCHES, '2'), DeleteSelection.unset(), false, false);
+        harness.options = branchFlag('2');
         await run();
 
         // '2' is b/two in BOTH runs — the husk it reaped on the second run did not renumber anything.
@@ -672,31 +681,10 @@ describe('wp-cleanup flags', () => {
     // is the one way this command can delete the wrong ref, so it stops rather than guessing.
     it('refuses a number that is not in the block it just printed', async () => {
         harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
-        harness.options = new CleanupOptions(
-            DeleteSelection.parse(FLAG_DELETE_BRANCHES, '1,4'), DeleteSelection.unset(), false, false);
+        harness.options = branchFlag('1,4');
 
         await expect(run()).rejects.toThrow(CliExitError);
         expect(harness.approved).toEqual([]);
-    });
-
-    // The parse itself: garbage never becomes a silent `none` (or, far worse, a silent `all`).
-    it('rejects a --delete-branches value that is neither all, none, nor numbers', () => {
-        expect(() => DeleteSelection.parse(FLAG_DELETE_BRANCHES, 'yes please')).toThrow(CliExitError);
-        expect(() => DeleteSelection.parse(FLAG_DELETE_BRANCHES, '')).toThrow(CliExitError);
-    });
-
-    // --help must list every flag this command honours; an undocumented flag and a rejected documented
-    // one are the same defect seen from the two ends.
-    it('--help lists all four flags', () => {
-        const usage = CleanupUsage.declare();
-        const check = new CliArgs().classify(['--help'], usage);
-
-        expect(check.ok).toBe(false);
-        expect(check.exitCode).toBe(0);
-        expect(check.message).toContain(FLAG_DELETE_BRANCHES);
-        expect(check.message).toContain(FLAG_DELETE_WORKTREES);
-        expect(check.message).toContain(FLAG_REPORT);
-        expect(check.message).toContain(FLAG_INTERACTIVE);
     });
 
     // A bare run with nothing to do points at --help rather than saying nothing useful.

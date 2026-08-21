@@ -1,4 +1,5 @@
-import { CliArgSet, CliExitError, CliFlag, CliUsage } from '@webpieces/rules-config';
+import { CliExitError, CliFlag, CliUsage } from '@webpieces/rules-config';
+import { injectable, bindingScopeValues } from 'inversify';
 
 /**
  * `wp-cleanup`'s flags, parsed — the whole decision about what this run deletes, as a value.
@@ -36,49 +37,46 @@ export const SELECTION_NUMBERS = 'numbers';
 export class DeleteSelection {
     readonly mode: string;
     readonly numbers: readonly number[];
-
-    // PRIVATE: there is exactly one way to make each kind of selection — `parse` from a flag value,
-    // `unset` for the absent flag. A public constructor would be a second spelling of both.
-    private constructor(mode: string, numbers: readonly number[]) {
-        this.mode = mode;
-        this.numbers = numbers;
-    }
-
-    /** The flag was not passed. The run falls back to its tty sniff (or `--interactive`). */
-    static unset(): DeleteSelection {
-        return new DeleteSelection(SELECTION_UNSET, []);
-    }
+    private readonly flag: string;
 
     /**
-     * Read one declared flag out of an already-validated argv scan.
+     * ONE constructor, taking argv's two facts about the flag: was it there, and what did it carry.
      *
-     * A flag passed BARE (`--delete-branches` with no value) is an error, not an implicit `all` and
-     * not an implicit `none`: both readings are defensible, which is exactly why neither may be
-     * guessed at when the outcome is a delete.
+     * Parsing in the constructor rather than in a static factory is what keeps this to one spelling —
+     * there is no way to hold a DeleteSelection that was never checked. `present === false` is the
+     * absent flag (the run falls back to its tty sniff); present with an EMPTY value is an error, not
+     * an implicit `all` and not an implicit `none`: both readings are defensible, which is exactly
+     * why neither may be guessed at when the outcome is a delete.
      */
-    static from(args: CliArgSet, flag: string): DeleteSelection {
-        if (!args.has(flag)) return DeleteSelection.unset();
-        return DeleteSelection.parse(flag, args.value(flag));
+    constructor(flag: string, present: boolean, raw: string) {
+        this.flag = flag;
+        this.numbers = [];
+        if (!present) {
+            this.mode = SELECTION_UNSET;
+            return;
+        }
+        const value = raw.trim().toLowerCase();
+        if (value === '') throw this.usage('a value is required.');
+        if (value === SELECTION_ALL || value === SELECTION_NONE) {
+            this.mode = value;
+            return;
+        }
+        this.mode = SELECTION_NUMBERS;
+        this.numbers = this.parseNumbers(value, raw);
     }
 
-    /** Parse one flag VALUE. Throws CliExitError (exit 2) on anything that is not all/none/numbers. */
-    static parse(flag: string, raw: string): DeleteSelection {
-        const value = raw.trim().toLowerCase();
-        if (value === '') throw DeleteSelection.usage(flag, `${flag} needs a value.`);
-        if (value === SELECTION_ALL) return new DeleteSelection(SELECTION_ALL, []);
-        if (value === SELECTION_NONE) return new DeleteSelection(SELECTION_NONE, []);
-
+    private parseNumbers(value: string, raw: string): number[] {
         const numbers: number[] = [];
         for (const token of value.split(/[\s,]+/)) {
             if (token === '') continue;
             const index = Number(token);
             if (!Number.isInteger(index) || index < 1) {
-                throw DeleteSelection.usage(flag, `${flag}=${raw} — '${token}' is not one of the numbers printed.`);
+                throw this.usage(`'${raw}' — '${token}' is not one of the numbers printed.`);
             }
             numbers.push(index);
         }
-        if (numbers.length === 0) throw DeleteSelection.usage(flag, `${flag}=${raw} named no numbers.`);
-        return new DeleteSelection(SELECTION_NUMBERS, numbers);
+        if (numbers.length === 0) throw this.usage(`'${raw}' named no numbers.`);
+        return numbers;
     }
 
     /** Did the caller say anything? An explicit flag ALWAYS beats the terminal sniff. */
@@ -92,14 +90,14 @@ export class DeleteSelection {
      * Range is checked against THAT block: a number past its end means the caller is holding numbers
      * from an older run, and the refs have moved under them. That stops the run.
      */
-    pick<T>(block: readonly T[], flag: string): T[] {
+    pick<T>(block: readonly T[]): T[] {
         if (this.mode === SELECTION_ALL) return [...block];
         if (this.mode === SELECTION_NONE || this.mode === SELECTION_UNSET) return [];
         const out: T[] = [];
         for (const index of this.numbers) {
             if (index > block.length) {
-                throw DeleteSelection.usage(flag,
-                    `${flag} names [${String(index)}], but the list above has only ${String(block.length)} entr(ies).\n`
+                throw this.usage(
+                    `it names [${String(index)}], but the list above has only ${String(block.length)} entr(ies).\n`
                     + 'Those numbers came from a different run. Re-run `pnpm wp-cleanup --report`, read the\n'
                     + 'numbers it prints, and pass those — nothing was deleted from that list.');
             }
@@ -108,10 +106,10 @@ export class DeleteSelection {
         return out;
     }
 
-    private static usage(flag: string, detail: string): CliExitError {
+    private usage(detail: string): CliExitError {
         return new CliExitError(2,
-            `❌ ${detail}\n\n`
-            + `Usage:  ${flag}=all | ${flag}=none | ${flag}=1,3\n`
+            `❌ ${this.flag}: ${detail}\n\n`
+            + `Usage:  ${this.flag}=all | ${this.flag}=none | ${this.flag}=1,3\n`
             + 'The numbers are the ones wp-cleanup printed in the classified block on the SAME run.');
     }
 }
@@ -149,15 +147,6 @@ export class CleanupOptions {
         this.interactive = interactive;
     }
 
-    /** Read argv (already validated by CliArgs). */
-    static from(args: CliArgSet): CleanupOptions {
-        return new CleanupOptions(
-            DeleteSelection.from(args, FLAG_DELETE_BRANCHES),
-            DeleteSelection.from(args, FLAG_DELETE_WORKTREES),
-            args.has(FLAG_REPORT),
-            args.has(FLAG_INTERACTIVE));
-    }
-
     /**
      * Does this run get to ASK? A tty is the default evidence; `--interactive` says so outright.
      * A `--delete-*` flag overrides both for the half it names — see `CleanupCommand.decide`.
@@ -175,8 +164,9 @@ export class CleanupOptions {
  * rejected, is the same defect from either side — and the bin itself is a `runMain` call that cannot
  * be imported into a test without executing.
  */
+@injectable(bindingScopeValues.Singleton)
 export class CleanupUsage {
-    static declare(): CliUsage {
+    declare(): CliUsage {
         return new CliUsage(
             'wp-cleanup',
             'Remove worktrees and branches that are provably dead, reap the zero-commit husks, and report the rest.',

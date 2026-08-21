@@ -6,7 +6,12 @@ import {
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
-import { CleanupOptions, DeleteSelection } from './cleanup-options';
+import {
+    CleanupOptions,
+    DeleteSelection,
+    FLAG_DELETE_BRANCHES,
+    FLAG_DELETE_WORKTREES,
+} from './cleanup-options';
 import { MainCheckout, StashedFiles } from './main-checkout';
 import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 
@@ -76,8 +81,10 @@ export class CheckoutCleanMainCommand {
         // bare `pnpm wp-cleanup` does here — reap what is provably dead and every zero-commit husk, ask
         // (or report) about the rest. Spelled out rather than defaulted so that if CleanupOptions ever
         // grows a field, this call site is a compile error instead of a silent old behaviour.
-        await this.cleanupCommand.run(
-            new CleanupOptions(DeleteSelection.unset(), DeleteSelection.unset(), false, false));
+        await this.cleanupCommand.run(new CleanupOptions(
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
+            false, false));
         this.sweep(repoRoot);
         this.reportStashed(stashed);
     }

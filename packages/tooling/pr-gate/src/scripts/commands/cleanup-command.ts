@@ -197,7 +197,7 @@ export class CleanupCommand {
 
         // Range-check the flag against the block BEFORE anything in this half is deleted, so a caller
         // holding stale numbers stops the run rather than half-executing it.
-        options.branches.pick(block, FLAG_DELETE_BRANCHES);
+        options.branches.pick(block);
 
         if (husks.length > 0) {
             process.stdout.write(this.huskBlock(BRANCH_KINDS, husks.map(
@@ -247,7 +247,7 @@ export class CleanupCommand {
         const husks = this.worktreeSection.withoutUncommitted(this.husks(promptable));
         const block = this.rest(promptable, husks);
 
-        options.worktrees.pick(block, FLAG_DELETE_WORKTREES);
+        options.worktrees.pick(block);
 
         if (husks.length > 0) {
             process.stdout.write(this.huskBlock(WORKTREE_KINDS, husks.map(
@@ -402,7 +402,7 @@ export class CleanupCommand {
         options: CleanupOptions,
     ): Promise<T[]> {
         if (selection.given()) {
-            const picked = selection.pick(block, flag);
+            const picked = selection.pick(block);
             process.stdout.write(`\n${flag} chose ${String(picked.length)} of the ${String(block.length)} `
                 + `${kinds} above.\n`);
             if (picked.length < block.length) process.stdout.write(this.flagHint(kinds, flag, block.length));
