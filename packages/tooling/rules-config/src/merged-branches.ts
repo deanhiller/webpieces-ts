@@ -349,7 +349,9 @@ export class MergedBranchesService {
      * lockVerdict), when it is the worktree we are standing in right now (removing your own cwd is not
      * a thing to suggest to an agent), or when its branch is anything short of provably merged —
      * INCLUDING a branch with no commits yet, which is what every worktree looks like while an agent
-     * is working in it.
+     * is working in it. `deletable` means PROVABLY dead and nothing weaker; wp-cleanup reaps the
+     * zero-commit ones on top of that, but only after checking on disk whether anybody is holding
+     * them (see CLASSIFICATION_NO_COMMITS), which is a question these verdicts do not answer.
      */
     private classifyWorktrees(
         repoRoot: string,
@@ -458,17 +460,17 @@ export class MergedBranchesService {
             }
         }
 
-        // Zero commits of its own. This is SPARED, not deletable — see CLASSIFICATION_NO_COMMITS for
-        // why. It is a real signal (the branch is identical to origin/main), but it is equally the
-        // signature of a worktree an agent created thirty seconds ago and has not committed in yet,
-        // and there is no git-local way to tell those two apart. So it becomes a question for a human
-        // (wp-cleanup prompts on it) instead of an unattended delete.
+        // Zero commits of its own. NOT deletable BY THIS VERDICT — the verdicts answer "is this
+        // provably dead?", and a husk is not. wp-cleanup reaps it anyway, after asking the one
+        // question this service cannot: is anybody HOLDING it (uncommitted files, a live lock, the
+        // tree you are standing in)? That check needs the worktree on disk, so it lives there and the
+        // verdict stays exactly what it is — see CLASSIFICATION_NO_COMMITS.
         if (commits === 0) {
             return new Verdict(false, new DeletableBranch(
                 branch,
-                'no commits of its own — identical to origin/main. That is either an abandoned husk OR a '
-                + 'worktree/branch someone is working in right now and has not committed to yet, so it is '
-                + 'never reaped unattended',
+                'no commits of its own — identical to origin/main, so deleting the ref loses a NAME, not a '
+                + 'commit. wp-cleanup reaps this by default; a worktree holding it is spared when it has '
+                + 'uncommitted files or a live lock, i.e. when somebody is working in it',
                 0, sha, 0, prState, CLASSIFICATION_NO_COMMITS));
         }
 

@@ -6,6 +6,7 @@ import {
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
+import { CleanupOptions, DeleteSelection } from './cleanup-options';
 import { MainCheckout, StashedFiles } from './main-checkout';
 import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 
@@ -71,7 +72,12 @@ export class CheckoutCleanMainCommand {
         const untracked = this.workingTreeGate.assertNoTrackedChanges(repoRoot);
         const stashed = this.mainCheckout.goToMain(repoRoot, untracked);
         this.reportUntracked(untracked, stashed);
-        await this.cleanupCommand.run();
+        // No flags: this is the "go to main and take out the trash" path, so cleanup behaves exactly as a
+        // bare `pnpm wp-cleanup` does here — reap what is provably dead and every zero-commit husk, ask
+        // (or report) about the rest. Spelled out rather than defaulted so that if CleanupOptions ever
+        // grows a field, this call site is a compile error instead of a silent old behaviour.
+        await this.cleanupCommand.run(
+            new CleanupOptions(DeleteSelection.unset(), DeleteSelection.unset(), false, false));
         this.sweep(repoRoot);
         this.reportStashed(stashed);
     }

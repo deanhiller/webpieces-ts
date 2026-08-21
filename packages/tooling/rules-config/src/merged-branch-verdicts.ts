@@ -55,9 +55,18 @@ export const CLASSIFICATION_BACKUP_OF_LIVE = 'backup-of-live';
  * in it. Observed 2026-07-30: three worktrees with live agents in them were listed as dead, under
  * the sentence "so no work can be lost".
  *
- * Liveness is now the same single rule branches already use: reapable == a MERGED PR. Anything not
- * provably merged is LIVE, and live means it is never deleted without an explicit human answer. A
- * genuine husk still gets cleaned up — it is PROMPTABLE (see below), so wp-cleanup asks.
+ * Liveness for anything holding COMMITS is the same single rule branches already use: reapable == a
+ * MERGED PR, and anything short of that is never deleted without an explicit answer.
+ *
+ * THIS verdict is the exception, and it is not the old auto-delete coming back. wp-cleanup REAPS a
+ * zero-commit ref by default — after checking the thing the 2026-07-30 incident actually turned on:
+ * whether somebody is HOLDING it. A worktree with uncommitted or untracked files
+ * (`WorktreeService.hasUncommittedChanges`), one LOCKED by a live agent, the tree you are standing in
+ * and a detached HEAD are all spared, each with a stated reason. Everything else with zero commits is
+ * a husk, and deleting a husk loses a NAME, not a commit — which the archive tag then hands back.
+ *
+ * So the bar is "prove somebody is holding it", not "prove it is dead". The 2026-07-30 loss was
+ * three LIVE worktrees called dead with no such check; the check is now what stands between them.
  */
 export const CLASSIFICATION_NO_COMMITS = 'no-commits';
 // Spared, but a human should be ASKED — in descending order of "obviously fine to delete".
@@ -85,8 +94,13 @@ export const CLASSIFICATION_LOCKED = 'locked-worktree';
 export const CLASSIFICATION_CURRENT = 'current-worktree';
 export const CLASSIFICATION_DETACHED = 'detached-worktree';
 
-// Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
-// exactly this order so the easy yeses come before the ones that need thought.
+// The spared classifications wp-cleanup ADJUDICATES, most-safe first — everything else it either
+// reaps on proof or spares for a mechanical reason (in-use, locked, current, detached).
+//
+// Three of the four are prompted / flagged, in exactly this order, so the easy yeses come before the
+// ones that need thought. CLASSIFICATION_NO_COMMITS is the fourth and is REAPED rather than asked
+// about (see its docstring): it stays in this list because this is the list wp-cleanup collects a
+// candidate set from, and pulling it out would mean a husk never reaching the code that reaps it.
 export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
     // CLASSIFICATION_BACKUP_OF_LIVE is deliberately NOT here — it is auto-reaped now. Anything that
     // reaches this list is a real judgement call; if a group's answer is always yes, it belongs in
@@ -94,10 +108,10 @@ export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
-    // LAST deliberately. For a parked branch this is the most obvious yes in the whole list, but the
-    // identical verdict on a WORKTREE means "an agent may be working in here right now", and the
-    // prompt cannot tell the human which one they are looking at any better than by ordering it dead
-    // last, after the groups whose evidence is about the PAST rather than about work in flight.
+    // LAST, and no longer a question at all. Ordering it last was the old, weak answer to "a worktree
+    // in active use looks exactly like this" — a prompt cannot tell a human which one they are
+    // looking at, and ordering does not help them either. wp-cleanup now ANSWERS that question
+    // instead of asking it (uncommitted files, live lock, current tree) and reaps whatever is left.
     CLASSIFICATION_NO_COMMITS,
 ];
 

@@ -5,6 +5,7 @@ import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
 import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
+import { CleanupOptions } from './commands/cleanup-options';
 import { CheckoutCleanMainCommand } from './commands/checkout-clean-main-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
@@ -108,10 +109,13 @@ export class PrGateApp {
         return this.finishUpsertPrCommand.run();
     }
 
-    /** `wp-cleanup`: reap what is provably merged, and ASK about everything that merely looks dead. */
-    cleanup(): Promise<void> {
+    /**
+     * `wp-cleanup`: reap what is provably merged AND every zero-commit husk, then report the rest with
+     * the exact flags that take it. `options` carries what argv said — see CleanupOptions.
+     */
+    cleanup(options: CleanupOptions): Promise<void> {
         this.assertNoResolveInProgress('wp-cleanup');
-        return this.cleanupCommand.run();
+        return this.cleanupCommand.run(options);
     }
 
     /**

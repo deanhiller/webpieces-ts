@@ -155,8 +155,10 @@ describe('MergedBranchesService empty-branch husks', () => {
      * every branch created by `git worktree add -b … origin/main` from creation until its first
      * commit, i.e. exactly the window in which an agent is working in it. Observed 2026-07-30: three
      * worktrees with live agents were listed as dead under this rule, with the words "so no work can
-     * be lost". The husk is still CLEANED UP — it lands in `keep` as CLASSIFICATION_NO_COMMITS, which
-     * wp-cleanup prompts about — but only ever with a human's yes.
+     * be lost". These verdicts answer "is it PROVABLY dead?", and a husk is not — so it lands in
+     * `keep` as CLASSIFICATION_NO_COMMITS. wp-cleanup then reaps it, but only after checking the
+     * worktree on disk for the thing this service cannot see: uncommitted files, a live lock, the
+     * tree you are standing in. The check is what stands where the 2026-07-30 auto-delete stood.
      */
     it('SPARES a branch with no commits of its own — it may be a worktree in active use', () => {
         world.localBranches = ['main', 'dean/never-committed'];
@@ -170,8 +172,9 @@ describe('MergedBranchesService empty-branch husks', () => {
         expect(cache.keep[0].reason).toContain('working in');
     });
 
-    // …and it is offered to the human rather than dropped on the floor, so real husks still go.
-    it('makes the husk PROMPTABLE, so wp-cleanup can still ask about it', () => {
+    // …and it reaches wp-cleanup's adjudicated set rather than being dropped on the floor, which is
+    // what lets a real husk be reaped there.
+    it('keeps the husk in the adjudicated set, so wp-cleanup still sees it', () => {
         expect(PROMPTABLE_CLASSIFICATIONS).toContain(CLASSIFICATION_NO_COMMITS);
     });
 

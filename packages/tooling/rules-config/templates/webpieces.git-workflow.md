@@ -225,12 +225,29 @@ flow are not interchangeable.
    repairs them on every run. They are server-side — not in `webpieces.config.json`, not on disk — so
    there is no key to configure and nothing for you to remember; if your token lacks repo-admin rights,
    stage ③ prints the single `gh api` command to hand to an owner.
-7. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
-   backup of a merged branch, or no commits of their own). Run it after the merge lands, or any time the
-   branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the
-   verdicts itself, deletes one branch per command, spares anything a human should rule on, and logs
+7. **`pnpm wp-cleanup`** — delete the local branches and worktrees that are provably dead (merged PR,
+   squash-merge backup of a merged branch) plus every **zero-commit husk** — a ref identical to
+   `origin/main`, which loses a NAME and not a commit. Run it after the merge lands, or any time the
+   branch cap blocks you. It recomputes the verdicts itself, deletes one branch per command, and logs
    every deletion with its pre-delete SHA plus a `recover=` command in
    `.webpieces/logs/branch-mutations.log`. **Use this instead of `git branch -D`.**
+
+   A husk is spared only when somebody is provably holding it: a worktree with uncommitted or
+   untracked files, one locked by a live agent, the tree you are standing in, a detached HEAD — each
+   reported with that as its reason. Anything carrying UNIQUE COMMITS is never taken by default; it is
+   printed in a numbered, classified block, and you act on it with a flag:
+
+   ```bash
+   pnpm wp-cleanup --report                 # the whole picture, deletes nothing
+   pnpm wp-cleanup --delete-branches=all    # or =none, or =1,3 by the numbers just printed
+   pnpm wp-cleanup --delete-worktrees=1,2
+   pnpm wp-cleanup --interactive            # prompt even with no tty
+   pnpm wp-cleanup --help
+   ```
+
+   The numbers in a `--delete-*` flag are the numbers printed on the SAME run — wp-cleanup renumbers
+   from a fresh scan every time, and a number past the end of the block stops the run rather than
+   deleting the wrong ref. An explicit flag always beats the terminal sniff.
 8. **`pnpm wp-push-dev`** — publish a **disposable copy** of this branch so a shared dev environment can
    build it. No PR, no build gate, and your feature branch is never moved. See below.
 9. **`pnpm wp-finish-push-dev`** — finalize a dev composition after you resolved its conflicts. Only
@@ -350,8 +367,10 @@ worktree still holds (and `wp-cleanup` deliberately spares worktree-held branche
 ```bash
 git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
 ```
-A branch is only ever deleted when it is backed by a **merged PR**, is a squash-merge backup of one, or
-holds **no commits of its own**. Anything else is spared for a human to decide, and
+A branch is only ever deleted without being asked about when it is backed by a **merged PR**, is a
+squash-merge backup of one, or holds **no commits of its own** and nobody is holding it (no uncommitted
+files, no live lock, not the tree you are standing in). Anything with unique commits is reported in a
+numbered block for you to take with `--delete-branches=` / `--delete-worktrees=`, and
 `.webpieces/merged-branches.json` carries the per-branch and per-worktree reason either way.
 
 With `branch-creation-guard.autoReapMergedBranches: true` you will rarely see this cap at all — the

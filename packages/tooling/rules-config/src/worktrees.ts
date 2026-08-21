@@ -143,6 +143,24 @@ export class WorktreeService {
     }
 
     /**
+     * Does this worktree hold uncommitted or untracked files?
+     *
+     * THE ONE THING THAT MAKES A ZERO-COMMIT WORKTREE UNREAPABLE. A ref with no commits of its own
+     * loses nothing when it is deleted — that is a property of the REF. A DIRECTORY is different:
+     * every worktree looks exactly like that husk from `git worktree add -b` until its first commit,
+     * which is precisely the window an agent is working in. `git status --porcelain` is what tells
+     * those two apart, and it is one cheap local spawn per candidate.
+     *
+     * Fails SAFE to TRUE: if git cannot answer, we do not know that the tree is empty, and the
+     * fail-safe direction for a question about deleting a directory is "leave it".
+     */
+    hasUncommittedChanges(worktreePath: string): boolean {
+        const result = spawnSync('git', ['status', '--porcelain'], { cwd: worktreePath, encoding: 'utf8' });
+        if (result.status !== 0 || typeof result.stdout !== 'string') return true;
+        return result.stdout.trim() !== '';
+    }
+
+    /**
      * The worktree record for the tree rooted at `root`, or null when it is not one of git's
      * worktrees (or git could not answer). Callers use it to name the exact directory a
      * `git worktree remove` has to take — a reap instruction with the wrong path is worse than none.

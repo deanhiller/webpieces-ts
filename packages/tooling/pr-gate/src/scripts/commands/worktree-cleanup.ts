@@ -5,6 +5,7 @@ import {
     ReapedWorktree,
     WorktreeReapResult,
     WorktreeReaper,
+    WorktreeService,
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_DETACHED,
@@ -35,6 +36,7 @@ export class WorktreeCleanupSection {
     constructor(
         private readonly mergedBranches: MergedBranchesService,
         private readonly reaper: WorktreeReaper,
+        private readonly worktreeService: WorktreeService,
     ) {}
 
     /**
@@ -67,6 +69,43 @@ export class WorktreeCleanupSection {
             }
         }
         return out;
+    }
+
+    /**
+     * The zero-commit worktrees that are genuinely husks — the ones holding no uncommitted or
+     * untracked work — with a printed line for each one that is spared.
+     *
+     * THIS IS THE ONE CHECK THAT MAKES REAPING A ZERO-COMMIT WORKTREE SAFE. A branch with no commits
+     * of its own can lose nothing; a DIRECTORY with no commits can lose everything an agent has typed
+     * in the last twenty minutes, and the two are indistinguishable by ref alone. `git status
+     * --porcelain` is the difference, it is one local spawn, and it fails safe to "dirty".
+     *
+     * It is applied ONLY to the husks. Anything with unique commits is decided by flag or prompt, and
+     * git's own refusal to remove a dirty worktree (WorktreeReaper never passes `--force`) is the
+     * backstop there — but a backstop that reports a FAILURE is not good enough for a delete nobody
+     * was asked about, which is why the husk path states the spare instead of tripping over it.
+     */
+    withoutUncommitted(husks: DeletableWorktree[]): DeletableWorktree[] {
+        const clean: DeletableWorktree[] = [];
+        let spared = '';
+        for (const tree of husks) {
+            if (this.hasUncommittedChanges(tree.path)) {
+                spared += `  · ${tree.path} [${tree.branch}] — has uncommitted or untracked files, so somebody\n`
+                    + '        is working in it; nothing archives those, so it is left exactly where it is\n';
+                continue;
+            }
+            clean.push(tree);
+        }
+        if (spared !== '') {
+            process.stdout.write('\nZero-commit worktrees SPARED because work is in flight in them:\n' + spared);
+        }
+        return clean;
+    }
+
+    // Seam: one git spawn per candidate, overridden in the spec so the decision is testable with no
+    // real worktrees on disk.
+    protected hasUncommittedChanges(worktreePath: string): boolean {
+        return this.worktreeService.hasUncommittedChanges(worktreePath);
     }
 
     reap(

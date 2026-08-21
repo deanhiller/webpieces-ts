@@ -35,7 +35,7 @@ export class CapRemedies {
             'Too many local branches.',
             '',
             [
-                new Option('Run: pnpm wp-cleanup — reaps the dead branches, prompts about the rest.', true),
+                new Option('Run: pnpm wp-cleanup — reaps the dead branches and the zero-commit husks.', true),
                 new Option(
                     'Only if that leaves you at the cap: ASK THE HUMAN which of the branches it spared ' +
                     'may go. Never delete a spared branch or edit webpieces.config.json ' +
@@ -56,7 +56,7 @@ export class CapRemedies {
             'Too many worktrees. Do NOT remove one by hand — an agent may be working in it right now.',
             '',
             [
-                new Option('Run: pnpm wp-cleanup — removes the dead worktrees, prompts about the rest.', true),
+                new Option('Run: pnpm wp-cleanup — removes the dead worktrees and the unheld husks.', true),
                 new Option(
                     'Only if that leaves you at the cap: ASK THE HUMAN which of the worktrees it spared ' +
                     'may go. Never edit webpieces.config.json (maxWorktrees / turnOffRuleUntilEpoch) ' +
