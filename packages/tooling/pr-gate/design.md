@@ -287,6 +287,7 @@ graph TD
     StartUpsertPrCommand --> RunUpdate
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper
+    WorktreeCleanupSection --> WorktreeService
     WorktreeLockVerdicts --> AgentWorktreeLockReader
     WorktreeReaper --> BranchArchiver
     WorktreeReaper --> BranchMutationLog

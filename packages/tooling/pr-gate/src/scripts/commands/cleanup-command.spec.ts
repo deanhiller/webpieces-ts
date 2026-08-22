@@ -11,6 +11,9 @@ import {
     RepoRootFinder,
     WorktreeReapResult,
     WorktreeReaper,
+    WorktreeService,
+    WorktreeWorkInFlight,
+    CliExitError,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
@@ -18,10 +21,17 @@ import {
     CLASSIFICATION_IN_USE,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_CURRENT,
+    CLASSIFICATION_LOCKED,
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
 import { WorktreeCleanupSection } from './worktree-cleanup';
+import {
+    CleanupOptions,
+    DeleteSelection,
+    FLAG_DELETE_BRANCHES,
+    FLAG_DELETE_WORKTREES,
+} from './cleanup-options';
 
 /**
  * The behaviour under test is the REPORT and the PROMPT — the half of wp-cleanup that decides what a
@@ -45,6 +55,13 @@ class Harness {
     // Set when the (fake) worktree reap removed something, so the branch pass can model the world it
     // leaves behind: a branch spared only by that worktree is reapable once the worktree is gone.
     branchesFreedByWorktreeReap: string[] = [];
+    // Worktree paths `git status --porcelain` would report as dirty — the one thing that spares a
+    // zero-commit worktree from the husk reap.
+    dirtyWorktrees: string[] = [];
+    // Everything reapApproved was handed, across every call in one run (husks AND the chosen ones).
+    approvedAll: DeletableBranch[] = [];
+    // What argv said for this run.
+    options: CleanupOptions = noFlags();
 }
 
 const harness = new Harness();
@@ -66,6 +83,7 @@ class FakeReaper extends BranchReaper {
 
     reapApproved(_repoRoot: string, _verb: 'wp-cleanup', approved: DeletableBranch[]): ReapResult {
         harness.approved = approved;
+        harness.approvedAll = [...harness.approvedAll, ...approved];
         return new ReapResult(
             approved.map((entry: DeletableBranch): ReapedBranch =>
                 new ReapedBranch(entry.branch, 'sha1234567', entry.reason, entry.pr, true, '')),
@@ -79,6 +97,12 @@ class FakeReaper extends BranchReaper {
 class FakeWorktreeSection extends WorktreeCleanupSection {
     verdicts(): DeletableWorktree[] {
         return harness.worktrees;
+    }
+
+    protected workInFlight(worktreePath: string): WorktreeWorkInFlight {
+        return harness.dirtyWorktrees.includes(worktreePath)
+            ? new WorktreeWorkInFlight(true, 'has uncommitted or untracked files')
+            : new WorktreeWorkInFlight(false, '');
     }
 
     reap(_repoRoot: string, _verb: 'wp-cleanup', targets: DeletableWorktree[]): WorktreeReapResult {
@@ -111,7 +135,22 @@ class TestableCleanup extends CleanupCommand {
 function build(): TestableCleanup {
     return new TestableCleanup(
         new FakeRepoRootFinder(), new FakeReaper(), new BranchArchiver(),
-        new FakeWorktreeSection(new MergedBranchesService(), new WorktreeReaper()));
+        new FakeWorktreeSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService()));
+}
+
+// Argv said nothing — the bare `pnpm wp-cleanup` every test starts from.
+function noFlags(): CleanupOptions {
+    return new CleanupOptions(
+        new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+        new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
+        false, false);
+}
+
+function branchFlag(value: string): CleanupOptions {
+    return new CleanupOptions(
+        new DeleteSelection(FLAG_DELETE_BRANCHES, true, value),
+        new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
+        false, false);
 }
 
 function spared(branch: string, classification: string, commits: number, reason: string): DeletableBranch {
@@ -127,7 +166,7 @@ async function run(): Promise<string> {
     };
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        await build().run();
+        await build().run(harness.options);
     } finally {
         (process.stdout as unknown as { write: typeof original }).write = original;
     }
@@ -147,6 +186,9 @@ beforeEach(() => {
     harness.worktrees = [];
     harness.worktreeTargets = [];
     harness.branchesFreedByWorktreeReap = [];
+    harness.dirtyWorktrees = [];
+    harness.approvedAll = [];
+    harness.options = noFlags();
     // The prompt path is the thing under test, so present a terminal. Restored per-test where needed.
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
 });
@@ -308,8 +350,12 @@ describe('wp-cleanup worktree prompt', () => {
         expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/work/a']);
     });
 
-    // Same posture as the branch prompt: unattended takes the redundant ones and spares NEVER PROPOSED.
-    it('removes the redundant worktrees but not the never-proposed one when there is no TTY', async () => {
+    /**
+     * The non-TTY worktree half, after the change: it removes NOTHING from the numbered block and
+     * hands back the exact command that would. It used to silently take the "redundant" ones, which
+     * both hid the decision and renumbered the list it had just printed.
+     */
+    it('takes no worktree from the block with no TTY, and prints the command that would', async () => {
         Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
         harness.worktrees = [
             new DeletableWorktree('/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED),
@@ -319,9 +365,13 @@ describe('wp-cleanup worktree prompt', () => {
 
         const out = await run();
 
-        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/work/a']);
-        expect(out).toContain('Not a terminal, so no prompt');
-        expect(out).toContain('dean/b');
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(harness.prompts).toEqual([]);
+        // The identical numbered block a human sees, plus how to act on it.
+        expect(out).toContain('[1] /work/a');
+        expect(out).toContain('[2] /work/b');
+        expect(out).toContain(`pnpm wp-cleanup ${FLAG_DELETE_WORKTREES}=all`);
+        expect(out).toContain(`pnpm wp-cleanup ${FLAG_DELETE_WORKTREES}=1,3`);
         Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
     });
 });
@@ -359,7 +409,7 @@ describe('wp-cleanup prompt — asking is the point, but silence is never a yes'
         const out = await run();
 
         expect(harness.approved).toEqual([]);
-        expect(out).toContain('Nothing deleted');
+        expect(out).toContain('were kept');
     });
 
     // An unparseable answer must select nothing — the fail-safe direction for a delete question.
@@ -375,12 +425,12 @@ describe('wp-cleanup prompt — asking is the point, but silence is never a yes'
     /**
      * The AGENT path, and the whole point of this command being runnable by one.
      *
-     * A non-interactive shell used to answer NONE — so an agent told to clean up ran wp-cleanup,
-     * deleted nothing, stayed blocked at the branch cap, and had nothing left to do but hand a human
-     * a table of branches to adjudicate. Now it takes the redundant groups itself (archived and
-     * recoverable) and leaves exactly ONE group for a human: NEVER PROPOSED.
+     * It reaps the zero-commit husk without being asked (that is Part 1), takes NOTHING out of the
+     * numbered block, and prints the block plus the exact command that takes it. Taking part of the
+     * block silently is what it used to do, and it is what made `--delete-branches=3,4` unsafe: the
+     * numbers it printed no longer pointed at the same refs on the next run.
      */
-    it('takes the redundant branches unattended and spares never-proposed when there is no TTY', async () => {
+    it('reaps the husk, takes nothing from the block, and prints the command that would (no TTY)', async () => {
         Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
         harness.spared = [
             spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r'),
@@ -392,12 +442,247 @@ describe('wp-cleanup prompt — asking is the point, but silence is never a yes'
 
         const out = await run();
 
-        // No prompt was issued — the picks are made from the classifications, not from an answer.
         expect(harness.prompts).toEqual([]);
-        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch))
-            .toEqual(['a/one', 'b/two', 'c/three']);
-        expect(out).toContain('Not a terminal, so no prompt');
-        expect(out).toContain('d/four');
+        // Only the zero-commit husk, and it was never in the numbered block.
+        expect(harness.approvedAll.map((entry: DeletableBranch): string => entry.branch)).toEqual(['c/three']);
+        expect(out).toContain('zero-commit branches');
+        expect(out).toContain('[1] a/one');
+        expect(out).toContain('[2] b/two');
+        expect(out).toContain('[3] d/four');
+        expect(out).not.toContain('[4] ');
+        expect(out).toContain(`pnpm wp-cleanup ${FLAG_DELETE_BRANCHES}=all`);
         Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
+    });
+});
+
+/**
+ * PART 1 — a ref with zero unique commits is a HUSK, and a husk is reaped on sight.
+ *
+ * Dean, after a terminal run stopped to ask him about two branches identical to origin/main: "this is
+ * really dumb ... wp-cleanup should just reap if no commits and no agents working ... we can make
+ * mistakes - we want SPEED". Deleting such a ref loses a NAME, not a commit, and the name is archived
+ * to a tag first — so the only thing worth checking is whether somebody is HOLDING it.
+ */
+describe('wp-cleanup zero-commit husks are reaped by default', () => {
+    it('reaps a zero-commit branch in a terminal with no prompt at all', async () => {
+        harness.spared = [spared('dean/investigate-home-config-deadlock', CLASSIFICATION_NO_COMMITS, 0,
+            'no commits of its own — identical to origin/main')];
+
+        const out = await run();
+
+        expect(harness.prompts).toEqual([]);
+        expect(harness.approvedAll.map((entry: DeletableBranch): string => entry.branch))
+            .toEqual(['dean/investigate-home-config-deadlock']);
+        expect(out).toContain('zero-commit branches');
+        expect(out).not.toContain('your call');
+    });
+
+    // PART 2: the husk reap is archived like every other delete, and says how to undo it.
+    it('archives the husk and prints the recover pointer', async () => {
+        harness.spared = [spared('worktree-agent-a10a638a', CLASSIFICATION_NO_COMMITS, 0, 'identical to origin/main')];
+
+        const out = await run();
+
+        expect(out).toContain('archived to a tag first');
+        expect(out).toContain('branch-mutations.log');
+    });
+
+    it('reaps a zero-commit worktree with no prompt', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-husk', 'worktree-agent-b', 'identical to origin/main', 0, false, CLASSIFICATION_NO_COMMITS)];
+
+        const out = await run();
+
+        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path))
+            .toEqual(['/work/wt-husk']);
+        expect(harness.prompts).toEqual([]);
+        expect(out).toContain('zero-commit worktrees');
+    });
+
+    /**
+     * THE ONE CASE THE CAUTION EXISTED FOR. A worktree with uncommitted or untracked files looks
+     * exactly like a husk by its ref, and holds work no archive tag can bring back.
+     */
+    it('spares a zero-commit worktree that holds uncommitted work, and says why', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-live', 'worktree-agent-c', 'identical to origin/main', 0, false, CLASSIFICATION_NO_COMMITS)];
+        harness.dirtyWorktrees = ['/work/wt-live'];
+
+        const out = await run();
+
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(out).toContain('SPARED because work may be in flight');
+        expect(out).toContain('/work/wt-live');
+        expect(out).toContain('uncommitted or untracked files');
+    });
+
+    // A live lock never even reaches the husk pass — merged-branches classifies it LOCKED, which is
+    // not promptable. Asserted here so the guarantee is pinned from wp-cleanup's side too.
+    it('never touches a live-locked worktree, whatever its commit count', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-locked', 'worktree-agent-d', 'locked by claude agent pid 4242 (still running)', 0, false,
+            CLASSIFICATION_LOCKED)];
+
+        const out = await run();
+
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(harness.prompts).toEqual([]);
+        expect(out).toContain('Worktrees deliberately left alone');
+        expect(out).toContain('still running');
+    });
+});
+
+/**
+ * PART 4 — the flags. An explicit flag is a caller who KNOWS, and it beats `process.stdin.isTTY`,
+ * which was only ever a guess about who was standing there.
+ */
+describe('wp-cleanup flags', () => {
+    it('--delete-branches=all deletes the whole classified block with no prompt, tty or not', async () => {
+        harness.spared = [
+            spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r'),
+            spared('b/two', CLASSIFICATION_NEVER_PROPOSED, 2, 'r'),
+        ];
+        harness.options = branchFlag('all');
+
+        await run();
+
+        expect(harness.prompts).toEqual([]);
+        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch)).toEqual(['a/one', 'b/two']);
+    });
+
+    it('--delete-branches=1,3 deletes exactly the numbers printed', async () => {
+        harness.spared = [
+            spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r'),
+            spared('b/two', CLASSIFICATION_CONTENT_IN_MAIN, 1, 'r'),
+            spared('c/three', CLASSIFICATION_NEVER_PROPOSED, 1, 'r'),
+        ];
+        harness.options = branchFlag('1,3');
+
+        const out = await run();
+
+        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch)).toEqual(['a/one', 'c/three']);
+        // The numbering the flag acted on is the numbering that was printed.
+        expect(out.indexOf('[1] a/one')).toBeGreaterThan(-1);
+        expect(out.indexOf('[3] c/three')).toBeGreaterThan(-1);
+    });
+
+    // AN EXPLICIT FLAG BEATS THE TTY SNIFF: a terminal is present and no prompt is issued.
+    it('--delete-branches=none beats a live tty and asks nothing', async () => {
+        harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
+        harness.answer = 'all';
+        harness.options = branchFlag('none');
+
+        await run();
+
+        expect(harness.prompts).toEqual([]);
+        expect(harness.approved).toEqual([]);
+    });
+
+    it('--delete-worktrees=all removes the whole worktree block', async () => {
+        harness.worktrees = [
+            new DeletableWorktree('/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED),
+            new DeletableWorktree('/work/b', 'dean/b', 'never had a PR', 0, false, CLASSIFICATION_NEVER_PROPOSED),
+        ];
+        harness.options = new CleanupOptions(
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, true, 'all'), false, false);
+
+        await run();
+
+        expect(harness.prompts).toEqual([]);
+        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path))
+            .toEqual(['/work/a', '/work/b']);
+    });
+
+    // --interactive is the mirror image: no tty, and it prompts anyway.
+    it('--interactive prompts with no tty', async () => {
+        Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
+        harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
+        harness.answer = 'all';
+        harness.options = new CleanupOptions(
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), false, true);
+
+        await run();
+
+        expect(harness.prompts.length).toEqual(1);
+        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch)).toEqual(['a/one']);
+        Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
+    });
+
+    /**
+     * --report is the print-and-exit case, and the ONLY run whose numbers are still valid when the
+     * next command starts — because a run that deletes nothing cannot renumber anything.
+     */
+    it('--report deletes nothing at all, husks included', async () => {
+        harness.spared = [
+            spared('a/one', CLASSIFICATION_SUPERSEDED, 2, 'r'),
+            spared('c/husk', CLASSIFICATION_NO_COMMITS, 0, 'r'),
+        ];
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-merged', 'dean/merged', 'PR #430 merged', 430, true, CLASSIFICATION_MERGED_PR)];
+        harness.options = new CleanupOptions(
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
+
+        const out = await run();
+
+        expect(harness.approvedAll).toEqual([]);
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(harness.prompts).toEqual([]);
+        expect(out).toContain('nothing will be deleted');
+        expect(out).toContain('Would reap');
+        expect(out).toContain('c/husk');
+        expect(out).toContain('[1] a/one');
+    });
+
+    /**
+     * THE NUMBERING CONTRACT, asserted end to end: what `--report` numbers is what
+     * `--delete-branches=<n>` acts on. A husk reaped in between must not shift a single index, which
+     * is exactly why husks are never IN the block.
+     */
+    it('numbers the report and the flag identically, with a husk reaped in between', async () => {
+        const branches = (): DeletableBranch[] => [
+            spared('a/one', CLASSIFICATION_SUPERSEDED, 2, 'r'),
+            spared('c/husk', CLASSIFICATION_NO_COMMITS, 0, 'r'),
+            spared('b/two', CLASSIFICATION_NEVER_PROPOSED, 5, 'r'),
+        ];
+
+        harness.spared = branches();
+        harness.options = new CleanupOptions(
+            new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
+        const report = await run();
+
+        expect(report).toContain('[1] a/one');
+        expect(report).toContain('[2] b/two');
+
+        harness.out = '';
+        harness.approvedAll = [];
+        harness.spared = branches();
+        harness.options = branchFlag('2');
+        await run();
+
+        // '2' is b/two in BOTH runs — the husk it reaped on the second run did not renumber anything.
+        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch)).toEqual(['b/two']);
+        expect(harness.approvedAll.map((entry: DeletableBranch): string => entry.branch))
+            .toEqual(['c/husk', 'b/two']);
+    });
+
+    // A number past the end of the block means the caller is holding numbers from an older run. That
+    // is the one way this command can delete the wrong ref, so it stops rather than guessing.
+    it('refuses a number that is not in the block it just printed', async () => {
+        harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
+        harness.options = branchFlag('1,4');
+
+        await expect(run()).rejects.toThrow(CliExitError);
+        expect(harness.approved).toEqual([]);
+    });
+
+    // A bare run with nothing to do points at --help rather than saying nothing useful.
+    it('points a bare run with nothing to do at --help', async () => {
+        const out = await run();
+
+        expect(out).toContain('--help');
     });
 });

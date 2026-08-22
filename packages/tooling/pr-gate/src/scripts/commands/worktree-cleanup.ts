@@ -5,11 +5,13 @@ import {
     ReapedWorktree,
     WorktreeReapResult,
     WorktreeReaper,
+    WorktreeService,
+    WorktreeWorkInFlight,
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_DETACHED,
     CLASSIFICATION_PRUNABLE,
-    PROMPTABLE_CLASSIFICATIONS,
+    ADJUDICATED_CLASSIFICATIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -35,6 +37,7 @@ export class WorktreeCleanupSection {
     constructor(
         private readonly mergedBranches: MergedBranchesService,
         private readonly reaper: WorktreeReaper,
+        private readonly worktreeService: WorktreeService,
     ) {}
 
     /**
@@ -61,12 +64,52 @@ export class WorktreeCleanupSection {
      */
     promptable(verdicts: DeletableWorktree[]): DeletableWorktree[] {
         const out: DeletableWorktree[] = [];
-        for (const classification of PROMPTABLE_CLASSIFICATIONS) {
+        for (const classification of ADJUDICATED_CLASSIFICATIONS) {
             for (const tree of verdicts) {
                 if (!tree.deletable && tree.classification === classification) out.push(tree);
             }
         }
         return out;
+    }
+
+    /**
+     * The zero-commit worktrees that are genuinely husks — the ones holding no uncommitted or
+     * untracked work — with a printed line for each one that is spared.
+     *
+     * THIS IS THE ONE CHECK THAT MAKES REAPING A ZERO-COMMIT WORKTREE SAFE. A branch with no commits
+     * of its own can lose nothing; a DIRECTORY with no commits can lose everything an agent has typed
+     * in the last twenty minutes, and the two are indistinguishable by ref alone. `git status
+     * --porcelain` is the difference, it is one local spawn, and it fails safe to "dirty".
+     *
+     * It is applied ONLY to the husks. Anything with unique commits is decided by flag or prompt, and
+     * git's own refusal to remove a dirty worktree (WorktreeReaper never passes `--force`) is the
+     * backstop there — but a backstop that reports a FAILURE is not good enough for a delete nobody
+     * was asked about, which is why the husk path states the spare instead of tripping over it.
+     */
+    withoutUncommitted(husks: DeletableWorktree[]): DeletableWorktree[] {
+        const clean: DeletableWorktree[] = [];
+        let spared = '';
+        for (const tree of husks) {
+            const held = this.workInFlight(tree.path);
+            if (held.held) {
+                // The REASON is printed verbatim, because "it has uncommitted files" and "git would
+                // not tell me" send an operator to two different places.
+                spared += `  · ${tree.path} [${tree.branch}] — ${held.reason};\n`
+                    + '        nothing archives that, so it is left exactly where it is\n';
+                continue;
+            }
+            clean.push(tree);
+        }
+        if (spared !== '') {
+            process.stdout.write('\nZero-commit worktrees SPARED because work may be in flight in them:\n' + spared);
+        }
+        return clean;
+    }
+
+    // Seam: one git spawn per candidate, overridden in the spec so the decision is testable with no
+    // real worktrees on disk.
+    protected workInFlight(worktreePath: string): WorktreeWorkInFlight {
+        return this.worktreeService.workInFlight(worktreePath);
     }
 
     reap(

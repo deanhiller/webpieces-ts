@@ -720,16 +720,31 @@ its branch, so reaping the tree is what makes the branch reapable, and the branc
 its verdicts against the post-removal truth. Do not hand-run `git worktree prune`/`remove` or
 `git branch -D` — the tool does both, in the right order, and archives what it removes.
 
-It removes only what it can PROVE is dead: a worktree whose directory is already gone, or whose branch
-is dead by a merged PR (its own, or the one it snapshots); a branch that is merged, is a squash-merge
-backup of a merged one, or has no commits of its own. Everything short of that is spared or offered as a
-question — a worktree LOCKED by something still there (whoever the lock reason names, or a claude agent
-whose pid is still running), the one you are standing in, a detached HEAD, and any branch not provably
-merged (including one with no commits yet, which is what every worktree looks like while an agent is
-still working in it). Every removal is logged with its pre-delete SHA and a `recover=` command that
-brings back both the directory and its branch. Do not stop to ask whether it is safe to run — it is the
-sanctioned cleanup command, and asking is what let stale branches and worktrees pile up in the first
-place.
+It removes what it can PROVE is dead — a worktree whose directory is already gone, or whose branch is
+dead by a merged PR (its own, or the one it snapshots); a branch that is merged or is a squash-merge
+backup of a merged one — **plus every zero-commit husk**: a ref identical to `origin/main`, where the
+delete costs a NAME and not a commit. A husk is spared only when somebody is provably HOLDING it: a
+worktree with uncommitted or untracked files, one LOCKED by something still there (whoever the lock
+reason names, or a claude agent whose pid is still running), the tree you are standing in, a detached
+HEAD — each reported with that as its reason. Every removal is logged with its pre-delete SHA and a
+`recover=` command that brings back both the directory and its branch. Do not stop to ask whether it is
+safe to run — it is the sanctioned cleanup command, and asking is what let stale branches and worktrees
+pile up in the first place.
+
+Anything carrying UNIQUE COMMITS is never taken by default. It is printed in a numbered, classified
+block — identical whether or not there is a terminal — and you act on it with a flag:
+
+```bash
+pnpm wp-cleanup --report                 # the whole classified picture, deletes nothing
+pnpm wp-cleanup --delete-branches=all    # or =none, or =1,3 by the numbers just printed
+pnpm wp-cleanup --delete-worktrees=1,2
+pnpm wp-cleanup --interactive            # prompt even with no tty
+pnpm wp-cleanup --help
+```
+
+The numbers in a `--delete-*` flag are the numbers printed on the SAME run; a number past the end of the
+block stops the run rather than deleting the wrong ref. An explicit flag always beats the terminal sniff
+(`isTTY` was only ever a guess about who was standing there).
 
 **The ONLY reasons to stop before posting the PR:**
 - The human explicitly said "don't open a PR yet."

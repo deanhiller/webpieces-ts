@@ -360,7 +360,7 @@ export {
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_DETACHED,
-    PROMPTABLE_CLASSIFICATIONS,
+    ADJUDICATED_CLASSIFICATIONS,
 } from './merged-branches';
 export {
     BranchArchiver,
@@ -373,6 +373,7 @@ export {
 } from './branch-archiver';
 export {
     Worktree,
+    WorktreeWorkInFlight,
     WorktreeService,
 } from './worktrees';
 export {
