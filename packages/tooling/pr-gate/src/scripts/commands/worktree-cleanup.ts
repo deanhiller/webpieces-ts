@@ -6,11 +6,12 @@ import {
     WorktreeReapResult,
     WorktreeReaper,
     WorktreeService,
+    WorktreeWorkInFlight,
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_DETACHED,
     CLASSIFICATION_PRUNABLE,
-    PROMPTABLE_CLASSIFICATIONS,
+    ADJUDICATED_CLASSIFICATIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -63,7 +64,7 @@ export class WorktreeCleanupSection {
      */
     promptable(verdicts: DeletableWorktree[]): DeletableWorktree[] {
         const out: DeletableWorktree[] = [];
-        for (const classification of PROMPTABLE_CLASSIFICATIONS) {
+        for (const classification of ADJUDICATED_CLASSIFICATIONS) {
             for (const tree of verdicts) {
                 if (!tree.deletable && tree.classification === classification) out.push(tree);
             }
@@ -89,23 +90,26 @@ export class WorktreeCleanupSection {
         const clean: DeletableWorktree[] = [];
         let spared = '';
         for (const tree of husks) {
-            if (this.hasUncommittedChanges(tree.path)) {
-                spared += `  · ${tree.path} [${tree.branch}] — has uncommitted or untracked files, so somebody\n`
-                    + '        is working in it; nothing archives those, so it is left exactly where it is\n';
+            const held = this.workInFlight(tree.path);
+            if (held.held) {
+                // The REASON is printed verbatim, because "it has uncommitted files" and "git would
+                // not tell me" send an operator to two different places.
+                spared += `  · ${tree.path} [${tree.branch}] — ${held.reason};\n`
+                    + '        nothing archives that, so it is left exactly where it is\n';
                 continue;
             }
             clean.push(tree);
         }
         if (spared !== '') {
-            process.stdout.write('\nZero-commit worktrees SPARED because work is in flight in them:\n' + spared);
+            process.stdout.write('\nZero-commit worktrees SPARED because work may be in flight in them:\n' + spared);
         }
         return clean;
     }
 
     // Seam: one git spawn per candidate, overridden in the spec so the decision is testable with no
     // real worktrees on disk.
-    protected hasUncommittedChanges(worktreePath: string): boolean {
-        return this.worktreeService.hasUncommittedChanges(worktreePath);
+    protected workInFlight(worktreePath: string): WorktreeWorkInFlight {
+        return this.worktreeService.workInFlight(worktreePath);
     }
 
     reap(

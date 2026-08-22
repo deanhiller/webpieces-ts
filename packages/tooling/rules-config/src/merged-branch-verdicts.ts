@@ -61,7 +61,7 @@ export const CLASSIFICATION_BACKUP_OF_LIVE = 'backup-of-live';
  * THIS verdict is the exception, and it is not the old auto-delete coming back. wp-cleanup REAPS a
  * zero-commit ref by default — after checking the thing the 2026-07-30 incident actually turned on:
  * whether somebody is HOLDING it. A worktree with uncommitted or untracked files
- * (`WorktreeService.hasUncommittedChanges`), one LOCKED by a live agent, the tree you are standing in
+ * (`WorktreeService.workInFlight`), one LOCKED by a live agent, the tree you are standing in
  * and a detached HEAD are all spared, each with a stated reason. Everything else with zero commits is
  * a husk, and deleting a husk loses a NAME, not a commit — which the archive tag then hands back.
  *
@@ -101,7 +101,7 @@ export const CLASSIFICATION_DETACHED = 'detached-worktree';
 // ones that need thought. CLASSIFICATION_NO_COMMITS is the fourth and is REAPED rather than asked
 // about (see its docstring): it stays in this list because this is the list wp-cleanup collects a
 // candidate set from, and pulling it out would mean a husk never reaching the code that reaps it.
-export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
+export const ADJUDICATED_CLASSIFICATIONS: readonly string[] = [
     // CLASSIFICATION_BACKUP_OF_LIVE is deliberately NOT here — it is auto-reaped now. Anything that
     // reaches this list is a real judgement call; if a group's answer is always yes, it belongs in
     // the deletable set instead of on a human's plate.

@@ -25,6 +25,23 @@ const BRANCH_KEY = 'branch ';
 const LOCKED_KEY = 'locked ';
 const REFS_HEADS = 'refs/heads/';
 
+/**
+ * Whether a worktree is being worked in, and the reason in the words an operator gets shown.
+ *
+ * Data-only (per CLAUDE.md, classes for data). A bare boolean was the first cut and it collapsed
+ * "there are uncommitted files here" into "git would not answer me" — two different things to tell
+ * somebody who is deciding whether a directory is safe to remove.
+ */
+export class WorktreeWorkInFlight {
+    held: boolean;
+    reason: string;
+
+    constructor(held: boolean, reason: string) {
+        this.held = held;
+        this.reason = reason;
+    }
+}
+
 // Data-only (per CLAUDE.md, classes for data).
 export class Worktree {
     path: string;
@@ -143,21 +160,30 @@ export class WorktreeService {
     }
 
     /**
-     * Does this worktree hold uncommitted or untracked files?
+     * Is somebody working in this worktree — and if so, WHY do we say that?
      *
-     * THE ONE THING THAT MAKES A ZERO-COMMIT WORKTREE UNREAPABLE. A ref with no commits of its own
+     * THE ONE CHECK THAT MAKES A ZERO-COMMIT WORKTREE UNREAPABLE. A ref with no commits of its own
      * loses nothing when it is deleted — that is a property of the REF. A DIRECTORY is different:
      * every worktree looks exactly like that husk from `git worktree add -b` until its first commit,
      * which is precisely the window an agent is working in. `git status --porcelain` is what tells
      * those two apart, and it is one cheap local spawn per candidate.
      *
-     * Fails SAFE to TRUE: if git cannot answer, we do not know that the tree is empty, and the
-     * fail-safe direction for a question about deleting a directory is "leave it".
+     * It returns the REASON rather than a bare boolean because the two ways of being held are not the
+     * same sentence to a human: "it has uncommitted files" is a fact about the tree, and "git could
+     * not tell me" is a fact about our evidence. Both spare the worktree — unknown must fail SAFE,
+     * since the fail-safe direction for deleting a directory is to leave it — but reporting the
+     * second as the first tells an operator to go look for edits that are not there.
      */
-    hasUncommittedChanges(worktreePath: string): boolean {
+    workInFlight(worktreePath: string): WorktreeWorkInFlight {
         const result = spawnSync('git', ['status', '--porcelain'], { cwd: worktreePath, encoding: 'utf8' });
-        if (result.status !== 0 || typeof result.stdout !== 'string') return true;
-        return result.stdout.trim() !== '';
+        if (result.status !== 0 || typeof result.stdout !== 'string') {
+            return new WorktreeWorkInFlight(true,
+                '`git status` could not report on it, so it is not provably empty');
+        }
+        if (result.stdout.trim() !== '') {
+            return new WorktreeWorkInFlight(true, 'has uncommitted or untracked files');
+        }
+        return new WorktreeWorkInFlight(false, '');
     }
 
     /**

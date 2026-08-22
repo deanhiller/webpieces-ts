@@ -12,6 +12,7 @@ import {
     WorktreeReapResult,
     WorktreeReaper,
     WorktreeService,
+    WorktreeWorkInFlight,
     CliExitError,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
@@ -98,8 +99,10 @@ class FakeWorktreeSection extends WorktreeCleanupSection {
         return harness.worktrees;
     }
 
-    protected hasUncommittedChanges(worktreePath: string): boolean {
-        return harness.dirtyWorktrees.includes(worktreePath);
+    protected workInFlight(worktreePath: string): WorktreeWorkInFlight {
+        return harness.dirtyWorktrees.includes(worktreePath)
+            ? new WorktreeWorkInFlight(true, 'has uncommitted or untracked files')
+            : new WorktreeWorkInFlight(false, '');
     }
 
     reap(_repoRoot: string, _verb: 'wp-cleanup', targets: DeletableWorktree[]): WorktreeReapResult {
@@ -484,17 +487,6 @@ describe('wp-cleanup zero-commit husks are reaped by default', () => {
         expect(out).toContain('branch-mutations.log');
     });
 
-    // A branch classified NEVER PROPOSED that nonetheless holds zero unique commits is the same husk.
-    // The verdict token is not the evidence here; the commit count is.
-    it('treats a zero-unique-commit branch as a husk whatever its classification says', async () => {
-        harness.spared = [spared('dean/parked', CLASSIFICATION_NEVER_PROPOSED, 0, 'never had a PR')];
-
-        const out = await run();
-
-        expect(harness.approvedAll.map((entry: DeletableBranch): string => entry.branch)).toEqual(['dean/parked']);
-        expect(out).not.toContain('your call');
-    });
-
     it('reaps a zero-commit worktree with no prompt', async () => {
         harness.worktrees = [new DeletableWorktree(
             '/work/wt-husk', 'worktree-agent-b', 'identical to origin/main', 0, false, CLASSIFICATION_NO_COMMITS)];
@@ -519,7 +511,7 @@ describe('wp-cleanup zero-commit husks are reaped by default', () => {
         const out = await run();
 
         expect(harness.worktreeTargets).toEqual([]);
-        expect(out).toContain('SPARED because work is in flight');
+        expect(out).toContain('SPARED because work may be in flight');
         expect(out).toContain('/work/wt-live');
         expect(out).toContain('uncommitted or untracked files');
     });

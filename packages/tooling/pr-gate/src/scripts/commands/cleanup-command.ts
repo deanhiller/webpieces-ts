@@ -16,7 +16,7 @@ import {
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_BACKUP_OF_MERGED,
     CLASSIFICATION_BACKUP_OF_LIVE,
-    PROMPTABLE_CLASSIFICATIONS,
+    ADJUDICATED_CLASSIFICATIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -343,7 +343,7 @@ export class CleanupCommand {
      */
     private promptable(spared: DeletableBranch[]): DeletableBranch[] {
         const out: DeletableBranch[] = [];
-        for (const classification of PROMPTABLE_CLASSIFICATIONS) {
+        for (const classification of ADJUDICATED_CLASSIFICATIONS) {
             for (const entry of spared) {
                 if (entry.classification === classification) out.push(entry);
             }
@@ -357,11 +357,15 @@ export class CleanupCommand {
      * Keeping them OUT of the numbered block is what keeps `--delete-branches=1,3` honest: whatever
      * this reaps, the entries the caller can name are the same entries in the same order as on the
      * `--report` run that printed those numbers.
+     *
+     * THE CLASSIFICATION TOKEN IS THE ONLY SPELLING OF "husk". It would read as belt-and-braces to
+     * also accept `commits === 0` here, and it is the opposite: MergedBranchesService.classify tests
+     * commits===0 BEFORE anything else, so a second test can only ever disagree with the verdict — and
+     * disagreeing in the widening direction, auto-reaping something no classification called a husk.
      */
-    private husks<T extends DeletableBranch | DeletableWorktree>(promptable: T[]): T[] {
-        return promptable.filter((entry: T): boolean =>
-            entry.classification === CLASSIFICATION_NO_COMMITS
-            || (entry instanceof DeletableBranch && entry.commits === 0));
+    private husks<T extends DeletableBranch | DeletableWorktree>(adjudicated: T[]): T[] {
+        return adjudicated.filter(
+            (entry: T): boolean => entry.classification === CLASSIFICATION_NO_COMMITS);
     }
 
     private rest<T extends DeletableBranch | DeletableWorktree>(promptable: T[], husks: T[]): T[] {

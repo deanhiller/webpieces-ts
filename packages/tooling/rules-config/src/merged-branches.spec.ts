@@ -71,7 +71,7 @@ import {
     CLASSIFICATION_PRUNABLE,
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
-    PROMPTABLE_CLASSIFICATIONS,
+    ADJUDICATED_CLASSIFICATIONS,
     MergedBranchesCache,
     DeletableWorktree,
 } from './merged-branches';
@@ -175,7 +175,7 @@ describe('MergedBranchesService empty-branch husks', () => {
     // …and it reaches wp-cleanup's adjudicated set rather than being dropped on the floor, which is
     // what lets a real husk be reaped there.
     it('keeps the husk in the adjudicated set, so wp-cleanup still sees it', () => {
-        expect(PROMPTABLE_CLASSIFICATIONS).toContain(CLASSIFICATION_NO_COMMITS);
+        expect(ADJUDICATED_CLASSIFICATIONS).toContain(CLASSIFICATION_NO_COMMITS);
     });
 
     it('spares an unmerged branch that has real commits on it', () => {
@@ -528,7 +528,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
      * every "which of these 6 branches may I delete?" the tooling put to a human.
      */
     it('is auto-reaped rather than put to a human', () => {
-        expect(PROMPTABLE_CLASSIFICATIONS).not.toContain(CLASSIFICATION_BACKUP_OF_LIVE);
+        expect(ADJUDICATED_CLASSIFICATIONS).not.toContain(CLASSIFICATION_BACKUP_OF_LIVE);
     });
 });
 
