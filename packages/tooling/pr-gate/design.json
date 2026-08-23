@@ -2400,6 +2400,15 @@
                     "paramType": "WorktreeReaper"
                 },
                 {
+                    "from": "WorktreeCleanupSection",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktreeService",
+                    "paramType": "WorktreeService"
+                },
+                {
                     "from": "WorktreeLockVerdicts",
                     "to": "AgentWorktreeLockReader",
                     "injection": "type",
