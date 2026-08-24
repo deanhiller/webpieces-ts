@@ -48,6 +48,7 @@ export class ClientErrorTranslator {
      * @param protocolError - Parsed ProtocolError from response body
      * @returns the chosen error plus its provenance and the downstream status
      */
+    // webpieces-disable no-function-outside-class -- pure, stateless status-to-type mapping with nothing to inject, called from a BROWSER bundle where no DI container exists; static is the established idiom of this class
     static translateError(response: Response, protocolError: ProtocolError): TranslatedFailure {
         const statusCode = response.status;
 
@@ -78,6 +79,7 @@ export class ClientErrorTranslator {
      * - 598 → HttpVendorError (with waitSeconds) - custom status code
      * - other → generic HttpError
      */
+    // webpieces-disable no-function-outside-class -- private helper of the static above; same reason
     private static builtInError(response: Response, protocolError: ProtocolError): Error {
         const statusCode = response.status;
         const message = protocolError.message || response.statusText || 'Unknown error';
