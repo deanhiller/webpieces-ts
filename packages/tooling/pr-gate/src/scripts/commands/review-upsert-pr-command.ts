@@ -19,6 +19,7 @@ import { PrContextWriter } from '../workflow/pr-context-writer';
 import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from '../workflow/review-report';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
+import { StageOutputLog, REVIEW_CONSOLE_LOG } from '../workflow/stage-output-log';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -81,10 +82,27 @@ export class ReviewUpsertPrCommand {
         private readonly activeHatchReport: ActiveHatchReport,
         // Injected only to RESOLVE + RENDER refusals (see refusals()). This stage never archives a verdict.
         private readonly reviewJsonService: ReviewJsonService,
+        private readonly stageConsole: StageOutputLog,
     ) {}
 
+    /**
+     * Everything below runs with this stage's console CAPTURED to a file (see StageOutputLog). Only the
+     * lines an agent must act on before it can do anything else reach the terminal — the build heartbeat
+     * and result, and the closing instruction block. The merge validation, the hatch report, the checklist
+     * scan and the diff extraction are all in the file, one `grep` away.
+     *
+     * This is the FIRST half of the fix for the piped-command watchdog kill: an agent pipes a command it
+     * expects to flood, a pipe withholds every byte until exit, and the harness kills a command that has
+     * printed nothing for 600 seconds — after a full build. Guarding the pipe without first shrinking the
+     * output would only have traded that kill for a flooded context.
+     */
     async run(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
+        await this.stageConsole.withCapture(
+            repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot, opts));
+    }
+
+    private async runStage(repoRoot: string, opts: ReviewUpsertPrOptions): Promise<void> {
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         const featureName = this.aiBranchName.getFeatureName();
@@ -155,7 +173,6 @@ export class ReviewUpsertPrCommand {
             'pnpm wp-review-upsert-pr',
             'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
             REVIEW_STAGE,
-            false,
         ));
         // Repo-wide: the build must not have left anything uncommitted AND unstaged. Runs HERE, not in
         // finish, because this is the stage that ran buildCommand and is therefore holding the dirty
@@ -214,7 +231,10 @@ export class ReviewUpsertPrCommand {
         input.briefings = briefings.slice();
         input.refused = this.refusals(scan);
         input.skipOptional = opts.skipOptional;
-        process.stdout.write(this.reviewReport.render(input));
+        // `say`: this block IS the next action — which reviewers to spawn, where review.json goes, and
+        // the command after that. Capturing it into the log would leave the terminal with a pointer and
+        // no instruction, which is the one thing this stage may never do.
+        this.stageConsole.say(this.reviewReport.render(input));
     }
 
     /**

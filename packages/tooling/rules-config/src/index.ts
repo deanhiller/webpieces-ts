@@ -74,7 +74,7 @@ export { validateChecklistDocs } from './checklist-docs-validator';
 // `whole-repo-build-guard`: ON requires an explicit `true`, and there is no per-key default to export.
 export {
     HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
-    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION,
     HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_MAX_CONCURRENT_BUILDS,
     DEFAULT_MAX_CONCURRENT_BUILDS,
 } from './home-config';

@@ -32,11 +32,9 @@ import { CommandScanner } from '../command-scan';
  * the right direction for a guard whose false positive costs an agent its next legitimate command.
  */
 
-// Package-manager wrappers that precede the real program (`pnpm exec vitest`, `npx nx`, `yarn build-all`).
-const RUNNERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'yarn', 'npx', 'pnpx', 'bun', 'bunx']);
-
-// The runner's own verb, consumed with it: `pnpm run build-all` and `pnpm build-all` are one command.
-const RUNNER_VERBS: ReadonlySet<string> = new Set(['run', 'run-script', 'exec', 'dlx', 'x']);
+// The package-manager wrapper (`pnpm exec vitest`, `npx nx`) is stripped by CommandScanner, which owns
+// that list — see `runnerStrippedWords`. It used to be duplicated here, and a second guard needing the
+// same normalization is exactly when a duplicate starts to drift.
 
 // Any of these ANYWHERE in the segment means the human/agent already scoped the work, so nothing here
 // applies. `--filter` is pnpm's project selector; the nx selectors are checked again per-subcommand.
@@ -114,11 +112,10 @@ export class WholeRepoBuildScan {
         // exactly how a scoped command ends up blocked.
         if (this.isNarrowed(this.scanner.words(segment))) return null;
 
-        const raw = this.scanner.words(segment);
-        const words = this.effectiveWords(segment);
+        const words = this.scanner.runnerStrippedWords(segment);
         if (words.length === 0) return null;
 
-        const program = this.programName(words[0]);
+        const program = this.scanner.programName(words[0]);
         const args = words.slice(1);
 
         if (WHOLE_REPO_SCRIPTS.has(program)) return `${program} builds every project`;
@@ -127,38 +124,10 @@ export class WholeRepoBuildScan {
         // `test` ONLY as a package-manager script — `pnpm test`, `npm test`, `yarn test`. A NAKED `test`
         // is POSIX test(1) (the `[` builtin), never a build, and treating the bare word as the script
         // is how a fragment of somebody's data ends up classified as a workspace-wide test run.
-        if (program === 'test' && args.length === 0 && this.atWorkspaceRoot && this.viaRunner(raw)) {
+        if (program === 'test' && args.length === 0 && this.atWorkspaceRoot && this.scanner.viaRunner(segment)) {
             return 'the root `test` script runs every spec in the repo';
         }
         return null;
-    }
-
-    // Did a package-manager runner precede the program (`pnpm …`, `npx …`)? Read off the RAW words,
-    // before effectiveWords strips it, which is the only place that fact still exists.
-    private viaRunner(raw: readonly string[]): boolean {
-        return raw.length > 0 && RUNNERS.has(this.programName(raw[0]));
-    }
-
-    /**
-     * The segment's words with wrappers stripped: shell prefixes (`time`, `sudo`, env assignments) by
-     * CommandScanner, then the package-manager runner and its verb. `pnpm exec vitest run` and
-     * `vitest run` reduce to the same words, which is the whole point.
-     */
-    private effectiveWords(segment: string): readonly string[] {
-        let words = this.scanner.words(segment);
-        while (words.length > 0 && RUNNERS.has(this.programName(words[0]))) {
-            words = words.slice(1);
-            // The runner's own flags (`--silent`, `-r`) sit between it and the program.
-            while (words.length > 0 && words[0].startsWith('-')) words = words.slice(1);
-            if (words.length > 0 && RUNNER_VERBS.has(words[0])) words = words.slice(1);
-        }
-        return words;
-    }
-
-    // `./node_modules/.bin/nx` and `/usr/local/bin/pnpm` are the same programs as `nx` and `pnpm`.
-    private programName(token: string): string {
-        const base = token.split('/').pop() ?? token;
-        return base.endsWith('.cmd') ? base.slice(0, -'.cmd'.length) : base;
     }
 
     // Did the caller already scope this command? Judged over the WHOLE segment, so a selector attached

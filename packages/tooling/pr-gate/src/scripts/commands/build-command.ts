@@ -49,17 +49,17 @@ export class BuildOptions {
  *
  * ─── ONE resolver, and ONE gate ────────────────────────────────────────────────────────────────────
  * `BuildAffected.runBuildGate` is the single code path that resolves the command
- * (`resolveBuildCommand`), announces it, runs it, honours `buildGateLogCapture`, and renders the
+ * (`resolveBuildCommand`), announces it, runs it, captures its output to a log file, and renders the
  * failure. `wp-build` calls THAT — it does not re-read the config key and does not hand-write a second
  * failure string. A second reader is a second thing that can drift, and a second failure message is a
  * second thing that can teach a command the gate does not run; drift is the entire reason this bin
  * exists, so reproducing it one level in would be self-defeating.
  *
  * Only `BuildGateOptions` differs from stage ② and stage ③ — the label, the command to re-run, the
- * headline, the log-file stage id, and `alwaysCapture`.
+ * headline, and the log-file stage id.
  *
  * ─── The output goes to a FILE, unconditionally ────────────────────────────────────────────────────
- * `alwaysCapture: true` is the one behaviour wp-build does not share with the PR-flow stages, and it is
+ * Every caller of the gate captures, and there is no flag or config key that selects otherwise. That is
  * the reason this bin is worth running: the build's full stdout+stderr land in `.webpieces/build.log`
  * (previous run kept as `.webpieces/build.log.bak`), and the console gets a heartbeat plus a pointer at
  * that file. A measured session burned ~19 minutes re-running `nx affected` five times with no code
@@ -86,7 +86,6 @@ export class BuildCommand {
             'pnpm wp-build',
             'Build failed.',
             BUILD_STAGE,
-            true,
         ));
     }
 

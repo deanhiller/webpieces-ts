@@ -1,8 +1,9 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
-import * as path from 'path';
-import { dotWebpieces, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+
+import { GateLogFile } from './gate-log-file';
+import { StageOutputLog } from './stage-output-log';
 
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
 // The build gate already builds everything. When the output only ever went to the CONSOLE, an agent that
@@ -25,6 +26,10 @@ import { injectable, bindingScopeValues } from 'inversify';
 // `spawnSync` blocks the event loop for the length of the build, so NOTHING can print while it runs — and
 // a silent terminal for 3–7 minutes is indistinguishable from a hang. The heartbeat is the reason this is
 // async, and it is why `run` returns a Promise and `BuildAffected.runBuildGate` is async with it.
+//
+// It is also the reason the heartbeat goes through `StageOutputLog.say` rather than `process.stdout` —
+// stage ② and stage ③ capture their own console output to a file, and a heartbeat captured into a file is
+// a heartbeat nobody can see. The 600-second watchdog that kills a silent command does not read files.
 
 /** How often the heartbeat reports the log's size. Hardcoded: a knob here would be a knob the PR gate's
  * own build never receives, and the two must stay the same command. */
@@ -45,7 +50,6 @@ export const BUILD_STAGE = 'build';
 
 /** The one fixed log name — see BuildGateLog.fileNameFor for why only `wp-build` gets one. */
 export const BUILD_LOG_NAME = 'build.log';
-const BACKUP_SUFFIX = '.bak';
 
 /**
  * The heartbeat's state: the line count reported on the PREVIOUS tick, so a tick that has not moved can
@@ -58,23 +62,18 @@ const BACKUP_SUFFIX = '.bak';
 export class BuildLogHeartbeat {
     private previous: number | null = null;
 
-    constructor(private readonly logPath: string, private readonly displayPath: string) {}
+    constructor(
+        private readonly files: GateLogFile,
+        private readonly logPath: string,
+        private readonly displayPath: string,
+    ) {}
 
     /** One heartbeat line — `<path> size <n> lines`, plus ` still` when <n> has not moved. */
     tick(): string {
-        const count = this.lineCount();
+        const count = this.files.lineCount(this.logPath);
         const still = this.previous !== null && count === this.previous ? ' still' : '';
         this.previous = count;
         return `${this.displayPath} size ${count} lines${still}`;
-    }
-
-    // Lines currently in the log. A log that does not exist yet is zero lines, not an error: the build may
-    // simply not have written its first byte, and a heartbeat may never be the reason a build stops.
-    private lineCount(): number {
-        if (!fs.existsSync(this.logPath)) return 0;
-        const body = fs.readFileSync(this.logPath, 'utf8');
-        if (body === '') return 0;
-        return body.split('\n').length - (body.endsWith('\n') ? 1 : 0);
     }
 }
 
@@ -82,18 +81,16 @@ export class BuildLogHeartbeat {
  * Captures the build gate's full output to a file, reports progress while it runs, and renders the
  * pointer the caller is handed instead of a rebuild instruction.
  *
+ * WHERE the file goes, how the previous run is kept, and what the pointer reads like are `GateLogFile`'s
+ * — one mechanism, shared with the stage console log, so there is a single answer to "where is it?".
+ *
  * ─── Two naming schemes, one rule each ─────────────────────────────────────────────────────────────────
  *   • `wp-build` (BUILD_STAGE) writes ONE fixed path, `.webpieces/build.log`. It is fixed because a HUMAN
  *     OR AN AGENT TYPES IT — `grep -n error .webpieces/build.log` has to be writable from memory, and a
- *     name carrying a branch and a sha is not. History comes from the rotation below instead.
+ *     name carrying a branch and a sha is not. History comes from the rotation instead.
  *   • stage ② and stage ③ write `logs/build-gate-<stage>-<branch>-<shortSha>.log`, because those two
  *     gates CAN run against one commit and a failure message from one must not be pointing at a file the
  *     other overwrote. Nobody types those names; the failure message prints them.
- *
- * ─── Rotation, everywhere ──────────────────────────────────────────────────────────────────────────────
- * Every run moves an existing log to `<log>.bak` before writing, so the last TWO runs are always on disk.
- * One rule for every stage: no branch, and the previous run of a re-run at the same commit survives
- * instead of being truncated away.
  *
  * ─── Concurrency ───────────────────────────────────────────────────────────────────────────────────────
  * The DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces/worktrees/<git worktree name>/`
@@ -103,14 +100,17 @@ export class BuildLogHeartbeat {
  */
 @injectable(bindingScopeValues.Singleton)
 export class BuildGateLog {
+    constructor(
+        private readonly files: GateLogFile,
+        private readonly stageConsole: StageOutputLog,
+    ) {}
+
     /** Absolute path of the log for `stage` at the current HEAD, creating its directory. */
     pathFor(repoRoot: string, stage: string): string {
-        const file = this.resolvePath(repoRoot, stage);
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        return file;
+        return this.resolvePath(repoRoot, stage);
     }
 
-    /** The same path WITHOUT creating anything, and '' when no such log exists. Used by finish's skip path. */
+    /** The same path, and '' when no log has been WRITTEN there yet. Used by finish's skip path. */
     existingLogFor(repoRoot: string, stage: string): string {
         const file = this.resolvePath(repoRoot, stage);
         return fs.existsSync(file) ? file : '';
@@ -124,32 +124,16 @@ export class BuildGateLog {
         return `build-gate-${this.slug(stage)}-${branch === '' ? 'nobranch' : branch}-${sha === '' ? 'nosha' : sha}.log`;
     }
 
-    /** Where the PREVIOUS run of `logPath` is kept — always `<logPath>.bak`. */
-    backupPathFor(logPath: string): string {
-        return `${logPath}${BACKUP_SUFFIX}`;
-    }
-
-    /**
-     * Move an existing log aside to `<log>.bak`, overwriting any previous backup. A missing log is the
-     * normal first-run state and is not an error.
-     */
-    rotate(logPath: string): void {
-        fs.mkdirSync(path.dirname(logPath), { recursive: true });
-        if (!fs.existsSync(logPath)) return;
-        fs.rmSync(this.backupPathFor(logPath), { force: true });
-        fs.renameSync(logPath, this.backupPathFor(logPath));
-    }
-
     /**
      * Run `buildCommand` with its stdout AND stderr redirected in full to `logPath`, printing a heartbeat
-     * to the console every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's exit code.
-     * Nothing is truncated and nothing is streamed.
+     * every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's exit code. Nothing is
+     * truncated and nothing is streamed.
      */
     async run(repoRoot: string, buildCommand: string, logPath: string): Promise<number> {
-        this.rotate(logPath);
+        this.files.rotate(logPath);
         const fd = fs.openSync(logPath, 'w');
-        const heartbeat = new BuildLogHeartbeat(logPath, this.displayPath(repoRoot, logPath));
-        const timer = setInterval((): void => { process.stdout.write(`${heartbeat.tick()}\n`); }, HEARTBEAT_MS);
+        const heartbeat = new BuildLogHeartbeat(this.files, logPath, this.files.displayPath(repoRoot, logPath));
+        const timer = setInterval((): void => { this.stageConsole.say(`${heartbeat.tick()}\n`); }, HEARTBEAT_MS);
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the timer and the fd MUST be released
         // whatever the child does, and the exit code is returned rather than thrown so runBuildGate owns
         // the one CliExitError.
@@ -166,7 +150,7 @@ export class BuildGateLog {
      * The success summary: the caller is told WHERE the full output is, not handed the output.
      */
     successMessage(logPath: string): string {
-        return `\nBuild success\n${this.logPointer(logPath)}`;
+        return `\nBuild success\n${this.files.pointer(logPath)}`;
     }
 
     /**
@@ -179,44 +163,10 @@ export class BuildGateLog {
      * agent guessing or rebuilding — so it is told to surface the contradiction to the human and stop.
      */
     failureMessage(buildCommand: string, logPath: string): string {
-        return `\nBuild Failed: ${buildCommand}\n${this.logPointer(logPath)}\n` +
-            `Last ${FAILURE_TAIL_LINES} lines of that log:\n${this.tail(logPath)}\n` +
+        return `\nBuild Failed: ${buildCommand}\n${this.files.pointer(logPath)}\n` +
+            `Last ${FAILURE_TAIL_LINES} lines of that log:\n${this.files.tail(logPath, FAILURE_TAIL_LINES)}\n` +
             `Read that FILE for the failures. Do NOT re-run the build to see them.\n` +
             `If you do not see failures in that log, report that to the user and stop.\n`;
-    }
-
-    // The two lines that name the log, identical on success and failure so there is one thing to recognise.
-    // The backup line says what is TRUE RIGHT NOW: on the very first build in a tree there is no `.bak`
-    // yet, and pointing a reader at a file that does not exist is the small lie that costs a wasted `cat`.
-    private logPointer(logPath: string): string {
-        const name = path.basename(logPath);
-        const backedUp = fs.existsSync(this.backupPathFor(logPath))
-            ? `(${name} is backed up to ${name}${BACKUP_SUFFIX} every run so you have the last 2 builds of logs)`
-            : `(the previous ${name} is kept as ${name}${BACKUP_SUFFIX} on every run — this is the first, so there is none yet)`;
-        return `FullLog : ${logPath}\n${backedUp}\n`;
-    }
-
-    /**
-     * The log's last FAILURE_TAIL_LINES lines, or a plain statement of why there are none.
-     *
-     * A read that fails is REPORTED, never allowed to throw: this renders the message for a build that has
-     * ALREADY failed, so an I/O error escaping here would replace the real failure with the renderer's own
-     * — the caller would lose the build error and be handed a filesystem error instead. The full log is
-     * still named on the line above, so nothing is hidden by degrading to one line.
-     */
-    private tail(logPath: string): string {
-        if (!fs.existsSync(logPath)) return `    (no log file at ${logPath})\n`;
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: see above, the failure renderer may not
-        // replace the build's failure with its own.
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter((l: string): boolean => l !== '');
-            if (lines.length === 0) return '    (the log is empty)\n';
-            return lines.slice(-FAILURE_TAIL_LINES).map((l: string): string => `    ${l}\n`).join('');
-        } catch (err: unknown) {
-            const error = toError(err);
-            return `    (could not read ${logPath}: ${error.message})\n`;
-        }
     }
 
     // Resolve, and wait for, the child's exit code. A spawn that never starts (a shell that is missing, a
@@ -233,18 +183,11 @@ export class BuildGateLog {
         });
     }
 
-    // The path as the heartbeat shows it: relative to the repo when it sits inside it (a linked worktree's
-    // state lives under the PRIMARY clone, so it often does not), absolute otherwise.
-    private displayPath(repoRoot: string, logPath: string): string {
-        const relative = path.relative(repoRoot, logPath);
-        return relative === '' || relative.startsWith('..') || path.isAbsolute(relative) ? logPath : relative;
-    }
-
     private resolvePath(repoRoot: string, stage: string): string {
         const name = this.fileNameFor(repoRoot, stage);
         // `wp-build`'s log sits at the ROOT of the state dir, not under `logs/`, because it is the one log
         // path a person types from memory. Everything else keeps the per-commit names in `logs/`.
-        return stage === BUILD_STAGE ? dotWebpieces.localFile(repoRoot, name) : dotWebpieces.logsFile(repoRoot, name);
+        return stage === BUILD_STAGE ? this.files.localPath(repoRoot, name) : this.files.logsPath(repoRoot, name);
     }
 
     // Anything that is not a filename-safe character becomes '-', so `dean/feat` cannot create directories.

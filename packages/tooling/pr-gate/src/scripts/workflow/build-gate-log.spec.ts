@@ -6,6 +6,18 @@ import * as path from 'path';
 import {
     BuildGateLog, BuildLogHeartbeat, BUILD_STAGE, FINISH_STAGE, REVIEW_STAGE, HEARTBEAT_MS, FAILURE_TAIL_LINES,
 } from './build-gate-log';
+import { GateLogFile } from './gate-log-file';
+import { StageOutputLog } from './stage-output-log';
+
+/**
+ * A real BuildGateLog over real collaborators. `GateLogFile` owns WHERE the log goes and how it rotates
+ * (its own spec covers that); `StageOutputLog` is the console broker the heartbeat writes through, and
+ * with no capture open it is a plain write to stdout — exactly what this suite wants.
+ */
+function newLog(): BuildGateLog {
+    const files = new GateLogFile();
+    return new BuildGateLog(files, new StageOutputLog(files));
+}
 
 const dirs: string[] = [];
 
@@ -35,7 +47,7 @@ function repo(branch: string): string {
 describe('BuildGateLog paths', () => {
     it('names the log for the stage, the branch and the short sha, under .webpieces/logs', () => {
         const dir = repo('dean/my-feature');
-        const log = new BuildGateLog().pathFor(dir, REVIEW_STAGE);
+        const log = newLog().pathFor(dir, REVIEW_STAGE);
         expect(log.startsWith(path.join(dir, '.webpieces', 'logs') + path.sep)).toBe(true);
         expect(path.basename(log)).toBe(`build-gate-review-dean-my-feature-${git(dir, 'rev-parse', '--short', 'HEAD')}.log`);
     });
@@ -47,7 +59,7 @@ describe('BuildGateLog paths', () => {
      */
     it('gives wp-build the fixed .webpieces/build.log, with no branch or sha in it', () => {
         const dir = repo('dean/my-feature');
-        expect(new BuildGateLog().pathFor(dir, BUILD_STAGE)).toBe(path.join(dir, '.webpieces', 'build.log'));
+        expect(newLog().pathFor(dir, BUILD_STAGE)).toBe(path.join(dir, '.webpieces', 'build.log'));
     });
 
     /**
@@ -56,84 +68,54 @@ describe('BuildGateLog paths', () => {
      */
     it('gives review and finish different files at the same commit', () => {
         const dir = repo('dean/my-feature');
-        expect(new BuildGateLog().pathFor(dir, REVIEW_STAGE))
-            .not.toBe(new BuildGateLog().pathFor(dir, FINISH_STAGE));
+        expect(newLog().pathFor(dir, REVIEW_STAGE))
+            .not.toBe(newLog().pathFor(dir, FINISH_STAGE));
     });
 
     // A `/` in a branch name must never become a directory separator in the log filename.
     it('flattens slashes in the branch rather than creating directories', () => {
         const dir = repo('dean/deep/nested');
-        expect(path.basename(new BuildGateLog().pathFor(dir, REVIEW_STAGE))).toContain('dean-deep-nested');
+        expect(path.basename(newLog().pathFor(dir, REVIEW_STAGE))).toContain('dean-deep-nested');
     });
 
     it('creates the log directory so the redirect can open the file', () => {
         const dir = repo('dean/x');
-        expect(fs.existsSync(path.dirname(new BuildGateLog().pathFor(dir, REVIEW_STAGE)))).toBe(true);
+        expect(fs.existsSync(path.dirname(newLog().pathFor(dir, REVIEW_STAGE)))).toBe(true);
     });
 
     it('existingLogFor is empty until a log is actually written, then names it', () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         expect(log.existingLogFor(dir, BUILD_STAGE)).toBe('');
         const p = log.pathFor(dir, BUILD_STAGE);
         fs.writeFileSync(p, 'output\n');
         expect(log.existingLogFor(dir, BUILD_STAGE)).toBe(p);
     });
 
-    it('backs a log up beside itself, as <log>.bak', () => {
-        const dir = repo('dean/x');
-        const log = new BuildGateLog();
-        expect(log.backupPathFor(log.pathFor(dir, BUILD_STAGE))).toBe(path.join(dir, '.webpieces', 'build.log.bak'));
-    });
 });
 
-/** Rotation is what keeps the LAST TWO runs on disk, which is the whole reason the filename can be fixed. */
+/**
+ * Rotation itself is GateLogFile's (see its spec). What belongs HERE is that `run()` actually rotates
+ * before it writes — the guarantee that makes a fixed filename safe.
+ */
 describe('BuildGateLog rotation', () => {
-    it('moves an existing log to .bak before the next run writes', () => {
-        const dir = repo('dean/x');
-        const log = new BuildGateLog();
-        const p = log.pathFor(dir, BUILD_STAGE);
-        fs.writeFileSync(p, 'first-run\n');
-        log.rotate(p);
-        expect(fs.existsSync(p)).toBe(false);
-        expect(fs.readFileSync(log.backupPathFor(p), 'utf8')).toContain('first-run');
-    });
-
-    it('overwrites an existing .bak rather than failing on it', () => {
-        const dir = repo('dean/x');
-        const log = new BuildGateLog();
-        const p = log.pathFor(dir, BUILD_STAGE);
-        fs.writeFileSync(log.backupPathFor(p), 'ancient\n');
-        fs.writeFileSync(p, 'previous\n');
-        log.rotate(p);
-        expect(fs.readFileSync(log.backupPathFor(p), 'utf8')).toContain('previous');
-    });
-
-    // The first build in a fresh clone has nothing to rotate, and that is not a failure.
-    it('is a no-op when there is no previous log', () => {
-        const dir = repo('dean/x');
-        const log = new BuildGateLog();
-        const p = log.pathFor(dir, BUILD_STAGE);
-        log.rotate(p);
-        expect(fs.existsSync(log.backupPathFor(p))).toBe(false);
-    });
-
     it('run() leaves the previous build readable as .bak', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const files = new GateLogFile();
+        const log = new BuildGateLog(files, new StageOutputLog(files));
         const p = log.pathFor(dir, BUILD_STAGE);
         await log.run(dir, 'echo first-run', p);
         await log.run(dir, 'echo second-run', p);
         expect(fs.readFileSync(p, 'utf8')).toContain('second-run');
         expect(fs.readFileSync(p, 'utf8')).not.toContain('first-run');
-        expect(fs.readFileSync(log.backupPathFor(p), 'utf8')).toContain('first-run');
+        expect(fs.readFileSync(files.backupPathFor(p), 'utf8')).toContain('first-run');
     });
 });
 
 describe('BuildGateLog capture', () => {
     it('captures stdout AND stderr in full, and returns 0 on success', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         const code = await log.run(dir, 'echo out-line; echo err-line 1>&2', p);
         expect(code).toBe(0);
@@ -149,7 +131,7 @@ describe('BuildGateLog capture', () => {
      */
     it('returns the BUILD exit code', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         expect(await log.run(dir, 'echo boom 1>&2; exit 7', p)).toBe(7);
         expect(fs.readFileSync(p, 'utf8')).toContain('boom');
@@ -157,7 +139,7 @@ describe('BuildGateLog capture', () => {
 
     it('fails CLOSED when the command cannot start, and says so in the log', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         // A command the shell cannot find exits non-zero rather than never starting; either way, not 0.
         expect(await log.run(dir, 'no-such-binary-anywhere', p)).not.toBe(0);
@@ -166,7 +148,7 @@ describe('BuildGateLog capture', () => {
     // Nothing may be dropped: the whole promise is "the failures ARE in that file".
     it('does not truncate large output', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         await log.run(dir, "awk 'BEGIN{for(i=0;i<5000;i++) print \"line-\" i}'", p);
         const lines = fs.readFileSync(p, 'utf8').trim().split('\n');
@@ -176,7 +158,7 @@ describe('BuildGateLog capture', () => {
 
     it('runs the build command verbatim, including a trailing shell comment', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         expect(await log.run(dir, 'echo kept # a trailing comment', p)).toBe(0);
         expect(fs.readFileSync(p, 'utf8')).toContain('kept');
@@ -184,7 +166,7 @@ describe('BuildGateLog capture', () => {
 
     it('leaves no side files beside the log', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         await log.run(dir, 'exit 3', p);
         expect(fs.existsSync(`${p}.status`)).toBe(false);
@@ -200,7 +182,7 @@ describe('BuildLogHeartbeat', () => {
     it('reports the growing line count', () => {
         const dir = repo('dean/x');
         const p = path.join(dir, 'build.log');
-        const beat = new BuildLogHeartbeat(p, '.webpieces/build.log');
+        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces/build.log');
         fs.writeFileSync(p, 'a\nb\n');
         expect(beat.tick()).toBe('.webpieces/build.log size 2 lines');
         fs.appendFileSync(p, 'c\nd\ne\n');
@@ -210,7 +192,7 @@ describe('BuildLogHeartbeat', () => {
     it('appends `still` when the count has not changed since the previous tick', () => {
         const dir = repo('dean/x');
         const p = path.join(dir, 'build.log');
-        const beat = new BuildLogHeartbeat(p, '.webpieces/build.log');
+        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces/build.log');
         fs.writeFileSync(p, 'a\nb\n');
         expect(beat.tick()).toBe('.webpieces/build.log size 2 lines');
         expect(beat.tick()).toBe('.webpieces/build.log size 2 lines still');
@@ -221,7 +203,7 @@ describe('BuildLogHeartbeat', () => {
     // The FIRST tick can never say `still`: there is nothing it has not changed since.
     it('never says still on the first tick, even at zero lines', () => {
         const dir = repo('dean/x');
-        const beat = new BuildLogHeartbeat(path.join(dir, 'missing.log'), '.webpieces/build.log');
+        const beat = new BuildLogHeartbeat(new GateLogFile(), path.join(dir, 'missing.log'), '.webpieces/build.log');
         expect(beat.tick()).toBe('.webpieces/build.log size 0 lines');
         expect(beat.tick()).toBe('.webpieces/build.log size 0 lines still');
     });
@@ -238,21 +220,21 @@ describe('BuildGateLog messages', () => {
      */
     it('names the log and the backup on success, in three lines', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         await log.run(dir, 'echo first-run', p);
         await log.run(dir, 'echo second-run', p);
         const msg = log.successMessage(p);
         expect(msg).toContain('Build success');
         expect(msg).toContain(`FullLog : ${p}`);
-        expect(msg).toContain('(build.log is backed up to build.log.bak every run so you have the last 2 builds of logs)');
+        expect(msg).toContain('(build.log is backed up to build.log.bak every run so you have the last 2 runs of logs)');
         expect(msg.trim().split('\n').length).toBe(3);
     });
 
     // The FIRST build in a tree has no .bak, and a pointer at a file that does not exist is a wasted read.
     it('does not claim a backup that does not exist yet', async () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         await log.run(dir, 'echo only-run', p);
         const msg = log.successMessage(p);
@@ -262,7 +244,7 @@ describe('BuildGateLog messages', () => {
 
     it('on failure names the command, the log, and echoes a bounded tail', () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         fs.writeFileSync(p, Array.from({ length: 200 }, (_v: unknown, i: number): string => `line-${i}`).join('\n') + '\n');
         const msg = log.failureMessage('pnpm nx affected --target=ci', p);
@@ -280,7 +262,7 @@ describe('BuildGateLog messages', () => {
      */
     it('reports an unreadable log rather than throwing over it', () => {
         const dir = repo('dean/x');
-        const log = new BuildGateLog();
+        const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         fs.mkdirSync(p);  // exists, but readFileSync cannot read a directory
         const msg = log.failureMessage('pnpm build', p);
@@ -289,12 +271,12 @@ describe('BuildGateLog messages', () => {
     });
 
     it('says so rather than showing an empty tail when there is no log to read', () => {
-        expect(new BuildGateLog().failureMessage('pnpm build', '/abs/nope.log')).toContain('(no log file at /abs/nope.log)');
+        expect(newLog().failureMessage('pnpm build', '/abs/nope.log')).toContain('(no log file at /abs/nope.log)');
     });
 
     // It must NOT teach the thing it exists to prevent.
     it('never tells the AI to re-run the build to see the errors', () => {
-        const msg = new BuildGateLog().failureMessage('pnpm build', '/abs/b.log');
+        const msg = newLog().failureMessage('pnpm build', '/abs/b.log');
         expect(msg).not.toContain('Run THIS exact command to reproduce');
         expect(msg).toContain('Do NOT re-run the build to see them.');
     });

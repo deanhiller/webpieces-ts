@@ -52,7 +52,7 @@ function harness(alreadyRunning = 0): Harness {
     const buildsLog = { running: (): RunningBuild[] => liveBuilds(alreadyRunning) } as unknown as BuildsLog;
     // webpieces-disable no-any-unknown -- ditto
     const homeConfig = {
-        load: (): HomeConfig => new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS),
+        load: (): HomeConfig => new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS),
     } as unknown as HomeConfigService;
     return new Harness(new BuildCommand(gate, roots, buildsLog, homeConfig), gate, calls);
 }
@@ -85,7 +85,7 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
     /**
      * THE test. Composition is what drifted in the sibling repo's `ci:local`, so wp-build must delegate
      * to BuildAffected.runBuildGate — which resolves `commands.pr-gate.buildCommand`, announces it, runs
-     * it, honours buildGateLogCapture and renders the failure — rather than doing any of that itself.
+     * it, captures its output to a log file and renders the failure — rather than doing any of that itself.
      * A second resolver or a second failure string is a second thing that can drift.
      */
     it('delegates to runBuildGate rather than resolving or spawning anything itself', async () => {
@@ -116,17 +116,6 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
     // it and report success, which would make a green terminal meaningless.
     // runBuildGate throws synchronously, before run() ever builds its promise, so the throw surfaces at
     // the call rather than as a rejection — and runMain, which invokes this, handles both alike.
-    /**
-     * The whole console contract of wp-build is "a heartbeat, then a pointer at .webpieces/build.log", so
-     * capture may not depend on the EXPERIMENTAL `~/.webpieces/config.json` opt-in that essentially no
-     * machine has — a wp-build that did not capture would have nothing to point at.
-     */
-    it('captures unconditionally, not on the experimental opt-in', async () => {
-        const h = harness();
-        await h.command.run(unforced());
-        expect(h.calls[0].alwaysCapture).toBe(true);
-    });
-
     it('propagates a failing build rather than swallowing it', async () => {
         const h = harness();
         vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): Promise<void> => Promise.reject(new Error('build failed')));

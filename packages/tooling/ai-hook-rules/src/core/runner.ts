@@ -416,8 +416,7 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
  * consumer's next Bash call a fault-Y block ("this rule has no entry") for a feature nobody opted into
  * — which is exactly what whole-repo-build-guard did on its first release. Each one decides for itself
  * whether it acts: whole-repo-build-guard reads ~/.webpieces/config.json for a machine-local OPT-IN
- * (absent means OFF), commit-message-substitution-guard acts unconditionally (see loadKeylessBashRules).
- *
+ * (absent means OFF); commit-message-substitution-guard and build-output-pipe-guard act unconditionally.
  * They still honour excludePaths, and they do not run in `rules` mode (code-style-only hook).
  */
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape

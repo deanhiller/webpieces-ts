@@ -27,6 +27,12 @@ const GIT_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set([
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
+// Package-manager wrappers that precede the real program (`pnpm exec vitest`, `npx nx`, `yarn build-all`).
+const RUNNERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'yarn', 'npx', 'pnpx', 'bun', 'bunx']);
+
+// The runner's own verb, consumed with it: `pnpm run build-all` and `pnpm build-all` are one command.
+const RUNNER_VERBS: ReadonlySet<string> = new Set(['run', 'run-script', 'exec', 'dlx', 'x']);
+
 /**
  * One invoked segment of a command, plus whether a PIPE fed it.
  *
@@ -182,6 +188,38 @@ export class CommandScanner {
             return i;
         }
         return -1;
+    }
+
+    /**
+     * The segment's words with the package-manager WRAPPER stripped, so `pnpm exec vitest run` and
+     * `vitest run` reduce to the same words. `pnpm --silent run build-all` → `['build-all']`.
+     *
+     * Lives HERE rather than in a guard because two guards now need it and they must agree: one blocks a
+     * whole-repo build, the other blocks piping a build's output. If they disagreed about whether
+     * `npx wp-build` is `wp-build`, one of them would have a spelling-shaped side door — which is exactly
+     * the failure mode the runner stripping exists to close.
+     */
+    runnerStrippedWords(segment: string): readonly string[] {
+        let words = this.words(segment);
+        while (words.length > 0 && RUNNERS.has(this.programName(words[0]))) {
+            words = words.slice(1);
+            // The runner's own flags (`--silent`, `-r`) sit between it and the program.
+            while (words.length > 0 && words[0].startsWith('-')) words = words.slice(1);
+            if (words.length > 0 && RUNNER_VERBS.has(words[0])) words = words.slice(1);
+        }
+        return words;
+    }
+
+    /** `./node_modules/.bin/nx` and `/usr/local/bin/pnpm.cmd` are the programs `nx` and `pnpm`. */
+    programName(token: string): string {
+        const base = token.split('/').pop() ?? token;
+        return base.endsWith('.cmd') ? base.slice(0, -'.cmd'.length) : base;
+    }
+
+    /** True when a package-manager runner precedes the program (`pnpm …`, `npx …`). */
+    viaRunner(segment: string): boolean {
+        const raw = this.words(segment);
+        return raw.length > 0 && RUNNERS.has(this.programName(raw[0]));
     }
 
     /** True when this segment actually invokes `git <subcommand>`. */

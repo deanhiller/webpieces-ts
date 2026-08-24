@@ -135,11 +135,16 @@ export const HOME_CONFIG_FILE = 'config.json';
 // text must spell them identically — a validator whose message names a different key than the one it
 // checks is worse than no message.
 export const HOME_EXPERIMENTAL_SECTION = 'experimental';
-export const HOME_KEY_BUILD_GATE_LOG_CAPTURE = 'buildGateLogCapture';
 // The on/off switch for `whole-repo-build-guard`. Spelled with the GUARD's own name, hyphens and all,
 // so `grep -rn whole-repo-build-guard` finds the switch beside the guard — and so nobody has to learn a
-// second name for one thing. It is a DIFFERENT key from buildGateLogCapture, which is #620's build-log
-// feature and merely selects WHICH refusal this guard prints.
+// second name for one thing.
+//
+// `buildGateLogCapture` used to sit beside it and is GONE: capturing the build's output to a file is now
+// what the gate always does (see BuildAffected.runBuildGate), so the flag had nothing left to switch. It
+// is deliberately NOT in RETIRED_HOME_CONFIG_KEYS — a retired key here is a HARD FAILURE on exact match,
+// and this file is machine-global and hand-authored, so a machine that opted INTO a behaviour it now
+// gets unconditionally must not have its shell broken for saying yes early. It falls through to the
+// unknown-key WARNING instead, which says the key had no effect and names what is understood.
 export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
 // The on/off switch for the orphan-directory sweep `wp-checkout-clean-main` runs. Named for the thing
 // it switches, exactly as the guard key above is — one name, greppable from either end.
@@ -199,7 +204,7 @@ export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
  * hand-maintained beside them, so it cannot fall out of step.
  */
 export const ALLOWED_EXPERIMENTAL_BOOLEANS: readonly string[] = [
-    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_ORPHAN_DIR_SWEEP,
+    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP,
 ];
 export const ALLOWED_EXPERIMENTAL_NUMBERS: readonly string[] = [HOME_KEY_MAX_CONCURRENT_BUILDS];
 export const ALLOWED_EXPERIMENTAL: readonly string[] = [
@@ -237,13 +242,6 @@ const ABSENT_ERROR_CODES: readonly string[] = ['ENOENT', 'ENOTDIR', 'EACCES', 'E
 
 /** The parsed `~/.webpieces/config.json`. Data-only (per CLAUDE.md — classes, not interfaces, for data). */
 export class HomeConfig {
-    /**
-     * EXPERIMENTAL, under test, not a supported knob. When true, the pr-gate build gate captures its full
-     * output to `.webpieces/logs/` and hands a failing build's pointer to that file to the AI instead of
-     * an instruction to rebuild. Default false — i.e. the behaviour every consumer has today.
-     */
-    buildGateLogCapture: boolean;
-
     /**
      * EXPERIMENTAL, and OFF unless this machine opts IN with an explicit `true`. When true,
      * `whole-repo-build-guard` BLOCKS a Bash command that would build the WHOLE monorepo and hands back
@@ -285,17 +283,15 @@ export class HomeConfig {
      */
     maxConcurrentBuilds: number;
 
-    // ALL FOUR required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
     // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per CLAUDE.md § "NO
     // webpieces surface is released backwards-compatible": the compile errors ARE the migration. The
     // absent-file state is constructed in exactly one place — load()'s absent-file branch.
     constructor(
-        buildGateLogCapture: boolean, wholeRepoBuildGuard: boolean, orphanDirSweep: boolean,
-        maxConcurrentBuilds: number,
+        wholeRepoBuildGuard: boolean, orphanDirSweep: boolean, maxConcurrentBuilds: number,
     ) {
-        this.buildGateLogCapture = buildGateLogCapture;
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
         this.orphanDirSweep = orphanDirSweep;
         this.maxConcurrentBuilds = maxConcurrentBuilds;
@@ -333,14 +329,16 @@ export class RetiredHomeConfigKey {
  * every entry below actually FAILS the load, so a fallback that quietly accepts one turns it red.
  */
 export const RETIRED_HOME_CONFIG_KEYS: readonly RetiredHomeConfigKey[] = [
-    // `captureBuildGateLog` was the working name while this feature was being built, and it appears in
-    // the branch history and in in-flight drafts, so it is exactly the spelling an agent reconstructing
-    // the file from memory will type. It never shipped in a release; it is listed so that typing it
-    // produces the rename instruction rather than a bare "unknown key".
+    // `captureBuildGateLog` was the working name while the build-log feature was being built, and it
+    // appears in the branch history and in in-flight drafts, so it is exactly the spelling an agent
+    // reconstructing the file from memory will type. It never shipped in a release; it is listed so that
+    // typing it produces the DELETION instruction rather than a bare "unknown key". It used to point at
+    // `experimental.buildGateLogCapture`; that key is itself gone now (capture is unconditional), so the
+    // destination is "no replacement, delete it" and this entry is the only place either name survives.
     new RetiredHomeConfigKey(
-        'experimental.captureBuildGateLog', 'experimental.buildGateLogCapture',
-        'Rename the key to "buildGateLogCapture" inside the same "experimental" object. Its boolean value ' +
-        'carries over unchanged.',
+        'experimental.captureBuildGateLog', '',
+        'Delete the key. Capturing the build gate\'s output to a log file is no longer optional — every ' +
+        'build the PR gate runs writes its full output to a file and prints a "FullLog :" pointer at it.',
     ),
 ];
 
@@ -374,8 +372,7 @@ export class HomeConfigService {
         // on why a defaulted parameter is a shim.
         if (raw === null) {
             return new HomeConfig(
-                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT,
-                DEFAULT_MAX_CONCURRENT_BUILDS);
+                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -462,7 +459,6 @@ export class HomeConfigService {
         const experimental = (section ?? {}) as Record<string, unknown>;
         this.warnUnknownKeys(Object.keys(experimental), ALLOWED_EXPERIMENTAL, `${HOME_EXPERIMENTAL_SECTION}.`);
         return new HomeConfig(
-            this.readOptionalBoolean(experimental, HOME_KEY_BUILD_GATE_LOG_CAPTURE, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_WHOLE_REPO_BUILD_GUARD, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalPositiveInteger(
@@ -613,9 +609,9 @@ export class HomeConfigService {
      * A near-miss of a RETIRED key, pointed at its migration — or '' when nothing retired is close.
      *
      * The gap this closes: `assertNotRetired` matches a retired key EXACTLY, so `captureBuildGateLog`
-     * throws with its rename instruction while `captureBuildGateLogg` — one stray character away, and a
-     * far likelier thing to type — falls through to the generic "IGNORED, might be from a newer release"
-     * line. That is the least helpful of the three answers offered to the reader whose intent is the
+     * throws with its migration instruction while `captureBuildGateLogg` — one stray character away, and
+     * a far likelier thing to type — falls through to the generic "IGNORED, might be from a newer
+     * release" line. That is the least helpful of the three answers offered to the reader whose intent is the
      * clearest, so the retired table is consulted here too, at the same distance-2 threshold.
      *
      * It only ever produces a WARNING, never a throw: this release cannot know whether the reader meant
@@ -646,9 +642,9 @@ export class HomeConfigService {
      * This used to be a case-insensitive EQUALITY test, which was adequate while an unknown key was a
      * hard error — the error itself was the signal, and the suggestion only saved a reading. Now the
      * suggestion IS the signal, so it has to catch the typos an equality test misses: a doubled letter,
-     * a dropped one, a transposition, a stray trailing `d` (`buildGateLogCaptured`). Two is the useful
-     * threshold — it covers every one of those and still refuses to guess for a genuinely new key, which
-     * is the case that must NOT be dressed up as a typo.
+     * a dropped one, a transposition, a stray trailing character (`orphan-dir-sweeped`). Two is the
+     * useful threshold — it covers every one of those and still refuses to guess for a genuinely new
+     * key, which is the case that must NOT be dressed up as a typo.
      */
     private nearestKnownKey(key: string, allowed: readonly string[]): string {
         let best = '';

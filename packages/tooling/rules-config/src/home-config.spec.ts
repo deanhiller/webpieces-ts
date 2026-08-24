@@ -6,7 +6,7 @@ import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import {
     DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
-    HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+    HOME_EXPERIMENTAL_SECTION, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
     HOME_KEY_ORPHAN_DIR_SWEEP,
     HOME_KEY_MAX_CONCURRENT_BUILDS,
     ALLOWED_EXPERIMENTAL, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_TOP_LEVEL,
@@ -96,25 +96,25 @@ function loadError(home: string): InformAiError {
  */
 describe('ABSENT ~/.webpieces/config.json — the default state, and never an error', () => {
     it('returns all-defaults when the file does not exist', () => {
-        expect(new HomeConfigService().load(fakeHome()).buildGateLogCapture).toBe(false);
+        expect(new HomeConfigService().load(fakeHome()).orphanDirSweep).toBe(false);
     });
 
     it('returns all-defaults when the ~/.webpieces DIRECTORY does not exist either', () => {
         const home = fakeHome();
         expect(fs.existsSync(path.join(home, '.webpieces'))).toBe(false);
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(false);
     });
 
     it('returns all-defaults when ~/.webpieces is a FILE rather than a directory (ENOTDIR)', () => {
         const home = fakeHome();
         fs.writeFileSync(path.join(home, '.webpieces'), 'not a directory\n');
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(false);
     });
 
     it('returns all-defaults when a DIRECTORY sits where config.json belongs (EISDIR)', () => {
         const home = fakeHome();
         fs.mkdirSync(path.join(home, '.webpieces', 'config.json'), { recursive: true });
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(false);
     });
 
     it('returns all-defaults when the file is unreadable (EACCES)', () => {
@@ -123,7 +123,7 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
         const home = fakeHome();
         const p = writeConfig(home, '{}');
         fs.chmodSync(p, 0o000);
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(false);
         fs.chmodSync(p, 0o600);
     });
 
@@ -134,8 +134,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS).buildGateLogCapture).toBe(false);
-        expect(new HomeConfig(false, false, false, DEFAULT_MAX_CONCURRENT_BUILDS).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS).orphanDirSweep).toBe(false);
     });
 
     /**
@@ -158,7 +158,6 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
         expect((): HomeConfig => new HomeConfigService().load(home)).not.toThrow();
         const loaded = new HomeConfigService().load(home);
         expect(loaded.wholeRepoBuildGuard).toBe(false);
-        expect(loaded.buildGateLogCapture).toBe(false);
         expect(loaded.orphanDirSweep).toBe(false);
     });
 });
@@ -166,25 +165,25 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
 describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
     it('is ON for the exact documented shape', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': false, buildGateLogCapture: true } }));
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(true);
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': true } }));
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(true);
     });
 
     it('is OFF for an explicit false — declining a preference is not an error', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': false, buildGateLogCapture: false } }));
-        expect(new HomeConfigService().load(home).buildGateLogCapture).toBe(false);
+        writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': false, 'orphan-dir-sweep': false } }));
+        expect(new HomeConfigService().load(home).orphanDirSweep).toBe(false);
     });
 
-    it('reads whole-repo-build-guard true and false, independently of buildGateLogCapture', () => {
+    it('reads whole-repo-build-guard true and false, independently of orphan-dir-sweep', () => {
         for (const on of [true, false]) {
             const home = fakeHome();
             writeConfig(home, JSON.stringify({ experimental: { 'whole-repo-build-guard': on, 'orphan-dir-sweep': false } }));
             const loaded = new HomeConfigService().load(home);
             expect(loaded.wholeRepoBuildGuard).toBe(on);
-            // The two keys are different features (#620's log capture vs this guard) and neither implies
-            // the other — buildGateLogCapture stays optional and defaults OFF.
-            expect(loaded.buildGateLogCapture).toBe(false);
+            // The two keys are different features and neither implies the other — every key in this
+            // file stays optional and defaults OFF.
+            expect(loaded.orphanDirSweep).toBe(false);
         }
     });
 });
@@ -228,7 +227,6 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
             // "present at its default" and "absent" are one state, per key, with no exception to keep in step.
             expect(loaded.wholeRepoBuildGuard).toBe(false);
             expect(loaded.orphanDirSweep).toBe(false);
-            expect(loaded.buildGateLogCapture).toBe(false);
             expect(loaded.maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS);
         }
     });
@@ -245,7 +243,6 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
             const loaded = new HomeConfigService().load(home);
             expect(loaded.wholeRepoBuildGuard).toBe(false);
             expect(loaded.orphanDirSweep).toBe(false);
-            expect(loaded.buildGateLogCapture).toBe(false);
         }
     });
 
@@ -266,7 +263,7 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
     it('stays OFF for an explicit false, for a sibling-only section, and for an empty one', () => {
         for (const experimental of [
             { [HOME_KEY_WHOLE_REPO_BUILD_GUARD]: false },
-            { [HOME_KEY_BUILD_GATE_LOG_CAPTURE]: true },
+            { [HOME_KEY_ORPHAN_DIR_SWEEP]: true },
             {},
         ]) {
             const home = fakeHome();
@@ -298,7 +295,7 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
 
     it('rejects a non-boolean value, showing the value it got', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: 'true' } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'orphan-dir-sweep': 'true' } }));
         const msg = loadError(home).message;
         expect(msg).toContain('must be the boolean');
         expect(msg).toContain('"true"');
@@ -313,7 +310,7 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
     // A PRESENT but unparseable file is the "wrong format" case, not the absent case.
     it('rejects unparseable JSON', () => {
         const home = fakeHome();
-        writeConfig(home, '{ "experimental": { "buildGateLogCapture": tru');
+        writeConfig(home, '{ "experimental": { "orphan-dir-sweep": tru');
         expect(loadError(home).message).toContain('not valid JSON');
     });
 
@@ -329,7 +326,7 @@ describe('PRESENT ~/.webpieces/config.json — rejected shapes', () => {
     // agent that cannot work out the right shape has no exit.
     it('always names the file and says deleting it is a valid fix', () => {
         const home = fakeHome();
-        const p = writeConfig(home, JSON.stringify({ experimental: { buildGateLogCapture: 1 } }));
+        const p = writeConfig(home, JSON.stringify({ experimental: { 'orphan-dir-sweep': 1 } }));
         const msg = loadError(home).message;
         expect(msg).toContain(p);
         expect(msg).toContain('deleting it outright is a valid fix');
@@ -424,7 +421,6 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         const loaded = new HomeConfigService().load(home);
         expect(loaded.wholeRepoBuildGuard).toBe(true);
         expect(loaded.orphanDirSweep).toBe(true);
-        expect(loaded.buildGateLogCapture).toBe(true);
         expect(loaded.maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS + 4);
         // …and the section that IS known is still the only one read, so a future sibling section cannot
         // change what this release does.
@@ -460,14 +456,14 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
         expect(warnings).toContain('experimental.some-future-flag');
         expect(warnings).toContain('IGNORED');
-        expect(warnings).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"`);
+        expect(warnings).toContain(`"${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_ORPHAN_DIR_SWEEP}"`);
     });
 
     // The "understood here" list is rendered at the LEVEL the bad key was found, so a mistyped section
     // is answered with the sections rather than with a list of flags that could not go there anyway.
     it('warns about an unknown top-level key, listing the sections rather than the flags', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimentl: { buildGateLogCapture: true } }));
+        writeConfig(home, JSON.stringify({ experimentl: { 'orphan-dir-sweep': true } }));
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
         expect(warnings).toContain('"experimentl"');
         expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}"?`);
@@ -479,16 +475,16 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
     // now the suggestion is.
     it('suggests the near match for a one-character typo', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCaptured: true } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'orphan-dir-sweeped': true } }));
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
-        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_ORPHAN_DIR_SWEEP}"?`);
     });
 
     it('suggests the near match for a case-only typo, as it always did', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildgatelogcapture: true } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'ORPHAN-DIR-SWEEP': true } }));
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
-        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_ORPHAN_DIR_SWEEP}"?`);
     });
 
     /**
@@ -514,9 +510,9 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
     // answered with a dead key's migration.
     it('prefers a near KNOWN key over a near RETIRED one', () => {
         const home = fakeHome();
-        writeConfig(home, JSON.stringify({ experimental: { buildGateLogCaptur: true } }));
+        writeConfig(home, JSON.stringify({ experimental: { 'orphan-dir-swee': true } }));
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
-        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_BUILD_GATE_LOG_CAPTURE}"?`);
+        expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_ORPHAN_DIR_SWEEP}"?`);
         expect(warnings).not.toContain('RETIRED');
     });
 
@@ -551,7 +547,6 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         const absent = new HomeConfigService().load(fakeHome());
         expect(loaded.wholeRepoBuildGuard).toBe(absent.wholeRepoBuildGuard);
         expect(loaded.orphanDirSweep).toBe(absent.orphanDirSweep);
-        expect(loaded.buildGateLogCapture).toBe(absent.buildGateLogCapture);
         expect(loaded.maxConcurrentBuilds).toBe(absent.maxConcurrentBuilds);
     });
 });

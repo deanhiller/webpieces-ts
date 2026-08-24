@@ -423,8 +423,9 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
 
     it('`whole-repo-build-guard` fires in the worktree too, once the machine has opted in', () => {
         // EXPERIMENTAL and OFF unless ~/.webpieces/config.json says otherwise, so opt in here rather
-        // than reading the developer's real preferences. HomeConfig(logCapture, wholeRepoBuildGuard).
-        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue(new HomeConfig(false, true, false, DEFAULT_MAX_CONCURRENT_BUILDS));
+        // than reading the developer's real preferences.
+        // HomeConfig(wholeRepoBuildGuard, orphanDirSweep, maxConcurrentBuilds).
+        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue(new HomeConfig(true, false, DEFAULT_MAX_CONCURRENT_BUILDS));
         const result = runBash(`cd ${e2eAgentWorktree} && pnpm run build-all`, e2ePrimary, 'guards');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('whole-repo-build-guard');

@@ -30,10 +30,10 @@ const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origi
 // config here keeps the suite off the developer's real one — a test that reads personal preferences
 // passes or fails by accident, and a test that WRITES one destroys work — and makes each test state the
 // switch it is exercising rather than inheriting it. Nothing in this file touches a real HOME.
-// HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, orphanDirSweep).
-function pinHomeConfig(wholeRepoBuildGuard: boolean, buildGateLogCapture = false): void {
+// HomeConfig(wholeRepoBuildGuard, orphanDirSweep, maxConcurrentBuilds).
+function pinHomeConfig(wholeRepoBuildGuard: boolean): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
-        .mockReturnValue(new HomeConfig(buildGateLogCapture, wholeRepoBuildGuard, false, DEFAULT_MAX_CONCURRENT_BUILDS));
+        .mockReturnValue(new HomeConfig(wholeRepoBuildGuard, false, DEFAULT_MAX_CONCURRENT_BUILDS));
 }
 
 // Most of this suite is about WHICH commands the guard refuses, which is only observable on a machine
@@ -269,35 +269,51 @@ describe('whole-repo-build-guard message', () => {
 
     it('stays short — a guard message is read mid-task, not studied', () => {
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
-        expect(message.split('\n').length).toBeLessThanOrEqual(6);
+        expect(message.split('\n').length).toBeLessThanOrEqual(8);
     });
 });
 
 /**
- * `~/.webpieces/config.json` → `experimental.buildGateLogCapture` picks WHICH refusal is printed. The
- * file is OPTIONAL and absent for essentially every consumer, so the default path must be the one
- * that names a build command; only an opted-in machine is told not to build at all.
+ * There is exactly ONE refusal now. It used to be two, chosen by `experimental.buildGateLogCapture`:
+ * "build smaller" when the build streamed to the terminal, and "do not build, read the log" when it did
+ * not. Capturing is no longer optional for the GATE, so the message says both things at once and no key
+ * selects between them.
+ *
+ * The second half of that — WHERE the log claim is allowed to appear — is the subject here. A
+ * `FullLog :` pointer comes only from the gate (`GateLogFile.pointer`, via `BuildGateLog` /
+ * `StageOutputLog`). `nx run <project>:ci` and `vitest run <path>` write no such file, so the claim
+ * belongs to the `wp-build` line and nowhere else: a cure naming an artifact the command does not
+ * produce sends a reader to grep a path that does not exist, while this same message forbids the
+ * re-run that is their only alternative.
  */
-describe('whole-repo-build-guard picks its message from ~/.webpieces/config.json', () => {
-    it('with capture OFF (the default, and the absent-file state) names the affected build', () => {
-        pinHomeConfig(true, false);
+describe('whole-repo-build-guard names the log, and only for the command that writes one', () => {
+    it('names the affected build AND the log to grep instead of a second build', () => {
+        pinHomeConfig(true);
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
         expect(message).toContain('pnpm nx affected --target=ci --base=abc1234def');
-        expect(message).not.toContain('wp-review-upsert-pr');
+        expect(message).toContain('FullLog');
+        expect(message).toContain('Never re-run a build');
     });
 
-    it('with capture ON says do not build — stage ② builds and writes a readable log', () => {
-        pinHomeConfig(true, true);
+    /**
+     * The FullLog sentence must sit above the "Narrower still:" line — i.e. attached to wp-build — and
+     * must not be phrased as covering every route. Asserted positionally rather than by wording, so a
+     * rewrite that keeps the claim honest stays green and one that re-widens it goes red.
+     */
+    it('scopes the FullLog claim to the wp-build line, never to the narrower commands', () => {
+        pinHomeConfig(true);
         const message = guard().check(ctx('pnpm run build-all'))[0].message ?? '';
-        expect(message).toContain('pnpm wp-review-upsert-pr');
-        expect(message).toContain('stage ②');
-        expect(message).toContain('log file');
-        // wp-start-upsert-pr runs NO build gate. Naming it here would tell an agent the build happens
-        // a stage earlier than it does — see BuildAffected's callers.
-        expect(message).not.toContain('wp-start-upsert-pr');
-        expect(message.split('\n').length).toBeLessThanOrEqual(6);
+        const lines = message.split('\n');
+        const buildLine = lines.findIndex((l: string): boolean => l.includes('pnpm wp-build'));
+        const narrower = lines.findIndex((l: string): boolean => l.includes('Narrower still'));
+        const fullLog = lines.findIndex((l: string): boolean => l.includes('FullLog'));
+        expect(buildLine).toBeGreaterThanOrEqual(0);
+        expect(narrower).toBeGreaterThan(buildLine);
+        expect(fullLog).toBeGreaterThan(buildLine);
+        expect(fullLog).toBeLessThan(narrower);
+        // The over-claim this test exists to prevent, in the wording it had.
+        expect(message).not.toContain('Whichever you run');
     });
-
 });
 
 /**
@@ -320,11 +336,6 @@ describe('whole-repo-build-guard honours the machine-local opt-in', () => {
         for (const command of ['pnpm run build-all', 'pnpm nx run-many --target=build', 'pnpm exec vitest run']) {
             expect(guard().check(ctx(command))).toEqual([]);
         }
-    });
-
-    it('stays off regardless of the unrelated build-log key', () => {
-        pinHomeConfig(false, true);
-        expect(guard().check(ctx('pnpm run build-all'))).toEqual([]);
     });
 
     it('blocks the same command once a machine opts in', () => {
