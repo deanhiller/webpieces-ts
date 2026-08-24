@@ -127,11 +127,26 @@ describe('build-output-pipe-guard message', () => {
         const hint = guard().fixHint;
         expect(hint.fixOptions.length).toBeGreaterThan(1);
         expect(hint.fixOptions[0].preferred).toBe(true);
-        expect(hint.fixOptions[0].text).toContain('pnpm wp-build');
+        expect(hint.fixOptions[0].text).toContain('with nothing after it');
         expect(hint.fixOptions[1].text).toContain('grep -n error');
         expect(hint.mainMessage).not.toContain('Fix Option');
         expect(hint.violation).not.toContain('Fix Option');
     });
+
+    /**
+     * `fixHint` is static per-rule and cannot see WHICH command was piped, so any command it spelled
+     * would be wrong for two of the three. It named `wp-build` at a caller who piped
+     * `wp-review-upsert-pr` — a cure that does not match the block, which is the "message teaches a
+     * cure that does not exist" shape the error-output checklist rejects. The bare command is printed
+     * once, by `message(hit)`, which is the only place that knows it.
+     */
+    it.each(LOGGED_BUILD_COMMANDS)('names %s in the message, and no command in the static cures',
+        (command: string) => {
+            expect(message(`pnpm ${command} | tail -5`)).toContain(`pnpm ${command}`);
+            for (const option of guard().fixHint.fixOptions) {
+                for (const other of LOGGED_BUILD_COMMANDS) expect(option.text).not.toContain(other);
+            }
+        });
 
     // A guard whose cure a reader cannot find is a guard that gets worked around.
     it('names the .bak, so comparing two runs needs no third one', () => {

@@ -9,7 +9,7 @@ import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2_UNROWED } from '../
 import { CommandScanner } from '../command-scan';
 import { ShellSegmentScan } from './shell-segment-scan';
 import {
-    BuildOutputPipeScan, BoundedOutputHit, BOUND_BY_PIPE, LOGGED_BUILD_COMMANDS,
+    BuildOutputPipeScan, BoundedOutputHit, BOUND_BY_PIPE,
 } from './build-output-pipe-scan';
 
 /**
@@ -72,9 +72,13 @@ export class BuildOutputPipeGuardRule extends BashRuleBase<EmptyRuleConfig> {
             'kills a command that has printed nothing for 600 seconds — after a full build has run.',
             'Their output is ALREADY in a file. Run the command bare and read the file it names:',
             [
+                // Names NO command. `fixHint` is static per-rule and cannot see which command was
+                // actually piped, while `message(hit)` above already prints that exact command bare —
+                // so hardcoding one here spelled `wp-build` at somebody who piped `wp-review-upsert-pr`,
+                // which is a cure that does not match the block. One statement of the command, in the
+                // one place that knows it.
                 new Option(
-                    'Run it with nothing after it:\n' +
-                    `    pnpm ${LOGGED_BUILD_COMMANDS[0]}\n` +
+                    'Re-run the command named above with nothing after it — no pipe, no redirect.\n' +
                     'The console stays short — a size heartbeat, then the result and a "FullLog : <path>" line.',
                     true),
                 new Option(
