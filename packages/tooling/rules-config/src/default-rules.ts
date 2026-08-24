@@ -32,6 +32,11 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // failing until a repo flips it to "error").
     'no-client-creation-outside-server-or-client': { mode: 'OFF' },
     'no-custom-css': { allowGlobs: [] },
+    // Ships ARMED, and diff-scoped. A template that restates a `.webpieces/` path ships that path into
+    // every governed repo as instruction, and the paths are per-worktree — so the default has to be the
+    // one that stops the NEXT one, not one a repo has to discover. NEW_AND_MODIFIED_CODE is what makes
+    // that safe: the docs whose subject IS the layout are untouched until somebody edits the line.
+    'no-state-paths-in-templates': { mode: 'NEW_AND_MODIFIED_CODE' },
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['browser', 'react', 'angular', 'node', 'express'] },
@@ -62,7 +67,8 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // pile up, and the pile is what makes a real branch hard to find. The reap is also NOT destructive
     // in the way the old comment implied — BranchReaper deletes only provably-dead branches (a merged
     // PR, a squash-merge backup of one, or no commits of their own), spares everything else for a
-    // human, and logs each deletion to .webpieces/logs/branch-mutations.log with the pre-delete SHA
+    // human, and logs each deletion to the branch-mutation log (BranchMutationLog.branchMutationLogPath,
+    // which is per-worktree) with the pre-delete SHA
     // and a ready-made `recover=` command. So the worst case is one paste to undo, which a human can
     // resolve; the previous default's worst case was unbounded accumulation nobody ever cleaned.
     //

@@ -230,7 +230,9 @@ flow are not interchangeable.
    `origin/main`, which loses a NAME and not a commit. Run it after the merge lands, or any time the
    branch cap blocks you. It recomputes the verdicts itself, deletes one branch per command, and logs
    every deletion with its pre-delete SHA plus a `recover=` command in
-   `.webpieces/logs/branch-mutations.log`. **Use this instead of `git branch -D`.**
+   `{{BRANCH_MUTATION_LOG}}` — the log for THIS tree, resolved when this doc was written (it is
+   per-worktree, so a relative spelling of it is wrong in half the trees that read this).
+   **Use this instead of `git branch -D`.**
 
    A husk is spared only when somebody is provably holding it: a worktree with uncommitted or
    untracked files, one locked by a live agent, the tree you are standing in, a detached HEAD — each

@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import {
     BranchArchiver,
+    BranchMutationLog,
     BranchReaper,
     DeletableBranch,
     DeletableWorktree,
@@ -110,6 +111,10 @@ export class CleanupCommand {
         private readonly branchReaper: BranchReaper,
         private readonly archiver: BranchArchiver,
         private readonly worktreeSection: WorktreeCleanupSection,
+        // The log path is COMPUTED, never restated. It is per-worktree, so the relative literal these
+        // messages used to carry named a file that does not exist in a linked worktree — the reader
+        // greps nothing and reads the silence as "nothing was deleted".
+        private readonly mutationLog: BranchMutationLog,
     ) {}
 
     /**
@@ -152,7 +157,7 @@ export class CleanupCommand {
         const treeBlock = this.rest(treePromptable, treeHusks);
         if (treeBlock.length > 0) {
             process.stdout.write(this.worktreeSection.promptBlock(treeBlock));
-            process.stdout.write(this.flagHint(WORKTREE_KINDS, FLAG_DELETE_WORKTREES, treeBlock.length));
+            process.stdout.write(this.flagHint(repoRoot, WORKTREE_KINDS, FLAG_DELETE_WORKTREES, treeBlock.length));
         }
 
         // Retention 'keep' turns BranchReaper.reap into a pure verdict computation — every branch
@@ -171,7 +176,7 @@ export class CleanupCommand {
         const block = this.rest(promptable, husks);
         if (block.length > 0) {
             process.stdout.write(this.classifiedBlock(block));
-            process.stdout.write(this.flagHint(BRANCH_KINDS, FLAG_DELETE_BRANCHES, block.length));
+            process.stdout.write(this.flagHint(repoRoot, BRANCH_KINDS, FLAG_DELETE_BRANCHES, block.length));
         }
         process.stdout.write(`\nNothing was deleted (--report). Retention policy in effect: ${retention}.\n`
             + 'Re-run without --report to act, or with the flags above to say exactly what to take.\n');
@@ -188,7 +193,7 @@ export class CleanupCommand {
         // No cache argument: wp-cleanup recomputes the verdicts itself. The file on disk is allowed to
         // go stale, and stale evidence is fine for BLOCKING but never for DELETING.
         const result = this.branchReaper.reap(repoRoot, 'wp-cleanup', null, retention);
-        const first = this.report(result);
+        const first = this.report(repoRoot, result);
         process.stdout.write(first);
 
         const promptable = this.promptable(result.spared);
@@ -202,7 +207,7 @@ export class CleanupCommand {
         if (husks.length > 0) {
             process.stdout.write(this.huskBlock(BRANCH_KINDS, husks.map(
                 (entry: DeletableBranch): string => entry.branch)));
-            process.stdout.write(this.report(
+            process.stdout.write(this.report(repoRoot,
                 this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', husks, retention)));
         }
 
@@ -212,13 +217,13 @@ export class CleanupCommand {
         }
         process.stdout.write(this.classifiedBlock(block));
         const approved = await this.decide(
-            block, BRANCH_KIND, BRANCH_KINDS, FLAG_DELETE_BRANCHES, options.branches, options);
+            repoRoot, block, BRANCH_KIND, BRANCH_KINDS, FLAG_DELETE_BRANCHES, options.branches, options);
         if (approved.length === 0) {
             process.stdout.write(
                 `\nNothing else deleted — the ${String(block.length)} ${BRANCH_KINDS} above were kept.\n`);
             return;
         }
-        process.stdout.write(this.report(
+        process.stdout.write(this.report(repoRoot,
             this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', approved, retention)));
     }
 
@@ -235,7 +240,7 @@ export class CleanupCommand {
         const dead = this.worktreeSection.provablyDead(verdicts);
         if (dead.length > 0) {
             process.stdout.write(
-                this.worktreeSection.report(
+                this.worktreeSection.report(repoRoot,
                     this.worktreeSection.reap(repoRoot, 'wp-cleanup', dead, retention)));
         }
         process.stdout.write(this.worktreeSection.sparedBlock(verdicts, dead));
@@ -253,21 +258,21 @@ export class CleanupCommand {
             process.stdout.write(this.huskBlock(WORKTREE_KINDS, husks.map(
                 (tree: DeletableWorktree): string => `${tree.path} [${tree.branch}]`)));
             process.stdout.write(
-                this.worktreeSection.report(
+                this.worktreeSection.report(repoRoot,
                     this.worktreeSection.reap(repoRoot, 'wp-cleanup', husks, retention)));
         }
 
         if (block.length === 0) return;
         process.stdout.write(this.worktreeSection.promptBlock(block));
         const approved = await this.decide(
-            block, WORKTREE_KIND, WORKTREE_KINDS, FLAG_DELETE_WORKTREES, options.worktrees, options);
+            repoRoot, block, WORKTREE_KIND, WORKTREE_KINDS, FLAG_DELETE_WORKTREES, options.worktrees, options);
         if (approved.length === 0) {
             process.stdout.write(
                 `\nNothing else removed — the ${String(block.length)} ${WORKTREE_KINDS} above were kept.\n`);
             return;
         }
         process.stdout.write(
-            this.worktreeSection.report(
+            this.worktreeSection.report(repoRoot,
                 this.worktreeSection.reap(repoRoot, 'wp-cleanup', approved, retention)));
     }
 
@@ -288,7 +293,7 @@ export class CleanupCommand {
         return out;
     }
 
-    private report(result: ReapResult): string {
+    private report(repoRoot: string, result: ReapResult): string {
         const gone = result.alreadyGone.length;
         if (result.reaped.length === 0 && result.failed.length === 0 && gone === 0) return '';
 
@@ -314,7 +319,7 @@ export class CleanupCommand {
 
         // Printed even on success: a deletion the human cannot undo is a deletion they have to trust
         // blindly, and the whole argument for auto-cleanup is that they never have to.
-        out += '\nEvery deletion is logged with its pre-delete SHA in .webpieces/logs/branch-mutations.log —\n'
+        out += `\nEvery deletion is logged with its pre-delete SHA in\n${this.mutationLog.branchMutationLogPath(repoRoot)} —\n`
             + 'recover any of them with the `recover=` command on its line.\n';
         return out;
     }
@@ -402,18 +407,18 @@ export class CleanupCommand {
      * numbers are the whole interface the next run is given.
      */
     private async decide<T extends DeletableBranch | DeletableWorktree>(
-        block: T[], kind: string, kinds: string, flag: string, selection: DeleteSelection,
-        options: CleanupOptions,
+        repoRoot: string, block: T[], kind: string, kinds: string, flag: string,
+        selection: DeleteSelection, options: CleanupOptions,
     ): Promise<T[]> {
         if (selection.given()) {
             const picked = selection.pick(block);
             process.stdout.write(`\n${flag} chose ${String(picked.length)} of the ${String(block.length)} `
                 + `${kinds} above.\n`);
-            if (picked.length < block.length) process.stdout.write(this.flagHint(kinds, flag, block.length));
+            if (picked.length < block.length) process.stdout.write(this.flagHint(repoRoot, kinds, flag, block.length));
             return picked;
         }
         if (!options.prompts()) {
-            process.stdout.write(this.flagHint(kinds, flag, block.length));
+            process.stdout.write(this.flagHint(repoRoot, kinds, flag, block.length));
             return [];
         }
         const answer = (await this.question(
@@ -429,7 +434,7 @@ export class CleanupCommand {
      * It states the numbering contract out loud because a shifted number is the one way this command
      * can delete the wrong ref, and the caller reading this is usually a program.
      */
-    private flagHint(kinds: string, flag: string, count: number): string {
+    private flagHint(repoRoot: string, kinds: string, flag: string, count: number): string {
         return `\nLeft for you to decide (${String(count)} ${kinds}, numbered above).\n`
             + 'To delete them yourself, re-run with:\n'
             + `  pnpm wp-cleanup ${flag}=all        # every one listed above\n`
@@ -438,8 +443,8 @@ export class CleanupCommand {
             + 'Those numbers are the numbers of THIS run. wp-cleanup renumbers from a fresh scan every\n'
             + 'time, so once anything in the list is deleted, re-run `pnpm wp-cleanup --report` (which\n'
             + 'deletes nothing) and read the new numbers before passing numbers again.\n'
-            + 'Every delete is archived to a tag first; `recover=` lines land in '
-            + '.webpieces/logs/branch-mutations.log\n';
+            + 'Every delete is archived to a tag first; `recover=` lines land in\n'
+            + `${this.mutationLog.branchMutationLogPath(repoRoot)}\n`;
     }
 
     // Parse `1,3` / `1 3` from a HUMAN at the prompt, ignoring anything out of range. An unparseable

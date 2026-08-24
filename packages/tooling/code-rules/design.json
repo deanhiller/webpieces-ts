@@ -265,6 +265,22 @@
                     "level": 2
                 },
                 {
+                    "id": "NoStatePathsInTemplatesConfig",
+                    "className": "NoStatePathsInTemplatesConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/no-state-paths-config.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoStatePathsInTemplatesValidator",
+                    "className": "NoStatePathsInTemplatesValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-state-paths-in-templates.ts",
+                    "level": 2
+                },
+                {
                     "id": "NoSymbolDiTokensConfig",
                     "className": "NoSymbolDiTokensConfig",
                     "kind": "class",
@@ -566,6 +582,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "NoStatePathsInTemplatesValidator",
+                    "injection": "type",
+                    "token": "NoStatePathsInTemplatesValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-state-paths-in-templates.ts#NoStatePathsInTemplatesValidator",
+                    "paramName": "noStatePathsInTemplates",
+                    "paramType": "NoStatePathsInTemplatesValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "NoSymbolDiTokensValidator",
                     "injection": "type",
                     "token": "NoSymbolDiTokensValidator",
@@ -770,6 +795,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoProcessExitOutsideMainConfig",
                     "paramName": "config",
                     "paramType": "NoProcessExitOutsideMainConfig"
+                },
+                {
+                    "from": "NoStatePathsInTemplatesValidator",
+                    "to": "NoStatePathsInTemplatesConfig",
+                    "injection": "type",
+                    "token": "NoStatePathsInTemplatesConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/no-state-paths-config.ts#NoStatePathsInTemplatesConfig",
+                    "paramName": "config",
+                    "paramType": "NoStatePathsInTemplatesConfig"
                 },
                 {
                     "from": "NoSymbolDiTokensValidator",

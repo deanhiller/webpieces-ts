@@ -29,6 +29,7 @@ export const RULE_NAMES = {
     NO_INLINE_TYPES: 'no-inline-types',
     NO_DIRECT_API_RESOLVER: 'no-direct-api-resolver',
     NO_CUSTOM_CSS: 'no-custom-css',
+    NO_STATE_PATHS_IN_TEMPLATES: 'no-state-paths-in-templates',
     PRISMA_CONVERTER: 'prisma-converter',
     MAX_LINES_NEW_METHODS: 'max-lines-new-methods',
     MAX_LINES_MODIFIED_FILES: 'max-lines-modified-files',

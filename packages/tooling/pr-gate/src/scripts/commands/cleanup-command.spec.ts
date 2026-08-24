@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     BranchArchiver,
+    BranchMutationLog,
     BranchReaper,
     DeletableBranch,
     DeletableWorktree,
@@ -135,7 +136,9 @@ class TestableCleanup extends CleanupCommand {
 function build(): TestableCleanup {
     return new TestableCleanup(
         new FakeRepoRootFinder(), new FakeReaper(), new BranchArchiver(),
-        new FakeWorktreeSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService()));
+        new FakeWorktreeSection(
+            new MergedBranchesService(), new WorktreeReaper(), new WorktreeService(), new BranchMutationLog()),
+        new BranchMutationLog());
 }
 
 // Argv said nothing — the bare `pnpm wp-cleanup` every test starts from.
@@ -253,8 +256,10 @@ describe('wp-cleanup classification report (Part 5)', () => {
 
         expect(out).toContain('archived → archive/2026-07-30/dean/merged');
         expect(out).toContain('restore: git checkout -b dean/merged archive/2026-07-30/dean/merged');
-        // The audit-log pointer is printed even on success — an undo nobody can find is not an undo.
-        expect(out).toContain('branch-mutations.log');
+        // The audit-log pointer is printed even on success — an undo nobody can find is not an undo,
+        // and the path is COMPUTED: the log is per-worktree, so the relative literal this used to carry
+        // named a file that does not exist in a linked worktree.
+        expect(out).toContain(new BranchMutationLog().branchMutationLogPath('/repo'));
     });
 
     /**
@@ -484,7 +489,8 @@ describe('wp-cleanup zero-commit husks are reaped by default', () => {
         const out = await run();
 
         expect(out).toContain('archived to a tag first');
-        expect(out).toContain('branch-mutations.log');
+        // The flag hint names the RESOLVED path too — it was the third copy of the old literal.
+        expect(out).toContain(new BranchMutationLog().branchMutationLogPath('/repo'));
     });
 
     it('reaps a zero-commit worktree with no prompt', async () => {

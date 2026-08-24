@@ -134,6 +134,7 @@ graph TD
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchArchiver
+    CleanupCommand --> BranchMutationLog
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
@@ -285,6 +286,7 @@ graph TD
     StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate
+    WorktreeCleanupSection --> BranchMutationLog
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper
     WorktreeCleanupSection --> WorktreeService

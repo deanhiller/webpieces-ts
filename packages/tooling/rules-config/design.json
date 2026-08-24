@@ -6,7 +6,7 @@
             "root": "RulesConfigDesign",
             "rootKind": "apiImplementation",
             "file": "packages/tooling/rules-config/src/rules-config-design.ts",
-            "maxLevel": 3,
+            "maxLevel": 5,
             "nodes": [
                 {
                     "id": "AtomicFile",
@@ -22,7 +22,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
-                    "level": 1
+                    "level": 3
                 },
                 {
                     "id": "ConfigFile",
@@ -54,7 +54,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/state-dir.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "InstructAiDocSet",
@@ -110,7 +110,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/state-dir-migration.ts",
-                    "level": 3
+                    "level": 5
                 },
                 {
                     "id": "TemplateWriter",
@@ -156,6 +156,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir-migration.ts#StateDirMigrator",
                     "paramName": "migrator",
                     "paramType": "StateDirMigrator"
+                },
+                {
+                    "from": "InstructAiDocSet",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "mutationLog",
+                    "paramType": "BranchMutationLog"
                 },
                 {
                     "from": "MainSyncFileStore",

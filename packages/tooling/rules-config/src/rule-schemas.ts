@@ -40,6 +40,7 @@ import {
     ValidateEslintSyncConfig,
 } from './rule-configs';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
+import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
 
 // Thin lookup table — each entry delegates to the class's own SCHEMA.
 // No field lists here; all schemas live with their config class.
@@ -65,6 +66,7 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'no-symbol-di-tokens': NoSymbolDiTokensConfig.SCHEMA,
     'no-client-creation-outside-server-or-client': NoClientCreationOutsideServerOrClientConfig.SCHEMA,
     'no-custom-css': NoCustomCssConfig.SCHEMA,
+    'no-state-paths-in-templates': NoStatePathsInTemplatesConfig.SCHEMA,
     'no-process-exit-outside-main': NoProcessExitOutsideMainConfig.SCHEMA,
     'no-function-outside-class': NoFunctionOutsideClassConfig.SCHEMA,
     'inject-annotation-not-needed-for-concrete-class': InjectAnnotationNotNeededForConcreteClassConfig.SCHEMA,

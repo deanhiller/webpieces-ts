@@ -8,7 +8,7 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## RulesConfigDesign — api-impl, Level 0…3
+## RulesConfigDesign — api-impl, Level 0…5
 
 ```mermaid
 graph TD
@@ -30,6 +30,7 @@ graph TD
     BranchMutationLog --> DotWebpieces
     ConfigLoader --> ConfigFile
     DotWebpieces --> StateDirMigrator
+    InstructAiDocSet --> BranchMutationLog
     MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
     MainSyncStatusService --> DotWebpieces
