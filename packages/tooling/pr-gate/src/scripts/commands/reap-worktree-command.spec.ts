@@ -42,6 +42,7 @@ vi.mock('child_process', () => ({
 }));
 
 import {
+    BranchMutationLog,
     CLASSIFICATION_CURRENT,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_NEVER_PROPOSED,
@@ -49,6 +50,7 @@ import {
     MergedBranchesService,
     RepoRootFinder,
     WorktreeReaper,
+    WorktreeService,
     branchMutationLogPath,
 } from '@webpieces/rules-config';
 
@@ -85,7 +87,7 @@ class FakeRepoRootFinder extends RepoRootFinder {
 function build(): ReapWorktreeCommand {
     return new ReapWorktreeCommand(
         new FakeRepoRootFinder(),
-        new ScriptedSection(new MergedBranchesService(), new WorktreeReaper()),
+        new ScriptedSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService(), new BranchMutationLog()),
         new ReapOutcomeSignal());
 }
 

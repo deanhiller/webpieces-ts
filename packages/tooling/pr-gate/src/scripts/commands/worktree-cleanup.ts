@@ -1,4 +1,5 @@
 import {
+    BranchMutationLog,
     MutationVerb,
     DeletableWorktree,
     MergedBranchesService,
@@ -38,6 +39,9 @@ export class WorktreeCleanupSection {
         private readonly mergedBranches: MergedBranchesService,
         private readonly reaper: WorktreeReaper,
         private readonly worktreeService: WorktreeService,
+        // COMPUTED, not restated: the branch-mutation log is per-worktree, so the relative literal this
+        // message used to carry named a file that does not exist in a linked worktree.
+        private readonly mutationLog: BranchMutationLog,
     ) {}
 
     /**
@@ -121,7 +125,7 @@ export class WorktreeCleanupSection {
         return this.reaper.reapWorktrees(repoRoot, process.cwd(), verb, targets, retention);
     }
 
-    report(result: WorktreeReapResult): string {
+    report(repoRoot: string, result: WorktreeReapResult): string {
         if (result.reaped.length === 0 && result.failed.length === 0) return '';
 
         let out = '\n' + SEP + `🌲 Removed ${String(result.reaped.length)} dead worktree(s)\n` + SEP + '\n';
@@ -133,7 +137,7 @@ export class WorktreeCleanupSection {
         }
         // Printed on success too: removing a worktree deletes real files, and a human who cannot see
         // how to undo that has to take it on trust — which is precisely what nobody should have to do.
-        out += '\nEvery removal is logged in .webpieces/logs/branch-mutations.log (phase REAP_WORKTREE)\n'
+        out += `\nEvery removal is logged (phase REAP_WORKTREE) in\n${this.mutationLog.branchMutationLogPath(repoRoot)}\n`
             + 'with the `recover=` command that brings back both the directory and its branch.\n';
         return out;
     }

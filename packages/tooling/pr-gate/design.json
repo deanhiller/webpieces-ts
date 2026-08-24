@@ -1024,6 +1024,15 @@
                 },
                 {
                     "from": "CleanupCommand",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "mutationLog",
+                    "paramType": "BranchMutationLog"
+                },
+                {
+                    "from": "CleanupCommand",
                     "to": "BranchReaper",
                     "injection": "type",
                     "token": "BranchReaper",
@@ -2380,6 +2389,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/run-update.ts#RunUpdate",
                     "paramName": "runUpdate",
                     "paramType": "RunUpdate"
+                },
+                {
+                    "from": "WorktreeCleanupSection",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "mutationLog",
+                    "paramType": "BranchMutationLog"
                 },
                 {
                     "from": "WorktreeCleanupSection",

@@ -30,6 +30,7 @@ import {
 } from './rule-configs';
 import { BranchStateGuardConfig } from './main-sync-guard-configs';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
+import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
 
 export class WebpiecesRulesConfig {
     'max-method-lines'?: MaxMethodLinesConfig;
@@ -48,6 +49,7 @@ export class WebpiecesRulesConfig {
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
     'no-client-creation-outside-server-or-client'?: NoClientCreationOutsideServerOrClientConfig;
     'no-custom-css'?: NoCustomCssConfig;
+    'no-state-paths-in-templates'?: NoStatePathsInTemplatesConfig;
     'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
     'no-function-outside-class'?: NoFunctionOutsideClassConfig;
     'inject-annotation-not-needed-for-concrete-class'?: InjectAnnotationNotNeededForConcreteClassConfig;

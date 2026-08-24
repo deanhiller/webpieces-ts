@@ -65,7 +65,7 @@ export class ReapWorktreeCommand {
 
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
         const result = this.worktreeSection.reap(repoRoot, 'wp-land-pr', [target], retention);
-        process.stdout.write(this.render(result));
+        process.stdout.write(this.render(repoRoot, result));
         process.stdout.write(this.signal.line(this.outcomeOf(result)));
     }
 
@@ -115,13 +115,13 @@ export class ReapWorktreeCommand {
 
     // The reap report, plus the spared case — which report() renders as '' because from wp-cleanup's
     // point of view "nothing happened" is a whole answer. Here it never is: we asked for exactly one.
-    private render(result: WorktreeReapResult): string {
+    private render(repoRoot: string, result: WorktreeReapResult): string {
         if (result.reaped.length === 0 && result.failed.length === 0) {
             let out = '\n' + SEP + '🛑 Nothing removed\n' + SEP + '\n';
             for (const tree of result.spared) out += `   · ${tree.path} — ${tree.reason}\n`;
             return out;
         }
-        return this.worktreeSection.report(result);
+        return this.worktreeSection.report(repoRoot, result);
     }
 
     // `<worktree-path> <branch>`, both required. Thrown rather than printed: bad argv means the caller

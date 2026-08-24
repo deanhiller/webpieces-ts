@@ -49,7 +49,7 @@ export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
 // The instruct-ai docs are delivered as a SET: writing one writes the transitive closure of the docs it
 // links to, so a doc and everything it points at always land together. See instruct-ai-docs.ts.
-export { InstructAiDoc, InstructAiDocSet, MergeProcessDoc } from './instruct-ai-docs';
+export { GIT_WORKFLOW_DOC, GitWorkflowDoc, InstructAiDoc, InstructAiDocSet, MergeProcessDoc } from './instruct-ai-docs';
 export { MERGE_PROCESS_DOC, MergeProcessText, MergeRun, ReferenceMergeRun } from './merge-process-doc';
 export { BUILD_LOG_DOC } from './build-log-doc';
 export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
@@ -207,6 +207,13 @@ export {
     CLIENT_CREATION_SEVERITIES,
 } from './no-client-creation-config';
 export type { ClientCreationSeverity } from './no-client-creation-config';
+// The `no-state-paths-in-templates` config, in its own module for the same reason no-client-creation is:
+// rule-configs.ts is at its file-size cap and a rule that carries real defaults belongs beside them.
+export {
+    NoStatePathsInTemplatesConfig,
+    DEFAULT_TEMPLATE_DIRS,
+    DEFAULT_BANNED_STATE_PATH_PREFIXES,
+} from './no-state-paths-config';
 export type {
     MethodLimitMode,
     FileLimitMode,

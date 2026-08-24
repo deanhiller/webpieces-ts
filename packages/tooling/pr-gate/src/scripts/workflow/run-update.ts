@@ -22,7 +22,8 @@ export class RunUpdate {
 
     // `finishCommand` is the command the AI is told to run after resolving conflicts (standalone passes
     // `wp-finish-update`, PR flow passes `wp-finish-upsert-pr`). `verb` is the invoking bin, threaded so
-    // every branch mutation is recorded in `.webpieces/logs/branch-mutations.log`. `pushRemote` is false
+    // every branch mutation is recorded in the branch-mutation log (BranchMutationLog.branchMutationLogPath
+    // resolves it for THIS tree — it is per-worktree). `pushRemote` is false
     // for the PR flow, which pushes exactly once from wp-finish-upsert-pr (see MergeEndOptions).
     // eslint-disable-next-line @typescript-eslint/max-params
     async runUpdateFromMain(repoRoot: string, verb: MutationVerb, finishCommand: string, pushRemote: boolean): Promise<UpdateOutcome> {

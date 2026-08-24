@@ -44,6 +44,8 @@ graph TD
     NoInlineTypeLiteralsValidator["NoInlineTypeLiteralsValidator"]
     NoProcessExitOutsideMainConfig["NoProcessExitOutsideMainConfig"]:::many
     NoProcessExitOutsideMainValidator["NoProcessExitOutsideMainValidator"]
+    NoStatePathsInTemplatesConfig["NoStatePathsInTemplatesConfig"]:::many
+    NoStatePathsInTemplatesValidator["NoStatePathsInTemplatesValidator"]
     NoSymbolDiTokensConfig["NoSymbolDiTokensConfig"]:::many
     NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]
     NoUnmanagedExceptionsConfig["NoUnmanagedExceptionsConfig"]:::many
@@ -79,6 +81,7 @@ graph TD
     CodeRulesEngine --> NoImplicitAnyValidator
     CodeRulesEngine --> NoInlineTypeLiteralsValidator
     CodeRulesEngine --> NoProcessExitOutsideMainValidator
+    CodeRulesEngine --> NoStatePathsInTemplatesValidator
     CodeRulesEngine --> NoSymbolDiTokensValidator
     CodeRulesEngine --> NoUnmanagedExceptionsValidator
     CodeRulesEngine --> PrismaConverterValidator
@@ -102,6 +105,7 @@ graph TD
     NoImplicitAnyValidator --> NoImplicitAnyConfig
     NoInlineTypeLiteralsValidator --> NoInlineTypeLiteralsConfig
     NoProcessExitOutsideMainValidator --> NoProcessExitOutsideMainConfig
+    NoStatePathsInTemplatesValidator --> NoStatePathsInTemplatesConfig
     NoSymbolDiTokensValidator --> NoSymbolDiTokensConfig
     NoUnmanagedExceptionsValidator --> NoUnmanagedExceptionsConfig
     PrismaConverterValidator --> PrismaConverterConfig

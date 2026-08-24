@@ -20,6 +20,7 @@ import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver'
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { NoCustomCssValidator } from './validate-no-custom-css';
+import { NoStatePathsInTemplatesValidator } from './validate-no-state-paths-in-templates';
 import { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 import { NoFunctionOutsideClassValidator } from './validate-no-function-outside-class';
 import { InjectAnnotationNotNeededForConcreteClassValidator } from './validate-inject-annotation-not-needed-for-concrete-class';
@@ -55,6 +56,7 @@ export class CodeRulesEngine {
         private readonly noSymbolDiTokens: NoSymbolDiTokensValidator,
         private readonly noClientCreationOutsideServerOrClient: NoClientCreationOutsideServerOrClientValidator,
         private readonly noCustomCss: NoCustomCssValidator,
+        private readonly noStatePathsInTemplates: NoStatePathsInTemplatesValidator,
         private readonly noProcessExitOutsideMain: NoProcessExitOutsideMainValidator,
         private readonly noFunctionOutsideClass: NoFunctionOutsideClassValidator,
         private readonly injectAnnotationNotNeeded: InjectAnnotationNotNeededForConcreteClassValidator,
@@ -62,13 +64,14 @@ export class CodeRulesEngine {
         private readonly roleTag: RoleTagValidator,
     ) {}
 
-    /** The 20 injected built-in validators, in run order. */
+    /** The 21 injected built-in validators, in run order. */
     private builtIns(): CodeValidator<BaseRuleConfig>[] {
         return [
             this.maxMethodLines, this.maxFileLines, this.requireReturnType, this.noInlineTypeLiterals,
             this.noAnyUnknown, this.noImplicitAny, this.prismaValidateDtos, this.prismaConverter,
             this.noDestructure, this.catchErrorPattern, this.noUnmanagedExceptions, this.noDirectApiResolver,
             this.noSymbolDiTokens, this.noClientCreationOutsideServerOrClient, this.noCustomCss,
+            this.noStatePathsInTemplates,
             this.noProcessExitOutsideMain, this.noFunctionOutsideClass,
             this.injectAnnotationNotNeeded, this.frameworkTag, this.roleTag,
         ];

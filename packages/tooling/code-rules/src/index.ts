@@ -13,6 +13,7 @@ export { NoDestructureValidator } from './validate-no-destructure';
 export { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 export { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
 export { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
+export { NoStatePathsInTemplatesValidator, StatePathHit, StatePathViolation } from './validate-no-state-paths-in-templates';
 export { ProjectRoleResolver } from './project-role-resolver';
 export { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 export { NoFunctionOutsideClassValidator } from './validate-no-function-outside-class';

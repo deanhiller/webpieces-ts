@@ -42,7 +42,7 @@ export class TemplateWriter {
         for (const doc of this.docs.closure(name, (docName: string): string => this.loadTemplate(docName))) {
             const target = this.destination(workspaceRoot, doc.name, instructDir);
             if (fs.existsSync(target)) continue;
-            this.atomicFile.writeAtomic(target, doc.render(this.loadTemplate(doc.name)));
+            this.atomicFile.writeAtomic(target, doc.render(this.loadTemplate(doc.name), workspaceRoot));
         }
     }
 
@@ -65,7 +65,7 @@ export class TemplateWriter {
             // while a conflicted merge is still open, and clobbering that handback with the reference
             // copy would delete the file list the agent is working from.
             if (doc.seedOnly() && fs.existsSync(target)) continue;
-            this.atomicFile.writeIfChanged(target, doc.render(this.loadTemplate(doc.name)));
+            this.atomicFile.writeIfChanged(target, doc.render(this.loadTemplate(doc.name), workspaceRoot));
         }
         return this.destination(workspaceRoot, name, instructDir);
     }
