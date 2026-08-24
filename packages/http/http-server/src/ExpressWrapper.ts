@@ -4,19 +4,11 @@ import {
     ClientRegistry,
     HttpError,
     HttpBadRequestError,
-    HttpVendorError,
-    HttpUserError,
-    HttpNotFoundError,
-    HttpTimeoutError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpInternalServerError,
-    HttpBadGatewayError,
-    HttpGatewayTimeoutError,
     toError,
     LogManager,
 } from '@webpieces/core-util';
 import { RequestContext, HttpRequest, RawRequest, RequestContextHeaders } from '@webpieces/core-context';
+import { HttpErrorWireMapper } from './HttpErrorWireMapper';
 
 // The logging backend prepends this logger name to every line, so messages below carry NO
 // "[ExpressWrapper]" literal of their own — that would print the name twice.
@@ -43,6 +35,13 @@ const log = LogManager.getLogger('ExpressWrapper');
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 export class ExpressWrapper {
+    /**
+     * Decides what an outside caller is allowed to see of a thrown {@link HttpError}. Stateless —
+     * one instance per wrapper is fine, and the class doc there is where the "only HttpUserError's
+     * message goes on the wire" rule is stated.
+     */
+    private readonly errorWireMapper = new HttpErrorWireMapper();
+
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         private clientMethod: (requestDto: unknown) => Promise<unknown>,
@@ -260,17 +259,23 @@ export class ExpressWrapper {
      * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
      *
      * Maps all HttpError types (must match ClientErrorTranslator's built-in status mapping):
-     * - HttpUserError → 266 (with errorCode)
-     * - HttpBadRequestError → 400 (with field, guiAlertMessage)
-     * - HttpUnauthorizedError → 401
-     * - HttpForbiddenError → 403
-     * - HttpNotFoundError → 404
-     * - HttpTimeoutError → 408
-     * - HttpInternalServerError → 500
-     * - HttpBadGatewayError → 502
-     * - HttpServiceUnavailableError → 503 (generic branch: res.status(error.code))
-     * - HttpGatewayTimeoutError → 504
-     * - HttpVendorError → 598 (with waitSeconds)
+     * - HttpUserError → 266 (message + subType + errorCode)
+     * - HttpBadRequestError → 400 (generic message + field, guiAlertMessage)
+     * - HttpUnauthorizedError → 401 (generic message + subType)
+     * - HttpForbiddenError → 403 (generic message)
+     * - HttpNotFoundError → 404 (generic message)
+     * - HttpTimeoutError → 408 (generic message)
+     * - HttpTooManyRequestsError → 429 (generic message)
+     * - HttpInternalServerError → 500 (generic message)
+     * - HttpBadGatewayError → 502 (generic message)
+     * - HttpServiceUnavailableError → 503 (generic message)
+     * - HttpGatewayTimeoutError → 504 (generic message)
+     * - HttpVendorError → 598 (generic message + waitSeconds)
+     *
+     * "generic message" is the point of {@link HttpErrorWireMapper}: ONLY `HttpUserError`'s message
+     * was written for a human to read, so only it is copied to the response body. Every other type
+     * sends the standard reason phrase for its status and logs the real message. Read that class's
+     * doc for the full rule, including why `subType` is kept and `name` is not.
      */
     // webpieces-disable no-any-unknown -- a thrown error is genuinely unknown until narrowed below
     public handleError(res: Response, error: unknown): void {
@@ -292,49 +297,20 @@ export class ExpressWrapper {
             }
         }
 
-        const protocolError = new ProtocolError();
-
         if (error instanceof HttpError) {
-            // Set common fields for all HttpError types
-            protocolError.message = error.message;
-            protocolError.subType = error.subType;
-            protocolError.name = error.name;
-
-            // Set type-specific fields (MUST match ClientErrorTranslator's built-in status mapping)
-            if (error instanceof HttpUserError) {
-                log.info(`User Error: ${error.message}`);
-                protocolError.errorCode = error.errorCode;
-            } else if (error instanceof HttpBadRequestError) {
-                log.info(`Bad Request: ${error.message}`);
-                protocolError.field = error.field;
-                protocolError.guiAlertMessage = error.guiMessage;
-            } else if (error instanceof HttpNotFoundError) {
-                log.info(`Not Found: ${error.message}`);
-            } else if (error instanceof HttpTimeoutError) {
-                log.error(`Timeout Error: ${error.message}`);
-            } else if (error instanceof HttpVendorError) {
-                log.error(`Vendor Error: ${error.message}`);
-                protocolError.waitSeconds = error.waitSeconds;
-            } else if (error instanceof HttpUnauthorizedError) {
-                log.info(`Unauthorized: ${error.message}`);
-            } else if (error instanceof HttpForbiddenError) {
-                log.info(`Forbidden: ${error.message}`);
-            } else if (error instanceof HttpInternalServerError) {
-                log.error(`Internal Server Error: ${error.message}`);
-            } else if (error instanceof HttpBadGatewayError) {
-                log.error(`Bad Gateway: ${error.message}`);
-            } else if (error instanceof HttpGatewayTimeoutError) {
-                log.error(`Gateway Timeout: ${error.message}`);
-            } else {
-                log.info(`Generic HttpError: ${error.message}`);
-            }
+            // The mapper decides what the caller may see AND logs everything it withholds — see
+            // HttpErrorWireMapper. Nothing type-specific is decided here any more.
+            const protocolError = this.errorWireMapper.toWire(error);
 
             // Serialize ProtocolError to JSON (SYMMETRIC with client)
             const responseJson = JSON.stringify(protocolError);
             res.status(error.code).setHeader('Content-Type', 'application/json').send(responseJson);
         } else {
-            // Unknown error - 500
+            // Unknown error - 500. This branch was ALREADY generic, which is what made the old
+            // HttpError branch's verbatim `error.message` so obviously backwards: an unexpected crash
+            // leaked nothing while a deliberate HttpInternalServerError leaked everything.
             const err = toError(error);
+            const protocolError = new ProtocolError();
             protocolError.message = 'Internal Server Error';
             log.error('Unexpected error:', err);
             const responseJson = JSON.stringify(protocolError);

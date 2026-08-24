@@ -9,6 +9,7 @@ Server runtime that assembles the HTTP layer: bootstraps the Inversify DI contai
 - DI container/module wiring (`WebpiecesModule`) binding framework singletons
 - Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter`, `ServiceAuthFilter` (service-to-service `@AuthOidc`/`@AuthSharedSecret` enforcement on Cloud Tasks / cross-service delivery)
 - In-process (HTTP-less) client factory for tests (`InProcessApiClientFactory`)
+- Deciding what an outside caller may see of a thrown `HttpError` (`HttpErrorWireMapper`, driven by `ExpressWrapper.handleError`). ONLY `HttpUserError`'s `message` goes on the wire — it is the one type written for a human to read. Every other subclass sends the generic HTTP reason phrase for its status and logs the real message, because `Error.message` is an operator field that routinely quotes downstream urls, response bodies and internal ids. Structured contract data (`errorCode`, `waitSeconds`, `subType`, `field`, `guiAlertMessage`) still goes out; `name` does not. The opt-out is an app-registered `ClientRegistry` error translation, whose `toWire()` result is sent verbatim
 - Test-case recorder implementation and spec generation (`TestCaseRecorderImpl`, `SpecGenerator`, `recordable`)
 
 ## Out of Scope

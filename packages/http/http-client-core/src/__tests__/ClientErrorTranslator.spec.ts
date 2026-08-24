@@ -5,8 +5,19 @@ import {
     HttpError,
     HttpBadRequestError,
     HttpNotFoundError,
+    HttpUserError,
+    HttpUnauthorizedError,
+    HttpForbiddenError,
+    HttpTimeoutError,
+    HttpTooManyRequestsError,
+    HttpInternalServerError,
+    HttpBadGatewayError,
+    HttpServiceUnavailableError,
+    HttpGatewayTimeoutError,
+    HttpVendorError,
     ErrorTranslation,
     ErrorWireForm,
+    WRONG_LOGIN,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 
@@ -133,7 +144,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
         expect(failure.error).toBeInstanceOf(AiBadRequestError);
     });
 
-    it('statusCode is the DOWNSTREAM status, not the registered error\'s own code', () => {
+    it('statusCode is the DOWNSTREAM status, not the registered error\'s own code (relay case)', () => {
         // A gateway app deliberately relays a 404 as its own — its translation claims 404.
         const relay: ErrorTranslation = {
             toWire: () => undefined,
@@ -146,5 +157,97 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
 
         expect(failure.appRegistered).toBe(true);
         expect(failure.statusCode).toBe(404);
+    });
+});
+
+/**
+ * The CLIENT half of the server -> wire -> client round trip.
+ *
+ * `http-server` does not depend on this package and must not start to for a test's convenience, so
+ * the round trip is pinned as two halves that meet on the wire bytes. The fixtures below are exactly
+ * what `http-server`'s `HttpErrorWireMapper.spec.ts` ("the exact wire bytes, so the client half can
+ * be pinned against them") asserts a webpieces server emits. Change one and the other stops
+ * describing reality.
+ *
+ * What this proves is the thing the genericization had to preserve: a caller still gets the right
+ * TYPE. Only the prose changed, and only for the types whose prose was never written for a caller.
+ */
+describe('the exact bodies a webpieces server now emits, reconstructed', () => {
+    beforeEach(() => {
+        ClientRegistry.clear();
+    });
+
+    /** [status, the generic message the server sends, the class the caller must receive] */
+    const wire: ReadonlyArray<readonly [number, string, new (...args: never[]) => Error]> = [
+        [400, 'Bad Request', HttpBadRequestError],
+        [401, 'Unauthorized', HttpUnauthorizedError],
+        [403, 'Forbidden', HttpForbiddenError],
+        [404, 'Not Found', HttpNotFoundError],
+        [408, 'Request Timeout', HttpTimeoutError],
+        [429, 'Too Many Requests', HttpTooManyRequestsError],
+        [500, 'Internal Server Error', HttpInternalServerError],
+        [502, 'Bad Gateway', HttpBadGatewayError],
+        [503, 'Service Unavailable', HttpServiceUnavailableError],
+        [504, 'Gateway Timeout', HttpGatewayTimeoutError],
+        [598, 'Vendor Error', HttpVendorError],
+    ];
+
+    for (const [status, generic, expectedClass] of wire) {
+        it(`${status} -> ${expectedClass.name} carrying the generic message`, () => {
+            const pe = new ProtocolError();
+            pe.message = generic;
+
+            const err = translate(status, pe);
+
+            expect(err).toBeInstanceOf(expectedClass);
+            expect(err.message).toBe(generic);
+        });
+    }
+
+    it('266 -> HttpUserError with the human-facing message and errorCode intact', () => {
+        const pe = new ProtocolError();
+        pe.message = 'Password must be 12+ characters';
+        pe.errorCode = 'PW_SHORT';
+        pe.subType = 'USER_ERROR';
+
+        const err = translate(266, pe);
+
+        expect(err).toBeInstanceOf(HttpUserError);
+        expect(err.message).toBe('Password must be 12+ characters');
+        expect((err as HttpUserError).errorCode).toBe('PW_SHORT');
+    });
+
+    it('401 keeps subType, so a caller can still branch on WHY login failed', () => {
+        const pe = new ProtocolError();
+        pe.message = 'Unauthorized';
+        pe.subType = WRONG_LOGIN;
+
+        const err = translate(401, pe);
+
+        expect(err).toBeInstanceOf(HttpUnauthorizedError);
+        expect((err as HttpUnauthorizedError).subType).toBe(WRONG_LOGIN);
+    });
+
+    it('400 keeps guiAlertMessage and field — the human-safe half of a bad request', () => {
+        const pe = new ProtocolError();
+        pe.message = 'Bad Request';
+        pe.field = 'email';
+        pe.guiAlertMessage = 'Enter a valid email';
+
+        const err = translate(400, pe);
+
+        expect(err).toBeInstanceOf(HttpBadRequestError);
+        expect((err as HttpBadRequestError).field).toBe('email');
+        expect((err as HttpBadRequestError).guiMessage).toBe('Enter a valid email');
+    });
+
+    it('598 keeps waitSeconds', () => {
+        const pe = new ProtocolError();
+        pe.message = 'Vendor Error';
+        pe.waitSeconds = 45;
+
+        const err = translate(598, pe);
+
+        expect((err as HttpVendorError).waitSeconds).toBe(45);
     });
 });
