@@ -1,9 +1,9 @@
-import { spawnSync } from 'child_process';
 import {
-    loadAndValidate, CliExitError, HomeConfigService, DEFAULT_BUILD_COMMAND, BuildsLog,
+    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
+import { StageOutputLog } from './stage-output-log';
 
 // Single source of truth for RUNNING the build gate. `wp-start-upsert-pr` runs NO build; stage ②
 // (`wp-review-upsert-pr`) runs it authoritatively before any reviewer is spawned, and stage ③
@@ -12,7 +12,6 @@ import { BuildGateLog } from './build-gate-log';
 // DEFAULT_BUILD_COMMAND — whole-repo-build-guard prints the same string, and one definition is what
 // keeps the refusal message naming the build that actually runs.
 
-const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
  * The caller-supplied framing for the build gate (label, re-run command, failure headline, stage id). Kept
@@ -26,18 +25,12 @@ export class BuildGateOptions {
     // WHICH stage's gate this is — REVIEW_STAGE, FINISH_STAGE or BUILD_STAGE. Required, with no default:
     // it decides the captured log's filename, and a default would silently make two stages share one file.
     stage: string;
-    // Capture regardless of the EXPERIMENTAL `~/.webpieces/config.json` opt-in. True for `wp-build`, whose
-    // entire contract IS the log file — its console output is a heartbeat and a pointer at that file, so a
-    // wp-build that did not capture would have nothing to point at. The PR-flow stages pass false and stay
-    // on the opt-in until the experiment lands for them too.
-    alwaysCapture: boolean;
 
-    constructor(label: string, rerunCommand: string, failureHeadline: string, stage: string, alwaysCapture: boolean) {
+    constructor(label: string, rerunCommand: string, failureHeadline: string, stage: string) {
         this.label = label;
         this.rerunCommand = rerunCommand;
         this.failureHeadline = failureHeadline;
         this.stage = stage;
-        this.alwaysCapture = alwaysCapture;
     }
 }
 
@@ -45,22 +38,10 @@ export class BuildGateOptions {
 @injectable(bindingScopeValues.Singleton)
 export class BuildAffected {
     constructor(
-        private readonly homeConfig: HomeConfigService,
         private readonly buildLog: BuildGateLog,
         private readonly buildsLog: BuildsLog,
+        private readonly stageConsole: StageOutputLog,
     ) {}
-
-    /**
-     * EXPERIMENTAL, and OFF unless the OPTIONAL machine-local `~/.webpieces/config.json` turns it on.
-     *
-     * That file does not exist for essentially anyone, and its absence is not an error, a warning or a
-     * behaviour change of any kind — `HomeConfigService.load` returns all-defaults silently. False here is
-     * therefore the state every consumer is in, and false means runBuildGate executes exactly the code it
-     * executed before this feature existed.
-     */
-    isCaptureEnabled(): boolean {
-        return this.homeConfig.load().buildGateLogCapture;
-    }
 
     /**
      * Resolve the exact build command this gate will run: the project's configured
@@ -69,25 +50,6 @@ export class BuildAffected {
     resolveBuildCommand(repoRoot: string): string {
         const configured = loadAndValidate(repoRoot).prGate.buildCommand;
         return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
-    }
-
-    /**
-     * Spawn the resolved build command, streamed to the terminal. Returns the exit code (0 = pass).
-     *
-     * PRIVATE, and that is the point. This and `runConfiguredBuildGate` used to be PUBLIC side doors that
-     * spawned `buildCommand` with no caller identity and no ledger row — so "run the build" had three
-     * spellings, two of which were invisible to `~/.webpieces/builds.log`. They are folded into this one
-     * private method, reachable only through `runBuildGate`, which means an unlogged build no longer
-     * COMPILES. That is the one-spelling rule from CLAUDE.md § "NO webpieces surface is released
-     * backwards-compatible" applied to a behaviour rather than a type.
-     *
-     * Prints NOTHING itself — `runBuildGate` announces the command in one line.
-     */
-    private spawnBuild(repoRoot: string): number {
-        const configured = loadAndValidate(repoRoot).prGate.buildCommand;
-        const cmd = configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
-        const result = spawnSync(cmd, { stdio: 'inherit', cwd: repoRoot, shell: true });
-        return result.status ?? 1;
     }
 
     /**
@@ -110,36 +72,37 @@ export class BuildAffected {
         // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
         // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
         // only useful when the build FAILS, so it now lives solely on the failure path below.
-        process.stdout.write(`\n${opts.label}: ${buildCommand}\n`);
-        // '' means NOT capturing: a PR-flow stage on a machine that has not created the OPTIONAL
-        // `~/.webpieces/config.json`. Everything below then runs exactly the code it ran before capture
-        // existed — same spawn, streamed to the terminal, same message, no extra file.
-        const logPath = opts.alwaysCapture || this.isCaptureEnabled() ? this.buildLog.pathFor(repoRoot, opts.stage) : '';
+        //
+        // `say`, so it survives a stage that is capturing its own console (see StageOutputLog): the
+        // command being run and the result of running it are exactly what a caller watching a long build
+        // needs to see live.
+        this.stageConsole.say(`\n${opts.label}: ${buildCommand}\n`);
+        const logPath = this.buildLog.pathFor(repoRoot, opts.stage);
         const ticket = this.buildsLog.start(opts.stage, repoRoot);
         let buildCode = 1;
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the DONE row must be written whether the
         // build passed, failed, or the spawn itself blew up; the throw is re-raised untouched below
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            buildCode = logPath === ''
-                ? this.spawnBuild(repoRoot)
-                : await this.buildLog.run(repoRoot, buildCommand, logPath);
+            buildCode = await this.buildLog.run(repoRoot, buildCommand, logPath);
         } finally {
             this.buildsLog.finish(ticket, buildCode);
         }
         if (buildCode !== 0) throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath));
-        process.stdout.write(logPath === '' ? '\n✅ Build passed.\n' : this.buildLog.successMessage(logPath));
+        this.stageConsole.say(this.buildLog.successMessage(logPath));
     }
 
     /**
-     * On failure, WITHOUT capture: the pre-existing text, which tells the AI to re-run the build itself.
-     * WITH capture: a deliberately tiny pointer at the log the gate already wrote — the whole point of the
-     * feature is that the agent reads one file instead of rebuilding the repo and eating the transcript.
+     * The failure text: this gate's own headline, then the pointer at the log the build already wrote.
+     *
+     * There is no second, streamed variant any more. Capturing used to be behind an EXPERIMENTAL
+     * machine-local opt-in, which meant the refusal an agent read depended on a file almost nobody had —
+     * and the un-captured branch's advice was "run the build again yourself", which is the single most
+     * expensive thing an agent can be told. Reading a FILE is now the only answer this gate gives.
      */
     private failureText(opts: BuildGateOptions, buildCommand: string, logPath: string): string {
-        if (logPath !== '') return this.buildLog.failureMessage(buildCommand, logPath);
-        return `\n❌ ${opts.failureHeadline}\n\n` +
-            `Run THIS exact command to reproduce and fix all errors, then re-run ${opts.rerunCommand}:\n\n` +
-            `    ${buildCommand}\n`;
+        return `\n❌ ${opts.failureHeadline}\n` +
+            this.buildLog.failureMessage(buildCommand, logPath) +
+            `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`;
     }
 }

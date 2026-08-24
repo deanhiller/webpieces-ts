@@ -32,6 +32,7 @@ import { NoProcessExitOutsideMainRule } from './rules/no-process-exit-outside-ma
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
+import { BuildOutputPipeGuardRule } from './rules/build-output-pipe-guard';
 import { PrMergeGuardRule } from './rules/pr-merge-guard';
 import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
@@ -136,13 +137,21 @@ export function loadRules(
  *  - `commit-message-substitution-guard` acts unconditionally. Nobody legitimately wants a backtick
  *    expanded inside a commit message, and its cure (`git commit -F <file>`) is available for every
  *    input and can never itself match the guard — so there is nothing for a switch to rescue.
+ *  - `build-output-pipe-guard` acts unconditionally, on the same test. Piping `wp-build` /
+ *    `wp-review-upsert-pr` / `wp-finish-upsert-pr` withholds their heartbeat until they exit and gets
+ *    the build killed by the 600s watchdog; the cure is the SAME command with less typing, available
+ *    for every input, and it cannot itself match the guard.
  *
  * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
  * repo's gate actually runs.
  */
 // webpieces-disable no-function-outside-class -- sibling of loadRules/loadMatchRules in this module; the whole loader is module-scope functions and a lone class for this one would break the file's shape
 export function loadKeylessBashRules(affectedBuildCommand: string): Rule[] {
-    return [new WholeRepoBuildGuardRule(affectedBuildCommand), new CommitMessageSubstitutionGuardRule()];
+    return [
+        new WholeRepoBuildGuardRule(affectedBuildCommand),
+        new CommitMessageSubstitutionGuardRule(),
+        new BuildOutputPipeGuardRule(),
+    ];
 }
 
 // One MatchRule per entry of the `match-rules` array. Kept separate from loadRules (built-ins/custom)

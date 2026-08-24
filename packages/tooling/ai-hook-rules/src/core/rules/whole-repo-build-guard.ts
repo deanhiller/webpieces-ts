@@ -70,12 +70,13 @@ import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
  *     naming the edit. That is a file somebody wrote wrongly, not one written for another release.
  *     Editing that file is an unconditional PASS in the guards, so the block is always self-curable.
  *
- * ─── Two messages, chosen by a DIFFERENT key ───────────────────────────────────────────────────────
- * `experimental.buildGateLogCapture` is a separate feature (the pr-gate captures its build's full output
- * to a log file and hands the agent that path instead of a rebuild instruction) and it is NOT this
- * guard's switch. It only picks WHICH refusal is printed once the guard is on: with capture ON the right
- * advice is not "build smaller", it is "do not build; stage ② already builds and you can READ the
- * result". `HomeConfigService` is the one reader of both keys.
+ * ─── ONE message, because the gate now always captures ─────────────────────────────────────────────
+ * There used to be two refusals here, chosen by `experimental.buildGateLogCapture`: one naming the
+ * narrower build to run, and one saying "do not build at all — stage ② already builds and you can READ
+ * the result". That key is gone, because capturing the build's full output to a file is no longer
+ * optional. What survived is the FIRST of those, now carrying the log pointer the second one existed to
+ * offer: a refusal still has to answer "so what do I run?", and "run nothing" is only an answer when the
+ * caller was already inside the PR flow.
  *
  * ─── Humans are not affected, by construction ──────────────────────────────────────────────────────
  * This is a PreToolUse hook. It sees the AI's Bash tool calls and nothing else — a human typing
@@ -157,7 +158,7 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
 
         // Resolved ONCE, here, and read by both the violation message and the fix hint.
         this.resolvedCommand = this.resolvedBuildCommand(ctx.workspaceRoot);
-        return this.block(ctx, hit, this.message(home));
+        return this.block(ctx, hit, this.message());
     }
 
     /**
@@ -192,18 +193,23 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<EmptyRuleConfig> {
 
     // The whole refusal. Short on purpose: it is read mid-task by an agent that needs the ONE command
     // to run next, and a guard message long enough to skim is a guard message that gets skimmed.
-    private message(home: HomeConfig): string {
-        if (home.buildGateLogCapture) {
-            return 'Blocked: that builds the WHOLE monorepo — and you should not be building at all.\n'
-                + '`pnpm wp-review-upsert-pr` (stage ②) runs the build for you, captures the full output to a\n'
-                + 'log file, and names that file if it fails. Read the file; do not rebuild.\n'
-                + 'Need a check before then: pnpm exec vitest run <path>.';
-        }
-        // `pnpm wp-build` FIRST, with the command it resolves to shown beside it. One thing to type, and
-        // it runs `commands.pr-gate.buildCommand` through the gate's own resolver — so this refusal can
-        // never teach a command the gate does not run, however the project reconfigures it.
+    //
+    // `pnpm wp-build` FIRST, with the command it resolves to shown beside it. One thing to type, and it
+    // runs `commands.pr-gate.buildCommand` through the gate's own resolver — so this refusal can never
+    // teach a command the gate does not run, however the project reconfigures it.
+    //
+    // The log note is attached to the `wp-build` line ONLY, and that placement is the whole point. A
+    // `FullLog :` pointer is written by `GateLogFile.pointer`, which is reachable solely through
+    // `BuildGateLog` / `StageOutputLog` — i.e. through the gate. A bare `nx run <project>:ci` or
+    // `vitest run <path>` writes no such file, so a blanket "whichever you run" claim would send an
+    // agent to grep a path that does not exist while this same message forbids the re-run that is its
+    // only remaining option. A cure that names an artifact the command does not produce is worse than
+    // no cure at all.
+    private message(): string {
         return 'Blocked: that builds the WHOLE monorepo. Build only what your change affects:\n\n'
-            + `    pnpm wp-build   # runs: ${this.resolvedCommand}\n\n`
+            + `    pnpm wp-build   # runs: ${this.resolvedCommand}\n`
+            + '    (its full output goes to a FILE — it prints "FullLog : <path>"; grep THAT instead of\n'
+            + '     rebuilding. Never re-run a build to read a different slice of it.)\n\n'
             + 'Narrower still: pnpm nx run <project>:ci, or pnpm exec vitest run <path>.';
     }
 

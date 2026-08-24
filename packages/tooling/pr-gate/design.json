@@ -305,6 +305,14 @@
                     "level": 5
                 },
                 {
+                    "id": "GateLogFile",
+                    "className": "GateLogFile",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts",
+                    "level": 6
+                },
+                {
                     "id": "GateTokenService",
                     "className": "GateTokenService",
                     "kind": "class",
@@ -358,7 +366,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/home-config.ts",
-                    "level": 4
+                    "level": 3
                 },
                 {
                     "id": "LandPrCommand",
@@ -625,6 +633,14 @@
                     "level": 2
                 },
                 {
+                    "id": "StageOutputLog",
+                    "className": "StageOutputLog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts",
+                    "level": 5
+                },
+                {
                     "id": "StartUpdateCommand",
                     "className": "StartUpdateCommand",
                     "kind": "class",
@@ -772,12 +788,12 @@
                 },
                 {
                     "from": "BuildAffected",
-                    "to": "HomeConfigService",
+                    "to": "StageOutputLog",
                     "injection": "type",
-                    "token": "HomeConfigService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/home-config.ts#HomeConfigService",
-                    "paramName": "homeConfig",
-                    "paramType": "HomeConfigService"
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
                 },
                 {
                     "from": "BuildArtifactGate",
@@ -841,6 +857,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "BuildGateLog",
+                    "to": "GateLogFile",
+                    "injection": "type",
+                    "token": "GateLogFile",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts#GateLogFile",
+                    "paramName": "files",
+                    "paramType": "GateLogFile"
+                },
+                {
+                    "from": "BuildGateLog",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
                 },
                 {
                     "from": "BuildsLog",
@@ -1390,6 +1424,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/squash-settings-enforcer.ts#SquashSettingsEnforcer",
                     "paramName": "squashSettings",
                     "paramType": "SquashSettingsEnforcer"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
                 },
                 {
                     "from": "ForkPoint",
@@ -2229,6 +2272,15 @@
                     "paramType": "ReviewerInstructionsService"
                 },
                 {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
+                },
+                {
                     "from": "ReviewerBriefingBuilder",
                     "to": "ReviewJsonService",
                     "injection": "type",
@@ -2299,6 +2351,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "StageOutputLog",
+                    "to": "GateLogFile",
+                    "injection": "type",
+                    "token": "GateLogFile",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts#GateLogFile",
+                    "paramName": "files",
+                    "paramType": "GateLogFile"
                 },
                 {
                     "from": "StartUpdateCommand",

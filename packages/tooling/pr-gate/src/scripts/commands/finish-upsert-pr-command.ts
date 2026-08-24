@@ -16,6 +16,7 @@ import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { BuildGateLog, FINISH_STAGE, REVIEW_STAGE } from '../workflow/build-gate-log';
 import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
+import { StageOutputLog, FINISH_CONSOLE_LOG } from '../workflow/stage-output-log';
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
@@ -144,10 +145,22 @@ export class FinishUpsertPrCommand {
         // Pins the two GitHub repo settings that decide whether a UI merge writes the body we just
         // rendered. Server-side, so no config can express them — see SquashSettingsEnforcer.
         private readonly squashSettings: SquashSettingsEnforcer,
+        private readonly stageConsole: StageOutputLog,
     ) {}
 
+    /**
+     * Runs with this stage's console CAPTURED to a file (see StageOutputLog). What still reaches the
+     * terminal is what an agent must act on: the build heartbeat and result, and the closing banner with
+     * the PR link and whatever is still owed. The dashboard computation, the gh round trips and the
+     * comment upserts are in the file.
+     */
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
+        await this.stageConsole.withCapture(
+            repoRoot, FINISH_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot));
+    }
+
+    private async runStage(repoRoot: string): Promise<void> {
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         // 1. REQUIRE stage ② — see assertStageTwoRan. Returns true when its receipt covers THIS commit,
@@ -202,8 +215,10 @@ export class FinishUpsertPrCommand {
         // Nothing here may hard-code success: a stranded PR under a green checkmark is how PRs got
         // abandoned (see FinishBanner).
         const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge);
-        process.stdout.write(this.banner.render(bannerInput));
-        process.stdout.write(this.banner.linkDirective(bannerInput));
+        // `say`: the PR link and what is still owed are the whole reason a caller ran this command, and a
+        // not-done outcome carries the commands that fix it. Neither may end up only in a log file.
+        this.stageConsole.say(this.banner.render(bannerInput));
+        this.stageConsole.say(this.banner.linkDirective(bannerInput));
     }
 
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
@@ -218,14 +233,15 @@ export class FinishUpsertPrCommand {
      */
     private async runOrSkipBuildGate(repoRoot: string, alreadyGreen: boolean): Promise<void> {
         if (alreadyGreen) {
-            process.stdout.write('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n'
+            // `say`, for the same reason the gate's own two lines are: a caller watching for a build needs
+            // to be told, live, that there is not going to be one.
+            this.stageConsole.say('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n'
                 + this.skippedBuildLogNote(repoRoot));
             return;
         }
         await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
             FINISH_STAGE,
-            false,
         ));
     }
 
@@ -236,11 +252,10 @@ export class FinishUpsertPrCommand {
      *
      * The path is recomputed rather than stored, and that is sound precisely BECAUSE this branch is only
      * reached when the receipt covers the current HEAD: same worktree, same branch, same sha ⇒ the same
-     * deterministic filename stage ② wrote. Empty string whenever capture is off or the file is gone, so
-     * a user without `~/.webpieces/config.json` sees the pre-existing single line unchanged.
+     * deterministic filename stage ② wrote. Empty string when the file is gone — a log that was reaped or
+     * never written must not be named as though a reader could open it.
      */
     private skippedBuildLogNote(repoRoot: string): string {
-        if (!this.buildAffected.isCaptureEnabled()) return '';
         const log = this.buildLog.existingLogFor(repoRoot, REVIEW_STAGE);
         return log === '' ? '' : `   Stage ②'s full build output: ${log}\n`;
     }

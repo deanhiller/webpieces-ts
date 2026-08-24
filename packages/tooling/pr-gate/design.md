@@ -49,6 +49,7 @@ graph TD
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
+    GateLogFile["GateLogFile"]
     GateTokenService["GateTokenService"]
     GatedPrPublisher["GatedPrPublisher"]
     GatherInfo["GatherInfo"]
@@ -89,6 +90,7 @@ graph TD
     ReviewerVerdictGate["ReviewerVerdictGate"]
     RunUpdate["RunUpdate"]
     SquashSettingsEnforcer["SquashSettingsEnforcer"]
+    StageOutputLog["StageOutputLog"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
     StateDirMigrator["StateDirMigrator"]
@@ -106,7 +108,7 @@ graph TD
     BranchReaper --> MergedBranchesService
     BuildAffected --> BuildGateLog
     BuildAffected --> BuildsLog
-    BuildAffected --> HomeConfigService
+    BuildAffected --> StageOutputLog
     BuildArtifactGate --> BuildAffected
     BuildArtifactGate --> GeneratedArtifactRegistry
     BuildArtifactGate --> GitExec
@@ -114,6 +116,8 @@ graph TD
     BuildCommand --> BuildsLog
     BuildCommand --> HomeConfigService
     BuildCommand --> RepoRootFinder
+    BuildGateLog --> GateLogFile
+    BuildGateLog --> StageOutputLog
     BuildsLog --> DotWebpieces
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
@@ -175,6 +179,7 @@ graph TD
     FinishUpsertPrCommand --> ReviewStageReceiptService
     FinishUpsertPrCommand --> ReviewerVerdictGate
     FinishUpsertPrCommand --> SquashSettingsEnforcer
+    FinishUpsertPrCommand --> StageOutputLog
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder
@@ -268,6 +273,7 @@ graph TD
     ReviewUpsertPrCommand --> ReviewStageReceiptService
     ReviewUpsertPrCommand --> ReviewerBriefingBuilder
     ReviewUpsertPrCommand --> ReviewerInstructionsService
+    ReviewUpsertPrCommand --> StageOutputLog
     ReviewerBriefingBuilder --> ReviewJsonService
     ReviewerInstructionsService --> ReviewJsonService
     ReviewerVerdictGate --> ChecklistInstructionsService
@@ -276,6 +282,7 @@ graph TD
     RunUpdate --> MergeEnd
     RunUpdate --> MergeStart
     RunUpdate --> MergeState
+    StageOutputLog --> GateLogFile
     StartUpdateCommand --> OpenPrCheck
     StartUpdateCommand --> RepoRootFinder
     StartUpdateCommand --> RunUpdate

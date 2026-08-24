@@ -74,7 +74,7 @@ class HomeConfigStub {
     /** Pins the machine-local flag without touching a real HOME, which no spec may ever read or write. */
     static withSweep(enabled: boolean): HomeConfigService {
         const service = new HomeConfigService();
-        vi.spyOn(service, 'load').mockReturnValue(new HomeConfig(false, false, enabled, DEFAULT_MAX_CONCURRENT_BUILDS));
+        vi.spyOn(service, 'load').mockReturnValue(new HomeConfig(false, enabled, DEFAULT_MAX_CONCURRENT_BUILDS));
         return service;
     }
 }
