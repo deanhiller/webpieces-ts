@@ -89,7 +89,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
         ClientRegistry.clear();
     });
 
-    it('serializes a registered custom type (460) the built-in ladder cannot', () => {
+    it('serializes a registered custom type (460) the built-in ladder cannot, VERBATIM', () => {
         ClientRegistry.addErrorTranslation(new AiErrorTranslation());
 
         const res = new FakeResponse();
@@ -98,6 +98,8 @@ describe('ExpressWrapper.handleError registry integration', () => {
         expect(res.statusCode).toBe(460);
         expect(res.getHeader('content-type')).toBe('application/json');
         const pe = JSON.parse(res.body ?? '{}') as ProtocolError;
+        // The registry is the explicit opt-out from HttpErrorWireMapper's genericization: the app
+        // authored this body, so message AND name are published exactly as toWire() returned them.
         expect(pe.message).toBe('bad ai input');
         expect(pe.name).toBe('AiBadRequest');
     });
@@ -111,6 +113,9 @@ describe('ExpressWrapper.handleError registry integration', () => {
         expect(res.statusCode).toBe(400);
         const pe = JSON.parse(res.body ?? '{}') as ProtocolError;
         expect(pe.field).toBe('email');
+        // ...and the built-in ladder genericizes, unlike the registry path above.
+        expect(pe.message).toBe('Bad Request');
+        expect(pe.name).toBeUndefined();
     });
 
     it('does nothing once headers are already sent', () => {

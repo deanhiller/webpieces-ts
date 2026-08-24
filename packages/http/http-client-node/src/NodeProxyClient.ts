@@ -190,6 +190,19 @@ export class NodeProxyClient extends ProxyClient {
      * The downstream diagnostic is NOT lost: the original error (which for the incident above names the
      * method, the status, the `text/html` content-type and a snippet of the body) is both quoted in the
      * message and kept as `httpCause`.
+     *
+     * How much "Downstream said:" is worth depends on WHO answered, and both halves are by design:
+     * - a NON-webpieces answer (an lb's html 404, a proxy's plain-text 502) is described CLIENT-side by
+     *   `ResponseBodyReader.describeForeignBody`, so the full diagnostic is ours to quote — this is the
+     *   mealco incident's exact shape, and it is the case that mattered.
+     * - a WEBPIECES peer deliberately sends only the generic reason phrase for its status (see
+     *   `HttpErrorWireMapper` in http-server — only `HttpUserError`'s message is caller-facing), so this
+     *   reads "Downstream said: Not Found". That is correct and not a regression: the peer's real
+     *   message is in the PEER's log, correlated by request id, which is the only place it was ever
+     *   safe to read it.
+     *
+     * This whole string is an operator-facing message on an `HttpInternalServerError`, so when THIS
+     * server answers its own caller none of it goes on the wire — it goes to this server's log.
      */
     protected override adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error {
         if (failure.appRegistered) {

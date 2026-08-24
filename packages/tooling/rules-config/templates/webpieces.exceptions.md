@@ -652,7 +652,27 @@ async submitForm(): Promise<void> {
 
 - **ONLY catch specific error types** (e.g., `HttpUserError`, `ValidationError`)
 - **ALWAYS rethrow** errors that aren't user-facing
-- The server-side code should throw `HttpUserError` for user-displayable messages
+- Server-side code MUST throw `HttpUserError` for user-displayable messages
+
+### `HttpUserError` is not a convention — it is the only message that survives the wire
+
+This is a HARD RULE, enforced by `HttpErrorWireMapper` on the server (`http-server`):
+
+> **Only `HttpUserError`'s `message` is sent to the caller.** Every other `HttpError` subclass sends
+> the generic HTTP reason phrase for its status — `'Not Found'`, `'Internal Server Error'`, … — and
+> its real message goes to the server's LOG only.
+
+`Error.message` is an operator-facing field. It routinely quotes a downstream service url, an HTTP
+method and content-type, a body snippet, a table name or an internal id, and none of that may reach an
+external consumer. So:
+
+- Throwing `new HttpBadRequestError('the email you entered is already taken')` does **not** show that
+  text to the user — the caller receives `'Bad Request'`. Throw `HttpUserError` instead, or pass the
+  text as `HttpBadRequestError`'s `guiMessage`, which IS sent (as `guiAlertMessage`).
+- A client must branch on the error TYPE, on `subType`, on `errorCode` or on `guiAlertMessage` — never
+  on the prose of `message`. Against a current webpieces server that prose is a constant per status.
+- An app that deliberately wants to publish richer text registers an `ErrorTranslation` with
+  `ClientRegistry`; its `toWire()` result is sent verbatim. That is the explicit, greppable opt-out.
 
 ## How to Request Approval
 

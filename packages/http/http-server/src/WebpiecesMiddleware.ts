@@ -67,6 +67,11 @@ export class WebpiecesMiddleware {
      * Returns an HTML 500 page. Api routes translate their own errors to JSON inside the filter
      * chain (JsonFilter/ExpressWrapper), so this normally only fires for failures OUTSIDE a route
      * (body parsing, unmatched paths, a bug in the wrapper itself).
+     *
+     * The page carries NO `error.message`. It used to render one into a `<pre>` block, which is the
+     * same leak `HttpErrorWireMapper` closes on the JSON side and a worse one here: the errors that
+     * reach THIS handler are the unhandled ones, whose messages are stack-adjacent internals nobody
+     * wrote for a caller to read. The message is logged one line above, which is where it belongs.
      */
     // webpieces-disable no-any-unknown -- a thrown/forwarded express error is genuinely unknown until narrowed
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- express needs the 4-arg (err,req,res,next) arity to recognize this as error-handling middleware
@@ -84,7 +89,6 @@ export class WebpiecesMiddleware {
           <body>
             <h1>You hit a server error</h1>
             <p>An unexpected error occurred while processing your request.</p>
-            <pre>${error.message}</pre>
           </body>
           </html>
         `);

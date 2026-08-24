@@ -6,12 +6,25 @@
 /**
  * ProtocolError - Data class for error response body.
  * This is what gets serialized and sent to the client.
+ *
+ * EVERY field here is caller-facing, so the framework fills it CONSERVATIVELY. `HttpErrorWireMapper`
+ * (http-server) copies `message` from the thrown error for {@link HttpUserError} ONLY — the one type
+ * whose message is written for a human to read — and sends the generic HTTP reason phrase for every
+ * other type, because `Error.message` is an operator-facing field that routinely quotes downstream
+ * urls, response bodies and internal ids. `name` is not filled by that ladder at all.
+ *
+ * An app that wants to publish more than that does it deliberately, by registering an
+ * {@link ErrorTranslation} with {@link ClientRegistry}, whose `toWire()` result is sent verbatim.
  */
 export class ProtocolError {
     public message?: string;
     public subType?: string;
     public field?: string;
     public waitSeconds?: number;
+    /**
+     * Filled only by an app's own `ErrorTranslation.toWire()`. The built-in HttpError ladder does NOT
+     * send it: nothing on the client reads it, and for a subclass it is an internal class name.
+     */
     public name?: string;
     public guiAlertMessage?: string;
     public errorCode?: string;
@@ -214,6 +227,18 @@ export class HttpVendorError extends HttpError {
  *
  * This is a deliberate design pattern - do NOT change to 4xx codes.
  * Examples: "Email already exists", "Invalid password format", "Required field missing"
+ *
+ * # It is also the ONLY type whose `message` reaches the caller
+ *
+ * `HttpErrorWireMapper` (http-server) copies `message` onto the response body for this type and no
+ * other; every other subclass sends the generic HTTP reason phrase for its status. That is not an
+ * arbitrary exception — it follows from the four points above. This type MEANS "this text was written
+ * for a human to read", where `Error.message` everywhere else means "this text was written for whoever
+ * reads the logs" and routinely quotes downstream urls, response bodies and internal ids.
+ *
+ * So: text the user must SEE goes in an `HttpUserError` (or in `HttpBadRequestError.guiMessage`,
+ * which is the same idea one field down). Throwing `new HttpForbiddenError('you need the admin role
+ * on tenant 4471')` shows the user 'Forbidden' and nothing else.
  */
 export class HttpUserError extends HttpError {
     public errorCode?: string;
