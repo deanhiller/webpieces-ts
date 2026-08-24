@@ -48,7 +48,7 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
     it('502 HTML → HttpBadGatewayError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
         const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
-        const translated = ClientErrorTranslator.translateError(response, protocolError);
+        const translated = ClientErrorTranslator.translateError(response, protocolError).error;
 
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect((translated as HttpBadGatewayError).code).toBe(502);
@@ -63,12 +63,12 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
     it('503 (cold start) → HttpServiceUnavailableError, 504 → HttpGatewayTimeoutError', async () => {
         const unavailable = htmlResponse(503);
         expect(
-            ClientErrorTranslator.translateError(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
+            ClientErrorTranslator.translateError(unavailable, await reader.readErrorBody(unavailable, 'A.b')).error,
         ).toBeInstanceOf(HttpServiceUnavailableError);
 
         const timeout = htmlResponse(504);
         expect(
-            ClientErrorTranslator.translateError(timeout, await reader.readErrorBody(timeout, 'A.b')),
+            ClientErrorTranslator.translateError(timeout, await reader.readErrorBody(timeout, 'A.b')).error,
         ).toBeInstanceOf(HttpGatewayTimeoutError);
     });
 
@@ -95,7 +95,7 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
         const translated = ClientErrorTranslator.translateError(
             response,
             await reader.readErrorBody(response, 'A.b'),
-        );
+        ).error;
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect(translated.message).toBe('upstream refused');
     });

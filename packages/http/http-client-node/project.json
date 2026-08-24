@@ -4,6 +4,12 @@
     "sourceRoot": "packages/http/http-client-node/src",
     "projectType": "library",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/http/http-client-node/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": [

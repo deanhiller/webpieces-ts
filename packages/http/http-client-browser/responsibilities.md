@@ -6,11 +6,12 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 
 - `ClientHttpBrowserFactory` — a plain class the app provides through whatever DI it already has (Angular `useFactory`, a React context, a module-level `const`)
 - `ClientConfig` — per-client state: the base URL, plus an optional logging name
+- Rethrowing a downstream failure EXACTLY as translated (`BrowserProxyClient.adaptDownstreamFailure`). Here the client is the end user's agent and the "downstream" is the app's own backend, so a 404/401/403 is a real answer the UI must act on. This is the deliberate opposite of `http-client-node`, which owns a downstream 4xx as its own 500
 - `MutableContextStore` — the browser `ContextReader`. Browsers have no ambient request scope, so the app sets context values (login token, tenant) as they become known and every outbound call transfers them as headers
 
 ## Out of Scope
 
-- The decorator-reading engine, the Proxy trap, and error translation → `http-client-core`
+- The decorator-reading engine, the Proxy trap, and the status→type mapping itself → `http-client-core`
 - Reading a server RequestContext → `core-context` (node-only; a browser has no AsyncLocalStorage)
 - Minting OIDC tokens or holding `Secrets` → a browser cannot hold service credentials. A contract with an `@AuthOidc` endpoint fails fast in `ProxyClient.init`
 - Server-side routing, filters, recording → `http-routing` / `http-server`

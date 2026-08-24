@@ -259,7 +259,7 @@ export class ExpressWrapper {
      * PUBLIC so wrapExpress can call it for symmetric error handling.
      * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
      *
-     * Maps all HttpError types (must match ClientErrorTranslator.translateError()):
+     * Maps all HttpError types (must match ClientErrorTranslator's built-in status mapping):
      * - HttpUserError → 266 (with errorCode)
      * - HttpBadRequestError → 400 (with field, guiAlertMessage)
      * - HttpUnauthorizedError → 401
@@ -300,7 +300,7 @@ export class ExpressWrapper {
             protocolError.subType = error.subType;
             protocolError.name = error.name;
 
-            // Set type-specific fields (MUST match ClientErrorTranslator)
+            // Set type-specific fields (MUST match ClientErrorTranslator's built-in status mapping)
             if (error instanceof HttpUserError) {
                 log.info(`User Error: ${error.message}`);
                 protocolError.errorCode = error.errorCode;

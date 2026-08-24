@@ -24,5 +24,5 @@ export { NodeProxyClient, NODE_PROXY_CLIENT_PROVIDER } from './NodeProxyClient';
 export { ClientConfig } from './ClientConfig';
 
 // The isomorphic engine, re-exported so a server app needs one import.
-export { ProxyClient, ClientErrorTranslator } from '@webpieces/http-client-core';
+export { ProxyClient, ClientErrorTranslator, TranslatedFailure } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
