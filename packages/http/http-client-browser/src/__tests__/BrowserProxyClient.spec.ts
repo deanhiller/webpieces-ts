@@ -10,7 +10,12 @@ import {
     Endpoint,
     HeaderRegistry,
     HttpBadGatewayError,
+    HttpBadRequestError,
+    HttpError,
+    HttpForbiddenError,
+    HttpNotFoundError,
     HttpServiceUnavailableError,
+    HttpUnauthorizedError,
     OfflineError,
     Public,
     Rpc,
@@ -99,6 +104,19 @@ function stubFetchWithHeaders(status: number, headers: Record<string, string>): 
     const body = status < 400 ? '{}' : JSON.stringify({ code: 'ERR', message: 'boom' });
     const fetchMock = vi.fn(() =>
         Promise.resolve(new Response(body, { status, headers: { 'Content-Type': 'application/json', ...headers } })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+}
+
+/** Stub fetch with a webpieces ProtocolError body at the given status — the ordinary error path. */
+function stubFetchProtocolError(status: number, message: string): void {
+    const fetchMock = vi.fn(() =>
+        Promise.resolve(
+            new Response(JSON.stringify({ message }), {
+                status,
+                headers: { 'Content-Type': 'application/json' },
+            }),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
 }
@@ -369,5 +387,71 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         expect((error as Error).message).toContain('PublicApi.save');
         expect((error as Error).message).toContain('text/html');
         expect((error as Error).message).not.toContain('Unexpected token');
+    });
+});
+
+/**
+ * THE ASYMMETRY, browser half. `ProxyClient.adaptDownstreamFailure` is the seam where the two
+ * environments part company, and this is the side that must NOT change:
+ *
+ *   In a browser the client IS the end user's agent, and the "downstream" is the app's own backend.
+ *   A 404 really does mean "that thing does not exist", a 401 really does mean "sign in again", a 403
+ *   really does mean "you may not". Each is a real answer to the user, and rewriting any of them to a
+ *   500 would delete the only signal the UI has to act on.
+ *
+ * The server twin does the OPPOSITE for the same reason — there the downstream is a dependency, and
+ * its 4xx describes the caller's own broken request. See NodeProxyClient's spec.
+ */
+describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', () => {
+    it('404 stays HttpNotFoundError — the resource genuinely does not exist for this user', async () => {
+        stubFetchProtocolError(404, 'no such order');
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(HttpNotFoundError);
+        expect((error as HttpError).code).toBe(404);
+        expect((error as Error).message).toBe('no such order');
+    });
+
+    it('400 / 401 / 403 each stay their own type, with their own status and message', async () => {
+        stubFetchProtocolError(400, 'email is required');
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const badRequest = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        expect(badRequest).toBeInstanceOf(HttpBadRequestError);
+        expect((badRequest as HttpError).code).toBe(400);
+
+        stubFetchProtocolError(401, 'token expired');
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const unauthorized = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        expect(unauthorized).toBeInstanceOf(HttpUnauthorizedError);
+        expect((unauthorized as HttpError).code).toBe(401);
+
+        stubFetchProtocolError(403, 'not your org');
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const forbidden = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        expect(forbidden).toBeInstanceOf(HttpForbiddenError);
+        expect((forbidden as HttpError).code).toBe(403);
+    });
+
+    it('an HTML 404 from misrouted infra also arrives unchanged — a browser has no caller to protect', async () => {
+        stubFetchNonJsonBody(404);
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(HttpNotFoundError);
+        expect((error as Error).message).toContain('PublicApi.save');
+        expect((error as Error).message).toContain('text/html');
+    });
+
+    it('the lifecycle listener sees the SAME error the caller does', async () => {
+        stubFetchProtocolError(404, 'no such order');
+        const listener = new RecordingListener();
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await clientWith(listener).save(new SaveRequest('q')).catch((err: unknown) => err);
+
+        expect(listener.onlyEnd().error).toBe(error);
     });
 });

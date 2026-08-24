@@ -4,6 +4,7 @@ import {
     ProtocolError,
     HttpError,
     HttpBadRequestError,
+    HttpNotFoundError,
     ErrorTranslation,
     ErrorWireForm,
 } from '@webpieces/core-util';
@@ -43,6 +44,11 @@ function fakeResponse(status: number, statusText = ''): Response {
     return { status, statusText } as unknown as Response;
 }
 
+/** The error half of the translation, for the assertions that only care about the type. */
+function translate(status: number, pe: ProtocolError = new ProtocolError(), statusText = ''): Error {
+    return ClientErrorTranslator.translateError(fakeResponse(status, statusText), pe).error;
+}
+
 /**
  * ClientErrorTranslator consults ClientRegistry.tryTranslateFromWire() BEFORE its built-in switch,
  * so an app both ADDS custom types and OVERRIDES built-ins — while unregistered codes fall through
@@ -55,7 +61,7 @@ describe('ClientErrorTranslator registry integration', () => {
 
     it('reconstructs a registered custom type (460) that the built-in switch cannot', () => {
         // Without a translation, 460 hits the default branch (a generic HttpError, not the app type).
-        const generic = ClientErrorTranslator.translateError(fakeResponse(460), new ProtocolError());
+        const generic = translate(460);
         expect(generic).not.toBeInstanceOf(AiBadRequestError);
         expect(generic).toBeInstanceOf(HttpError);
 
@@ -63,7 +69,7 @@ describe('ClientErrorTranslator registry integration', () => {
 
         const pe = new ProtocolError();
         pe.message = 'bad ai input';
-        const err = ClientErrorTranslator.translateError(fakeResponse(460), pe);
+        const err = translate(460, pe);
         expect(err).toBeInstanceOf(AiBadRequestError);
         expect(err.message).toBe('bad ai input');
     });
@@ -74,7 +80,7 @@ describe('ClientErrorTranslator registry integration', () => {
         const pe = new ProtocolError();
         pe.message = 'bad field';
         pe.field = 'email';
-        const err = ClientErrorTranslator.translateError(fakeResponse(400), pe);
+        const err = translate(400, pe);
         expect(err).toBeInstanceOf(HttpBadRequestError);
     });
 
@@ -86,13 +92,59 @@ describe('ClientErrorTranslator registry integration', () => {
         };
         ClientRegistry.addErrorTranslation(override);
 
-        const err = ClientErrorTranslator.translateError(fakeResponse(400), new ProtocolError());
+        const err = translate(400);
         expect(err).toBeInstanceOf(AiBadRequestError);
     });
 
     it('an unknown status with no translation is a real HttpError carrying the status code', () => {
-        const err = ClientErrorTranslator.translateError(fakeResponse(499, 'weird'), new ProtocolError());
+        const err = translate(499, new ProtocolError(), 'weird');
         expect(err).toBeInstanceOf(HttpError);
         expect((err as HttpError).code).toBe(499);
+    });
+});
+
+/**
+ * translateError returns a {@link TranslatedFailure}, not a bare Error, because the mapping is only
+ * HALF the decision — the same isomorphic mapping runs in a browser and in a server, and only the
+ * PROVENANCE tells `ProxyClient.adaptDownstreamFailure` whether the app chose this error type
+ * deliberately or the framework's built-in default did. Two `HttpNotFoundError`s are identical as
+ * values; they are not identical as decisions.
+ */
+describe('TranslatedFailure carries the provenance the environment hook needs', () => {
+    beforeEach(() => {
+        ClientRegistry.clear();
+    });
+
+    it('a BUILT-IN mapping reports appRegistered=false and the downstream status', () => {
+        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError());
+
+        expect(failure.appRegistered).toBe(false);
+        expect(failure.statusCode).toBe(404);
+        expect(failure.error).toBeInstanceOf(HttpNotFoundError);
+    });
+
+    it('an APP-registered translation reports appRegistered=true — the deliberate, greppable choice', () => {
+        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+
+        const failure = ClientErrorTranslator.translateError(fakeResponse(460), new ProtocolError());
+
+        expect(failure.appRegistered).toBe(true);
+        expect(failure.statusCode).toBe(460);
+        expect(failure.error).toBeInstanceOf(AiBadRequestError);
+    });
+
+    it('statusCode is the DOWNSTREAM status, not the registered error\'s own code', () => {
+        // A gateway app deliberately relays a 404 as its own — its translation claims 404.
+        const relay: ErrorTranslation = {
+            toWire: () => undefined,
+            fromWire: (statusCode: number, pe: ProtocolError) =>
+                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed') : undefined,
+        };
+        ClientRegistry.addErrorTranslation(relay);
+
+        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError());
+
+        expect(failure.appRegistered).toBe(true);
+        expect(failure.statusCode).toBe(404);
     });
 });

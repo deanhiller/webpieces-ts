@@ -19,6 +19,7 @@ import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { RequestOutcome } from './RequestOutcome';
 import { ResponseBodyReader } from './ResponseBodyReader';
+import { TranslatedFailure } from './TranslatedFailure';
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -112,6 +113,33 @@ export abstract class ProxyClient {
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
+
+    /**
+     * Adapt a translated downstream failure into the error THIS environment's caller should see.
+     *
+     * THE INVARIANT, and the reason this hook exists at all:
+     *
+     *   A status received from a downstream dependency describes OUR request to it. It is never the
+     *   status we return to OUR caller. The server that answered 404 is correct; the server that
+     *   asked for a route that does not exist is broken, and must say so as a 500.
+     *
+     * That invariant reads differently in the two environments, which is exactly why the ISOMORPHIC
+     * {@link ClientErrorTranslator} cannot settle it:
+     * - BROWSER: the client IS the end user's agent, so the downstream IS the answer. Pass it through
+     *   unchanged.
+     * - NODE: server-to-server. A 4xx from a dependency is a caller-side defect (wrong path, wrong
+     *   base URL, an undeployed dependency, bad service credentials), so the caller owns it as a 500.
+     *
+     * ABSTRACT, not a defaulted pass-through, for the same reason
+     * {@link outboundContextHeaders} takes a required `destination`: a permissive default puts the
+     * wrong answer one keystroke away. A new environment subclass must SAY which of the two it is,
+     * and there are exactly two subclasses in the repo, so the compile error is the migration.
+     *
+     * @param failure - the translated error, its provenance (app-registered vs built-in), and the
+     *                  downstream status
+     * @param callId  - `ApiName.methodName`, so a rewritten message can still name the call
+     */
+    protected abstract adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error;
 
     /**
      * Fires immediately BEFORE `fetch`, once per RPC — the progress "start marker". Symmetric with
@@ -367,11 +395,20 @@ export abstract class ProxyClient {
      * malformed still throws (that one is a genuine server bug), and the END marker must fire for it
      * too — an unreported end leaves the app's progress bar spinning forever.
      *
-     * `translated` is the HttpError subclass ClientErrorTranslator picked, and translateError RETURNS
-     * Error — so nothing in this seam is ever `unknown`.
+     * `translated` is what ClientErrorTranslator picked, and translateError RETURNS a
+     * {@link TranslatedFailure} — so nothing in this seam is ever `unknown`.
+     *
+     * The translated failure then goes through {@link adaptDownstreamFailure}, which is where the two
+     * environments part company (browser rethrows it, node turns a downstream 4xx into its own 500).
+     *
+     * The RequestOutcome reported to {@link onRequestEnd} carries the POST-adapt error, deliberately:
+     * a lifecycle listener must see the SAME error the caller sees, or a progress bar / error toast
+     * says 404 while the thrown exception says 500. That is the identical rule the network-reject path
+     * already follows (it classifies BEFORE onRequestEnd for exactly this reason). The pre-adapt error
+     * is not lost — it is the adapted error's `httpCause`.
      */
     private async endWithTypedFailure(response: Response, route: RouteMetadata, callId: string): Promise<Error> {
-        let translated: Error;
+        let translated: TranslatedFailure;
         // webpieces-disable no-unmanaged-exceptions -- a malformed JSON error body must still report the END marker
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -380,11 +417,14 @@ export abstract class ProxyClient {
         } catch (err: unknown) {
             const error = toError(err);
             // The response CLAIMED JSON and was not parseable — report that failure as the outcome.
+            // It never reaches adaptDownstreamFailure: there is no translated status to adapt, and a
+            // body that broke its own content-type promise is already a defect, not a status answer.
             this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
             return error;
         }
 
-        this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, translated));
-        return translated;
+        const adapted = this.adaptDownstreamFailure(translated, callId);
+        this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, adapted));
+        return adapted;
     }
 }

@@ -7,12 +7,13 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - `ProxyClient` — @ApiPath validation, the route map built from @ApiPath/@Endpoint/@Auth* metadata, the `fetch` call, logging via `LogApiCall`, and test-case recording. Two-phase: collaborators on the constructor, per-client state on `init()`
 - `buildClientProxy` — the typed `Proxy` trap (including the framework-inspection whitelist) shared by both environment factories
 - `ClientTarget` — the base a `ClientConfig` extends: a logging `svcName` plus an async `resolveBaseUrl()`
-- Translating HTTP responses/status codes into the typed `HttpError` hierarchy (`ClientErrorTranslator`)
+- Translating HTTP responses/status codes into the typed `HttpError` hierarchy (`ClientErrorTranslator`), returning a `TranslatedFailure` that also records WHO decided — an app-registered `ClientRegistry` translation, or the built-in default mapping
 - Deciding whether a response body may be parsed at all, from its `content-type` (`ResponseBodyReader`) — an infra 502/503/504 serves HTML, so it becomes a status-typed `HttpError` rather than a `SyntaxError`
 - Attaching outbound delivery auth per the endpoint's `AuthMode` (@AuthOidc bearer via the injected `IdTokenMinter`, @AuthSharedSecret value from the bound `Secrets`)
 
 ## Out of Scope
 
+- Deciding what a downstream status MEANS to this environment's caller → the abstract `ProxyClient.adaptDownstreamFailure(failure, callId)` hook. The mapping is isomorphic; the meaning is not — a browser rethrows a 4xx unchanged (it is the user's answer), a server turns it into its own 500 (it describes the server's own broken request)
 - Reading the magic context → the abstract `ProxyClient.outboundContextHeaders(destination)` hook, answered by `RequestContextHeaders` (node, via `core-context`) and `ContextMgr` (browser, in `core-util`). This package only DERIVES the `DestinationTrust` from the route's `AuthMode` and passes it down, so trusted context keys never ride to an endpoint that cannot authenticate the caller
 - Deciding a base URL from a Cloud Run service name → `gcp-identity`, used by `http-client-node`
 - Minting OIDC tokens → `gcp-identity`; this package only accepts an `IdTokenMinter` seam
