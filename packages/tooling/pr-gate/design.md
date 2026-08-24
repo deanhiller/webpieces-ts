@@ -57,6 +57,7 @@ graph TD
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
     HomeConfigService["HomeConfigService"]
+    HomeDocKeys["HomeDocKeys"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
@@ -191,6 +192,7 @@ graph TD
     GatherInfo --> RepoRootFinder
     GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
+    HomeConfigService --> HomeDocKeys
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming

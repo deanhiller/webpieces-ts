@@ -77,6 +77,7 @@ export {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION,
     HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_MAX_CONCURRENT_BUILDS,
     DEFAULT_MAX_CONCURRENT_BUILDS,
+    HOME_KEY_DOC, HOME_KEY_AI_DOC, DOCUMENTATION_KEYS,
 } from './home-config';
 // The MACHINE-WIDE build ledger, `~/.webpieces/builds.log`. THE one carve-out from
 // `no-machine-global-state.spec.ts`'s rule that webpieces writes only under `{repo}/.webpieces` — the

@@ -369,6 +369,14 @@
                     "level": 3
                 },
                 {
+                    "id": "HomeDocKeys",
+                    "className": "HomeDocKeys",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/home-config-doc-keys.ts",
+                    "level": 4
+                },
+                {
                     "id": "LandPrCommand",
                     "className": "LandPrCommand",
                     "kind": "class",
@@ -1532,6 +1540,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "HomeConfigService",
+                    "to": "HomeDocKeys",
+                    "injection": "type",
+                    "token": "HomeDocKeys",
+                    "tokenKey": "class:packages/tooling/rules-config/src/home-config-doc-keys.ts#HomeDocKeys",
+                    "paramName": "docKeys",
+                    "paramType": "HomeDocKeys"
                 },
                 {
                     "from": "LandPrCommand",
