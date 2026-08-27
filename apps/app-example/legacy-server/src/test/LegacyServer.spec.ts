@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
-import { ApiFactory, AUTH_CONFIG, JWT_HOOK, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
+import { ApiFactory, AUTH_CONFIG, JWT_HOOK, FilterDefinition, MethodMeta, WpResponse } from '@webpieces/http-routing';
+import { Filter, Service } from '@webpieces/core-util';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';

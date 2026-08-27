@@ -14,7 +14,7 @@
  *
  * WHICH X is decided by the call site, not by "everyone who implements Y", in
  * priority order: (1) a literal at the call site —
- * `createRpcClient(Y, new ClientConfig('helper-fsdb'))` — kept as
+ * `createRpcClient(Y, new ClientConfig('helper-fsdb', new DeployedServiceHost()))` — kept as
  * `ApiRef.targetService`; else (2) the calling project's declared `callsService`
  * (project.json metadata.webpieces.callsService), the symmetric half of
  * `serviceName` for the shared-library case where the client is built once from a
@@ -66,6 +66,8 @@ export type {
     RuntimeTrigger,
     RuntimeUnresolved,
 } from './runtime-graph-model';
+import { adjacencyFromEdges, assignLevels } from './runtime-graph-levels';
+import { RuntimeHostUsage } from './runtime-host-nodes';
 
 // Persistence lives in runtime-graph-io.ts; re-exported for the same reason as the model types.
 export {
@@ -113,50 +115,6 @@ export class RuntimeGraphReport {
 }
 
 /**
- * Adjacency (service -> [targets]) used for leveling + cycle checks.
- *
- * PUBSUB EDGES ARE EXCLUDED. A queue is precisely the thing that decouples producer from consumer:
- * the producer returns as soon as the task is enqueued and never waits on the consumer, so a queued
- * hop is not a runtime dependency in the sense levels and cycle detection mean. Counting them would
- * make the common and correct `A → queue → A` (a service deferring its own work) an architecture
- * cycle, and would rank services by an ordering that does not constrain deploy or startup.
- */
-// webpieces-disable no-function-outside-class -- pure graph helper, matches the sibling helpers in this file
-function adjacencyFromEdges(
-    serviceNames: string[],
-    edges: RuntimeEdge[],
-): Record<string, string[]> {
-    const adj: Record<string, string[]> = {};
-    for (const name of serviceNames) adj[name] = [];
-    for (const edge of edges) {
-        if (edge.type === 'pubsub') continue;
-        if (!adj[edge.from]) adj[edge.from] = [];
-        adj[edge.from].push(edge.to);
-    }
-    return adj;
-}
-
-/** Adjacency (service -> [targets]) from a loaded runtime graph. */
-export function runtimeAdjacency(graph: RuntimeGraph): Record<string, string[]> {
-    return adjacencyFromEdges(Object.keys(graph.services), graph.runtimeEdges);
-}
-
-/** Assign levels via topological sort; falls back to level 0 when a cycle exists. */
-function assignLevels(adjacency: Record<string, string[]>): Record<string, number> {
-    const levels: Record<string, number> = {};
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const sorted = sortGraphTopologically(adjacency);
-        for (const name of Object.keys(sorted)) levels[name] = sorted[name].level;
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        for (const name of Object.keys(adjacency)) levels[name] = 0;
-    }
-    return levels;
-}
-
-/**
  * Derives the runtime microservice graph from architecture/dependencies.json `apiRelations`:
  * implementers × users per API, split by transport. An rpc edge is a direct call; a pubsub edge flows
  * through a queue (drawn producer → queue → consumer by the visualizer).
@@ -174,6 +132,14 @@ class RuntimeGraphDeriver {
     private readonly problems: string[] = [];
     /** role:server nodes hidden by isNonParticipantServer, in the order buildServices met them. */
     private readonly autoHidden: string[] = [];
+
+    /**
+     * identity -> the services that dial it and the contracts they dial it with, for every client
+     * whose base URL arrives at RUNTIME. Accumulated while edges are built, then merged into the
+     * graph's `externalSystems` in {@link assemble} so a partner destination is drawn as the
+     * external node it is instead of vanishing between fan-out and `unresolvedUses`.
+     */
+    private readonly runtimeHosts = new Map<string, RuntimeHostUsage>();
     /**
      * False when NO project in the graph carries `webpiecesRuntime`, i.e. the file was written
      * before the field existed. Auto-hiding is then off ENTIRELY, so an old dependencies.json
@@ -241,7 +207,20 @@ class RuntimeGraphDeriver {
             queues: edgeResult.queues,
             triggers: this.buildTriggers(decls),
         };
-        attachExternalSystems(graph, resolveExternalSystems(this.externalSystemDecls, services));
+        const systems = resolveExternalSystems(this.externalSystemDecls, services);
+        // Runtime destinations join the SAME table the declared vendor systems live in, so two
+        // clients naming one identity converge on one node exactly as two `@externalSystem twilio`
+        // contracts do, and the drift check that already watches `externalSystems` watches these too.
+        for (const identity of Array.from(this.runtimeHosts.keys()).sort()) {
+            const usage = this.runtimeHosts.get(identity)!;
+            systems[identity] = {
+                kind: 'runtime',
+                label: identity,
+                usedBy: [...usage.usedBy].sort(),
+                apis: [...usage.apis].sort(),
+            };
+        }
+        attachExternalSystems(graph, systems);
         return new RuntimeGraphReport(graph, this.warnings, this.problems, [...this.autoHidden].sort());
     }
 
@@ -419,6 +398,13 @@ class RuntimeGraphDeriver {
         const queues = new Map<string, RuntimeQueue>();
         for (const decl of decls) {
             for (const ref of decl.usesApis) {
+                // A destination supplied at runtime is neither an in-repo implementer nor a missing
+                // one, so BOTH of the branches below would misreport it — fan-out invents edges to
+                // services we never call, `unresolvedUses` reads as a gap. It gets its own node.
+                if (ref.runtimeHost !== undefined) {
+                    this.recordRuntimeHost(decl.name, ref.runtimeHost, ref.api);
+                    continue;
+                }
                 const implementers = apis.get(ref.api)?.implementedBy ?? [];
                 if (implementers.length === 0) {
                     // Nobody in-repo serves it. For a vendor contract that is the ANSWER, not a gap:
@@ -494,6 +480,17 @@ class RuntimeGraphDeriver {
             if (!queue.producedBy.includes(from)) queue.producedBy.push(from);
             if (!queue.consumedBy.includes(to)) queue.consumedBy.push(to);
         }
+    }
+
+    /** Remember that `user` dials the runtime destination `identity` through contract `api`. */
+    private recordRuntimeHost(user: string, identity: string, api: string): void {
+        let usage = this.runtimeHosts.get(identity);
+        if (usage === undefined) {
+            usage = new RuntimeHostUsage();
+            this.runtimeHosts.set(identity, usage);
+        }
+        usage.usedBy.add(user);
+        usage.apis.add(api);
     }
 
     /**
@@ -580,7 +577,7 @@ class RuntimeGraphDeriver {
             this.warnings.push(
                 `${user} uses "${ref.api}" with no literal client config, and ${implementers.length} services ` +
                     `implement it (${implementers.join(', ')}) — an edge is drawn to EVERY one, so all but one ` +
-                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>')); ` +
+                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>', new DeployedServiceHost())); ` +
                     `or, when the client is built in a shared library (no literal can sit at the call site), ` +
                     `declare metadata.webpieces.callsService: '<serviceName>' on ${user}'s project.json.`,
             );
@@ -695,3 +692,7 @@ export function deriveRuntimeGraphReport(
         externalSystems,
     ).assemble();
 }
+
+// Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model
+// types and the io helpers above are — one obvious place to import the runtime graph from.
+export { runtimeAdjacency } from './runtime-graph-levels';

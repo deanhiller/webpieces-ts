@@ -26,7 +26,9 @@ export class BrowserProxyClient extends ProxyClient {
     /** Bind this client to one API contract + base URL. */
     init(apiPrototype: ApiPrototype<object>, config: ClientConfig): void {
         this.config = config;
-        this.initRoutes(apiPrototype);
+        // The browser factory does not take app filters yet, so this client runs the framework
+        // built-ins only (today: none). The chain itself is isomorphic and ready for them.
+        this.initRoutes(apiPrototype, []);
     }
 
     /**

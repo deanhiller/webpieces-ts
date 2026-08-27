@@ -19,7 +19,8 @@ import { ApiRoutingFactory } from '../ApiRoutingFactory';
 import { WebhookAuthCallback } from '../AuthHooks';
 import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
-import { WpResponse, Service } from '../Filter';
+import { Service } from '@webpieces/core-util';
+import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 /**

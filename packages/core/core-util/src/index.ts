@@ -198,3 +198,12 @@ export { TestCaseRecorder, RecorderKeys } from './http/recorder/TestCaseRecorder
 export { RecordedEndpoint, RecordedError, RecordedTestCase } from './http/recorder/RecordedEndpoint';
 export { DoNotRecord, getDoNotRecordFields } from './http/recorder/DoNotRecord';
 export { RecordSerializer, SerializedMap, SerializedError } from './http/recorder/RecordSerializer';
+
+// ---------------------------------------------------------------------------------------------
+// Filter-chain primitives, shared by BOTH chains: the inbound server chain
+// (`Filter<MethodMeta, WpResponse<unknown>>`, @webpieces/http-routing) and the outbound client
+// chain (`Filter<ClientRequest, Response>`, @webpieces/http-client-core). Declared once, here, in
+// the package both depend on — see the class doc for why a second pair would be a shim.
+export { Filter } from './filters/Filter';
+export type { Service } from './filters/Filter';
+export { FilterChain } from './filters/FilterChain';

@@ -6,7 +6,8 @@ import {
 } from '@webpieces/core-util';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { MethodMeta } from './MethodMeta';
-import { Service, WpResponse } from './Filter';
+import { Service } from '@webpieces/core-util';
+import { WpResponse } from './WpResponse';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
 import { ApiClient, ApiClientProxy } from './ApiClient';
 import { ClassType } from './ApiRoutingFactory';

@@ -1,6 +1,7 @@
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { LogManager, WebpiecesCoreHeaders, LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
-import { Filter, WpResponse, Service } from '../Filter';
+import { Filter, Service } from '@webpieces/core-util';
+import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
 
 /**

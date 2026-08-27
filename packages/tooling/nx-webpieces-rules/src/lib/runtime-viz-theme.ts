@@ -54,12 +54,22 @@ export const QUEUE_CLASS = 'wp_queue';
 /** Fill for the upright cylinder standing for an external DATASTORE (firestore, postgres, ...). */
 export const DATABASE_FILL = '#E1F5FE';
 
+/**
+ * Fill for a destination whose ADDRESS arrives at runtime (a partner-registered webhook URL). Amber
+ * rather than the neutral external grey on purpose: this is the one outbound hop where the address
+ * itself is attacker-influenced data, and the graph exists to make it findable.
+ */
+export const RUNTIME_HOST_FILL = '#FFE0B2';
+
 /** Shape per external-system kind. Anything unrecognised falls back to the generic dashed box. */
 export const EXTERNAL_SHAPES: Record<string, string> = {
     database: 'cylinder',
     cache: 'cylinder',
     queue: 'Mrecord',
     storage: 'folder',
+    // A destination dialled by address rather than by name: a doubled outline, because what is on
+    // the far side is not one system we can name but whatever the data said.
+    runtime: 'doubleoctagon',
 };
 
 /** Fill per external-system kind, paired with {@link EXTERNAL_SHAPES}. */
@@ -68,7 +78,9 @@ export const EXTERNAL_FILLS: Record<string, string> = {
     cache: DATABASE_FILL,
     queue: QUEUE_FILL,
     storage: '#F3E5F5',
+    runtime: RUNTIME_HOST_FILL,
 };
+
 
 /** Fill + border for the dashed terminal node standing for a system outside this repo. */
 export const EXTERNAL_FILL = '#FAFAFA';

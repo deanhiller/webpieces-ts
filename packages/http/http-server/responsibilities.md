@@ -15,10 +15,10 @@ Server runtime that assembles the HTTP layer: bootstraps the Inversify DI contai
 ## Out of Scope
 
 - Route/filter registration data structures and matching → `http-routing`
-- The `Filter` interface and chain engine → `http-filters`
+- The `Filter` / `Service` / `FilterChain` abstraction → `core-util`; the inbound chain's `WpResponse`, `FilterMatcher` and `FilterDefinition` → `http-routing`
 - API decorators, error types, recorder contract → `http-api`
 - Client-side (browser) HTTP request generation → `http-client`
 
 ## Notes (optional)
 
-Top of the HTTP dependency stack (depends on `http-routing`, transitively on `http-filters`/`http-api`). This is where abstract routing/filter metadata becomes a running Express server with a live DI container. Concrete filters live here, not in `http-filters`, which holds only the contract.
+Top of the HTTP dependency stack (depends on `http-routing`, transitively on `core-util`). This is where abstract routing/filter metadata becomes a running Express server with a live DI container. Concrete server filters live here; the `Filter` abstraction they extend lives in `core-util`, shared with the client's outbound chain.

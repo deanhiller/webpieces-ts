@@ -4,10 +4,17 @@ import { Filter, Service } from './Filter';
  * FilterChain - Manages execution of filters in priority order.
  * Similar to Java servlet filter chains.
  *
- * Filters are sorted by priority (highest first) and each filter
- * calls nextFilter.invoke() to invoke the next filter in the chain.
+ * Filters arrive ALREADY SORTED by priority (highest first) and each filter calls
+ * nextFilter.invoke() to invoke the next filter in the chain. Sorting is the caller's job because
+ * priority lives on the DEFINITION (server: `FilterDefinition`, client: `ClientFilterDefinition`),
+ * never on the filter itself — see {@link Filter}.
  *
- * The final "filter" in the chain is the controller method itself.
+ * The final "filter" in the chain is the `finalHandler` passed to {@link execute}: the controller
+ * method on the server, the `fetch` on the client.
+ *
+ * A filter may invoke the rest of the chain MORE THAN ONCE (the client-side SSRF guard re-invokes it
+ * to follow a validated redirect) or NOT AT ALL (an auth filter short-circuiting). Nothing here
+ * assumes exactly one pass.
  */
 export class FilterChain<REQ, RESP> {
     private filters: Filter<REQ, RESP>[];
