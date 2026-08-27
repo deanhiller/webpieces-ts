@@ -54,7 +54,13 @@ const NO_CURE_PREFIX = new CurePrefix('none', 'none');
 // wraps. Deliberately NOT every `wp-*` bin: a prefix earns the composition allowance because it makes
 // the tree fresh, and `pnpm wp-cleanup` does not.
 const ADVANCING_BINS: ReadonlySet<string> = new Set(['wp-checkout-clean-main']);
-const ADVANCING_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set(['pull']);
+
+// The refs a pull may name and still be the CURE. `git pull origin some-feature` advances local
+// `main` by merging a feature branch into it — which is a different and worse thing than being stale,
+// and leaves the work reading a `main` that still does not contain `origin/main`. A pull with NO
+// explicit ref takes the current branch's upstream, and the current branch here is `main` by the time
+// this class is consulted, so the bare forms are the cure and are covered by the empty case below.
+const MAIN_REFS: ReadonlySet<string> = new Set(['main', 'origin/main', 'main:main', 'origin/main:main']);
 
 // `git fetch` may LEAD the prefix — `git fetch --prune origin main && git pull --ff-only origin main`
 // is the shape agents actually type — but it is not itself a cure and never satisfies the prefix on
@@ -112,9 +118,28 @@ export class CurePrefixScan {
             return false;
         }
         const gitSub = this.scanner.gitSubcommandOf(words);
-        if (gitSub !== null) return ADVANCING_GIT_SUBCOMMANDS.has(gitSub);
+        if (gitSub !== null) return gitSub === 'pull' && this.pullsMain(segment);
         return this.scanner.runnerStrippedWords(segment.text)
             .some((word: string): boolean => ADVANCING_BINS.has(path.basename(word)));
+    }
+
+    /**
+     * Does this `git pull` bring `origin/main` in, rather than some other branch?
+     *
+     * The LAST positional argument is the refspec (`git pull [flags] [remote] [refspec…]`); with no
+     * refspec at all the pull takes the current branch's upstream, and the current branch is `main`
+     * wherever this class is consulted, so that form is the cure. `git pull origin some-feature`
+     * is not: it merges a feature branch into `main` and leaves local `main` still not containing
+     * `origin/main`, so the work behind the `&&` would read the same stale tree the block is about.
+     */
+    private pullsMain(segment: CommandSegment): boolean {
+        const args = this.scanner.gitSubcommandArgs(segment.text, 'pull') ?? [];
+        // Flags are not positional, and neither is a REDIRECTION token — `2>&1` and `>/dev/null` are
+        // the two decorations an agent appends by reflex, and reading `2>&1` as the refspec would
+        // reject the single most common spelling of the cure.
+        const positional = args.filter((arg: string): boolean => !arg.startsWith('-') && !/[<>]/.test(arg));
+        if (positional.length <= 1) return true;
+        return MAIN_REFS.has(positional[positional.length - 1]);
     }
 
     /**

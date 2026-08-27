@@ -57,6 +57,20 @@ describe('CurePrefixScan — what counts as the cure', () => {
         expect(kind('git fetch --prune origin main && git pull origin main && cat src/app.ts')).toBe('short-circuits');
     });
 
+    /*
+     * A pull of some OTHER branch merges it into `main`. That is a different and worse thing than
+     * being stale, and it leaves local `main` still not containing `origin/main` — so the work behind
+     * the `&&` would read the same stale tree the block is about. A pull with no refspec takes the
+     * current branch's upstream, and the current branch is `main` wherever this class is consulted.
+     */
+    it('accepts a pull of main in every spelling, and no other branch', () => {
+        expect(kind('git pull && cat x.ts')).toBe('short-circuits');
+        expect(kind('git pull origin && cat x.ts')).toBe('short-circuits');
+        expect(kind('git pull --ff-only origin main 2>&1 && cat x.ts')).toBe('short-circuits');
+        expect(kind('git pull origin origin/main && cat x.ts')).toBe('short-circuits');
+        expect(kind('git pull origin dean/some-feature && cat x.ts')).toBe('none');
+    });
+
     it('is not opened by an allowlisted command that cures nothing', () => {
         expect(kind('pnpm install && cat src/app.ts')).toBe('none');
         expect(kind('pnpm wp-cleanup && cat src/app.ts')).toBe('none');
