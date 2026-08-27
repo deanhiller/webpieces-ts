@@ -19,7 +19,8 @@ import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
 import { MethodMeta } from '../MethodMeta';
-import { WpResponse, Service } from '../Filter';
+import { Service } from '@webpieces/core-util';
+import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 /**

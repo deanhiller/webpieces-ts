@@ -15,7 +15,8 @@ import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiKeyHook } from '../AuthHooks';
 import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
-import { WpResponse, Service } from '../Filter';
+import { Service } from '@webpieces/core-util';
+import { WpResponse } from '../WpResponse';
 
 /**
  * The ENFORCEMENT half of `@AuthApiKey` (the contract half is pinned in core-util's

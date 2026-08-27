@@ -14,7 +14,7 @@ import {
 } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { ApiPrototype, ProxyClient, TranslatedFailure } from '@webpieces/http-client-core';
+import { ApiPrototype, ClientFilterDefinition, ProxyClient, TranslatedFailure } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 
 /**
@@ -41,10 +41,16 @@ export class NodeProxyClient extends ProxyClient {
         super();
     }
 
-    /** Bind this client to one API contract + target. */
-    init(apiPrototype: ApiPrototype<object>, config: ClientConfig): void {
+    /**
+     * Bind this client to one API contract + target, with the app's outbound filters.
+     *
+     * `appFilters` is REQUIRED, not defaulted: an empty array is a statement that this client signs
+     * nothing and rewrites nothing, and it should be written down rather than inferred from an
+     * omitted argument.
+     */
+    init(apiPrototype: ApiPrototype<object>, config: ClientConfig, appFilters: ClientFilterDefinition[]): void {
         this.config = config;
-        this.initRoutes(apiPrototype);
+        this.initRoutes(apiPrototype, appFilters);
     }
 
     /**
@@ -56,7 +62,17 @@ export class NodeProxyClient extends ProxyClient {
      * read beneath a deriver is memoized process-wide, so only the first call pays.
      */
     protected override resolveBaseUrl(): Promise<string> {
-        return ClientRegistry.resolve(this.config.svcName);
+        return this.config.hostPolicy.resolveBaseUrl(this.config.svcName);
+    }
+
+    /**
+     * The framework filters this client's {@link HostPolicy} demands — none for a deployed service,
+     * the context override plus the SSRF guard for a runtime host. Delegated rather than decided
+     * here so the two halves of "where does this go" (resolution and enforcement) cannot drift
+     * apart into different policies.
+     */
+    protected override clientFilters(): ClientFilterDefinition[] {
+        return this.config.hostPolicy.builtInFilters();
     }
 
     /**
@@ -82,11 +98,11 @@ export class NodeProxyClient extends ProxyClient {
     protected override async attachOutboundAuth(
         route: RouteMetadata,
         baseUrl: string,
-        httpHeaders: Record<string, string>,
+        httpHeaders: Map<string, string>,
     ): Promise<void> {
         const mode = route.authMeta?.mode;
         if (mode?.kind === 'oidc') {
-            httpHeaders['Authorization'] = `Bearer ${await this.gcpOidc.mintIdToken(baseUrl)}`;
+            httpHeaders.set('Authorization', `Bearer ${await this.gcpOidc.mintIdToken(baseUrl)}`);
         } else if (mode?.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (!secret) {
@@ -96,7 +112,7 @@ export class NodeProxyClient extends ProxyClient {
             }
             // Same header as a JWT/OIDC token, but its OWN scheme, so a secret can never be
             // mistaken for a token nor accepted where one was expected.
-            httpHeaders['Authorization'] = `Webpieces ${secret}`;
+            httpHeaders.set('Authorization', `Webpieces ${secret}`);
         }
     }
 
@@ -154,8 +170,15 @@ export class NodeProxyClient extends ProxyClient {
         }
     }
 
-    /** A server can satisfy every auth mode, so nothing is rejected at bind time. */
-    protected override assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
+    /**
+     * A server can satisfy every auth mode when it is talking to a peer it CHOSE, so the deployed
+     * policy rejects nothing. A runtime-host policy does reject: an OIDC token's audience and a
+     * shared secret both name a peer, and a destination that arrives per call has no honest one —
+     * see {@link HostPolicy.assertEndpointSupported}.
+     */
+    protected override assertEndpointSupported(authMeta: AuthMeta | undefined, methodName: string): void {
+        this.config.hostPolicy.assertEndpointSupported(authMeta, methodName, this.contractName());
+    }
 
     /**
      * SERVER-TO-SERVER: a 4xx received from a dependency becomes THIS server's own 500.

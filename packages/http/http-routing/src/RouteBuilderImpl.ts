@@ -4,7 +4,8 @@ import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
 import { RouteMetadata, DocumentDesign } from '@webpieces/core-util';
-import { WpResponse, Service } from './Filter';
+import { Service } from '@webpieces/core-util';
+import { WpResponse } from './WpResponse';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
 

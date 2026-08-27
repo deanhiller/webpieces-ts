@@ -1,0 +1,51 @@
+import { Filter } from '@webpieces/core-util';
+import { ClientRequest } from './ClientRequest';
+
+/**
+ * An OUTBOUND filter — the client-side counterpart of the server's `HttpFilter`, and the same
+ * `Filter` abstraction from @webpieces/core-util pointed the other way:
+ *
+ * - server: `Filter<MethodMeta, WpResponse<unknown>>` wraps the controller invocation
+ * - client: `Filter<ClientRequest, Response>` wraps the send
+ *
+ * `REQ` is the mutable {@link ClientRequest}, so a filter can re-point the URL, add headers, or
+ * replace the serialized body. `RESP` is the platform `Response`, so a filter can read the status
+ * and headers of what came back, short-circuit without sending at all, or invoke the rest of the
+ * chain more than once (which is how a redirect is followed under policy).
+ *
+ * ## One rule: do not consume the body
+ *
+ * A `Response` body can be read exactly once, and the response body is read AFTER the chain by the
+ * engine that turns it into the caller's DTO or typed error. A filter that calls `.json()` or
+ * `.text()` on the response it is passing back breaks the call. Read `response.status` and
+ * `response.headers` freely; `response.clone()` first if you genuinely need the bytes.
+ */
+export type ClientFilter = Filter<ClientRequest, Response>;
+
+/**
+ * ONE registered client filter and the priority it runs at — the client-side twin of the server's
+ * `FilterDefinition`, and it carries a priority for the same reason: priority belongs to the
+ * REGISTRATION, never to the filter, so the same filter class can sit at different depths in two
+ * different clients.
+ *
+ * Highest priority runs OUTERMOST (first in, last out), matching `FilterMatcher`'s ordering, so a
+ * filter with a higher number wraps everything below it.
+ *
+ * ## Two deliberate differences from the server's FilterDefinition
+ *
+ * 1. It holds an INSTANCE, not a DI class token. Server filters are resolved from the container by
+ *    the router; a client filter is constructed at the `createRpcClient` call site, which is code
+ *    already inside a DI module and already holding whatever the filter needs (a signing key, a
+ *    clock). Adding a container round-trip would buy nothing and would make the filter's collaborators
+ *    invisible at the one place a reader looks.
+ * 2. There is no filepath pattern. The server matches filters to controllers because ONE router
+ *    serves many controllers; a client is bound to exactly ONE contract, so there is nothing to
+ *    match against and a pattern would always be a no-op.
+ */
+export class ClientFilterDefinition {
+    constructor(
+        /** Higher runs OUTERMOST. Framework built-ins occupy 900–1000; app filters go below. */
+        public readonly priority: number,
+        public readonly filter: ClientFilter,
+    ) {}
+}

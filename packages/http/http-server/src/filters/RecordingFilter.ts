@@ -6,7 +6,8 @@ import {
     WEBPIECES_CONFIG_TOKEN,
 } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { Filter, WpResponse, Service } from '@webpieces/http-routing';
+import { Filter, Service } from '@webpieces/core-util';
+import { WpResponse } from '@webpieces/http-routing';
 import {
     RecordedEndpoint,
     RecordedError,

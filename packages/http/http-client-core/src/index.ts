@@ -32,3 +32,9 @@ export { buildClientProxy } from './buildClientProxy';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
 export { TranslatedFailure } from './TranslatedFailure';
 export { ResponseBodyReader } from './ResponseBodyReader';
+// The OUTBOUND filter chain: the mutable request a filter edits, and one registration of a filter
+// at a priority. The `Filter`/`Service`/`FilterChain` abstraction itself lives in
+// @webpieces/core-util, shared with the server's inbound chain.
+export { ClientRequest } from './ClientRequest';
+export { ClientFilterDefinition } from './ClientFilter';
+export type { ClientFilter } from './ClientFilter';

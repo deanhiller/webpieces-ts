@@ -23,6 +23,7 @@ import type { RequestContextHeaders } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import { buildClientProxy } from '@webpieces/http-client-core';
 import { ClientConfig } from '../ClientConfig';
+import { DeployedServiceHost } from '../HostPolicy';
 import { NodeProxyClient } from '../NodeProxyClient';
 
 class FetchStoresRequest {
@@ -85,7 +86,7 @@ function client(): DbStoresApi {
         // webpieces-disable no-any-unknown -- test double: no @AuthOidc endpoint exists in this spec
         new StubOidc() as unknown as GcpOidc,
     );
-    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess'));
+    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess', new DeployedServiceHost()), []);
     return buildClientProxy(DbStoresApi, proxyClient);
 }
 

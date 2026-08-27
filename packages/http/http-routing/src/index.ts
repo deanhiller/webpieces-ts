@@ -65,9 +65,10 @@ export {
 // public request — a transport adapter builds one and the chain reads it from RequestContext).
 export { HttpRequest, RawHttpRequest, RawRequest } from '@webpieces/core-context';
 
-// Filter-chain primitives (absorbed from the former @webpieces/http-filters package)
-export { Filter, WpResponse, Service } from './Filter';
-export { FilterChain } from './FilterChain';
+// The INBOUND chain's response type. `Filter`, `Service` and `FilterChain` are NOT re-exported
+// here: they moved to @webpieces/core-util so the outbound client chain is the SAME abstraction
+// rather than a second spelling of it. Import them from '@webpieces/core-util'.
+export { WpResponse } from './WpResponse';
 export { MethodMeta } from './MethodMeta';
 export { RouteHandler } from './RouteHandler';
 

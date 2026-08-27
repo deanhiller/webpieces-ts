@@ -1,29 +1,9 @@
 /**
- * WpResponse - Wraps controller responses for the filter chain.
- *
- * Generic type parameter TResult represents the controller's return type.
- * The filter chain uses WpResponse<unknown> because it handles all response types uniformly.
- *
- * The jsonTranslator middleware is responsible for:
- * 1. Serializing WpResponse.response to JSON
- * 2. Writing the JSON to the HTTP response body
- * 3. Setting the HTTP status code from WpResponse.statusCode
- */
-// webpieces-disable no-any-unknown -- generic default: the filter chain handles all response types uniformly
-export class WpResponse<TResult = unknown> {
-    response: TResult;
-
-    constructor(response: TResult) {
-        this.response = response;
-    }
-}
-
-/**
  * Service interface - Similar to Java WebPieces Service<REQ, RESP>.
  * Represents any component that can process a request and return a response.
  *
  * Used for:
- * - Final controller invocation
+ * - The final invocation at the end of a chain (a controller server-side, `fetch` client-side)
  * - Wrapping filters as services in the chain
  * - Functional composition of filters
  */
@@ -40,25 +20,36 @@ export interface Service<REQ, RESP> {
  * Filter abstract class - Similar to Java WebPieces Filter<REQ, RESP>.
  *
  * Filters are STATELESS and can handle N concurrent requests.
- * They wrap the execution of subsequent filters and the controller.
+ * They wrap the execution of subsequent filters and the final service.
  *
  * Key principles:
  * - STATELESS: No instance variables for request data
  * - COMPOSABLE: Use chain() methods for functional composition
  *
- * For HTTP filters, use Filter<MethodMeta, WpResponse<unknown>>:
- * - MethodMeta: Standardized request metadata (defined in http-server)
- * - WpResponse<unknown>: Wraps any controller response
+ * ## Why this lives in core-util rather than beside either chain that uses it
+ *
+ * There are TWO chains in webpieces and they are the same concept pointed in opposite directions:
+ *
+ * - INBOUND, server side: `Filter<MethodMeta, WpResponse<unknown>>` (@webpieces/http-routing) wraps
+ *   the controller invocation.
+ * - OUTBOUND, client side: `Filter<ClientRequest, Response>` (@webpieces/http-client-core) wraps the
+ *   `fetch`, so a filter can re-point the URL, add headers, or sign the exact serialized bytes.
+ *
+ * Declaring the abstraction once, in the package both depend on, is what keeps them ONE concept.
+ * A second `Filter`/`Service` pair defined beside the client chain would be two spellings of one
+ * thing — the shim shape CLAUDE.md rejects — and the two would drift.
+ *
+ * core-util is browser-safe and dependency-free, and so is this file: it imports nothing.
  */
 export abstract class Filter<REQ, RESP> {
     //priority is determined by how it is chained only here
     //DO NOT add priority here
 
     /**
-     * Filter method that wraps the next filter/controller.
+     * Filter method that wraps the next filter/service.
      *
      * @param meta - Metadata about the method being invoked
-     * @param nextFilter - Next filter/controller as a Service
+     * @param nextFilter - Next filter/service as a Service
      * @returns Promise of the response
      */
     abstract filter(meta: REQ, nextFilter: Service<REQ, RESP>): Promise<RESP>;

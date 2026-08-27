@@ -14,8 +14,11 @@ import {
     ApiMethodInfo,
     toError,
     NetworkRejectClassifier,
+    FilterChain,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
+import { ClientFilterDefinition } from './ClientFilter';
+import { ClientRequest } from './ClientRequest';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { RequestOutcome } from './RequestOutcome';
 import { ResponseBodyReader } from './ResponseBodyReader';
@@ -45,6 +48,16 @@ export abstract class ProxyClient {
     // Assigned by initRoutes(), which every subclass's init() calls immediately after construction.
     private routeMap!: Map<string, RouteMetadata>;
     private apiName!: string;
+
+    /**
+     * The OUTBOUND filter chain, built once at bind time from {@link clientFilters} and reused for
+     * every call. Built once rather than per call because a filter is STATELESS by contract (the
+     * per-call state is the {@link ClientRequest} the chain is handed), exactly as on the server.
+     */
+    private chain!: FilterChain<ClientRequest, Response>;
+
+    /** The app's own filters, as handed to `createRpcClient`. Stored only to build {@link chain}. */
+    private appFilters: ClientFilterDefinition[] = [];
 
     // Stateless + dependency-free, so the browser bundle keeps no DI on the fetch path.
     private readonly networkRejectClassifier = new NetworkRejectClassifier();
@@ -84,7 +97,7 @@ export abstract class ProxyClient {
     protected async attachOutboundAuth(
         _route: RouteMetadata,
         _baseUrl: string,
-        _httpHeaders: Record<string, string>,
+        _httpHeaders: Map<string, string>,
     ): Promise<void> {}
 
     /**
@@ -113,6 +126,21 @@ export abstract class ProxyClient {
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
+
+    /**
+     * The FRAMEWORK filters this environment installs on every client it builds, on top of whatever
+     * the app passed to `createRpcClient`. The default installs none, so a client with no app
+     * filters runs the exact code path it ran before the chain existed.
+     *
+     * This is the seam the runtime base-URL override lives behind: @webpieces/http-client-node
+     * returns the filters its `ClientConfig`'s host policy demands — the one that reads
+     * `WebpiecesCoreHeaders.OVERRIDE_BASE_URL` out of the ambient RequestContext, and the SSRF guard
+     * that then judges what it found. Neither concept can live here, because reading a
+     * RequestContext and resolving DNS are both things a browser bundle must never contain.
+     */
+    protected clientFilters(): ClientFilterDefinition[] {
+        return [];
+    }
 
     /**
      * Adapt a translated downstream failure into the error THIS environment's caller should see.
@@ -171,10 +199,13 @@ export abstract class ProxyClient {
      * build the route map once. Each subclass's `init(api, config)` stores its own config, then
      * calls this.
      *
+     * @param appFilters the app's OUTBOUND filters for this client, from `createRpcClient`. They are
+     *        merged with {@link clientFilters} and sorted by priority, highest OUTERMOST.
      * @throws Error if the prototype lacks @ApiPath, or declares an endpoint this environment
      *         cannot satisfy (see {@link assertEndpointSupported}).
      */
-    protected initRoutes(apiPrototype: ApiPrototype<object>): void {
+    protected initRoutes(apiPrototype: ApiPrototype<object>, appFilters: ClientFilterDefinition[]): void {
+        this.appFilters = appFilters;
         if (!isApiPath(apiPrototype)) {
             const className = apiPrototype.name || 'Unknown';
             throw new Error(`Class ${className} must be decorated with @ApiPath()`);
@@ -202,6 +233,12 @@ export abstract class ProxyClient {
                 ),
             );
         }
+
+        // Highest priority OUTERMOST, matching the server's FilterMatcher. Sorted here, once, so
+        // FilterChain itself never sorts — priority lives on the DEFINITION, not on the filter.
+        const definitions = [...this.clientFilters(), ...this.appFilters];
+        definitions.sort((a, b) => b.priority - a.priority);
+        this.chain = new FilterChain<ClientRequest, Response>(definitions.map((d) => d.filter));
     }
 
     /** The contract's class name, for logs and recordings. */
@@ -277,39 +314,35 @@ export abstract class ProxyClient {
         this.refuseEndpointNoClientCanCall(route);
         // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
         const baseUrl = await this.resolveBaseUrl();
-        const url = `${baseUrl}${route.path}`;
 
-        const httpHeaders: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
+        const httpHeaders = new Map<string, string>([['Content-Type', 'application/json']]);
 
         // Transferred context, request-id chained. The server impl throws here when there is no
         // active RequestContext — an outbound call with no trace is a bug, not a default. The
         // destination's own auth mode decides whether trusted keys are part of that set.
         const contextHeaders = this.outboundContextHeaders(DestinationTrust.forAuthMode(route.authMeta?.mode));
         for (const entry of contextHeaders.entries()) {
-            httpHeaders[entry[0]] = entry[1];
+            httpHeaders.set(entry[0], entry[1]);
         }
 
         await this.attachOutboundAuth(route, baseUrl, httpHeaders);
 
-        const options: RequestInit = {
-            method: route.httpMethod,
-            headers: httpHeaders,
-        };
-
-        // POST body is the first argument as JSON
+        // POST body is the first argument as JSON. Serialized HERE, before the filter chain, so a
+        // filter that signs the request signs the exact bytes {@link sendOnce} will transmit.
         // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
         let requestDto: unknown;
+        let body: string | undefined;
         if (args.length > 0) {
             requestDto = args[0];
-            options.body = JSON.stringify(requestDto);
+            body = JSON.stringify(requestDto);
         }
 
-        // Wrap fetch in a method for LogApiCall.execute
+        const request = new ClientRequest(route, this.apiName, baseUrl, httpHeaders, body, requestDto);
+
+        // Wrap the send in a method for LogApiCall.execute
         // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
         const method = async (): Promise<unknown> => {
-            return this.executeFetch(url, options, route);
+            return this.executeFetch(request);
         };
 
         return await this.execute(route, requestDto, method);
@@ -324,24 +357,26 @@ export abstract class ProxyClient {
      * though the caller sees an exception.
      */
     // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
-    private async executeFetch(url: string, options: RequestInit, route: RouteMetadata): Promise<unknown> {
+    private async executeFetch(request: ClientRequest): Promise<unknown> {
+        const route = request.route;
         this.onRequestStart(route);
 
-        // A network reject (offline, DNS, CORS preflight) means no Response ever existed, so there is
-        // no status and no headers to report — only status 0 and the failure itself. toNetworkError
-        // turns that reject into a typed OfflineError (a genuine bug passes through untouched), and we
-        // classify BEFORE onRequestEnd so a lifecycle listener sees the SAME typed error the caller will.
+        // The START marker fires ONCE per RPC even though a filter may send more than once (the SSRF
+        // guard re-invokes the chain to follow a validated redirect) — start and end still pair up
+        // exactly, which is what lets a listener drive a progress counter.
         let response: Response;
-        // webpieces-disable no-unmanaged-exceptions -- translate a network reject into a lifecycle END, then rethrow
+        // webpieces-disable no-unmanaged-exceptions -- translate a send failure into a lifecycle END, then rethrow
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
-            response = await fetch(url, options);
+            response = await this.chain.execute(request, () => this.sendOnce(request));
         } catch (err: unknown) {
+            // No Response ever existed — a network reject already classified by sendOnce, or a filter
+            // that refused to send at all (an SSRF policy rejecting a partner's URL). Either way there
+            // is no status and no headers to report, only status 0 and the failure itself, and the
+            // lifecycle listener must see the SAME error the caller is about to.
             const error = toError(err);
-            const networkError = this.networkRejectClassifier.toNetworkError(error, url);
-            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, networkError));
-            throw networkError;
+            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, error));
+            throw error;
         }
 
         const callId = `${this.apiName}.${route.methodName}`;
@@ -349,6 +384,36 @@ export abstract class ProxyClient {
             return this.readSuccessBody(response, route, callId);
         }
         throw await this.endWithTypedFailure(response, route, callId);
+    }
+
+    /**
+     * ONE transmission — the bottom of the filter chain, and the only place `fetch` is called.
+     *
+     * Everything it sends comes off the {@link ClientRequest} as the chain left it, so a filter's
+     * edits to the url, the headers or the serialized body are exactly what goes on the wire. It may
+     * run more than once for a single RPC when a filter follows a redirect.
+     *
+     * A network reject (offline, DNS, CORS preflight) is classified into a typed OfflineError here (a
+     * genuine bug passes through untouched) so that filters above see the same typed error the caller
+     * will, rather than a raw platform reject.
+     */
+    private async sendOnce(request: ClientRequest): Promise<Response> {
+        const options: RequestInit = {
+            method: request.route.httpMethod,
+            headers: request.headersAsRecord(),
+            redirect: request.followRedirects ? 'follow' : 'manual',
+        };
+        if (request.body !== undefined) {
+            options.body = request.body;
+        }
+        // webpieces-disable no-unmanaged-exceptions -- classify a network reject, then rethrow it typed
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
+            return await fetch(request.url, options);
+        } catch (err: unknown) {
+            throw this.networkRejectClassifier.toNetworkError(toError(err), request.url);
+        }
     }
 
     /**

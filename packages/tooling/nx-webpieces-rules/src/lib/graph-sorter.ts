@@ -31,7 +31,7 @@ export interface GraphEntry {
     framework?: string[];
     role?: string;
     /**
-     * The name CLIENTS address this app by at runtime (`new ClientConfig('helper-fsdb')`) — its
+     * The name CLIENTS address this app by at runtime (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`) — its
      * deployed service name, DECLARED in project.json as metadata.webpieces.serviceName. Absent for
      * anything nothing calls by name (libraries, browser apps). See service-name-resolver.ts.
      */

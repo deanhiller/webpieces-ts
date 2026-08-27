@@ -4,6 +4,9 @@ Lowest-level, zero-dependency utilities shared across webpieces (browser and Nod
 
 ## In Scope
 
+- `Filter` / `Service` / `FilterChain` — the filter-chain abstraction BOTH chains are built from: the server's inbound `Filter<MethodMeta, WpResponse<unknown>>` (`http-routing`) and the client's outbound `Filter<ClientRequest, Response>` (`http-client-core`). Declared once, here, in the package both depend on, so they cannot drift into two spellings of one concept. Dependency-free and browser-safe, like everything else in this package. Priority lives on the registering DEFINITION, never on the filter
+- `WebpiecesCoreHeaders.OVERRIDE_BASE_URL` — the context key carrying ONE outbound call's destination when that destination is data rather than deployment. Untrusted (it comes from a partner-editable row) and deliberately NOT transferred over the wire: it names where THIS hop goes, and a callee inheriting it would re-point its own outbound calls at the same host
+
 - `toError(unknown)` — normalizes any thrown value into a real `Error` (enforced by the catch-error-pattern ESLint rule).
 - The `Header` interface (`getHeaderName()`) — the minimal header/context-key abstraction placed here to avoid circular deps.
 - `ContextKey` — typed key for non-HTTP context values stored in RequestContext.

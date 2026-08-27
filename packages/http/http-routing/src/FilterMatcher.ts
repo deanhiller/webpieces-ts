@@ -1,4 +1,5 @@
-import { Filter, WpResponse } from './Filter';
+import { Filter } from '@webpieces/core-util';
+import { WpResponse } from './WpResponse';
 import { MethodMeta } from './MethodMeta';
 import { FilterDefinition } from './WebAppMeta';
 import { minimatch } from 'minimatch';

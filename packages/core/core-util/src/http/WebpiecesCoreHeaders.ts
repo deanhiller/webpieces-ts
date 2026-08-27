@@ -178,6 +178,44 @@ export class WebpiecesCoreHeaders {
     static readonly METHOD = ContextKey.untrusted<string>('method', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
 
     /**
+     * The base URL ONE outbound call should go to, overriding whatever the client's `ClientConfig`
+     * bound at construction — the answer to "POST our published contract to a URL the PARTNER
+     * registered at runtime" (an `OrganizationWebhook.url` column, an OAuth callback, a per-tenant
+     * or self-hosted host). The destination is DATA, not deployment, so it cannot be a svcName and
+     * there is nothing to register in {@link ClientRegistry}.
+     *
+     * ```ts
+     * RequestContext.run(() => {
+     *     RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, webhook.url);
+     *     return partnerWebhookClient.deliver(envelope);
+     * });
+     * ```
+     *
+     * ONLY a client whose `ClientConfig` names a runtime host policy reads it — `new
+     * ClientConfig('partner-webhooks', new RuntimeHostFromContext())`. A client bound to a deployed
+     * service (`new DeployedServiceHost()`) IGNORES this key entirely, which is what stops an
+     * ambient value re-pointing every other client in the same fan-out loop at a partner's server.
+     * Opting in is a named class at the construction site, so `grep -rn RuntimeHostFromContext`
+     * enumerates every client that can be re-pointed at all.
+     *
+     * - `httpHeader` UNDEFINED → NOT transferred over the wire, and that is load-bearing. This value
+     *   names where THIS hop goes. If it travelled, the callee would inherit it and re-point ITS
+     *   own outbound calls at the same host — one partner-supplied URL turning into an SSRF pivot
+     *   across the whole call tree. It is per-hop, always.
+     * - `isLogged` TRUE → the destination of a partner delivery is exactly what you want in the log
+     *   line when one fails.
+     *
+     * UNTRUSTED, necessarily: it comes from a database column a partner edited. That is precisely
+     * why {@link RuntimeHostFromContext} ships an SSRF policy on by default rather than trusting it.
+     */
+    static readonly OVERRIDE_BASE_URL = ContextKey.untrusted<string>(
+        'overrideBaseUrl',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
+
+    /**
      * NO CREDENTIAL KEYS LIVE HERE.
      *
      * `authorization` and `x-webpieces-shared-secret` used to be ContextKeys. That made them
@@ -214,5 +252,6 @@ export class WebpiecesCoreHeaders {
         WebpiecesCoreHeaders.REQUEST_PATH,
         WebpiecesCoreHeaders.CONTROLLER,
         WebpiecesCoreHeaders.METHOD,
+        WebpiecesCoreHeaders.OVERRIDE_BASE_URL,
     ];
 }
