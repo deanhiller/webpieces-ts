@@ -66,6 +66,8 @@ export type {
     RuntimeTrigger,
     RuntimeUnresolved,
 } from './runtime-graph-model';
+import { adjacencyFromEdges, assignLevels } from './runtime-graph-levels';
+import { RuntimeHostUsage } from './runtime-host-nodes';
 
 // Persistence lives in runtime-graph-io.ts; re-exported for the same reason as the model types.
 export {
@@ -110,50 +112,6 @@ export class RuntimeGraphReport {
          */
         public readonly autoHidden: string[] = [],
     ) {}
-}
-
-/**
- * Adjacency (service -> [targets]) used for leveling + cycle checks.
- *
- * PUBSUB EDGES ARE EXCLUDED. A queue is precisely the thing that decouples producer from consumer:
- * the producer returns as soon as the task is enqueued and never waits on the consumer, so a queued
- * hop is not a runtime dependency in the sense levels and cycle detection mean. Counting them would
- * make the common and correct `A → queue → A` (a service deferring its own work) an architecture
- * cycle, and would rank services by an ordering that does not constrain deploy or startup.
- */
-// webpieces-disable no-function-outside-class -- pure graph helper, matches the sibling helpers in this file
-function adjacencyFromEdges(
-    serviceNames: string[],
-    edges: RuntimeEdge[],
-): Record<string, string[]> {
-    const adj: Record<string, string[]> = {};
-    for (const name of serviceNames) adj[name] = [];
-    for (const edge of edges) {
-        if (edge.type === 'pubsub') continue;
-        if (!adj[edge.from]) adj[edge.from] = [];
-        adj[edge.from].push(edge.to);
-    }
-    return adj;
-}
-
-/** Adjacency (service -> [targets]) from a loaded runtime graph. */
-export function runtimeAdjacency(graph: RuntimeGraph): Record<string, string[]> {
-    return adjacencyFromEdges(Object.keys(graph.services), graph.runtimeEdges);
-}
-
-/** Assign levels via topological sort; falls back to level 0 when a cycle exists. */
-function assignLevels(adjacency: Record<string, string[]>): Record<string, number> {
-    const levels: Record<string, number> = {};
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const sorted = sortGraphTopologically(adjacency);
-        for (const name of Object.keys(sorted)) levels[name] = sorted[name].level;
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        for (const name of Object.keys(adjacency)) levels[name] = 0;
-    }
-    return levels;
 }
 
 /**
@@ -735,13 +693,6 @@ export function deriveRuntimeGraphReport(
     ).assemble();
 }
 
-/**
- * Who dials ONE runtime destination, and through which contracts — the accumulator behind
- * `RuntimeGraphDeriver.recordRuntimeHost`. A class rather than an object literal, per this repo's
- * rule, and Sets rather than arrays because two call sites in one service naming the same partner
- * identity are one arrow, not two.
- */
-class RuntimeHostUsage {
-    readonly usedBy = new Set<string>();
-    readonly apis = new Set<string>();
-}
+// Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model
+// types and the io helpers above are — one obvious place to import the runtime graph from.
+export { runtimeAdjacency } from './runtime-graph-levels';

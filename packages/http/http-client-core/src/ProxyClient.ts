@@ -412,7 +412,8 @@ export abstract class ProxyClient {
             // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
             return await fetch(request.url, options);
         } catch (err: unknown) {
-            throw this.networkRejectClassifier.toNetworkError(toError(err), request.url);
+            const error = toError(err);
+            throw this.networkRejectClassifier.toNetworkError(error, request.url);
         }
     }
 
