@@ -298,7 +298,35 @@ export class Dashboard {
         }
         lines.push('');
         lines.push(this.prBodyFooter(input.buildCommand));
-        return lines.join('\n');
+        return this.gitLogSafe(lines.join('\n'));
+    }
+
+    /**
+     * Makes THIS renderer own the invariant `wp-land-pr` checks: the compact body carries no markdown
+     * heading and no table pipe.
+     *
+     * It is applied to the WHOLE joined string rather than to each author-supplied field, on purpose.
+     * Every field this body interpolates — the review summary, an override justification, a checklist
+     * title, a disabled rule name, `commands.pr-gate.buildCommand` — is text this package did not write,
+     * and a `|` reaches all of them for entirely ordinary non-markdown reasons: a TypeScript union
+     * (`'open' | 'paused'`), a regex alternation, a quoted shell pipeline, an OR in prose. Sanitizing at
+     * the single exit point means a field added later is covered without anyone remembering to wrap it,
+     * and none of this renderer's own literals contain either marker, so nothing of ours changes.
+     *
+     * Before this, `wp-finish-upsert-pr` would happily POST such a body and report success, and then
+     * `wp-land-pr` refused those exact bytes — two commands in one flow disagreeing about what the
+     * renderer produces, with a refusal that blamed an old release and prescribed re-running finish,
+     * which re-rendered the identical pipe from the unchanged `review.json`. An infinite loop costing a
+     * CI cycle per turn.
+     *
+     * `¦` (BROKEN BAR) rather than `\|`: this string's home is `git log` in a terminal, where a
+     * backslash is literal punctuation and a markdown escape means nothing. The substitution is visible
+     * and reads correctly; the full, unaltered text is one click away in the 1st comment, which this
+     * body's last bullet always points at. `##` collapses to `#` for the same reason — a heading in a
+     * summary is markdown a plain-text history cannot carry either.
+     */
+    private gitLogSafe(body: string): string {
+        return body.replace(/\|/g, '\u00a6').replace(/#{2,}/g, '#');
     }
 
     /**

@@ -80,6 +80,44 @@ describe('the PR description IS the squash-merge commit body', () => {
     });
 
     /**
+     * The half of the invariant that used to be assumed rather than enforced, and cost a CI cycle every
+     * time the assumption broke.
+     *
+     * The body interpolates text this package did not write, and a `|` reaches it for ordinary
+     * non-markdown reasons — a TypeScript union, a regex alternation, a quoted shell pipeline. Nothing
+     * escaped it, so finish POSTED such a body and reported success, and `wp-land-pr` then refused those
+     * exact bytes and prescribed re-running finish, which re-rendered the identical character from the
+     * unchanged `review.json`. The renderer owns the property now: author text can say whatever it likes.
+     */
+    it('carries author text containing pipes and headings without ever emitting them', () => {
+        const body = dash.renderPrBody(
+            input({ summary: "Narrows state to 'open' | 'paused'. Matches auth|api. ## Notes on the cutover." }),
+            URL,
+        );
+
+        expect(body).not.toContain('|');
+        expect(body).not.toContain('##');
+        // Substituted, not dropped — the sentence still reads, and the unaltered text is in the 1st comment.
+        expect(body).toContain("'open' \u00a6 'paused'");
+        expect(body).toContain('auth\u00a6api');
+        expect(body).toContain('# Notes on the cutover.');
+    });
+
+    /**
+     * `commands.pr-gate.buildCommand` is a SHELL command quoted verbatim into the footer, so a pipeline
+     * in it is the one source of this marker that no amount of careful prose-writing avoids.
+     */
+    it('carries a piped build command in the footer without emitting a pipe', () => {
+        const piped = input();
+        piped.buildCommand = 'pnpm nx affected --target=ci | tee build.log';
+
+        const body = dash.renderPrBody(piped, URL);
+
+        expect(body).not.toContain('|');
+        expect(body).toContain('tee build.log');
+    });
+
+    /**
      * The self-link survives the round trip. In `git log` this is the ONLY way back to the PR — the
      * dashboard, the reviewer output and the full summary are all in comments this text cannot reach.
      */

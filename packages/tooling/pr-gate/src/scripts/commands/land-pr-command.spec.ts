@@ -361,6 +361,26 @@ describe('wp-land-pr — refusals', () => {
         expect(landedBody()).toBe('');
     });
 
+    /**
+     * The refusal names BOTH causes, and explicitly does not blame the author's prose.
+     *
+     * It used to assert an old release as "the usual cause". When the marker had instead come from author
+     * text — a `|` in a summary, from a TypeScript union or a regex alternation — re-running finish
+     * re-rendered the identical character from the unchanged `review.json`, so landing refused again: a
+     * loop costing a CI cycle per turn. `Dashboard.gitLogSafe` closed the render side; this pins that the
+     * message stopped teaching the diagnosis that sent readers looking for a version skew.
+     */
+    it('names a hand edit as well as an old release, and does not blame the review text', async (): Promise<void> => {
+        ghPrSays('Summary\n\n| gate | result |\n', prHeadOid);
+
+        const message = await refusalMessage(primary);
+
+        expect(message).toContain('EDITED BY HAND');
+        expect(message).toContain('OLDER');
+        expect(message).toContain('does NOT require removing');
+        expect(message).not.toContain('The usual cause');
+    });
+
     /** It must not fire on the real thing — the compact body is what finish actually publishes. */
     it('does NOT refuse the compact gated body', async (): Promise<void> => {
         await land(primary);

@@ -153,6 +153,12 @@ export class LandPrCommand {
      *
      * It keeps earning its place after the transition: nothing stops a human editing a PR description
      * in GitHub's textarea, and this is the only point between that edit and main's history.
+     *
+     * What it must NOT be read as is proof that the bytes did not come from `renderPrBody`. They can:
+     * the compact body interpolates author text, and a `|` reaches that text from a TypeScript union, a
+     * regex alternation or a quoted shell pipeline. `Dashboard.gitLogSafe` substitutes both markers at
+     * the render exit so a freshly-rendered body no longer trips this — which is where that invariant
+     * belongs, since the renderer is the only thing that can fix it without an extra CI cycle.
      */
     private notFitForGitLog(body: string): string {
         if (body.includes('##')) return '##  (a markdown heading)';
@@ -161,19 +167,32 @@ export class LandPrCommand {
     }
 
     /**
-     * The refusal when the description is not the compact gated body — almost always an OLD PR posted
-     * before the surface swap, whose description is still the full dashboard.
+     * The refusal when the description is not the compact gated body.
+     *
+     * It names BOTH ways bytes get here, because naming only one sent readers down a path that did not
+     * exist. It used to assert an old release as "the usual cause" and prescribe re-running finish — and
+     * when the marker had come from AUTHOR TEXT instead (a `|` in a summary, from a TypeScript union or a
+     * regex alternation), finish re-rendered the identical character from the unchanged `review.json` and
+     * landing refused again: a loop costing a CI cycle per turn, escapable only by guessing that one
+     * character in your prose was the problem. `Dashboard.gitLogSafe` now substitutes both markers at the
+     * render exit, so a freshly-rendered body cannot reach here at all — which leaves a HAND-EDITED
+     * description and a genuinely old PR as the two remaining causes, and this says so.
      */
     private descriptionUnfitForGitLog(ref: PrIdentity, marker: string): InformAiError {
         return new InformAiError(
             '\n' + SEP + `❌ PR #${ref.number}'s description is not a git-log commit body\n` + SEP + '\n' +
             `It contains ${marker}, which the compact body rendered by \`pnpm wp-finish-upsert-pr\` never\n` +
-            'does — so these bytes are not the gated summary, and landing them would put a PR Gate\n' +
-            'Dashboard (or hand-written markdown) into main\'s history permanently.\n\n' +
-            'The usual cause is a PR posted by a webpieces release OLDER than the one that made the\n' +
-            'description the commit body. The dashboard now lives in the PR\'s 1st comment instead.\n\n' +
-            'Re-run finish — it re-renders the description in the compact form and re-posts it to this\n' +
-            'same PR, then landing works:\n' +
+            'does — it substitutes both markers as it renders — so these bytes are not the gated summary,\n' +
+            'and landing them would put a PR Gate Dashboard (or hand-written markdown) into main\'s\n' +
+            'history permanently.\n\n' +
+            'There are two causes, and they need different fixes:\n\n' +
+            '  1. The description was EDITED BY HAND on GitHub after finish posted it. Re-running finish\n' +
+            '     overwrites that edit with the compact body, so landing works.\n' +
+            '  2. The PR was posted by a webpieces release OLDER than the one that made the description\n' +
+            '     the commit body, so it is still the full dashboard. The dashboard now lives in the PR\'s\n' +
+            '     1st comment instead, and re-running finish moves it there.\n\n' +
+            `Either way the cure is the same, and it does NOT require removing ${marker.trim()} from your review\n` +
+            'text — a pipe or a heading in a summary is rendered safe, not rejected:\n' +
             '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP,
         );
     }
