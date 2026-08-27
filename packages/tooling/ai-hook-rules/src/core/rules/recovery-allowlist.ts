@@ -52,7 +52,7 @@ export class RecoveryAllowlist {
      * the empty command because its default is the other way round.)
      */
     isFullyRecovery(ctx: BashContext): boolean {
-        const segments = this.scanner.segmentsWithPipes(ctx.command);
+        const segments = this.scanner.segmentsWithJoins(ctx.command);
         if (segments.length === 0) return false;
         const content = new ContentReadScan(this.scanner, ctx.workspaceRoot, ctx.effectiveCwd);
         return segments.every((segment: CommandSegment): boolean => this.isRecoverySegment(segment, content));

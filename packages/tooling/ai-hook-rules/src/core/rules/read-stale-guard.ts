@@ -34,7 +34,7 @@ import { TreeRecovery } from './tree-recovery';
  *
  * THERE IS NO DIRTY-TREE ASYMMETRY, and there is no dirty-tree valve in either state. Both used to
  * fail open on uncommitted work; both now block. The argument for the state-A valve was that its cure,
- * `git pull --ff-only`, is not a fast-forward on a dirty tree — true, but that is a fact about the
+ * an in-place pull, is not a fast-forward on a dirty tree — true, but that is a fact about the
  * MESSAGE, which printed only the pull. Row 6 has always carried a second cure, `git checkout -b <new>
  * origin/main`, and that one CARRIES uncommitted changes onto the new branch, so the work comes with
  * you and nothing is trapped. StaleMainMessage now prints both, labelled with which survives a dirty
@@ -44,11 +44,12 @@ import { TreeRecovery } from './tree-recovery';
  * Residual, in both states: if `origin/main` changed the same files you edited, git refuses the switch.
  * `git stash` is on the L2 skip list and is never blocked, so the path out is stash → branch → pop.
  *
- * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `git pull origin main`,
+ * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `pnpm wp-checkout-clean-main`,
  * `pnpm install`, any webpieces upgrade — is a Bash command, and this guard never looks at Bash.
  * So there is no command allowlist to maintain and no way to lock the agent out of its own fix.
- * (`git pull origin main` is explicitly permitted on main by redirect-how-to-merge-main, which
- * returns null when the branch IS main — the two guards are complementary, not stacked.)
+ * (Every `wp-*` bin is on the L2 skip list, and the pull it wraps is explicitly permitted on main by
+ * redirect-how-to-merge-main, which returns null when the branch IS main — the guards are
+ * complementary, not stacked.)
  *
  * That scoping is also this guard's HOLE, and it is closed elsewhere rather than here: leaving Bash
  * entirely alone let a session `cat`/`grep`/`ls` the same stale tree the Read block was rejecting,
@@ -94,9 +95,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         'This branch is stale to read from — reading it would give you pre-merge/out-of-date content.',
         'Get onto current code before reading anything else:',
         [
-            new Option('On main, behind origin/main → git pull origin main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
+            new Option('On main, behind origin/main → pnpm wp-checkout-clean-main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
             new Option('If a checkout -b refuses because origin/main changed the same files you edited: git stash (never blocked), redo the checkout, then git stash pop.'),
-            new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
+            new Option("If pnpm wp-checkout-clean-main dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then run it again."),
             new Option('Still allowed right now: reading webpieces.config.json, and the Bash commands that get you OUT or tell you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs. Everything ELSE through Bash is blocked in this same state (a main that is behind → stale-main-bash-guard; a merged branch → merged-branch-bash-guard), and Write/Edit on main is blocked by feature-branch-guard however current main is. There is no side door: get onto a branch off origin/main.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
@@ -140,8 +141,8 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
-        // NO DIRTY VALVE. It used to fail open here, on the argument that the prescribed `git pull` is
-        // not a clean fast-forward on a dirty tree. That argument was about the MESSAGE, not the row:
+        // NO DIRTY VALVE. It used to fail open here, on the argument that the prescribed in-place pull
+        // is not a clean fast-forward on a dirty tree. That argument was about the MESSAGE, not the row:
         // row 6's cure cell has always offered `git checkout -b <new> origin/main` as an alternative,
         // and THAT works dirty — it carries uncommitted changes onto the new branch and lands you on
         // current code, which is the whole point. The message now leads with it when the tree is dirty

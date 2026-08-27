@@ -86,7 +86,7 @@ export class ContentReadScan {
             // No path given: either it reads stdin (fine — and doubly fine when piped into), or it
             // walks the cwd. That only reads the stale tree when the cwd IS in it — `cd /tmp && ls`
             // walks /tmp, which this repo's staleness has nothing to do with.
-            const walksTree = !segment.pipedInto && CWD_WALKERS.has(command) && this.isInWorkspace(this.baseDir);
+            const walksTree = segment.join !== '|' && CWD_WALKERS.has(command) && this.isInWorkspace(this.baseDir);
             return walksTree ? command : null;
         }
         return operands.some((operand: string): boolean => this.isWorkspacePath(operand)) ? command : null;

@@ -35,7 +35,7 @@ export class ReadOnlyInspectionScan {
 
     /** True only when EVERY segment of the command is provably inert. Empty command → false. */
     isReadOnlyInspection(command: string): boolean {
-        const segments = this.scanner.segmentsWithPipes(command);
+        const segments = this.scanner.segmentsWithJoins(command);
         if (segments.length === 0) return false;
         return segments.every((segment: CommandSegment): boolean => this.segmentIsInert(segment));
     }

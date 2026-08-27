@@ -171,6 +171,113 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
     });
 });
 
+/**
+ * ONE SPELLING of "make local `main` current", and it is the one CLAUDE.md names.
+ *
+ * Fleet-wide this rule handed agents FOUR refresh-main cures across 238 prescriptions, and
+ * `pnpm wp-checkout-clean-main` — the command CLAUDE.md names, and the only one that also sweeps the
+ * orphan directories — appeared in 6 of them. The other 231 prescribed the hand-rolled pair CLAUDE.md
+ * explicitly forbids, so agents caught between the guard and the instructions improvised hybrids of
+ * both, four distinct spellings observed, one blocked round trip each. A cure is an instruction the AI
+ * follows LITERALLY; the retired spellings are gone rather than softened.
+ */
+describe('stale-main-bash-guard — one refresh-main cure, and it is the prescribed one', () => {
+    const RETIRED = ['git pull origin main', 'git pull --ff-only origin main', 'git checkout main && git pull origin main'];
+
+    it('names none of the retired spellings in any fix option', () => {
+        for (const option of rule().fixHint.fixOptions) {
+            for (const spelling of RETIRED) expect(option.text, spelling).not.toContain(spelling);
+        }
+    });
+
+    it('names none of them in either block message', () => {
+        const messages = [
+            rule().check(ctx('cat src/app.ts'))[0].message,
+            rule().check(ctx('git checkout main'))[0].message,
+            rule().check(ctx('pnpm wp-checkout-clean-main; cat src/app.ts'))[0].message,
+        ];
+        for (const message of messages) {
+            for (const spelling of RETIRED) expect(message, spelling).not.toContain(spelling);
+        }
+    });
+
+    // The BRANCH-OFF cure is a different intent and is deliberately untouched — it works on a dirty
+    // tree, where refreshing `main` in place does not, so collapsing the two would hand an agent with
+    // edits in flight a cure it cannot run.
+    it('keeps branching off origin/main as its own, separate cure', () => {
+        expect(rule().check(ctx('cat src/app.ts'))[0].message).toContain('git checkout -b <new-branch> origin/main');
+    });
+});
+
+/**
+ * COMPOSITION — `<cure> && <work>` is allowed, `<cure> ; <work>` is not.
+ *
+ * Both shapes are lifted from the fleet audit (docs/audit/2026-08-24-mon-wed.md §3): the same agent,
+ * blocked on a stale `main`, bundled cure and work in one call sixteen times across four distinct
+ * spellings. `&&` was refused for nothing — the shell already guarantees the work is skipped when the
+ * cure fails — while `;` genuinely runs the work on still-stale content, in 7 of 9 cases with the cure
+ * silenced by `>/dev/null 2>&1` as well.
+ */
+describe('stale-main-bash-guard — the cure may be composed with the work, but only with &&', () => {
+    it('ALLOWS a cure joined to the work by && — the shell short-circuits', () => {
+        expect(blocked('pnpm wp-checkout-clean-main && cat src/app.ts')).toBe(false);
+        expect(blocked('git pull --ff-only origin main && cat src/app.ts')).toBe(false);
+        expect(blocked('git pull origin main && pnpm run build-all')).toBe(false);
+    });
+
+    // The exact line from the audit, `2>&1 | tail -1` and all. An agent bounds tool output by reflex,
+    // and a filter a pipe fed cannot touch the tree — so it must not veto the chain.
+    it('ALLOWS the piped-and-fetch-led form agents actually type', () => {
+        expect(blocked("git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n '30,75p' src/app.ts")).toBe(false);
+        expect(blocked("cd /repo && pnpm wp-checkout-clean-main >/dev/null 2>&1 && sed -n '1,5p' src/app.ts")).toBe(false);
+    });
+
+    it('REFUSES the same cure joined by ; — the work runs even if the pull fails', () => {
+        expect(blocked("pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' eslint.config.mjs")).toBe(true);
+        expect(blocked('git pull --ff-only origin main 2>&1 | tail -1; cat src/app.ts')).toBe(true);
+        expect(blocked('pnpm wp-checkout-clean-main || cat src/app.ts')).toBe(true);
+    });
+
+    // The fix is a ONE-CHARACTER edit, so the message says which character was typed. An agent told
+    // only "use &&" has to diff the two spellings itself to find where.
+    it('names the operator that was used, and hands over the && spelling', () => {
+        const message = rule().check(ctx('pnpm wp-checkout-clean-main >/dev/null 2>&1; cat src/app.ts'))[0].message;
+        expect(message).toContain('Your cure is joined with `;`');
+        expect(message).toContain('the work runs even if the pull fails');
+        expect(message).toContain('pnpm wp-checkout-clean-main && <your command>');
+        expect(message).toContain('Or run the cure alone and re-issue your command in the next call.');
+
+        const orMessage = rule().check(ctx('git pull origin main || cat src/app.ts'))[0].message;
+        expect(orMessage).toContain('Your cure is joined with `||`');
+    });
+
+    /*
+     * A `git fetch` does NOT cure a stale `main` — it moves the remote-tracking ref and leaves local
+     * `main` exactly as far behind — so there is nothing for the `&&` to short-circuit and the command
+     * gets the ordinary row 6 block, whose message says what a fetch alone does not fix.
+     */
+    it('does not accept a bare fetch as the cure — it advances nothing local', () => {
+        expect(blocked('git fetch origin main && cat src/app.ts')).toBe(true);
+        const message = rule().check(ctx('git fetch origin main && cat src/app.ts'))[0].message;
+        expect(message).toContain('local `main` is BEHIND origin/main');
+        expect(message).not.toContain('Your cure is joined with');
+    });
+
+    // A command that merely OPENS with something allowlisted is not cure-prefixed. Only a segment that
+    // brings local main forward opens the composition door.
+    it('is not opened by any allowlisted first segment', () => {
+        expect(blocked('git status --porcelain | head && cat src/app.ts')).toBe(true);
+        expect(blocked('pnpm install && cat src/app.ts')).toBe(true);
+        expect(blocked('pnpm wp-cleanup && cat src/app.ts')).toBe(true);
+    });
+
+    // On a CURRENT main nothing here fires at all — composition is judged only inside row 6's state.
+    it('is only consulted once main is established BEHIND', () => {
+        state.containsExit = 0;
+        expect(blocked("pnpm wp-checkout-clean-main; sed -n '1,5p' src/app.ts")).toBe(false);
+    });
+});
+
 // The guard must never block the cure, the build, or metadata — a wedged agent is worse than a stale
 // one, and everything here was explicitly promised to stay open.
 describe('stale-main-bash-guard — never wedges the session', () => {

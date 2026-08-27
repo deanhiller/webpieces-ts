@@ -50,13 +50,14 @@ function reasonLiteralsIn(source: string): readonly string[] {
 }
 
 describe('L2 rows — the table itself', () => {
-    it('has eleven rows with unique numbers, in first-match order', () => {
-        expect(L2_ROWS).toHaveLength(11);
-        // The design's 1-5, then the cache divider, then 6-10. The divider is numbered 11 and PRINTED
-        // in position because row numbers are identity: they are logged as `row=` and cited in the doc,
-        // so renumbering 6-10 to slot it in would silently re-point every reference.
-        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 11, 6, 7, 8, 9, 10]);
-        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(11);
+    it('has thirteen rows with unique numbers, in first-match order', () => {
+        expect(L2_ROWS).toHaveLength(13);
+        // The design's 1-5, then the cache divider, then the two composition rows, then 6-10. The
+        // divider is numbered 11 and the composition rows 12/13, all PRINTED in position, because row
+        // numbers are identity: they are logged as `row=` and cited in the doc, so renumbering to slot
+        // them in would silently re-point every reference.
+        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 11, 12, 13, 6, 7, 8, 9, 10]);
+        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(13);
     });
 
     it('puts the on-main block ABOVE the cache divider — the most load-bearing order in the table', () => {
@@ -88,7 +89,7 @@ describe('L2 rows — the table itself', () => {
     it('gives every blocking row a LITERAL cure, and every allowing row none', () => {
         for (const row of L2_ROWS) {
             const blocking = row.action.kind === 'block';
-            expect(blocking, `row ${row.num}`).toBe([2, 5, 6, 8, 9].includes(row.num));
+            expect(blocking, `row ${row.num}`).toBe([2, 5, 6, 8, 9, 13].includes(row.num));
             if (blocking) {
                 // A cure that points at documentation cannot be tested for reachability — see L0's
                 // cure-reachability discipline, which caught a fault prescribing a renamed-away bin.
@@ -233,6 +234,37 @@ describe('cure= is looked up from the matrix, not authored twice', () => {
     it('strips the doc backticks so the field is greppable', () => {
         expect(cureForMatrix('L2', '5')).toBe('git checkout -b <new> origin/main');
         expect(cureForMatrix('L2', '5')).not.toContain('`');
+    });
+
+    /*
+     * ONE SPELLING FOR "make local `main` current", and it is the one CLAUDE.md names.
+     *
+     * Fleet-wide this rule emitted FOUR refresh-main cures across 238 prescriptions and the sanctioned
+     * one appeared in 6 of them — so the guard prescribed the hand-rolled form CLAUDE.md explicitly
+     * forbids 231 times out of 238, and agents caught between the two authorities improvised hybrids of
+     * both (docs/audit/2026-08-24-mon-wed.md, section 3). `cure=` is looked up from the row, so pinning
+     * the row's literal here pins what the log carries and what the doc prints at the same time.
+     *
+     * The BRANCH-OFF cure is a DIFFERENT intent and stays: refreshing `main` in place and cutting a new
+     * branch off `origin/main` are different moves with different tree-state requirements. Row 5's cure
+     * (asserted above) is untouched for exactly that reason.
+     */
+    it('prescribes `pnpm wp-checkout-clean-main` on every row that refreshes main', () => {
+        expect(cureForMatrix('L2', '2')).toBe('pnpm wp-checkout-clean-main');
+        expect(cureForMatrix('L2', '6')).toBe('pnpm wp-checkout-clean-main, or git checkout -b <new> origin/main');
+        expect(cureForMatrix('L2', '13')).toBe('pnpm wp-checkout-clean-main && <your command>');
+    });
+
+    it('emits none of the retired refresh-main spellings, on any row or use case', () => {
+        const retired = ['git pull origin main', 'git checkout main && git pull origin main', 'git pull --ff-only origin main'];
+        for (const row of L2_ROWS) {
+            for (const spelling of retired) {
+                expect(row.cure, `row ${row.num}`).not.toContain(spelling);
+                for (const useCase of row.useCases) {
+                    expect(useCase.fix, `use case ${useCase.num}`).not.toContain(spelling);
+                }
+            }
+        }
     });
 
     it('resolves a cure for every reason the guards can log on a blocking row', () => {

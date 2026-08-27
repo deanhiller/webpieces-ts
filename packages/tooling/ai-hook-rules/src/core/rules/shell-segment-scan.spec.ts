@@ -8,7 +8,7 @@ const shell = new ShellSegmentScan(scanner);
 
 // Classify every segment of a whole command line, in order.
 function roles(command: string): SegmentRole[] {
-    return scanner.segmentsWithPipes(command)
+    return scanner.segmentsWithJoins(command)
         .map((segment: CommandSegment): SegmentRole => shell.classify(segment).role);
 }
 
