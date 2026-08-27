@@ -192,7 +192,7 @@ export class WebpiecesCoreHeaders {
      * ```
      *
      * ONLY a client whose `ClientConfig` names a runtime host policy reads it — `new
-     * ClientConfig('partner-webhooks', new RuntimeHostFromContext())`. A client bound to a deployed
+     * ClientConfig('partner-webhooks', new RuntimeHostFromContext(new DnsAddressResolver()))`. A client bound to a deployed
      * service (`new DeployedServiceHost()`) IGNORES this key entirely, which is what stops an
      * ambient value re-pointing every other client in the same fan-out loop at a partner's server.
      * Opting in is a named class at the construction site, so `grep -rn RuntimeHostFromContext`

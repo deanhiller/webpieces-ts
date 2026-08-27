@@ -17,11 +17,10 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 
 - The `Filter` / `Service` / `FilterChain` abstraction itself → `core-util`. This package owns the INBOUND chain built on it — `WpResponse`, `FilterMatcher`, `FilterDefinition`, and the framework filters — while the client's outbound chain (`http-client-core`) is the same abstraction pointed the other way
 
-- The `Filter` interface and `FilterChain` execution engine → `http-filters`
 - Actually starting/serving over Express, DI container bootstrap → `http-server`
 - API decorators/errors/`ValidateImplementation` definitions → `http-api` (re-exported here for convenience)
 - Client-side request generation → `http-client`
 
 ## Notes (optional)
 
-Depends on `http-api`, `http-filters`, `inversify`, and `minimatch`. This is the "contract → handler" direction. It defines routing/filter-registration data structures and matching logic but does not run a server — `http-server` consumes this to build and serve the app.
+Depends on `core-util` (for the `Filter` / `Service` / `FilterChain` abstraction), `core-context`, `inversify`, and `minimatch`. This is the "contract → handler" direction. It defines routing/filter-registration data structures and matching logic but does not run a server — `http-server` consumes this to build and serve the app.

@@ -1,6 +1,7 @@
 import { Filter, Service, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { ClientRequest } from '@webpieces/http-client-core';
+import { MissingRuntimeBaseUrlError } from './RuntimeHostErrors';
 
 /**
  * Reads {@link WebpiecesCoreHeaders.OVERRIDE_BASE_URL} out of the ambient RequestContext and points
@@ -31,7 +32,7 @@ export class ContextBaseUrlOverrideFilter extends Filter<ClientRequest, Response
     override async filter(request: ClientRequest, nextFilter: Service<ClientRequest, Response>): Promise<Response> {
         const override = RequestContext.getUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL);
         if (override === undefined || override === '') {
-            throw new Error(
+            throw new MissingRuntimeBaseUrlError(
                 `${request.contractName}.${request.route.methodName} is a RUNTIME-HOST client, so its ` +
                     `destination must be supplied per call, but no ` +
                     `WebpiecesCoreHeaders.OVERRIDE_BASE_URL was found in the RequestContext. Set it around ` +
@@ -39,6 +40,7 @@ export class ContextBaseUrlOverrideFilter extends Filter<ClientRequest, Response
                     `    RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, webhook.url);\n` +
                     `Refusing rather than falling back to a derived service URL is deliberate: a silent ` +
                     `fallback would send a partner's payload to one of our own services.`,
+                `${request.contractName}.${request.route.methodName}`,
             );
         }
         request.pointAtBaseUrl(override);

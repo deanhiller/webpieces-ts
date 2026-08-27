@@ -14,7 +14,7 @@
  *                 without ever serving it — only `addRoutes` proves a served route.
  *   - USES:       `factory.createRpcClient(XxxApi, ...)`    → rpc client
  *                 `factory.createPubSubClient(XxxApi, ...)` → pubsub (Cloud Tasks) client
- *                 The config argument (`new ClientConfig('helper-fsdb')`) names WHICH service the
+ *                 The config argument (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`) names WHICH service the
  *                 client talks to and is kept as `ApiRef.targetService` — see targetServiceOf.
  * An api-lib is DETECTED, not tagged: a project exporting an `abstract class`
  * carrying `@ApiPath` owns that API. Its transport is `@PubSub` → 'pubsub', else 'rpc'.

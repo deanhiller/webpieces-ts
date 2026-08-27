@@ -104,8 +104,8 @@ export class SsrfGuardFilter extends Filter<ClientRequest, Response> {
                 `169.254.169.254 would hand this process's own service-account tokens to whoever registered ` +
                 `the URL. If this client genuinely must reach an internal host (a local emulator, an ` +
                 `on-cluster service), say so at the construction site with ` +
-                `new RuntimeHostFromContextAllowingInternalAddresses('<why>') instead of ` +
-                `new RuntimeHostFromContext().`,
+                `new RuntimeHostFromContextAllowingInternalAddresses('<why>', new DnsAddressResolver()) ` +
+                `instead of new RuntimeHostFromContext(new DnsAddressResolver()).`,
             url,
         );
     }

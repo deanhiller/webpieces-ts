@@ -29,6 +29,7 @@ import {
 } from '../HostPolicy';
 import { NodeProxyClient } from '../NodeProxyClient';
 import { SsrfRefusedError } from '../SsrfRefusedError';
+import { MissingRuntimeBaseUrlError, RuntimeHostEndpointUnsupportedError } from '../RuntimeHostErrors';
 
 class DeliverRequest {
     constructor(public readonly eventId: string) {}
@@ -226,6 +227,11 @@ describe('the runtime base-URL override', () => {
         await withOverride('https://api.partner.example', () => partner.deliver(new DeliverRequest('e1')));
 
         // A second call OUTSIDE any override scope must not inherit the first one's destination.
+        // Its OWN type, not a bare Error: a delivery worker must tell "we were misconfigured"
+        // from "the partner's URL was hostile" (SsrfRefusedError) — different owners, different cures.
+        await expect(
+            RequestContext.run(() => partner.deliver(new DeliverRequest('e2'))),
+        ).rejects.toBeInstanceOf(MissingRuntimeBaseUrlError);
         await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e2')))).rejects.toThrow(
             /OVERRIDE_BASE_URL/,
         );
@@ -233,6 +239,9 @@ describe('the runtime base-URL override', () => {
     });
 
     it('refuses an endpoint whose auth mode mints a credential for an audience we choose', () => {
+        expect(() =>
+            client(OidcApi, new ClientConfig('partner', new RuntimeHostFromContext(publicDns())), []),
+        ).toThrow(RuntimeHostEndpointUnsupportedError);
         expect(() =>
             client(OidcApi, new ClientConfig('partner', new RuntimeHostFromContext(publicDns())), []),
         ).toThrow(/cannot be used by a runtime-host client/);

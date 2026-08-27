@@ -4,6 +4,7 @@ import { AddressResolver } from './AddressResolver';
 import { BASE_URL_OVERRIDE_PRIORITY, ContextBaseUrlOverrideFilter, SSRF_GUARD_PRIORITY } from './ContextBaseUrlOverrideFilter';
 import { SsrfGuardFilter } from './SsrfGuardFilter';
 import { SsrfPolicy } from './SsrfPolicy';
+import { RuntimeHostEndpointUnsupportedError } from './RuntimeHostErrors';
 
 /**
  * WHERE a client's requests go — the second half of a {@link ClientConfig}, and a REQUIRED one.
@@ -74,7 +75,7 @@ export class DeployedServiceHost extends HostPolicy {
  * ```ts
  * const partner = factory.createRpcClient(
  *     PartnerWebhookApi,
- *     new ClientConfig('partner-webhooks', new RuntimeHostFromContext()),
+ *     new ClientConfig('partner-webhooks', new RuntimeHostFromContext(new DnsAddressResolver())),
  *     [new ClientFilterDefinition(500, new HmacSigningFilter(secret))],
  * );
  *
@@ -191,12 +192,13 @@ function assertNoServiceCredential(
     if (kind !== 'oidc' && kind !== 'shared-secret') {
         return;
     }
-    throw new Error(
+    throw new RuntimeHostEndpointUnsupportedError(
         `${contractName}.${methodName} is authenticated with '${kind}', which cannot be used by a ` +
             `runtime-host client. Both mint a credential for a peer WE chose — an OIDC token's audience is ` +
             `the callee's base URL, and a shared secret is one we agreed with a named service — and the ` +
             `destination here is not known until the call happens, so minting either one would hand our ` +
             `credential to whoever registered the URL. Authenticate this hop the way a webhook actually is ` +
             `authenticated: an app filter that signs the exact serialized bytes (ClientRequest.body).`,
+        `${contractName}.${methodName}`,
     );
 }

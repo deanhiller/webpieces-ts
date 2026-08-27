@@ -35,6 +35,8 @@ export { HostPolicy, DeployedServiceHost, RuntimeHostFromContext, RuntimeHostFro
 export { SsrfPolicy } from './SsrfPolicy';
 export { SsrfGuardFilter } from './SsrfGuardFilter';
 export { SsrfRefusedError } from './SsrfRefusedError';
+// The two refusals that happen BEFORE any bytes leave, and are not about the destination itself.
+export { RuntimeHostEndpointUnsupportedError, MissingRuntimeBaseUrlError } from './RuntimeHostErrors';
 export { InternalAddressRules } from './InternalAddressRules';
 export { AddressResolver, DnsAddressResolver } from './AddressResolver';
 
