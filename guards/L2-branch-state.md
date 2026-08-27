@@ -74,7 +74,9 @@ guards, meant at most one of the four values could ever reach a spawn.
 | 4 | `B` | on the **skip list** — it gets you OUT, or tells you where you are | 1 allow | — |
 | 5 | `E` | on `main` | 4 block | `git checkout -b <new> origin/main` |
 | 11 | `B R E` | **the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, or the forge unreachable | 1 allow (fail-open) | — (nothing to fix; the refresher populates the cache for the next call) |
-| 6 | `B R` | on `main`, behind `origin/main` | 4 block | `git pull origin main`, or `git checkout -b <new> origin/main` |
+| 12 | `B` | on `main`, behind `origin/main`, and the command STARTS with a refresh-main cure joined to the work by `&&` | 1 allow | — |
+| 13 | `B` | on `main`, behind `origin/main`, and the cure is joined to the work by `;` (or `||`, `&`, a newline) — the work runs even if the cure fails | 4 block | `pnpm wp-checkout-clean-main && <your command>` |
+| 6 | `B R` | on `main`, behind `origin/main` | 4 block | `pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main` |
 | 7 | `B R` | on `main`, current | 1 allow | — |
 | 8 | `B R E` | on a branch whose PR is **already merged** | 4 block | `git fetch origin main && git checkout -b <new> origin/main` |
 | 9 | `B R E` | no fork point with `origin/main`, or `origin/main` moved and collided with your files | 4 block | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
@@ -131,12 +133,29 @@ comes with you, so nothing needs reading first and nothing is trapped. Residual:
 changed the same files you edited, git refuses the switch — `git stash` is on the skip list and
 clears it.
 
-Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure is `git pull`,
-which genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND
+Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure pulls, and a
+pull genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND
 cure — `git checkout -b <new> origin/main` — and that one works dirty for exactly the reason above.
 The teeth were in the MESSAGE, which printed only the pull; it now prints both, labelled, so the
 cure an agent reads is always one it can run. **So there is no dirty row anywhere, and no dirty
 valve in the code either** — both were closed, and "Not done" is empty as a result.
+
+### Rows 12 and 13 — the cure may be COMPOSED with the work, but only with `&&`
+
+`pnpm wp-checkout-clean-main && cat src/app.ts` is ALLOWED. `pnpm wp-checkout-clean-main ; cat
+src/app.ts` is REFUSED, and the refusal names the operator you typed.
+
+The difference belongs to the shell, not to this guard. `&&` short-circuits: the work cannot run
+when the cure exits non-zero, which is exactly the property the row 6 block exists to guarantee.
+Refusing that bought nothing and cost a round trip. `;` discards the cure's exit code and runs the
+work regardless — measured with `>/dev/null 2>&1` on the cure in 7 of 9 observed cases, so the
+failure was invisible as well as ignored. The two-step is genuinely safer there, because the NEXT
+tool call is a fresh evaluation that recomputes `localMain` against `originMain`: a failed pull
+re-blocks. An allowed `;` compound never gets that second look.
+
+`git fetch` may LEAD the prefix (`git fetch --prune origin main && git pull --ff-only origin main`
+is the shape agents type) but never satisfies it alone: a fetch moves the remote-tracking ref and
+leaves local `main` exactly as far behind, so there is nothing for the `&&` to protect.
 
 ## L2 use cases
 
@@ -167,8 +186,10 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 | 12 | Guards quietly stand down on a plane, or when `gh` is unauthenticated or rate-limited | the forge could not be asked whether the PR is merged | ALLOW (fail-open) logged as `no-forge` — distinct from "asked, and it is not merged", which used to look identical in the trail | None — restore network/`gh auth` to re-arm the merged-branch policy |
 | 27 | A build, a `cat` or a `curl` on `main`, on the first Bash call of a session | on `main`, cache absent — so whether `main` is behind is UNKNOWN | ALLOW (fail-open), logged `ALLOW_FAIL_OPEN`. `B` on `main` is judged by rows 6/7 and therefore lands here when the cache cannot answer; the WRITE half is not, which is why row 5 sits above this divider | None — the second call is judged normally |
 | 14 | Mid-rebase, every guard abstains | detached HEAD — there is no branch name to judge | ALLOW (fail-open), logged LOUDLY when the branch is unresolvable rather than merely detached | None — finish or abort the rebase |
+| 29 | `git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n '30,75p' src/app.ts` — the agent cures and reads in one call | on `main`, behind `origin/main`, cure first, `&&` between | ALLOW: `&&` short-circuits, so the `sed` never runs if the pull fails — the guard was refusing a safety property the shell already enforces. Measured fleet-wide as `cure_bundled_and`, and filed as a TOOLING defect, not an agent one | None needed |
+| 30 | `pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' eslint.config.mjs` — and the agent then quotes an eslint rule out of a file 15 commits stale | on `main`, behind `origin/main`, cure first, `;` between | BLOCK: `;` discards the cure's exit code, so a conflict, a dirty tree or no network leaves the `sed` reading still-stale content — and 7 of the 9 observed cases also silenced the cure with `>/dev/null 2>&1`, so the failure was invisible too. The two-step is safer because the NEXT tool call re-computes `localMain` against `originMain`, so a failed pull re-blocks; an allowed `;` compound never gets that second look | Swap the `;` for `&&` — `pnpm wp-checkout-clean-main && <your command>` — or run the cure alone and re-issue the command in the next call |
 | 13 | The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits | on `main`, behind `origin/main`, dirty tree | BLOCK. This used to fail open, on the argument that the prescribed `git pull` is not a clean fast-forward when the tree is dirty. That was true of the MESSAGE, not the row: the cure cell always offered a second form, and it works dirty | `git checkout -b <new> origin/main` — uncommitted changes come with you onto the new branch. If git refuses because `origin/main` touched the same files, `git stash` first (never blocked), then retry, then `git stash pop` |
-| 15 | The Read tool refuses a file that exists, on a `main` 18 commits behind | on `main`, behind `origin/main`, clean tree | BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly | `git pull origin main`, or `git checkout -b <new> origin/main` |
+| 15 | The Read tool refuses a file that exists, on a `main` 18 commits behind | on `main`, behind `origin/main`, clean tree | BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly | `pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main` |
 | 16 | Read is blocked, so the session reaches for `cat`, `grep` and `ls` instead — and describes a CI workflow set missing a whole workflow that existed upstream | the SIDE DOOR: same tree, same staleness, different tool | BLOCK: `B` is judged here beside `R`, so closing the Read tool no longer opens a shell-shaped hole. The log used to read "read-stale-guard handled", which is worse than no guard — it looks covered | `git checkout -b <new> origin/main` |
 | 10 | A Bash command that WRITES tracked files as a side effect — `npx expo install`, a formatter, codegen, `sed -i`, a `>` redirect | on a `main` known to be BEHIND, and the write is incidental to a command whose stated purpose is something else | BLOCK: inside this row `B` is default-DENY plus row 4's skip list, never a blocklist of readers — a command nobody thought to enumerate is caught by not being on the list, which is the only shape that could have caught this one | `git checkout -b <new> origin/main` BEFORE running anything that may write |
 | 17 | Reading files on a `main` you just pulled | on `main`, and `origin/main` is an ancestor of HEAD | ALLOW: ancestry, not hash equality, so the allow arrives the instant the pull lands rather than when the detached refresher next runs | None needed |

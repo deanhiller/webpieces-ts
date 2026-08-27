@@ -62,7 +62,7 @@ export class ShellSegmentScan {
         if (this.redirectsToFile(words)) return new SegmentVerdict('command', words);
 
         if (ALWAYS_INERT.has(head)) return new SegmentVerdict('shaping', words);
-        if (segment.pipedInto && OUTPUT_FILTERS.has(head)) return new SegmentVerdict('shaping', words);
+        if (segment.join === '|' && OUTPUT_FILTERS.has(head)) return new SegmentVerdict('shaping', words);
 
         return new SegmentVerdict('command', words);
     }

@@ -58,14 +58,14 @@ export class BuildOutputPipeScan {
 
     /** The first bounded logging command in `command`, or null when there is none. */
     firstHit(command: string): BoundedOutputHit | null {
-        const parts = this.scanner.segmentsWithPipes(command);
+        const parts = this.scanner.segmentsWithJoins(command);
         for (let i = 0; i < parts.length; i++) {
             const name = this.loggingCommandIn(parts[i]);
             if (name === '') continue;
             // The NEXT segment carries the separator that preceded it, so "this segment pipes OUT" is
             // "the segment after me was piped into". Splitting on `|` throws that away; CommandSegment
             // exists precisely so it does not have to be re-derived here.
-            if (i + 1 < parts.length && parts[i + 1].pipedInto) return new BoundedOutputHit(name, BOUND_BY_PIPE);
+            if (i + 1 < parts.length && parts[i + 1].join === '|') return new BoundedOutputHit(name, BOUND_BY_PIPE);
             if (this.segments.redirectsToFile(this.scanner.words(parts[i].text))) {
                 return new BoundedOutputHit(name, BOUND_BY_REDIRECT);
             }

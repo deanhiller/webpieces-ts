@@ -78,6 +78,7 @@ export function renderL2Doc(): string {
     return [
         ...renderHead(),
         ...renderTable(),
+        ...renderTableNotes(),
         ...renderUseCases(),
         ...renderNotes(),
         ...renderTail(),
@@ -175,6 +176,14 @@ function renderTable(): string[] {
         'numbers are identity — they are logged as `row=` and cited here — so renumbering 6-10 to slot it in',
         'would silently re-point every reference. L1 does the same with its row 8.',
         '',
+    ];
+}
+
+// The prose that explains the table's shape — split out of renderTable purely to stay inside the
+// method-line budget. The join order is what makes them one section; keep them adjacent.
+// webpieces-disable no-function-outside-class -- continuation of renderTable above, beside it in this module
+function renderTableNotes(): string[] {
+    return [
         '### The one rule that explains the tool column',
         '',
         '**`B` tracks `E` everywhere except on `main`, where `B` tracks `R` instead — rows 5, 6 and 7.**',
@@ -217,12 +226,29 @@ function renderTable(): string[] {
         'changed the same files you edited, git refuses the switch — `git stash` is on the skip list and',
         'clears it.',
         '',
-        'Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure is `git pull`,',
-        'which genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND',
+        'Row 6 looked like the one place the dirty argument had teeth, because its FIRST cure pulls, and a',
+        'pull genuinely is not a clean fast-forward on a dirty tree. But row 6 has always carried a SECOND',
         'cure — `git checkout -b <new> origin/main` — and that one works dirty for exactly the reason above.',
         'The teeth were in the MESSAGE, which printed only the pull; it now prints both, labelled, so the',
         'cure an agent reads is always one it can run. **So there is no dirty row anywhere, and no dirty',
         'valve in the code either** — both were closed, and "Not done" is empty as a result.',
+        '',
+        '### Rows 12 and 13 — the cure may be COMPOSED with the work, but only with `&&`',
+        '',
+        '`pnpm wp-checkout-clean-main && cat src/app.ts` is ALLOWED. `pnpm wp-checkout-clean-main ; cat',
+        'src/app.ts` is REFUSED, and the refusal names the operator you typed.',
+        '',
+        'The difference belongs to the shell, not to this guard. `&&` short-circuits: the work cannot run',
+        'when the cure exits non-zero, which is exactly the property the row 6 block exists to guarantee.',
+        'Refusing that bought nothing and cost a round trip. `;` discards the cure\'s exit code and runs the',
+        'work regardless — measured with `>/dev/null 2>&1` on the cure in 7 of 9 observed cases, so the',
+        'failure was invisible as well as ignored. The two-step is genuinely safer there, because the NEXT',
+        'tool call is a fresh evaluation that recomputes `localMain` against `originMain`: a failed pull',
+        're-blocks. An allowed `;` compound never gets that second look.',
+        '',
+        '`git fetch` may LEAD the prefix (`git fetch --prune origin main && git pull --ff-only origin main`',
+        'is the shape agents type) but never satisfies it alone: a fetch moves the remote-tracking ref and',
+        'leaves local `main` exactly as far behind, so there is nothing for the `&&` to protect.',
         '',
     ];
 }

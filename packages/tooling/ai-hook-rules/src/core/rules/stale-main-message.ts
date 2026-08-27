@@ -14,17 +14,28 @@ import { atRoot } from '@webpieces/rules-config';
  * One source of truth on purpose (same reason as MergedBranchMessage): the cure is an instruction the
  * AI follows literally, so two drifting copies mean two behaviours for one repo state.
  *
- * Cure 1 is `--ff-only` deliberately. A plain `git pull` on a stale main can start a MERGE, which is
- * the one thing redirect-how-to-merge-main exists to keep an AI away from; `--ff-only` either
- * fast-forwards or fails loudly without touching anything. It used to be the ONLY cure printed, on the
- * strength of "the block only fires when the tree is clean and behind" — which stopped being true when
- * the dirty valve was deleted, and was the reason that valve existed. Cure 2 (`git checkout -b`) is
- * what makes the message correct on a dirty tree, so both are printed and each is labelled.
+ * Cure 1 is `pnpm wp-checkout-clean-main`, the ONE command this repo names for "make local `main`
+ * current" — and it is now spelled that way here because it was not, which is the defect this file's
+ * last change fixed. Fleet-wide, this rule handed agents FOUR different refresh-main cures across 238
+ * prescriptions and the sanctioned one appeared in 6 of them; CLAUDE.md meanwhile names
+ * `pnpm wp-checkout-clean-main` and explicitly forbids hand-rolling the `git checkout main && git pull`
+ * pair, because that is the same command minus the orphan-directory sweep. Agents caught between the
+ * two authorities improvised hybrids — four distinct spellings observed — each costing a blocked round
+ * trip. A cure is an instruction the AI follows LITERALLY, so there is exactly one spelling of it.
+ *
+ * It still fast-forwards rather than merging (the command pulls `--ff-only`), which is what keeps this
+ * message clear of the merge redirect-how-to-merge-main exists to prevent, and it is still CLEAN-TREE
+ * ONLY. Cure 2 (`git checkout -b`) is what makes the message correct on a dirty tree, so both are
+ * printed and each is labelled.
+ *
+ * NOTE the intents stay SEPARATE. Cure 2 is not a spelling of cure 1: refreshing `main` in place and
+ * branching off fresh are different moves with different tree-state requirements, and collapsing them
+ * would hand a dirty tree a cure it cannot run.
  */
 export class StaleMainMessage {
     /**
      * `treeRoot` is the tree the guard JUDGED (which is NOT the shell's cwd when the command carried
-     * a leading `cd`). Pass it and the cure is rendered as `cd <treeRoot> && git pull …`, naming the
+     * a leading `cd`). Pass it and each cure is rendered as `cd <treeRoot> && <cure>`, naming the
      * directory outright.
      *
      * WHY that matters here specifically: in the field this guard told an agent working in a worktree
@@ -38,7 +49,7 @@ export class StaleMainMessage {
      * The diagnosis + BOTH cures.
      *
      * Two cures rather than one, and that is what let the dirty valve be deleted. The guard used to
-     * fail open on a dirty tree because the only cure it printed was `git pull --ff-only`, which is
+     * fail open on a dirty tree because the only cure it printed was the in-place pull, which is
      * not a clean fast-forward when there are local modifications — so the block was suppressed to
      * avoid prescribing something that could not run.
      *
@@ -49,7 +60,7 @@ export class StaleMainMessage {
      * path, and no state in which the printed cure is unrunnable.
      */
     private common(behindCount: string): string[] {
-        const pull = 'git pull --ff-only origin main';
+        const refresh = 'pnpm wp-checkout-clean-main';
         const branch = 'git checkout -b <new-branch> origin/main';
         return [
             `You are on main and main is ${behindCount} commit(s) behind origin/main.`,
@@ -58,15 +69,16 @@ export class StaleMainMessage {
             'longer exists upstream.',
             '',
             'Run ONE of these, then retry:',
-            `  1. ${this.treeRoot !== '' ? atRoot(this.treeRoot, pull) : pull}`,
-            '     Updates main in place. CLEAN TREE ONLY — with local modifications this is not a',
-            '     fast-forward and git will refuse it.',
+            `  1. ${this.treeRoot !== '' ? atRoot(this.treeRoot, refresh) : refresh}`,
+            '     Updates main in place — checkout, pull, reap dead branches/worktrees, sweep orphan',
+            '     directories. CLEAN TREE ONLY: with tracked modifications the pull is not a',
+            '     fast-forward and it will refuse.',
             `  2. ${this.treeRoot !== '' ? atRoot(this.treeRoot, branch) : branch}`,
             '     Works with UNCOMMITTED CHANGES — they come with you onto the new branch, and you',
             '     land on current code. Prefer this one if you have edits in flight, or if 1 refused.',
             '',
             'If 1 fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD holds a',
-            'duplicate entry — clear it with `git fetch --prune origin main`, then pull again.',
+            'duplicate entry — clear it with `git fetch --prune origin main`, then run 1 again.',
             'If 2 refuses because origin/main changed the same files you edited, run `git stash`',
             '(never blocked), then 2 again, then `git stash pop`.',
         ];

@@ -2,7 +2,7 @@
 // L2 — the BRANCH-STATE layer, as data.
 //
 // L2 answers one question: *may I work here, and is what I read current?* Drawn as a decision matrix
-// that is TEN ordered rows plus one terminal fail-open row, first match wins.
+// that is TWELVE ordered rows plus one terminal fail-open row, first match wins.
 //
 // This module holds those rows, l2-doc.ts renders them into guards/L2-branch-state.md, and a unit test
 // (l2-matrix.spec.ts) locks that file byte-identical to the renderer — the same mechanism that already
@@ -141,7 +141,7 @@ export class L2Row {
 }
 
 /**
- * THE ELEVEN L2 ROWS, in first-match-wins order.
+ * THE THIRTEEN L2 ROWS, in first-match-wins order.
  *
  * Rows 1-5 need NO cache and fire on call #1: rows 1, 2 and 4 are text matches, row 3 is a marker-file
  * scan, row 5 is one `git rev-parse`. Row 11 is the cache divider. Rows 6-10 all read the cache.
@@ -261,7 +261,27 @@ export const L2_ROWS: readonly L2Row[] = [
             'None — finish or abort the rebase',
             'branch-undeterminable'),
     ]),
-    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`git pull origin main`, or `git checkout -b <new> origin/main`', [
+    // ROWS 12/13 sit ABOVE row 6 because they are judged inside its state: local `main` is established
+    // BEHIND, and the only remaining question is whether the command already carries its own cure. They
+    // are numbered 12/13 rather than slotted in as 6a/6b for the reason row 11 is numbered 11 — row
+    // numbers are logged as `row=` and cited here, so renumbering re-points every existing reference.
+    new L2Row(12, ['B'], 'on `main`, behind `origin/main`, and the command STARTS with a refresh-main cure joined to the work by `&&`', L2_ALLOW, '—', [
+        new L2UseCase(29,
+            '`git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n \'30,75p\' src/app.ts` — the agent cures and reads in one call',
+            'on `main`, behind `origin/main`, cure first, `&&` between',
+            'ALLOW: `&&` short-circuits, so the `sed` never runs if the pull fails — the guard was refusing a safety property the shell already enforces. Measured fleet-wide as `cure_bundled_and`, and filed as a TOOLING defect, not an agent one',
+            'None needed',
+            'cure-prefixed, && short-circuits the work'),
+    ]),
+    new L2Row(13, ['B'], 'on `main`, behind `origin/main`, and the cure is joined to the work by `;` (or `||`, `&`, a newline) — the work runs even if the cure fails', L2_BLOCK, '`pnpm wp-checkout-clean-main && <your command>`', [
+        new L2UseCase(30,
+            '`pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n \'598,612p\' eslint.config.mjs` — and the agent then quotes an eslint rule out of a file 15 commits stale',
+            'on `main`, behind `origin/main`, cure first, `;` between',
+            'BLOCK: `;` discards the cure\'s exit code, so a conflict, a dirty tree or no network leaves the `sed` reading still-stale content — and 7 of the 9 observed cases also silenced the cure with `>/dev/null 2>&1`, so the failure was invisible too. The two-step is safer because the NEXT tool call re-computes `localMain` against `originMain`, so a failed pull re-blocks; an allowed `;` compound never gets that second look',
+            'Swap the `;` for `&&` — `pnpm wp-checkout-clean-main && <your command>` — or run the cure alone and re-issue the command in the next call',
+            'cure-prefixed, work runs anyway'),
+    ]),
+    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main`', [
         new L2UseCase(13,
             'The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits',
             'on `main`, behind `origin/main`, dirty tree',
@@ -272,7 +292,7 @@ export const L2_ROWS: readonly L2Row[] = [
             'The Read tool refuses a file that exists, on a `main` 18 commits behind',
             'on `main`, behind `origin/main`, clean tree',
             'BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly',
-            '`git pull origin main`, or `git checkout -b <new> origin/main`',
+            '`pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main`',
             'on-stale-main'),
         new L2UseCase(16,
             'Read is blocked, so the session reaches for `cat`, `grep` and `ls` instead — and describes a CI workflow set missing a whole workflow that existed upstream',
@@ -388,6 +408,10 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // for the Read tool, stale-main-bash-guard for Bash. Same cache, same ancestry test, one verdict.
     'on-stale-main': 6,
     'local-main-contains-origin (up to date)': 7,
+    // Rows 12/13 — composition, judged INSIDE row 6's state: the tree is established behind, and the
+    // only remaining question is whether the command carries its own cure and with which operator.
+    'cure-prefixed, && short-circuits the work': 12,
+    'cure-prefixed, work runs anyway': 13,
     // Row 9 — the two unhealthy-fork states.
     'no-fork-point': 9,
     'main-moved-conflict': 9,

@@ -34,20 +34,32 @@ const RUNNERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'yarn', 'npx', 'pnp
 const RUNNER_VERBS: ReadonlySet<string> = new Set(['run', 'run-script', 'exec', 'dlx', 'x']);
 
 /**
- * One invoked segment of a command, plus whether a PIPE fed it.
+ * The shell operator that JOINED one segment to the one before it. `'none'` for the first segment.
  *
- * `pipedInto` is what separates `git log | grep foo` (grep consumes the pipe — reads no file) from
+ * This used to be a single boolean, `pipedInto`, and the widening is what makes composition
+ * judgeable. A pipe is only one of the joins whose MEANING differs: `cure && work` short-circuits, so
+ * the work cannot run when the cure failed, while `cure ; work` discards the cure's exit code and
+ * runs the work anyway. A boolean that answered only "was it a pipe?" threw that distinction away,
+ * and a guard cannot refuse the dangerous join while allowing the safe one without it.
+ */
+export type SegmentJoin = 'none' | '|' | '&&' | '||' | ';' | '&' | '\n' | '(' | ')';
+
+/**
+ * One invoked segment of a command, plus the operator that joined it to its predecessor.
+ *
+ * `join === '|'` is what separates `git log | grep foo` (grep consumes the pipe — reads no file) from
  * `grep foo src/` (grep reads the working tree). A guard that cares about which FILES a command
  * reads cannot tell those apart from the segment text alone, because splitting on `|` throws exactly
- * that fact away. Data-only, so a class (per CLAUDE.md).
+ * that fact away. `join === '&&'` vs `';'` is the same argument one operator over — see
+ * {@link SegmentJoin}. Data-only, so a class (per CLAUDE.md).
  */
 export class CommandSegment {
     text: string;
-    pipedInto: boolean;
+    join: SegmentJoin;
 
-    constructor(text: string, pipedInto: boolean) {
+    constructor(text: string, join: SegmentJoin) {
         this.text = text;
-        this.pipedInto = pipedInto;
+        this.join = join;
     }
 }
 
@@ -64,19 +76,20 @@ export class CommandScanner {
      * quotes is not split out. Bash would expand it; we do not scan it. Contrived enough to accept.)
      */
     commandSegments(command: string): readonly string[] {
-        return this.segmentsWithPipes(command).map((s: CommandSegment): string => s.text);
+        return this.segmentsWithJoins(command).map((s: CommandSegment): string => s.text);
     }
 
     /**
-     * commandSegments, but each segment also carries whether the separator BEFORE it was a pipe.
-     * Only a guard reasoning about which files a segment reads needs that; everything else uses
-     * commandSegments, which is this method with the flag dropped.
+     * commandSegments, but each segment also carries the OPERATOR that joined it to its predecessor.
+     * Only a guard reasoning about which files a segment reads, or about whether a failed first
+     * segment can stop the rest, needs that; everything else uses commandSegments, which is this
+     * method with the join dropped.
      */
-    segmentsWithPipes(command: string): readonly CommandSegment[] {
+    segmentsWithJoins(command: string): readonly CommandSegment[] {
         const segments: CommandSegment[] = [];
         let current = '';
         let quote: string | null = null;
-        let piped = false;      // was the separator that ENDED the previous segment a pipe?
+        let join: SegmentJoin = 'none';   // the operator that ENDED the previous segment
 
         for (let i = 0; i < command.length; i++) {
             const ch = command[i];
@@ -108,19 +121,19 @@ export class CommandScanner {
                 // Consume the second char of `&&` / `||` so it does not start an empty segment.
                 const doubled = (ch === '|' || ch === '&') && command[i + 1] === ch;
                 if (doubled) i++;
-                segments.push(new CommandSegment(current, piped));
+                segments.push(new CommandSegment(current, join));
                 // `|` pipes into the next segment; `||` is a separator, not a pipe.
-                piped = ch === '|' && !doubled;
+                join = doubled ? ((ch + ch) as SegmentJoin) : (ch as SegmentJoin);
                 current = '';
                 continue;
             }
 
             current += ch;
         }
-        segments.push(new CommandSegment(current, piped));
+        segments.push(new CommandSegment(current, join));
 
         return segments
-            .map((s: CommandSegment): CommandSegment => new CommandSegment(s.text.trim(), s.pipedInto))
+            .map((s: CommandSegment): CommandSegment => new CommandSegment(s.text.trim(), s.join))
             .filter((s: CommandSegment): boolean => s.text.length > 0);
     }
 

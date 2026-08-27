@@ -17,6 +17,7 @@ import { TreeRecovery } from './tree-recovery';
 import { BranchSwitchScan } from './branch-switch-scan';
 import { RecoveryAllowlist } from './recovery-allowlist';
 import { MainFreshness } from './main-freshness';
+import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
 
 /**
  * The BASH half of the STALE-MAIN protection (read-stale-guard's State A), in two halves of its own:
@@ -106,6 +107,13 @@ import { MainFreshness } from './main-freshness';
  *             `git status|log|diff|show|branch`, `git stash`, `gh` (it talks to GitHub, not to this
  *             tree), `curl`/`wget`, every `wp-*` bin, installs.
  *
+ * ── ROWS 12/13: the cure may be COMPOSED with the work, but only with `&&` ───────────────────────
+ *
+ * `pnpm wp-checkout-clean-main && cat src/app.ts` is allowed and `pnpm wp-checkout-clean-main ; cat
+ * src/app.ts` is not, and the difference is the shell's rather than this guard's: `&&` short-circuits,
+ * so the work cannot run when the cure failed — the exact property the block is here to guarantee. `;`
+ * discards the exit code and runs the work anyway. See cure-prefix-scan.ts for the measured shapes.
+ *
  * There is no dirty-tree valve here and none in read-stale-guard either: the cure is
  * `git checkout -b`, which CARRIES uncommitted work onto the new branch, so a dirty tree traps nobody
  * in any L2 state. (`git stash` covers the residual where origin/main touched the same files.)
@@ -121,6 +129,8 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     private readonly recoveryList = new RecoveryAllowlist(this.scanner);
     // The ancestry test and the cache summary, shared with read-stale-guard — see main-freshness.ts.
     private readonly freshness = new MainFreshness();
+    // ROWS 12/13 — `<cure> && <work>` vs `<cure> ; <work>`. See cure-prefix-scan.ts.
+    private readonly curePrefix = new CurePrefixScan(this.scanner);
 
     readonly description =
         'Block a bare `git checkout main` (use `pnpm wp-checkout-clean-main`, or chain the pull into ' +
@@ -144,7 +154,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             // hint that cannot look.
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
                 + '\nIf you hand-roll the git instead, the pull must be in the SAME command as the checkout.', true),
-            new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
+            new Option('Already on main: pnpm wp-checkout-clean-main (then re-run) — it pulls main and takes the trash out in the one command this repo prescribes. You may chain your command onto it with && (pnpm wp-checkout-clean-main && <your command>), which is skipped if the pull fails; a ; instead runs your command anyway and is refused.'),
             new Option('Still allowed: every BASH command, on a main that is current or whose freshness is not known — this guard only closes once local main is known to be BEHIND origin/main. (Write/Edit on main is a different policy and is blocked by feature-branch-guard however current main is.) In that state you keep the Read tool while main is current (read-stale-guard closes it when main falls behind, because stale reads are worthless) plus everything that gets you OUT or tells you where you are: git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
@@ -209,6 +219,31 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         }
 
         // ESTABLISHED BEHIND. Now — and only now — the default-deny polarity applies.
+        return this.judgeComposition(ctx, branch, cache);
+    }
+
+    /**
+     * ROWS 12/13 — `<cure> && <work>` is allowed; `<cure> ; <work>` is not.
+     *
+     * The distinction is the shell's, not this guard's invention. `&&` short-circuits, so the work
+     * cannot run when the cure exits non-zero — which is precisely the property the block exists to
+     * guarantee, already enforced by the interpreter. Refusing it bought nothing and cost a round
+     * trip, and the fleet audit files that as a TOOLING defect.
+     *
+     * `;` discards the exit code and runs the work regardless, and it was measured with
+     * `>/dev/null 2>&1` on the cure in 7 of 9 observed cases — so the failure was invisible as well as
+     * ignored. The two-step is genuinely safer there: the NEXT tool call is a fresh evaluation that
+     * recomputes `localMain` against `originMain`, so a pull that failed re-blocks. An allowed `;`
+     * compound never gets that second look.
+     */
+    private judgeComposition(ctx: BashContext, branch: string, cache: string): readonly Violation[] {
+        const prefix = this.curePrefix.classify(ctx.command);
+        if (prefix.kind === 'short-circuits') {
+            return this.allow(ctx, branch, 'cure-prefixed, && short-circuits the work', cache);
+        }
+        if (prefix.kind === 'runs-anyway') {
+            return this.block(ctx, branch, 'cure-prefixed, work runs anyway', this.compositionMessage(prefix), cache);
+        }
         return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
     }
 
@@ -260,6 +295,17 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             + 'unit of work in any case: reviewable, revertable — and the cure fetches, so it makes '
             + 'your reads true as well as moving you off main.\n'
             + `Start a branch (uncommitted work comes with you):\n  cd '${workspaceRoot}' && git fetch origin main && git checkout -b <new-branch> origin/main`;
+    }
+
+    /**
+     * ROW 13's deny. It NAMES the operator the agent typed, because the fix is a one-character edit
+     * and an agent told only "use `&&`" has to diff the two spellings itself to find where.
+     */
+    private compositionMessage(prefix: CurePrefix): string {
+        return `Your cure is joined with \`${prefix.operator}\` — the work runs even if the pull fails. `
+            + 'Use `&&` so it is skipped:\n'
+            + '\n    pnpm wp-checkout-clean-main && <your command>\n\n'
+            + 'Or run the cure alone and re-issue your command in the next call.';
     }
 
     private pairingMessage(ctx: BashContext): string {
