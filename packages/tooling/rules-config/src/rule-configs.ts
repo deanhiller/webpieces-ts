@@ -507,7 +507,12 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
     // nx-webpieces-rules/src/lib/runtime-graph.ts), so any config still listing them (a hand-maintained
     // enumeration of api libs) now fails the unknown-field check in validateWebpiecesConfig. There is
     // nothing to enumerate — delete the keys.
-    allowedCycles?: string[];
+    // NOTE: `allowedCycles` was removed — a runtime cycle is no longer allowable at all. CD deploys
+    // services in dependency order and a cyclic architecture has no such order, so the runtime graph
+    // now THROWS while it is being levelled rather than emitting a flat, unlevellable diagram (see
+    // nx-webpieces-rules/src/lib/runtime-graph-levels.ts). A repo that genuinely cannot break a cycle
+    // yet declares it PER EDGE with a `cutLegacyCycle:<targetService>` nx tag on the CALLING project,
+    // which admits the debt in a place `grep -rn cutLegacyCycle` can enumerate. Delete the key.
     /**
      * Draw a dashed terminal node for every contract a service calls that NOTHING in-repo
      * implements (firestore, gmail, ...) — the vendor systems the runtime graph otherwise stops one
@@ -531,7 +536,6 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        allowedCycles: FieldDef.optional('string[]'),
         showExternalNodes: FieldDef.optional('boolean'),
         externalApiPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,

@@ -8,7 +8,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { ProjectCycleDetector } from '../../lib/graph-cycles';
@@ -221,7 +221,11 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Graph generation failed:', error.message);
+        // A RuleFailError carries its cures as Option[]; `Error.message` is only the aiMessage, so
+        // printing that alone silently drops them. renderRuleFailForHuman is the ONE renderer that
+        // numbers them, and this catch is the top-level handler for the nx target.
+        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        console.error('❌ Graph generation failed:', rendered);
         if (error instanceof MetadataValidationError) {
             const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
             console.error('');

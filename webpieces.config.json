@@ -139,7 +139,6 @@
         },
         "runtime-architecture": {
             "mode": "RUN_EVERY_TIME",
-            "allowedCycles": [],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

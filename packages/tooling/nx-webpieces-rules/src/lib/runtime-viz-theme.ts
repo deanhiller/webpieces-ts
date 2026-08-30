@@ -87,6 +87,16 @@ export const EXTERNAL_FILL = '#FAFAFA';
 export const EXTERNAL_BORDER = '#9E9E9E';
 
 /** Fill + border for the clock node standing for a scheduler-driven endpoint. */
+/** The colour of a `cutLegacyCycle` edge — red, because it is drawing DEBT, not a design. */
+export const CUT_CYCLE_COLOR = '#D32F2F';
+
+/**
+ * DOT attributes appended to a `cutLegacyCycle` edge: dashed and red so it reads as debt, and
+ * `constraint=false` so it does not pull on a ranking it was deliberately excluded from.
+ */
+export const CUT_CYCLE_EDGE_ATTRS =
+    `, style=dashed, color="${CUT_CYCLE_COLOR}", fontcolor="${CUT_CYCLE_COLOR}", constraint=false`;
+
 export const CRON_FILL = '#FFF9C4';
 export const CRON_BORDER = '#F9A825';
 

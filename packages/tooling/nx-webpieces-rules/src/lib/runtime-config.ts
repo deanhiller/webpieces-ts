@@ -8,7 +8,6 @@
  *     "mode": "ON",                          // "OFF" disables the whole feature
  *     "turnOffRuleUntilEpoch": 0,            // whole-rule punt (epoch seconds)
  *     "turnOffRuleWhileOnBranch": null,      // whole-rule punt while on a named branch
- *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ],
  *     "showExternalNodes": true,              // draw firestore/gmail/... as terminal nodes
  *     "externalApiPaths": ["libraries/apis/external/**"]  // where those vendor contracts live
  *   }
@@ -18,17 +17,10 @@ import { loadAndValidate, shouldSkipRule, SkipRuleResult } from '@webpieces/rule
 
 export const RUNTIME_RULE_NAME = 'runtime-architecture';
 
-export interface AllowedCycle {
-    services: string[];
-    reason?: string;
-    until?: number;
-}
-
 export interface RuntimeRuleConfig {
     off: boolean;
     turnOffRuleUntilEpoch?: number;
     turnOffRuleWhileOnBranch?: string;
-    allowedCycles: AllowedCycle[];
     /** Render the dashed external terminal nodes in the runtime viz (default true). */
     showExternalNodes: boolean;
     /**
@@ -46,13 +38,8 @@ export interface RuntimeRuleConfig {
 interface RuntimeRuleRaw {
     turnOffRuleUntilEpoch?: number;
     turnOffRuleWhileOnBranch?: string | null;
-    allowedCycles?: AllowedCycle[];
     showExternalNodes?: boolean;
     externalApiPaths?: string[];
-}
-
-function isUsableCycle(cycle: AllowedCycle): boolean {
-    return Array.isArray(cycle.services) && cycle.services.length > 0;
 }
 
 /** Load the runtime-architecture rule config (with safe defaults). */
@@ -68,7 +55,6 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
         // non-string (null) collapses to undefined, which shouldSkipRule treats as "no branch scoping".
         turnOffRuleWhileOnBranch:
             typeof raw.turnOffRuleWhileOnBranch === 'string' ? raw.turnOffRuleWhileOnBranch : undefined,
-        allowedCycles: Array.isArray(raw.allowedCycles) ? raw.allowedCycles.filter(isUsableCycle) : [],
         // Opt-OUT: the external systems are the ones that page you at 3am, so they are drawn unless
         // a repo explicitly says its external surface is too noisy to be useful.
         showExternalNodes: raw.showExternalNodes !== false,

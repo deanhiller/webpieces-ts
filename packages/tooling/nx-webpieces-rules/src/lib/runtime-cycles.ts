@@ -1,29 +1,24 @@
 /**
  * Runtime Cycles
  *
- * Enumerates ALL cycles in the runtime service graph using Tarjan's
- * strongly-connected-components algorithm. Runtime validation needs every cycle so each can be
- * checked against the per-cycle allowlist independently.
+ * Enumerates ALL cycles in a directed graph using Tarjan's strongly-connected-components algorithm.
+ * Every cycle rather than the first, so one run names everything a reader has to break.
  *
- * This is the ONE SCC implementation in the package: `ProjectCycleDetector` (lib/graph-cycles.ts)
- * calls it for the COMPILE-TIME project graph, where it likewise enumerates every cycle rather than
- * stopping at the first.
+ * This is the ONE SCC implementation in the package. `ProjectCycleDetector` (lib/graph-cycles.ts)
+ * calls it for BOTH graphs: the COMPILE-TIME project graph, and — through `assignLevels`
+ * (lib/runtime-graph-levels.ts) — the RUNTIME service graph.
  *
  * A cycle is any SCC with more than one node, or a single node with a self-edge.
- * Each cycle is keyed by its sorted, comma-joined node names so it can be
- * matched against an `allowedCycles` entry regardless of traversal order.
+ *
+ * There is no per-cycle allowlist any more. The `allowedCycles` config key that once keyed off a
+ * canonical sorted-name string is deleted: a cyclic architecture cannot be deployed in any order, so
+ * it fails outright, and the one escape is a per-EDGE `cutLegacyCycle:<targetService>` nx tag that
+ * keeps the edge out of the adjacency this ever sees.
  */
 
 export interface RuntimeCycle {
     /** Sorted service names participating in the cycle. */
     services: string[];
-    /** Canonical key: services sorted then joined with ",". */
-    key: string;
-}
-
-/** Canonical key for a set of service names (order-independent). */
-export function cycleKey(services: string[]): string {
-    return [...services].sort().join(',');
 }
 
 /**
@@ -78,7 +73,7 @@ export function findRuntimeCycles(graph: Record<string, string[]>): RuntimeCycle
         const isSelfLoop = component.length === 1 && (graph[component[0]] ?? []).includes(component[0]);
         if (isMultiNode || isSelfLoop) {
             const services = [...component].sort();
-            cycles.push({ services, key: cycleKey(services) });
+            cycles.push({ services });
         }
     }
     return cycles;

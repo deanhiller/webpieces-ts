@@ -66,7 +66,7 @@ export type {
     RuntimeTrigger,
     RuntimeUnresolved,
 } from './runtime-graph-model';
-import { adjacencyFromEdges, assignLevels } from './runtime-graph-levels';
+import { adjacencyFromEdges, applyCycleCuts, assignLevels } from './runtime-graph-levels';
 
 // Persistence lives in runtime-graph-io.ts; re-exported for the same reason as the model types.
 export {
@@ -188,6 +188,8 @@ class RuntimeGraphDeriver {
         const decls = this.collectDecls();
         const apis = this.buildApis(decls);
         const edgeResult = this.buildEdges(decls, apis);
+        // Cuts are stamped BEFORE buildServices, which is where leveling reads the edges.
+        this.problems.push(...applyCycleCuts(edgeResult.edges, this.projects, this.nodeByServiceName));
         const services = this.buildServices(decls, edgeResult.edges);
         const apisObj: Record<string, RuntimeApi> = {};
         for (const api of Array.from(apis.keys()).sort()) apisObj[api] = apis.get(api)!;
@@ -651,14 +653,9 @@ export function deriveRuntimeGraphReport(
     apiContracts: ApiContracts = {},
     externalSystems: ExternalSystemDecls = {},
 ): RuntimeGraphReport {
-    return new RuntimeGraphDeriver(
-        projects,
-        hiddenProjects,
-        apiContracts,
-        externalSystems,
-    ).assemble();
+    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts, externalSystems).assemble();
 }
 
-// Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model
-// types and the io helpers above are — one obvious place to import the runtime graph from.
+// Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model types
+// and the io helpers above are — one obvious place to import the runtime graph from.
 export { runtimeAdjacency } from './runtime-graph-levels';

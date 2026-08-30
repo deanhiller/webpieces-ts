@@ -237,6 +237,9 @@ function formatEntryLines(entry: GraphEntry): string[] {
     pushOptionalField(lines, 'serviceName', entry.serviceName);
     pushOptionalCallsServiceField(lines, entry.callsService);
     pushOptionalBooleanField(lines, 'drawOnGraph', entry.drawOnGraph);
+    // MUST be persisted: validate re-derives the runtime graph from this file, so a cut written only
+    // in-memory by generate would make generate and validate level (and cycle-check) different graphs.
+    pushOptionalArrayField(lines, 'cutLegacyCycle', entry.cutLegacyCycle);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);

@@ -52,6 +52,13 @@ export interface GraphEntry {
      * Absent means drawn (the default). From the project's `drawOnGraph:` nx tag.
      */
     drawOnGraph?: boolean;
+    /**
+     * Target service names whose RUNTIME edge from this project is cut out of leveling and cycle
+     * detection, from this project's `cutLegacyCycle:<target>` nx tags. Per EDGE, not per project.
+     * An admission of legacy debt, never an approved pattern — see cut-legacy-cycle-resolver.ts.
+     * Absent (the overwhelmingly normal case) means this project cuts nothing.
+     */
+    cutLegacyCycle?: string[];
     shortDescription?: string;
     responsibilitiesFile?: string;
     designFile?: string;
