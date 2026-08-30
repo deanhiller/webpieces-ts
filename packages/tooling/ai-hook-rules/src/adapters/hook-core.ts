@@ -53,6 +53,7 @@ function blockingRule(report: string, fallback: string): string {
     return names.length > 0 ? names.join(',') : fallback;
 }
 
+// webpieces-disable no-function-outside-class -- sibling of handleRead()/handleFileTool() in this module; the adapter is module-scope functions by design
 function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): void {
     const command = event.bash === null ? '' : event.bash.command;
     if (command.trim() === '') { emitAllow(); }
@@ -114,6 +115,7 @@ function handleRead(event: AgentHookEvent, filePath: string, cwd: string, mode: 
  * A Claude Code event always has exactly one entry, so the loop runs once and the behaviour is the
  * single-file behaviour it has always had.
  */
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleRead() in this module; the adapter is module-scope functions by design
 function handleFileTool(event: AgentHookEvent, cwd: string, mode: HookMode): void {
     if (event.files.length === 0) { emitAllow(); }
 

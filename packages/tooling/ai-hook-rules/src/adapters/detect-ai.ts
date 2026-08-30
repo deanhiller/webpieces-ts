@@ -37,7 +37,9 @@ export const AI_TYPE_SH = `case "$PAYLOAD" in *'${AI_TYPE_TOKEN_SH}'*) AI=codex 
  * the top-level envelope?
  */
 // webpieces-disable no-function-outside-class -- twin of an sh fragment in the dependency-free adapter layer; it must stay callable on a tree too broken to build a DI container, exactly like isAllowed()
+// webpieces-disable no-any-unknown -- the argument IS unparsed JSON from another process's stdout; naming a type here would assert a shape we have not yet established, which is the question this function exists to answer
 export function detectAiType(payload: unknown): AiType {
     if (payload === null || typeof payload !== 'object') return 'claude-code';
+    // webpieces-disable no-any-unknown -- narrowing the same unparsed JSON; the index signature is the widest true statement about it
     return 'turn_id' in (payload as Record<string, unknown>) ? 'codex' : 'claude-code';
 }

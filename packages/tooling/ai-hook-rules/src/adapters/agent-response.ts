@@ -46,6 +46,7 @@ const ESC = String.fromCharCode(0x1b);
  * The reset (`[0m`) still closes the sequence on the same line it opened, so nothing leaks into the
  * body or into whatever the terminal prints next.
  */
+// webpieces-disable no-function-outside-class -- private helper of the PreToolUse protocol boundary below; this module must stay callable from a tree too broken to build a DI container
 function redSystemMessage(reason: string): string {
     const nl = reason.indexOf('\n');
     if (nl < 0) return `${ESC}[31;1m🛑 ${reason}${ESC}[0m`;
@@ -58,6 +59,7 @@ function redSystemMessage(reason: string): string {
 // same `permissionDecision: "deny"` + `permissionDecisionReason` + `systemMessage` fields, and rejects
 // nothing we emit. It does hard-reject an EMPTY `permissionDecisionReason` where Claude tolerates one,
 // which is why emitDeny below refuses to send one.
+// webpieces-disable no-function-outside-class -- the PreToolUse wire shape itself, module-scope beside emitDeny/emitAllow by design, and it must stay callable from a tree too broken to build a DI container
 export function denyJson(event: AgentHookEvent | null, reason: string): string {
     // NEVER an empty reason, and the check lives HERE because this function owns the wire shape. Codex
     // hard-rejects a deny whose permissionDecisionReason is empty (Claude tolerates it and shows the
@@ -103,6 +105,7 @@ export function emitDeny(event: AgentHookEvent | null, reason: string, rule: str
 }
 
 // Allow the tool call. No JSON needed — a silent exit 0 is "allow" in the PreToolUse protocol.
+// webpieces-disable no-function-outside-class -- the PreToolUse protocol boundary, module-scope beside denyJson/emitDeny by design, and it must stay callable from a tree too broken to build a DI container
 export function emitAllow(): never {
     invocationLog.finish('ALLOW', '-');
     // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (silent exit 0 = "allow"); designated terminal boundary.
