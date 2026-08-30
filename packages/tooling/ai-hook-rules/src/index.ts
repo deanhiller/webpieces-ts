@@ -8,6 +8,12 @@ export {
     ResolvedConfig, ResolvedRuleConfig,
 } from './core/types';
 
+// The ONE normalized hook event every harness's payload is morphed into, and the discriminator that
+// decides which harness produced it. `AgentHookEvent` sits beside the types above because it is the
+// shape the adapters produce and the hook body consumes.
+export { AiType, AgentEventKind, AgentHookEvent, FileOperation } from './core/agent-event';
+export { AI_TYPE_SH, AI_TYPE_TOKEN_SH, detectAiType } from './adapters/detect-ai';
+
 // Structured fix guidance shown in blocked reports (violation + mainMessage + options + escape).
 // `Option` is NOT re-exported here — it has ONE home, `@webpieces/rules-config`, because
 // `RuleFailError` carries the same class. Import it from there.

@@ -481,7 +481,7 @@ describe('renderShim fallback — audit log', () => {
 
 // A Bash deny only shows the human a top-level systemMessage (permissionDecisionReason is invisible
 // there) and it honors ANSI, so the fallback wraps it red — Bash ONLY. Write/Edit render the reason
-// red natively, so they get no systemMessage. See claude-code-response.ts for the full matrix.
+// red natively, so they get no systemMessage. See agent-response.ts for the full matrix.
 describe('renderShim fallback — tool-conditional deny visibility', () => {
     const ESC = String.fromCharCode(0x1b);
 

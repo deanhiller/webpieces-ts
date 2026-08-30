@@ -6,10 +6,17 @@ import { FixHint } from './fix-hint';
 import { L0_FAULT_NONE } from './l0-fault-codes';
 
 // 'Read' is a first-class member because read-stale-guard is a file-scoped guard that runs on the
-// Read fast path. It is deliberately NOT in HANDLED_FILE_TOOLS (hook-core), so normalizeToolKind()
-// still returns null for it and Read never enters the edit/file rule pipeline — only the one guard
-// that asks for it. Nothing switches exhaustively on this union; it is carried for logging.
-export type ToolKind = 'Write' | 'Edit' | 'MultiEdit' | 'Read';
+// Read fast path. It is deliberately NOT in HANDLED_FILE_TOOLS (adapters/claude-code-adapter.ts), so
+// ClaudeCodeAdapter.kindOf() maps it to the 'Read' routing kind and Read never enters the edit/file
+// rule pipeline — only the one guard that asks for it. Nothing switches exhaustively on this union;
+// it is carried for logging.
+//
+// 'Delete' arrives ONLY from a Codex `apply_patch` carrying a `*** Delete File:` directive — no Claude
+// Code tool produces it. Every existing rule DEFAULTS TO NOT FIRING on it (see DeleteScopedRules in
+// ./delete-scoped-rules.ts): a rule written to judge the bytes an edit ADDS has nothing to say about a file going
+// away, and inventing a verdict for it would be guessing. Rules for which a delete IS meaningful — a
+// barrel export disappearing, a doc that documents a deleted file — opt in there, deliberately.
+export type ToolKind = 'Write' | 'Edit' | 'MultiEdit' | 'Read' | 'Delete';
 export type RuleScope = 'edit' | 'file' | 'bash';
 // Which category of built-in rules a hook invocation runs: code-style 'rules', git/PR/branch
 // 'guards' (the hookGuards section), or 'all' (both categories — used by the openclaw plugin adapter,

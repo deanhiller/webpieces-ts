@@ -3,6 +3,7 @@ import * as path from 'path';
 import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isWebpiecesStateDir, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
+import { DeleteScopedRules } from './delete-scoped-rules';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
 import { ExcludedPathEscapeHint } from './excluded-path-escape';
@@ -136,7 +137,7 @@ function runInternal(
     // repositories/**). Exclusion is all-or-nothing per category, so an excluded file drops the whole
     // rule set and is fully hands-off — no violations AND no config-sync nag on those files.
     const relativePath = path.relative(workspaceRoot, input.filePath);
-    const rules = filterByExcludedPaths(modeRules, relativePath, loaded.excludePaths);
+    const rules = new DeleteScopedRules().narrow(toolKind, filterByExcludedPaths(modeRules, relativePath, loaded.excludePaths));
     if (rules.length === 0) return null;
 
     // Config-sync applies only to built-in/custom rules; match-rules have their own validated section
