@@ -14,7 +14,7 @@
  *                 without ever serving it — only `addRoutes` proves a served route.
  *   - USES:       `factory.createRpcClient(XxxApi, ...)`    → rpc client
  *                 `factory.createPubSubClient(XxxApi, ...)` → pubsub (Cloud Tasks) client
- *                 The config argument (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`) names WHICH service the
+ *                 The config argument (`new ClientConfig('helper-fsdb')`) names WHICH service the
  *                 client talks to and is kept as `ApiRef.targetService` — see targetServiceOf.
  * An api-lib is DETECTED, not tagged: a project exporting an `abstract class`
  * carrying `@ApiPath` owns that API. Its transport is `@PubSub` → 'pubsub', else 'rpc'.
@@ -70,7 +70,6 @@ import {
     isAbstractClass,
     isTestFile,
     targetServiceOf,
-    runtimeHostOf,
     typeReferenceName,
 } from './api-ast';
 
@@ -410,15 +409,6 @@ export class ApiUsageScanner {
             const targetService = targetServiceOf(call);
             const ref: ApiRef = { api: info.api, type: info.type };
             if (targetService !== null) ref.targetService = targetService;
-            // …unless the config names a RUNTIME host policy, in which case argument 2 is not a
-            // service at all: the destination is data that arrives per call, and the svcName is the
-            // identity of the external node this hop should be drawn to. Recorded INSTEAD of
-            // targetService — a runtime host is not a module and would fail to resolve to one.
-            const runtimeHost = runtimeHostOf(call);
-            if (runtimeHost !== null) {
-                delete ref.targetService;
-                ref.runtimeHost = runtimeHost;
-            }
             acc.addUses(info.owner, ref);
         }
     }

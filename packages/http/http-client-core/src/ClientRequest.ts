@@ -34,6 +34,21 @@ export class ClientRequest {
     private currentUrl: string;
 
     /**
+     * FALSE while this request still points where the client's own configuration put it; TRUE the
+     * moment anything moved it — {@link pointAtBaseUrl} or {@link followRedirectTo}.
+     *
+     * This flag is what makes the SSRF guard automatic AND free. A URL that came out of
+     * `ClientRegistry` is an address WE chose, so judging it would mean resolving DNS on every
+     * internal RPC in order to re-derive a fact we already know. A URL a filter substituted is not:
+     * it arrived from outside the call — a partner-editable row, an OAuth callback, a `Location`
+     * header — and that is precisely the input an SSRF policy exists to judge.
+     *
+     * So the trigger is the ACT of re-pointing rather than a per-client setting, which means no app
+     * can forget to switch the guard on and none can switch it off by omitting an argument.
+     */
+    private rePointed = false;
+
+    /**
      * Whether the transport may follow a 3xx itself. The SSRF guard sets this FALSE so it can read
      * the `Location`, judge it under the same policy as the original URL, and only then re-invoke
      * the chain — a partner URL that 302s must not be able to bounce our POST at an internal
@@ -74,24 +89,41 @@ export class ClientRequest {
     }
 
     /**
-     * Re-point this ONE call at another host, keeping this route's path. The base-URL override
-     * filter calls this with the URL a partner registered; nothing here is remembered by the
-     * client, so the next call through the same client starts from its configured host again.
+     * TRUE once anything has moved this request off the address the client resolved for itself —
+     * i.e. once the destination is DATA rather than a peer we named. See {@link rePointed}.
+     */
+    get destinationCameFromData(): boolean {
+        return this.rePointed;
+    }
+
+    /**
+     * Re-point this ONE call at another host, keeping this route's path. `ContextBaseUrlFilter`
+     * calls this with the URL a partner registered; nothing here is remembered by the client, so
+     * the next call through the same client starts from its configured host again.
+     *
+     * It also flips {@link destinationCameFromData}, which is what arms the SSRF guard sitting
+     * below every app filter. That coupling is deliberate and lives HERE rather than in the guard:
+     * a filter cannot move the request without saying so, because moving it is only possible
+     * through this method.
      */
     pointAtBaseUrl(baseUrl: string): void {
         this.currentBaseUrl = baseUrl;
         this.currentUrl = `${baseUrl}${this.route.path}`;
+        this.rePointed = true;
     }
 
     /**
      * Follow a redirect to an ABSOLUTE url. The base URL becomes that url's origin, so a policy
-     * that judges hosts judges the host we are actually about to talk to.
+     * that judges hosts judges the host we are actually about to talk to. Flips
+     * {@link destinationCameFromData} for the same reason {@link pointAtBaseUrl} does: a `Location`
+     * header is the far end's data, not an address we chose.
      *
      * @throws TypeError if `absoluteUrl` is not a parseable absolute URL.
      */
     followRedirectTo(absoluteUrl: string): void {
         this.currentBaseUrl = new URL(absoluteUrl).origin;
         this.currentUrl = absoluteUrl;
+        this.rePointed = true;
     }
 
     /** The headers in the shape the transport wants. */

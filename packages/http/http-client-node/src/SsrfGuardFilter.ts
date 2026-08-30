@@ -13,6 +13,17 @@ import { SsrfRefusedError } from './SsrfRefusedError';
  * consumer was reinventing this, badly or not at all, and the one that did it best still only
  * managed `maxRedirects: 0` by hand.
  *
+ * ## Installed on EVERY client; it costs nothing until a filter moves the request
+ *
+ * It sits beneath every app filter of every client this package builds, and the first thing it does
+ * is ask `request.destinationCameFromData`. FALSE — the URL is what `ClientRegistry` resolved, an
+ * address we chose — and it steps aside without parsing a URL or resolving a name, so an ordinary
+ * service-to-service RPC runs exactly the code path it ran before this class existed. TRUE only
+ * once something re-pointed the request, which is the one input a partner controls.
+ *
+ * That is why there is no per-client switch: an app cannot forget to turn the guard on for a client
+ * that takes runtime URLs, and cannot turn it off for one — the ACT of re-pointing is the trigger.
+ *
  * ## What it enforces, per hop
  *
  * 1. the URL parses and its scheme is allowed (https only, by default);
@@ -43,6 +54,12 @@ export class SsrfGuardFilter extends Filter<ClientRequest, Response> {
     }
 
     override async filter(request: ClientRequest, nextFilter: Service<ClientRequest, Response>): Promise<Response> {
+        // The destination is still the one this client resolved for itself, so there is nothing
+        // attacker-influenced to judge. Step aside entirely — no parse, no DNS, no redirect
+        // interception — so the deployed-service path is byte-identical to having no guard at all.
+        if (!request.destinationCameFromData) {
+            return nextFilter.invoke(request);
+        }
         await this.assertAllowed(request.url);
 
         // The transport must not follow a redirect on its own — that would be a hop this policy
@@ -102,10 +119,12 @@ export class SsrfGuardFilter extends Filter<ClientRequest, Response> {
             `Refusing to send to ${url}: ${because}. A destination supplied at runtime is attacker-influenced ` +
                 `data, so loopback, RFC1918, link-local and cloud-metadata addresses are refused — reaching ` +
                 `169.254.169.254 would hand this process's own service-account tokens to whoever registered ` +
-                `the URL. If this client genuinely must reach an internal host (a local emulator, an ` +
-                `on-cluster service), say so at the construction site with ` +
-                `new RuntimeHostFromContextAllowingInternalAddresses('<why>', new DnsAddressResolver()) ` +
-                `instead of new RuntimeHostFromContext(new DnsAddressResolver()).`,
+                `the URL. To reach one of OUR OWN services at a local port, register it — ` +
+                `ClientRegistry.addUrlMapping('svc', 'http://localhost:8202') — and a registry-resolved ` +
+                `URL is never judged here at all. If this client genuinely must dial an internal address ` +
+                `from RUNTIME data (exercising the partner path against a local fake), say so at the ` +
+                `construction site with ` +
+                `new ContextBaseUrlFilter(SsrfPolicy.forTesting('<why>')).`,
             url,
         );
     }

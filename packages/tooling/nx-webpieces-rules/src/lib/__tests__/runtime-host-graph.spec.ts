@@ -3,71 +3,66 @@
  *
  * The failure this closes: a service whose job is to POST our published contract to a URL a PARTNER
  * registered had nothing for the scanner to read, so the most security-sensitive hop in the system —
- * us POSTing to a stranger's server — appeared nowhere at all. Now the client declares its host
- * policy at construction, the scanner reads it, and the destination is drawn as an external node of
- * kind `runtime`.
+ * us POSTing to a stranger's server — appeared nowhere at all.
  *
- * Two levels, because they fail independently: the AST reader that recognises the declaration, and
- * the deriver/visualizer that turn it into a node and an edge.
+ * It is declared where every other outbound vendor seam is declared: an `@externalSystem` JSDoc tag
+ * on the CONTRACT, with kind `runtime`. On the contract rather than at the `createRpcClient` call
+ * site, because "the far end of this contract is outside our estate" is true for every caller of it
+ * — one declaration however many services deliver over it — and because it then rides the exact same
+ * declare → resolve → draw pipeline `saas` and `database` already ride, instead of a second
+ * mechanism reading construction sites that can disagree with the first.
+ *
+ * Two levels, because they fail independently: the AST reader that recognises the tag, and the
+ * deriver/visualizer that turn it into a node and an edge.
  */
 
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { runtimeHostOf, targetServiceOf, calleeMethodName } from '../api-usage/api-ast';
-import { deriveRuntimeGraph } from '../runtime-graph';
+import { externalSystemTagFrom } from '../api-usage/api-ast';
+import { deriveRuntimeGraphReport } from '../runtime-graph';
 import type { EnhancedGraph } from '../graph-sorter';
+import type { ExternalSystemDecls } from '../api-usage/api-relations';
 import { generateRuntimeDot } from '../runtime-visualizer';
 
-/** The first CallExpression in `source`, which every case below writes as a single statement. */
-function firstCall(source: string): ts.CallExpression {
+/** The first class/interface declaration in `source`, so a JSDoc tag can be read off it. */
+function firstDeclaration(source: string): ts.Node {
     const file = ts.createSourceFile('t.ts', source, ts.ScriptTarget.Latest, true);
-    let found: ts.CallExpression | undefined;
+    let found: ts.Node | undefined;
     const visit = (node: ts.Node): void => {
-        if (found === undefined && ts.isCallExpression(node) && calleeMethodName(node) === 'createRpcClient') {
+        if (found === undefined && (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node))) {
             found = node;
         }
         ts.forEachChild(node, visit);
     };
     ts.forEachChild(file, visit);
     if (found === undefined) {
-        throw new Error('no createRpcClient call in the test source');
+        throw new Error('no class or interface in the test source');
     }
     return found;
 }
 
-describe('runtimeHostOf', () => {
-    it('reads the svcName as the identity when the config names a runtime host policy', () => {
-        const call = firstCall(
-            `f.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', new RuntimeHostFromContext(r)));`,
+describe('the @externalSystem runtime tag', () => {
+    it('reads kind and identity off the contract', () => {
+        const node = firstDeclaration(
+            `/** @externalSystem runtime partner-webhooks */\nexport abstract class PartnerWebhookApi {}`,
         );
-        expect(runtimeHostOf(call)).toBe('partner-webhooks');
+        expect(externalSystemTagFrom(node, 'PartnerWebhookApi')).toEqual({
+            kind: 'runtime',
+            label: 'partner-webhooks',
+        });
     });
 
-    it('reads the LONGER permissive policy name too — it is the same stem on purpose', () => {
-        const call = firstCall(
-            `f.createRpcClient(A, new ClientConfig('local-emulator', new RuntimeHostFromContextAllowingInternalAddresses('why', r)));`,
-        );
-        expect(runtimeHostOf(call)).toBe('local-emulator');
-    });
-
-    it('is null for a deployed-service client, which still reads as a targetService', () => {
-        const call = firstCall(`f.createRpcClient(Server2Api, new ClientConfig('server2', new DeployedServiceHost()));`);
-        expect(runtimeHostOf(call)).toBeNull();
-        expect(targetServiceOf(call)).toBe('server2');
-    });
-
-    it('is null when the policy is a variable rather than a named class', () => {
-        const call = firstCall(`f.createRpcClient(A, new ClientConfig('svc', policy));`);
-        expect(runtimeHostOf(call)).toBeNull();
+    it('is null on a contract that declares nothing — an ordinary in-repo peer', () => {
+        const node = firstDeclaration(`export abstract class Server2Api {}`);
+        expect(externalSystemTagFrom(node, 'Server2Api')).toBeNull();
     });
 });
 
 /**
- * `sender` calls a contract nobody in this repo implements, with a RUNTIME host. Before this change
- * that combination produced an `unresolvedUses` entry and a generic grey box; the point of the
- * feature is that it now names the hop.
+ * `sender` delivers over a contract nobody in this repo implements, declared `runtime`. Before the
+ * feature that combination produced only a generic grey box; the point is that it now NAMES the hop.
  */
-function graphWithRuntimeHost(): EnhancedGraph {
+function graphWithSender(): EnhancedGraph {
     return {
         'partner-api': { level: 0, dependsOn: [], role: 'api-lib', framework: ['node'] },
         sender: {
@@ -79,15 +74,27 @@ function graphWithRuntimeHost(): EnhancedGraph {
                 'partner-api': {
                     kind: 'uses',
                     implements: [],
-                    uses: [{ api: 'PartnerWebhookApi', type: 'rpc', runtimeHost: 'partner-webhooks' }],
+                    uses: [{ api: 'PartnerWebhookApi', type: 'rpc' }],
                 },
             },
         },
     };
 }
 
+/** What the scanner writes into dependencies.json for that `@externalSystem runtime` tag. */
+function runtimeDecls(): ExternalSystemDecls {
+    return {
+        'partner-webhooks': {
+            kind: 'runtime',
+            label: 'partner-webhooks',
+            apis: ['PartnerWebhookApi'],
+            projects: [],
+        },
+    };
+}
+
 describe('the derived runtime graph', () => {
-    const derived = deriveRuntimeGraph(graphWithRuntimeHost());
+    const derived = deriveRuntimeGraphReport(graphWithSender(), new Set<string>(), {}, runtimeDecls()).graph;
 
     it('draws the destination as an external system of kind runtime', () => {
         expect(derived.externalSystems?.['partner-webhooks']).toEqual({
@@ -96,10 +103,6 @@ describe('the derived runtime graph', () => {
             usedBy: ['sender'],
             apis: ['PartnerWebhookApi'],
         });
-    });
-
-    it('does NOT report it as an unresolved use — it is an answer, not a gap', () => {
-        expect(derived.unresolvedUses).toEqual([]);
     });
 
     it('stamps the contract, so the visualizer stops drawing the generic grey box for it', () => {
@@ -122,11 +125,27 @@ describe('the derived runtime graph', () => {
         const dot = generateRuntimeDot(derived);
         expect(dot).toContain('doubleoctagon');
     });
+
+    it('draws the hop ONCE — the unresolved entry is stamped, so no second grey box appears', () => {
+        // The `uses` still lands in unresolvedUses, exactly as every other @externalSystem contract's
+        // does: nothing in-repo implements it, which is the literal truth the field records. What
+        // stops it being DRAWN twice is the stamp above — the visualizer skips an unresolved entry
+        // whose contract carries an externalSystem. Keeping that one rule, rather than a second
+        // suppression path just for `runtime`, is the whole point of routing this through the
+        // existing declaration pipeline.
+        expect(derived.unresolvedUses).toEqual([{ service: 'sender', api: 'PartnerWebhookApi' }]);
+        const dot = generateRuntimeDot(derived);
+        // Node DEFINITIONS only — a line that starts with the id (an edge line starts with its source).
+        const definitions = dot
+            .split('\n')
+            .filter((line: string) => line.trim().startsWith('"system__partner_webhooks" ['));
+        expect(definitions).toHaveLength(1);
+    });
 });
 
 describe('two senders naming ONE runtime identity', () => {
-    it('converge on one node with an arrow each, exactly as two @externalSystem contracts do', () => {
-        const graph = graphWithRuntimeHost();
+    it('converge on one node with an arrow each, exactly as two @externalSystem saas contracts do', () => {
+        const graph = graphWithSender();
         graph['other-sender'] = {
             level: 1,
             dependsOn: ['partner-api'],
@@ -136,38 +155,21 @@ describe('two senders naming ONE runtime identity', () => {
                 'partner-api': {
                     kind: 'uses',
                     implements: [],
-                    uses: [{ api: 'PartnerWebhookApi', type: 'rpc', runtimeHost: 'partner-webhooks' }],
+                    uses: [{ api: 'PartnerWebhookApi', type: 'rpc' }],
                 },
             },
         };
 
-        const derived = deriveRuntimeGraph(graph);
+        const derived = deriveRuntimeGraphReport(graph, new Set<string>(), {}, runtimeDecls()).graph;
 
         expect(Object.keys(derived.externalSystems ?? {})).toEqual(['partner-webhooks']);
         expect(derived.externalSystems?.['partner-webhooks'].usedBy).toEqual(['other-sender', 'sender']);
     });
 });
 
-describe('a graph with no runtime hosts', () => {
+describe('a graph with nothing declared', () => {
     it('is left byte-identical — no empty externalSystems key is written', () => {
-        const plain: EnhancedGraph = {
-            'partner-api': { level: 0, dependsOn: [], role: 'api-lib', framework: ['node'] },
-            sender: {
-                level: 1,
-                dependsOn: ['partner-api'],
-                role: 'server',
-                framework: ['node'],
-                apiRelations: {
-                    'partner-api': {
-                        kind: 'uses',
-                        implements: [],
-                        uses: [{ api: 'PartnerWebhookApi', type: 'rpc' }],
-                    },
-                },
-            },
-        };
-
-        const derived = deriveRuntimeGraph(plain);
+        const derived = deriveRuntimeGraphReport(graphWithSender()).graph;
 
         expect(derived.externalSystems).toBeUndefined();
         expect(derived.unresolvedUses).toEqual([{ service: 'sender', api: 'PartnerWebhookApi' }]);

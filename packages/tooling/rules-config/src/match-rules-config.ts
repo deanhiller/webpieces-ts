@@ -188,7 +188,7 @@ export const DEFAULT_MATCH_RULES: readonly MatchRuleConfig[] = [
         'NEW_AND_MODIFIED_CODE',
         0,
         [
-            "PREFERRED: generate a client from the API you want to call — import { ClientHttpFactory, ClientConfig, DeployedServiceHost } from '@webpieces/http-client-node'; const client = factory.createRpcClient(SomeApi, new ClientConfig('some-svc', new DeployedServiceHost()), []); await client.someMethod(req);",
+            "PREFERRED: generate a client from the API you want to call — import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node'; const client = factory.createRpcClient(SomeApi, new ClientConfig('some-svc')); await client.someMethod(req);",
             'Reuse an existing API contract already defined in your repo (under libraries/apis/**) and generate its client the same way.',
             'For a truly external service, create a NEW API contract (a decorated abstract class) AND a NEW implementation that calls fetch behind that contract, under an allowlisted dir (libraries/apis-external/**). The contract stays the shared surface; fetch is an impl detail.',
         ],

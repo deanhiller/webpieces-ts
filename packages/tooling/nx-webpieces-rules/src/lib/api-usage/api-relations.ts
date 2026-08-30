@@ -44,7 +44,15 @@ export const EXTERNAL_SYSTEM_KINDS = [
      * A destination whose ADDRESS is supplied at runtime — a URL a partner registered, an OAuth
      * callback, a per-tenant host. Unlike every other kind it does not name one vendor: it names the
      * PLACE in our own system where somebody else's address is dialled, which is the fact a security
-     * review is looking for. See `ApiRef.runtimeHost`.
+     * review is looking for.
+     *
+     * Declared like every other kind, on the CONTRACT: `@externalSystem runtime partner-webhooks`.
+     * On the contract rather than at a `createRpcClient` call site deliberately — "the far end of
+     * this contract is outside our estate" is a property of the CONTRACT, true for every caller of
+     * it, so putting it there means one declaration however many services deliver over it, and
+     * nothing to keep in step when a second one appears. It also means this kind rides the exact
+     * same declare → resolve → draw pipeline `saas` and `database` already ride, rather than a
+     * second mechanism that reads construction sites and can disagree with the first.
      */
     'runtime',
 ] as const;
@@ -93,7 +101,7 @@ export interface ApiRef {
     type: ApiTransport;
     /**
      * ONLY on a `uses` ref: the service the call site aims at, read from the client config literal
-     * (`createRpcClient(XxxApi, new ClientConfig('helper-fsdb', new DeployedServiceHost()))` → `helper-fsdb`). It is matched
+     * (`createRpcClient(XxxApi, new ClientConfig('helper-fsdb'))` → `helper-fsdb`). It is matched
      * against a project's DECLARED `serviceName` to pick the ONE runtime edge target, instead of
      * fanning the edge out to every implementer of the api — which is catastrophically wrong for a
      * company-wide contract registered in a shared library and therefore implemented by every server.
@@ -114,22 +122,6 @@ export interface ApiRef {
      * the difference keeps a producer-side queue from being read as proof that queue is used.
      */
     methodsInferred?: boolean;
-    /**
-     * ONLY on a `uses` ref: this client's destination is not a service at all — its base URL arrives
-     * per call, from data (`new ClientConfig('partner-webhooks', new RuntimeHostFromContext(...))`).
-     * The value is the client's `svcName`, which under a runtime host policy is not resolved to
-     * anything and exists precisely to be this IDENTITY.
-     *
-     * It is the answer to a question the graph could not previously ask. A runtime destination is
-     * neither an in-repo implementer (so fanning the edge out to every implementer is fiction) nor a
-     * missing one (so `unresolvedUses` understates it as a gap). Both readings LOSE the hop, and it
-     * is the most security-sensitive hop there is — us POSTing to a stranger's server. Recorded here
-     * it becomes an `external` node of kind `runtime`, drawn honestly.
-     *
-     * Mutually exclusive with {@link targetService} by construction: the same second argument cannot
-     * name a deployed service and a runtime host policy at once.
-     */
-    runtimeHost?: string;
 }
 
 /**
@@ -138,7 +130,7 @@ export interface ApiRef {
  */
 // webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs
 export function apiRefKey(ref: ApiRef): string {
-    return `${ref.api} ${ref.targetService ?? ''} ${ref.runtimeHost ?? ''}`;
+    return `${ref.api} ${ref.targetService ?? ''}`;
 }
 
 /**

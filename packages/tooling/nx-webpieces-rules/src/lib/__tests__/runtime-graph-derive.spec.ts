@@ -171,7 +171,7 @@ describe('drawOnGraph:false hides a service from the runtime render but keeps it
  * an edge to every server in the repo — including a browser bundle to another product's data
  * server, and a false helper-svr <-> lang cycle that failed the build.
  *
- * Each call site names its target (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`), captured as
+ * Each call site names its target (`new ClientConfig('helper-fsdb')`), captured as
  * `ApiRef.targetService` and matched against the DECLARED `serviceName`. Note the naming spaces do
  * not line up: helper-svr is called 'helper-portal'; no suffix rule could derive that.
  */

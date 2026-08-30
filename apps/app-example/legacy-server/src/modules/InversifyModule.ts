@@ -4,7 +4,7 @@ import { Server2Api, TYPES } from '../remote/Server2Client';
 import { ContextKey, AnyContextKey, Secrets, SECRETS } from '@webpieces/core-util';
 import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
-import { ClientHttpFactory, ClientConfig, DeployedServiceHost } from '@webpieces/http-client-node';
+import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
 
 /**
  * App-specific headers for the legacy server (third tier of the three-tier header
@@ -49,7 +49,7 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // (server.ts). Tests rebind this token to the in-process simulator.
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
-            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2', new DeployedServiceHost()), []);
+            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2'));
         })
         .inSingletonScope();
 });
