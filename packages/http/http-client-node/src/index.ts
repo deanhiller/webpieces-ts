@@ -38,8 +38,8 @@ export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 export { WebhookSignerCallback, SignableRequest, WEBHOOK_SIGNER_CALLBACK } from './WebhookSignerCallback';
 
 // The SSRF policy a re-pointed URL is judged under, and the refusal it produces. Automatic, armed by
-// the ACT of re-pointing; the ONLY way to relax it is naming SsrfPolicy.forTesting('<why>').
-export { SsrfPolicy } from './SsrfPolicy';
+// the ACT of re-pointing; the ONLY way to relax it is naming SsrfTestingPolicy at a call site.
+export { SsrfPolicy, SsrfTestingPolicy } from './SsrfPolicy';
 export { SsrfGuardFilter } from './SsrfGuardFilter';
 export { SsrfRefusedError } from './SsrfRefusedError';
 export { OutboundAuthFilter } from './OutboundAuthFilter';

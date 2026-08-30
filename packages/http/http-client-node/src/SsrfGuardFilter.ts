@@ -124,7 +124,7 @@ export class SsrfGuardFilter extends Filter<ClientRequest, Response> {
                 `URL is never judged here at all. If this client genuinely must dial an internal address ` +
                 `from RUNTIME data (exercising the partner path against a local fake), say so at the ` +
                 `construction site with ` +
-                `new ContextBaseUrlFilter(SsrfPolicy.forTesting('<why>')).`,
+                `new ContextBaseUrlFilter(new SsrfTestingPolicy('<why>')).`,
             url,
         );
     }

@@ -58,7 +58,7 @@ import { SsrfPolicy } from './SsrfPolicy';
  * `destinationCameFromData`, and the framework's own guard sits beneath every app filter and reads
  * that. So this filter cannot forget to bring the guard along, and an app cannot install this one
  * without it. The only thing this class carries is WHICH policy the guard applies, and only
- * because the single legitimate relaxation ({@link SsrfPolicy.forTesting}) belongs at the same
+ * because the single legitimate relaxation ({@link SsrfTestingPolicy}) belongs at the same
  * construction site as the decision to be re-pointable at all.
  */
 export class ContextBaseUrlFilter extends Filter<ClientRequest, Response> {
@@ -68,9 +68,9 @@ export class ContextBaseUrlFilter extends Filter<ClientRequest, Response> {
          *
          * Defaulted to {@link SsrfPolicy.strict}, and that default is the SAFE branch, so the
          * omitted argument can never be the permissive one — the widening has to be typed out, with
-         * a reason, as `new ContextBaseUrlFilter(SsrfPolicy.forTesting('<why>'))`.
+         * a reason, as `new ContextBaseUrlFilter(new SsrfTestingPolicy('<why>'))`.
          */
-        readonly ssrfPolicy: SsrfPolicy = SsrfPolicy.strict(),
+        readonly ssrfPolicy: SsrfPolicy = new SsrfPolicy(),
     ) {
         super();
     }

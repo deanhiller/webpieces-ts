@@ -103,7 +103,7 @@ for (const webhook of webhooks) {
   from the transport and re-judged hop by hop, so a partner URL that 302s at `169.254.169.254` is
   refused rather than obeyed. The one relaxation — testing the partner path against a local fake —
   has to be said out loud, with a reason:
-  `new ContextBaseUrlFilter(SsrfPolicy.forTesting('local fake in the delivery e2e'))`.
+  `new ContextBaseUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
 - **Every auth mode still works.** `@AuthOidc` mints for the FINAL base URL, `@AuthSharedSecret`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
   a real topology), and `@AuthWebhook(name)` calls your bound `WebhookSignerCallback`. The minter runs

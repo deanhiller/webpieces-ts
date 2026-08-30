@@ -107,7 +107,7 @@ export class NodeProxyClient extends ProxyClient {
      *
      * Read off an installed {@link ContextBaseUrlFilter}, because that filter is where an app says
      * "this client may be re-pointed", and the single legitimate relaxation
-     * ({@link SsrfPolicy.forTesting}) belongs at the same construction site as that decision rather
+     * ({@link SsrfTestingPolicy}) belongs at the same construction site as that decision rather
      * than in a second place a reader has to correlate. No such filter — or one built with the
      * default — means {@link SsrfPolicy.strict}, so the safe answer is what an app gets by saying
      * nothing.
@@ -117,7 +117,7 @@ export class NodeProxyClient extends ProxyClient {
             const filter = definition.filter;
             if (filter instanceof ContextBaseUrlFilter) return filter.ssrfPolicy;
         }
-        return SsrfPolicy.strict();
+        return new SsrfPolicy();
     }
 
     /**

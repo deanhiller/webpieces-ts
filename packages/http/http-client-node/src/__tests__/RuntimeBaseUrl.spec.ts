@@ -27,7 +27,7 @@ import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
 import { ContextBaseUrlFilter } from '../ContextBaseUrlFilter';
 import { NodeProxyClient } from '../NodeProxyClient';
-import { SsrfPolicy } from '../SsrfPolicy';
+import { SsrfTestingPolicy } from '../SsrfPolicy';
 import { SsrfRefusedError } from '../SsrfRefusedError';
 import { MissingRuntimeBaseUrlError } from '../MissingRuntimeBaseUrlError';
 import { SignableRequest, WebhookSignerCallback } from '../WebhookSignerCallback';
@@ -394,14 +394,14 @@ describe('the SSRF policy, armed by the ACT of re-pointing', () => {
     it('names the ONE opt-out in its refusal, so a reader does not have to go looking', async () => {
         await expect(
             withOverride('https://127.0.0.1', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/SsrfPolicy\.forTesting/);
+        ).rejects.toThrow(/SsrfTestingPolicy/);
     });
 
     it('the named opt-out reaches an internal address, and only when named', async () => {
         const local = client(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
             new ClientFilterDefinition(
                 1000,
-                new ContextBaseUrlFilter(SsrfPolicy.forTesting('exercising the partner path against a local fake')),
+                new ContextBaseUrlFilter(new SsrfTestingPolicy('exercising the partner path against a local fake')),
             ),
         ]);
 
