@@ -1,21 +1,25 @@
 /**
- * COMPILE-TIME assertions pinning `createRpcClient`'s filters argument to ONE spelling per decision.
+ * COMPILE-TIME assertions that `createRpcClient`'s filters argument is GENUINELY optional.
  *
- * A CLASS is one shape and cannot express "absent, or at least one" — so the argument is a NON-EMPTY
- * tuple, and the empty array that used to mean the same thing as omitting it is a COMPILE error. See
- * `.claude/review/backwards-compatibility.md` shim shape #1: the fix for two spellings is to make the
- * type unsatisfiable in the bad case, not to document a preference.
+ * The argument is `readonly ClientFilterDefinition[] | undefined`, so all three ways an app says
+ * "here are this client's filters" compile: omit it, pass `[]`, or pass a mutable
+ * `ClientFilterDefinition[]` that was declared empty and pushed to under `if`s. That last one is the
+ * whole reason this file exists — it is how a real app builds a filter list once the list is not a
+ * hardcoded literal, and a non-empty tuple parameter rejects it, because the declared type of a
+ * conditionally-populated local cannot be non-empty. The cure would be a cast at every call site,
+ * which is worse than the case the tuple was protecting against.
  *
  * WHY THIS FILE AND NOT A SPEC. `tsconfig.lib.json` EXCLUDES `*.spec.ts`, and vitest strips types
- * with esbuild rather than checking them — so a `@ts-expect-error` in a spec is inert and the suite
- * passes whether or not the bad case still compiles. Here it is compiled by the build: if any line
- * below ever starts compiling, tsc fails with TS2578 ("Unused '@ts-expect-error' directive"). That
- * failure IS the test. Mirrors `core-util/src/http/AuthJwtCompileAssertions.ts`.
+ * with esbuild rather than checking them — so a type-level assertion in a spec is inert and the
+ * suite passes whether or not the signature still admits these calls. Here it is compiled by the
+ * build: if the signature is ever re-narrowed, tsc fails on the line below that stops compiling.
+ * That failure IS the test. Mirrors `core-util/src/http/AuthJwtCompileAssertions.ts`.
  *
  * Nothing here runs. The class is never constructed and never exported from the barrel.
  */
 
-import { ClientFilterDefinition } from '@webpieces/http-client-core';
+import { Filter, Service } from '@webpieces/core-util';
+import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpFactory } from './ClientHttpFactory';
 import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
@@ -23,21 +27,35 @@ import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
 /** Stand-in for a real contract; only its TYPE is used, and only by tsc. */
 declare const someApi: Parameters<ClientHttpFactory['createRpcClient']>[0];
 declare const factory: ClientHttpFactory;
+declare const perTenant: boolean;
+declare const verbose: boolean;
+
+/** A second app filter, so the conditional-build case below has two branches like a real one. */
+class OutboundLogFilter extends Filter<ClientRequest, Response> {
+    override filter(request: ClientRequest, next: Service<ClientRequest, Response>): Promise<Response> {
+        return next.invoke(request);
+    }
+}
 
 class CreateRpcClientCompileAssertions {
-    /** ✅ No app filters — the ONE spelling for it is omitting the argument. */
+    /** No app filters, said by omitting the argument. */
     noFilters(): void {
         factory.createRpcClient(someApi, new ClientConfig('server2'));
     }
 
-    /** ✅ One app filter. */
+    /** No app filters, said with an empty array — the same thing, normalized to the same value. */
+    emptyArray(): void {
+        factory.createRpcClient(someApi, new ClientConfig('server2'), []);
+    }
+
+    /** One app filter. */
     oneFilter(): void {
         factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
         ]);
     }
 
-    /** ✅ Several app filters. */
+    /** Several app filters. */
     severalFilters(): void {
         factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
@@ -46,12 +64,15 @@ class CreateRpcClientCompileAssertions {
     }
 
     /**
-     * ❌ `[]` is a SECOND way to say what omitting the argument already says. Deleting it by type is
-     * what keeps "this client has no app filters" to one spelling.
+     * THE CASE THIS CHANGE EXISTS FOR: a MUTABLE `ClientFilterDefinition[]`, declared empty and
+     * pushed to conditionally. Its declared type is not, and cannot be, non-empty; a mutable array
+     * is assignable to the `readonly` parameter, so this compiles with no cast.
      */
-    emptyArrayDoesNotCompile(): void {
-        // @ts-expect-error - pass no third argument instead; [] is a second spelling of that
-        factory.createRpcClient(someApi, new ClientConfig('server2'), []);
+    conditionallyBuiltList(): void {
+        const filters: ClientFilterDefinition[] = [];
+        if (perTenant) filters.push(new ClientFilterDefinition(1000, new ContextBaseUrlFilter()));
+        if (verbose) filters.push(new ClientFilterDefinition(500, new OutboundLogFilter()));
+        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), filters);
     }
 }
 

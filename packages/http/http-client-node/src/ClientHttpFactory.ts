@@ -1,9 +1,8 @@
 import { inject } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
-import type { ApiPrototype } from '@webpieces/http-client-core';
+import type { ApiPrototype, ClientFilterDefinition } from '@webpieces/http-client-core';
 import { buildClientProxy } from '@webpieces/http-client-core';
-import type { ClientFilters } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient } from './NodeProxyClient';
 
@@ -75,17 +74,19 @@ export class ClientHttpFactory {
      *        guard and credential minter are installed on every client regardless, BENEATH anything
      *        passed here, so there is nothing an app can decline by writing nothing.
      *
-     *        ONE SPELLING PER DECISION. It is a NON-EMPTY tuple, so `createRpcClient(Api, cfg, [])`
-     *        does not compile: "this client has no app filters" is said by omitting the argument, and
-     *        `[]` would be a second way to say the identical thing. That is the same device
-     *        {@link JwtRoles}'s `roles` uses, for the same reason — the bad case is deleted by the
-     *        TYPE rather than left available and discouraged in a docstring. Pinned in
+     *        A PLAIN OPTIONAL ARRAY, deliberately. Omitting it, passing `[]`, and passing a list you
+     *        built up conditionally all mean the same thing and all compile — because the normal way
+     *        an app arrives at a filter list is to declare a `ClientFilterDefinition[]` and push to
+     *        it under `if`s, and the declared type of such a local can never be non-empty. A
+     *        non-empty tuple here would reject that ordinary code and force a cast at the call site.
+     *        `filters === undefined ? [] : [...filters]` below normalizes the two empty spellings to
+     *        one value before anything downstream sees them. Pinned in
      *        {@link CreateRpcClientCompileAssertions}.
      */
     createRpcClient<T extends object>(
         apiPrototype: ApiPrototype<T>,
         config: ClientConfig,
-        filters?: ClientFilters,
+        filters?: readonly ClientFilterDefinition[],
     ): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
