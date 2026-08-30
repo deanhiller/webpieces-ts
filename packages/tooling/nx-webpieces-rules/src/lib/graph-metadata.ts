@@ -23,6 +23,7 @@ import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { resolveDrawOnGraph } from './draw-on-graph-resolver';
+import { resolveCutLegacyCycles } from './cut-legacy-cycle-resolver';
 import { resolveRuntimeParticipant } from './runtime-participant-resolver';
 import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
@@ -147,6 +148,15 @@ function enrichDeclarations(
         problems.push(drawResolution.problem);
     } else if (drawResolution.drawOnGraph === false) {
         entry.drawOnGraph = false;
+    }
+
+    // Only persist when the project actually cuts an edge — absence is the normal state, and a repo
+    // full of "cutLegacyCycle": [] lines would bury the ones that mean something.
+    const cutResolution = resolveCutLegacyCycles(info);
+    if (cutResolution.problem !== null) {
+        problems.push(cutResolution.problem);
+    } else if (cutResolution.targets !== null && cutResolution.targets.length > 0) {
+        entry.cutLegacyCycle = cutResolution.targets;
     }
 }
 

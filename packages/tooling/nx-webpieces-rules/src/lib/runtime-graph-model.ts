@@ -90,6 +90,13 @@ export interface RuntimeEdge {
      * queues rather than one arrow.
      */
     queue?: string;
+    /**
+     * True when the CALLING project carries a `cutLegacyCycle:<target>` nx tag naming this edge's
+     * target — an admission that this hop closes a REAL cycle that is being tolerated as legacy
+     * debt, not a claim that it is harmless. The edge is still drawn (dashed, labelled "legacy
+     * cycle"); it is only excluded from leveling and cycle detection. Absent on every other edge.
+     */
+    cutLegacyCycle?: boolean;
 }
 
 /**

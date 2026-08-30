@@ -68,6 +68,7 @@ import {
     EXTERNAL_BORDER,
     CRON_FILL,
     CRON_BORDER,
+    CUT_CYCLE_EDGE_ATTRS,
     legendHtml,
 } from './runtime-viz-theme';
 
@@ -161,15 +162,19 @@ function nodeLabel(name: string, svc: RuntimeService): string {
  * response comes back). Queued (pubsub) hops are drawn by {@link queuesDot} instead, because they
  * are merged across methods and therefore cannot be emitted one edge at a time.
  *
- * Solid vs dashed is the graph's one line-level distinction: solid is a call that returns a
- * response, dashed is an event that returns as soon as it is queued.
+ * Dashed is the graph's one line-level distinction, and it now says one of two things: an event that
+ * returns as soon as it is queued, or (in red, labelled "legacy cycle") an edge a `cutLegacyCycle:`
+ * tag holds out of leveling. A cut edge is still DRAWN — erasing the arrow would erase exactly the
+ * debt the tag records — it is only drawn as the debt it is. See lib/cut-legacy-cycle-resolver.ts.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
 function edgeDot(edge: RuntimeEdge): string {
     const from = serviceNodeId(edge.from);
     const to = serviceNodeId(edge.to);
     const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
-    return `  "${from}" -> "${to}" [label="${dotValue(viaRaw)}"];\n`;
+    const cut = edge.cutLegacyCycle === true;
+    const label = cut ? `${dotValue(viaRaw)}\\nlegacy cycle` : dotValue(viaRaw);
+    return `  "${from}" -> "${to}" [label="${label}"${cut ? CUT_CYCLE_EDGE_ATTRS : ''}];\n`;
 }
 
 /** The VISIBLE producers and consumers of one queue, gathered from the edges that survived hiding. */

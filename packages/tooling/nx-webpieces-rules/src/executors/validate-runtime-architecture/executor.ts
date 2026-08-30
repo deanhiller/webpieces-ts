@@ -1,11 +1,17 @@
 /**
  * Validate Runtime Architecture Executor (workspace)
  *
- * Two workspace-level checks on the runtime microservice graph:
- *   1. No-cycles: every runtime cycle must be in the `allowedCycles` allowlist
- *      with an unexpired `until`; any other cycle fails the build.
- *   2. Unchanged: the freshly-assembled graph must match the committed
+ * Workspace-level checks on the runtime microservice graph:
+ *   1. Unchanged: the freshly-assembled graph must match the committed
  *      architecture/runtime-dependencies.json (run `architecture:generate`).
+ *   2. Every role:server project has a node on the graph.
+ *
+ * CYCLES ARE NOT CHECKED HERE, and there is deliberately no allowlist for them any more. A runtime
+ * cycle now fails inside the DERIVATION — `assignLevels` (lib/runtime-graph-levels.ts) throws a
+ * RuleFailError naming every chain, because CD deploys in dependency order and a cyclic architecture
+ * has no such order. `deriveRuntimeGraphReport` below therefore cannot return a cyclic graph, and the
+ * only way past it is to break the cycle, or to declare ONE edge with a `cutLegacyCycle:<target>` nx
+ * tag on the CALLING project.
  *
  * On/off + a whole-rule grace window come from webpieces.config.json
  * (rule: runtime-architecture).
@@ -14,19 +20,19 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { loadBlessedGraph } from '../../lib/graph-loader';
+import type { DependenciesFile } from '../../lib/graph-loader';
+import { toError } from '../../toError';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import {
     deriveRuntimeGraphReport,
     loadRuntimeGraph,
-    runtimeAdjacency,
     runtimeGraphFileExists,
     serializeRuntimeGraph,
 } from '../../lib/runtime-graph';
-import type { RuntimeGraph } from '../../lib/runtime-graph';
-import { findRuntimeCycles, cycleKey } from '../../lib/runtime-cycles';
+import type { RuntimeGraph, RuntimeGraphReport } from '../../lib/runtime-graph';
 import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
-import type { AllowedCycle } from '../../lib/runtime-config';
 import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
 
 export interface ValidateRuntimeArchitectureOptions {
@@ -37,33 +43,34 @@ export interface ExecutorResult {
     success: boolean;
 }
 
-/** Allowlist keys (sorted-services -> entry) that are still in their grace window. */
-function activeAllowedKeys(allowed: AllowedCycle[]): Map<string, AllowedCycle> {
-    const nowSeconds = Date.now() / 1000;
-    const map = new Map<string, AllowedCycle>();
-    for (const entry of allowed) {
-        const active = entry.until === undefined || nowSeconds < entry.until;
-        if (active) map.set(cycleKey(entry.services), entry);
+/**
+ * The derived report, or the RENDERED failure when the derivation refused to produce one.
+ *
+ * `assignLevels` throws a `RuleFailError` on a cyclic graph, and its cures live in that error's
+ * `Option[]` — which `Error.message` does NOT carry. This executor is the top-level handler for its
+ * nx target, so it renders through the one human renderer here; letting the throw escape `runExecutor`
+ * would print the message with every cure silently dropped. Nothing is swallowed: the caller reports
+ * the rendered text and fails, and anything that is not a rule verdict is rethrown untouched.
+ *
+ * A rendered failure ends the run rather than joining `problems`: there is no graph left to run the
+ * other checks against, and a cycle is deliberately the one failure this rule does NOT route through
+ * its report-only window — an architecture with no deploy order is not a style preference.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches checkUnchanged in this file
+function deriveOrRender(
+    depsFile: DependenciesFile,
+    hiddenProjects: Set<string>,
+): RuntimeGraphReport | string {
+    // webpieces-disable no-unmanaged-exceptions -- top-level handler for this nx target; it renders, it does not swallow
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return deriveRuntimeGraphReport(
+            depsFile.projects, hiddenProjects, depsFile.apiContracts, depsFile.externalSystems);
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (error instanceof RuleFailError) return renderRuleFailForHuman(error);
+        throw error;
     }
-    return map;
-}
-
-/** Returns disallowed-cycle messages (empty = all cycles allowed or none). */
-function checkCycles(graph: RuntimeGraph, allowed: AllowedCycle[]): string[] {
-    const cycles = findRuntimeCycles(runtimeAdjacency(graph));
-    if (cycles.length === 0) return [];
-
-    const activeAllow = activeAllowedKeys(allowed);
-    const problems: string[] = [];
-    for (const cycle of cycles) {
-        const entry = activeAllow.get(cycle.key);
-        if (entry) {
-            console.log(`⏳ Allowed runtime cycle [${cycle.services.join(' <-> ')}] — ${entry.reason ?? 'no reason given'}`);
-            continue;
-        }
-        problems.push(`runtime cycle: ${cycle.services.join(' -> ')} -> ${cycle.services[0]}`);
-    }
-    return problems;
 }
 
 /**
@@ -73,7 +80,7 @@ function checkCycles(graph: RuntimeGraph, allowed: AllowedCycle[]): string[] {
  * Now the only sanctioned way for a server to be absent from the drawing is `drawOnGraph:false`, and
  * anything else that ever removes one fails the build by name instead of disappearing quietly.
  */
-// webpieces-disable no-function-outside-class -- executor step helper, matches checkCycles/checkUnchanged in this file
+// webpieces-disable no-function-outside-class -- executor step helper, matches checkUnchanged in this file
 export function checkServersPresent(
     projects: EnhancedGraph,
     hiddenProjects: Set<string>,
@@ -130,12 +137,14 @@ export default async function runExecutor(
     }
     // apiContracts comes from the SAME loaded file, so the queue/trigger data the derivation sees
     // here is byte-identical to what generate saw in memory.
-    const report = deriveRuntimeGraphReport(
-        depsFile.projects,
-        hiddenProjects,
-        depsFile.apiContracts,
-        depsFile.externalSystems,
-    );
+    // A cyclic graph leaves no graph to run the rest of the checks against, and is the one failure
+    // this rule never softens through the report-only window below — see deriveOrRender.
+    const derived = deriveOrRender(depsFile, hiddenProjects);
+    if (typeof derived === 'string') {
+        console.error(`\n❌ Runtime architecture validation failed:\n\n${derived}\n`);
+        return { success: false };
+    }
+    const report = derived;
     const graph = report.graph;
     for (const warning of report.warnings) console.warn(`⚠️  ${warning}`);
     printAutoHiddenServers(report.autoHidden);
@@ -144,7 +153,6 @@ export default async function runExecutor(
     // the name is a typo or a stale rename, and the graph only ever hid it by fanning the edge out.
     const problems: string[] = [
         ...report.problems,
-        ...checkCycles(graph, config.allowedCycles),
         ...checkServersPresent(depsFile.projects, hiddenProjects, graph),
     ];
     const unchanged = checkUnchanged(workspaceRoot, graph);
@@ -155,13 +163,12 @@ export default async function runExecutor(
     }
 
     if (problems.length === 0) {
-        console.log('✅ Runtime architecture valid (no disallowed cycles, graph unchanged)\n');
+        console.log('✅ Runtime architecture valid (graph unchanged)\n');
         return { success: true };
     }
 
     console.error('\n❌ Runtime architecture validation failed:\n');
     for (const p of problems) console.error(`  - ${p}`);
-    console.error('\nAllow a cycle temporarily via runtime-architecture.allowedCycles (services + reason + until) in webpieces.config.json.\n');
 
     const reportOnly = runtimeReportOnly(config);
     if (reportOnly.skip) {

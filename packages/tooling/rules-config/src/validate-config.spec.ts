@@ -109,7 +109,6 @@ describe('validateWebpiecesConfig — retired runtime-architecture fields', () =
                 turnOffRuleUntilEpoch: 0,
                 servicePaths: ['services/*/*'],
                 apiProjectPaths: ['libraries/apis/internal/portal-apis', 'libraries/apis/internal/lang-apis'],
-                allowedCycles: [],
             },
         });
         const ra = errorsFor('runtime-architecture', errors);
@@ -117,6 +116,22 @@ describe('validateWebpiecesConfig — retired runtime-architecture fields', () =
         expect(apiErr).toBeDefined();
         expect(apiErr).toContain('derived automatically from architecture/dependencies.json');
         expect(ra.some(e => e.includes('Unknown field "servicePaths"'))).toBe(true);
+    });
+
+    it('rejects allowedCycles — a runtime cycle is not allowable at all any more', () => {
+        // The allowlist was the last shape saying "some cycles are fine". Levelling now throws on any
+        // cycle, so a config still carrying the key would be configuring a code path that is gone. The
+        // per-EDGE `cutLegacyCycle:<targetService>` nx tag replaced it, and it is not config at all.
+        const errors = validateWebpiecesConfig({
+            'runtime-architecture': { mode: 'RUN_EVERY_TIME', allowedCycles: [] },
+        });
+        const err = errorsFor('runtime-architecture', errors)
+            .find(e => e.includes('Unknown field "allowedCycles"'));
+        expect(err).toBeDefined();
+        // The generic unknown-field error says WHAT vanished, not why — which is how an AI re-adds it.
+        // The retired-field hint has to name the destination: the tag, and that there is no config key.
+        expect(err).toContain('cutLegacyCycle:<targetService>');
+        expect(err).toContain('there is no config key for it');
     });
 });
 

@@ -22,7 +22,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'catch-error-pattern': {},
     'no-unmanaged-exceptions': {},
     'no-file-import-cycles': { mode: 'RUN_EVERY_TIME' },
-    'runtime-architecture': { mode: 'RUN_EVERY_TIME', allowedCycles: [] },
+    'runtime-architecture': { mode: 'RUN_EVERY_TIME' },
     'prisma-validate-dtos': {},
     'prisma-converter': {},
     'angular-no-direct-api-in-resolver': {},
