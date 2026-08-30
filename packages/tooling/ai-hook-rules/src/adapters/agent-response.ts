@@ -1,5 +1,5 @@
-// The single place that knows Claude Code's PreToolUse decision protocol, so every deny in the
-// Claude Code adapter is emitted identically — and identically to the checked-in shim
+// The single place that knows the PreToolUse decision protocol, so every deny is emitted identically
+// — and identically to the checked-in shim
 // (.claude/webpieces/ai-hook.sh, rendered by renderShim() in ../bin/shim.ts), which emits the same JSON.
 //
 // A block is signalled by `permissionDecision: "deny"` JSON on STDOUT with exit 0 — NOT exit 2.
@@ -28,6 +28,7 @@
 
 import { invocationLog } from '../core/decision-log';
 import { L0_FAULT_NONE } from '../core/l0-fault-codes';
+import { AgentHookEvent } from '../core/agent-event';
 
 // ANSI escape (0x1b) built at runtime so no raw ESC byte sits in source. ANSI red is a *bonus* — the
 // 🛑 prefix + reason stay meaningful if a future/CI renderer strips the color. One place = one escape.
@@ -51,22 +52,34 @@ function redSystemMessage(reason: string): string {
     return `${ESC}[31;1m🛑 ${reason.slice(0, nl)}${ESC}[0m${reason.slice(nl)}`;
 }
 
-export function denyJson(reason: string, toolName: string): string {
+// Takes the EVENT rather than a tool-name string, because the one thing this decision needs is the
+// event's routing kind, and the harnesses spell their tool names differently (`Bash` vs `apply_patch`)
+// while agreeing on the kind. The emitted bytes are identical for both harnesses — Codex accepts the
+// same `permissionDecision: "deny"` + `permissionDecisionReason` + `systemMessage` fields, and rejects
+// nothing we emit. It does hard-reject an EMPTY `permissionDecisionReason` where Claude tolerates one,
+// which is why emitDeny below refuses to send one.
+export function denyJson(event: AgentHookEvent | null, reason: string): string {
+    // NEVER an empty reason, and the check lives HERE because this function owns the wire shape. Codex
+    // hard-rejects a deny whose permissionDecisionReason is empty (Claude tolerates it and shows the
+    // human nothing), so an empty one is not a cosmetic defect — it is a block that silently fails to
+    // block. Every call site passes prose; this is the backstop that keeps a future one from turning a
+    // deny into a protocol error.
+    const safe = reason.trim() === '' ? '[ai-hooks] blocked, but the guard produced no reason — failing closed.' : reason;
     const hookSpecificOutput = {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: reason,
+        permissionDecisionReason: safe,
     };
     // Bash only: permissionDecisionReason is NOT user-visible, so add the red systemMessage.
-    if (toolName === 'Bash') {
-        return JSON.stringify({ systemMessage: redSystemMessage(reason), hookSpecificOutput });
+    if (event !== null && event.kind === 'Bash') {
+        return JSON.stringify({ systemMessage: redSystemMessage(safe), hookSpecificOutput });
     }
     // Write/Edit/MultiEdit (and anything else): reason renders red natively; no systemMessage.
     return JSON.stringify({ hookSpecificOutput });
 }
 
-// Block the tool call and surface `reason` to both the user (terminal UI) and the model. `toolName`
-// selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
+// Block the tool call and surface `reason` to both the user (terminal UI) and the model. The event's
+// kind selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
 // emitDeny/emitAllow are the hook's designated terminal boundary — the exit code IS the Claude Code
 // PreToolUse protocol (exit 0 + JSON = the contract), so the process.exit stays and is allowlisted.
 //
@@ -78,13 +91,13 @@ export function denyJson(reason: string, toolName: string): string {
 // where the sh shim's own `fault=` stamp can never reach), else '-'. Stamping it at this ONE boundary is
 // what makes `grep 'fault=S'` span the whole audit trail rather than only its sh half.
 // webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/emitAllow by design, and it must stay callable from a tree too broken to build a DI container.
-export function emitDeny(reason: string, toolName: string, rule: string = '-', fault: string = L0_FAULT_NONE): never {
+export function emitDeny(event: AgentHookEvent | null, reason: string, rule: string = '-', fault: string = L0_FAULT_NONE): never {
     // BLOCK_AI_CURE: every deny that reaches this boundary prints a cure the agent can act on — the
     // L0 faults name a command on the allowlist, and the L1/L2 guards print theirs. A deny needing a
     // HUMAN would have to say so at its own site; none does today, and inventing one here would be
     // guessing at the boundary rather than at the decision.
     invocationLog.finish('BLOCK_AI_CURE', rule, fault);
-    process.stdout.write(denyJson(reason, toolName) + '\n');
+    process.stdout.write(denyJson(event, reason) + '\n');
     // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
     process.exit(0);
 }

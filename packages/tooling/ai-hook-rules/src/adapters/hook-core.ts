@@ -7,9 +7,13 @@ import { logGuardDecision, GuardDecision, branchForLog, invocationLog, MATRIX_L0
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder, renderRuleFailForAi } from '@webpieces/rules-config';
-import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
+import { NormalizedToolInput, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
+import { AgentHookEvent, FileOperation } from '../core/agent-event';
 import { toError } from '../core/to-error';
-import { emitDeny, emitAllow } from './claude-code-response';
+import { emitDeny, emitAllow } from './agent-response';
+import { AgentPayload, AgentPayloadParser } from './agent-payload';
+import { AgentAdapters } from './agent-adapters';
+import { CodexSubagentSharedTreeGuard, CODEX_SUBAGENT_RULE } from './codex-subagent-guard';
 import { governingShimRoot, isAllowed, installedShimRulesVersion } from '../bin/shim';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import { managedSurfaceDrift } from '../bin/hook-registration';
@@ -26,43 +30,8 @@ import { L0_FAULT_SHIM_STALE, L0_FAULT_NONE } from '../core/l0-fault-codes';
 //  - 'all'    → both categories, used by the openclaw plugin adapter (a single before_tool_call hook).
 export type { HookMode };
 
-const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
-
-// Read-only tools carry NO guard or code rule, but the guards hook owns the per-invocation audit log
-// (the `calls/` stream). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
-// log-and-allow fast path records every file the AI opens — so a human can later inspect whether it
-// read a project's design.json BEFORE editing the project. Never blocked. Scoped to Read for now;
-// widen (Grep/Glob/NotebookRead) later if desired.
-const READ_ONLY_TOOLS = new Set(['Read']);
-
-interface ClaudeCodePayload {
-    tool_name: string;
-    tool_input: ClaudeCodeToolInput;
-    // Claude Code sends the session's current working directory (follows a persisted `cd`). Used to
-    // scope guards to the git repo the AI is actually in — see runner git-repo-boundary governance.
-    cwd?: string;
-    // Present ONLY when the hook fires inside a SUBAGENT; absent = the coordinator. Used to NAME the log
-    // writer file and nothing else — never to decide which tree a call acts on, which is measured from
-    // the path (see core/version-sync.ts). A worktree-isolated agent was measured resuming on the primary
-    // clone after its tree was reaped, so identity cannot stand in for location.
-    session_id?: string;
-    agent_id?: string;
-    agent_type?: string;
-}
-
-interface ClaudeCodeToolInput {
-    file_path?: string;
-    content?: string;
-    old_string?: string;
-    new_string?: string;
-    edits?: ClaudeCodeEditEntry[];
-    command?: string;
-}
-
-interface ClaudeCodeEditEntry {
-    old_string?: string;
-    new_string?: string;
-}
+const ADAPTERS = new AgentAdapters();
+const SUBAGENT_GUARD = new CodexSubagentSharedTreeGuard();
 
 function readStdin(): Promise<string> {
     return new Promise((resolve: (value: string) => void) => {
@@ -75,44 +44,6 @@ function readStdin(): Promise<string> {
     });
 }
 
-function safeParse(raw: string): ClaudeCodePayload | null {
-    if (!raw || raw.trim() === '') return null;
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return JSON.parse(raw) as ClaudeCodePayload;
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new InformAiError(`Malformed hook input from Claude Code stdin: ${error.message}`, { cause: error });
-    }
-}
-
-function normalizeToolKind(toolName: string): ToolKind | null {
-    if (HANDLED_FILE_TOOLS.has(toolName)) return toolName as ToolKind;
-    return null;
-}
-
-function normalizeToolInput(toolKind: ToolKind, toolInput: ClaudeCodeToolInput): NormalizedToolInput | null {
-    const filePath = toolInput.file_path;
-    if (!filePath) return null;
-
-    if (toolKind === 'Write') {
-        return new NormalizedToolInput(filePath, [
-            new NormalizedEdit('', toolInput.content || ''),
-        ]);
-    }
-    if (toolKind === 'Edit') {
-        return new NormalizedToolInput(filePath, [
-            new NormalizedEdit(toolInput.old_string || '', toolInput.new_string || ''),
-        ]);
-    }
-    if (toolKind === 'MultiEdit') {
-        const raw = Array.isArray(toolInput.edits) ? toolInput.edits : [];
-        const edits = raw.map((e: ClaudeCodeEditEntry) => new NormalizedEdit(e.old_string || '', e.new_string || ''));
-        return new NormalizedToolInput(filePath, edits);
-    }
-    return null;
-}
-
 // The rule name for a block's audit line: the FIRST rule the report cites, or `fallback` when the
 // report opens with no `[rule]` header (a hand-written guard message). Comma-joined when a report
 // cites several, so `rule=` never silently drops one.
@@ -122,9 +53,19 @@ function blockingRule(report: string, fallback: string): string {
     return names.length > 0 ? names.join(',') : fallback;
 }
 
-function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
-    const command = payload.tool_input.command;
-    if (!command || command.trim() === '') { emitAllow(); }
+function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): void {
+    const command = event.bash === null ? '' : event.bash.command;
+    if (command.trim() === '') { emitAllow(); }
+
+    // READ PARITY, and it can only ever be reached from a Codex event: the adapter leaves `reads`
+    // empty for Claude Code, which has a real `Read` tool and its own fast path. A Codex read arrives
+    // as `Bash` running a pager, so without this the read guard and the `calls/` audit trail see none
+    // of them. The command is STILL run through the bash guards below — this adds a verdict, it never
+    // replaces one.
+    for (const readPath of event.reads) {
+        handleRead(event, readPath, cwd, mode);
+    }
+
     const result = runBash(command, cwd, mode);
     if (!result) { emitAllow(); }
     // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
@@ -135,9 +76,10 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     // the guard actually judged, so a `cd`-relocated command scattered one block across two different
     // `.webpieces` directories.
     //
-    // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
-    // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
-    emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'), result.fault);
+    // Bash deny → the event's kind is 'Bash', so denyJson adds the ANSI-red systemMessage (the only
+    // field a Bash deny shows the human; permissionDecisionReason is invisible on Bash). See
+    // agent-response.ts.
+    emitDeny(event, result.report, blockingRule(result.report, 'bash-guard'), result.fault);
 }
 
 /**
@@ -149,7 +91,7 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
  * path deliberately inverts the policy: a broken read-guard degrades to a no-op, never to a wedge.
  */
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
-function handleRead(filePath: string, cwd: string, mode: HookMode): void {
+function handleRead(event: AgentHookEvent, filePath: string, cwd: string, mode: HookMode): void {
     if (filePath === '') return;
     let result: BlockedResult | null = null;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -162,18 +104,38 @@ function handleRead(filePath: string, cwd: string, mode: HookMode): void {
     }
     if (!result) return;
     logRejection('Read', new NormalizedToolInput(filePath, []), result, cwd);
-    emitDeny(result.report, 'Read', blockingRule(result.report, 'read-guard'), result.fault);
+    emitDeny(event, result.report, blockingRule(result.report, 'read-guard'), result.fault);
 }
 
-function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
-    const toolKind = normalizeToolKind(payload.tool_name);
-    if (!toolKind) { emitAllow(); }
+/**
+ * The file/edit pipeline, run once per file the call touches.
+ *
+ * `event.files` is a LIST because ONE Codex `apply_patch` carries many files with mixed operations.
+ * A Claude Code event always has exactly one entry, so the loop runs once and the behaviour is the
+ * single-file behaviour it has always had.
+ */
+function handleFileTool(event: AgentHookEvent, cwd: string, mode: HookMode): void {
+    if (event.files.length === 0) { emitAllow(); }
 
-    const input = normalizeToolInput(toolKind, payload.tool_input);
-    if (!input) { emitAllow(); }
+    // A Codex SUBAGENT writing into the tree it shares with its coordinator. Returns null for every
+    // Claude Code event — that harness can hand a subagent its own worktree, and does.
+    const subagentBlock = SUBAGENT_GUARD.check(event, new RepoRootFinder().resolveRepoRoot(cwd));
+    if (subagentBlock) {
+        emitDeny(event, subagentBlock.report, CODEX_SUBAGENT_RULE, subagentBlock.fault);
+    }
+
+    for (const file of event.files) {
+        handleOneFile(event, file, cwd, mode);
+    }
+    emitAllow();
+}
+
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function handleOneFile(event: AgentHookEvent, file: FileOperation, cwd: string, mode: HookMode): void {
+    const input = file.input;
 
     // Always allow edits to webpieces.config.json — it's the fix target when the config is broken.
-    // This exits BEFORE run(), so feature-branch-guard never sees a config edit; record that so the
+    // This returns BEFORE run(), so feature-branch-guard never sees a config edit; record that so the
     // audit trail explains why a config edit on a bad branch was not blocked (see decision-log.ts).
     if (path.basename(input.filePath) === CONFIG_FILENAME) {
         if (mode !== 'rules') {
@@ -183,23 +145,23 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
                 root,
-                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, matrixL2Row('config-bypass (feature-branch-guard skipped)')),
+                new GuardDecision('feature-branch-guard', file.toolKind, input.filePath, branchForLog(root), 'ALLOW_EXEMPT', 'config-bypass (feature-branch-guard skipped)', '-', L0_FAULT_NONE, matrixL2Row('config-bypass (feature-branch-guard skipped)')),
             );
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
             // refreshes the sync status. Fire-and-forget; never blocks the edit.
             triggerMainSyncRefresh(root, branchStateHangTimeoutFor(cwd));
         }
-        emitAllow();
+        return;
     }
 
-    const result = run(toolKind, input, cwd, mode);
-    if (!result) { emitAllow(); }
+    const result = run(file.toolKind, input, cwd, mode);
+    if (!result) return;
 
-    logRejection(toolKind, input, result, cwd);
-    // File-tool deny → pass the Write/Edit/MultiEdit kind so denyJson omits systemMessage (the reason
-    // already renders red natively for these tools). See claude-code-response.ts.
-    emitDeny(result.report, toolKind, blockingRule(result.report, 'file-guard'), result.fault);
+    logRejection(file.toolKind, input, result, cwd);
+    // File-tool deny → the event's kind is 'File', so denyJson omits systemMessage (the reason
+    // already renders red natively for these tools). See agent-response.ts.
+    emitDeny(event, result.report, blockingRule(result.report, 'file-guard'), result.fault);
 }
 
 // What a stale committed shim lets through — now a thin adapter over the ONE L0 allowlist (isAllowed in
@@ -254,8 +216,13 @@ export function shimStaleRecoveryDecision(toolName: string, command: string, fil
 // shimStaleRecoveryDecision): the whole L0 allowlist, any Read, and editing webpieces.config.json. We deny +
 // tell the AI; we do NOT silently rewrite the file under it. 'rules' hook skips it (guards owns the
 // shim). Returns normally (pass / nothing to do) or exits via emitAllow/emitDeny.
+//
+// It asks the allowlist about the RAW WIRE FIELDS, not about the normalized event, and that ordering is
+// deliberate: L0 has to hold on a tree too broken to trust anything above it, including the adapters.
+// The raw fields are the same key names in both harnesses (measured), so one reading serves both, and
+// the answer cannot change because a normalizer changed. `event` is here only to decorate the deny.
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
-function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
+function enforceCommittedShim(payload: AgentPayload, event: AgentHookEvent, cwd: string, mode: HookMode): void {
     // ONE root for the whole decision, resolved from the RUNNING MODULE (governingShimRoot), never from
     // `cwd`: the shim file we compare and the renderShim() we compare it TO must come from the same
     // install, or the check straddles two trees and can never converge (see governingShimRoot's header).
@@ -290,35 +257,38 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
     // grep finds it here as in the sh half's `L0-shim/` stream.
-    // A subagent is discriminated by `agent_id`, which Claude Code populates on stdin only off the main
-    // loop (main falls back to the session id, so the field is absent). Its cure differs: the hooks
+    // A subagent is discriminated by `agent_id`, which BOTH harnesses populate on stdin only off the
+    // main loop (main falls back to the session id / leaves it empty). Its cure differs: the hooks
     // blocking it resolve through CLAUDE_PROJECT_DIR, which names the MAIN tree.
-    const inSubagent = (payload.agent_id ?? '') !== '';
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted, inSubagent) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
+    const inSubagent = event.agentId !== '';
+    emitDeny(event, shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted, inSubagent) + guardMatrixPointer(docPath), 'committed-shim-stale', L0_FAULT_SHIM_STALE);
 }
 
 /**
- * Shared entry point for all three Claude Code PreToolUse adapters. `mode` selects which tool kinds
- * to validate; payloads outside the mode's scope pass through (emitAllow). Blocks by emitting a
- * PreToolUse `permissionDecision:"deny"` JSON on stdout (exit 0) — see claude-code-response.ts. Fails
- * CLOSED on any unexpected crash (emits a deny) so a broken hook never silently lets an edit through,
- * and the reason now surfaces in the Claude Code UI instead of being hidden on a stderr+exit-2 block.
+ * Shared entry point for every PreToolUse adapter. `mode` selects which tool kinds to validate;
+ * payloads outside the mode's scope pass through (emitAllow). Blocks by emitting a PreToolUse
+ * `permissionDecision:"deny"` JSON on stdout (exit 0) — see agent-response.ts. Fails CLOSED on any
+ * unexpected crash (emits a deny) so a broken hook never silently lets an edit through, and the reason
+ * surfaces in the agent's UI instead of being hidden on a stderr+exit-2 block.
  */
 export async function runMain(mode: HookMode): Promise<void> {
-    // Captured from the payload as soon as it parses so the fail-closed catch below can tell denyJson
-    // which tool it is denying — a crash on a Bash call still gets the visible red systemMessage, a
-    // crash on a file tool does not. Empty (before parse / malformed input) → treated as non-Bash.
-    let toolName = '';
+    // Captured as soon as the ENVELOPE parses so the fail-closed catch below can tell denyJson which
+    // kind of call it is denying — a crash on a Bash call still gets the visible red systemMessage, a
+    // crash on a file tool does not. Null (before parse / malformed input) → treated as non-Bash.
+    let event: AgentHookEvent | null = null;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const raw = await readStdin();
-        const payload = safeParse(raw);
+        const payload = new AgentPayloadParser().parse(raw);
         if (!payload) { emitAllow(); }
-        toolName = payload.tool_name;
+        // The envelope shape first: it reads only `tool_name` and the identity fields, so it cannot
+        // fail, and it is what the crash path needs. The full normalization below reads `tool_input`
+        // and CAN fail (a malformed Codex patch envelope denies rather than being half-understood).
+        event = ADAPTERS.envelope(payload);
 
         // BEFORE enforceCommittedShim(), which can itself write a BLOCK line. See LogStream for why
         // all three of session/agent/hook are needed to keep concurrent writers off one file.
-        logStream.identify(new StreamIdentity(payload.session_id ?? '', payload.agent_id ?? '', mode));
+        logStream.identify(new StreamIdentity(event.sessionId, event.agentId, mode));
 
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
@@ -327,21 +297,23 @@ export async function runMain(mode: HookMode): Promise<void> {
 
         // Committed-shim self-guard: blocks real work while the committed shim is stale, but keeps the
         // recovery path open (cures, reads, config edit). See enforceCommittedShim / shimStaleRecoveryDecision.
-        enforceCommittedShim(payload, cwd, mode);
+        enforceCommittedShim(payload, event, cwd, mode);
+
+        event = ADAPTERS.toEvent(payload, cwd);
 
         // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
         // guard (read-stale-guard) and allow. Runs BEFORE the general rule engine — no code-style rule
         // ever sees a Read, and the only way this path can deny is a stale `main`.
         // The audit trail still records every file the AI opened (see setup.ts).
-        if (READ_ONLY_TOOLS.has(payload.tool_name)) {
-            const readPath = payload.tool_input.file_path ?? '';
+        if (event.kind === 'Read') {
+            const readPath = event.reads.length > 0 ? event.reads[0] : '';
             if (mode !== 'rules') {
-                invocationLog.begin(cwd, payload.tool_name, readPath);
+                invocationLog.begin(cwd, event.rawToolName, readPath);
                 // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
                 // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
                 triggerMainSyncRefresh(cwd, branchStateHangTimeoutFor(cwd));
             }
-            handleRead(readPath, cwd, mode);
+            handleRead(event, readPath, cwd, mode);
             emitAllow();
         }
 
@@ -350,39 +322,48 @@ export async function runMain(mode: HookMode): Promise<void> {
         // never blocks the call. (The committed shim is no longer silently healed here — a mismatch is
         // reported by the self-guard above, not rewritten out from under the AI.)
         if (mode !== 'rules') {
-            const target = payload.tool_name === 'Bash' ? (payload.tool_input.command ?? '') : (payload.tool_input.file_path ?? '');
-            invocationLog.begin(cwd, payload.tool_name, target);
+            invocationLog.begin(cwd, event.rawToolName, logTarget(event));
         }
 
-        if (payload.tool_name === 'Bash') {
+        if (event.kind === 'Bash') {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.
             if (mode === 'rules') { emitAllow(); }
-            handleBash(payload, cwd, mode);
+            handleBash(event, cwd, mode);
             return;
         }
 
         // File payloads run in 'rules' (code-style), 'guards' (file-scoped guards like
         // feature-branch-guard), and 'all'. The runner filters to the right category.
-        handleFileTool(payload, cwd, mode);
+        handleFileTool(event, cwd, mode);
     } catch (err: unknown) {
         const error = toError(err);
-        denyForCrash(error, toolName);
+        denyForCrash(error, event);
     }
+}
+
+// What the `calls/` audit line names as the call's target: the command for a shell call, else the first
+// file it touches. A Codex `apply_patch` touching several files names the first — the rejection log and
+// the decision log carry the rest, per file.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope hook entry points in this adapter
+function logTarget(event: AgentHookEvent): string {
+    if (event.kind === 'Bash') return event.bash === null ? '' : event.bash.command;
+    return event.files.length > 0 ? event.files[0].input.filePath : '';
 }
 
 /**
  * The fail-closed boundary for anything that escaped the hook body. An escaped RuleFailError (a rule
- * that threw past the runner's per-rule catch) or an InformAiError (bad config/stdin) both carry an
- * AI-readable message; anything else is an unexpected bug. All three DENY and surface their reason,
- * because a hook that crashed established nothing and must never be read as an allow.
+ * that threw past the runner's per-rule catch) or an InformAiError (bad config/stdin, or a Codex patch
+ * envelope this parser refuses to guess at) both carry an AI-readable message; anything else is an
+ * unexpected bug. All three DENY and surface their reason, because a hook that crashed established
+ * nothing and must never be read as an allow.
  */
 // webpieces-disable no-function-outside-class -- sibling of the module-scope hook entry points in this adapter; a lone class for one terminal boundary would break the file's shape
-function denyForCrash(error: Error, toolName: string): never {
+function denyForCrash(error: Error, event: AgentHookEvent | null): never {
     if (error instanceof RuleFailError) {
-        emitDeny(renderRuleFailForAi(error), toolName, 'rule-crash');
+        emitDeny(event, renderRuleFailForAi(error), 'rule-crash');
     }
     if (error instanceof InformAiError) {
-        emitDeny(error.message, toolName, 'bad-config-or-stdin');
+        emitDeny(event, error.message, 'bad-config-or-stdin');
     }
-    emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName, 'hook-crash');
+    emitDeny(event, `[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, 'hook-crash');
 }

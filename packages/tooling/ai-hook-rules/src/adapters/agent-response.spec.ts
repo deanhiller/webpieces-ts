@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 
-import { denyJson } from './claude-code-response';
+import { denyJson } from './agent-response';
+import { ClaudeCodeAdapter } from './claude-code-adapter';
+import { AgentHookEvent } from '../core/agent-event';
+
+// denyJson now takes the normalized EVENT rather than a tool-name string. Building it through the real
+// Claude Code adapter keeps this spec pinned to the actual mapping rather than to a hand-made shape.
+function claudeEvent(toolName: string): AgentHookEvent {
+    return new ClaudeCodeAdapter().envelope({ tool_name: toolName, tool_input: {} });
+}
 
 const ESC = String.fromCharCode(0x1b);
 
@@ -21,7 +29,7 @@ function parse(json: string): ParsedDeny {
 
 describe('denyJson', () => {
     it('emits the PreToolUse deny shape Claude Code expects', () => {
-        const out = parse(denyJson('nope', 'Edit'));
+        const out = parse(denyJson(claudeEvent('Edit'), 'nope'));
         expect(out.hookSpecificOutput.hookEventName).toBe('PreToolUse');
         expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
         expect(out.hookSpecificOutput.permissionDecisionReason).toBe('nope');
@@ -29,21 +37,21 @@ describe('denyJson', () => {
 
     it('round-trips a reason containing quotes, newlines, and unicode', () => {
         const reason = '❌ blocked:\n  L5: const x = "y"\n    → use \'unknown\'';
-        const out = parse(denyJson(reason, 'Bash'));
+        const out = parse(denyJson(claudeEvent('Bash'), reason));
         expect(out.hookSpecificOutput.permissionDecisionReason).toBe(reason);
     });
 
     it('produces a single line of valid JSON (no embedded raw newline breaks parsing)', () => {
-        const json = denyJson('multi\nline\nreason', 'Bash');
+        const json = denyJson(claudeEvent('Bash'), 'multi\nline\nreason');
         expect(json.includes('\n')).toBe(false); // JSON.stringify escapes newlines inside the string
         expect(() => parse(json)).not.toThrow();
     });
 
     // On a Bash deny the human ONLY sees systemMessage (permissionDecisionReason is invisible), and it
     // honors ANSI — so we wrap the reason red there. permissionDecisionReason stays plain (the model
-    // reads it). See the rendering matrix in claude-code-response.ts.
+    // reads it). See the rendering matrix in agent-response.ts.
     it('adds an ANSI-red systemMessage on a Bash deny; keeps the reason plain', () => {
-        const out = parse(denyJson('boom', 'Bash'));
+        const out = parse(denyJson(claudeEvent('Bash'), 'boom'));
         expect(out.systemMessage).toBeDefined();
         expect(out.systemMessage!.startsWith(`${ESC}[31`)).toBe(true);
         expect(out.systemMessage!.endsWith(`${ESC}[0m`)).toBe(true);
@@ -66,14 +74,14 @@ describe('denyJson', () => {
      */
     it('reds ONLY the headline of a multi-line deny, and leaves the structured body plain', () => {
         const reason = '❌ blocked this call: something\n\n[a-guard] (layer=L0 fault=S row=3, 1 violation)\n  Fix Option 1: run it';
-        const out = parse(denyJson(reason, 'Bash'));
+        const out = parse(denyJson(claudeEvent('Bash'), reason));
         const lines = out.systemMessage!.split('\n');
         expect(lines).toHaveLength(4);
         expect(lines[0].startsWith(`${ESC}[31`)).toBe(true);
         expect(lines[0].endsWith(`${ESC}[0m`)).toBe(true);
         for (const line of lines.slice(1)) expect(line.includes(ESC)).toBe(false);
         // Still ONE line of valid JSON on the wire, and the model's copy stays plain end to end.
-        expect(denyJson(reason, 'Bash').includes('\n')).toBe(false);
+        expect(denyJson(claudeEvent('Bash'), reason).includes('\n')).toBe(false);
         expect(out.hookSpecificOutput.permissionDecisionReason).toBe(reason);
         expect(out.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);
     });
@@ -81,7 +89,7 @@ describe('denyJson', () => {
     // Write/Edit/MultiEdit render permissionDecisionReason as a red "Error:" block natively — a
     // systemMessage would just be a redundant second red line, so we omit it.
     it.each(['Write', 'Edit', 'MultiEdit'])('adds NO systemMessage on a %s deny', (tool: string) => {
-        const out = parse(denyJson('boom', tool));
+        const out = parse(denyJson(claudeEvent(tool), 'boom'));
         expect(out.systemMessage).toBeUndefined();
         expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
         expect(out.hookSpecificOutput.permissionDecisionReason).toBe('boom');
