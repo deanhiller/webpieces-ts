@@ -23,7 +23,7 @@ export interface RuntimeService {
      */
     role?: string;
     /**
-     * The name clients address this service by (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`), declared in its
+     * The name clients address this service by (`new ClientConfig('helper-fsdb')`), declared in its
      * project.json. Absent for a service nothing calls by name (e.g. a browser app).
      */
     serviceName?: string;

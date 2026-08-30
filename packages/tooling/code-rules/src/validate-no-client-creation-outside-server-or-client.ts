@@ -19,7 +19,7 @@
  * ============================================================================
  * VIOLATIONS (BAD) — flagged when the OWNING project's role is not in allowedRoles:
  * ============================================================================
- *   factory.createRpcClient(SomeApi, new ClientConfig('svc', new DeployedServiceHost()))
+ *   factory.createRpcClient(SomeApi, new ClientConfig('svc'))
  *   clientCloudTasksFactory.createPubSubClient(SomeApi, config)
  *
  * ============================================================================

@@ -22,8 +22,8 @@ import type { AnyUntrustedContextKey, ApiCallContext } from '@webpieces/core-uti
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import { buildClientProxy } from '@webpieces/http-client-core';
+import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
-import { DeployedServiceHost } from '../HostPolicy';
 import { NodeProxyClient } from '../NodeProxyClient';
 
 class FetchStoresRequest {
@@ -71,6 +71,16 @@ class NoopApiCallContext implements ApiCallContext {
     remove(_contextKey: AnyUntrustedContextKey): void {}
 }
 
+/**
+ * Proves, by exploding, that the SSRF guard never resolves anything on the deployed path: nothing in
+ * this spec re-points a request, so the guard steps aside before any name reaches a resolver.
+ */
+class ThrowingAddressResolver extends AddressResolver {
+    override resolve(hostname: string): Promise<string[]> {
+        throw new Error(`the SSRF guard must not resolve ${hostname} for a ClientRegistry-resolved url`);
+    }
+}
+
 /** GcpOidc stand-in. Every contract here is @Public, so nothing ever mints a token. */
 class StubOidc {
     mintIdToken(_audience: string): Promise<string> {
@@ -85,8 +95,10 @@ function client(): DbStoresApi {
         new StubHeaders() as unknown as RequestContextHeaders,
         // webpieces-disable no-any-unknown -- test double: no @AuthOidc endpoint exists in this spec
         new StubOidc() as unknown as GcpOidc,
+        // Never consulted: every url here comes from ClientRegistry, so the SSRF guard steps aside.
+        new ThrowingAddressResolver(),
     );
-    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess', new DeployedServiceHost()), []);
+    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess'), []);
     return buildClientProxy(DbStoresApi, proxyClient);
 }
 

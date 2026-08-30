@@ -2,7 +2,8 @@ import { inject } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import type { ApiPrototype } from '@webpieces/http-client-core';
-import { buildClientProxy, ClientFilterDefinition } from '@webpieces/http-client-core';
+import { buildClientProxy } from '@webpieces/http-client-core';
+import type { ClientFilters } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient } from './NodeProxyClient';
 
@@ -21,25 +22,27 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * Inject it and ask for a typed client per contract:
  * ```typescript
  * // same project + region as this container; the URL is derived, you maintain nothing
- * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2', new DeployedServiceHost()), []);
+ * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
  *
  * // to reach somewhere derivation cannot describe (other region/project, non-Cloud-Run, localhost),
  * // register it once at startup — the client still carries only the svcName:
  * //   ClientRegistry.addUrlMapping('legacy', 'https://legacy.corp');
- * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy', new DeployedServiceHost()), []);
+ * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy'));
  *
  * const response = await server2.fetchValue(req);   // inside a RequestContext
  * ```
  *
- * A destination that is DATA rather than deployment — a URL a partner registered — names a runtime
- * host policy instead, and typically installs a signing filter over the exact bytes:
+ * A destination that is DATA rather than deployment — a URL a partner registered — is a FILTER, not
+ * a different kind of client. Install `ContextBaseUrlFilter` on the one client that may be
+ * re-pointed, and set the URL per call:
  * ```typescript
- * const partner = factory.createRpcClient(
- *     PartnerWebhookApi,
- *     new ClientConfig('partner-webhooks', new RuntimeHostFromContext(new DnsAddressResolver())),
- *     [new ClientFilterDefinition(500, new HmacSigningFilter(secret))],
- * );
+ * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+ *     new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
+ * ]);
  * ```
+ * The SSRF guard arms itself the moment that filter re-points a request, and the contract's
+ * `@AuthWebhook(name)` selects the app's bound `WebhookSignerCallback` to sign the exact bytes —
+ * neither is something the app registers, orders, or can displace.
  *
  * Every client it builds shares one {@link NodeProxyClient} *shape* but never one instance: the
  * injected `Provider<NodeProxyClient>` hands out a fresh one per contract, which `createRpcClient`
@@ -61,23 +64,33 @@ export class ClientHttpFactory {
      * Create a type-safe RPC (HTTP) client for one API contract.
      *
      * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
-     * @param config - This client's state (its svcName and its host policy)
-     * @param filters - This client's OUTBOUND filters, each with the priority it runs at (highest
-     *        OUTERMOST). They wrap the send, so a filter sees the final URL, may add headers, and
-     *        may replace `ClientRequest.body` — the exact bytes transmitted, which is what makes
-     *        signing possible without hand-serializing. Pass `[]` for a client that needs none;
-     *        the argument is REQUIRED so "this client signs nothing" is written down rather than
-     *        inferred from an omitted argument.
+     * @param config - This client's state: its svcName, which is what `ClientRegistry` resolves
+     * @param filters - This client's own OUTBOUND filters, each with the priority it runs at
+     *        (highest OUTERMOST). They wrap the send, so a filter may rewrite the URL, add or remove
+     *        headers, log, or replace `ClientRequest.body` — the exact bytes transmitted. What goes
+     *        here is APP behaviour: url rewriting, headers, logging, and `ContextBaseUrlFilter` when
+     *        this client's destination arrives per call.
+     *
+     *        OPTIONAL, and omitting it is not a statement about security: the framework's own SSRF
+     *        guard and credential minter are installed on every client regardless, BENEATH anything
+     *        passed here, so there is nothing an app can decline by writing nothing.
+     *
+     *        ONE SPELLING PER DECISION. It is a NON-EMPTY tuple, so `createRpcClient(Api, cfg, [])`
+     *        does not compile: "this client has no app filters" is said by omitting the argument, and
+     *        `[]` would be a second way to say the identical thing. That is the same device
+     *        {@link JwtRoles}'s `roles` uses, for the same reason — the bad case is deleted by the
+     *        TYPE rather than left available and discouraged in a docstring. Pinned in
+     *        {@link CreateRpcClientCompileAssertions}.
      */
     createRpcClient<T extends object>(
         apiPrototype: ApiPrototype<T>,
         config: ClientConfig,
-        filters: ClientFilterDefinition[],
+        filters?: ClientFilters,
     ): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
         const proxyClient = this.proxyClientProvider.get();
-        proxyClient.init(apiPrototype, config, filters);
+        proxyClient.init(apiPrototype, config, filters === undefined ? [] : [...filters]);
         return buildClientProxy(apiPrototype, proxyClient);
     }
 }

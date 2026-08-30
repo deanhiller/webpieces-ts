@@ -3,7 +3,7 @@
  *
  * Resolves the `serviceName` field written per project into
  * architecture/dependencies.json — the name a CLIENT uses to address this app at
- * runtime (`new ClientConfig('helper-fsdb', new DeployedServiceHost())`), i.e. its deployed Cloud Run
+ * runtime (`new ClientConfig('helper-fsdb')`), i.e. its deployed Cloud Run
  * service name, NOT its nx project name.
  *
  * It is DECLARED, never derived. The three naming spaces have no mechanical

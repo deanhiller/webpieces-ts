@@ -48,14 +48,6 @@ const EXTERNAL_SYSTEM_TAG = 'externalSystem';
 const CLIENT_CONFIG_SUFFIX = 'ClientConfig';
 
 /**
- * Class-name prefix of a host policy whose destination arrives at RUNTIME —
- * `RuntimeHostFromContext`, `RuntimeHostFromContextAllowingInternalAddresses`. Matched as a PREFIX
- * so a policy added later is picked up without a scanner release, and because the permissive variant
- * is deliberately spelled as a longer name on the same stem.
- */
-const RUNTIME_HOST_POLICY_PREFIX = 'RuntimeHost';
-
-/**
  * The module-scope `const NAME = '<string literal>'` bindings of ONE source file.
  *
  * A contract that hoists its route to a constant (`@ApiPath(WHATSAPP_API_PATH)`) is good practice —
@@ -472,7 +464,7 @@ export function hasClassDecorator(cls: ts.ClassDeclaration, name: string): boole
 
 /**
  * The service a client-factory call aims at, from its config argument:
- * `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb', new DeployedServiceHost()))` → `'helper-fsdb'`.
+ * `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `'helper-fsdb'`.
  *
  * Only a `new <Xxx>ClientConfig('<string literal>')` yields a name. A variable, a template string
  * or a computed expression yields null — the target is genuinely unknown at scan time, and the
@@ -484,34 +476,6 @@ export function targetServiceOf(call: ts.CallExpression): string | null {
     const config = call.arguments[1];
     if (!ts.isNewExpression(config) || !ts.isIdentifier(config.expression)) return null;
     if (!config.expression.text.endsWith(CLIENT_CONFIG_SUFFIX)) return null;
-    const first = config.arguments?.[0];
-    if (first === undefined || !ts.isStringLiteral(first)) return null;
-    return first.text.length > 0 ? first.text : null;
-}
-
-/**
- * The RUNTIME-HOST identity a client-factory call declares, or null when the client targets a
- * deployed service:
- * `createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', new RuntimeHostFromContext(r)))`
- * → `'partner-webhooks'`.
- *
- * It reads the SECOND constructor argument — the host policy — and returns the FIRST, the svcName,
- * because under a runtime policy the svcName resolves to nothing and exists to be exactly this: the
- * identity of the outbound node on the runtime graph.
- *
- * Reading the construction site rather than a new annotation is deliberate. The fact "this client's
- * host is data" is already written there, in a class the caller had to name to get the behaviour, so
- * there is nothing to keep in step and no second place for it to be wrong.
- */
-// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function runtimeHostOf(call: ts.CallExpression): string | null {
-    if (call.arguments.length < 2) return null;
-    const config = call.arguments[1];
-    if (!ts.isNewExpression(config) || !ts.isIdentifier(config.expression)) return null;
-    if (!config.expression.text.endsWith(CLIENT_CONFIG_SUFFIX)) return null;
-    const policy = config.arguments?.[1];
-    if (policy === undefined || !ts.isNewExpression(policy) || !ts.isIdentifier(policy.expression)) return null;
-    if (!policy.expression.text.startsWith(RUNTIME_HOST_POLICY_PREFIX)) return null;
     const first = config.arguments?.[0];
     if (first === undefined || !ts.isStringLiteral(first)) return null;
     return first.text.length > 0 ? first.text : null;

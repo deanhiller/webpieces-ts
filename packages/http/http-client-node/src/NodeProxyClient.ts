@@ -1,6 +1,5 @@
 import { inject, optional } from 'inversify';
 import {
-    AuthMeta,
     ClientRegistry,
     DestinationTrust,
     HttpInternalServerError,
@@ -15,7 +14,23 @@ import {
 import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ApiPrototype, ClientFilterDefinition, ProxyClient, TranslatedFailure } from '@webpieces/http-client-core';
+import { AddressResolver } from './AddressResolver';
 import { ClientConfig } from './ClientConfig';
+import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
+import { OutboundAuthFilter } from './OutboundAuthFilter';
+import { SsrfGuardFilter } from './SsrfGuardFilter';
+import { SsrfPolicy } from './SsrfPolicy';
+import { WEBHOOK_SIGNER_CALLBACK, WebhookSignerCallback } from './WebhookSignerCallback';
+
+/**
+ * The two framework built-ins' priorities, RELATIVE TO EACH OTHER and to nothing else — they are
+ * ordered beneath every app filter structurally, not by number (see `ProxyClient.initRoutes`).
+ *
+ * The guard is OUTSIDE the minter deliberately: a destination that is going to be refused must be
+ * refused BEFORE a credential is minted for it, so a hostile URL never causes a token to exist.
+ */
+const SSRF_GUARD_PRIORITY = 900;
+const OUTBOUND_AUTH_PRIORITY = 800;
 
 /**
  * The server-side {@link ProxyClient}. Everything a browser cannot do lives here: reading the
@@ -34,19 +49,22 @@ export class NodeProxyClient extends ProxyClient {
         @inject(RequestContextHeaders) private readonly headers: RequestContextHeaders,
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @inject(AddressResolver) private readonly addressResolver: AddressResolver,
         // @optional: only @AuthSharedSecret endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
+        // @optional: only @AuthWebhook endpoints need it, and an unbound one makes them THROW
+        // rather than deliver unsigned — see WebhookSignerCallback.
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @optional() @inject(WEBHOOK_SIGNER_CALLBACK) private readonly webhookSigner?: WebhookSignerCallback,
     ) {
         super();
     }
 
     /**
-     * Bind this client to one API contract + target, with the app's outbound filters.
-     *
-     * `appFilters` is REQUIRED, not defaulted: an empty array is a statement that this client signs
-     * nothing and rewrites nothing, and it should be written down rather than inferred from an
-     * omitted argument.
+     * Bind this client to one API contract + target, with the app's outbound filters (url
+     * rewriting, header editing, logging, per-call re-pointing).
      */
     init(apiPrototype: ApiPrototype<object>, config: ClientConfig, appFilters: ClientFilterDefinition[]): void {
         this.config = config;
@@ -62,17 +80,44 @@ export class NodeProxyClient extends ProxyClient {
      * read beneath a deriver is memoized process-wide, so only the first call pays.
      */
     protected override resolveBaseUrl(): Promise<string> {
-        return this.config.hostPolicy.resolveBaseUrl(this.config.svcName);
+        return ClientRegistry.resolve(this.config.svcName);
     }
 
     /**
-     * The framework filters this client's {@link HostPolicy} demands — none for a deployed service,
-     * the context override plus the SSRF guard for a runtime host. Delegated rather than decided
-     * here so the two halves of "where does this go" (resolution and enforcement) cannot drift
-     * apart into different policies.
+     * The two framework built-ins, installed on EVERY client this package builds and ordered
+     * beneath every app filter by {@link ProxyClient.initRoutes}.
+     *
+     * They are unconditional rather than opt-in because neither costs anything on the path that
+     * does not need it: the SSRF guard steps aside when nothing re-pointed the request, and the
+     * auth filter does nothing for a `@Public` endpoint. An app therefore cannot forget to install
+     * the guard on the one client that takes runtime URLs — the ACT of re-pointing is what arms it.
      */
     protected override clientFilters(): ClientFilterDefinition[] {
-        return this.config.hostPolicy.builtInFilters();
+        return [
+            new ClientFilterDefinition(SSRF_GUARD_PRIORITY, new SsrfGuardFilter(this.ssrfPolicy(), this.addressResolver)),
+            new ClientFilterDefinition(
+                OUTBOUND_AUTH_PRIORITY,
+                new OutboundAuthFilter(this.gcpOidc, this.secrets, this.webhookSigner),
+            ),
+        ];
+    }
+
+    /**
+     * WHICH policy the guard applies when something does re-point this client.
+     *
+     * Read off an installed {@link ContextBaseUrlFilter}, because that filter is where an app says
+     * "this client may be re-pointed", and the single legitimate relaxation
+     * ({@link SsrfTestingPolicy}) belongs at the same construction site as that decision rather
+     * than in a second place a reader has to correlate. No such filter — or one built with the
+     * default — means {@link SsrfPolicy} (the strict one), so the safe answer is what an app gets by saying
+     * nothing.
+     */
+    private ssrfPolicy(): SsrfPolicy {
+        for (const definition of this.appFilters) {
+            const filter = definition.filter;
+            if (filter instanceof ContextBaseUrlFilter) return filter.ssrfPolicy;
+        }
+        return new SsrfPolicy();
     }
 
     /**
@@ -85,35 +130,6 @@ export class NodeProxyClient extends ProxyClient {
      */
     protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {
         return this.headers.buildOutboundHeaders(destination);
-    }
-
-    /**
-     * Attach the outbound credential for the endpoint's AuthMode: an @AuthOidc bearer minted as
-     * this caller's runtime SA (audience = the callee base URL — the server verifies the signature
-     * + caller allow-list), or the @AuthSharedSecret(key) value THIS client sends from its bound
-     * {@link Secrets}. Both ride in the ONE `Authorization` header under their own scheme —
-     * `Bearer <oidc>` / `Webpieces <secret>` — which is never a context key, so it cannot leak onto
-     * the next hop. Never reads process.env.
-     */
-    protected override async attachOutboundAuth(
-        route: RouteMetadata,
-        baseUrl: string,
-        httpHeaders: Map<string, string>,
-    ): Promise<void> {
-        const mode = route.authMeta?.mode;
-        if (mode?.kind === 'oidc') {
-            httpHeaders.set('Authorization', `Bearer ${await this.gcpOidc.mintIdToken(baseUrl)}`);
-        } else if (mode?.kind === 'shared-secret') {
-            const secret = this.secrets?.get(mode.secretKey);
-            if (!secret) {
-                throw new Error(
-                    `No shared secret configured for @AuthSharedSecret('${mode.secretKey}') endpoint ${route.methodName}`,
-                );
-            }
-            // Same header as a JWT/OIDC token, but its OWN scheme, so a secret can never be
-            // mistaken for a token nor accepted where one was expected.
-            httpHeaders.set('Authorization', `Webpieces ${secret}`);
-        }
     }
 
     /**
@@ -168,16 +184,6 @@ export class NodeProxyClient extends ProxyClient {
             recorded.failureResponse = new RecordedError(error.name, error.message);
             throw err;
         }
-    }
-
-    /**
-     * A server can satisfy every auth mode when it is talking to a peer it CHOSE, so the deployed
-     * policy rejects nothing. A runtime-host policy does reject: an OIDC token's audience and a
-     * shared secret both name a peer, and a destination that arrives per call has no honest one —
-     * see {@link HostPolicy.assertEndpointSupported}.
-     */
-    protected override assertEndpointSupported(authMeta: AuthMeta | undefined, methodName: string): void {
-        this.config.hostPolicy.assertEndpointSupported(authMeta, methodName, this.contractName());
     }
 
     /**

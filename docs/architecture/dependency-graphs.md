@@ -17,13 +17,13 @@ Per-project it carries:
 - `apiRelations` — per API class, a `"kind": "implements" | "uses"` with a transport `type`
   (`rpc` | `pubsub`). Example: `angular-site` **uses** `client-server-api`; `client-server`
   **implements** it. A `uses` also carries `targetService` when the call site named one —
-  `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb', new DeployedServiceHost()))` → `"targetService": "helper-fsdb"`.
-- A client whose config names a RUNTIME host policy instead
-  (`new ClientConfig('partner-webhooks', new RuntimeHostFromContext(r))`) records
-  `"runtimeHost": "partner-webhooks"` rather than a `targetService`, because its destination is not
-  a module at all — the base URL arrives per call, from data. It is drawn as an external system of
-  kind `runtime`, so the outbound hop appears on the graph instead of falling between a fan-out to
-  every implementer (fiction) and `unresolvedUses` (which reads as a gap).
+  `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `"targetService": "helper-fsdb"`.
+- A contract whose destination is not a module at all — the base URL arrives per call, from data —
+  says so on the CONTRACT, with `@externalSystem runtime partner-webhooks`. That lands in
+  `externalSystems` exactly as `@externalSystem saas twilio` does, and is drawn as an external system
+  of kind `runtime` (its own shape), so the outbound hop appears on the graph rather than reading as
+  a generic vendor box. On the contract rather than at a `createRpcClient` call site because it is
+  true for every caller of that contract — one declaration however many services deliver over it.
 - metadata: `role`, `framework`, `serviceName`, `responsibilitiesFile`, `designFile`, plus
   `aiInstructions` and `commands` to regenerate/visualize.
 

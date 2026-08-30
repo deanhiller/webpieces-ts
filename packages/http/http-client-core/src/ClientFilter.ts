@@ -31,6 +31,16 @@ export type ClientFilter = Filter<ClientRequest, Response>;
  * Highest priority runs OUTERMOST (first in, last out), matching `FilterMatcher`'s ordering, so a
  * filter with a higher number wraps everything below it.
  *
+ * ## Priority orders APP filters against each other, and nothing else
+ *
+ * The framework's own built-ins (the SSRF guard, the outbound credential minter) are not in this
+ * ordering at all: `ProxyClient.initRoutes` appends them BENEATH every app filter, whatever numbers
+ * the app chose. So there is no priority — not `Number.MAX_SAFE_INTEGER` — that gets an app filter
+ * underneath them, which is the point. The guard must judge, and the minter must sign for, the URL
+ * that is actually about to be fetched; a filter that could run below them would be able to move
+ * the request after both had spoken.
+ *
+
  * ## Two deliberate differences from the server's FilterDefinition
  *
  * 1. It holds an INSTANCE, not a DI class token. Server filters are resolved from the container by
@@ -44,8 +54,20 @@ export type ClientFilter = Filter<ClientRequest, Response>;
  */
 export class ClientFilterDefinition {
     constructor(
-        /** Higher runs OUTERMOST. Framework built-ins occupy 900–1000; app filters go below. */
+        /** Higher runs OUTERMOST, among THIS client's app filters. See the class doc. */
         public readonly priority: number,
         public readonly filter: ClientFilter,
     ) {}
 }
+
+/**
+ * The app filters ONE client installs — a NON-EMPTY list, which is the whole point of the type.
+ *
+ * `createRpcClient`'s filters argument is optional and typed as this, so "this client has no app
+ * filters" has exactly ONE spelling: omit the argument. `[]` would be a second way to say the
+ * identical thing, so it is a COMPILE error rather than a discouraged-but-accepted alternative —
+ * the same device `JwtRoles`'s `roles` uses, and for the same reason (see
+ * `.claude/review/backwards-compatibility.md` shim shape #1: delete the bad case from the type
+ * instead of documenting a preference). Pinned in `CreateRpcClientCompileAssertions.ts`.
+ */
+export type ClientFilters = readonly [ClientFilterDefinition, ...ClientFilterDefinition[]];

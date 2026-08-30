@@ -56,8 +56,14 @@ export abstract class ProxyClient {
      */
     private chain!: FilterChain<ClientRequest, Response>;
 
-    /** The app's own filters, as handed to `createRpcClient`. Stored only to build {@link chain}. */
-    private appFilters: ClientFilterDefinition[] = [];
+    /**
+     * The app's own filters, as handed to `createRpcClient`. Set by {@link initRoutes} BEFORE it
+     * calls {@link clientFilters}, so an environment's built-ins may read the app's intent off them
+     * — @webpieces/http-client-node takes the SSRF policy from an installed `ContextBaseUrlFilter`
+     * that way, which keeps the one legitimate relaxation at the same construction site as the
+     * decision to be re-pointable at all.
+     */
+    protected appFilters: ClientFilterDefinition[] = [];
 
     // Stateless + dependency-free, so the browser bundle keeps no DI on the fetch path.
     private readonly networkRejectClassifier = new NetworkRejectClassifier();
@@ -90,17 +96,6 @@ export abstract class ProxyClient {
     protected abstract outboundContextHeaders(destination: DestinationTrust): Map<string, string>;
 
     /**
-     * Attach the endpoint's outbound credential. Service-to-service auth (@AuthOidc bearer,
-     * @AuthSharedSecret value) is a SERVER concept; a browser has neither a minter nor a Secrets
-     * store, so it attaches nothing and its user JWT simply travels as a transferred context key.
-     */
-    protected async attachOutboundAuth(
-        _route: RouteMetadata,
-        _baseUrl: string,
-        _httpHeaders: Map<string, string>,
-    ): Promise<void> {}
-
-    /**
      * Run the call. The default just logs it. Test-case RECORDING is a server concept, so
      * NodeProxyClient overrides this to capture the call when a recorder is in the context.
      *
@@ -128,15 +123,16 @@ export abstract class ProxyClient {
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
 
     /**
-     * The FRAMEWORK filters this environment installs on every client it builds, on top of whatever
-     * the app passed to `createRpcClient`. The default installs none, so a client with no app
-     * filters runs the exact code path it ran before the chain existed.
+     * The FRAMEWORK filters this environment installs on every client it builds, BENEATH whatever
+     * the app passed to `createRpcClient`. The default installs none, so the browser runs the exact
+     * code path it ran before the chain existed.
      *
-     * This is the seam the runtime base-URL override lives behind: @webpieces/http-client-node
-     * returns the filters its `ClientConfig`'s host policy demands — the one that reads
-     * `WebpiecesCoreHeaders.OVERRIDE_BASE_URL` out of the ambient RequestContext, and the SSRF guard
-     * that then judges what it found. Neither concept can live here, because reading a
-     * RequestContext and resolving DNS are both things a browser bundle must never contain.
+     * "Beneath" is not a priority — see {@link initRoutes}. These are the filters that must judge
+     * and sign what is ACTUALLY about to be sent, so no app priority may be allowed to get under
+     * them: @webpieces/http-client-node installs its SSRF guard and its outbound-auth minter here,
+     * and both would be defeated by an app filter that re-pointed the URL below them. Neither
+     * concept can live in this class, because reading a RequestContext, resolving DNS and minting
+     * an OIDC token are all things a browser bundle must never contain.
      */
     protected clientFilters(): ClientFilterDefinition[] {
         return [];
@@ -234,11 +230,21 @@ export abstract class ProxyClient {
             );
         }
 
-        // Highest priority OUTERMOST, matching the server's FilterMatcher. Sorted here, once, so
-        // FilterChain itself never sorts — priority lives on the DEFINITION, not on the filter.
-        const definitions = [...this.clientFilters(), ...this.appFilters];
-        definitions.sort((a, b) => b.priority - a.priority);
-        this.chain = new FilterChain<ClientRequest, Response>(definitions.map((d) => d.filter));
+        // APP filters first (highest priority OUTERMOST, matching the server's FilterMatcher), then
+        // the framework built-ins, ALWAYS innermost. Two separate sorts rather than one over the
+        // union, deliberately: an app priority orders app filters against each other and nothing
+        // else, so no number an app can type — however large — gets underneath the SSRF guard or the
+        // credential minter. A single sorted list would make "displace the guard" a matter of typing
+        // a bigger integer, and a security control an app can outrank by accident is not a control.
+        //
+        // Sorted here, once, so FilterChain itself never sorts — priority lives on the DEFINITION,
+        // not on the filter.
+        const byPriority = (a: ClientFilterDefinition, b: ClientFilterDefinition): number =>
+            b.priority - a.priority;
+        const ordered = [...[...this.appFilters].sort(byPriority), ...[...this.clientFilters()].sort(byPriority)];
+        this.chain = new FilterChain<ClientRequest, Response>(
+            ordered.map((definition: ClientFilterDefinition) => definition.filter),
+        );
     }
 
     /** The contract's class name, for logs and recordings. */
@@ -294,14 +300,11 @@ export abstract class ProxyClient {
                 `so a webpieces client has no credential to send.`,
             );
         }
-        // @AuthWebhook: verified by the VENDOR's signature over the request, which nothing here can produce.
-        if (authMode?.kind === 'webhook') {
-            throw new Error(
-                `${this.apiName}.${route.methodName} is @AuthWebhook('${authMode.name}') — only ` +
-                `${authMode.name} can call it, because only ${authMode.name} can produce the signature ` +
-                `its WebhookAuthCallback verifies. It is not callable from a webpieces client.`,
-            );
-        }
+        // @AuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
+        // that the vendor is always somebody else — but `@AuthWebhook(name)` names a signing SCHEME,
+        // not a direction, and for an OUTBOUND partner webhook WE are the vendor. The environment's
+        // outbound-auth filter asks its bound signer to produce the signature, which is the exact
+        // mirror of the inbound WebhookAuthCallback that verifies one.
     }
 
     /**
@@ -325,8 +328,12 @@ export abstract class ProxyClient {
             httpHeaders.set(entry[0], entry[1]);
         }
 
-        await this.attachOutboundAuth(route, baseUrl, httpHeaders);
-
+        // NOTHING mints a credential here. The endpoint's outbound auth is a FILTER, sitting at the
+        // very bottom of the chain, because the URL at this point is only where the call STARTS: an
+        // app filter above may re-point it, and an OIDC token whose audience is the pre-filter URL
+        // is a token for the wrong peer. The minter has to run last, against the settled
+        // destination — see the environment's `clientFilters()`.
+        //
         // POST body is the first argument as JSON. Serialized HERE, before the filter chain, so a
         // filter that signs the request signs the exact bytes {@link sendOnce} will transmit.
         // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary

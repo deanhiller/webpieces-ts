@@ -5,17 +5,9 @@ the Cloud Tasks twin — calling a method makes the HTTP request that contract d
 
 ```ts
 // inject the factory (a framework singleton), then one client per contract
-const server2 = factory.createRpcClient(
-    Server2Api,
-    new ClientConfig('server2', new DeployedServiceHost()),
-    [],                                             // this client's outbound filters
-);
+const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
 const res = await server2.fetchValue(req);          // inside a RequestContext
 ```
-
-Every `ClientConfig` states WHERE its requests go, because there are two kinds of destination and
-they carry very different risk. `DeployedServiceHost` is the one above and is what almost every
-client wants. See "A destination supplied at RUNTIME" below for the other.
 
 - `svcName` becomes a URL through `ClientRegistry.resolve` — ONE chain, the same one the browser
   client and Cloud Tasks run:
@@ -41,19 +33,53 @@ top-level server filter normally establishes the scope for you.
 
 The browser twin is [@webpieces/http-client-browser](../http-client-browser).
 
+## Outbound filters
+
+`createRpcClient`'s OPTIONAL third argument is this client's outbound filter chain — the same
+`Filter` / `Service` abstraction (from `@webpieces/core-util`) the server's inbound chain uses,
+pointed the other way. A filter receives a mutable `ClientRequest` and returns the `Response`, so it
+can rewrite the url, add or remove headers, log, or replace the serialized body:
+
+```ts
+class TenantHeaderFilter extends Filter<ClientRequest, Response> {
+    async filter(request: ClientRequest, next: Service<ClientRequest, Response>): Promise<Response> {
+        request.headers.set('x-tenant', currentTenant());
+        return next.invoke(request);
+    }
+}
+```
+
+Highest priority runs OUTERMOST, matching the server's `FilterMatcher`.
+
+**Priority orders YOUR filters against each other, and nothing else.** The framework's own built-ins
+— the SSRF guard, then the outbound credential minter — are appended BENEATH every app filter,
+structurally rather than by number, so no priority (not `Number.MAX_SAFE_INTEGER`) puts an app filter
+under them. They have to judge, and sign for, the URL that is actually about to be fetched.
+
+`request.body` is the EXACT serialized bytes the transport will send. That is the whole reason this
+seam exists: without it a webhook sender has to hand-serialize and post the payload itself, because a
+raw HTTP library that re-serializes internally signs one byte sequence and sends another.
+
 ## A destination supplied at RUNTIME
 
 Some destinations are DATA, not deployment: a URL a partner registered (`OrganizationWebhook.url`),
 an OAuth callback, a per-tenant or self-hosted host. There is no `svcName` to resolve and nothing to
-register, but there IS a contract — the payload is fully specified and published to customers. Name
-a runtime host policy and the base URL arrives per call:
+register, but there IS a contract — the payload is fully specified and published to customers.
+
+It is not a different kind of client. It is ONE filter:
 
 ```ts
-const partner = factory.createRpcClient(
-    PartnerWebhookApi,
-    new ClientConfig('partner-webhooks', new RuntimeHostFromContext(new DnsAddressResolver())),
-    [new ClientFilterDefinition(500, new HmacSigningFilter(secret))],
-);
+/** @externalSystem runtime partner-webhooks */
+@ApiPath('/ot-webhook')
+export class PartnerWebhookApi {
+    @Endpoint('/deliver')
+    @AuthWebhook('partner-hmac')
+    deliver(envelope: WebhookEnvelope): Promise<DeliveryAck>;
+}
+
+const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+    new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
+]);
 
 for (const webhook of webhooks) {
     await RequestContext.run(() => {
@@ -63,46 +89,51 @@ for (const webhook of webhooks) {
 }
 ```
 
+- **Installing the filter IS the opt-in.** A client without a `ContextBaseUrlFilter` ignores an
+  ambient `OVERRIDE_BASE_URL` entirely, so a URL set for a partner delivery cannot re-point every
+  other client in the same request. `grep -rn ContextBaseUrlFilter` lists every client that can be
+  re-pointed at all.
 - **It cannot leak.** The override lives on the per-call request, never on the client, so one client
   fans out across N partner URLs and each call goes exactly where its own scope said.
-- **A `DeployedServiceHost` client IGNORES the key.** That is the point of making the policy a named
-  class: an ambient URL set for a partner delivery cannot re-point every other client in the same
-  request. `grep -rn RuntimeHostFromContext` lists every client that can be re-pointed at all.
-- **SSRF policy is ON.** https only; loopback / RFC1918 / link-local / cloud-metadata refused, by
-  name AND by every address the name resolves to; redirects are not followed by the transport but
-  re-judged hop by hop, so a partner URL that 302s at `169.254.169.254` is refused rather than
-  obeyed. The ONLY way to relax it is to say so out loud:
-  `new RuntimeHostFromContextAllowingInternalAddresses('local emulator on 127.0.0.1', resolver)`.
-- **`@AuthOidc` / `@AuthSharedSecret` endpoints are refused at bind time.** Both mint a credential
-  for a peer we chose; a destination that arrives per call has no honest audience, and minting one
-  would hand our credential to whoever registered the URL.
-- **The hop is VISIBLE.** `svcName` is still required under a runtime policy: it is the identity the
-  destination gets on the runtime architecture graph, drawn as an external node of kind `runtime`.
+- **SSRF is automatic, and it is the ACT of re-pointing that arms it.** A URL that came out of
+  `ClientRegistry` is an address we chose and is never judged — so a `localhost` emulator registered
+  with `ClientRegistry.addMapping` needs no opt-out of any kind, and an ordinary RPC costs nothing.
+  A re-pointed URL gets the full policy: https only; loopback / RFC1918 / CGNAT / link-local /
+  cloud-metadata refused, by name AND by every address the name resolves to; redirects taken away
+  from the transport and re-judged hop by hop, so a partner URL that 302s at `169.254.169.254` is
+  refused rather than obeyed. The one relaxation — testing the partner path against a local fake —
+  has to be said out loud, with a reason:
+  `new ContextBaseUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
+- **Every auth mode still works.** `@AuthOidc` mints for the FINAL base URL, `@AuthSharedSecret`
+  sends the value this client holds (N services implementing one contract behind one agreed secret is
+  a real topology), and `@AuthWebhook(name)` calls your bound `WebhookSignerCallback`. The minter runs
+  BELOW the SSRF guard, so a destination that is going to be refused never causes a credential to be
+  created.
+- **The hop is VISIBLE.** `@externalSystem runtime <identity>` on the contract draws the destination
+  as its own node on the runtime architecture graph, and two services delivering over the same
+  contract converge on one box.
 
-## Outbound filters
+## Signing an OUTBOUND webhook — `@AuthWebhook`, the other way round
 
-`createRpcClient`'s third argument is this client's OUTBOUND filter chain — the same `Filter` /
-`Service` abstraction (from `@webpieces/core-util`) the server's inbound chain uses, pointed the
-other way. A filter receives a mutable `ClientRequest` and returns the `Response`:
+`@AuthWebhook(name)` names a signing SCHEME, not a direction. Inbound, a vendor signs and your bound
+`WebhookAuthCallback` (in `@webpieces/http-routing`) verifies. Outbound, WE are the vendor, so your
+bound `WebhookSignerCallback` produces the signature over the final URL and the exact wire bytes:
 
 ```ts
-class HmacSigningFilter extends Filter<ClientRequest, Response> {
-    constructor(private readonly secret: string) { super(); }
-
-    async filter(request: ClientRequest, next: Service<ClientRequest, Response>): Promise<Response> {
-        // request.body is the EXACT serialized bytes the transport will send — sign those.
-        const mac = createHmac('sha256', this.secret).update(request.body ?? '').digest('hex');
-        request.headers.set('x-signature', `sha256=${mac}`);
-        return next.invoke(request);
+@provideSingleton()
+export class PartnerHmacSigner implements WebhookSignerCallback {
+    async sign(name: string, request: SignableRequest): Promise<Map<string, string>> {
+        const mac = createHmac('sha256', secretFor(name)).update(request.body ?? '').digest('hex');
+        return new Map([['x-partner-signature', `sha256=${mac}`]]);
     }
 }
+
+// AppModule.ts
+options.bind(WEBHOOK_SIGNER_CALLBACK).to(PartnerHmacSigner);
 ```
 
-Highest priority runs OUTERMOST, matching the server's `FilterMatcher`. The framework's own
-built-ins occupy 1000 (the runtime base-URL override) and 900 (the SSRF guard), so an app filter
-below them sees the destination already settled.
-
-Signing over `request.body` is the whole reason this seam exists: the bytes a filter signs are the
-bytes transmitted, byte for byte. Without it a sender has to hand-serialize and post the payload
-itself, because a raw HTTP library that re-serializes internally signs one sequence and sends
-another.
+The framework ships no vendor crypto, deliberately: Twilio signs the full URL with sorted params,
+Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your hook and the vendor on
+the contract. With **no** `WebhookSignerCallback` bound, every outbound `@AuthWebhook` call THROWS
+rather than delivering unsigned — the mirror of an unbound `WebhookAuthCallback` 401ing every inbound
+one.

@@ -17,6 +17,15 @@
                     "level": 0
                 },
                 {
+                    "id": "DnsAddressResolver",
+                    "className": "DnsAddressResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/http/http-client-node/src/AddressResolver.ts",
+                    "level": 2,
+                    "api": "AddressResolver"
+                },
+                {
                     "id": "GcpOidc",
                     "className": "GcpOidc",
                     "kind": "class",
@@ -48,6 +57,15 @@
                     "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
                     "level": 2,
                     "detail": "SECRETS"
+                },
+                {
+                    "id": "WebhookSignerCallback",
+                    "className": "WebhookSignerCallback",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
+                    "level": 2,
+                    "detail": "WEBHOOK_SIGNER_CALLBACK"
                 }
             ],
             "edges": [
@@ -59,6 +77,15 @@
                     "tokenKey": "class:packages/http/http-client-node/src/NodeProxyClient.ts#NodeProxyClient",
                     "paramName": "proxyClientProvider",
                     "paramType": "Provider<NodeProxyClient>"
+                },
+                {
+                    "from": "NodeProxyClient",
+                    "to": "DnsAddressResolver",
+                    "injection": "token",
+                    "token": "AddressResolver",
+                    "tokenKey": "class:packages/http/http-client-node/src/AddressResolver.ts#AddressResolver",
+                    "paramName": "addressResolver",
+                    "paramType": "AddressResolver"
                 },
                 {
                     "from": "NodeProxyClient",
@@ -86,10 +113,20 @@
                     "tokenKey": "symbol.for:Secrets",
                     "paramName": "secrets",
                     "paramType": "Secrets"
+                },
+                {
+                    "from": "NodeProxyClient",
+                    "to": "WebhookSignerCallback",
+                    "injection": "token",
+                    "token": "WEBHOOK_SIGNER_CALLBACK",
+                    "tokenKey": "symbol.for:WebhookSignerCallback",
+                    "paramName": "webhookSigner",
+                    "paramType": "WebhookSignerCallback"
                 }
             ],
             "unresolved": [
-                "SECRETS"
+                "SECRETS",
+                "WEBHOOK_SIGNER_CALLBACK"
             ]
         }
     ]

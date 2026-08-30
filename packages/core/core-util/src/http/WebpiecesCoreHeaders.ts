@@ -191,12 +191,10 @@ export class WebpiecesCoreHeaders {
      * });
      * ```
      *
-     * ONLY a client whose `ClientConfig` names a runtime host policy reads it — `new
-     * ClientConfig('partner-webhooks', new RuntimeHostFromContext(new DnsAddressResolver()))`. A client bound to a deployed
-     * service (`new DeployedServiceHost()`) IGNORES this key entirely, which is what stops an
-     * ambient value re-pointing every other client in the same fan-out loop at a partner's server.
-     * Opting in is a named class at the construction site, so `grep -rn RuntimeHostFromContext`
-     * enumerates every client that can be re-pointed at all.
+     * ONLY a client carrying a `ContextBaseUrlFilter` reads it. Every other client IGNORES this key
+     * entirely, which is what stops an ambient value re-pointing every other client in the same
+     * fan-out loop at a partner's server. Installing that ONE filter IS the opt-in, so
+     * `grep -rn ContextBaseUrlFilter` enumerates every client that can be re-pointed at all.
      *
      * - `httpHeader` UNDEFINED → NOT transferred over the wire, and that is load-bearing. This value
      *   names where THIS hop goes. If it travelled, the callee would inherit it and re-point ITS
@@ -206,7 +204,8 @@ export class WebpiecesCoreHeaders {
      *   line when one fails.
      *
      * UNTRUSTED, necessarily: it comes from a database column a partner edited. That is precisely
-     * why {@link RuntimeHostFromContext} ships an SSRF policy on by default rather than trusting it.
+     * why re-pointing a request ARMS the framework's SSRF guard, automatically, rather than trusting
+     * it — the guard sits beneath every app filter and reads the fact that the request was moved.
      */
     static readonly OVERRIDE_BASE_URL = ContextKey.untrusted<string>(
         'overrideBaseUrl',
