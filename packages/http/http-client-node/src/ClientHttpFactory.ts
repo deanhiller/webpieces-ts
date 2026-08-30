@@ -2,7 +2,8 @@ import { inject } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import type { ApiPrototype } from '@webpieces/http-client-core';
-import { buildClientProxy, ClientFilterDefinition } from '@webpieces/http-client-core';
+import { buildClientProxy } from '@webpieces/http-client-core';
+import type { ClientFilters } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient } from './NodeProxyClient';
 
@@ -84,7 +85,7 @@ export class ClientHttpFactory {
     createRpcClient<T extends object>(
         apiPrototype: ApiPrototype<T>,
         config: ClientConfig,
-        filters?: readonly [ClientFilterDefinition, ...ClientFilterDefinition[]],
+        filters?: ClientFilters,
     ): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
