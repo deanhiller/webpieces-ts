@@ -1,6 +1,11 @@
 # Fix Plan — Make Bash guard denials VISIBLE (and red) in the Claude Code UI
 
-Status: **empirically verified** against Claude Code v2.1.x (July 2026). Ready to implement.
+Status: **HISTORICAL — implemented and shipped.** The verified rendering matrix below is still true and
+is the reason the code looks the way it does; the *concrete edits* are a record of what was done, not
+instructions to follow. Two names in them have since moved and are kept here only so the history reads:
+`src/adapters/claude-code-response.ts` is now `src/adapters/agent-response.ts`, and the signature is now
+`denyJson(event, reason)` / `emitDeny(event, reason, …)` — the event's routing kind, not a tool-name
+string, is what selects the Bash `systemMessage`. Do not reintroduce the old spellings.
 
 > ANSI escapes below are written as the literal JSON escape `` (backslash-u-0-0-1-b). Emit exactly
 > that sequence into the JSON string — do NOT paste a raw ESC (0x1b) byte into source or JSON.
