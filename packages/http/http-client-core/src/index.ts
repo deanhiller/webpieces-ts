@@ -37,4 +37,4 @@ export { ResponseBodyReader } from './ResponseBodyReader';
 // @webpieces/core-util, shared with the server's inbound chain.
 export { ClientRequest } from './ClientRequest';
 export { ClientFilterDefinition } from './ClientFilter';
-export type { ClientFilter, ClientFilters } from './ClientFilter';
+export type { ClientFilter } from './ClientFilter';

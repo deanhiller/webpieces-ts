@@ -59,15 +59,3 @@ export class ClientFilterDefinition {
         public readonly filter: ClientFilter,
     ) {}
 }
-
-/**
- * The app filters ONE client installs — a NON-EMPTY list, which is the whole point of the type.
- *
- * `createRpcClient`'s filters argument is optional and typed as this, so "this client has no app
- * filters" has exactly ONE spelling: omit the argument. `[]` would be a second way to say the
- * identical thing, so it is a COMPILE error rather than a discouraged-but-accepted alternative —
- * the same device `JwtRoles`'s `roles` uses, and for the same reason (see
- * `.claude/review/backwards-compatibility.md` shim shape #1: delete the bad case from the type
- * instead of documenting a preference). Pinned in `CreateRpcClientCompileAssertions.ts`.
- */
-export type ClientFilters = readonly [ClientFilterDefinition, ...ClientFilterDefinition[]];
