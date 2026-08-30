@@ -86,7 +86,11 @@ export class ShellReadParity {
         try {
             return fs.statSync(resolved).isFile();
         } catch (err: unknown) {
-            //const error = toError(err); best-effort on a blocking path: unreadable is NOT a read target
+            // Nothing is swallowed here: a token we cannot stat is simply NOT a read target, which is an
+            // ANSWER, and the command still runs the ordinary bash guards either way. The commented-out
+            // toError() call below is the form `catch-error-pattern` requires for a deliberately ignored
+            // error — it is the rule's spelling of "ignored on purpose", not a disabled line.
+            //const error = toError(err);
             return false;
         }
     }

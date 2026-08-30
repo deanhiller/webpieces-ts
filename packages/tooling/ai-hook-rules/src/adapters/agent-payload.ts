@@ -41,7 +41,15 @@ export interface AgentEditEntry {
 }
 
 export class AgentPayloadParser {
-    /** Returns null for empty stdin (nothing to judge); throws InformAiError on unparseable bytes. */
+    /**
+     * Returns null for empty stdin (nothing to judge); throws InformAiError on unparseable bytes.
+     *
+     * The message still names Claude Code even though this path is shared, and that is DELIBERATE and
+     * temporary: the overriding constraint on this change is that no Claude Code behaviour moves, and a
+     * user-visible string is behaviour. Renaming it is a one-line follow-up once the Codex path is
+     * actually armed (it cannot mislead anyone before then — no Codex session reaches this code until
+     * the installer lands).
+     */
     parse(raw: string): AgentPayload | null {
         if (!raw || raw.trim() === '') return null;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions

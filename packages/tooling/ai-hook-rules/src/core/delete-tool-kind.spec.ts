@@ -10,7 +10,7 @@ import { BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
 
 /**
  * `ToolKind` gained 'Delete' for Codex's `*** Delete File:` directive, and EVERY existing rule defaults
- * to NOT firing on it (DELETE_SCOPED_RULES in runner.ts is empty).
+ * to NOT firing on it (DELETE_SCOPED_RULES in ./delete-scoped-rules.ts is empty).
  *
  * The CONTROL case is what makes this non-vacuous: the identical path, judged as a Write, IS blocked.
  * So a green here means "the rules are off for Delete", not "the rules were never on".
