@@ -66,23 +66,30 @@ export class ClientHttpFactory {
      * @param config - This client's state: its svcName, which is what `ClientRegistry` resolves
      * @param filters - This client's own OUTBOUND filters, each with the priority it runs at
      *        (highest OUTERMOST). They wrap the send, so a filter may rewrite the URL, add or remove
-     *        headers, log, or replace `ClientRequest.body` — the exact bytes transmitted.
+     *        headers, log, or replace `ClientRequest.body` — the exact bytes transmitted. What goes
+     *        here is APP behaviour: url rewriting, headers, logging, and `ContextBaseUrlFilter` when
+     *        this client's destination arrives per call.
      *
-     *        OPTIONAL, and omitting it is not a statement about security. The framework's own SSRF
+     *        OPTIONAL, and omitting it is not a statement about security: the framework's own SSRF
      *        guard and credential minter are installed on every client regardless, BENEATH anything
-     *        passed here, so there is nothing an app can decline by writing nothing. What goes here
-     *        is app behaviour: url rewriting, headers, logging, and `ContextBaseUrlFilter` when this
-     *        client's destination arrives per call.
+     *        passed here, so there is nothing an app can decline by writing nothing.
+     *
+     *        ONE SPELLING PER DECISION. It is a NON-EMPTY tuple, so `createRpcClient(Api, cfg, [])`
+     *        does not compile: "this client has no app filters" is said by omitting the argument, and
+     *        `[]` would be a second way to say the identical thing. That is the same device
+     *        {@link JwtRoles}'s `roles` uses, for the same reason — the bad case is deleted by the
+     *        TYPE rather than left available and discouraged in a docstring. Pinned in
+     *        {@link CreateRpcClientCompileAssertions}.
      */
     createRpcClient<T extends object>(
         apiPrototype: ApiPrototype<T>,
         config: ClientConfig,
-        filters: ClientFilterDefinition[] = [],
+        filters?: readonly [ClientFilterDefinition, ...ClientFilterDefinition[]],
     ): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
         const proxyClient = this.proxyClientProvider.get();
-        proxyClient.init(apiPrototype, config, filters);
+        proxyClient.init(apiPrototype, config, filters === undefined ? [] : [...filters]);
         return buildClientProxy(apiPrototype, proxyClient);
     }
 }

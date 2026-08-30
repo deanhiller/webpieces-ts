@@ -66,7 +66,7 @@ export class ContextBaseUrlFilter extends Filter<ClientRequest, Response> {
         /**
          * What the framework's SSRF guard holds this client's re-pointed URLs to.
          *
-         * Defaulted to {@link SsrfPolicy.strict}, and that default is the SAFE branch, so the
+         * Defaulted to {@link SsrfPolicy} (the strict one), and that default is the SAFE branch, so the
          * omitted argument can never be the permissive one — the widening has to be typed out, with
          * a reason, as `new ContextBaseUrlFilter(new SsrfTestingPolicy('<why>'))`.
          */

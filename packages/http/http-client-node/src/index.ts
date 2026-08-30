@@ -33,6 +33,11 @@ export { ClientConfig } from './ClientConfig';
 export { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
 export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 
+// The two ways outbound auth refuses to send: a binding a contract's auth mode requires is absent.
+// Typed, so a delivery worker tells 'we are misconfigured' from 'the partner registered something
+// hostile' (SsrfRefusedError) without matching message text.
+export { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
+
 // The OUTBOUND half of @AuthWebhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
 // one, or every outbound @AuthWebhook call throws rather than delivering unsigned.
 export { WebhookSignerCallback, SignableRequest, WEBHOOK_SIGNER_CALLBACK } from './WebhookSignerCallback';

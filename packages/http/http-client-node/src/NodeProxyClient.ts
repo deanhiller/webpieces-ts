@@ -109,7 +109,7 @@ export class NodeProxyClient extends ProxyClient {
      * "this client may be re-pointed", and the single legitimate relaxation
      * ({@link SsrfTestingPolicy}) belongs at the same construction site as that decision rather
      * than in a second place a reader has to correlate. No such filter — or one built with the
-     * default — means {@link SsrfPolicy.strict}, so the safe answer is what an app gets by saying
+     * default — means {@link SsrfPolicy} (the strict one), so the safe answer is what an app gets by saying
      * nothing.
      */
     private ssrfPolicy(): SsrfPolicy {

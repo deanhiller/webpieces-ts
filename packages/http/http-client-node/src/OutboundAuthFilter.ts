@@ -1,6 +1,7 @@
 import { Filter, Secrets, Service } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ClientRequest } from '@webpieces/http-client-core';
+import { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
 import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback';
 
 /**
@@ -59,9 +60,14 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         if (mode?.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (!secret) {
-                throw new Error(
-                    `No shared secret configured for @AuthSharedSecret('${mode.secretKey}') endpoint ` +
-                        `${request.contractName}.${request.route.methodName}. Bind a Secrets holding that key.`,
+                throw new MissingSharedSecretError(
+                    `${request.contractName}.${request.route.methodName} is ` +
+                        `@AuthSharedSecret('${mode.secretKey}'), but this client's bound Secrets holds no ` +
+                        `value for that key, so there is no credential to send. Bind a Secrets carrying ` +
+                        `'${mode.secretKey}'. Refusing to send is deliberate: the callee is obliged to 401 an ` +
+                        `unauthenticated request, so sending it would report as the peer's failure.`,
+                    `${request.contractName}.${request.route.methodName}`,
+                    mode.secretKey,
                 );
             }
             // Same header as a JWT/OIDC token, but its OWN scheme, so a secret can never be
@@ -75,20 +81,22 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     }
 
     /**
-     * @throws Error when no {@link WebhookSignerCallback} is bound. FAIL CLOSED, matching the
-     *         inbound side exactly: an unbound `WebhookAuthCallback` 401s every `@AuthWebhook`
-     *         endpoint rather than admitting it unverified, so an unbound signer must refuse to
-     *         send rather than deliver something the partner is obliged to reject.
+     * @throws MissingWebhookSignerError when no {@link WebhookSignerCallback} is bound. FAIL CLOSED,
+     *         matching the inbound side exactly: an unbound `WebhookAuthCallback` 401s every
+     *         `@AuthWebhook` endpoint rather than admitting it unverified, so an unbound signer must
+     *         refuse to send rather than deliver something the partner is obliged to reject.
      */
     private async signWebhook(request: ClientRequest, name: string): Promise<void> {
         if (this.webhookSigner === undefined) {
-            throw new Error(
+            throw new MissingWebhookSignerError(
                 `${request.contractName}.${request.route.methodName} is @AuthWebhook('${name}'), so this ` +
                     `client must SIGN the request the way ${name} verifies it — but no WebhookSignerCallback ` +
                     `is bound, so there is nothing to produce the signature. Bind one:\n` +
                     `    options.bind(WEBHOOK_SIGNER_CALLBACK).to(MyWebhookSigner);\n` +
                     `Refusing to send is deliberate: an unsigned delivery is one the partner will reject, ` +
                     `and sending it anyway would hide the missing binding until they complained.`,
+                `${request.contractName}.${request.route.methodName}`,
+                name,
             );
         }
         const signable = new SignableRequest(
