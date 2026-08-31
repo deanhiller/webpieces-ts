@@ -96,7 +96,10 @@ class FakeReaper extends BranchReaper {
 // The worktree section with git replaced: `verdicts` hands back the scripted list, and `reap` records
 // what it was asked to remove and reports it removed. WorktreeReaper's own spec covers the real thing.
 class FakeWorktreeSection extends WorktreeCleanupSection {
-    verdicts(): DeletableWorktree[] {
+    verdicts(_repoRoot: string, ignoreStaleLocks: boolean): DeletableWorktree[] {
+        // Asserted HERE so every test in this file pays for the wiring: the flag argv gave has to be
+        // the one the classifier is handed. A run passing `options.report` here would fail right here.
+        expect(ignoreStaleLocks).toBe(harness.options.ignoreStaleLocks);
         return harness.worktrees;
     }
 
@@ -146,14 +149,14 @@ function noFlags(): CleanupOptions {
     return new CleanupOptions(
         new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
         new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
-        false, false);
+        false, false, false);
 }
 
 function branchFlag(value: string): CleanupOptions {
     return new CleanupOptions(
         new DeleteSelection(FLAG_DELETE_BRANCHES, true, value),
         new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
-        false, false);
+        false, false, false);
 }
 
 function spared(branch: string, classification: string, commits: number, reason: string): DeletableBranch {
@@ -522,20 +525,22 @@ describe('wp-cleanup zero-commit husks are reaped by default', () => {
         expect(out).toContain('uncommitted or untracked files');
     });
 
-    // A live lock never even reaches the husk pass — merged-branches classifies it LOCKED, which is
-    // not promptable. Asserted here so the guarantee is pinned from wp-cleanup's side too.
-    it('never touches a live-locked worktree, whatever its commit count', async () => {
-        harness.worktrees = [new DeletableWorktree(
-            '/work/wt-locked', 'worktree-agent-d', 'locked by claude agent pid 4242 (still running)', 0, false,
-            CLASSIFICATION_LOCKED)];
+    // A standing lock never even reaches the husk pass — merged-branches classifies it LOCKED, which
+    // is not promptable. Asserted here so the guarantee is pinned from wp-cleanup's side too.
+    it('never touches a locked worktree, whatever its commit count', async () => {
+        harness.worktrees = [new DeletableWorktree('/work/wt-locked', 'worktree-agent-d',
+            'locked by claude agent agent-d — the harness says it is mid-tool-call, working in here',
+            0, false, CLASSIFICATION_LOCKED)];
 
         const out = await run();
 
         expect(harness.worktreeTargets).toEqual([]);
         expect(harness.prompts).toEqual([]);
         expect(out).toContain('Worktrees deliberately left alone');
-        expect(out).toContain('still running');
+        expect(out).toContain('working in here');
     });
+
+
 });
 
 /**
@@ -591,7 +596,7 @@ describe('wp-cleanup flags', () => {
         ];
         harness.options = new CleanupOptions(
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
-            new DeleteSelection(FLAG_DELETE_WORKTREES, true, 'all'), false, false);
+            new DeleteSelection(FLAG_DELETE_WORKTREES, true, 'all'), false, false, false);
 
         await run();
 
@@ -607,7 +612,7 @@ describe('wp-cleanup flags', () => {
         harness.answer = 'all';
         harness.options = new CleanupOptions(
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
-            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), false, true);
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), false, true, false);
 
         await run();
 
@@ -629,7 +634,7 @@ describe('wp-cleanup flags', () => {
             '/work/wt-merged', 'dean/merged', 'PR #430 merged', 430, true, CLASSIFICATION_MERGED_PR)];
         harness.options = new CleanupOptions(
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
-            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false, false);
 
         const out = await run();
 
@@ -657,7 +662,7 @@ describe('wp-cleanup flags', () => {
         harness.spared = branches();
         harness.options = new CleanupOptions(
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
-            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false);
+            new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''), true, false, false);
         const report = await run();
 
         expect(report).toContain('[1] a/one');

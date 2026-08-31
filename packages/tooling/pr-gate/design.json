@@ -393,6 +393,14 @@
                     "level": 6
                 },
                 {
+                    "id": "HarnessAgentActivityReader",
+                    "className": "HarnessAgentActivityReader",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/harness-agent-activity.ts",
+                    "level": 6
+                },
+                {
                     "id": "HomeConfigService",
                     "className": "HomeConfigService",
                     "kind": "class",
@@ -766,7 +774,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/worktrees.ts",
-                    "level": 5
+                    "level": 6
                 }
             ],
             "edges": [
@@ -2695,6 +2703,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/agent-worktree-lock.ts#AgentWorktreeLockReader",
                     "paramName": "agentLocks",
                     "paramType": "AgentWorktreeLockReader"
+                },
+                {
+                    "from": "WorktreeLockVerdicts",
+                    "to": "HarnessAgentActivityReader",
+                    "injection": "type",
+                    "token": "HarnessAgentActivityReader",
+                    "tokenKey": "class:packages/tooling/rules-config/src/harness-agent-activity.ts#HarnessAgentActivityReader",
+                    "paramName": "harness",
+                    "paramType": "HarnessAgentActivityReader"
+                },
+                {
+                    "from": "WorktreeLockVerdicts",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
                 },
                 {
                     "from": "WorktreeReaper",

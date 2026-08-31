@@ -8,6 +8,7 @@ import {
     FLAG_DELETE_WORKTREES,
     FLAG_INTERACTIVE,
     FLAG_REPORT,
+    FLAG_IGNORE_STALE_LOCKS,
     SELECTION_ALL,
     SELECTION_NONE,
     SELECTION_NUMBERS,
@@ -66,7 +67,7 @@ describe('DeleteSelection', () => {
 
 describe('wp-cleanup --help', () => {
     // A flag that works but is undocumented, and one documented but rejected, are the same defect
-    // seen from the two ends — so the declared list is asserted to carry all four.
+    // seen from the two ends — so the declared list is asserted to carry every one of them.
     it('lists every flag the command honours', () => {
         const check = new CliArgs().classify(['--help'], new CleanupUsage().declare());
 
@@ -76,6 +77,7 @@ describe('wp-cleanup --help', () => {
         expect(check.message).toContain(FLAG_DELETE_WORKTREES);
         expect(check.message).toContain(FLAG_REPORT);
         expect(check.message).toContain(FLAG_INTERACTIVE);
+        expect(check.message).toContain(FLAG_IGNORE_STALE_LOCKS);
     });
 
     // The guard that makes the flags safe to add at all: an undeclared token is still fatal.

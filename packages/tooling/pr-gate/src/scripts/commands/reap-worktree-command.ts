@@ -87,7 +87,9 @@ export class ReapWorktreeCommand {
      */
     private resolveTarget(repoRoot: string, request: ReapRequest): DeletableWorktree | null {
         const wanted = path.resolve(request.worktreePath);
-        const target = this.worktreeSection.verdicts(repoRoot)
+        // `false`: this reaps ONE named worktree after its PR landed, and it is not the place to
+        // override anybody's lock — a lock still standing here is exactly the refusal this prints.
+        const target = this.worktreeSection.verdicts(repoRoot, false)
             .find((tree: DeletableWorktree): boolean => path.resolve(tree.path) === wanted);
 
         if (target === undefined) {

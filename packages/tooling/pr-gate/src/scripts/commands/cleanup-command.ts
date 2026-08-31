@@ -77,8 +77,10 @@ const CLASSIFICATION_HEADINGS: Readonly<Record<string, string>> = {
  * is working in it. But that case is DETECTABLE, and detecting it is cheaper than asking a human:
  *
  *   · the worktree holds uncommitted or untracked files (`git status --porcelain`) — spared, said out loud
- *   · the worktree is LOCKED by a live holder (a lock reason naming something present, or a claude
- *     agent whose pid is still running) — spared by the verdicts before it ever reaches here
+ *   · the worktree is LOCKED and that lock still stands — a reason naming somebody other than the
+ *     Claude Code harness, or a harness lock whose agent the harness itself still reports as
+ *     mid-tool-call — spared by the verdicts before it ever reaches here (see WorktreeLockVerdicts;
+ *     the pid in a harness lock reason proves nothing, it is the shared session process)
  *   · it is the tree we are standing in, or a detached HEAD — spared, likewise
  *
  * So the bar moved from "prove it is dead" to "prove somebody is holding it", deliberately, because
@@ -91,6 +93,10 @@ const CLASSIFICATION_HEADINGS: Readonly<Record<string, string>> = {
  * is a proxy, not a fact: a human running `pnpm wp-cleanup | tee log` has no tty, an agent on a pty
  * has one. The sniff stays as the DEFAULT selector; `--delete-branches` / `--delete-worktrees` /
  * `--interactive` / `--report` let the caller who KNOWS say so, and an explicit flag always wins.
+ * `--ignore-stale-locks` is the same idea for the OTHER thing this command could not previously be
+ * told: that a standing claude-agent lock is stale. It replaces the `git worktree unlock` a human had
+ * to run per directory — seven times, in the incident that produced it — before wp-cleanup would do
+ * its job. A dirty worktree and a genuinely live agent's are still spared under it.
  *
  * ─── WHY A NON-TTY RUN NOW DELETES NOTHING IT WAS NOT ASKED TO ───────────────────────────────────
  * It used to silently take the "redundant" groups and print a bare list of names it left. That is
@@ -128,7 +134,7 @@ export class CleanupCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
         if (options.report) {
-            this.reportOnly(repoRoot, retention);
+            this.reportOnly(repoRoot, retention, options);
             return;
         }
         await this.cleanUpWorktrees(repoRoot, retention, options);
@@ -142,10 +148,10 @@ export class CleanupCommand {
      * because a run that deletes nothing cannot renumber anything. That is what makes it the honest
      * first half of `--report` → read the numbers → `--delete-branches=1,3`.
      */
-    private reportOnly(repoRoot: string, retention: string): void {
+    private reportOnly(repoRoot: string, retention: string, options: CleanupOptions): void {
         process.stdout.write('\n' + SEP + '🔎 wp-cleanup --report — nothing will be deleted\n' + SEP);
 
-        const verdicts = this.worktreeSection.verdicts(repoRoot);
+        const verdicts = this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
         const deadTrees = this.worktreeSection.provablyDead(verdicts);
         process.stdout.write(this.wouldReapBlock(
             WORKTREE_KINDS, deadTrees.map((tree: DeletableWorktree): string => `${tree.path} — ${tree.reason}`)));
@@ -236,7 +242,7 @@ export class CleanupCommand {
      * cleanup command becomes a data-loss command).
      */
     private async cleanUpWorktrees(repoRoot: string, retention: string, options: CleanupOptions): Promise<void> {
-        const verdicts = this.worktreeSection.verdicts(repoRoot);
+        const verdicts = this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
         const dead = this.worktreeSection.provablyDead(verdicts);
         if (dead.length > 0) {
             process.stdout.write(

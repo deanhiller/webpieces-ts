@@ -13,8 +13,11 @@ import {
     CLASSIFICATION_DETACHED,
     CLASSIFICATION_PRUNABLE,
     ADJUDICATED_CLASSIFICATIONS,
+    LOCK_LIVENESS_UNVERIFIABLE,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+
+import { FLAG_IGNORE_STALE_LOCKS } from './cleanup-options';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -49,8 +52,8 @@ export class WorktreeCleanupSection {
      * deliberately allowed to go stale, which is fine for BLOCKING a `git worktree add` and never fine
      * for removing a directory, since the tree may have gained uncommitted work since it was written.
      */
-    verdicts(repoRoot: string): DeletableWorktree[] {
-        return this.mergedBranches.computeMergedBranches(repoRoot).worktrees;
+    verdicts(repoRoot: string, ignoreStaleLocks: boolean): DeletableWorktree[] {
+        return this.mergedBranches.computeMergedBranches(repoRoot, ignoreStaleLocks).worktrees;
     }
 
     provablyDead(verdicts: DeletableWorktree[]): DeletableWorktree[] {
@@ -154,7 +157,15 @@ export class WorktreeCleanupSection {
         return `  ✓ ${entry.path}${branch} — ${entry.reason}${restore}${partial}\n`;
     }
 
-    /** The spared worktrees, with WHY — including the ones nobody will ever be asked about. */
+    /**
+     * The spared worktrees, with WHY — including the ones nobody will ever be asked about.
+     *
+     * When any of them is a claude-agent lock whose agent could not be verified either way, the block
+     * ends with the flag that judges it on its branch instead. That hint lives HERE and not in the
+     * verdict's own reason for one reason: the flag is wp-cleanup's, its spelling is one constant in
+     * this package, and a rules-config message naming it would be a second copy of that spelling free
+     * to drift. The reason says what is KNOWN; this says what you can DO about it.
+     */
     sparedBlock(verdicts: DeletableWorktree[], removed: DeletableWorktree[]): string {
         const gone = new Set(removed.map((tree: DeletableWorktree): string => tree.path));
         const spared = verdicts.filter(
@@ -162,7 +173,16 @@ export class WorktreeCleanupSection {
                 && this.isMechanical(tree.classification));
         if (spared.length === 0) return '';
         let out = '\nWorktrees deliberately left alone:\n';
-        for (const tree of spared) out += `  · ${tree.path} — ${tree.reason}\n`;
+        let unverified = 0;
+        for (const tree of spared) {
+            out += `  · ${tree.path} — ${tree.reason}\n`;
+            if (tree.reason.includes(LOCK_LIVENESS_UNVERIFIABLE)) unverified += 1;
+        }
+        if (unverified > 0) {
+            out += `\n${String(unverified)} of those carry a claude-agent lock whose liveness cannot be `
+                + 'verified.\nTo judge those on their branch and commits alone — unlocking and removing only\n'
+                + `the ones that come back dead — re-run:\n  pnpm wp-cleanup ${FLAG_IGNORE_STALE_LOCKS}\n`;
+        }
         return out;
     }
 

@@ -17,6 +17,7 @@ export const FLAG_DELETE_BRANCHES = '--delete-branches';
 export const FLAG_DELETE_WORKTREES = '--delete-worktrees';
 export const FLAG_REPORT = '--report';
 export const FLAG_INTERACTIVE = '--interactive';
+export const FLAG_IGNORE_STALE_LOCKS = '--ignore-stale-locks';
 
 // What a `--delete-*` flag said. UNSET is "the flag was not passed at all" and is a genuinely
 // different answer from NONE: unset defers to the tty sniff, NONE is a caller saying no out loud.
@@ -125,26 +126,37 @@ export class DeleteSelection {
  * was never a fact about who is standing there, only a proxy: a human running
  * `pnpm wp-cleanup | tee log` has no tty, and an agent on a pty has one. The sniff stays as the
  * DEFAULT, and any explicit flag beats it.
+ *
+ * `ignoreStaleLocks` is the escape hatch for the ONE thing wp-cleanup could not previously express:
+ * "that agent lock is stale". Every locked worktree is then classified on its real branch and commit
+ * state, and the ones that come back deletable are `git worktree unlock`ed on the way out. It replaces
+ * the hand-run `git worktree unlock` per directory that a human had to do seven times before the tool
+ * would clean up at all. Two things it does NOT override, by design: a worktree with uncommitted or
+ * untracked files, and a lock whose agent the harness still reports as running.
  */
 export class CleanupOptions {
     readonly branches: DeleteSelection;
     readonly worktrees: DeleteSelection;
     readonly report: boolean;
     readonly interactive: boolean;
+    readonly ignoreStaleLocks: boolean;
 
     // Every parameter REQUIRED, no defaults — same reasoning as BuildOptions: a defaulted parameter
     // means a call site written before this class grew a field silently keeps the old behaviour, and
     // the old behaviour here is "delete without being told to".
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         branches: DeleteSelection,
         worktrees: DeleteSelection,
         report: boolean,
         interactive: boolean,
+        ignoreStaleLocks: boolean,
     ) {
         this.branches = branches;
         this.worktrees = worktrees;
         this.report = report;
         this.interactive = interactive;
+        this.ignoreStaleLocks = ignoreStaleLocks;
     }
 
     /**
@@ -181,6 +193,12 @@ export class CleanupUsage {
                     + '                                run whose numbers are still valid for the next command.'),
                 new CliFlag(FLAG_INTERACTIVE,
                     'Prompt even when stdin is not a terminal.'),
+                new CliFlag(FLAG_IGNORE_STALE_LOCKS,
+                    'Treat a standing claude-agent worktree lock as no evidence:\n'
+                    + '                                classify every locked worktree on its real branch and\n'
+                    + '                                commit state, and unlock the ones that come back dead.\n'
+                    + '                                A DIRTY worktree, and one whose agent the harness still\n'
+                    + '                                reports as running, are spared anyway.'),
             ]);
     }
 }

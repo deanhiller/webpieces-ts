@@ -60,6 +60,7 @@ graph TD
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
+    HarnessAgentActivityReader["HarnessAgentActivityReader"]
     HomeConfigService["HomeConfigService"]
     HomeDocKeys["HomeDocKeys"]
     HumanAuthorizationService["HumanAuthorizationService"]
@@ -321,6 +322,8 @@ graph TD
     WorktreeCleanupSection --> WorktreeReaper
     WorktreeCleanupSection --> WorktreeService
     WorktreeLockVerdicts --> AgentWorktreeLockReader
+    WorktreeLockVerdicts --> HarnessAgentActivityReader
+    WorktreeLockVerdicts --> WorktreeService
     WorktreeReaper --> BranchArchiver
     WorktreeReaper --> BranchMutationLog
     WorktreeReaper --> WorktreeService

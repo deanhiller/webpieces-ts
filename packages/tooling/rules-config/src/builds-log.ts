@@ -302,9 +302,14 @@ export class BuildsLog {
     /**
      * Is `pid` still addressable? `process.kill(pid, 0)` sends no signal — it only asks the kernel. ESRCH
      * is the ONE answer that proves death; EPERM proves the opposite (it exists, it is somebody else's).
-     * Same test, same reasoning, as `AgentWorktreeLockReader.isRunning`, including the accepted
-     * imprecision of pid reuse: being wrong in the "still running" direction costs one extra refusal,
-     * being wrong the other way lets a fourth build start.
+     * Pid reuse is an accepted imprecision here: being wrong in the "still running" direction costs
+     * one extra refusal, being wrong the other way lets a fourth build start.
+     *
+     * WHY A PID IS MEANINGFUL HERE AND WAS NOT FOR AGENT WORKTREE LOCKS. Every row in this ledger is
+     * written BY the process it names — one real OS process per build — so its pid identifies it.
+     * A Claude Code subagent is not a process at all: every agent in a session records the SAME pid,
+     * the session's, which is why that check was deleted rather than shared (see
+     * harness-agent-activity.ts). Do not generalise this one back out to anything but a real process.
      */
     private isAlive(pid: number): boolean {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
