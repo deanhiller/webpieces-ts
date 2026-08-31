@@ -138,6 +138,7 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
     it.each([
         'backwards-compat-reviewer',
         'error-output-reviewer',
+        'experiment-lifecycle-reviewer',
     ])('%s is registered, REQUIRED, and names a doc and an agent file that exist', (subagent: string) => {
         const entry = live.find((c: ChecklistDefinition): boolean => c.subagent === subagent);
         expect(entry, `${subagent} is missing from commands.pr-gate.checklists`).toBeDefined();
@@ -151,37 +152,19 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
     });
 
     /**
-     * `experiment-lifecycle-reviewer` ships its agent file and checklist doc HERE and its
-     * `commands.pr-gate.checklists` entry in the FOLLOW-UP PR — the Claude Code harness builds its agent
-     * registry when a session starts, so the PR that creates a brand-new REQUIRED reviewer cannot spawn
-     * it and is refused by its own provenance check.
-     *
-     * So this asserts the halves that exist NOW: both files are on disk, so the entry the follow-up adds
-     * cannot point at nothing. That is the same wiring guarantee the cases above give the registered two,
-     * asked one release earlier — and it is the assertion that goes red if the follow-up never lands and
-     * somebody deletes these files as unused.
+     * `experiment-lifecycle-reviewer`'s EXACT pattern list, which the case above can only assert is
+     * non-empty. The reviewer's subject is a SETTING an AI must not end, and that decision shows up in
+     * three places: the flags and their read paths under `packages/**`, the config, and the "ships OFF
+     * and stays OFF for two years" policy prose in `CLAUDE.md`. A checklist watching only `packages/**`
+     * would miss a diff that ends an experiment by editing the policy sentence — so a narrowing of this
+     * list is a silent hole, and this is the case that goes red for it.
      */
-    it('experiment-lifecycle-reviewer has its agent file and its doc, ready for the follow-up to register', () => {
-        expect(fs.existsSync(path.join(repoRoot, '.claude', 'review', 'experiment-lifecycle.md'))).toBe(true);
-        expect(fs.existsSync(
-            path.join(repoRoot, '.claude', 'agents', 'experiment-lifecycle-reviewer.md'))).toBe(true);
-    });
-
-    // The pattern list the follow-up must use, pinned as a scratch-repo case so it is enforced by the
-    // validator rather than only described in prose. The reviewer's subject is a SETTING an AI must not
-    // end, and that decision shows up in three places: the flags and their read paths under packages/**,
-    // the config, and the "ships OFF and stays OFF for two years" policy prose in CLAUDE.md. A checklist
-    // watching only packages/** would miss a diff that ends an experiment by editing the policy sentence.
-    it('the entry the follow-up adds validates — code, config and policy prose, and REQUIRED', () => {
-        const dir = repoWith(['experiment-lifecycle.md'], ['experiment-lifecycle-reviewer']);
-        const entry = toChecklist({
-            subagent: 'experiment-lifecycle-reviewer',
-            doc: '.claude/review/experiment-lifecycle.md',
-            patterns: ['packages/**', 'webpieces.config.json', 'CLAUDE.md'],
-            required: true,
-        });
-        expect(svc.validate(dir, [entry])).toEqual([]);
-        expect(entry.required).toBe(true);
-        expect(entry.patterns).toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md']);
+    it('experiment-lifecycle-reviewer watches code, config AND policy prose', () => {
+        if (configPath === null) return;
+        const entry = live.find(
+            (c: ChecklistDefinition): boolean => c.subagent === 'experiment-lifecycle-reviewer');
+        expect(entry, 'experiment-lifecycle-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
+        expect((entry as ChecklistDefinition).patterns)
+            .toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md']);
     });
 });

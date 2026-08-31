@@ -7,13 +7,13 @@ quotes a human deciding that this specific experiment is over.**
 This is the checklist for `experiment-lifecycle-reviewer`, a REQUIRED reviewer over every PR that
 touches `packages/**`, `webpieces.config.json`, or `CLAUDE.md`. A 🔴 verdict BLOCKS the PR.
 
-**Registration lands in the follow-up PR.** The agent and this doc ship first, and the
-`commands.pr-gate.checklists` entry in `webpieces.config.json` ships next — not because the entry is in
-doubt (it is an array element on a key the published validator already knows, and the gate accepted it),
-but because the Claude Code harness builds its agent registry when a session STARTS. An agent file
-created mid-session cannot be spawned in that session, so a PR that both creates a required reviewer and
-registers it is refused by its own provenance check with no way to satisfy it. Once the entry lands, the
-gate names this reviewer on every matching PR.
+**This reviewer is registered.** Its `commands.pr-gate.checklists` entry is in
+`webpieces.config.json`, so the gate names it on every PR touching those three patterns. It arrived in
+two PRs — the agent file and this doc first, the checklists entry second — because the Claude Code
+harness builds its agent registry when a session STARTS: an agent file created mid-session cannot be
+spawned in that session, so a PR that both creates a required reviewer and registers it is refused by
+its own provenance check with no way to satisfy it. That ordering applies to any brand-new required
+reviewer somebody adds next.
 
 The binding rule is CLAUDE.md §"ONLY A HUMAN ENDS AN EXPERIMENT". This doc is how you enforce it against
 a diff.
