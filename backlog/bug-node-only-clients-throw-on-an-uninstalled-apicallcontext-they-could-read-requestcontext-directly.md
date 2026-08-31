@@ -101,8 +101,17 @@ apply. First, the call must run inside a `RequestContext.run(...)` scope: `isAct
 one, and LogApiCall throws on an inactive context — a different and much better message than the old
 one, naming a cure the host can actually reach. Second, a non-webpieces node host must still configure
 the other process-globals these clients read: `HeaderRegistry.configure(...)`,
-`LogManager.setFactory(...)`, and a `ClientRegistry` url mapping or deriver (`http-client-node` THROWS
-on node with no mapping and no deriver; `cloudtasks-client` derives from GCP metadata otherwise).
+`LogManager.setFactory(...)`, and a `ClientRegistry` url mapping or deriver. **Both clients resolve
+through the identical `ClientRegistry.resolve(svcName)` chain** — registered mapping, else the
+installed deriver, else THROW on node — so neither has a fallback the other lacks
+(`TaskClientConfig.resolveUrl()` calls the same `ClientRegistry.resolve` that
+`NodeProxyClient.resolveBaseUrl()` does). The GCP deriver is real and genuinely removes the need for a
+url table *within one project and region*, but it is installed by the host
+(`ClientRegistry.setDeriver(gcpCloudRunDeriver())`) and reads only THIS process's project number and
+region from the metadata server, applying the Cloud Run formula
+`https://<svc>-<projectNumber>.<region>.run.app` — so it reaches only a Cloud Run callee in the same
+project and region, named exactly `svcName`. Another region or project, a non-Cloud-Run host, or
+localhost each need a mapping, and off GCP the deriver itself throws.
 `ServiceInfo.setInfo(...)` is optional but unnamed builds log anonymously.
 
 ## Why a "client-only bootstrap" is the WRONG fix
