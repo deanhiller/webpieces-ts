@@ -1,0 +1,308 @@
+{
+    "rules": {
+        "no-state-paths-in-templates": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "max-method-lines": {
+            "limit": 80,
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "max-file-lines": {
+            "limit": 902,
+            "mode": "NEW_AND_MODIFIED_FILES",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "require-return-type": {
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-inline-type-literals": {
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-any-unknown": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-implicit-any": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "prisma-validate-dtos": {
+            "mode": "MODIFIED_CLASS",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "prisma-converter": {
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-destructure": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-unmanaged-exceptions": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "catch-error-pattern": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "throw-cause-required": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-process-exit-outside-main": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "angular-no-direct-api-in-resolver": {
+            "mode": "OFF",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-symbol-di-tokens": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "allowedPaths": [
+                "libraries/apis/**",
+                "packages/core/core-util/src/http/**"
+            ],
+            "turnOffRuleWhileOnBranch": null
+        },
+        "missing-design-annotation": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "framework-tag": {
+            "mode": "MODIFIED_PROJECTS",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "role-tag": {
+            "mode": "MODIFIED_PROJECTS",
+            "knownTypes": [
+                "server",
+                "app",
+                "bundle",
+                "designed-lib",
+                "lib",
+                "client",
+                "api-lib"
+            ],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "di-graph": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-file-import-cycles": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreTypeOnly": false,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "runtime-architecture": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-js-files": {
+            "mode": "NEW_AND_MODIFIED_FILES",
+            "allowedPaths": [],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-function-outside-class": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "inject-annotation-not-needed-for-concrete-class": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-ts-in-src": {
+            "mode": "NEW_AND_MODIFIED_FILES",
+            "turnOffRuleUntilEpoch": 0,
+            "allowedRootFiles": [
+                "jest.setup.ts"
+            ],
+            "excludePaths": [
+                "node_modules",
+                "dist",
+                ".nx",
+                ".git",
+                "scripts/**",
+                "**/*.d.ts",
+                "**/jest.config.ts",
+                "**/codegen.ts"
+            ],
+            "turnOffRuleWhileOnBranch": null
+        },
+        "nx-wiring": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-custom-css": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "no-client-creation-outside-server-or-client": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-architecture-unchanged": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-no-architecture-cycles": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-packagejson": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-versions-locked": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "validate-eslint-sync": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        }
+    },
+    "hookGuards": {
+        "branch-state-guard": {
+            "mode": "ON",
+            "branchNamingConvention": "{whoami}/{featurename}",
+            "hangTimeoutMinutes": 5,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "branch-creation-guard": {
+            "mode": "ON_NO_SUBBRANCHES",
+            "subBranchNaming": "feature/<ticket>/<short-description>",
+            "autoReapMergedBranches": true,
+            "maxLocalBranches": 5,
+            "maxWorktrees": 10,
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "pr-lifecycle-guard": {
+            "mode": "ON",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        }
+    },
+    "commands": {
+        "pr-gate": {
+            "mode": "ON",
+            "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
+            "mergeMode": "NONE",
+            "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b"
+        }
+    },
+    "excludePaths": [
+        "repositories/**"
+    ],
+    "match-rules": [
+        {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "turnOffRuleUntilEpoch": 0,
+            "name": "no-fetch",
+            "patterns": [
+                "(?<![.\\w])fetch\\s*\\(",
+                "\\baxios\\b",
+                "\\bXMLHttpRequest\\b",
+                "\\bnew\\s+Request\\s*\\(",
+                "from\\s+['\"](node-fetch|got|undici)['\"]"
+            ],
+            "mainMessage": "Raw HTTP (fetch/axios/XMLHttpRequest/…) bypasses contract-first development — the client and server stop sharing the same API contract/types. Generate a type-safe client from the contract instead:",
+            "options": [
+                "PREFERRED: generate a client from the API you want to call — server-side, inject ClientHttpFactory from '@webpieces/http-client-node' and call factory.createRpcClient(SomeApi, new ClientConfig('some-svc')); in a browser, use ClientHttpBrowserFactory from '@webpieces/http-client-browser'. Then: await client.someMethod(req);",
+                "Reuse an existing API contract already defined in your repo (under libraries/apis/**) and generate its client the same way.",
+                "For a truly external service, create a NEW API contract (a decorated abstract class) AND a NEW implementation that calls fetch behind that contract, under an allowlisted dir (libraries/apis-external/**). The contract stays the shared surface; fetch is an impl detail."
+            ],
+            "disableAllowed": true,
+            "allowedPaths": [
+                "packages/http/http-client-core/**",
+                "packages/cloud/cloudtasks-client/**",
+                "libraries/apis-external/**",
+                "libraries/apis/external/**"
+            ],
+            "turnOffRuleWhileOnBranch": null
+        },
+        {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "turnOffRuleUntilEpoch": 0,
+            "name": "no-global-providesingleton-in-packages",
+            "patterns": [
+                "@provideSingleton\\s*\\(",
+                "@provideSingletonAs\\s*\\("
+            ],
+            "mainMessage": "Framework code in packages/** must use @provideFrameworkSingleton (a SEPARATE DI registry) so a client's buildProviderModule() never scoops up webpieces framework classes. Plain @provideSingleton is for apps/client code only. (Turn ON once the repo consumes a @webpieces release whose DI-graph analyzer understands provideFrameworkSingleton.)",
+            "options": [
+                "In a packages/** framework class, use @provideFrameworkSingleton() (self-bind) or @provideFrameworkSingletonAs(TOKEN) from @webpieces/core-context.",
+                "WebpiecesRouter loads buildFrameworkModule() + buildProviderModule(); any embeddable WebpiecesRouteCreator user must also load buildFrameworkModule() to resolve framework filters."
+            ],
+            "disableAllowed": true,
+            "allowedPaths": [
+                "apps/**",
+                "libraries/**",
+                "packages/tooling/**",
+                "packages/core/core-context/src/provide.ts"
+            ],
+            "turnOffRuleWhileOnBranch": null
+        }
+    ],
+    "rulesDir": []
+}

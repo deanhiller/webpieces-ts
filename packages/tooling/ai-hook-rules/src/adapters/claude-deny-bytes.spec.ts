@@ -18,6 +18,13 @@ import { AgentHookEvent } from '../core/agent-event';
  *
  * `\\u001b` is how JSON.stringify serializes the ANSI escape, so the payload stays valid JSON with no
  * raw ESC byte anywhere in this source file.
+ *
+ * KEPT alongside `hook-app-golden.spec.ts`, and the two are not duplicates: this file pins the WIRE
+ * SHAPE of `denyJson` over a matrix no composed run reaches — five tool names crossed with three
+ * flavours of empty reason, plus the identical-bytes-for-Codex claim — and it does so with no repo, no
+ * git and no rule engine, so it stays readable and fast. The golden spec pins the OTHER half: that a
+ * whole invocation still routes to those bytes. A change that broke either alone would be a real
+ * regression, and only one of the two files would say which layer moved.
  */
 const BASH_ONELINE = '{"systemMessage":"\\u001b[31;1m🛑 boom\\u001b[0m","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"boom"}}';
 const WRITE_ONELINE = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"boom"}}';

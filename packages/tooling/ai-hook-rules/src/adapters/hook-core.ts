@@ -10,13 +10,14 @@ import { RepoRootFinder, renderRuleFailForAi } from '@webpieces/rules-config';
 import { NormalizedToolInput, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { AgentHookEvent, FileOperation } from '../core/agent-event';
 import { toError } from '../core/to-error';
-import { emitDeny, emitAllow } from './agent-response';
+import { emitDeny, emitAllow, denyOutcome } from './agent-response';
+import { HookOutcome, HookTerminated } from './hook-outcome';
 import { AgentPayload, AgentPayloadParser } from './agent-payload';
 import { AgentAdapters } from './agent-adapters';
 import { CodexSubagentSharedTreeGuard, CODEX_SUBAGENT_RULE } from './codex-subagent-guard';
 import { governingShimRoot, isAllowed, installedShimRulesVersion } from '../bin/shim';
-import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import { managedSurfaceDrift } from '../bin/hook-registration';
+import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream, StreamIdentity } from '../core/log-stream';
 import { L0_FAULT_SHIM_STALE, L0_FAULT_NONE } from '../core/l0-fault-codes';
@@ -33,17 +34,6 @@ export type { HookMode };
 const ADAPTERS = new AgentAdapters();
 const SUBAGENT_GUARD = new CodexSubagentSharedTreeGuard();
 
-function readStdin(): Promise<string> {
-    return new Promise((resolve: (value: string) => void) => {
-        let data = '';
-        process.stdin.setEncoding('utf8');
-        process.stdin.on('data', (chunk: string) => { data += chunk; });
-        process.stdin.on('end', () => resolve(data));
-        process.stdin.on('error', () => resolve(''));
-        if (process.stdin.isTTY) resolve('');
-    });
-}
-
 // The rule name for a block's audit line: the FIRST rule the report cites, or `fallback` when the
 // report opens with no `[rule]` header (a hand-written guard message). Comma-joined when a report
 // cites several, so `rule=` never silently drops one.
@@ -54,7 +44,7 @@ function blockingRule(report: string, fallback: string): string {
 }
 
 // webpieces-disable no-function-outside-class -- sibling of handleRead()/handleFileTool() in this module; the adapter is module-scope functions by design
-function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): void {
+function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): never {
     const command = event.bash === null ? '' : event.bash.command;
     if (command.trim() === '') { emitAllow(); }
 
@@ -109,6 +99,28 @@ function handleRead(event: AgentHookEvent, filePath: string, cwd: string, mode: 
 }
 
 /**
+ * Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped guard
+ * (read-stale-guard) and allow. Runs BEFORE the general rule engine — no code-style rule ever sees a
+ * Read, and the only way this path can deny is a stale `main`. The audit trail still records every
+ * file the AI opened (see setup.ts).
+ *
+ * Returns normally ONLY when the event is not a Read; otherwise it ends the invocation.
+ */
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function handleReadFastPath(event: AgentHookEvent, cwd: string, mode: HookMode): void {
+    if (event.kind !== 'Read') return;
+    const readPath = event.reads.length > 0 ? event.reads[0] : '';
+    if (mode !== 'rules') {
+        invocationLog.begin(cwd, event.rawToolName, readPath);
+        // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
+        // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
+        triggerMainSyncRefresh(cwd, branchStateHangTimeoutFor(cwd));
+    }
+    handleRead(event, readPath, cwd, mode);
+    emitAllow();
+}
+
+/**
  * The file/edit pipeline, run once per file the call touches.
  *
  * `event.files` is a LIST because ONE Codex `apply_patch` carries many files with mixed operations.
@@ -116,7 +128,7 @@ function handleRead(event: AgentHookEvent, filePath: string, cwd: string, mode: 
  * single-file behaviour it has always had.
  */
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleRead() in this module; the adapter is module-scope functions by design
-function handleFileTool(event: AgentHookEvent, cwd: string, mode: HookMode): void {
+function handleFileTool(event: AgentHookEvent, cwd: string, mode: HookMode): never {
     if (event.files.length === 0) { emitAllow(); }
 
     // A Codex SUBAGENT writing into the tree it shares with its coordinator. Returns null for every
@@ -267,20 +279,28 @@ function enforceCommittedShim(payload: AgentPayload, event: AgentHookEvent, cwd:
 }
 
 /**
- * Shared entry point for every PreToolUse adapter. `mode` selects which tool kinds to validate;
- * payloads outside the mode's scope pass through (emitAllow). Blocks by emitting a PreToolUse
- * `permissionDecision:"deny"` JSON on stdout (exit 0) — see agent-response.ts. Fails CLOSED on any
- * unexpected crash (emits a deny) so a broken hook never silently lets an edit through, and the reason
- * surfaces in the agent's UI instead of being hidden on a stderr+exit-2 block.
+ * THE PIPELINE, from raw stdin bytes to the decision — the whole of `parse -> adapter -> runner ->
+ * emit`, as ONE function returning ONE value.
+ *
+ * `mode` selects which tool kinds to validate; payloads outside the mode's scope pass through
+ * (emitAllow). A block is a PreToolUse `permissionDecision:"deny"` JSON on stdout with exit 0 — see
+ * agent-response.ts. Fails CLOSED on any unexpected crash (returns a deny) so a broken hook never
+ * silently lets an edit through, and the reason surfaces in the agent's UI instead of being hidden on
+ * a stderr+exit-2 block.
+ *
+ * It reads NO stdin, writes NO stdout and calls NO exit: those three couplings are ports owned by
+ * HookApp (see hook-ports.ts), which is what makes the composed pipeline drivable from a test. This
+ * function is what `runMain` was; it is not a second spelling of it — `runMain` is deleted, and
+ * `HookApp.run()` is the only entry point.
  */
-export async function runMain(mode: HookMode): Promise<void> {
+// webpieces-disable no-function-outside-class -- the module-scope hook body itself, sibling of handleBash()/handleFileTool(); the adapter is module-scope functions by design and must stay callable from a tree too broken to build a DI container
+export function runPipeline(raw: string, mode: HookMode): HookOutcome {
     // Captured as soon as the ENVELOPE parses so the fail-closed catch below can tell denyJson which
     // kind of call it is denying — a crash on a Bash call still gets the visible red systemMessage, a
     // crash on a file tool does not. Null (before parse / malformed input) → treated as non-Bash.
     let event: AgentHookEvent | null = null;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const raw = await readStdin();
         const payload = new AgentPayloadParser().parse(raw);
         if (!payload) { emitAllow(); }
         // The envelope shape first: it reads only `tool_name` and the identity fields, so it cannot
@@ -303,21 +323,8 @@ export async function runMain(mode: HookMode): Promise<void> {
 
         event = ADAPTERS.toEvent(payload, cwd);
 
-        // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
-        // guard (read-stale-guard) and allow. Runs BEFORE the general rule engine — no code-style rule
-        // ever sees a Read, and the only way this path can deny is a stale `main`.
-        // The audit trail still records every file the AI opened (see setup.ts).
-        if (event.kind === 'Read') {
-            const readPath = event.reads.length > 0 ? event.reads[0] : '';
-            if (mode !== 'rules') {
-                invocationLog.begin(cwd, event.rawToolName, readPath);
-                // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
-                // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
-                triggerMainSyncRefresh(cwd, branchStateHangTimeoutFor(cwd));
-            }
-            handleRead(event, readPath, cwd, mode);
-            emitAllow();
-        }
+        // Read-only tools: their own fast path, which never returns when it applies.
+        handleReadFastPath(event, cwd, mode);
 
         // Per-invocation guard log (the `calls/` stream): tool + command/file + live branch +
         // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-effort;
@@ -331,7 +338,6 @@ export async function runMain(mode: HookMode): Promise<void> {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.
             if (mode === 'rules') { emitAllow(); }
             handleBash(event, cwd, mode);
-            return;
         }
 
         // File payloads run in 'rules' (code-style), 'guards' (file-scoped guards like
@@ -339,7 +345,11 @@ export async function runMain(mode: HookMode): Promise<void> {
         handleFileTool(event, cwd, mode);
     } catch (err: unknown) {
         const error = toError(err);
-        denyForCrash(error, event);
+        // The pipeline's own terminal control flow, not a failure: emitAllow/emitDeny threw the answer
+        // out to here from wherever they were called. Treating it as a crash would turn every allow
+        // into a deny, so this branch comes FIRST and returns the carried outcome verbatim.
+        if (error instanceof HookTerminated) return error.outcome;
+        return denyForCrash(error, event);
     }
 }
 
@@ -358,14 +368,17 @@ function logTarget(event: AgentHookEvent): string {
  * envelope this parser refuses to guess at) both carry an AI-readable message; anything else is an
  * unexpected bug. All three DENY and surface their reason, because a hook that crashed established
  * nothing and must never be read as an allow.
+ *
+ * It BUILDS the deny (denyOutcome) rather than throwing it (emitDeny), because it is already inside
+ * the catch that the throw would land in — see HookTerminated. Same bytes either way.
  */
 // webpieces-disable no-function-outside-class -- sibling of the module-scope hook entry points in this adapter; a lone class for one terminal boundary would break the file's shape
-function denyForCrash(error: Error, event: AgentHookEvent | null): never {
+function denyForCrash(error: Error, event: AgentHookEvent | null): HookOutcome {
     if (error instanceof RuleFailError) {
-        emitDeny(event, renderRuleFailForAi(error), 'rule-crash');
+        return denyOutcome(event, renderRuleFailForAi(error), 'rule-crash');
     }
     if (error instanceof InformAiError) {
-        emitDeny(event, error.message, 'bad-config-or-stdin');
+        return denyOutcome(event, error.message, 'bad-config-or-stdin');
     }
-    emitDeny(event, `[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, 'hook-crash');
+    return denyOutcome(event, `[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, 'hook-crash');
 }

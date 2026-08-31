@@ -25,7 +25,9 @@
         "directory": "packages/tooling/ai-hook-rules"
     },
     "dependencies": {
-        "@webpieces/rules-config": "workspace:*"
+        "@webpieces/rules-config": "workspace:*",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
     },
     "publishConfig": {
         "access": "public",
