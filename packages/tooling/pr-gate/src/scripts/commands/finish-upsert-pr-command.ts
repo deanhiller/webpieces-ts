@@ -179,7 +179,7 @@ export class FinishUpsertPrCommand {
         const featureName = this.aiBranchName.getFeatureName();
         const prGate = loadAndValidate(repoRoot).prGate;
         const scan = this.checklistScanner.scan(
-            repoRoot, prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish', prGate.gateSalt));
+            repoRoot, prGate.checklists, prGate.gateSalt, new ChecklistScanOptions(true, 'stage3-finish'));
         const required = scan.applicable;
         // The applicable checklists that are supposed to HAVE a verdict — everything except the optional ones
         // nobody ran. Used for provenance and for the dashboard rows, both of which ask "who reviewed this?"

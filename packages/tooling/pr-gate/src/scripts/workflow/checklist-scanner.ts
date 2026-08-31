@@ -33,20 +33,9 @@ export class ChecklistScanOptions {
      */
     contextStage: string;
 
-    /**
-     * The repo's `prGate.gateSalt` — the HMAC key human authorizations are verified with.
-     *
-     * It is passed IN rather than loaded here for the same reason `defined` is (see {@link ChecklistScanner.scan}):
-     * both callers already run `loadAndValidate`, and a scanner that reads config is a function of the
-     * filesystem rather than of its inputs. The default '' fails CLOSED — no approval verifies under an empty
-     * salt, so a caller that forgets it refuses every override rather than honouring an unsigned one.
-     */
-    gateSalt: string;
-
-    constructor(filterAlreadyReviewed = false, contextStage = 'stage-scan', gateSalt = '') {
+    constructor(filterAlreadyReviewed = false, contextStage = 'stage-scan') {
         this.filterAlreadyReviewed = filterAlreadyReviewed;
         this.contextStage = contextStage;
-        this.gateSalt = gateSalt;
     }
 }
 
@@ -129,8 +118,10 @@ export class ChecklistScan {
         // stays a one-liner; the scanner itself always passes the real set.
         results: ChecklistResult[] = [],
         optionalNotRun: RequiredChecklist[] = [],
-        // Defaulted to the EMPTY grant so a construction that forgets it authorizes nothing. Fails closed.
-        authorized: AuthorizedOverrides = new AuthorizedOverrides(),
+        // REQUIRED, with no default. An empty grant fails closed, but a construction that silently got one
+        // by omission would report "no human authorized this" for a branch where somebody did — the exact
+        // stall this whole feature exists to end, arrived at by forgetting an argument.
+        authorized: AuthorizedOverrides,
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -186,9 +177,14 @@ export class ChecklistScanner {
      * config itself: `loadAndValidate` is the one gate on the checklist set (it rejects a non-array
      * `checklists`, including the removed `{ doc }` manifest shape, and verifies every guidance doc and
      * reviewer-agent file exists), both callers already run it for other fields, and keeping the read out of
-     * here leaves this a function of its inputs rather than of the filesystem.
+     * here leaves this a function of its inputs rather than of the filesystem. `gateSalt` travels the same
+     * way and for the same reason — and as a POSITIONAL parameter rather than a field on
+     * {@link ChecklistScanOptions}, so it cannot be omitted. Omitted, every human authorization on the
+     * branch would be silently ignored, which looks exactly like a human who never approved anything.
      */
-    scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): ChecklistScan {
+    scan(
+        repoRoot: string, defined: ChecklistDefinition[], gateSalt: string, opts: ChecklistScanOptions,
+    ): ChecklistScan {
         const featureName = this.aiBranchName.getFeatureName();
         const reviewPath = reviewJsonPath(repoRoot, featureName);
         // ONE basis for the file set, the reproduce command and any downstream materialization. The fork
@@ -205,7 +201,7 @@ export class ChecklistScanner {
         // Resolved ONCE, from the same fork point and changed-file set the matching ran against — the
         // approval's scope is checked against THIS diff, not against a second reading of it.
         const authorized = this.humanAuthorization.verifiedFor(
-            repoRoot, new AuthorizationContext(featureName, base, changedFiles), opts.gateSalt);
+            repoRoot, new AuthorizationContext(featureName, base, changedFiles), gateSalt);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results, authorized);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
         // NOT `!owedIds.has(...)`-with-the-optional-exemption-folded-in: an optional checklist nobody ran is

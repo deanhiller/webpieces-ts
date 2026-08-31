@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, ReviewJsonService, toError,
+    AuthorizedOverrides, ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist,
+    ReviewJsonService, toError,
 } from '@webpieces/rules-config';
 import { ChecklistRoster } from './checklist-detector';
 import { ChecklistScan } from './checklist-scanner';
@@ -43,15 +44,17 @@ function scanOver(dir: string, applicable: RequiredChecklist[]): ChecklistScan {
     // The optional-without-a-verdict subtraction is part of how `outstanding` is BUILT (ChecklistScanner
     // owns it, so the gate needs no optional-awareness of its own). Reproduced here for the same reason the
     // rest of this fixture is: a scan assembled differently from the real one tests a gate nobody runs.
-    const optionalNotRun = svc.optionalWithoutVerdict(applicable, results);
+    // No human has authorized anything in this fixture — these tests are about how a REFUSAL reads.
+    const authorized = new AuthorizedOverrides();
+    const optionalNotRun = svc.optionalWithoutVerdict(applicable, results, authorized);
     const skipped = new Set(optionalNotRun.map((r: RequiredChecklist): string => r.id));
-    const outstanding = svc.pendingChecklists(applicable, results)
+    const outstanding = svc.pendingChecklists(applicable, results, authorized)
         .filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
     return new ChecklistScan(
         [], applicable, [], outstanding,
         new ChecklistReviewContext(), reviewPath, 'abc1234',
-        new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
-        undefined, [], results, optionalNotRun,
+        new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results, authorized),
+        undefined, [], results, optionalNotRun, authorized,
     );
 }
 

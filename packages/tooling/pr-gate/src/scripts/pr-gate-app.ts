@@ -149,7 +149,6 @@ export class PrGateApp {
         return this.reviewUpsertPrCommand.run(opts);
     }
 
-    /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */
     /**
      * `wp-authorize`: HUMAN ONLY — sign an authorization allowing one review checklist to be overridden.
      * Reads from /dev/tty, so an agent cannot drive it. See AuthorizeCommand for why that is the mechanism.
@@ -163,6 +162,7 @@ export class PrGateApp {
         this.checkAuthCommand.run(args);
     }
 
+    /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */
     checkPr(): Promise<void> {
         return this.checkPrCommand.run();
     }

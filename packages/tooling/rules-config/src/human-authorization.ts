@@ -72,10 +72,21 @@ export class HumanApproval {
 export class AuthorizationFile {
     branch: string;
     approvals: HumanApproval[];
+    /**
+     * '' when the file was absent or read cleanly. Non-empty = it EXISTS but could not be parsed, and the
+     * reason.
+     *
+     * Carried rather than swallowed because "no approvals" and "approvals I could not read" are different
+     * facts and the second one is actionable: a corrupt file means the human's approval is sitting on disk
+     * unreadable, and the fix is to re-authorize rather than to wonder why nothing was found. `verifiedFor`
+     * turns this into a `rejected` line, which `wp-check-auth` already prints.
+     */
+    unreadable: string;
 
-    constructor(branch = '', approvals: HumanApproval[] = []) {
+    constructor(branch = '', approvals: HumanApproval[] = [], unreadable = '') {
         this.branch = branch;
         this.approvals = approvals;
+        this.unreadable = unreadable;
     }
 }
 
@@ -270,8 +281,10 @@ export class HumanAuthorizationService {
             return new AuthorizationFile(branch, list.map((e: unknown): HumanApproval => this.toApproval(e)));
         } catch (err: unknown) {
             const error = toError(err);
-            void error;
-            return new AuthorizationFile(branch);
+            // Fail CLOSED on the grant, but say so: nothing is authorized either way, and reporting WHY is
+            // the difference between "ask the human to authorize" and "ask the human to authorize AGAIN
+            // because their last one is unreadable on disk".
+            return new AuthorizationFile(branch, [], `${p} exists but could not be read (${error.message})`);
         }
     }
 
@@ -371,7 +384,9 @@ export class HumanAuthorizationService {
     verifiedFor(repoRoot: string, ctx: AuthorizationContext, salt: string): AuthorizedOverrides {
         const prose = new Map<string, string>();
         const rejected: string[] = [];
-        for (const approval of this.load(repoRoot, ctx.branch).approvals) {
+        const file = this.load(repoRoot, ctx.branch);
+        if (file.unreadable !== '') rejected.push(`(unreadable, treated as NO approvals) — ${file.unreadable}`);
+        for (const approval of file.approvals) {
             const check = this.verify(ctx, approval, salt);
             if (check.ok) prose.set(approval.checklist, approval.approves);
             else rejected.push(`"${approval.checklist}" (issued ${approval.issuedAt}) — ${check.reason}`);

@@ -49,6 +49,13 @@ export function isPathExcluded(relPath: string, excludePaths: readonly string[])
  * a dotfile path would have silently failed to cover it, so the approval would die for a reason nobody
  * could see. Shell-style dot-hiding protects against globbing up `.` and `..`, which is not a hazard any
  * caller here has.
+ *
+ * The three consumers OUTSIDE the authorization path are named here on purpose, because the widening is
+ * silent for them: `build-artifact-gate` (stale generated artifacts), `api-scanner.externalApiPaths`
+ * (project classification) and `no-custom-css-scope.allowGlobs` (an EXEMPTION list, so wider = more
+ * exempt). None configures a dot-path today, and for all three "the pattern author meant the whole
+ * subtree" is the reading they already assume — but a future dot-path entry now matches where it
+ * silently did not, and that is a deliberate decision recorded here rather than an accident.
  */
 // webpieces-disable no-function-outside-class -- pure path predicate, sibling of isPathExcluded above
 export function matchesAnyGlob(relPath: string, patterns: readonly string[]): boolean {

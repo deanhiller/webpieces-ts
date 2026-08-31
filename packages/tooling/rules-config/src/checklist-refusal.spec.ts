@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ChecklistResult, RequiredChecklist, ReviewJsonService, loadReviewJson } from './review-json';
+import { ChecklistResult, RequiredChecklist, ReviewJsonService } from './review-json';
 import { AuthorizedOverrides } from './human-authorization';
 import { toError } from './to-error';
 
 // No human has authorized anything in these tests unless one says so explicitly.
 const NONE = new AuthorizedOverrides();
+const svcLoad = new ReviewJsonService();
 
 function tmpReviewWith(verdicts: Record<string, Record<string, string>>): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-refusal-'));
@@ -74,7 +75,7 @@ describe('refusedChecklists / refusalError', () => {
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            loadReviewJson(file, [REQ('migrations')], NONE);
+            svcLoad.loadReviewJson(file, [REQ('migrations')], NONE);
             expect.fail('expected loadReviewJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);

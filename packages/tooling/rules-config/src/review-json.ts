@@ -658,9 +658,3 @@ export function reviewJsonSchemaHint(filePath: string): string {
     return reviewJsonSvc.reviewJsonSchemaHint(filePath);
 }
 
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it
-export function loadReviewJson(
-    filePath: string, required: readonly RequiredChecklist[], authorized: AuthorizedOverrides,
-): ReviewJson {
-    return reviewJsonSvc.loadReviewJson(filePath, required, authorized);
-}

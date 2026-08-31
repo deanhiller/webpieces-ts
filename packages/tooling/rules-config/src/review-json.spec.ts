@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { DotWebpieces } from './state-dir';
-import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
+import { prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { AuthorizedOverrides } from './human-authorization';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
@@ -14,6 +14,10 @@ import { toError } from './to-error';
 // The empty grant. Most of these tests predate human authorization and assert verdict mechanics that have
 // nothing to do with it; passing NONE says out loud that no human has authorized anything here.
 const NONE = new AuthorizedOverrides();
+
+// The service, constructed once. There is no module-level `loadReviewJson` any more — a second spelling of
+// one method is exactly the shim shape this repo rejects, so the only way in is the service.
+const svcLoad = new ReviewJsonService();
 
 function tmpFile(contents: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-'));
@@ -131,7 +135,7 @@ describe('archiveReviewJson', () => {
     it('leaves the branch unable to reach finish again without a fresh review', () => {
         const file = tmpFile(aReview('First round'));
         svc.archiveReviewJson(file);
-        expect((): unknown => loadReviewJson(file, [], NONE)).toThrow(InformAiError);
+        expect((): unknown => svcLoad.loadReviewJson(file, [], NONE)).toThrow(InformAiError);
     });
 
     it('points the "not found" complaint at the archive instead of reading as data loss', () => {
@@ -140,7 +144,7 @@ describe('archiveReviewJson', () => {
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            loadReviewJson(file, [], NONE);
+            svcLoad.loadReviewJson(file, [], NONE);
             expect.fail('expected loadReviewJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);
@@ -155,7 +159,7 @@ describe('archiveReviewJson', () => {
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            loadReviewJson(file, [], NONE);
+            svcLoad.loadReviewJson(file, [], NONE);
             expect.fail('expected loadReviewJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);
@@ -170,7 +174,7 @@ describe('loadReviewJson', () => {
             title: 'Fix the thing', riskScore: 42, riskLevel: 'yellow', summary: 'ok',
             violations: ['a'], risks: [], filesToReview: ['x.ts'],
         }));
-        const review = loadReviewJson(file, [], NONE);
+        const review = svcLoad.loadReviewJson(file, [], NONE);
         expect(review.riskScore).toBe(42);
         expect(review.riskLevel).toBe('yellow');
         expect(review.riskEmoji).toBe('🟡');
@@ -180,26 +184,26 @@ describe('loadReviewJson', () => {
 
     it('reads a trimmed title and REQUIRES it (hard-reject when absent or blank)', () => {
         const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', riskScore: 10, riskLevel: 'green' }));
-        expect(loadReviewJson(withTitle, [], NONE).title).toBe('Fix the thing');
+        expect(svcLoad.loadReviewJson(withTitle, [], NONE).title).toBe('Fix the thing');
         const without = tmpFile(JSON.stringify({ riskScore: 10, riskLevel: 'green' }));
-        expect(() => loadReviewJson(without, [], NONE)).toThrowError(/"title" must be a non-empty/);
+        expect(() => svcLoad.loadReviewJson(without, [], NONE)).toThrowError(/"title" must be a non-empty/);
         const blank = tmpFile(JSON.stringify({ title: '   ', riskScore: 10, riskLevel: 'green' }));
-        expect(() => loadReviewJson(blank, [], NONE)).toThrowError(/"title" must be a non-empty/);
+        expect(() => svcLoad.loadReviewJson(blank, [], NONE)).toThrowError(/"title" must be a non-empty/);
     });
 
     it('throws InformAiError with the schema when the file is missing', () => {
-        expect(() => loadReviewJson('/nope/review.json', [], NONE)).toThrowError(InformAiError);
-        expect(() => loadReviewJson('/nope/review.json', [], NONE)).toThrowError(/Required review.json not found/);
+        expect(() => svcLoad.loadReviewJson('/nope/review.json', [], NONE)).toThrowError(InformAiError);
+        expect(() => svcLoad.loadReviewJson('/nope/review.json', [], NONE)).toThrowError(/Required review.json not found/);
     });
 
     it('throws on malformed JSON', () => {
         const file = tmpFile('{ not json');
-        expect(() => loadReviewJson(file, [], NONE)).toThrowError(/not valid JSON/);
+        expect(() => svcLoad.loadReviewJson(file, [], NONE)).toThrowError(/not valid JSON/);
     });
 
     it('throws on an out-of-range riskScore and a bad riskLevel', () => {
         const file = tmpFile(JSON.stringify({ riskScore: 200, riskLevel: 'orange' }));
-        expect(() => loadReviewJson(file, [], NONE)).toThrowError(/riskScore.*0–100/);
+        expect(() => svcLoad.loadReviewJson(file, [], NONE)).toThrowError(/riskScore.*0–100/);
     });
 });
 
@@ -255,21 +259,21 @@ describe('writePrContext', () => {
 describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
     it('throws when a matched checklist has no verdict, naming the reviewer subagent', () => {
         const file = tmpFile(validReview());
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/"migrations" subagent/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/"migrations" subagent/);
     });
 
     it('passes when review-<id>.json has status:green', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'green', output: 'no NOT NULL added' } });
-        const review = loadReviewJson(file, [REQ('migrations')], NONE);
+        const review = svcLoad.loadReviewJson(file, [REQ('migrations')], NONE);
         expect(review.results[0].id).toBe('migrations');
         expect(review.results[0].status).toBe('green');
     });
 
     it('refuses status:red with no override, printing the reviewer output', () => {
         const file = tmpReviewWith({ migrations: { status: 'red', output: 'NOT NULL without backfill' } });
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/FAILED review/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/NOT NULL without backfill/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/FAILED review/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/NOT NULL without backfill/);
     });
 
     /**
@@ -279,14 +283,14 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
      */
     it('REFUSES status:red + override when no human has authorized it', () => {
         const file = tmpReviewWith({ migrations: { status: 'red', output: 'locks writes', override: 'behind a flag; ONE-2210' } });
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/NO HUMAN AUTHORIZED/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/pnpm wp-authorize --checklist migrations/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/NO HUMAN AUTHORIZED/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/pnpm wp-authorize --checklist migrations/);
     });
 
     it('loads status:red + override once a verified human authorization covers that checklist', () => {
         const file = tmpReviewWith({ migrations: { status: 'red', output: 'locks writes', override: 'behind a flag; ONE-2210' } });
         const granted = new AuthorizedOverrides(new Map([['migrations', 'Behind a flag until ONE-2210 lands.']]));
-        const review = loadReviewJson(file, [REQ('migrations')], granted);
+        const review = svcLoad.loadReviewJson(file, [REQ('migrations')], granted);
         expect(review.results[0].override).toBe('behind a flag; ONE-2210');
     });
 
@@ -294,7 +298,7 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
     // the PR and overriding its own failure — which reads as a deliberately-accepted defect, not a note.
     it('passes status:yellow — a concern is published, not a blocker', () => {
         const file = tmpReviewWith({ migrations: { status: 'yellow', output: 'index added without CONCURRENTLY' } });
-        const review = loadReviewJson(file, [REQ('migrations')], NONE);
+        const review = svcLoad.loadReviewJson(file, [REQ('migrations')], NONE);
         expect(review.results[0].status).toBe('yellow');
     });
 
@@ -303,7 +307,7 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
             migrations: { status: 'green', output: 'ok' },
             dockerfiles: { status: 'green', output: 'ok' },
         });
-        const review = loadReviewJson(file, [REQ('migrations'), REQ('dockerfiles')], NONE);
+        const review = svcLoad.loadReviewJson(file, [REQ('migrations'), REQ('dockerfiles')], NONE);
         expect(review.results.map((r): string => r.id).sort()).toEqual(['dockerfiles', 'migrations']);
     });
 
@@ -324,21 +328,21 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
 describe('loadReviewJson — the removed `success` field', () => {
     it('names `success` as removed and does NOT claim the verdict is missing', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', success: true, output: 'ok' } });
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/"success"/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/REMOVED/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/has no verdict/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/"success"/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/REMOVED/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/has no verdict/);
     });
 
     it('prints the replacement shape, so the fix needs no doc lookup', () => {
         const file = tmpReviewWith({ migrations: { success: false, output: 'bad' } });
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/green \| yellow \| red/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/green \| yellow \| red/);
     });
 
     it('reports an INVALID status as invalid — not as a legacy file and not as a missing one', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'purple', output: 'ok' } });
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/no valid "status"/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/has no verdict/);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/"success"/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/no valid "status"/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/has no verdict/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).not.toThrowError(/"success"/);
     });
 
     // Unparseable bytes stay tolerant: a half-written file degrades to the same message as an absent one,
@@ -348,7 +352,7 @@ describe('loadReviewJson — the removed `success` field', () => {
         const file = path.join(dir, 'review.json');
         fs.writeFileSync(file, validReview());
         fs.writeFileSync(path.join(dir, 'review-migrations.json'), '{ not json');
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
     });
 });
 
@@ -594,7 +598,7 @@ describe('archiveChecklistResult', () => {
         const file = tmpReviewWith({ migrations: redVerdict('refused') });
         svc.archiveChecklistResult(file, 'migrations');
         expect(svc.loadChecklistResults(file, [REQ('migrations')])).toEqual([]);
-        expect(() => loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
+        expect(() => svcLoad.loadReviewJson(file, [REQ('migrations')], NONE)).toThrowError(/has no verdict/);
     });
 });
 
@@ -615,7 +619,7 @@ describe('loadReviewJson — optional checklists', () => {
         // webpieces-disable no-unmanaged-exceptions -- the thrown message IS the assertion subject here
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            loadReviewJson(file, reqs, NONE);
+            svcLoad.loadReviewJson(file, reqs, NONE);
             return '';
         } catch (err: unknown) {
             const error = toError(err);
