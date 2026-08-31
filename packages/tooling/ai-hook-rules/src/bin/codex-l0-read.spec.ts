@@ -10,6 +10,9 @@ import { ShimTestkit } from './shim-testkit';
 import { shimStaleRecoveryDecision } from '../adapters/hook-core';
 import { detectAiType } from '../adapters/detect-ai';
 import { ShellReadParity } from '../core/shell-read-parity';
+import { run, runBash } from '../core/runner';
+import { BlockedResult, NormalizedToolInput } from '../core/types';
+import { CODEX_READ_STILL_ALLOWED } from './l0-codex-read';
 
 /**
  * THE CODEX L0 READ DEADLOCK, and the proof it is gone.
@@ -273,6 +276,59 @@ describe('every L0 fault: a Codex READ is allowed, a Codex WRITE and a non-read 
         expect(shimStaleRecoveryDecision('Bash', CODEX_READ_CMD, '', 'claude-code')).toBe('deny');
         expect(shimStaleRecoveryDecision('apply_patch', '*** Begin Patch\n*** End Patch', '', 'codex')).toBe('deny');
         expect(shimStaleRecoveryDecision('Bash', 'rm -rf /', '', 'codex')).toBe('deny');
+    });
+
+    /**
+     * FAULT C (webpieces.config.json missing) TRAVELS A DIFFERENT ROUTE, and that is why it needs its
+     * own case rather than another row in the table above.
+     *
+     * D/X/U/K are decided in POSIX sh inside the shim, before the bin runs, so the four cases above
+     * drive a real /bin/sh. C is decided INSIDE the binary — `runner.configMissingBlock`, reached from
+     * `runBash` — and its escape is `l0FaultAllows`. That function used to test `L0_ALLOW_JS` directly,
+     * a union this branch deliberately filters harness-gated entries OUT of, so the Codex read entry was
+     * not consultable on this path at all while `CONFIG_MISSING_REPORT` went on promising it. A green
+     * build, 23 green goldens and two passing reviewers all missed it, because nothing drove fault C
+     * with a Codex read. This is that test.
+     */
+    it('fault C (config missing) lets a Codex read through and still denies the rest', () => {
+        // A root with NO webpieces.config.json anywhere above it — the whole of fault C.
+        const root = fs.realpathSync(kit.mktmp());
+        fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
+
+        expect(runBash(CODEX_READ_CMD, root, 'guards', 'codex'),
+            'the read was DENIED under fault C — the deny promises a cure the guard rejects').toBeNull();
+        expect(runBash('cat package.json', root, 'guards', 'codex')).toBeNull();
+
+        const nonRead = runBash('rm -rf /', root, 'guards', 'codex');
+        expect(nonRead, 'a non-read Codex Bash escaped fault C').toBeInstanceOf(BlockedResult);
+        // A Codex WRITE is `apply_patch`, which the adapter normalizes to a File event — so it reaches
+        // the runner through run(), not runBash(). Same fault, same block, different door.
+        const write = run('Write', new NormalizedToolInput(path.join(root, 'x.ts'), []), root, 'all');
+        expect(write, 'a Codex WRITE escaped fault C').toBeInstanceOf(BlockedResult);
+    });
+
+    /**
+     * THE HARD CONSTRAINT, on the fault-C path too: identical bytes, harness claude-code, still blocked.
+     */
+    it('fault C denies the SAME read command when the harness is Claude Code', () => {
+        const root = fs.realpathSync(kit.mktmp());
+        fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
+        expect(runBash(CODEX_READ_CMD, root, 'guards', 'claude-code'),
+            'Claude Code reached the Codex-gated entry through fault C').toBeInstanceOf(BlockedResult);
+    });
+
+    /**
+     * ANTI-DEADLOCK, asserted the way l0-matrix.spec.ts asserts it for the cures: the fault-C deny NAMES
+     * the Codex read spelling, and the guard on that same path ACCEPTS what it names. A message and an
+     * allowlist that disagree is the entire failure mode this file exists for.
+     */
+    it('fault C names the Codex read spelling and then accepts it', () => {
+        const root = fs.realpathSync(kit.mktmp());
+        fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
+        const blocked = run('Write', new NormalizedToolInput(path.join(root, 'x.ts'), []), root, 'all');
+        expect(blocked).toBeInstanceOf(BlockedResult);
+        expect((blocked as BlockedResult).report).toContain(CODEX_READ_STILL_ALLOWED);
+        expect(runBash(CODEX_READ_CMD, root, 'guards', 'codex')).toBeNull();
     });
 
     /**
