@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-    LEGACY_GUARANTEE_ROOT_MARKER, LEGACY_MARKER_REMOVE_AFTER, expectedEntries,
+    LEGACY_GUARANTEE_ROOT_MARKER, LEGACY_MARKER_REMOVE_AFTER, expectedEntries, HARNESS_REGISTRATIONS, HarnessRegistration,
     GUARDS_BIN, RULES_BIN, HookRegistrationEntry,
 } from './hook-registration';
 
@@ -39,7 +39,8 @@ describe('the retired-hook recogniser has an expiry, not an intention', () => {
      * compatibility policy rejects.
      */
     it('is never emitted — it only ever matches what must be removed', () => {
-        const wanted = expectedEntries([GUARDS_BIN, RULES_BIN]);
+        const wanted = HARNESS_REGISTRATIONS.flatMap(
+            (h: HarnessRegistration) => expectedEntries(h, [GUARDS_BIN, RULES_BIN]));
         for (const entry of wanted) {
             expect(entry.command).not.toContain(LEGACY_GUARANTEE_ROOT_MARKER);
         }

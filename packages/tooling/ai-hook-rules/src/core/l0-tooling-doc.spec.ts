@@ -6,7 +6,7 @@ import {
     L0AllowEntry, L0_ALLOWLIST, SHIM_LOG_FIELDS, SHIM_LOG_VERDICTS, ShimLogField, ShimLogVerdict,
     isAllowed,
 } from '../bin/shim';
-import { GUARDS_BIN, RULES_BIN, shimCommand } from '../bin/hook-registration';
+import { GUARDS_BIN, RULES_BIN, HARNESS_REGISTRATIONS, HarnessRegistration } from '../bin/hook-registration';
 import { L0FaultCode, L0_FAULT_NAMES } from './l0-fault-codes';
 import { L0Cure, L0Fault, L0_FAULTS } from './l0-matrix';
 import { L0ToolingDoc, L0_DOC_BEGIN, L0_DOC_END } from './l0-tooling-doc';
@@ -130,13 +130,15 @@ describe('the generated block renders every array it claims to render', () => {
     });
 
     /**
-     * The registrations are RENDERED from shimCommand(), which is what makes "both hooks are ABSOLUTE"
+     * The registrations are RENDERED from each harness's own shimCommand(), which is what makes "the hooks are ABSOLUTE"
      * a fact the doc cannot get wrong. It got it wrong twice while it was prose.
      */
     it('prints the two hook registrations from the code that installs them', () => {
         const block = new L0ToolingDoc().render();
-        expect(block).toContain(shimCommand(GUARDS_BIN));
-        expect(block).toContain(shimCommand(RULES_BIN));
+        for (const harness of HARNESS_REGISTRATIONS) {
+            expect(block, harness.label).toContain(harness.shimCommand(GUARDS_BIN));
+            expect(block, harness.label).toContain(harness.shimCommand(RULES_BIN));
+        }
         expect(block).toContain('$CLAUDE_PROJECT_DIR');
     });
 });

@@ -13,6 +13,8 @@ import {
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
     ADD_HOOK_PKG_CMD, HOOK_PKG, WORKSPACE_MANIFEST, PACKAGE_MANIFEST,
 } from './l0-allowlist';
+import { L0_IGNORED_TOOLS_SH } from './l0-ignored-tools';
+import { AI_TYPE_SH } from '../adapters/detect-ai';
 import { WP_LOG_SH } from './shim-audit-log';
 import { DRIFT_INVERSE_FIX_SH } from './shim-drift-fix';
 import { VERSION_DRIFT_GUARD_SH } from './shim-version-drift';
@@ -21,6 +23,10 @@ import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 // The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
 // every existing `from './shim'` import keeps working and there is still ONE name to import L0 by.
 export * from './l0-allowlist';
+// …and its two siblings, split out for the same size reason: the decision (isAllowed / isRootManifest /
+// READ_TOOLS) and the tool-shaped set it consults. ONE name to import L0 by, still.
+export * from './l0-decide';
+export * from './l0-ignored-tools';
 // Same treatment for the audit-log fragment: one name to import the whole rendered shim by.
 export * from './shim-audit-log';
 
@@ -221,7 +227,13 @@ WP_SID="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:spa
 WP_AID="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"agent_id"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 FILE="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 WP_CWD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-[ -n "\$WP_CWD" ] || WP_CWD="\$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree`;
+[ -n "\$WP_CWD" ] || WP_CWD="\$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
+# WHICH HARNESS sent this call — the ONE discriminator, imported from ../adapters/detect-ai so the sh
+# half of L0 and the JS half answer the identical question from one definition (the same twin pattern
+# L0_ALLOW_ERE_SH / L0_ALLOW_JS uses). One \`case\`, no JSON parser: consistent with how every field
+# above is \`sed\`-scraped, and the values are the AiType union's own strings so the twin-agreement spec
+# compares them byte for byte instead of translating between two vocabularies.
+${AI_TYPE_SH}`;
 
 // Shell fragment: the guards are DOWN (missing | stale | crashed). Classify the fault, then let THE L0
 // ALLOWLIST through — everything else falls to the deny below.
@@ -250,6 +262,14 @@ if [ "\$TOOL" = "Read" ]; then
   wp_log "\$WP_FAULT" ALLOW-READ   # you must be able to read to work out how to fix this
   exit 0
 fi
+case "\$TOOL" in
+  ${L0_IGNORED_TOOLS_SH})
+    # Nothing to judge — the Codex tools that are neither a shell command nor a file edit. sh twin of
+    # isAllowed()'s L0_IGNORED_TOOLS branch; see there for why the list is EXPLICIT and why apply_patch
+    # (Codex's only WRITE) is not on it.
+    wp_log "\$WP_FAULT" ALLOW-IGNORED
+    exit 0 ;;
+esac
 case "\$FILE" in
   */${CONFIG_FILENAME}|${CONFIG_FILENAME})
     wp_log "\$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it

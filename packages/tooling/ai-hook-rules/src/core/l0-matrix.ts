@@ -4,7 +4,7 @@ import {
     ADD_HOOK_PKG_CMD, CHECKOUT_MAIN_PULL_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call,
     L0_ALLOWLIST, RECOVERY_CMD, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
 } from '../bin/shim';
-import { ENV_SURFACE, REGISTRATION_SURFACE } from '../bin/hook-registration';
+import { ENV_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import {
     L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC,
@@ -216,17 +216,17 @@ export const L0_FAULTS: readonly L0Fault[] = [
     // cwd so the hooks resolve identically for every subagent. They only work as a set — a settings file left
     // on a superseded form silently changes who governs, re-pinning every tree to the
     // primary's release — and nothing validated the registration at all before it joined this fault.
-    new L0Fault(L0_FAULT_SHIM_STALE, 'a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release',
+    new L0Fault(L0_FAULT_SHIM_STALE, 'a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release',
         'the guard bin', 'JS',
         [
-            // wp-upgrade-shim leads because it is the ONLY cure that repairs all three, and it is
-            // still surgical: it rewrites ai-hook.sh, the registration and the managed env entry
+            // wp-upgrade-shim leads because it is the ONLY cure that repairs EVERY managed surface, and
+            // it is still surgical: it rewrites ai-hook.sh, each harness's registration and the env entry
             // and touches no config, and it imports only fs/path so it runs on a tree too broken to load
             // the rule engine. The INSTALLER is deliberately NOT a cure here: it also migrates the config
             // and prompts for a target twice, which hangs a non-interactive agent.
             bashCure(UPGRADE_SHIM_CMD, true,
-                'this fault fires at all — it is the only cure that repairs all three managed things '
-                + '(ai-hook.sh, the settings.json registration and its managed env entry), and it also '
+                'this fault fires at all — it is the only cure that repairs EVERY managed surface '
+                + '(ai-hook.sh, each harness hook registration, and the Claude settings env entry), and it also '
                 + 'deletes the retired guarantee-root.sh and any entry still naming it, and it '
                 + 'touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer'),
             // 2026-07-21: the version gap below caused a real "command not found" deadlock.
@@ -235,7 +235,14 @@ export const L0_FAULTS: readonly L0Fault[] = [
                 + 'not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade '
                 + '@webpieces afterwards and run Option 1 to finish'),
         ],
-        shimStaleDenyReason('', '', [SHIM_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], false)),
+        // The SAMPLE deny renders EVERY managed surface, built from HARNESS_REGISTRATIONS rather than
+        // a hand-written trio — a doc that shows a three-surface deny while the guard can report four
+        // is exactly the drift this generated-doc arrangement exists to make impossible.
+        shimStaleDenyReason('', '', [
+            SHIM_MARKER,
+            ...HARNESS_REGISTRATIONS.map((h: HarnessRegistration): string => h.registrationSurface),
+            ENV_SURFACE,
+        ], false)),
     new L0Fault(L0_FAULT_CONFIG_MISSING, `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
         [

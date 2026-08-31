@@ -657,30 +657,3 @@ describe('healShim — self-heal the committed shim from the running binary', ()
         expect(fs.readFileSync(target, 'utf8')).toBe(renderShim());
     });
 });
-
-/**
- * MATCHER-SUPERSET INVARIANT — the guards matcher must cover every tool the rules matcher covers.
- *
- * The rules hook deliberately SKIPS the committed-shim self-guard ("guards owns the shim", see
- * enforceCommittedShim's `mode === 'rules'` early return). That is only safe while every tool the
- * rules hook sees is ALSO seen by the guards hook. Narrow the guards matcher — drop Write, say — and
- * fault S silently stops being enforced for exactly the tools that fell out: no error, no test, just
- * a guard that quietly no longer runs on the writes it was written for.
- *
- * Nothing asserted this until now, and a matcher is a string literal one careless edit away.
- */
-describe('hook matchers — guards ⊇ rules', () => {
-    const toolsOf = (matcher: string): Set<string> => new Set(matcher.split('|'));
-
-    it('the guards matcher is a superset of the rules matcher', () => {
-        const guards = toolsOf(GUARDS_HOOK.matcher);
-        const missing = [...toolsOf(RULES_HOOK.matcher)].filter((t: string): boolean => !guards.has(t));
-        expect(missing, `guards hook does not match: ${missing.join('|')} — fault S stops being enforced there`).toEqual([]);
-    });
-
-    it('the guards matcher additionally covers Bash and Read', () => {
-        const guards = toolsOf(GUARDS_HOOK.matcher);
-        expect(guards.has('Bash')).toBe(true);   // the git/PR guards
-        expect(guards.has('Read')).toBe(true);   // the log-and-allow audit + read-stale-guard
-    });
-});

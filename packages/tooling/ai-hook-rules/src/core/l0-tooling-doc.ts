@@ -5,7 +5,7 @@ import {
     ShimLogVerdict, UPGRADE_SHIM_CMD,
 } from '../bin/shim';
 import {
-    ENV_SURFACE, GUARDS_BIN, REGISTRATION_SURFACE, RULES_BIN, SHIM_SURFACE, shimCommand,
+    ENV_SURFACE, GUARDS_BIN, RULES_BIN, SHIM_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration,
 } from '../bin/hook-registration';
 import {
     L0FaultCode, L0_FAULT_NAMES, L0_JS_FAULT_CODES, L0_LAYER, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED,
@@ -188,27 +188,40 @@ export class L0ToolingDoc {
     }
 
     /**
-     * Fault `S`'s subject: the THREE managed things, and the two registrations rendered from
-     * `shimCommand()` — which is what makes "they are ABSOLUTE" a fact this doc cannot get wrong.
+     * Fault `S`'s subject: the managed things, and every registration rendered from the harness's own
+     * `shimCommand()` — which is what makes "they are ABSOLUTE" a fact this doc cannot get wrong, and
+     * what keeps it from describing Claude Code's matcher as if it were Codex's.
      */
     private managedSurface(): string[] {
+        const surfaces = [
+            SHIM_SURFACE,
+            ...HARNESS_REGISTRATIONS.map((h: HarnessRegistration): string => h.registrationSurface),
+            ENV_SURFACE,
+        ];
+        const registrations: string[] = [];
+        for (const harness of HARNESS_REGISTRATIONS) {
+            registrations.push(`# ${harness.label}`);
+            registrations.push(harness.shimCommand(GUARDS_BIN));
+            registrations.push(harness.shimCommand(RULES_BIN));
+        }
         return [
-            '### The managed hook surface — what fault `S` compares (THREE things, one set)',
+            `### The managed hook surface — what fault \`S\` compares (${String(surfaces.length)} things, one set)`,
             '',
             '| # | surface |',
             '|---|---|',
-            `| 1 | \`${SHIM_SURFACE}\` |`,
-            `| 2 | ${this.cell(REGISTRATION_SURFACE)} |`,
-            `| 3 | ${this.cell(ENV_SURFACE)} |`,
+            // The shim is a bare PATH and the others are prose naming a file, so only the first is
+            // wrapped in code ticks — the same rendering this table has always had, now generated.
+            ...surfaces.map((surface: string, i: number): string =>
+                `| ${String(i + 1)} | ${i === 0 ? `\`${surface}\`` : this.cell(surface)} |`),
             '',
-            'The registration is TWO PreToolUse entries, and both are ABSOLUTE — they resolve from any cwd:',
+            'The registration is TWO PreToolUse entries per harness, and all of them are ABSOLUTE — they',
+            'resolve from any cwd:',
             '',
             '```',
-            shimCommand(GUARDS_BIN),
-            shimCommand(RULES_BIN),
+            ...registrations,
             '```',
             '',
-            `\`${UPGRADE_SHIM_CMD}\` repairs all three. \`${RESTORE_SHIM_CMD}\``,
+            `\`${UPGRADE_SHIM_CMD}\` repairs all ${String(surfaces.length)}. \`${RESTORE_SHIM_CMD}\``,
             `repairs \`${SHIM_SURFACE}\` and nothing else, so it is the fallback for an installed release too old`,
             'to carry the first.',
             '',

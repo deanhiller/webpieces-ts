@@ -5,7 +5,7 @@ import * as nodePath from 'path';
 import { vi, afterEach } from 'vitest';
 
 import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from '@webpieces/rules-config';
-import { migrate } from '../bin/setup';
+import { migrate } from '../bin/setup-config';
 import { buildBashContext } from './build-context';
 import { isAllowed } from '../bin/shim';
 import { EffectiveTreeResolver, atRoot } from './effective-tree';

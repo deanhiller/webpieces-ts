@@ -360,7 +360,7 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
 });
 
 /**
- * THE LINE FORMAT itself — 8 tab-separated fields, or 9 when the OPTIONAL `bin=` is present. Locked
+ * THE LINE FORMAT itself — 11 tab-separated fields, or 12 when the OPTIONAL `bin=` is present. Locked
  * because the whole point of this log is that a human or an agent can reconcile it against
  * guards/L0-tooling.md, and a format nobody agreed on cannot be reconciled against anything.
  *
@@ -378,21 +378,64 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
  * if-and-only-if below is what stops it quietly becoming unconditional noise again.
  */
 describe('L0 audit log line format', () => {
-    it('emits ts, bin, tool, tree=, layer=, row=, shim=, fault=, verdict, command — no bin= when it agrees', () => {
+    it('emits ts, bin, tool, ai=, tree=, layer=, row=, shim=, fault=, verdict, command — no bin= when it agrees', () => {
         const root = kit.mktmp();
         installBin(root, 0);
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         const fields = logOf(root).trim().split('\t');
-        expect(fields).toHaveLength(10);
+        expect(fields).toHaveLength(11);
         expect(fields[1]).toBe('wp-ai-guards-hook');
         expect(fields[2]).toBe('Bash');
-        expect(fields[3].startsWith('tree=')).toBe(true);
-        expect(fields[4]).toBe('layer=L0');
-        expect(fields[5]).toBe(`row=${L0_ROW_HANDED_DOWN}`);   // healthy: no fault, handed down
-        expect(fields[6]).toBe(`shim=${root}`);   // a REAL path — an empty shim= would read as "unknown"
-        expect(fields[7].startsWith('fault=')).toBe(true);
-        expect(fields[8]).toBe('PASS-BIN-ALLOW');
-        expect(fields[9]).toBe('pnpm build');
+        // The payload carries no `turn_id`, so the one discriminator says Claude Code — see
+        // adapters/detect-ai.ts, whose sh fragment the shim splices in verbatim.
+        expect(fields[3]).toBe('ai=claude-code');
+        expect(fields[4].startsWith('tree=')).toBe(true);
+        expect(fields[5]).toBe('layer=L0');
+        expect(fields[6]).toBe(`row=${L0_ROW_HANDED_DOWN}`);   // healthy: no fault, handed down
+        expect(fields[7]).toBe(`shim=${root}`);   // a REAL path — an empty shim= would read as "unknown"
+        expect(fields[8].startsWith('fault=')).toBe(true);
+        expect(fields[9]).toBe('PASS-BIN-ALLOW');
+        expect(fields[10]).toBe('pnpm build');
+    });
+
+    /**
+     * THE HARNESS FIELD, both values, through the REAL shim under a real /bin/sh — the sh half of what
+     * `detect-ai.spec.ts` locks at the fragment level. Without it "is Codex actually being guarded?" has
+     * no answer in the one stream that records every single tool call.
+     */
+    it('stamps ai=codex on a Codex payload and ai=claude-code on a Claude one', () => {
+        const root = kit.mktmp();
+        installBin(root, 0);
+        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
+        expect(logOf(root)).toContain('\tai=claude-code\t');
+
+        const codex = kit.mktmp();
+        installBin(codex, 0);
+        kit.runShim(codex, 'wp-ai-guards-hook', JSON.stringify({
+            tool_name: 'Bash', cwd: codex, tool_input: { command: 'pnpm build' }, turn_id: 'turn-1',
+        }));
+        expect(logOf(codex)).toContain('\tai=codex\t');
+    });
+
+    /**
+     * A Codex tool with nothing to judge must not fall through to the DENY while the guards are down.
+     * `update_plan` is how a Codex agent records what it intends to do next, so denying it would block
+     * the agent from writing down the cure it is being told to run. See L0_IGNORED_TOOLS.
+     */
+    it('allows a Codex tool with nothing to judge under a fault, and still DENIES apply_patch', () => {
+        const ignored = kit.stageDeclaredRoot();   // declared but no bin → fault X
+        kit.runShim(ignored, 'wp-ai-guards-hook', JSON.stringify({
+            tool_name: 'update_plan', cwd: ignored, tool_input: {}, turn_id: 't1',
+        }));
+        expect(logOf(ignored)).toContain('\tfault=X\tALLOW-IGNORED\t');
+
+        const write = kit.stageDeclaredRoot();
+        const out = kit.runShim(write, 'wp-ai-guards-hook', JSON.stringify({
+            tool_name: 'apply_patch', cwd: write, turn_id: 't1',
+            tool_input: { command: '*** Begin Patch\\n*** Add File: a.ts\\n+a\\n*** End Patch' },
+        }));
+        expect(out.isDenied()).toBe(true);
+        expect(logOf(write)).toContain('\tfault=X\tDENY\t');
     });
 
     /**
@@ -430,10 +473,10 @@ describe('L0 audit log line format', () => {
         fs.mkdirSync(borrower, { recursive: true });
         kit.runShim(borrower, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         const fields = logOf(borrower).trim().split('\t');
-        expect(fields).toHaveLength(11);
-        expect(fields[6]).toBe(`shim=${borrower}`);
-        expect(fields[7]).toBe(`bin=${owner}`);    // the lender, named because it is NOT the shim's tree
-        expect(fields[8].startsWith('fault=')).toBe(true);
+        expect(fields).toHaveLength(12);
+        expect(fields[7]).toBe(`shim=${borrower}`);
+        expect(fields[8]).toBe(`bin=${owner}`);    // the lender, named because it is NOT the shim's tree
+        expect(fields[9].startsWith('fault=')).toBe(true);
     });
 
     // The verdict stays immediately before the command, so the greps that predate the tree/fault

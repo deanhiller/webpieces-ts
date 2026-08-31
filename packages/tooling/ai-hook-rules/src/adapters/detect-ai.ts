@@ -18,10 +18,11 @@ import { AiType } from '../core/agent-event';
  * cannot do better, the spelling is contrived (an agent grepping for `turn_id` types it bare), and
  * the consequence of the miss is bounded: the Codex path is a SUPERSET of guards, never fewer.
  *
- * NOT WIRED INTO THE RENDERED SHIM IN THIS CHANGE. `committedShimStale()` compares the committed
- * `.claude/webpieces/ai-hook.sh` against `renderShim()` of the INSTALLED release, so changing the
- * renderer and regenerating the artifact together makes L0 fault S fire for everyone mid-upgrade.
- * The constant ships here first; the shim consumes it a release later.
+ * WIRED INTO THE RENDERED SHIM (`PARSE_PAYLOAD_SH` in ../bin/shim.ts), which is what makes the L0 audit
+ * line's `ai=` field possible. Note the release ordering that governs the ARTIFACT rather than this
+ * constant: `committedShimStale()` compares the committed `.claude/webpieces/ai-hook.sh` against
+ * `renderShim()` of the INSTALLED release, so the committed shim is NOT regenerated in the same PR that
+ * changes the renderer — it is regenerated after that release publishes, or by `wp-upgrade-shim`.
  */
 export const AI_TYPE_TOKEN_SH = '"turn_id":';
 

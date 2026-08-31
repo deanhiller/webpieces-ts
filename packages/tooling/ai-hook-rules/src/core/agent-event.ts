@@ -11,6 +11,24 @@ import { ToolKind, NormalizedToolInput, NormalizedBashInput } from './types';
 export type AiType = 'claude-code' | 'codex';
 
 /**
+ * The `AiType` union AS DATA, so the audit-log vocabulary is rendered from the type rather than retyped
+ * beside it. Adding a harness means adding it here and getting the log field's documented value set for
+ * free — the same reason `SHIM_LOG_FAULTS` is built from `L0_SH_FAULT_CODES` rather than retyped.
+ */
+export const AI_TYPES: readonly AiType[] = ['claude-code', 'codex'];
+
+/**
+ * What a log row shows when NOTHING established the harness: a row written by a release older than the
+ * `ai=` field, or a writer reached before any payload was parsed (the openclaw plugin, a library
+ * consumer, a spec).
+ *
+ * It is a REAL VALUE, not a compatibility shim and not an absence. `ai=unknown` is greppable and
+ * countable; an omitted field is neither, and "no `ai=`" would be indistinguishable from "this reader is
+ * looking at the wrong column".
+ */
+export const AI_TYPE_UNKNOWN = 'unknown';
+
+/**
  * How the hook ROUTES this call. It is deliberately NOT `ToolKind`.
  *
  * The plan sketched the field as `ToolKind | 'Bash' | 'Ignored'`, and that shape cannot express the

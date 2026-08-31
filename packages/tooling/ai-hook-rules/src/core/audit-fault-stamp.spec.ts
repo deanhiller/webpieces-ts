@@ -76,7 +76,10 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
             const invocations = new InvocationLog();
             invocations.begin(root, 'Bash', 'pnpm build');
             invocations.finish('BLOCK_AI_CURE', 'some-rule', code);
-            expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\n`);
+            // Anchored on the TAB that follows, for the same reason the decision line below is: every
+            // one of these streams is APPEND-ONLY, so `fault=` stopped being terminal the moment `ai=`
+            // was appended after it. What is worth pinning is that the field is present and delimited.
+            expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\t`);
 
             logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code, MATRIX_L2_UNROWED));
             // Anchored on the TAB that follows, not on the newline: the decision line is APPEND-ONLY,
@@ -87,7 +90,7 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
 
             const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
             logRejection('Edit', input, new BlockedResult('[some-rule] (a reason)\nblocked', code), root);
-            expect(readLog(root, REJECTION_LOG), `rejection line, fault ${code}`).toContain(`\tfault=${code}\n`);
+            expect(readLog(root, REJECTION_LOG), `rejection line, fault ${code}`).toContain(`\tfault=${code}\t`);
         }
     });
 
@@ -98,7 +101,7 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
         const invocations = new InvocationLog();
         invocations.begin(root, 'Bash', 'ls');
         invocations.finish('ALLOW', '-');
-        expect(readLog(root, INVOCATION_LOG)).toContain(`\tfault=${L0_FAULT_NONE}\n`);
+        expect(readLog(root, INVOCATION_LOG)).toContain(`\tfault=${L0_FAULT_NONE}\t`);
     });
 
     // Fault C for real, from the code path that decides it: no webpieces.config.json anywhere above a

@@ -195,6 +195,12 @@ WP_AID="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"agent_id"[[:space:]]*:[[:space:]
 FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
 WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
 [ -n "$WP_CWD" ] || WP_CWD="$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
+# WHICH HARNESS sent this call — the ONE discriminator, imported from ../adapters/detect-ai so the sh
+# half of L0 and the JS half answer the identical question from one definition (the same twin pattern
+# L0_ALLOW_ERE_SH / L0_ALLOW_JS uses). One `case`, no JSON parser: consistent with how every field
+# above is `sed`-scraped, and the values are the AiType union's own strings so the twin-agreement spec
+# compares them byte for byte instead of translating between two vocabularies.
+case "$PAYLOAD" in *'"turn_id":'*) AI=codex ;; *) AI=claude-code ;; esac
 # Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
 # tab-separated line per invocation into this TREE's own
 # logs/L0-shim/<session>-<agent|coordinator>-<binName>.log (gitignored), so the
@@ -293,7 +299,7 @@ wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
     # what distinguishes it from the ~50 constant bytes 'bin=' used to spend above.
     _wp_row=1
     case "$2" in ALLOW*) _wp_row=2 ;; DENY*) _wp_row=3 ;; esac
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "layer=L0" "row=$_wp_row" "shim=$ROOT" "$_wp_bin" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "ai=$AI" "tree=$WP_TREE" "layer=L0" "row=$_wp_row" "shim=$ROOT" "$_wp_bin" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }
 BROKEN_BIN=""
@@ -348,6 +354,14 @@ if [ "$TOOL" = "Read" ]; then
   wp_log "$WP_FAULT" ALLOW-READ   # you must be able to read to work out how to fix this
   exit 0
 fi
+case "$TOOL" in
+  webrun|collaborationspawn_agent|collaborationwait_agent|view_image|update_plan)
+    # Nothing to judge — the Codex tools that are neither a shell command nor a file edit. sh twin of
+    # isAllowed()'s L0_IGNORED_TOOLS branch; see there for why the list is EXPLICIT and why apply_patch
+    # (Codex's only WRITE) is not on it.
+    wp_log "$WP_FAULT" ALLOW-IGNORED
+    exit 0 ;;
+esac
 case "$FILE" in
   */webpieces.config.json|webpieces.config.json)
     wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it

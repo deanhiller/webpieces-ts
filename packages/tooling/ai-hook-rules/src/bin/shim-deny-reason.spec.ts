@@ -112,7 +112,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
         expect(reason).toContain(`${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE}`);
         expect(reason).toContain('pins the Bash cwd to the project root');
         expect(reason).toContain('inherited');
-        expect(reason).toContain('repairs all three');
+        expect(reason).toContain('repairs every managed surface');
     });
 
     /**

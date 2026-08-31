@@ -8,6 +8,7 @@ import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-str
 import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
+import { aiTypeContext } from './ai-type-context';
 import { l2RowForReason } from './l2-rows';
 import { cureForMatrix } from './matrix-cures';
 
@@ -234,6 +235,11 @@ function appendDecision(root: string, streamDir: string, decision: GuardDecision
             // prescribed, which is what makes the trail auditable against the doc without opening it.
             // APPEND-ONLY, like every field before it.
             `cure=${oneLine(cureForMatrix(decision.matrix.layer, decision.matrix.row))}`,
+            // WHICH HARNESS made the call, spelled exactly as the L0 sh shim spells it on its own
+            // stream — so ONE grep (`ai=codex`) spans all five streams and "is Codex actually being
+            // guarded?" is a question the trail can answer. APPEND-ONLY, like every field before it; a
+            // row from a release that predates this carries no `ai=` and reads as `unknown`.
+            `ai=${aiTypeContext.forLog()}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {
@@ -348,6 +354,9 @@ export class InvocationLog {
                 // WHICH L0 fault ended this call, in the same letters and the same field name the L0 sh
                 // shim uses (the `L0-shim/` stream) — so ONE grep spans the whole trail.
                 `fault=${fault}`,
+                // WHICH HARNESS made the call — same field name and same vocabulary as the L0 sh shim's
+                // `ai=` and the decision stream's, so one grep spans the whole trail. APPEND-ONLY.
+                `ai=${aiTypeContext.forLog()}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);
         } catch (err: unknown) {

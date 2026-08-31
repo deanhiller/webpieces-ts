@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { runUpgradeShim } from './upgrade-shim';
 import { renderShim, shimPath } from './shim';
-import { GUARDS_BIN, readSettings, shimCommand, writeSettings } from './hook-registration';
+import { GUARDS_BIN, readSettings, writeSettings, CLAUDE_REGISTRATION } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 /**
@@ -77,7 +77,7 @@ describe('runUpgradeShim', () => {
         writeSettings(settingsPath, {
             hooks: {
                 PreToolUse: [
-                    { matcher: 'Write|Edit|MultiEdit|Bash|Read', hooks: [{ type: 'command', command: shimCommand(GUARDS_BIN) }] },
+                    { matcher: 'Write|Edit|MultiEdit|Bash|Read', hooks: [{ type: 'command', command: CLAUDE_REGISTRATION.shimCommand(GUARDS_BIN) }] },
                 ],
             },
         });

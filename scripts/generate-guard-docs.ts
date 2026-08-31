@@ -8,6 +8,7 @@ import { LOCATION_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/
 import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
 import { GuardIndexDoc } from '../packages/tooling/ai-hook-rules/src/core/guard-index-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
+import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-matrix';
 
 /**
  * Rewrite every GENERATED guard artifact from the arrays and renderers the guards consult.
@@ -38,8 +39,8 @@ import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
  * committing a locally-rendered copy would hard-block every call in the repo until the next publish.
  * `pnpm exec wp-upgrade-shim` is what writes those, from node_modules, after a release.
  *
- * L0's generated doc half is a rules-config TEMPLATE (webpieces.guard-matrix.md) written by its own
- * writer. GUARD_MATRIX.md's "Generation status" table is the authority for which layer is which.
+ * L0's generated doc half is a rules-config TEMPLATE (webpieces.guard-matrix.md), written here too.
+ * GUARD_MATRIX.md's "Generation status" table is the authority for which layer is which.
  */
 // webpieces-disable no-function-outside-class -- a standalone generator script, not a library module
 function main(): void {
@@ -81,6 +82,15 @@ function main(): void {
     const index = path.join(root, 'GUARD_MATRIX.md');
     fs.writeFileSync(index, new GuardIndexDoc().splice(fs.readFileSync(index, 'utf8')), 'utf8');
     wrote.push(index);
+
+    // L0's OTHER generated artifact — the matrix doc a blocked agent is handed by name, rendered from
+    // L0_FAULTS + L0_ALLOWLIST. `l0-matrix.spec.ts` locks it byte-identical to renderGuardMatrixDoc()
+    // exactly as every artifact above is locked, but it was the ONE such file this script did not write:
+    // the docblock said "rewrite every GENERATED guard artifact" and then left the reader of a red byte
+    // lock with no command at all. Adding an allowlist ENTRY is what surfaced it.
+    const matrix = path.join(root, 'packages', 'tooling', 'rules-config', 'templates', GUARD_MATRIX_DOC);
+    fs.writeFileSync(matrix, renderGuardMatrixDoc(), 'utf8');
+    wrote.push(matrix);
 
     const templates = path.join(root, 'packages', 'tooling', 'ai-hook-rules', 'templates');
     const shim = path.join(templates, 'ai-hook.sh');
