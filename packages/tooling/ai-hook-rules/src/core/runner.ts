@@ -80,16 +80,9 @@ export function isGitOrGhCommand(command: string): boolean {
 // L0 fault table, so the message and the allowlist can never prescribe different cures. `cwd` is used
 // only to drop the matrix doc where the AI can read it (the config root does not exist yet here).
 //
-// THE ALLOWLIST ESCAPE IS THE CALLER'S, NOT THIS FUNCTION'S — moved out 2026-09-01, and the move is
-// the fix for a real hole rather than tidying. This used to take an optional `command` and ask
-// `l0FaultAllows(command)` itself, which meant the escape could only ever see what a command-less
-// signature could carry: no harness. So the harness-GATED half of the allowlist was unreachable under
-// fault C, while CONFIG_MISSING_REPORT went on promising a Codex session it could `cat` the config —
-// a deny prescribing a cure the same deny rejects, which is the deadlock shape L0 exists to remove.
-//
-// With the escape at the call site, fault C now reads exactly like fault Y one screen down
-// (`l0FaultAllows(...) ? null : block`), the harness travels with the command, and this function has
-// one job: build the block. Returns the block; it no longer answers "is this allowed".
+// THE ALLOWLIST ESCAPE IS THE CALLER'S (moved out 2026-09-01): behind an optional `command` it could
+// not see the harness, so the gated half of the list was unreachable under C while
+// CONFIG_MISSING_REPORT promised it. See l0FaultAllows. This has one job now: build the block.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function configMissingBlock(cwd: string): BlockedResult {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
@@ -249,15 +242,10 @@ function isL0CureCommand(command: string): boolean {
 }
 
 // The FULL L0 list, asked only where this file has actually detected an L0 fault (C = config missing,
-// Y = config out of sync). Those two are the JS-side faults; D/X/K are decided in the shim, which greps
-// the same union. Without this the orientation entry would be honoured under four faults and silently
-// dropped under the other two — precisely the per-fault carve-out the L0 rewrite removed.
-//
-// IT ASKS `isAllowed()`, not a regex, and that is the point: `isAllowed` is the ONE question both
-// halves of L0 ask, and it is the only place the harness-gated entries are consulted. Testing
-// `L0_ALLOW_JS` directly — which is what this did — silently skipped every gated entry, so a Codex
-// read was honoured under D/X/U/K/S and dropped under C and Y. That is the same per-fault carve-out
-// one layer in, and asking the union rather than the question is how it got back in.
+// Y = config out of sync). D/X/U/K are decided in the shim, which greps the same union.
+// IT ASKS `isAllowed()`, not a regex: that is the ONE question both halves of L0 ask, and the only
+// place harness-gated entries are consulted. Testing `L0_ALLOW_JS` directly (which is what this did)
+// dropped the Codex read under C and Y while D/X/U/K honoured it — a per-fault carve-out again.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l0FaultAllows(command: string, aiType: AiType): boolean {
     return isAllowed('Bash', command.trim(), '', aiType) !== null;
@@ -450,7 +438,6 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     const loaded = loadConfigOrAllowInspection(command, cwd);
     // null = the config would not load AND this command only inspects → allow, see the helper.
     if (loaded === null) return null;
-    // fault C — the L0 list wins, harness included, exactly as under Y below.
     if (loaded.configPath === null) return l0FaultAllows(command, aiType) ? null : configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
