@@ -1,12 +1,14 @@
 import {
-    ChangedFilesOptions, ChecklistDefinition, ChecklistResult, ChecklistReviewContext, DiffScope,
-    RequiredChecklist, ReviewJsonService, reviewJsonPath,
+    AuthorizationContext, AuthorizedOverrides, ChecklistDefinition, ChecklistResult,
+    ChecklistReviewContext, HumanAuthorizationService, RequiredChecklist, ReviewJsonService,
+    reviewJsonPath,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { ChecklistDetector, ChecklistRoster } from './checklist-detector';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
+import { ReviewChangedFiles } from './authorization-context-resolver';
 
 /** How a caller wants the scan filtered. Data-only (per CLAUDE.md). */
 export class ChecklistScanOptions {
@@ -88,6 +90,16 @@ export class ChecklistScan {
      * passed. An optional checklist that ran and went RED is absent from here and stays in `outstanding`.
      */
     optionalNotRun: RequiredChecklist[];
+    /**
+     * The human authorizations that VERIFY for this branch right now — the only thing that turns a
+     * reviewer's `override` into a shipping verdict.
+     *
+     * Carried on the scan for the same reason `results` is: it is an input to every verdict, and a caller
+     * that re-resolved it would be verifying against a second reading of the fork point and changed-file
+     * set. One resolution, one answer, or the command that gates and the command that reports disagree
+     * about whether the human said yes.
+     */
+    authorized: AuthorizedOverrides;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -106,6 +118,10 @@ export class ChecklistScan {
         // stays a one-liner; the scanner itself always passes the real set.
         results: ChecklistResult[] = [],
         optionalNotRun: RequiredChecklist[] = [],
+        // REQUIRED, with no default. An empty grant fails closed, but a construction that silently got one
+        // by omission would report "no human authorized this" for a branch where somebody did — the exact
+        // stall this whole feature exists to end, arrived at by forgetting an argument.
+        authorized: AuthorizedOverrides,
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -120,6 +136,7 @@ export class ChecklistScan {
         this.changedFiles = changedFiles;
         this.results = results;
         this.optionalNotRun = optionalNotRun;
+        this.authorized = authorized;
     }
 }
 
@@ -133,10 +150,9 @@ export class ChecklistScan {
  * 1. **The base is the FORK POINT of main, computed directly** — never `DiffScope.resolveBase`, which
  *    overlays `NX_BASE`/`NX_HEAD` from the environment. That made review coverage depend on an env var.
  *    It now arrives via {@link DiffBasisResolver}, which injects ForkPoint; same sha, one resolution.
- * 2. **UNCOMMITTED work counts.** `getChangedFiles` is called with NO head, which is the branch of it that
- *    diffs base → WORKING TREE and unions in untracked files. Passing a head would diff commit-to-commit and
- *    silently miss staged, unstaged and untracked changes — so a checklist matching only uncommitted files
- *    would never fire and its reviewer would never be listed.
+ * 2. **UNCOMMITTED work counts**, and the set comes from {@link ReviewChangedFiles} — the one place that
+ *    computation lives, shared with the authorization commands so a checklist's scope and an approval's
+ *    scope are literally the same file set rather than two implementations of it.
  * 3. **The range and the command it prints are the SAME basis.** Property 2 used to be true of the file set
  *    only: reviewers were handed `git diff <base> HEAD`, which on a dirty tree covers a different range and
  *    prints nothing. Both now derive from one {@link DiffBasis}, carried on the scan so a materializing
@@ -149,10 +165,11 @@ export class ChecklistScanner {
     constructor(
         private readonly aiBranchName: AiBranchName,
         private readonly checklistDetector: ChecklistDetector,
-        private readonly diffScope: DiffScope,
+        private readonly reviewChangedFiles: ReviewChangedFiles,
         private readonly diffBasisResolver: DiffBasisResolver,
         private readonly prContextWriter: PrContextWriter,
         private readonly reviewJsonService: ReviewJsonService,
+        private readonly humanAuthorization: HumanAuthorizationService,
     ) {}
 
     /**
@@ -160,9 +177,14 @@ export class ChecklistScanner {
      * config itself: `loadAndValidate` is the one gate on the checklist set (it rejects a non-array
      * `checklists`, including the removed `{ doc }` manifest shape, and verifies every guidance doc and
      * reviewer-agent file exists), both callers already run it for other fields, and keeping the read out of
-     * here leaves this a function of its inputs rather than of the filesystem.
+     * here leaves this a function of its inputs rather than of the filesystem. `gateSalt` travels the same
+     * way and for the same reason — and as a POSITIONAL parameter rather than a field on
+     * {@link ChecklistScanOptions}, so it cannot be omitted. Omitted, every human authorization on the
+     * branch would be silently ignored, which looks exactly like a human who never approved anything.
      */
-    scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): ChecklistScan {
+    scan(
+        repoRoot: string, defined: ChecklistDefinition[], gateSalt: string, opts: ChecklistScanOptions,
+    ): ChecklistScan {
         const featureName = this.aiBranchName.getFeatureName();
         const reviewPath = reviewJsonPath(repoRoot, featureName);
         // ONE basis for the file set, the reproduce command and any downstream materialization. The fork
@@ -171,18 +193,22 @@ export class ChecklistScanner {
         const base = basis.base;
         // ONE changed-file computation feeds both the roster (all X) and the applicable set (N). `detect` is
         // pure and defined as the roster minus its empty entries, so the two cannot disagree about a match.
-        const changedFiles = this.changedFiles(repoRoot, base);
+        const changedFiles = this.reviewChangedFiles.since(repoRoot, base);
         const roster = new ChecklistRoster(
             this.checklistDetector.roster(defined, changedFiles), changedFiles.length, base !== '');
         const applicable = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
         const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
-        const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
+        // Resolved ONCE, from the same fork point and changed-file set the matching ran against — the
+        // approval's scope is checked against THIS diff, not against a second reading of it.
+        const authorized = this.humanAuthorization.verifiedFor(
+            repoRoot, new AuthorizationContext(featureName, base, changedFiles), gateSalt);
+        const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results, authorized);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
         // NOT `!owedIds.has(...)`-with-the-optional-exemption-folded-in: an optional checklist nobody ran is
         // neither reviewed nor blocking, and calling it "reviewed" would put a ✓ on the dashboard for a review
         // that never happened.
         const reviewed = applicable.filter((r: RequiredChecklist): boolean => !owedIds.has(r.id));
-        const optionalNotRun = this.reviewJsonService.optionalWithoutVerdict(applicable, results);
+        const optionalNotRun = this.reviewJsonService.optionalWithoutVerdict(applicable, results, authorized);
         return new ChecklistScan(
             defined,
             applicable,
@@ -194,11 +220,12 @@ export class ChecklistScanner {
             reviewPath,
             base,
             roster,
-            this.reviewJsonService.checklistFormatErrors(applicable, results),
+            this.reviewJsonService.checklistFormatErrors(applicable, results, authorized),
             basis,
             changedFiles,
             results,
             optionalNotRun,
+            authorized,
         );
     }
 
@@ -214,24 +241,5 @@ export class ChecklistScanner {
     private blocking(stillOwed: readonly RequiredChecklist[], optionalNotRun: readonly RequiredChecklist[]): RequiredChecklist[] {
         const skipped = new Set(optionalNotRun.map((r: RequiredChecklist): string => r.id));
         return stillOwed.filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
-    }
-
-    /**
-     * Every file changed since the fork point, INCLUDING uncommitted and untracked ones. Two non-default
-     * options, both load-bearing:
-     *
-     * `tsOnly:false`        — the default drops every *.sql / Dockerfile / .env* file a checklist most wants
-     *                         to key on, which would silently shrink the set a reviewer is pointed at.
-     * `includeDeletions:true` — the default is `--diff-filter=d`, so a DELETED file is invisible. A PR that
-     *                         deletes a migration, an auth check or a terraform rule changed exactly what a
-     *                         checklist exists to catch, and under the default no checklist fires at all.
-     */
-    private changedFiles(repoRoot: string, base: string): string[] {
-        if (base === '') return [];
-        const opts = new ChangedFilesOptions();
-        opts.tsOnly = false;
-        opts.includeDeletions = true;
-        // No head argument — see the class comment. This is what includes the working tree.
-        return this.diffScope.getChangedFiles(repoRoot, base, undefined, opts);
     }
 }

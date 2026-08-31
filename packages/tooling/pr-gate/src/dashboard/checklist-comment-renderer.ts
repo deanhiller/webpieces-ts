@@ -1,5 +1,5 @@
 import {
-    formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
+    formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, CK_UNAUTHORIZED,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistCommentRow } from './checklist-comment-row';
@@ -184,7 +184,7 @@ export class ChecklistCommentRenderer {
         if (row.status === CK_PASS) return '🟢';
         if (row.status === CK_WARN) return '🟡';
         if (row.status === CK_OVERRIDDEN) return '🟠';
-        if (row.status === CK_FAIL) return '🔴';
+        if (row.status === CK_FAIL || row.status === CK_UNAUTHORIZED) return '🔴';
         return '⚪';
     }
 
@@ -198,7 +198,8 @@ export class ChecklistCommentRenderer {
         if (!row.ran) return 'skipped, not applicable to this diff (expected ✅)';
         if (row.status === CK_PASS) return 'passed';
         if (row.status === CK_WARN) return 'passed with concerns';
-        if (row.status === CK_OVERRIDDEN) return 'OVERRIDDEN — shipped with a stated justification';
+        if (row.status === CK_OVERRIDDEN) return 'OVERRIDDEN — a human authorized shipping it (pnpm wp-authorize)';
+        if (row.status === CK_UNAUTHORIZED) return 'REFUSED — override claimed, but no human authorized it';
         if (row.status === CK_FAIL) return 'FAILED review';
         if (row.status === CK_MISSING) return 'no verdict written';
         return `unknown verdict (${row.status})`;

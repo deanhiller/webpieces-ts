@@ -104,7 +104,7 @@ describe('ChecklistCommentRenderer.render — reviewer sections', () => {
         const md = renderChecklistComment(rows, true);
         expect(md).toContain('### Reviews that ran');
         expect(md).toContain(
-            '#### 🟠 secrets-reviewer — OVERRIDDEN — shipped with a stated justification',
+            '#### 🟠 secrets-reviewer — OVERRIDDEN — a human authorized shipping it (pnpm wp-authorize)',
         );
         expect(md).toContain('#### 🟡 api-reviewer — passed with concerns');
         expect(md).toContain('#### 🟢 db-reviewer — passed');
