@@ -2,7 +2,7 @@ import {toError} from "../lib/errorUtils";
 import {LogManager} from "../logging/LogManager";
 import {ApiCallInfo} from "./ApiCallInfo";
 import {ApiMethodInfo} from "./ApiMethodInfo";
-import {ApiCallContext, ApiCallContextHolder} from "./ApiCallContext";
+import {ApiCallContext} from "./ApiCallContext";
 import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
 import {LOG_API_CALL_LOGGER_NAME} from "./ApiCallLogName";
 import {ClientRegistry} from "./ClientRegistry";
@@ -13,23 +13,29 @@ import {WEBPIECES_DEFAULT_FAILURE_CLASSIFIER} from "./WebpiecesDefaultFailureCla
 const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
 
 /**
- * LogApiCall - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and
+ * LogApiCallImpl - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and
  * client-side (ProxyClient) for one consistent logging shape across the framework.
  *
  * TWO things happen around each call:
  * 1. Text lines are emitted (the human-readable `[API-...]` patterns below).
  * 2. A structured {@link ApiCallInfo} tag is stamped into the ambient request context via the
- *    {@link ApiCallContextHolder} seam, so EVERY log line emitted during the call (not just the
+ *    {@link ApiCallContext} seam, so EVERY log line emitted during the call (not just the
  *    req/resp lines) inherits a filterable `api` object — surfacing in GCP as
  *    `jsonPayload.api.{method.{side,apiClass,methodName,controllerName},type,result}`.
  *
  * BROWSER-SAFE: this lives in core-util and runs in the browser bundle (via ProxyClient →
  * BrowserProxyClient), so it MUST NOT import `RequestContext` (Node async_hooks, and a circular dep).
- * It stamps through the {@link ApiCallContext} seam instead: `setupRuntime` installs a
- * RequestContext-backed impl on a Node server, and `ClientHttpBrowserFactory` a module-global impl in a
- * browser. If neither ran, {@link ApiCallContextHolder.get} throws (loud misconfiguration).
+ * It stamps through the {@link ApiCallContext} seam instead, and takes that seam as a REQUIRED
+ * CONSTRUCTOR ARGUMENT — there is no process-global holder to install and none to forget. Each
+ * environment-specific package constructs its own:
  *
- * Singleton, mirroring `RequestContext`: use the exported {@link LogApiCall} constant, not `new`.
+ *   LogApiFilter        (@webpieces/http-routing)        -> new LogApiCallImpl(new RequestContextApiCallContext())
+ *   NodeProxyClient     (@webpieces/http-client-node)    -> new LogApiCallImpl(new RequestContextApiCallContext())
+ *   TaskProxyClient     (@webpieces/cloudtasks-client)   -> new LogApiCallImpl(new RequestContextApiCallContext())
+ *   BrowserProxyClient  (@webpieces/http-client-browser) -> new LogApiCallImpl(new BrowserApiCallContext())
+ *
+ * NOT a singleton, deliberately: a shared instance would need a shared context, which is the global
+ * this constructor replaced. Construct one where you know which environment you are in.
  *
  * Logging format patterns:
  * - [API-{side}-req] ClassName.methodName request={...}
@@ -38,6 +44,13 @@ const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
  * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (server errors)
  */
 export class LogApiCallImpl {
+
+    /**
+     * @param ctx - the environment's {@link ApiCallContext}. REQUIRED, with no default: that is what
+     *   turns "nobody bootstrapped the context" into a compile error instead of a throw on the first
+     *   real call in production.
+     */
+    constructor(private readonly ctx: ApiCallContext) {}
 
     /**
      * Execute an API call with logging + `api` context-tagging around it.
@@ -128,15 +141,18 @@ export class LogApiCallImpl {
     }
 
     /**
-     * The ApiCallContext to stamp into. Throws if none was installed at startup, or if there is no
-     * active scope — loud misconfiguration, because an api call with nowhere to tag is a bug.
+     * The ApiCallContext to stamp into. It cannot be MISSING (it is a constructor argument), but it
+     * can be INACTIVE — a Node context used outside any `RequestContext.run(...)` scope. That throws:
+     * an api call with nowhere to tag is a bug.
      */
     private activeContext(): ApiCallContext {
-        const ctx = ApiCallContextHolder.get();
+        const ctx = this.ctx;
         if (!ctx.isActive()) {
             throw new Error(
-                'LogApiCall requires an ACTIVE ApiCallContext. On a Node server, run inside the ' +
-                'RequestContext.run(...) a server filter opens; in a browser, build ClientHttpBrowserFactory first.',
+                'LogApiCall requires an ACTIVE ApiCallContext. On a Node server, run inside a ' +
+                'RequestContext.run(...) scope — a server filter opens one per request, and a ' +
+                'non-webpieces host must open one around the work that calls a webpieces client. ' +
+                '(A BrowserApiCallContext is always active, so this can only be the Node side.)',
             );
         }
         return ctx;
@@ -202,9 +218,3 @@ export class LogApiCallImpl {
         );
     }
 }
-
-/**
- * The process-wide {@link LogApiCallImpl} singleton — mirrors the `RequestContext` export pattern.
- * Callers use `LogApiCall.execute(...)`, never `new`.
- */
-export const LogApiCall = new LogApiCallImpl();

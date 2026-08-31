@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-    ApiCallContextHolder,
     ApiMethodInfo,
     ContextKey,
     HeaderRegistry,
-    LogApiCall,
+    LogApiCallImpl,
     LogManager,
     MAX_GCP_LOG_BYTES,
     ServiceInfo,
@@ -55,7 +54,6 @@ beforeAll(() => {
     // The api tag must be registered+logged, or it never reaches jsonPayload at all.
     HeaderRegistry.configure([REQUEST_ID, WebpiecesCoreHeaders.API_CALL_INFO], /*platformHeaders*/ false);
     ServiceInfo.setInfo('e2e-svc', '1.0.0-e2e');
-    ApiCallContextHolder.install(new RequestContextApiCallContext());
     LogManager.setFactory(new WinstonGcpFactory());
 });
 
@@ -65,7 +63,7 @@ async function logApiCall(response: object, delayMs: number): Promise<LogRecord[
     capture.start();
     await RequestContext.run(async () => {
         RequestContext.putUntrusted(REQUEST_ID, 'req-e2e');
-        await LogApiCall.execute(
+        await new LogApiCallImpl(new RequestContextApiCallContext()).execute(
             new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
             { q: 'x' },
             async () => {

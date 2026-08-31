@@ -1,5 +1,9 @@
-import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
-import { LogManager, WebpiecesCoreHeaders, LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
+import {
+    provideFrameworkSingleton,
+    RequestContext,
+    RequestContextApiCallContext,
+} from '@webpieces/core-context';
+import { LogManager, WebpiecesCoreHeaders, LogApiCallImpl, ApiMethodInfo } from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
@@ -35,6 +39,13 @@ const log = LogManager.getLogger('LogApiFilter');
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
+    /**
+     * The SERVER's api-call log seam, built here around the RequestContext-backed ApiCallContext.
+     * This is the server's inbound construction point; the outbound ones live in each client package
+     * (NodeProxyClient, TaskProxyClient, BrowserProxyClient).
+     */
+    private readonly logApiCall = new LogApiCallImpl(new RequestContextApiCallContext());
+
     // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
     async filter(
         meta: MethodMeta,
@@ -47,7 +58,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             return wpResponse.response;
         };
 
-        // LogApiCall is a singleton (use it directly, no `new`). It logs the text lines AND stamps the
+        // LogApiCall logs the text lines AND stamps the
         // structured `api={method:{side:'server',...},...}` tag into RequestContext, so every log line
         // during the request carries jsonPayload.api. Correlation fields (requestId, ...) are added by
         // the backend. apiClass is the CONTRACT name (routeMeta.apiName, e.g. 'SaveApi') so a server log
@@ -73,7 +84,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             rm.controllerClassName,
             rm.mask,
         );
-        const response = await LogApiCall.execute(info, meta.requestDto, method);
+        const response = await this.logApiCall.execute(info, meta.requestDto, method);
         return new WpResponse(response);
     }
 }

@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    ApiCallContextHolder,
     ApiPath,
     ClientRegistry,
     DestinationTrust,
@@ -18,8 +17,8 @@ import {
     Rpc,
     TestCaseRecorder,
 } from '@webpieces/core-util';
-import type { AnyUntrustedContextKey, ApiCallContext } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
+import { RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import { buildClientProxy } from '@webpieces/http-client-core';
 import { AddressResolver } from '../AddressResolver';
@@ -54,21 +53,6 @@ class StubHeaders {
     findRecorder(): TestCaseRecorder | undefined {
         return undefined;
     }
-}
-
-/**
- * The `api` log-tag seam LogApiCall stamps into. A server installs a RequestContext-backed one at
- * startup; this suite is about error TYPES, not log tags, so it installs a no-op.
- */
-class NoopApiCallContext implements ApiCallContext {
-    isActive(): boolean {
-        return true;
-    }
-
-    // webpieces-disable no-any-unknown -- a context value is heterogeneous; this impl records nothing
-    set(_contextKey: AnyUntrustedContextKey, _value: unknown): void {}
-
-    remove(_contextKey: AnyUntrustedContextKey): void {}
 }
 
 /**
@@ -135,14 +119,18 @@ function stubExpressHtml404(): void {
     );
 }
 
-/** Call the client and hand back whatever it rejected with. */
+/**
+ * Call the client and hand back whatever it rejected with, inside a real RequestContext scope —
+ * NodeProxyClient builds its own RequestContext-backed ApiCallContext, so a live scope is all the
+ * setup there is. (This replaced a hand-rolled NoopApiCallContext + a holder install.)
+ */
 async function callAndCatch(): Promise<unknown> {
     // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-    return client().fetchStores(new FetchStoresRequest(51)).catch((err: unknown) => err);
+    return RequestContext.run(() =>
+        client().fetchStores(new FetchStoresRequest(51)).catch((err: unknown) => err));
 }
 
 beforeEach(() => {
-    ApiCallContextHolder.install(new NoopApiCallContext());
     ClientRegistry.clear();
     ClientRegistry.addUrlMapping('pg-dataaccess', 'https://pg-dataaccess.example.com');
 });
@@ -313,5 +301,35 @@ describe('an app-registered translation WINS over the node 4xx-to-500 wrap', () 
 
         expect(error).toBeInstanceOf(HttpInternalServerError);
         expect((error as HttpError).httpCause!.message).toBe('our service account is not on the allow-list');
+    });
+});
+
+/**
+ * THE REGRESSION, http half. The same defect the cloudtasks spec pins: a non-webpieces node host that
+ * never ran `setupRuntime` used to get `ApiCallContext is not installed` on the first real call.
+ *
+ * Nothing in THIS FILE installs an ApiCallContext — NodeProxyClient builds its own
+ * RequestContextApiCallContext — so an open RequestContext is the whole of the per-call setup.
+ *
+ * A node client still needs its BASE URL resolvable: ClientRegistry throws on node with no mapping and
+ * no deriver, which is why the beforeEach above registers one. That is a separate, LOUD, startup-time
+ * failure with its own message, not this one.
+ */
+describe('NodeProxyClient calls from a host that never ran setupRuntime', () => {
+    it('does not throw "ApiCallContext is not installed" — the call reaches fetch and returns', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() =>
+                Promise.resolve(new Response('{"ok":true}', {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                })),
+            ),
+        );
+
+        const result = await RequestContext.run(() =>
+            client().fetchStores(new FetchStoresRequest(51)));
+
+        expect(result).toEqual({ ok: true });
     });
 });

@@ -12,10 +12,11 @@ import {
     DestinationTrust,
     MaskSpec,
     LogManager,
-    LogApiCall,
+    LogApiCallImpl,
     ApiMethodInfo,
 } from '@webpieces/core-util';
 import {
+    RequestContextApiCallContext,
     RequestContextHeaders,
     provideFrameworkTransient,
 } from '@webpieces/core-context';
@@ -67,6 +68,15 @@ export class TaskProxyClient {
     private apiName!: string;
     private config!: TaskClientConfig;
 
+    /**
+     * The api-call log seam, built around this node-only package's OWN RequestContext-backed
+     * ApiCallContext. Constructed here rather than installed at startup, so a plain NestJS/Express
+     * host needs no webpieces STARTUP INSTALL to enqueue — it only has to run the call inside a
+     * `RequestContext.run(...)` scope, which such a host already opens per request. That is the defect
+     * that made every enqueue throw `ApiCallContext is not installed`.
+     */
+    private readonly logApiCall = new LogApiCallImpl(new RequestContextApiCallContext());
+
     constructor(
         @inject(TaskInvoker) private readonly invoker: TaskInvoker,
         @inject(RequestContextHeaders) private readonly headers: RequestContextHeaders,
@@ -116,7 +126,7 @@ export class TaskProxyClient {
         // `jsonPayload.api.*` logging (and, once recording is unified at LogApiCall, is recorded)
         // uniformly, without touching either invoker impl.
         const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
-        await LogApiCall.execute(info, requestDto, async () => {
+        await this.logApiCall.execute(info, requestDto, async () => {
             // Resolved lazily (not at client construction) so building a client stays synchronous.
             // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
             // enqueue in the process pays a lookup.

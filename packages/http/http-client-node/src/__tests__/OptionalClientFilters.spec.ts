@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    ApiCallContextHolder,
     ApiPath,
     ClientRegistry,
     DestinationTrust,
@@ -13,7 +12,6 @@ import {
     Service,
     TestCaseRecorder,
 } from '@webpieces/core-util';
-import type { AnyUntrustedContextKey, ApiCallContext } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { Provider, RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
@@ -57,17 +55,6 @@ class StubHeaders {
     findRecorder(): TestCaseRecorder | undefined {
         return undefined;
     }
-}
-
-class NoopApiCallContext implements ApiCallContext {
-    isActive(): boolean {
-        return true;
-    }
-
-    // webpieces-disable no-any-unknown -- a context value is heterogeneous; this impl records nothing
-    set(_contextKey: AnyUntrustedContextKey, _value: unknown): void {}
-
-    remove(_contextKey: AnyUntrustedContextKey): void {}
 }
 
 class StubOidc {
@@ -136,7 +123,6 @@ function newFactory(): ClientHttpFactory {
 }
 
 beforeEach(() => {
-    ApiCallContextHolder.install(new NoopApiCallContext());
     sent = [];
     stubTransport();
     ClientRegistry.addUrlMapping('svc', 'https://svc.example');

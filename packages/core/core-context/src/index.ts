@@ -16,9 +16,9 @@ export type { CapturedContext } from './CapturedContext';
 // deliberately dropped (`grep -rn withoutTrusted`). Type-only for the same reason as above: with no
 // class object on the surface there is no `of(...)` factory to reach, cast or not.
 export type { RestorableContext } from './CapturedContext';
-// SERVER impl of the core-util ApiCallContext seam, bound to RequestContext. Importing it here runs
-// its install() side effect, so LogApiCall (core-util, browser-safe) stamps the real RequestContext on
-// a Node server without importing it. A browser never loads core-context → keeps the no-op.
+// SERVER impl of the core-util ApiCallContext seam, bound to RequestContext. There is no install and
+// no side effect: each node package that logs api calls (LogApiFilter, NodeProxyClient,
+// TaskProxyClient) CONSTRUCTS one and hands it to its own LogApiCallImpl.
 export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 // Transport-neutral request stored in the context (http-routing's request type; re-exported there)
 export { HttpRequest, RawHttpRequest } from './HttpRequest';

@@ -2,7 +2,7 @@ import { ApiMethodInfo } from './ApiMethodInfo';
 
 /**
  * ApiCallInfo - the structured tag stamped into RequestContext around every API call
- * (by {@link LogApiCall}), so ANY log line emitted during the call inherits a filterable
+ * (by {@link LogApiCallImpl}), so ANY log line emitted during the call inherits a filterable
  * `api` object rather than only the req/resp text lines.
  *
  * The node logging backends (winston/bunyan) read this struct out of context via
@@ -36,7 +36,7 @@ export type ApiType = 'request' | 'response';
 
 /**
  * Response outcome. 'success' covers 2xx AND user errors (400/401/403/404/266 — a successfully
- * handled "you made a mistake"); 'failure' is a genuine server error. See {@link LogApiCall.isUserError}.
+ * handled "you made a mistake"); 'failure' is a genuine server error. See {@link LogApiCallImpl.isUserError}.
  */
 export type ApiResult = 'success' | 'failure';
 
@@ -59,7 +59,7 @@ export class ApiCallInfo {
          * There is deliberately no `statusCode` beside this. LogApiCall runs deep in the stack over
          * in-process calls, pubsub handlers, and cloud-task enqueues — none of which have an HTTP
          * status — and business logic must not know about HTTP. `result` (see {@link ApiResult}) is
-         * the transport-neutral outcome, exactly as {@link LogApiCall.isUserError} classifies by
+         * the transport-neutral outcome, exactly as {@link LogApiCallImpl.isUserError} classifies by
          * portable Error TYPE rather than by status code.
          */
         readonly durationMs?: number,

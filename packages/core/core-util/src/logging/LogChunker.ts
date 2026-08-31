@@ -22,7 +22,7 @@
  * BROWSER-SAFE: lives in core-util, which ships in the browser bundle — so `TextEncoder`, never
  * `Buffer`.
  *
- * Singleton, mirroring `LogApiCall` / `RequestContext`: use the exported {@link LogChunker}, not `new`.
+ * Singleton, mirroring `RequestContext`: use the exported {@link LogChunker}, not `new`.
  */
 
 /**
@@ -243,7 +243,7 @@ export class LogChunkerImpl {
 }
 
 /**
- * The process-wide {@link LogChunkerImpl} singleton — mirrors the `LogApiCall` export pattern.
+ * The process-wide {@link LogChunkerImpl} singleton — mirrors the `RequestContext` export pattern.
  * Callers use `LogChunker.chunk(...)`, never `new`.
  */
 export const LogChunker = new LogChunkerImpl();

@@ -1,6 +1,6 @@
 /**
  * ApiMethodInfo - the transport-neutral identity of a single API method call, handed to
- * {@link LogApiCall.execute} by every caller (server inbound, http/in-process clients, cloud tasks,
+ * {@link LogApiCallImpl.execute} by every caller (server inbound, http/in-process clients, cloud tasks,
  * and external wrapped clients like the firestore admin client).
  *
  * WHY generic (not RouteMetadata): LogApiCall runs deep in the stack over MANY shapes — HTTP routes,
@@ -34,7 +34,7 @@ export class ApiMethodInfo {
          *  impl. Surfaces as `jsonPayload.api.method.controllerName` for server-only drill-down. */
         readonly controllerName?: string,
         /** OPTIONAL — which DTO fields to mask in the log lines, and how. Absent = log the DTO
-         *  verbatim exactly as before (the fast path, no per-field walk). Present = {@link LogApiCall}
+         *  verbatim exactly as before (the fast path, no per-field walk). Present = {@link LogApiCallImpl}
          *  runs {@link maskedStringify} so a declared-sensitive field (an OAuth refresh token, an
          *  id-token JWT) is masked in the log while the REAL value still travels on the wire untouched.
          *  Rides the call identity so the spec travels with the api definition, not a global app config. */

@@ -4,7 +4,7 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 
 ## In Scope
 
-- `ProxyClient` — @ApiPath validation, the route map built from @ApiPath/@Endpoint/@Auth* metadata, the `fetch` call, logging via `LogApiCall`, and test-case recording. Two-phase: collaborators on the constructor, per-client state on `init()`
+- `ProxyClient` — @ApiPath validation, the route map built from @ApiPath/@Endpoint/@Auth* metadata, the `fetch` call, logging via the `LogApiCallImpl` its subclass's package constructs (required constructor argument — no global), and test-case recording. Two-phase: collaborators on the constructor, per-client state on `init()`
 - `buildClientProxy` — the typed `Proxy` trap (including the framework-inspection whitelist) shared by both environment factories
 - The OUTBOUND filter chain: `ClientRequest` (the mutable per-call request a filter edits — url, headers, and the EXACT serialized body), `ClientFilter` / `ClientFilterDefinition` (one filter at one priority; highest runs outermost, matching the server's `FilterMatcher`), and running it around the single `sendOnce`. Serialization happens BEFORE the chain, which is what lets a filter sign the exact bytes transmitted instead of forcing the caller to hand-serialize. A filter may invoke the rest of the chain more than once (a validated redirect) or not at all
 - `ClientTarget` — the base a `ClientConfig` extends: a logging `svcName` plus an async `resolveBaseUrl()`

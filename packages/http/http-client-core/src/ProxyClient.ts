@@ -9,7 +9,6 @@ import {
     AuthMeta,
     DestinationTrust,
     RouteMetadata,
-    LogApiCall,
     LogApiCallImpl,
     ApiMethodInfo,
     toError,
@@ -71,7 +70,13 @@ export abstract class ProxyClient {
     // Same shape and same reason: stateless, so it is constructed here rather than injected.
     private readonly bodyReader = new ResponseBodyReader();
 
-    constructor(protected readonly logApiCall: LogApiCallImpl = LogApiCall) {}
+    /**
+     * @param logApiCall - built by the SUBCLASS's package around that environment's ApiCallContext
+     *   (node: RequestContextApiCallContext; browser: BrowserApiCallContext). REQUIRED, with no
+     *   default: core-util cannot construct either one, and a default here would have to reach for a
+     *   process-global — which is exactly the throw-on-first-call this parameter deleted.
+     */
+    constructor(protected readonly logApiCall: LogApiCallImpl) {}
 
     // ---------------------------------------------------------------- environment hooks
 
