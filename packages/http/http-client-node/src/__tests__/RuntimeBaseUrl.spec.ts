@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    ApiCallContextHolder,
     ApiPath,
     AuthOidc,
     AuthSharedSecret,
@@ -17,7 +16,6 @@ import {
     TestCaseRecorder,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import type { AnyUntrustedContextKey, ApiCallContext } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
@@ -98,18 +96,6 @@ class StubHeaders {
     findRecorder(): TestCaseRecorder | undefined {
         return undefined;
     }
-}
-
-/** The `api` log-tag seam LogApiCall stamps into. This suite is not about log tags. */
-class NoopApiCallContext implements ApiCallContext {
-    isActive(): boolean {
-        return true;
-    }
-
-    // webpieces-disable no-any-unknown -- a context value is heterogeneous; this impl records nothing
-    set(_contextKey: AnyUntrustedContextKey, _value: unknown): void {}
-
-    remove(_contextKey: AnyUntrustedContextKey): void {}
 }
 
 /** Records the audience it was asked to mint for, so a test can check WHICH url won. */
@@ -256,7 +242,6 @@ function withOverride<T>(url: string, fn: () => Promise<T>): Promise<T> {
 }
 
 beforeEach(() => {
-    ApiCallContextHolder.install(new NoopApiCallContext());
     sent = [];
     stubTransport([ok()]);
     ClientRegistry.addUrlMapping('server2', 'https://server2.example');

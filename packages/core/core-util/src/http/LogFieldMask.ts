@@ -1,5 +1,5 @@
 /**
- * LogFieldMask - opt-in field masking for the {@link LogApiCall} logging path ONLY.
+ * LogFieldMask - opt-in field masking for the {@link LogApiCallImpl} logging path ONLY.
  *
  * WHY this exists: LogApiCall stringifies whole request/response DTOs into the logs. Any secret
  * riding on a DTO across a logged hop (an OAuth refresh token, an id-token JWT) is otherwise written

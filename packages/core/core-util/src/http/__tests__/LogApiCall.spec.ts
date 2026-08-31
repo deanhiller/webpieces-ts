@@ -1,8 +1,8 @@
 import { describe, expect, it, afterEach, beforeAll } from 'vitest';
-import { LogApiCall } from '../LogApiCall';
+import { LogApiCallImpl } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
-import { ApiCallContext, ApiCallContextHolder } from '../ApiCallContext';
+import { ApiCallContext } from '../ApiCallContext';
 import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
@@ -15,9 +15,14 @@ import { LoggerFactory } from '../../logging/LoggerFactory';
 
 /**
  * A recording {@link ApiCallContext}: keeps every (key, value) it was asked to stamp so a test can
- * assert the request → response transition {@link LogApiCall} makes. `active` toggles isActive().
+ * assert the request → response transition {@link LogApiCallImpl} makes. `active` toggles isActive().
+ *
+ * It carries its OWN {@link LogApiCallImpl}, wired to `this` — that constructor argument is the whole
+ * of the setup a test needs now. There is no holder to install, nothing to reset between tests, and
+ * two contexts in the same file cannot clobber each other.
  */
 class RecordingApiCallContext implements ApiCallContext {
+    readonly logApiCall = new LogApiCallImpl(this);
     active = true;
     readonly sets: { key: AnyContextKey; value: unknown }[] = [];
     readonly removes: AnyContextKey[] = [];
@@ -40,21 +45,10 @@ class RecordingApiCallContext implements ApiCallContext {
 const info = (side: ApiSide): ApiMethodInfo => new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
-describe('ApiCallContextHolder.get', () => {
-    it('throws a setup message before anything is installed', () => {
-        // Vitest isolates modules per file, so the holder is unset until a test installs one below.
-        if (!ApiCallContextHolder.isInstalled()) {
-            expect(() => ApiCallContextHolder.get()).toThrow(/not installed/i);
-        }
-    });
-});
-
 describe('LogApiCall.execute — success + active guard', () => {
     it('stamps API_CALL_INFO: request then response:success around a successful call', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
-
-        const res = await LogApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
+        const res = await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
 
         expect(res).toEqual({ ok: true });
         expect(ctx.sets.map(s => s.key)).toEqual([API, API]); // both stamps target API_CALL_INFO
@@ -68,9 +62,8 @@ describe('LogApiCall.execute — success + active guard', () => {
 
     it('nests the ApiMethodInfo under ApiCallInfo.method (jsonPayload.api.method.apiClass matches both sides)', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
-        await LogApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
+        await ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
 
         const tag = ctx.values()[0];
         expect(tag.method).toEqual(new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'));
@@ -80,9 +73,7 @@ describe('LogApiCall.execute — success + active guard', () => {
 
     it('a void/undefined return resolves and stamps response:success (Promise<void> methods are normal)', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
-
-        const res = await LogApiCall.execute(info('client'), { q: 'x' }, async () => undefined);
+        const res = await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => undefined);
 
         expect(res).toBeUndefined();
         expect(ctx.values().at(-1)).toMatchObject({ type: 'response', result: 'success' });
@@ -94,10 +85,9 @@ describe('LogApiCall.execute — success + active guard', () => {
     it('throws when the ApiCallContext is not active (no request scope / factory not built)', async () => {
         const ctx = new RecordingApiCallContext();
         ctx.active = false;
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true })),
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true })),
         ).rejects.toThrow(/ACTIVE ApiCallContext/);
     });
 });
@@ -105,10 +95,9 @@ describe('LogApiCall.execute — success + active guard', () => {
 describe('LogApiCall.execute — error result mapping', () => {
     it('SERVER 4xx → response:success (OTHER) — a handled bad request is not a failure', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => {
                 throw new HttpBadRequestError('bad input');
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
@@ -118,10 +107,9 @@ describe('LogApiCall.execute — error result mapping', () => {
 
     it('CLIENT receiving a 4xx → response:failure — the outbound call failed', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
                 throw new HttpBadRequestError('server said no');
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
@@ -132,9 +120,8 @@ describe('LogApiCall.execute — error result mapping', () => {
     it('HttpUserError (266) → response:success on BOTH sides', async () => {
         for (const side of ['server', 'client'] as const) {
             const ctx = new RecordingApiCallContext();
-            ApiCallContextHolder.install(ctx);
             await expect(
-                LogApiCall.execute(info(side), { q: 'x' }, async () => {
+                ctx.logApiCall.execute(info(side), { q: 'x' }, async () => {
                     throw new HttpUserError('special');
                 }),
             ).rejects.toBeInstanceOf(HttpUserError);
@@ -144,10 +131,9 @@ describe('LogApiCall.execute — error result mapping', () => {
 
     it('a server error → response:failure', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => {
                 throw new Error('boom');
             }),
         ).rejects.toThrow('boom');
@@ -170,10 +156,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
         });
 
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
                 throw new HttpNotFoundError('doc missing');
             }),
         ).rejects.toBeInstanceOf(HttpNotFoundError);
@@ -188,10 +173,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
         });
 
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
                 throw new HttpBadRequestError('server said no');
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
@@ -203,9 +187,8 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
 describe('LogApiCall.execute — durationMs', () => {
     it('times the call and stamps durationMs on the response tag only', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
-        await LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
             await new Promise(resolve => setTimeout(resolve, 25));
             return { ok: true };
         });
@@ -219,10 +202,9 @@ describe('LogApiCall.execute — durationMs', () => {
 
     it('still reports durationMs when the call FAILS — a slow timeout must show its real cost', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
+            ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => {
                 await new Promise(resolve => setTimeout(resolve, 25));
                 throw new Error('slow boom');
             }),
@@ -236,11 +218,10 @@ describe('LogApiCall.execute — durationMs', () => {
 describe('LogApiCall.execute — body sizes', () => {
     it('stamps requestSize/responseSize as real UTF-8 byte counts of the serialized bodies', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         const request = { q: 'x' };
         const response = { ok: true, note: 'hello' };
-        await LogApiCall.execute(info('client'), request, async () => response);
+        await ctx.logApiCall.execute(info('client'), request, async () => response);
 
         const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
         expect(ctx.values()[0].requestSize).toBe(bytes(request));
@@ -250,11 +231,10 @@ describe('LogApiCall.execute — body sizes', () => {
 
     it('counts BYTES not characters — multibyte bodies must not under-report', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         // '日本語' is 3 chars but 9 UTF-8 bytes; a .length-based size would be wrong here.
         const request = { q: '日本語' };
-        await LogApiCall.execute(info('client'), request, async () => ({ ok: true }));
+        await ctx.logApiCall.execute(info('client'), request, async () => ({ ok: true }));
 
         const serialized = JSON.stringify(request);
         expect(ctx.values()[0].requestSize).toBe(new TextEncoder().encode(serialized).length);
@@ -263,10 +243,9 @@ describe('LogApiCall.execute — body sizes', () => {
 
     it('reports the TOTAL body size, not a chunked/truncated size (chunking is the backend\'s job)', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         const big = { blob: 'a'.repeat(500_000) };
-        await LogApiCall.execute(info('server'), { q: 'x' }, async () => big);
+        await ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => big);
 
         // Well past the GCP per-entry limit: this layer still reports the one true size.
         expect(ctx.values().at(-1)?.responseSize).toBeGreaterThan(500_000);
@@ -274,9 +253,8 @@ describe('LogApiCall.execute — body sizes', () => {
 
     it('carries no statusCode — business logic must not know about HTTP', async () => {
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
-        await LogApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
+        await ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
 
         for (const tag of ctx.values()) {
             expect(tag).not.toHaveProperty('statusCode');
@@ -317,14 +295,13 @@ describe('LogApiCall.execute — opt-in field masking', () => {
     it('masks the secret in BOTH the request and response log lines, yet sends the real value on the wire', async () => {
         capturing.lines.length = 0;
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         const realRefresh = '1//04hg2kWy8UcIvCgYIARAAGAQSNwF-L9Irok';
         const request = { account: { refreshToken: realRefresh } };
         let seenByWire: string | undefined;
         const response = { account: { emailAddress: 'user@example.com', refreshToken: realRefresh } };
 
-        await LogApiCall.execute(masked('client'), request, async dto => {
+        await ctx.logApiCall.execute(masked('client'), request, async dto => {
             // What the transport would put ON THE WIRE is the ORIGINAL, unmasked value (acceptance #4).
             seenByWire = (dto as typeof request).account.refreshToken;
             return response;
@@ -345,10 +322,9 @@ describe('LogApiCall.execute — opt-in field masking', () => {
     it('an unmasked call logs the body byte-for-byte as before (no behavior change for existing callers)', async () => {
         capturing.lines.length = 0;
         const ctx = new RecordingApiCallContext();
-        ApiCallContextHolder.install(ctx);
 
         const response = { account: { refreshToken: 'still-cleartext-when-unmasked' } };
-        await LogApiCall.execute(info('client'), { q: 'x' }, async () => response);
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => response);
 
         const respLine = capturing.lines.find(l => l.includes('[API-client-resp-SUCCESS]'));
         expect(respLine).toContain(`response=${JSON.stringify(response)}`);
@@ -356,6 +332,9 @@ describe('LogApiCall.execute — opt-in field masking', () => {
 });
 
 describe('LogApiCall.isUserError (side-dependent)', () => {
+    // isUserError never touches the context; any instance answers identically.
+    const LogApiCall = new LogApiCallImpl(new RecordingApiCallContext());
+
     it('HttpUserError is a non-failure on both sides', () => {
         expect(LogApiCall.isUserError(new HttpUserError('x'), /*server*/ true)).toBe(true);
         expect(LogApiCall.isUserError(new HttpUserError('x'), /*server*/ false)).toBe(true);

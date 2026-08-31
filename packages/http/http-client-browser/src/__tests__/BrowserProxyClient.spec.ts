@@ -16,10 +16,14 @@ import {
     HttpNotFoundError,
     HttpServiceUnavailableError,
     HttpUnauthorizedError,
+    LogManager,
     OfflineError,
     Public,
     Rpc,
+    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
+import type { ApiCallInfo, Logger, LoggerFactory } from '@webpieces/core-util';
+import { BrowserApiCallContext } from '../BrowserApiCallContext';
 import { RouteMetadata } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
@@ -453,5 +457,69 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         const error = await clientWith(listener).save(new SaveRequest('q')).catch((err: unknown) => err);
 
         expect(listener.onlyEnd().error).toBe(error);
+    });
+});
+
+/**
+ * THE BROWSER TAGGING CONTRACT, end to end and with no bootstrap.
+ *
+ * Each BrowserProxyClient constructs its OWN BrowserApiCallContext (nothing installs one process-wide
+ * any more), yet a browser logger reads the tag back through the STATIC
+ * `BrowserApiCallContext.snapshot()`. That only works because the store is `private static` — which is
+ * why these two tests exist: make it per-instance and browser log lines silently stop carrying `api`.
+ *
+ * The span is SYNCHRONOUS by contract (set → log → remove, never held across an `await`), so the ONLY
+ * moment the tag is observable is inside the logger's own emit. That is exactly where this reads it.
+ */
+class SnapshotOnEmitLoggerFactory implements LoggerFactory {
+    /** The `api` tag as it stood DURING each `[API-*]` emit — undefined if nothing was stamped. */
+    readonly seen: (ApiCallInfo | undefined)[] = [];
+
+    getLogger(_name: string): Logger {
+        const record = (message: string): void => {
+            if (!message.includes('[API-')) {
+                return;
+            }
+            const tag = BrowserApiCallContext.snapshot().get(WebpiecesCoreHeaders.API_CALL_INFO.name);
+            this.seen.push(tag as ApiCallInfo | undefined);
+        };
+        return { trace: record, debug: record, info: record, warn: record, error: record };
+    }
+}
+
+describe('BrowserProxyClient stamps the api tag with no factory install and no bootstrap', () => {
+    it('the tag is READABLE off the static snapshot during the emit, and CLEARED after the call', async () => {
+        const capturing = new SnapshotOnEmitLoggerFactory();
+        LogManager.setFactory(capturing);
+        stubFetch();
+
+        // No holder install anywhere: the client built its own BrowserApiCallContext.
+        await client().save(new SaveRequest('q'));
+
+        // req + resp lines, both carrying the client-side identity for this contract.
+        expect(capturing.seen.length).toBe(2);
+        expect(capturing.seen[0]?.method.side).toBe('client');
+        expect(capturing.seen[0]?.method.apiClass).toBe('PublicApi');
+        expect(capturing.seen[0]?.type).toBe('request');
+        expect(capturing.seen[1]?.type).toBe('response');
+        expect(capturing.seen[1]?.result).toBe('success');
+
+        // set → log → remove is one synchronous span, so nothing survives the call.
+        expect(BrowserApiCallContext.snapshot().get(WebpiecesCoreHeaders.API_CALL_INFO.name)).toBeUndefined();
+    });
+
+    it('two independently built clients stamp into the SAME static slot the logger reads', async () => {
+        const capturing = new SnapshotOnEmitLoggerFactory();
+        LogManager.setFactory(capturing);
+        stubFetch();
+
+        const other = new ClientHttpBrowserFactory(new MutableContextStore())
+            .createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        await client().save(new SaveRequest('q'));
+        await other.save(new SaveRequest('q'));
+
+        // 4 lines from 2 different BrowserApiCallContext instances — none of them silently blank.
+        expect(capturing.seen.length).toBe(4);
+        expect(capturing.seen.every(tag => tag !== undefined)).toBe(true);
     });
 });

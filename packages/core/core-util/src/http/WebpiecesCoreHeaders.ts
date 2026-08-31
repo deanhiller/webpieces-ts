@@ -127,7 +127,7 @@ export class WebpiecesCoreHeaders {
     static readonly RECORDING = ContextKey.untrusted<string>('recording', 'x-webpieces-recording');
 
     /**
-     * The structured API-call tag ({@link ApiCallInfo}) stamped by {@link LogApiCall} around every
+     * The structured API-call tag ({@link ApiCallInfo}) stamped by {@link LogApiCallImpl} around every
      * outbound (client) / inbound (server) call. It rides the magic context so EVERY log line emitted
      * during the call inherits a filterable `api` object, surfacing in GCP as nested
      * `jsonPayload.api.{side,type,result,path,method}`.

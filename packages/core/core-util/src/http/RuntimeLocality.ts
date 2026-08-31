@@ -22,8 +22,9 @@ export type Locality = 'local' | 'deployed';
  * from the absence of both. Baking any one of those into core-util would hardcode a cloud vendor into
  * the framework core, and core-util is browser-safe (it may not read `process.env` at all). So the
  * ENVIRONMENT tells the framework, exactly as it tells it the logging backend
- * ({@link LogManager.setFactory}), the header set ({@link HeaderRegistry.configure}), the context seam
- * ({@link ApiCallContextHolder.install}) and its own identity ({@link ServiceInfo.setInfo}).
+ * ({@link LogManager.setFactory}), the header set ({@link HeaderRegistry.configure}) and its own
+ * identity ({@link ServiceInfo.setInfo}). (The {@link ApiCallContext} seam is NOT in that list any
+ * more: it is a constructor argument to {@link LogApiCallImpl}, not a startup install.)
  *
  * It is a VALUE holder rather than an interface-plus-impl (the `ApiCallContext` shape) because there
  * is no behavior to plug in — the answer is one token fixed at startup. Per CLAUDE.md, data is a

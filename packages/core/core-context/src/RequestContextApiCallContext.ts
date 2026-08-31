@@ -3,14 +3,17 @@ import { RequestContext } from './RequestContext';
 
 /**
  * RequestContextApiCallContext - the SERVER (Node) implementation of the {@link ApiCallContext} seam,
- * backing it with the ambient {@link RequestContext} (AsyncLocalStorage). {@link LogApiCall} — which
+ * backing it with the ambient {@link RequestContext} (AsyncLocalStorage). {@link LogApiCallImpl} — which
  * lives in browser-safe core-util and cannot import RequestContext — stamps its `api` tag through this.
  *
- * Installed ONCE at server startup by `setupRuntime` (http-routing), beside `HeaderRegistry.configure`
- * and `LogManager.setFactory` — the one place that runs on every server, so BOTH inbound (LogApiFilter)
- * and outbound (clients) get the tag. A browser never runs setupRuntime, so it installs its own
- * module-global impl. This is the same "impl in the env-specific package, bound to a core-util seam at
- * startup" pattern as LogManager.setFactory + the winston/bunyan backends.
+ * CONSTRUCTED, never installed: `LogApiFilter` (http-routing, inbound), `NodeProxyClient`
+ * (http-client-node, outbound http) and `TaskProxyClient` (cloudtasks-client, outbound enqueue) each
+ * build one and pass it to their own {@link LogApiCallImpl}. Every one of those packages is node-only
+ * and already depends on core-context, so none of them needs a startup hook — which is what lets a
+ * plain NestJS/Express host use a webpieces client with no webpieces STARTUP INSTALL. What it DOES
+ * still need is an open `RequestContext.run(...)` scope, because {@link isActive} is false outside one
+ * and LogApiCall throws on an inactive context. A browser never loads core-context; it builds a
+ * `BrowserApiCallContext` instead.
  *
  * WRITE-ONLY: the logging backends read the stamped key back off RequestContext
  * (`buildStructuredLogFields`) on every record, so this seam only needs to set it.

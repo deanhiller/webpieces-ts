@@ -26,7 +26,7 @@ export class RouteMetadata {
     readonly formPost: boolean;
     /**
      * The @MaskLog field-mask spec for this route, or undefined when the method declared none. Read
-     * ONCE here at route-build time and handed to {@link LogApiCall} via ApiMethodInfo, so the per-call
+     * ONCE here at route-build time and handed to {@link LogApiCallImpl} via ApiMethodInfo, so the per-call
      * log path pays for masking only on routes that opted in (the rest stay on plain JSON.stringify).
      */
     readonly mask?: MaskSpec;

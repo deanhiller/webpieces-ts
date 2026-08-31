@@ -1,4 +1,12 @@
-import { AuthMeta, ContextMgr, ClientRegistry, DestinationTrust, RouteMetadata } from '@webpieces/core-util';
+import {
+    AuthMeta,
+    ContextMgr,
+    ClientRegistry,
+    DestinationTrust,
+    LogApiCallImpl,
+    RouteMetadata,
+} from '@webpieces/core-util';
+import { BrowserApiCallContext } from './BrowserApiCallContext';
 import { ApiPrototype, ProxyClient, RequestOutcome, TranslatedFailure } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { RequestLifecycleListener } from './RequestLifecycleListener';
@@ -20,7 +28,10 @@ export class BrowserProxyClient extends ProxyClient {
         private readonly contextMgr: ContextMgr,
         private readonly lifecycleListener?: RequestLifecycleListener,
     ) {
-        super();
+        // The browser's ApiCallContext, constructed here rather than installed at startup: its store
+        // is static, so every instance stamps into the one slot BrowserApiCallContext.snapshot()
+        // reads — which is how a browser logger folds the `api` tag into each line.
+        super(new LogApiCallImpl(new BrowserApiCallContext()));
     }
 
     /** Bind this client to one API contract + base URL. */

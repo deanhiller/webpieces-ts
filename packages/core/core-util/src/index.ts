@@ -174,8 +174,10 @@ export { DestinationTrust } from './http/DestinationTrust';
 // RequestContextHeaders in the Node-only @webpieces/core-context.
 export { ContextMgr } from './http/ContextMgr';
 
-// API-call logging helper (uses LogManager above). Singleton: use the LogApiCall constant, not `new`.
-export { LogApiCall, LogApiCallImpl } from './http/LogApiCall';
+// API-call logging helper (uses LogManager above). NOT a singleton: construct one per environment
+// with that environment's ApiCallContext — `new LogApiCallImpl(new RequestContextApiCallContext())`
+// on node, `new LogApiCallImpl(new BrowserApiCallContext())` in a browser.
+export { LogApiCallImpl } from './http/LogApiCall';
 
 // Opt-in field masking for the LogApiCall log path — declare per-api sensitive fields so secrets
 // (OAuth refresh tokens, id-token JWTs) are masked in the logs while the real value stays on the wire.
@@ -183,14 +185,14 @@ export { MaskSpec } from './http/LogFieldMask';
 export type { MaskMode } from './http/LogFieldMask';
 
 // The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
-// RequestContext-backed impl is installed by @webpieces/core-context; the browser gets the no-op.
+// RequestContext-backed impl lives in @webpieces/core-context, the browser one in
+// @webpieces/http-client-browser; each is CONSTRUCTED by its package, never installed globally.
 export { ApiCallInfo } from './http/ApiCallInfo';
 export type { ApiType, ApiResult } from './http/ApiCallInfo';
 // Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
 export { ApiCallLogName, ApiCallLogNameImpl, LOG_API_CALL_LOGGER_NAME } from './http/ApiCallLogName';
 export { ApiMethodInfo } from './http/ApiMethodInfo';
 export type { ApiSide } from './http/ApiMethodInfo';
-export { ApiCallContextHolder } from './http/ApiCallContext';
 export type { ApiCallContext } from './http/ApiCallContext';
 
 // Test-case recording contract (impl lives in http-server; hooks in http-client)

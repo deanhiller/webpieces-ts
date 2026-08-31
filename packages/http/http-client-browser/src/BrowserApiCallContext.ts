@@ -2,10 +2,10 @@ import { ApiCallContext, AnyContextKey } from '@webpieces/core-util';
 
 /**
  * BrowserApiCallContext - the BROWSER implementation of the {@link ApiCallContext} seam, so
- * {@link LogApiCall} (shared, browser-safe core-util) stamps its structured `api` tag in the browser
- * too. Installed by {@link ClientHttpBrowserFactory}.
+ * {@link LogApiCallImpl} (shared, browser-safe core-util) stamps its structured `api` tag in the browser
+ * too. Constructed by {@link BrowserProxyClient}, which hands it to its LogApiCallImpl.
  *
- * WHY a module-level global is SAFE here (no AsyncLocalStorage / Zone.js): {@link LogApiCall} stamps as
+ * WHY a module-level global is SAFE here (no AsyncLocalStorage / Zone.js): {@link LogApiCallImpl} stamps as
  * `set → log → remove` in ONE synchronous span, so the slot is only ever populated while the logger reads
  * it and is cleared before the `await fetch`. A browser is single-threaded, so nothing can interleave
  * between set and remove — a concurrent in-flight call can never clobber the slot. (Because of that, only
@@ -16,8 +16,9 @@ import { ApiCallContext, AnyContextKey } from '@webpieces/core-util';
  * log emit (inside the set → remove span) and folds `api.{side,type,result,...}` into that line.
  */
 export class BrowserApiCallContext implements ApiCallContext {
-    // Shared across every instance (a browser app may build the factory more than once) so the value a
-    // logger reads is the same one LogApiCall stamped, whichever instance the holder currently holds.
+    // STATIC on purpose, and it must stay that way: every BrowserProxyClient builds its own
+    // BrowserApiCallContext, while a browser logger reads the tag back through the STATIC
+    // snapshot() below. A per-instance store would silently stop tagging browser log lines.
     // webpieces-disable no-any-unknown -- context values are heterogeneous (the api struct; future keys)
     private static readonly store = new Map<string, unknown>();
 
@@ -39,7 +40,7 @@ export class BrowserApiCallContext implements ApiCallContext {
      * The current stamped values, keyed by ContextKey name — for a browser logger to fold into each line.
      */
     // webpieces-disable no-any-unknown -- context values are heterogeneous (the api struct; future keys)
-    // webpieces-disable no-function-outside-class -- static read accessor of the module-global browser slot (like ApiCallContextHolder), read by a browser logger, not DI-injected
+    // webpieces-disable no-function-outside-class -- static read accessor of the module-global browser slot, read by a browser logger, not DI-injected
     static snapshot(): ReadonlyMap<string, unknown> {
         return BrowserApiCallContext.store;
     }

@@ -7,10 +7,10 @@ export const LOG_API_CALL_LOGGER_NAME = 'LogApiCall';
 type LogFieldValue = string | number | boolean | object | null | undefined;
 
 /**
- * ApiCallLogName - the console-render bridge that turns a {@link LogApiCall} line's plain
+ * ApiCallLogName - the console-render bridge that turns a {@link LogApiCallImpl} line's plain
  * `[LogApiCall]` logger bracket into a self-describing `[API.{side}.{phase}]` bracket.
  *
- * WHY: {@link LogApiCall} emits EVERY api req/resp line under the single logger name `LogApiCall`, so
+ * WHY: {@link LogApiCallImpl} emits EVERY api req/resp line under the single logger name `LogApiCall`, so
  * the local console showed the unhelpful `[LogApiCall]` on all of them. But each of those lines already
  * carries the structured {@link ApiCallInfo} `api` tag in context, which knows the `side` (client/server)
  * and whether this is the request or a success/failure response. The console backends (winston
@@ -18,7 +18,7 @@ type LogFieldValue = string | number | boolean | object | null | undefined;
  * lines and render that richer bracket instead — e.g. `[API.client.request]`, `[API.server.success]`,
  * `[API.client.failure]`. GCP is unaffected (it filters on `jsonPayload.api.*`, not the logger name).
  *
- * Singleton, mirroring {@link LogApiCall}: use the exported {@link ApiCallLogName} constant, not `new`.
+ * Singleton, mirroring {@link LogApiCallImpl}: use the exported {@link ApiCallLogName} constant, not `new`.
  * Kept in one place so the two duplicated console formats stay byte-identical, and so the special-cased
  * name matches the logger name LogApiCall actually uses ({@link LOG_API_CALL_LOGGER_NAME}).
  */
@@ -68,7 +68,7 @@ export class ApiCallLogNameImpl {
 }
 
 /**
- * The process-wide {@link ApiCallLogNameImpl} singleton — mirrors the {@link LogApiCall} export pattern.
+ * The process-wide {@link ApiCallLogNameImpl} singleton — mirrors the {@link LogApiCallImpl} export pattern.
  * Callers use `ApiCallLogName.describe(...)`, never `new`.
  */
 export const ApiCallLogName = new ApiCallLogNameImpl();

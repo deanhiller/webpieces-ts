@@ -11,10 +11,18 @@
 
 ## `LogApiCall` — one logging shape for every edge
 
-`packages/core/core-util/src/http/LogApiCall.ts` (singleton `LogApiCall`, entry point
+`packages/core/core-util/src/http/LogApiCall.ts` (class `LogApiCallImpl`, entry point
 `execute(methodInfo, requestDto, method)`). Used by **both** sides — "used by BOTH server-side
 (`LogApiFilter`) and client-side (`ProxyClient`) for one consistent logging shape across the
 framework."
+
+**It is NOT a singleton, and there is no startup install.** `LogApiCallImpl` takes its
+`ApiCallContext` (`core-util/src/http/ApiCallContext.ts`) as a **required constructor argument**, and each
+environment-specific package constructs its own — `LogApiFilter`, `NodeProxyClient` and
+`TaskProxyClient` with a `RequestContextApiCallContext`, `BrowserProxyClient` with a
+`BrowserApiCallContext`. A required argument is what makes "nobody bootstrapped the context" a compile
+error rather than a throw on the first real call: a plain NestJS/Express host can use
+`@webpieces/http-client-node` or `@webpieces/cloudtasks-client` with no `setupRuntime()` at all.
 
 Four log lines per call (text form):
 - `[API-{side}-req] {id} request=…`
@@ -34,10 +42,12 @@ stamped here — a logging *backend* owns that, reading `RequestContext` on ever
   fixed framework filter (auto-installed at priority 1,000,000 on every route, above AuthFilter)."
   It logs request *and* response/failure for every call, over HTTP **or** via `createApiClient`.
 - **Client outbound** — `packages/http/http-client-core/src/ProxyClient.ts` calls
-  `LogApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName), …)`, using the
-  **contract** name so "this client log line MATCHES the server's for the same call."
-- **Cloud-task enqueue** — `TaskProxyClient.enqueue` wraps the enqueue in `LogApiCall.execute` too,
-  so the queue edge gets the same structured logging as HTTP "without touching either invoker."
+  `this.logApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName), …)` on the
+  `LogApiCallImpl` its subclass handed to `super(...)`, using the **contract** name so "this client log
+  line MATCHES the server's for the same call."
+- **Cloud-task enqueue** — `TaskProxyClient.enqueue` wraps the enqueue in its own
+  `LogApiCallImpl.execute` too, so the queue edge gets the same structured logging as HTTP "without
+  touching either invoker."
 
 Result: `jsonPayload.api.method.apiClass="SaveApi"` filters *both* sides of a call together, and you
 can walk the call graph across services purely from logs.

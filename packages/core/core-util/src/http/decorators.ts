@@ -191,7 +191,7 @@ export function Endpoint(path: string, kind: EndpointKind, options: EndpointOpti
 
 /**
  * @MaskLog(fields) - declare which fields of THIS method's request/response DTOs the
- * {@link LogApiCall} logging path must mask, so a secret riding on a DTO (an OAuth refresh token, an
+ * {@link LogApiCallImpl} logging path must mask, so a secret riding on a DTO (an OAuth refresh token, an
  * id-token JWT) is never written to the logs in cleartext. The REAL value still travels on the wire
  * untouched — masking lives in the logging path only.
  *

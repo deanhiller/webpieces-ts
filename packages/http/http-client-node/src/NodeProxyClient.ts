@@ -5,13 +5,19 @@ import {
     HttpInternalServerError,
     RecordedEndpoint,
     RecordedError,
+    LogApiCallImpl,
     RouteMetadata,
     Secrets,
     SECRETS,
     TestCaseRecorder,
     toError,
 } from '@webpieces/core-util';
-import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
+import {
+    RequestContext,
+    RequestContextApiCallContext,
+    RequestContextHeaders,
+    provideFrameworkTransient,
+} from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ApiPrototype, ClientFilterDefinition, ProxyClient, TranslatedFailure } from '@webpieces/http-client-core';
 import { AddressResolver } from './AddressResolver';
@@ -59,7 +65,10 @@ export class NodeProxyClient extends ProxyClient {
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(WEBHOOK_SIGNER_CALLBACK) private readonly webhookSigner?: WebhookSignerCallback,
     ) {
-        super();
+        // This package is node-only and already depends on core-context, so it builds the
+        // RequestContext-backed ApiCallContext itself. No startup install, and therefore nothing a
+        // non-webpieces host (plain NestJS/Express) can forget.
+        super(new LogApiCallImpl(new RequestContextApiCallContext()));
     }
 
     /**

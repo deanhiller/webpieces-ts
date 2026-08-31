@@ -7,7 +7,6 @@ process.env['METADATA_SERVER_DETECTION'] = 'none';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ApiPath,
-    ApiCallContextHolder,
     AuthOidc,
     ContextKey,
     Endpoint,
@@ -17,7 +16,7 @@ import {
     Queue,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { RequestContext, RequestContextApiCallContext } from '@webpieces/core-context';
+import { RequestContext } from '@webpieces/core-context';
 import { Provider, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
@@ -80,9 +79,6 @@ function clientFor(config: TaskClientConfig): EmailApi {
 
 beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
-    // enqueue now routes through LogApiCall (like ProxyClient for http), which requires an installed
-    // ApiCallContext — setupRuntime does this on a real server; a unit test installs it directly.
-    ApiCallContextHolder.install(new RequestContextApiCallContext());
     // Off-GCP the callee's base URL is resolved from the service name via the local registry —
     // this is exactly how a local multi-service run points a svcName at a port.
     ClientRegistry.clear();
@@ -165,5 +161,31 @@ describe('TaskProxyClient target resolution + request scope', () => {
         });
 
         expect(invoker.captured!.targetUrl).toBe('https://email.other-region.example');
+    });
+});
+
+/**
+ * THE REGRESSION. A plain NestJS host (`services/orders-manager`) that had never run `setupRuntime`
+ * used to get `ApiCallContext is not installed` on EVERY enqueue — a runtime throw on the first real
+ * event, in a service that built and unit-tested green.
+ *
+ * Nothing in THIS FILE installs an ApiCallContext, and nothing calls setupRuntime: TaskProxyClient
+ * builds its own RequestContextApiCallContext, because cloudtasks-client is node-only and already
+ * depends on core-context. An open RequestContext is the ONLY thing an enqueue needs, and that is a
+ * scope the host already opens per request.
+ *
+ * (The remaining process-globals a non-webpieces host must still configure are unchanged and
+ * unrelated: HeaderRegistry, LogManager, ClientRegistry/deriver — see the beforeEach above.)
+ */
+describe('TaskProxyClient enqueues from a host that never ran setupRuntime', () => {
+    it('does not throw "ApiCallContext is not installed" — no holder, no bootstrap', async () => {
+        await RequestContext.run(async () => {
+            const ref = await scheduler.addToQueue(
+                () => emailTasks.sendEmail(new SendEmailRequest('nest@host.example')),
+            );
+            expect(ref.taskId).toBe('captured-task-1');
+        });
+
+        expect((invoker.captured!.body as SendEmailRequest).to).toBe('nest@host.example');
     });
 });
