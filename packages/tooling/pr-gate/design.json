@@ -49,6 +49,22 @@
                     "level": 5
                 },
                 {
+                    "id": "AuthorizationContextResolver",
+                    "className": "AuthorizationContextResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts",
+                    "level": 2
+                },
+                {
+                    "id": "AuthorizeCommand",
+                    "className": "AuthorizeCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/authorize-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "BranchArchiver",
                     "className": "BranchArchiver",
                     "kind": "class",
@@ -121,6 +137,14 @@
                     "level": 4
                 },
                 {
+                    "id": "CheckAuthCommand",
+                    "className": "CheckAuthCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/check-auth-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "CheckPrCommand",
                     "className": "CheckPrCommand",
                     "kind": "class",
@@ -159,6 +183,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts",
                     "level": 3
+                },
+                {
+                    "id": "ChecklistRefusalRenderer",
+                    "className": "ChecklistRefusalRenderer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/checklist-refusal.ts",
+                    "level": 5
                 },
                 {
                     "id": "ChecklistScanner",
@@ -377,6 +409,14 @@
                     "level": 4
                 },
                 {
+                    "id": "HumanAuthorizationService",
+                    "className": "HumanAuthorizationService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/human-authorization.ts",
+                    "level": 3
+                },
+                {
                     "id": "LandPrCommand",
                     "className": "LandPrCommand",
                     "kind": "class",
@@ -561,6 +601,14 @@
                     "level": 6
                 },
                 {
+                    "id": "ReviewChangedFiles",
+                    "className": "ReviewChangedFiles",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts",
+                    "level": 3
+                },
+                {
                     "id": "ReviewJsonService",
                     "className": "ReviewJsonService",
                     "kind": "class",
@@ -741,6 +789,60 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "AuthorizationContextResolver",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "AuthorizationContextResolver",
+                    "to": "DiffBasisResolver",
+                    "injection": "type",
+                    "token": "DiffBasisResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-basis.ts#DiffBasisResolver",
+                    "paramName": "diffBasisResolver",
+                    "paramType": "DiffBasisResolver"
+                },
+                {
+                    "from": "AuthorizationContextResolver",
+                    "to": "ReviewChangedFiles",
+                    "injection": "type",
+                    "token": "ReviewChangedFiles",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts#ReviewChangedFiles",
+                    "paramName": "changedFiles",
+                    "paramType": "ReviewChangedFiles"
+                },
+                {
+                    "from": "AuthorizeCommand",
+                    "to": "AuthorizationContextResolver",
+                    "injection": "type",
+                    "token": "AuthorizationContextResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts#AuthorizationContextResolver",
+                    "paramName": "contextResolver",
+                    "paramType": "AuthorizationContextResolver"
+                },
+                {
+                    "from": "AuthorizeCommand",
+                    "to": "HumanAuthorizationService",
+                    "injection": "type",
+                    "token": "HumanAuthorizationService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/human-authorization.ts#HumanAuthorizationService",
+                    "paramName": "humanAuthorization",
+                    "paramType": "HumanAuthorizationService"
+                },
+                {
+                    "from": "AuthorizeCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "BranchMutationLog",
                     "to": "DotWebpieces",
                     "injection": "type",
@@ -894,6 +996,33 @@
                     "paramType": "DotWebpieces"
                 },
                 {
+                    "from": "CheckAuthCommand",
+                    "to": "AuthorizationContextResolver",
+                    "injection": "type",
+                    "token": "AuthorizationContextResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts#AuthorizationContextResolver",
+                    "paramName": "contextResolver",
+                    "paramType": "AuthorizationContextResolver"
+                },
+                {
+                    "from": "CheckAuthCommand",
+                    "to": "HumanAuthorizationService",
+                    "injection": "type",
+                    "token": "HumanAuthorizationService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/human-authorization.ts#HumanAuthorizationService",
+                    "paramName": "humanAuthorization",
+                    "paramType": "HumanAuthorizationService"
+                },
+                {
+                    "from": "CheckAuthCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "CheckPrCommand",
                     "to": "GateTokenService",
                     "injection": "type",
@@ -958,12 +1087,12 @@
                 },
                 {
                     "from": "ChecklistScanner",
-                    "to": "DiffScope",
+                    "to": "HumanAuthorizationService",
                     "injection": "type",
-                    "token": "DiffScope",
-                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
-                    "paramName": "diffScope",
-                    "paramType": "DiffScope"
+                    "token": "HumanAuthorizationService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/human-authorization.ts#HumanAuthorizationService",
+                    "paramName": "humanAuthorization",
+                    "paramType": "HumanAuthorizationService"
                 },
                 {
                     "from": "ChecklistScanner",
@@ -973,6 +1102,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts#PrContextWriter",
                     "paramName": "prContextWriter",
                     "paramType": "PrContextWriter"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ReviewChangedFiles",
+                    "injection": "type",
+                    "token": "ReviewChangedFiles",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/authorization-context-resolver.ts#ReviewChangedFiles",
+                    "paramName": "reviewChangedFiles",
+                    "paramType": "ReviewChangedFiles"
                 },
                 {
                     "from": "ChecklistScanner",
@@ -1551,6 +1689,15 @@
                     "paramType": "HomeDocKeys"
                 },
                 {
+                    "from": "HumanAuthorizationService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
                     "from": "LandPrCommand",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -1831,12 +1978,30 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "AuthorizeCommand",
+                    "injection": "type",
+                    "token": "AuthorizeCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/authorize-command.ts#AuthorizeCommand",
+                    "paramName": "authorizeCommand",
+                    "paramType": "AuthorizeCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "BuildCommand",
                     "injection": "type",
                     "token": "BuildCommand",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/build-command.ts#BuildCommand",
                     "paramName": "buildCommand",
                     "paramType": "BuildCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "CheckAuthCommand",
+                    "injection": "type",
+                    "token": "CheckAuthCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/check-auth-command.ts#CheckAuthCommand",
+                    "paramName": "checkAuthCommand",
+                    "paramType": "CheckAuthCommand"
                 },
                 {
                     "from": "PrGateApp",
@@ -2107,6 +2272,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewChangedFiles",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "ReviewJsonService",
+                    "to": "ChecklistRefusalRenderer",
+                    "injection": "type",
+                    "token": "ChecklistRefusalRenderer",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-refusal.ts#ChecklistRefusalRenderer",
+                    "paramName": "refusals",
+                    "paramType": "ChecklistRefusalRenderer"
                 },
                 {
                     "from": "ReviewJsonService",

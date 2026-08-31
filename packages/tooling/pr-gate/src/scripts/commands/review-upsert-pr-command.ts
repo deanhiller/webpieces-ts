@@ -112,7 +112,7 @@ export class ReviewUpsertPrCommand {
         this.gitExec.assertCleanTree(repoRoot);
         const buildPassedAt = await this.runBuildGate(repoRoot);
 
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));  // '' — THIS command writes the context itself, after materializing
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, '', config.gateSalt));  // '' — THIS command writes the context itself, after materializing
         const briefings = this.briefReviewers(repoRoot, featureName, scan, config);
         this.receipts.write(repoRoot, featureName, new ReviewStageReceipt(
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
@@ -248,12 +248,14 @@ export class ReviewUpsertPrCommand {
      *
      * NO archive path is passed, deliberately, and this stage moves nothing. Retiring a verdict is finish's
      * act on the refusal it is actually enforcing; doing it here would delete the live verdict of a branch
-     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — "set an override
-     * in review-<id>.json" — is only correct while that file is still there, which here it is.
+     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — which points at
+     * the live review-<id>.json — is only correct while that file is still there, which here it is.
      */
     private refusals(scan: ChecklistScan): RefusedReviewer[] {
-        const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results);
+        const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results, scan.authorized);
         return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(
-            req.id, this.reviewJsonService.refusalError(req, this.reviewJsonService.resolveVerdict(req, scan.results))));
+            req.id,
+            this.reviewJsonService.refusalError(
+                req, this.reviewJsonService.resolveVerdict(req, scan.results, scan.authorized))));
     }
 }

@@ -3,7 +3,11 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ChecklistDefinition, DiffScope, RequiredChecklist, ReviewJsonService, toChecklist } from '@webpieces/rules-config';
+import {
+    ChecklistDefinition, DiffScope, HumanApproval, HumanAuthorizationService, RequiredChecklist,
+    ReviewJsonService, toChecklist,
+} from '@webpieces/rules-config';
+import { ReviewChangedFiles } from './authorization-context-resolver';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
@@ -12,6 +16,10 @@ import { DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
+
+// Any committed-looking salt: these tests care that a SIGNED approval verifies and an unsigned one does not,
+// not what the key is.
+const SALT = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
 
 function git(cwd: string, cmd: string): void {
     execSync(cmd, { cwd, stdio: 'pipe' });
@@ -63,9 +71,9 @@ function scannerFor(): ChecklistScanner {
     // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
     // the basis is now part of that plumbing (it is what makes the printed command match the matched range).
     return new ChecklistScanner(
-        newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
+        newAiBranchName(), new ChecklistDetector(diffScope), new ReviewChangedFiles(diffScope),
         new DiffBasisResolver(newForkPoint(), new GitStatusParser()),
-        new PrContextWriter(diffScope, reviewJson), reviewJson,
+        new PrContextWriter(diffScope, reviewJson), reviewJson, new HumanAuthorizationService(),
     );
 }
 
@@ -170,9 +178,13 @@ describe('ChecklistScanner — X / N / Z', () => {
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);   // Z
     });
 
-    // "Review once" is per subagent: 2 of 4 done means the other 2 still need running, so a FAILED verdict
-    // with no override still owes review and must stay in Z.
-    it('an un-overridden FAIL still owes review; an OVERRIDDEN one does not', () => {
+    /**
+     * "Review once" is per subagent, so a FAILED verdict still owes review and stays in Z — AND so does one
+     * whose `override` nobody authorized. That second half is the authorization gate seen from the scan: an
+     * override written by the reviewer subagent is the agent authorizing itself, and it buys nothing until a
+     * human has run `pnpm wp-authorize`.
+     */
+    it('an un-overridden FAIL owes review — and so does an override NO HUMAN authorized', () => {
         const dir = repoWithFour();
         const svc = new ReviewJsonService();
         const reviewPath = svc.reviewJsonPath(dir, newAiBranchName().getFeatureName());
@@ -181,8 +193,30 @@ describe('ChecklistScanner — X / N / Z', () => {
             JSON.stringify({ id: 'db-reviewer', status: 'red', output: 'bad', override: '' }));
         fs.writeFileSync(svc.checklistResultPath(reviewPath, 'ops-reviewer'),
             JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'bad', override: 'accepted, JIRA-1' }));
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true, 'stage-scan', SALT));
+        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer', 'ops-reviewer']);
+    });
+
+    // …and it stops owing review the moment a signed human approval covering it verifies. Same fixture, one
+    // difference: a real `wp-authorize` record, minted through the service the command uses.
+    it('an OVERRIDDEN one clears once a signed human approval verifies', () => {
+        const dir = repoWithFour();
+        const svc = new ReviewJsonService();
+        const feature = newAiBranchName().getFeatureName();
+        const reviewPath = svc.reviewJsonPath(dir, feature);
+        fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+        fs.writeFileSync(svc.checklistResultPath(reviewPath, 'db-reviewer'),
+            JSON.stringify({ id: 'db-reviewer', status: 'red', output: 'bad', override: '' }));
+        fs.writeFileSync(svc.checklistResultPath(reviewPath, 'ops-reviewer'),
+            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'bad', override: 'accepted, JIRA-1' }));
+        const auth = new HumanAuthorizationService();
+        const base = new DiffBasisResolver(newForkPoint(), new GitStatusParser()).resolve(dir).base;
+        auth.append(dir, feature, new HumanApproval(
+            'ops-reviewer', '', 'Ops signed off in person; shipping the ops half first.', ['**'], base,
+            new Date().toISOString(), new Date(Date.now() + 3600 * 1000).toISOString()), SALT);
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true, 'stage-scan', SALT));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
+        expect(scan.authorized.proseFor('ops-reviewer')).toContain('in person');
     });
 
 });

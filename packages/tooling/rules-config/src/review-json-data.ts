@@ -21,10 +21,18 @@ export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as 
 // file. It records the OUTCOME:
 //   status:'green'                  → PASS
 //   status:'yellow'                 → WARN (passes; the concern is published on the PR, nothing is blocked)
-//   status:'red' + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
+//   status:'red' + override non-empty → OVERRIDDEN, but ONLY when a VERIFIED human authorization for this
+//                                     checklist exists on the branch; otherwise UNAUTHORIZED (refuse)
 //   status:'red' + no override      → FAIL (refuse; `output` is printed verbatim)
 // `override` is deliberately free text, not a boolean — it forces the ship-anyway decision to be stated
-// in words and surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
+// in words and surfaces it on the dashboard, where a human sees it.
+//
+// IT IS NOT, BY ITSELF, AUTHORIZATION. This field is written by the reviewer SUBAGENT, so an agent that
+// fills it in is an agent authorizing itself — the one channel the whole authorization feature exists to
+// close. What makes an override count is `HumanAuthorizationService`: a human runs `pnpm wp-authorize` at
+// a tty, and `resolveVerdict` honours the override only while that HMAC-signed approval verifies against
+// the branch's fork point, scope and expiry. Without one the verdict resolves CK_UNAUTHORIZED and the PR
+// is refused exactly as if the override were absent. Data-only (per CLAUDE.md).
 export class ChecklistResult {
     id: string;
     status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
@@ -153,17 +161,26 @@ export class ReviewJson {
 }
 
 // A checklist's resolved outcome, shared by review.json enforcement and the dashboard so both agree.
-// PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
+// PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING, BAD_FORMAT and UNAUTHORIZED all refuse the PR.
 export const CK_PASS = 'pass';               // review-<id>.json status:'green'
 export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
-export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json status:'red' + non-empty override → 🟠
+export const CK_OVERRIDDEN = 'overridden';   // status:'red' + override + a VERIFIED human authorization → 🟠
 export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
+/**
+ * status:'red' + a non-empty `override` that NO verified human authorization backs → refuse.
+ *
+ * Its own status rather than a spelling of CK_FAIL because the two need opposite actions from the reader.
+ * CK_FAIL means the finding must be FIXED. This means the finding was judged shippable by an agent that is
+ * not allowed to make that call — so the action is to ask a HUMAN to run `pnpm wp-authorize`, and telling
+ * that reader to "fix the finding" sends them to re-do work a person has already decided to accept.
+ */
+export const CK_UNAUTHORIZED = 'unauthorized-override';
 export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
 export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)
 
 export class ChecklistVerdict {
     id: string;
-    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
+    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT | CK_UNAUTHORIZED
     detail: string; // reviewer output / override justification / format complaint (dashboard + errors)
 
     constructor(id: string, status: string, detail: string) {

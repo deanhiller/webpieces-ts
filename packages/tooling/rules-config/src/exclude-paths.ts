@@ -40,13 +40,22 @@ export function isPathExcluded(relPath: string, excludePaths: readonly string[])
  *
  * Paths are normalized to forward slashes so Windows backslashes match too. Empty `patterns` matches
  * nothing, so an unconfigured list is inert rather than universal.
+ *
+ * DOTFILE PATHS COUNT (`{ dot: true }`). minimatch's default hides any path segment starting with `.`
+ * from a wildcard, so `**` does not match `.github/workflows/deploy.yml` and `.claude/**` does not match
+ * `.claude/agents/x.md`. For a repo-path classifier that default is simply wrong: `.github/`, `.claude/`
+ * and `.webpieces/` are ordinary, frequently-changed directories here, and a pattern author writing
+ * `**` means all of it. It was also a live hazard — a human authorization scoped to a diff that includes
+ * a dotfile path would have silently failed to cover it, so the approval would die for a reason nobody
+ * could see. Shell-style dot-hiding protects against globbing up `.` and `..`, which is not a hazard any
+ * caller here has.
  */
 // webpieces-disable no-function-outside-class -- pure path predicate, sibling of isPathExcluded above
 export function matchesAnyGlob(relPath: string, patterns: readonly string[]): boolean {
     const norm = relPath.replace(/\\/g, '/');
     for (const pattern of patterns) {
-        if (minimatch(norm, pattern)) return true;
-        if (minimatch(norm, `${pattern}/**`)) return true;
+        if (minimatch(norm, pattern, { dot: true })) return true;
+        if (minimatch(norm, `${pattern}/**`, { dot: true })) return true;
     }
     return false;
 }

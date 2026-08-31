@@ -6,6 +6,7 @@ import {
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
+    CK_UNAUTHORIZED,
     CK_FAIL,
     CK_MISSING,
 } from '@webpieces/rules-config';
@@ -381,6 +382,7 @@ export class Dashboard {
             const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
             return `🟠 OVERRIDDEN${why}`;
         }
+        if (row.status === CK_UNAUTHORIZED) return '🔴 REFUSED — override written with no human authorization';
         if (row.status === CK_WARN) return '🟡 passed with concerns';
         if (row.status === CK_FAIL) return '🔴 FAILED review';
         if (row.status === CK_MISSING) return '⚪ not reviewed';

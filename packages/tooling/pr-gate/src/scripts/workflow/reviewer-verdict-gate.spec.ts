@@ -100,7 +100,12 @@ describe('a REFUSED checklist reads as a refusal, not as a reviewer that never r
         const msg = refusalOf(dir, [DB]);
         expect(msg).toContain('review again');
         expect(msg).toContain('A FRESH review-db-reviewer.json is now required');
-        expect(msg).toContain('human-authored "override"');
+        // The escape hatch is the HUMAN-ONLY mint, named as such: an agent that reads this must go ASK,
+        // not write the override field itself. Pinning the exact commands is the point — the old wording
+        // ("set a human-authored override") pointed at a file the agent could write.
+        expect(msg).toContain('pnpm wp-authorize --checklist db-reviewer');
+        expect(msg).toContain('pnpm wp-check-auth --checklist db-reviewer');
+        expect(msg).not.toContain('human-authored "override"');
     });
 });
 
