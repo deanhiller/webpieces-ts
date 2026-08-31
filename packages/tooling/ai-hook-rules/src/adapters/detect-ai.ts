@@ -30,7 +30,8 @@ import { AiType } from '../core/agent-event';
  *    This is the residual gap and sh cannot close it. Do not write a JSON parser in sh to try.
  *
  * WHY THE RESIDUAL GAP IS NOT A PRIVILEGE ESCALATION, stated as the property to preserve rather than
- * as a reassurance: the ONLY thing the harness answer gates at L0 is `CODEX_READ_ALLOW_ERE`, which
+ * as a reassurance: the ONLY thing the harness answer gates at L0 is `L0_CODEX_ALLOW_ERE` (built from
+ * `CODEX_READ_BODY_ERE` in ../bin/l0-codex-read.ts), which
  * admits nothing but a single, unredirected, unchained READ (`cat`/`head`/`tail`/`less`/`more`/`bat`,
  * or `sed -n '<range>p'`). Allowlist entry 1 — "any Read", with no path restriction — already grants
  * Claude Code the identical capability under every L0 fault. So a misclassification hands a Claude
