@@ -37,14 +37,14 @@ export class HookArgs {
  *
  * `emitAllow()` / `emitDeny()` are reached from a dozen places nested several frames deep inside the
  * pipeline, and every one of them means "this invocation is over, here is its answer". They used to
- * say that by calling `process.stdout.write` + `process.exit(0)` on the spot, which is precisely what
+ * say that by writing to stdout and terminating the process on the spot, which is precisely what
  * made the composed pipeline untestable — the answer never became a value anybody could look at.
  *
  * Throwing carries the same "nothing after this line runs" guarantee (both helpers are still typed
  * `never`) while turning the answer into a HookOutcome that `HookApp` writes and exits with. The
  * ORDER of observable effects is unchanged: the audit line is still flushed at the emit site, the
- * bytes are still written before the exit, and the exit still happens through `process.exit` in
- * production.
+ * bytes are still written before the exit, and the exit still happens at the same point, through the
+ * injected HookProcessExit port, in production.
  *
  * The ONE thing this shape requires: any `catch` between an emit site and HookApp must RETHROW it
  * rather than treat it as a crash. There is exactly one such catch (the fail-closed boundary in

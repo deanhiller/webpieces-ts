@@ -77,10 +77,19 @@ const CODEX_ENVELOPE = { ...CLAUDE_ENVELOPE, model: 'gpt-5-codex', turn_id: 'tur
 const PATCH_ADD_JS = '*** Begin Patch\n*** Add File: src/foo.js\n+var x = 1;\n*** End Patch\n';
 const PATCH_ADD_TS = '*** Begin Patch\n*** Add File: scripts/added.ts\n+export const b = 2;\n*** End Patch\n';
 
-// webpieces-disable no-any-unknown -- these objects ARE the wire envelope; JSON.stringify of a plain object is the payload under test, and naming a type for it would assert a shape the fixtures exist to state literally
-function payload(envelope: Record<string, unknown>, toolName: string, toolInput: Record<string, unknown>): string {
-    return JSON.stringify({ ...envelope, tool_name: toolName, tool_input: toolInput });
+/**
+ * Serializes ONE PreToolUse envelope to the bytes a harness would put on stdin. A class rather than a
+ * module-scope function because that is the repo rule, and the one instance below is built at module
+ * load so the fixture table can stay a plain literal list.
+ */
+class WirePayload {
+    // webpieces-disable no-any-unknown -- these objects ARE the wire envelope; JSON.stringify of a plain object is the payload under test, and naming a type for it would assert a shape the fixtures exist to state literally
+    write(envelope: Record<string, unknown>, toolName: string, toolInput: Record<string, unknown>): string {
+        return JSON.stringify({ ...envelope, tool_name: toolName, tool_input: toolInput });
+    }
 }
+
+const WIRE = new WirePayload();
 
 /**
  * ONE fixture per row of the coverage the composed pipeline had none of before: for BOTH harnesses a
@@ -91,28 +100,28 @@ export const GOLDEN_FIXTURES: readonly GoldenFixture[] = [
     // ── Claude Code ────────────────────────────────────────────────────────────────────────────────
     // A Bash deny. `git merge` is blocked on every branch, so this verdict does not depend on repo
     // state — and a Bash deny is the ONE case that carries the red `systemMessage`.
-    new GoldenFixture('claude/bash-deny', 'guards', payload(CLAUDE_ENVELOPE, 'Bash', { command: 'git merge main' })),
-    new GoldenFixture('claude/bash-allow', 'guards', payload(CLAUDE_ENVELOPE, 'Bash', { command: 'echo hi' })),
+    new GoldenFixture('claude/bash-deny', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'git merge main' })),
+    new GoldenFixture('claude/bash-allow', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'echo hi' })),
     // The read-only tool: log-and-allow, and the only guard that can deny it is a stale `main`.
-    new GoldenFixture('claude/read-allow', 'guards', payload(CLAUDE_ENVELOPE, 'Read', { file_path: `${REPO_TOKEN}/f.txt` })),
+    new GoldenFixture('claude/read-allow', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Read', { file_path: `${REPO_TOKEN}/f.txt` })),
     // Write / Edit / MultiEdit denies — all three must emit NO systemMessage.
-    new GoldenFixture('claude/write-deny', 'rules', payload(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/src/foo.js`, content: 'var x = 1;\n' })),
-    new GoldenFixture('claude/edit-deny', 'rules', payload(CLAUDE_ENVELOPE, 'Edit', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, old_string: 'const a = 1;', new_string: 'const { a } = b;' })),
-    new GoldenFixture('claude/multiedit-deny', 'rules', payload(CLAUDE_ENVELOPE, 'MultiEdit', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, edits: [{ old_string: 'const a = 1;', new_string: 'const { a } = b;' }] })),
-    new GoldenFixture('claude/write-allow', 'rules', payload(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, content: 'export const a = 1;\n' })),
+    new GoldenFixture('claude/write-deny', 'rules', WIRE.write(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/src/foo.js`, content: 'var x = 1;\n' })),
+    new GoldenFixture('claude/edit-deny', 'rules', WIRE.write(CLAUDE_ENVELOPE, 'Edit', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, old_string: 'const a = 1;', new_string: 'const { a } = b;' })),
+    new GoldenFixture('claude/multiedit-deny', 'rules', WIRE.write(CLAUDE_ENVELOPE, 'MultiEdit', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, edits: [{ old_string: 'const a = 1;', new_string: 'const { a } = b;' }] })),
+    new GoldenFixture('claude/write-allow', 'rules', WIRE.write(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, content: 'export const a = 1;\n' })),
     new GoldenFixture('claude/malformed', 'guards', 'not json at all'),
-    new GoldenFixture('claude/crash', 'rules', payload(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, content: 'export const a = 1;\n' }), true),
+    new GoldenFixture('claude/crash', 'rules', WIRE.write(CLAUDE_ENVELOPE, 'Write', { file_path: `${REPO_TOKEN}/scripts/ok.ts`, content: 'export const a = 1;\n' }), true),
 
     // ── Codex ──────────────────────────────────────────────────────────────────────────────────────
-    new GoldenFixture('codex/bash-deny', 'guards', payload(CODEX_ENVELOPE, 'Bash', { command: 'git merge main' })),
-    new GoldenFixture('codex/bash-allow', 'guards', payload(CODEX_ENVELOPE, 'Bash', { command: 'echo hi' })),
+    new GoldenFixture('codex/bash-deny', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'git merge main' })),
+    new GoldenFixture('codex/bash-allow', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'echo hi' })),
     // Codex has no Read tool: a read arrives as `Bash` running a pager, which read parity turns into a
     // read-scoped verdict ON TOP of the bash guards.
-    new GoldenFixture('codex/read-allow', 'guards', payload(CODEX_ENVELOPE, 'Bash', { command: `sed -n '1,240p' ${REPO_TOKEN}/f.txt` })),
-    new GoldenFixture('codex/apply-patch-deny', 'rules', payload(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_JS })),
-    new GoldenFixture('codex/apply-patch-allow', 'rules', payload(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_TS })),
+    new GoldenFixture('codex/read-allow', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: `sed -n '1,240p' ${REPO_TOKEN}/f.txt` })),
+    new GoldenFixture('codex/apply-patch-deny', 'rules', WIRE.write(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_JS })),
+    new GoldenFixture('codex/apply-patch-allow', 'rules', WIRE.write(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_TS })),
     new GoldenFixture('codex/malformed', 'guards', '{"turn_id": broken'),
-    new GoldenFixture('codex/crash', 'rules', payload(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_TS }), true),
+    new GoldenFixture('codex/crash', 'rules', WIRE.write(CODEX_ENVELOPE, 'apply_patch', { command: PATCH_ADD_TS }), true),
 ];
 
 // A rules module that blows up the moment it is required — the shortest honest way to reach the hook's
