@@ -8,12 +8,13 @@ import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder, renderRuleFailForAi } from '@webpieces/rules-config';
 import { NormalizedToolInput, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
-import { AgentHookEvent, FileOperation } from '../core/agent-event';
+import { AgentHookEvent, AiType, FileOperation } from '../core/agent-event';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow, denyOutcome } from './agent-response';
 import { HookOutcome, HookTerminated } from './hook-outcome';
 import { AgentPayload, AgentPayloadParser } from './agent-payload';
 import { AgentAdapters } from './agent-adapters';
+import { detectAiType } from './detect-ai';
 import { CodexSubagentSharedTreeGuard, CODEX_SUBAGENT_RULE } from './codex-subagent-guard';
 import { governingShimRoot, isAllowed, installedShimRulesVersion } from '../bin/shim';
 import { managedSurfaceDrift } from '../bin/hook-registration';
@@ -58,7 +59,11 @@ function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): never {
         handleRead(event, readPath, cwd, mode);
     }
 
-    const result = runBash(command, cwd, mode);
+    // The HARNESS travels with the command. Fault C and fault Y are decided inside the runner, and
+    // both consult the L0 allowlist — which since the gated entry exists cannot be asked without
+    // knowing who is calling. `event.aiType` is the adapter's answer, the same one that routed this
+    // call to the Codex read-parity loop above.
+    const result = runBash(command, cwd, mode, event.aiType);
     if (!result) { emitAllow(); }
     // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
     // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its
@@ -213,8 +218,8 @@ function handleOneFile(event: AgentHookEvent, file: FileOperation, cwd: string, 
 //   - 'deny'       → all OTHER work: blocked until the committed shim matches renderShim() again.
 export type ShimStaleDecision = 'allow-cure' | 'pass' | 'deny';
 // webpieces-disable no-function-outside-class -- pure decision helper beside the adapter's other module-scope functions; exported for direct unit testing.
-export function shimStaleRecoveryDecision(toolName: string, command: string, filePath: string): ShimStaleDecision {
-    const allowed = isAllowed(toolName, command, filePath);
+export function shimStaleRecoveryDecision(toolName: string, command: string, filePath: string, aiType: AiType): ShimStaleDecision {
+    const allowed = isAllowed(toolName, command, filePath, aiType);
     if (allowed === 'pass') return 'pass';
     if (allowed === 'allow') return 'allow-cure';
     return 'deny';
@@ -254,7 +259,13 @@ function enforceCommittedShim(payload: AgentPayload, event: AgentHookEvent, cwd:
     // step.
     const drifted = managedSurfaceDrift(shimRoot);
     if (drifted.length === 0) return;
-    const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');
+    // The harness comes from the RAW envelope too — `detectAiType` asks one question of one key, so it
+    // is as trustworthy here as the wire fields beside it, and it is the PRECISE test the shim's sh half
+    // can only approximate. Reading it off the normalized event instead would put a normalizer between
+    // L0 and its decision, which is the coupling the paragraph above exists to refuse.
+    const decision = shimStaleRecoveryDecision(
+        payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '',
+        detectAiType(payload));
     if (decision === 'pass') return;
     if (decision === 'allow-cure') emitAllow();
     // Drop the L0 matrix doc where the AI can read it and point the deny at it — a Read is entry 1 of

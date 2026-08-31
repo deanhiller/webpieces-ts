@@ -399,7 +399,7 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
     });
 
     it('`cd <worktree> && git push` is still BLOCKED by the push guard (a worktree is not an escape)', () => {
-        const result = runBash(`cd ${e2eWorktree} && git push -u origin feature-x`, e2ePrimary, 'guards');
+        const result = runBash(`cd ${e2eWorktree} && git push -u origin feature-x`, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
@@ -410,13 +410,13 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
      * from `.claude/worktrees/probe-l1`. Only `--dry-run` kept it from being a real ungated push.
      */
     it('an IN-REPO agent worktree is governed too — it was ALLOW_EXEMPT as a "foreign repo" before', () => {
-        const result = runBash(`cd ${e2eAgentWorktree} && git push -u origin agent-branch`, e2ePrimary, 'guards');
+        const result = runBash(`cd ${e2eAgentWorktree} && git push -u origin agent-branch`, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
 
     it('the SAME push is blocked from the primary clone — the two locations now agree', () => {
-        const result = runBash(`cd ${e2ePrimary} && git push -u origin main`, e2ePrimary, 'guards');
+        const result = runBash(`cd ${e2ePrimary} && git push -u origin main`, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
@@ -426,13 +426,13 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         // than reading the developer's real preferences.
         // HomeConfig(wholeRepoBuildGuard, orphanDirSweep, maxConcurrentBuilds).
         vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue(new HomeConfig(true, false, DEFAULT_MAX_CONCURRENT_BUILDS));
-        const result = runBash(`cd ${e2eAgentWorktree} && pnpm run build-all`, e2ePrimary, 'guards');
+        const result = runBash(`cd ${e2eAgentWorktree} && pnpm run build-all`, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('whole-repo-build-guard');
     });
 
     it('`git status` inside the worktree is ALLOWED — governed is not the same as blocked', () => {
-        expect(runBash(`cd ${e2eAgentWorktree} && git status`, e2ePrimary, 'guards')).toBeNull();
+        expect(runBash(`cd ${e2eAgentWorktree} && git status`, e2ePrimary, 'guards', 'claude-code')).toBeNull();
     });
 
     /**
@@ -444,7 +444,7 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         const dead = nodePath.join(e2ePrimary, '.claude', 'worktrees', 'agent-reaped');
         // NOT `git fetch origin main` — that is on the L0 cure allowlist, which runs ahead of L1 by
         // design so a cure stays reachable from every tree.
-        const result = runBash(`cd ${dead} && git status`, e2ePrimary, 'guards');
+        const result = runBash(`cd ${dead} && git status`, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         const report = (result as BlockedResult).report;
         expect(report).toContain('no longer exists');
@@ -473,12 +473,12 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
             `cd ${worktreeSub} && git status`,
         ];
         for (const command of commands) {
-            const first = runBash(command, e2ePrimary, 'guards');
+            const first = runBash(command, e2ePrimary, 'guards', 'claude-code');
             expect(first, command).toBeInstanceOf(BlockedResult);
             const headline = (first as BlockedResult).report.split('\n')[0];
             const remedy = suggestedCommand((first as BlockedResult).report);
             expect(remedy, `no remedy found for ${command}`).not.toBe('');
-            const second = runBash(remedy, e2ePrimary, 'guards');
+            const second = runBash(remedy, e2ePrimary, 'guards', 'claude-code');
             const secondReport = second instanceof BlockedResult ? second.report : '';
             expect(secondReport.split('\n')[0], `remedy re-triggered its own guard: ${remedy}`)
                 .not.toBe(headline);
@@ -489,7 +489,7 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         const sub = nodePath.join(e2eWorktree, 'src');
         fs.mkdirSync(sub, { recursive: true });
         const command = `cd ${sub} && git status`;
-        const result = runBash(command, e2ePrimary, 'guards');
+        const result = runBash(command, e2ePrimary, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         const report = (result as BlockedResult).report;
         // It names the tree it judged (a wrong judgement must be visible, not baffling) …
@@ -551,7 +551,7 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
 
     it('BLOCKS real work — the agent is in the worktree, and both trees are named with their versions', () => {
         const dirs = stage('0.4.624');
-        const result = runBash('pnpm build', dirs.resident, 'guards');
+        const result = runBash('pnpm build', dirs.resident, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         const report = (result as BlockedResult).report;
         expect(report).toContain('version SKEW');
@@ -567,31 +567,31 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
         expect(fs.existsSync(nodePath.join(dirs.resident, 'webpieces.config.json'))).toBe(true);
         expect(resolver().resolve('pnpm build', dirs.resident, dirs.resident).governedRoot)
             .toBe(dirs.resident);
-        expect(runBash('pnpm build', dirs.resident, 'guards')).toBeInstanceOf(BlockedResult);
+        expect(runBash('pnpm build', dirs.resident, 'guards', 'claude-code')).toBeInstanceOf(BlockedResult);
     });
 
     it('ALLOWS everything once the two trees agree — the block is the skew, not the worktree', () => {
         const dirs = stage('0.4.616');
-        expect(runBash('pnpm build', dirs.resident, 'guards')).toBeNull();
+        expect(runBash('pnpm build', dirs.resident, 'guards', 'claude-code')).toBeNull();
         // NOT `pnpm test`: at a workspace root that is the whole suite, so on a machine that has opted
         // into whole-repo-build-guard it would be refused for its SCOPE — which has nothing to do with
         // skew and would make this test pass or fail by reading someone's ~/.webpieces/config.json. A
         // narrowed run is the honest probe, and it is allowed either way.
-        expect(runBash('pnpm exec vitest run packages/core', dirs.resident, 'guards')).toBeNull();
+        expect(runBash('pnpm exec vitest run packages/core', dirs.resident, 'guards', 'claude-code')).toBeNull();
     });
 
     it('never blocks the look or the cure, so the resident agent is never deadlocked', () => {
         const dirs = stage('0.4.624');
         for (const command of ['ls -la', 'cat pnpm-workspace.yaml', 'git status', 'pnpm install']) {
-            expect(runBash(command, dirs.resident, 'guards'), command).toBeNull();
+            expect(runBash(command, dirs.resident, 'guards', 'claude-code'), command).toBeNull();
         }
         // …and the cure aimed at the MAIN tree passes from inside the worktree too.
-        expect(runBash(`git -C ${dirs.main} pull`, dirs.resident, 'guards')).toBeNull();
+        expect(runBash(`git -C ${dirs.main} pull`, dirs.resident, 'guards', 'claude-code')).toBeNull();
     });
 
     it('the MAIN tree is never blocked by this guard, however skewed the worktree is', () => {
         const dirs = stage('0.4.624');
-        expect(runBash('pnpm build', dirs.main, 'guards')).toBeNull();
+        expect(runBash('pnpm build', dirs.main, 'guards', 'claude-code')).toBeNull();
     });
 });
 
@@ -635,10 +635,10 @@ describe('atRoot() emits a remedy that is runnable AND allowlisted', () => {
     });
 
     it('produces a line the L0 allowlist ACCEPTS — the round trip that matters', () => {
-        expect(isAllowed('Bash', atRoot(spaced, 'pnpm install'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm install'), '', 'claude-code')).toBe('allow');
         // `git fetch origin main`, NOT `git pull origin main`: the pull left the L0 allowlist (audit
         // finding C6) because a terminal entry for it short-circuited redirect-how-to-merge-main.
-        expect(isAllowed('Bash', atRoot(spaced, 'git fetch origin main'), '')).toBe('allow');
-        expect(isAllowed('Bash', atRoot(spaced, 'pnpm exec wp-upgrade-shim'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'git fetch origin main'), '', 'claude-code')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm exec wp-upgrade-shim'), '', 'claude-code')).toBe('allow');
     });
 });

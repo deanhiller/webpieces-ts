@@ -12,11 +12,36 @@ import { AiType } from '../core/agent-event';
  * ../bin/l0-allowlist.ts already uses for `L0_ALLOW_ERE_SH` / `L0_ALLOW_JS`, and detect-ai.spec.ts
  * asserts the two agree over a corpus the same way.
  *
- * The sh half is an APPROXIMATION and says so out loud: it matches the six bytes `"turn_id":` in the
- * raw payload, so a Claude payload that happened to embed that exact quoted-key-with-colon spelling
- * inside a string value would be misread as Codex. Matching a JSON key from sh without a JSON parser
- * cannot do better, the spelling is contrived (an agent grepping for `turn_id` types it bare), and
- * the consequence of the miss is bounded: the Codex path is a SUPERSET of guards, never fewer.
+ * ─── THE SH HALF IS AN APPROXIMATION, AND SINCE L0 BRANCHES ON IT, HERE IS EXACTLY HOW FAR OFF ──────
+ *
+ * The JS half asks the precise question (`turn_id` is a key of the TOP-LEVEL envelope). The sh half has
+ * no JSON parser, so it asks a structural approximation of it: after deleting all whitespace, does the
+ * payload contain `{` or `,` immediately followed by `"turn_id":`? That is strictly narrower than the
+ * bare substring test it replaced, and the tightening is not cosmetic — `bin/l0-allowlist.ts` now gates
+ * an allowlist entry on this answer, so a wrong answer is a grant.
+ *
+ * WHAT IT CAN AND CANNOT DISTINGUISH:
+ *
+ *  - A Claude payload MENTIONING the key in a command — `grep '"turn_id":' x.json` — is answered
+ *    `claude-code`, and not by luck: JSON escapes every `"` inside a string value, so the bytes on the
+ *    wire are `\"turn_id\":`, which contains no `"turn_id":` at all. There is no spelling of a shell
+ *    command that puts the RAW token into the payload.
+ *  - A NESTED `turn_id` key — an MCP tool_input that happens to carry one — IS misread as `codex`.
+ *    This is the residual gap and sh cannot close it. Do not write a JSON parser in sh to try.
+ *
+ * WHY THE RESIDUAL GAP IS NOT A PRIVILEGE ESCALATION, stated as the property to preserve rather than
+ * as a reassurance: the ONLY thing the harness answer gates at L0 is `L0_CODEX_ALLOW_ERE` (built from
+ * `CODEX_READ_BODY_ERE` in ../bin/l0-codex-read.ts), which
+ * admits nothing but a single, unredirected, unchained READ (`cat`/`head`/`tail`/`less`/`more`/`bat`,
+ * or `sed -n '<range>p'`). Allowlist entry 1 — "any Read", with no path restriction — already grants
+ * Claude Code the identical capability under every L0 fault. So a misclassification hands a Claude
+ * session another SPELLING of a read it could already do, and never a capability it lacked. Anything
+ * added to the aiType-gated set later must be checked against that property, because it is what makes
+ * the approximation tolerable. `codex-l0-read.spec.ts` pins both halves of this.
+ *
+ * WHENEVER THE JS HALF IS RUNNING IT IS AUTHORITATIVE: the binary calls `detectAiType()` on the parsed
+ * envelope (see `enforceCommittedShim`), so the approximation decides only faults D/X/U/K, where the
+ * binary never runs at all.
  *
  * WIRED INTO THE RENDERED SHIM (`PARSE_PAYLOAD_SH` in ../bin/shim.ts), which is what makes the L0 audit
  * line's `ai=` field possible. Note the release ordering that governs the ARTIFACT rather than this
@@ -30,8 +55,17 @@ export const AI_TYPE_TOKEN_SH = '"turn_id":';
  * Sets `AI` to the literal `AiType` value — `codex` or `claude-code` — from `$PAYLOAD`. The values
  * are the SAME strings the TypeScript union carries, so the twin test can compare them byte for byte
  * instead of translating between two vocabularies (translation is where twins drift).
+ *
+ * Two steps, and both are load-bearing:
+ *   1. `tr -d` deletes every whitespace byte into `WP_AI_ENV`, so the structural test below does not
+ *      have to spell "optional whitespace" — which a POSIX `case` glob cannot express — and a
+ *      pretty-printed envelope is read exactly like a compact one. The stripped copy is used for THIS
+ *      test only; `$PAYLOAD` itself is untouched and stays the input every `sed` scrape reads.
+ *   2. the glob requires `{` or `,` IMMEDIATELY before the quoted key, i.e. the structural context a
+ *      real JSON key has and a mention inside a value does not.
  */
-export const AI_TYPE_SH = `case "$PAYLOAD" in *'${AI_TYPE_TOKEN_SH}'*) AI=codex ;; *) AI=claude-code ;; esac`;
+export const AI_TYPE_SH = `WP_AI_ENV="$(printf '%s' "$PAYLOAD" | tr -d ' \\t\\n\\r')"
+case "$WP_AI_ENV" in *[{,]'${AI_TYPE_TOKEN_SH}'*) AI=codex ;; *) AI=claude-code ;; esac`;
 
 /**
  * JS twin of AI_TYPE_SH. Asks the precise question the sh half approximates: is `turn_id` a key of

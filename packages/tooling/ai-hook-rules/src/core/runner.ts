@@ -16,7 +16,8 @@ import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
-import { L0_ALLOW_JS, L0_CURE_ALLOW_JS, isRootManifest } from '../bin/shim';
+import { L0_CURE_ALLOW_JS, isAllowed, isRootManifest } from '../bin/shim';
+import { AiType } from './agent-event';
 import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC, L0_FAULT_NONE } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import { L1Classification, firstMatchingL1Row, L1_PRESTAGE_ROW } from './l1-rows';
@@ -79,13 +80,11 @@ export function isGitOrGhCommand(command: string): boolean {
 // L0 fault table, so the message and the allowlist can never prescribe different cures. `cwd` is used
 // only to drop the matrix doc where the AI can read it (the config root does not exist yet here).
 //
-// `command` is '' on the file-tool path (there is no command to judge) and the Bash command otherwise:
-// a call on the L0 allowlist survives this block, which is how read-only orientation stays available
-// under C. You have to be able to see which tree you are standing in before you can decide what to
-// write into the config. Returns null when the call is allowed through.
+// THE ALLOWLIST ESCAPE IS THE CALLER'S (moved out 2026-09-01): behind an optional `command` it could
+// not see the harness, so the gated half of the list was unreachable under C while
+// CONFIG_MISSING_REPORT promised it. See l0FaultAllows. This has one job now: build the block.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function configMissingBlock(cwd: string, command: string = ''): BlockedResult | null {
-    if (command !== '' && l0FaultAllows(command)) return null;
+function configMissingBlock(cwd: string): BlockedResult {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
     // Stamped with its L0 letter so the block is greppable as fault C wherever it is recorded — the
     // adapter carries it to the audit line rather than re-deriving it from the report text.
@@ -168,8 +167,8 @@ const VERSION_SYNC = new VersionSyncGuard();
 // at a turn boundary silently resumes with its cwd on the primary clone — so a guard must never infer
 // a tree from who is asking.
 // webpieces-disable no-function-outside-class -- sibling of run()/runRead() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-export function runBash(command: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
-    return runBashInternal(command, cwd, mode);
+export function runBash(command: string, cwd: string, mode: HookMode, aiType: AiType): BlockedResult | null {
+    return runBashInternal(command, cwd, mode, aiType);
 }
 
 // The name of the ONLY rule permitted to block a Read. Reads are the highest-blast-radius tool
@@ -243,12 +242,13 @@ function isL0CureCommand(command: string): boolean {
 }
 
 // The FULL L0 list, asked only where this file has actually detected an L0 fault (C = config missing,
-// Y = config out of sync). Those two are the JS-side faults; D/X/K are decided in the shim, which greps
-// the same union. Without this the orientation entry would be honoured under four faults and silently
-// dropped under the other two — precisely the per-fault carve-out the L0 rewrite removed.
+// Y = config out of sync). D/X/U/K are decided in the shim, which greps the same union.
+// IT ASKS `isAllowed()`, not a regex: that is the ONE question both halves of L0 ask, and the only
+// place harness-gated entries are consulted. Testing `L0_ALLOW_JS` directly (which is what this did)
+// dropped the Codex read under C and Y while D/X/U/K honoured it — a per-fault carve-out again.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function l0FaultAllows(command: string): boolean {
-    return L0_ALLOW_JS.test(command.trim());
+function l0FaultAllows(command: string, aiType: AiType): boolean {
+    return isAllowed('Bash', command.trim(), '', aiType) !== null;
 }
 
 // The L0 cure bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
@@ -429,7 +429,7 @@ function keylessBashRules(loaded: LoadedConfig, mode: HookMode, relativePath: st
 }
 
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
+function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: AiType): BlockedResult | null {
     if (isL0CureCommand(command)) {
         logL0CureBypass(command, cwd);
         return null;
@@ -438,7 +438,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const loaded = loadConfigOrAllowInspection(command, cwd);
     // null = the config would not load AND this command only inspects → allow, see the helper.
     if (loaded === null) return null;
-    if (loaded.configPath === null) return configMissingBlock(cwd, command); // fault C
+    if (loaded.configPath === null) return l0FaultAllows(command, aiType) ? null : configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -469,7 +469,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     if (rules.length === 0 && keyless.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
-    if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
+    if (outOfSync) return l0FaultAllows(command, aiType) ? null : outOfSync;
 
     const locationBlock = l1LocationBlock(command, tree);
     if (locationBlock) return locationBlock;

@@ -81,14 +81,21 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 | 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
 | 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
 | 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
+| 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS | no — it repairs nothing, so L1 still judges it |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a
   downstream guard would block it.
 
-Every Bash entry is anchored to the WHOLE command. A leading `cd <dir> &&`, a trailing `2>&1` and a
-pipe into `tail`/`head` are tolerated; nothing else. Appending `&& git status` makes it a DIFFERENT
+Every Bash entry is anchored to the WHOLE command. Appending `&& git status` makes it a DIFFERENT
 command and it is rejected again — that is not the guard refusing its own cure.
+
+On an UNGATED entry a leading `cd <dir> &&`, a trailing `2>&1` and a pipe into `tail`/`head` are
+tolerated; nothing else. **The harness-gated read row tolerates NONE of the three** — not the
+`cd` prefix, not the redirect, not the pipe — so `cat f 2>&1` and `cat f | head -20` are both
+rejected. That is deliberate, not an oversight: the row means exactly what
+`core/shell-read-parity.ts` means by "this is a read", and that module treats a pipe or a
+redirect as proof the command is more than one. Type the bare command.
 
 `git merge` and a **bare** `git pull` are both deliberately absent — see "The git-sync split"
 below for why the one safe pull spelling is on the list and the bare one is not. Main is merged
@@ -147,6 +154,7 @@ to carry the first.
 | `PASS-BIN-BLOCK` | no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked |
 | `ALLOW-READ` | allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran) |
 | `ALLOW-IGNORED` | a Codex tool with nothing to judge (L0_IGNORED_TOOLS) — PASS, terminal here |
+| `ALLOW-CODEX-READ` | the aiType-gated entry: a read-shaped Bash command on CODEX, which has no Read tool — PASS, terminal here. It cannot appear on a claude-code line; if one ever does, the sh harness test (AI_TYPE_SH) misread the payload |
 | `ALLOW-CONFIG` | allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here |
 | `ALLOW-MANIFEST` | allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here |
 | `ALLOW-CURE` | a Bash entry of the allowlist matched — ALLOW |

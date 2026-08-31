@@ -3,7 +3,9 @@ import * as path from 'path';
 
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
 
+import { AiType } from '../core/agent-event';
 import { L0_ALLOW_JS, MANIFEST_FILENAMES } from './l0-allowlist';
+import { L0_CODEX_ALLOW_JS } from './l0-codex-read';
 import { L0_IGNORED_TOOLS } from './l0-ignored-tools';
 
 /**
@@ -39,9 +41,15 @@ export const READ_TOOLS: ReadonlySet<string> = new Set(['Read']);
  *   - null    → not on the list.
  *
  * `CONFIG_FILENAME` stays a basename match on purpose — one per tree; narrowing it is its own question.
+ *
+ * `aiType` is REQUIRED, and there is no default. The harness is a fact of the call, not a preference,
+ * and every caller already has it: the shim scrapes it in POSIX sh (AI_TYPE_SH) and the binary reads it
+ * off the raw envelope (detectAiType). A default here would be a second spelling of "which harness?" —
+ * the one that silently answers `claude-code` for a Codex call and re-creates the deadlock the gated
+ * entry exists to remove.
  */
 // webpieces-disable no-function-outside-class -- pure predicate over the exported allowlist data, in the dependency-free shim module (it must load on a corrupt tree, so it cannot depend on DI)
-export function isAllowed(toolName: string, command: string, filePath: string): 'pass' | 'allow' | null {
+export function isAllowed(toolName: string, command: string, filePath: string, aiType: AiType): 'pass' | 'allow' | null {
     if (READ_TOOLS.has(toolName)) return 'pass';
     // Nothing to judge — see L0_IGNORED_TOOLS. `pass`, never `allow`: L0 declines to be terminal, so on
     // a healthy tree the call still falls through to whatever runs next.
@@ -49,6 +57,11 @@ export function isAllowed(toolName: string, command: string, filePath: string): 
     if (path.basename(filePath) === CONFIG_FILENAME) return 'pass';
     if (isRootManifest(filePath)) return 'pass';
     if (L0_ALLOW_JS.test(command.trim())) return 'allow';
+    // The HARNESS-GATED tail of the list, and the only place `aiType` is consulted. Codex has no `Read`
+    // tool, so a read arrives here as a Bash command; without this it is denied under every L0 fault and
+    // a Codex session cannot read the deny that is telling it what to run. `pass`, exactly like the Read
+    // entry it twins — see the L0_CODEX_ALLOW_ERE header for why this union is anchored on its own.
+    if (aiType === 'codex' && L0_CODEX_ALLOW_JS.test(command.trim())) return 'pass';
     return null;
 }
 

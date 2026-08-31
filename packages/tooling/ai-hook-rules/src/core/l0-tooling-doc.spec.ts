@@ -154,14 +154,14 @@ describe('the generated block renders every array it claims to render', () => {
 describe('every command the doc quotes is runnable while L0 is blocking', () => {
     it('accepts every backticked command in the generated block', () => {
         for (const command of quotedCommands(new L0ToolingDoc().render())) {
-            expect(isAllowed('Bash', command, ''), `the block prescribes a DENIED command: ${command}`).not.toBeNull();
+            expect(isAllowed('Bash', command, '', 'claude-code'), `the block prescribes a DENIED command: ${command}`).not.toBeNull();
         }
     });
 
     it('accepts every backticked command in the hand-written prose too', () => {
         const prose = doc().split(L0_DOC_BEGIN)[0] + doc().split(L0_DOC_END)[1];
         for (const command of quotedCommands(prose)) {
-            expect(isAllowed('Bash', command, ''), `the prose quotes a DENIED command: ${command}`).not.toBeNull();
+            expect(isAllowed('Bash', command, '', 'claude-code'), `the prose quotes a DENIED command: ${command}`).not.toBeNull();
         }
     });
 
