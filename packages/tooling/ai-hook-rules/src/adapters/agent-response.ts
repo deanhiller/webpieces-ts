@@ -29,6 +29,7 @@
 import { invocationLog } from '../core/decision-log';
 import { L0_FAULT_NONE } from '../core/l0-fault-codes';
 import { AgentHookEvent } from '../core/agent-event';
+import { HookOutcome, HookTerminated } from './hook-outcome';
 
 // ANSI escape (0x1b) built at runtime so no raw ESC byte sits in source. ANSI red is a *bonus* — the
 // 🛑 prefix + reason stay meaningful if a future/CI renderer strips the color. One place = one escape.
@@ -80,34 +81,48 @@ export function denyJson(event: AgentHookEvent | null, reason: string): string {
     return JSON.stringify({ hookSpecificOutput });
 }
 
-// Block the tool call and surface `reason` to both the user (terminal UI) and the model. The event's
+// THE DENY, AS A VALUE. `reason` is surfaced to both the user (terminal UI) and the model; the event's
 // kind selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
-// emitDeny/emitAllow are the hook's designated terminal boundary — the exit code IS the Claude Code
-// PreToolUse protocol (exit 0 + JSON = the contract), so the process.exit stays and is allowlisted.
 //
-// Being the ONE boundary every path exits through is also why the per-invocation audit line is
-// flushed HERE: the `calls/` stream carries the outcome of its own call, and the outcome is not
+// This is the ONE boundary every blocking path passes through, which is why the per-invocation audit
+// line is flushed HERE: the `calls/` stream carries the outcome of its own call, and the outcome is not
 // known until this point. `rule` names what blocked (or '-'), for the line's `rule=` field.
 //
 // `fault` is the L0 fault code when the block IS an L0 fault (S/C/Y — the three decided here in JS,
 // where the sh shim's own `fault=` stamp can never reach), else '-'. Stamping it at this ONE boundary is
 // what makes `grep 'fault=S'` span the whole audit trail rather than only its sh half.
-// webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/emitAllow by design, and it must stay callable from a tree too broken to build a DI container.
-export function emitDeny(event: AgentHookEvent | null, reason: string, rule: string = '-', fault: string = L0_FAULT_NONE): never {
+//
+// It RETURNS the outcome instead of writing it. The write and the exit belong to HookApp, which owns
+// the injected stdout/exit ports — that separation is what lets a golden test read the exact bytes a
+// composed run produces. `denyForCrash` (hook-core) needs the value rather than the throw, because it
+// is already INSIDE the catch that would swallow one.
+// webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/allowOutcome by design, and it must stay callable from a tree too broken to build a DI container.
+export function denyOutcome(event: AgentHookEvent | null, reason: string, rule: string = '-', fault: string = L0_FAULT_NONE): HookOutcome {
     // BLOCK_AI_CURE: every deny that reaches this boundary prints a cure the agent can act on — the
     // L0 faults name a command on the allowlist, and the L1/L2 guards print theirs. A deny needing a
     // HUMAN would have to say so at its own site; none does today, and inventing one here would be
     // guessing at the boundary rather than at the decision.
     invocationLog.finish('BLOCK_AI_CURE', rule, fault);
-    process.stdout.write(denyJson(event, reason) + '\n');
-    // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
-    process.exit(0);
+    return new HookOutcome(denyJson(event, reason) + '\n', 0);
 }
 
-// Allow the tool call. No JSON needed — a silent exit 0 is "allow" in the PreToolUse protocol.
+// The ALLOW, as a value. No JSON — a silent exit 0 is "allow" in the PreToolUse protocol.
+// webpieces-disable no-function-outside-class -- the PreToolUse protocol boundary, module-scope beside denyJson/denyOutcome by design, and it must stay callable from a tree too broken to build a DI container
+export function allowOutcome(): HookOutcome {
+    invocationLog.finish('ALLOW', '-');
+    return new HookOutcome('', 0);
+}
+
+// Block the tool call and END the invocation from wherever in the pipeline we are — see HookTerminated
+// for why the terminal control flow is a throw now rather than a `process.exit` at the call site. Still
+// typed `never`: nothing after a call to this runs.
+// webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/emitAllow by design, and it must stay callable from a tree too broken to build a DI container.
+export function emitDeny(event: AgentHookEvent | null, reason: string, rule: string = '-', fault: string = L0_FAULT_NONE): never {
+    throw new HookTerminated(denyOutcome(event, reason, rule, fault));
+}
+
+// Allow the tool call and END the invocation. See emitDeny.
 // webpieces-disable no-function-outside-class -- the PreToolUse protocol boundary, module-scope beside denyJson/emitDeny by design, and it must stay callable from a tree too broken to build a DI container
 export function emitAllow(): never {
-    invocationLog.finish('ALLOW', '-');
-    // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (silent exit 0 = "allow"); designated terminal boundary.
-    process.exit(0);
+    throw new HookTerminated(allowOutcome());
 }
