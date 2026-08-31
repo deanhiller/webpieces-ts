@@ -93,6 +93,7 @@ export class HookApp {
  * ports themselves wrap.
  */
 export class HookBootFailure {
+    // webpieces-disable no-any-unknown -- a rejection value is `unknown` by construction; toError() below is the one place that narrowing belongs
     report(err: unknown): void {
         const error = toError(err);
         // `null` event ⇒ no `systemMessage`. Deliberate: we never parsed a payload, so we do not know

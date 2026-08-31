@@ -11,6 +11,7 @@ import { Container } from 'inversify';
 import { HookApp, HookBootFailure } from './hook-app';
 import { HookArgs } from './hook-outcome';
 
+// webpieces-disable no-function-outside-class -- this IS the bin's process entry point, named in package.json `exports` as ./claude-code-guards / ./claude-code-rules; a class here would be a namespace around one call and could not be the module's callable entry.
 export async function main(): Promise<void> {
     const container = new Container({ autobind: true });
     const app = container.get(HookApp);
@@ -22,5 +23,6 @@ export async function main(): Promise<void> {
 // and lets the tool call through. See HookBootFailure. `main` is async so a synchronous throw inside it
 // arrives here as a rejection too.
 if (require.main === module) {
+    // webpieces-disable no-any-unknown -- a rejection value is `unknown` by construction; HookBootFailure narrows it through toError(), which is the one place that job belongs
     void main().catch((err: unknown): void => { new HookBootFailure().report(err); });
 }
