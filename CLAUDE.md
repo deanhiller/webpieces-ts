@@ -415,6 +415,21 @@ and the agent honoured it to the letter — it never touched the file — while 
 CODE, which has the identical effect from the owner's seat. **A rule that protects a FILE does not
 protect the SETTING that file selects.**
 
+**Enforcement:** `experiment-lifecycle-reviewer` (`.claude/agents/experiment-lifecycle-reviewer.md`).
+Its `commands.pr-gate.checklists` entry lands in the FOLLOW-UP PR — it will be REQUIRED, over
+`packages/**`, `webpieces.config.json` and this file — because the Claude Code harness builds its agent
+registry at session start, so the PR that creates a brand-new required reviewer cannot spawn it and is
+refused by its own provenance check. Same ordering as a rule and the config key that turns it on. Once
+registered, a red verdict blocks the PR, and its `output` names the flag, the file, and the restoration
+that should have happened instead. It is a REVIEWER and not a rule
+for the reason the paragraph above gives: a rule can only see a FILE, and this defect is visible only in
+a diff's effect on a SETTING. `.claude/review/experiment-lifecycle.md` lists the seven shapes it rejects
+— deleting or renaming a flag, making a flagged behaviour unconditional, deleting the OFF branch while
+keeping the key, flipping a default to ON, narrowing what a flag controls, writing an
+`ENDED_EXPERIMENTS` entry, and offering "we never touched the protected file" as a defence — and, just
+as importantly, the GREEN path: a diff that ends an experiment passes when it QUOTES the human deciding
+that this specific experiment ends. Your own reasoning is never that quote, however good it is.
+
 `~/.webpieces/config.json` has no comment syntax, so `_doc` and `_aiDoc` are understood documentation
 keys there: any string, accepted at the top level and inside `experimental`, ignored by the loader,
 never advertised in a "did you mean" hint. Use `_aiDoc` to leave an instruction aimed at the next
