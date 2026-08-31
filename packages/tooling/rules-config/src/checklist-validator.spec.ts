@@ -3,9 +3,25 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ChecklistValidator } from './checklist-validator';
-import { ChecklistDefinition, toChecklist } from './checklist-config';
+import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
+import { findConfigFile } from './config-file';
+import { validateChecklistDocs } from './checklist-docs-validator';
 
 const svc = new ChecklistValidator();
+
+/**
+ * THIS repo's live `commands.pr-gate.checklists`, read straight off disk. Returns [] when there is no
+ * config to find, so the block below stays silent in a consumer repo rather than failing there.
+ */
+function liveChecklists(configPath: string | null): ChecklistDefinition[] {
+    if (configPath === null) return [];
+    // webpieces-disable no-any-unknown -- parsed config JSON is opaque until narrowed on the next line
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    const commands = raw['commands'] as Record<string, unknown> | undefined;
+    const prGate = commands?.['pr-gate'] as Record<string, unknown> | undefined;
+    const items = (prGate?.['checklists'] ?? []) as RawChecklistItem[];
+    return items.map((i: RawChecklistItem): ChecklistDefinition => toChecklist(i));
+}
 
 /**
  * A scratch repo. `docs` are written under `.claude/review/`; `agents` become `.claude/agents/<name>.md`.
@@ -92,5 +108,80 @@ describe('ChecklistValidator — the reviewer subagent must actually exist', () 
     // would break them over a directory they were never expected to have.
     it('stays off entirely when the repo has no .claude/agents dir', () => {
         expect(svc.validate(repoWith(), defs([{ subagent: 'nobody-at-all' }]))).toEqual([]);
+    });
+});
+
+/**
+ * THIS repo's own live `commands.pr-gate.checklists`, validated against the files on disk.
+ *
+ * Every case above runs against a scratch repo, which proves the validator works and proves nothing
+ * about whether the config beside it is wired correctly. This block closes that gap: it is the test that
+ * would have caught a checklist naming a doc or an agent file nobody ever created — the failure mode
+ * where the gate cheerfully tells a reviewer to open a path that does not exist and the reviewer's
+ * easiest way out is to certify itself.
+ *
+ * `findConfigFile` / `validateChecklistDocs` walk UP from the cwd, so this works whether vitest is
+ * launched from the project directory or the workspace root, and both stay silent (return [] / no
+ * errors) in a repo that has no webpieces.config.json at all.
+ */
+describe("this repo's own pr-gate checklists are wired to files that exist", () => {
+    const configPath = findConfigFile(process.cwd());
+    const repoRoot = configPath === null ? '' : path.dirname(configPath);
+    const live = liveChecklists(configPath);
+
+    it('validates clean — every doc and every reviewer agent file is on disk', () => {
+        expect(validateChecklistDocs(process.cwd())).toEqual([]);
+    });
+
+    // Named one by one rather than counted: a count stays green when one reviewer is silently swapped for
+    // another, and each of these enforces a policy this repo has already violated once in anger.
+    it.each([
+        'backwards-compat-reviewer',
+        'error-output-reviewer',
+    ])('%s is registered, REQUIRED, and names a doc and an agent file that exist', (subagent: string) => {
+        const entry = live.find((c: ChecklistDefinition): boolean => c.subagent === subagent);
+        expect(entry, `${subagent} is missing from commands.pr-gate.checklists`).toBeDefined();
+        const found = entry as ChecklistDefinition;
+        expect(found.required).toBe(true);
+        expect(found.patterns.length).toBeGreaterThan(0);
+        expect(found.doc).not.toBe('');
+        expect(fs.existsSync(path.join(repoRoot, found.doc)), `missing doc ${found.doc}`).toBe(true);
+        const agentFile = path.join(repoRoot, '.claude', 'agents', `${subagent}.md`);
+        expect(fs.existsSync(agentFile), `missing agent file ${agentFile}`).toBe(true);
+    });
+
+    /**
+     * `experiment-lifecycle-reviewer` ships its agent file and checklist doc HERE and its
+     * `commands.pr-gate.checklists` entry in the FOLLOW-UP PR — the Claude Code harness builds its agent
+     * registry when a session starts, so the PR that creates a brand-new REQUIRED reviewer cannot spawn
+     * it and is refused by its own provenance check.
+     *
+     * So this asserts the halves that exist NOW: both files are on disk, so the entry the follow-up adds
+     * cannot point at nothing. That is the same wiring guarantee the cases above give the registered two,
+     * asked one release earlier — and it is the assertion that goes red if the follow-up never lands and
+     * somebody deletes these files as unused.
+     */
+    it('experiment-lifecycle-reviewer has its agent file and its doc, ready for the follow-up to register', () => {
+        expect(fs.existsSync(path.join(repoRoot, '.claude', 'review', 'experiment-lifecycle.md'))).toBe(true);
+        expect(fs.existsSync(
+            path.join(repoRoot, '.claude', 'agents', 'experiment-lifecycle-reviewer.md'))).toBe(true);
+    });
+
+    // The pattern list the follow-up must use, pinned as a scratch-repo case so it is enforced by the
+    // validator rather than only described in prose. The reviewer's subject is a SETTING an AI must not
+    // end, and that decision shows up in three places: the flags and their read paths under packages/**,
+    // the config, and the "ships OFF and stays OFF for two years" policy prose in CLAUDE.md. A checklist
+    // watching only packages/** would miss a diff that ends an experiment by editing the policy sentence.
+    it('the entry the follow-up adds validates — code, config and policy prose, and REQUIRED', () => {
+        const dir = repoWith(['experiment-lifecycle.md'], ['experiment-lifecycle-reviewer']);
+        const entry = toChecklist({
+            subagent: 'experiment-lifecycle-reviewer',
+            doc: '.claude/review/experiment-lifecycle.md',
+            patterns: ['packages/**', 'webpieces.config.json', 'CLAUDE.md'],
+            required: true,
+        });
+        expect(svc.validate(dir, [entry])).toEqual([]);
+        expect(entry.required).toBe(true);
+        expect(entry.patterns).toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md']);
     });
 });
