@@ -107,8 +107,13 @@ export function denyOutcome(event: AgentHookEvent | null, reason: string, rule: 
 }
 
 // The ALLOW, as a value. No JSON — a silent exit 0 is "allow" in the PreToolUse protocol.
+//
+// NOT exported, deliberately, where denyOutcome is: `denyForCrash` genuinely needs the deny in value
+// form because it is already inside the catch a throw would land in, and nothing needs the allow that
+// way. An exported one would be a second, externally-pickable spelling of "allow" sitting three lines
+// from `emitAllow` — precisely the shape an agent picks by accident.
 // webpieces-disable no-function-outside-class -- the PreToolUse protocol boundary, module-scope beside denyJson/denyOutcome by design, and it must stay callable from a tree too broken to build a DI container
-export function allowOutcome(): HookOutcome {
+function allowOutcome(): HookOutcome {
     invocationLog.finish('ALLOW', '-');
     return new HookOutcome('', 0);
 }

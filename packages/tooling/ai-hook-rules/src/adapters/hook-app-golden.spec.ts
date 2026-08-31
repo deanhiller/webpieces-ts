@@ -96,6 +96,16 @@ class RecordedExit extends HookProcessExit {
     }
 }
 
+/**
+ * A stdin port that REJECTS — the closest stand-in for a broken pipe or a harness that died mid-write.
+ * Used only by the fail-closed test at the bottom; every golden fixture gets a working stdin.
+ */
+class FailingStdin extends HookStdinSource {
+    override read(): Promise<string> {
+        return Promise.reject(new Error('stdin is gone'));
+    }
+}
+
 const builder = new GoldenRepoBuilder();
 const built: PreparedFixture[] = [];
 
@@ -205,6 +215,49 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
             const parsed = JSON.parse(row.stdout) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
             expect(parsed.hookSpecificOutput.permissionDecision, name).toBe('deny');
             expect(parsed.hookSpecificOutput.permissionDecisionReason.trim(), name).not.toBe('');
+        }
+    });
+
+    /**
+     * THE FAIL-CLOSED BOUNDARY AROUND THE READ ITSELF — the one thing no golden above can reach,
+     * because every one of them substitutes a stdin port that works.
+     *
+     * `runMain` had the stdin read inside the try whose catch produced a deny. Moving the read behind
+     * a port could easily have narrowed that without anybody noticing: a rejected read would escape
+     * `run`, surface as an unhandled rejection, and exit NON-ZERO — and a non-zero exit is a
+     * non-blocking error, so PreToolUse lets the tool call THROUGH. A silent inversion of the one
+     * invariant the hook exists for. This pins the restored boundary.
+     */
+    it('turns a stdin port that rejects into a deny with exit 0, never a non-zero exit', async (): Promise<void> => {
+        const stdout = new CapturedStdout();
+        const exit = new RecordedExit();
+        const container = new Container({ autobind: true });
+        container.bind(HookStdinSource).toConstantValue(new FailingStdin());
+        container.bind(HookStdoutSink).toConstantValue(stdout);
+        container.bind(HookProcessExit).toConstantValue(exit);
+
+        await container.get(HookApp).run(new HookArgs('guards'));
+
+        expect(exit.code).toBe(0);
+        // webpieces-disable no-any-unknown -- parsing the bytes just emitted; the shape asserted is exactly the two fields under test
+        const parsed = JSON.parse(stdout.written) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
+        expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
+        expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('failing closed');
+        expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('stdin is gone');
+    });
+
+    /**
+     * The HookTerminated invariant, pinned by the allows above rather than by a mock.
+     *
+     * `emitAllow` says "this invocation is over, and the answer is allow" by THROWING, so any catch
+     * between it and HookApp that swallowed the throw would turn every allow into a crash-deny. That is
+     * exactly what the five allow fixtures would show — empty stdout becoming a `hook crashed`
+     * deny — which is why there is no separate mock-driven test for it: the real pipeline, run whole,
+     * is a stronger statement than a stubbed one.
+     */
+    it('keeps allows as allows, which is what proves no catch swallows the terminal throw', () => {
+        for (const name of ['claude/bash-allow', 'claude/read-allow', 'claude/write-allow']) {
+            expect(GOLDENS[name].stdout, name).toBe('');
         }
     });
 

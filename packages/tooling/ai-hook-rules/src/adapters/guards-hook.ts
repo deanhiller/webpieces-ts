@@ -8,15 +8,19 @@
 import 'reflect-metadata';
 import { Container } from 'inversify';
 
-import { HookApp } from './hook-app';
+import { HookApp, HookBootFailure } from './hook-app';
 import { HookArgs } from './hook-outcome';
 
-export function main(): Promise<void> {
+export async function main(): Promise<void> {
     const container = new Container({ autobind: true });
     const app = container.get(HookApp);
-    return app.run(new HookArgs('guards'));
+    await app.run(new HookArgs('guards'));
 }
 
+// `.catch` and not a bare `void main()`: a container that cannot be built throws BEFORE any HookApp
+// exists, and an unhandled rejection exits non-zero — which PreToolUse reads as a non-blocking error
+// and lets the tool call through. See HookBootFailure. `main` is async so a synchronous throw inside it
+// arrives here as a rejection too.
 if (require.main === module) {
-    void main();
+    void main().catch((err: unknown): void => { new HookBootFailure().report(err); });
 }
