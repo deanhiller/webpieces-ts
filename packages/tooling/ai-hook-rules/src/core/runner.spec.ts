@@ -149,16 +149,16 @@ describe('runBash installer bypass (deadlock escape: installs pass even with no/
 
     it('lets `pnpm install` / `npm i` through (null = allow) where a normal command is blocked', () => {
         const dir = tmpDirOutsideRepo();
-        expect(runBash('pnpm install', dir, 'guards')).toBeNull();
-        expect(runBash('  npm i --frozen-lockfile ', dir, 'guards')).toBeNull();
+        expect(runBash('pnpm install', dir, 'guards', 'claude-code')).toBeNull();
+        expect(runBash('  npm i --frozen-lockfile ', dir, 'guards', 'claude-code')).toBeNull();
         // Contrast: a non-installer command in the same config-less dir is NOT bypassed.
-        expect(runBash('ls', dir, 'guards')).toBeInstanceOf(BlockedResult);
+        expect(runBash('ls', dir, 'guards', 'claude-code')).toBeInstanceOf(BlockedResult);
     });
 
     it('does NOT bypass a chained command that merely starts with an installer', () => {
         const dir = tmpDirOutsideRepo();
         // Falls through to config handling instead of short-circuiting to allow.
-        expect(runBash('pnpm install && rm -rf /', dir, 'guards')).toBeInstanceOf(BlockedResult);
+        expect(runBash('pnpm install && rm -rf /', dir, 'guards', 'claude-code')).toBeInstanceOf(BlockedResult);
     });
 
     /**
@@ -169,10 +169,10 @@ describe('runBash installer bypass (deadlock escape: installs pass even with no/
     it('lets read-only orientation through the config-missing block, but not a mutation', () => {
         const dir = tmpDirOutsideRepo();
         for (const cmd of ['pwd', 'git status', 'git rev-parse --show-toplevel', 'git worktree list']) {
-            expect(runBash(cmd, dir, 'guards'), `should survive fault C: ${cmd}`).toBeNull();
+            expect(runBash(cmd, dir, 'guards', 'claude-code'), `should survive fault C: ${cmd}`).toBeNull();
         }
         for (const cmd of ['git worktree add ../x', 'git worktree prune', 'git status && rm -rf /']) {
-            expect(runBash(cmd, dir, 'guards'), `must stay blocked under fault C: ${cmd}`).toBeInstanceOf(BlockedResult);
+            expect(runBash(cmd, dir, 'guards', 'claude-code'), `must stay blocked under fault C: ${cmd}`).toBeInstanceOf(BlockedResult);
         }
     });
 });
@@ -294,30 +294,30 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
     it('1: `cd <nested clone> && git push` from the outer root → ALLOW (defect 1)', () => {
         writeGuardConfig(outer, ['repositories/**', 'tools/**']);
         // Shell cwd is the OUTER root — the pre-`cd` cwd that used to defeat the foreign-repo escape.
-        expect(runBash(`cd ${nestedClone} && git push -u origin feature/x`, outer, 'guards')).toBeNull();
+        expect(runBash(`cd ${nestedClone} && git push -u origin feature/x`, outer, 'guards', 'claude-code')).toBeNull();
     });
 
     it('2: same, with excludePaths.guards empty — foreign-repo rule alone suffices → ALLOW', () => {
         writeGuardConfig(outer, []);
-        expect(runBash(`cd ${nestedClone} && git push -u origin feature/x`, outer, 'guards')).toBeNull();
+        expect(runBash(`cd ${nestedClone} && git push -u origin feature/x`, outer, 'guards', 'claude-code')).toBeNull();
     });
 
     it('3: `cd repositories/plain && git push` where plain is NOT its own repo but IS excluded → ALLOW (defect 2)', () => {
         writeGuardConfig(outer, ['repositories/**']);
         // Same git toplevel as outer (foreign check does not fire), so this exercises excludePaths alone.
-        expect(runBash(`cd ${plainSubdir} && git push -u origin feature/x`, outer, 'guards')).toBeNull();
+        expect(runBash(`cd ${plainSubdir} && git push -u origin feature/x`, outer, 'guards', 'claude-code')).toBeNull();
     });
 
     it('4: plain `git push` at the governed repo root → BLOCK (no regression)', () => {
         writeGuardConfig(outer, ['repositories/**']);
-        const result = runBash('git push origin HEAD', outer, 'guards');
+        const result = runBash('git push origin HEAD', outer, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
 
     it('5: `cd repositories/plain && git push` when NOT excluded and sharing the outer git root → BLOCK', () => {
         writeGuardConfig(outer, []);       // plain is a subdir of the governed repo, no exclusion
-        const result = runBash(`cd ${plainSubdir} && git push origin HEAD`, outer, 'guards');
+        const result = runBash(`cd ${plainSubdir} && git push origin HEAD`, outer, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         // Blocked by force-to-root, which runs BEFORE the bash guards (gitFromSubdirBlock precedes
         // runBashRules) and now judges the cd'd-into directory rather than the shell's own. It used to
@@ -333,7 +333,7 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
         // no-op it is (the point is it is not the excluded-path BYPASS an unquoted cd would grant).
         writeGuardConfig(outer, ['repositories/**']);
         expect(effectiveBashCwd('echo "cd repositories/plain && git push"', outer)).toBe(outer);
-        expect(runBash('echo "cd repositories/plain && git push"', outer, 'guards')).toBeNull();
+        expect(runBash('echo "cd repositories/plain && git push"', outer, 'guards', 'claude-code')).toBeNull();
     });
 
 });
@@ -356,7 +356,7 @@ describe('runBash — trailing-cd does not bypass the guards (defect A)', () => 
         // Still blocked, and now blocked EARLIER: misplacedCdBlock refuses the shape before the push
         // guard is reached, so the report is the cd rule rather than the gated-flow redirect. The
         // property under test is unchanged — a trailing cd buys no exemption for what already ran.
-        const result = runBash('git push origin HEAD && cd repositories/plain', outer, 'guards');
+        const result = runBash('git push origin HEAD && cd repositories/plain', outer, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('must come FIRST');
     });
@@ -364,7 +364,7 @@ describe('runBash — trailing-cd does not bypass the guards (defect A)', () => 
     it('the same push WITHOUT the trailing cd still gets the gated-flow redirect', () => {
         // Keeps the original assertion alive on the shape that can still reach the push guard, so a
         // regression in that redirect cannot hide behind the cd rule firing first.
-        const result = runBash('git push origin HEAD', outer, 'guards');
+        const result = runBash('git push origin HEAD', outer, 'guards', 'claude-code');
         expect((result as BlockedResult).report).toContain('gated flow');
     });
 });
@@ -389,7 +389,7 @@ describe('runBash — force-to-root uses the effective cwd (defect C)', () => {
     afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
 
     it('shell in a nested clone, `cd <root> && git push` → blocked by the PUSH guard, not force-to-root', () => {
-        const result = runBash(`cd ${outer} && git push origin HEAD`, nestedClone, 'guards');
+        const result = runBash(`cd ${outer} && git push origin HEAD`, nestedClone, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         const report = (result as BlockedResult).report;
         expect(report).toContain('gated flow');              // the right guard
@@ -406,13 +406,13 @@ describe('runBash — force-to-root uses the effective cwd (defect C)', () => {
         // keep the agent's git work at the root, and an agent that cd's INTO a subdir to run git has
         // the same broken mental model as one stranded there — git behaves identically from any subdir
         // of the repo, so there is no legitimate reason to cd in first.
-        const result = runBash(`cd ${governedSubdir} && git status`, outer, 'guards');
+        const result = runBash(`cd ${governedSubdir} && git status`, outer, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('Run git/gh commands from the repo root');
     });
 
     it('shell PERSISTED in a governed subdir, bare `git status` (no cd) → force-to-root BLOCK (kept)', () => {
-        const result = runBash('git status', governedSubdir, 'guards');
+        const result = runBash('git status', governedSubdir, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('Run git/gh commands from the repo root');
     });
@@ -432,7 +432,7 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
 
     it('appends the exempt trees when excludePaths.guards is non-empty', () => {
         writeGuardConfig(outer, ['repositories/**', 'tools/**']);
-        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('git push origin HEAD', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('LITERAL');
         expect(report).toContain('repositories/**');
         expect(report).toContain('tools/**');
@@ -441,14 +441,14 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
     // The hint teaches the shape for the NEXT command; misplacedCdBlock enforces it on this one.
     it('states the one legal shape, not just the remedy', () => {
         writeGuardConfig(outer, ['repositories/**']);
-        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('git push origin HEAD', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('cd <literal path> && <work>');
         expect(report).toContain('cd "$DIR"');
     });
 
     it('omits the hint when no trees are exempt (no noise for repos without exemptions)', () => {
         writeGuardConfig(outer, []);
-        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('git push origin HEAD', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('gated flow');   // still the push block
         expect(report).not.toContain('LITERAL');  // but no exempt-tree hint
     });
@@ -471,7 +471,7 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
 
     it('prepends the stanza — ABOVE the git remedies — when the command names an excluded path', () => {
         writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
-        const report = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report.startsWith('✅ YOU CAN USE THE READ/WRITE TOOLS RIGHT NOW')).toBe(true);
         expect(report).toContain('Your command referenced: .webpieces/tasks.md');
         expect(report).toContain('.webpieces/**');   // the ACTUAL configured globs, not an example
@@ -481,13 +481,13 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     it("normalises an ABSOLUTE path the same way (the live incident's shape)", () => {
         writeGuardConfig(outer, ['.webpieces/**']);
         const command = `git push origin HEAD && cat ${nodePath.join(outer, '.webpieces', 'tasks.md')}`;
-        const report = (runBash(command, outer, 'guards') as BlockedResult).report;
+        const report = (runBash(command, outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('Your command referenced: .webpieces/tasks.md');
     });
 
     it('does NOT prepend the stanza when the command names no excluded path', () => {
         writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
-        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('git push origin HEAD', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).not.toContain('READ/WRITE TOOLS RIGHT NOW');
         expect(report.startsWith('❌')).toBe(true);
     });
@@ -495,10 +495,10 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     it('offers the `cd` only when the directory itself matches — never the <dir>/** trap', () => {
         writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
 
-        const withCd = (runBash('git push origin HEAD && cat repositories/plain/notes.md', outer, 'guards') as BlockedResult).report;
+        const withCd = (runBash('git push origin HEAD && cat repositories/plain/notes.md', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(withCd).toContain('cd repositories/plain &&');
 
-        const noCd = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards') as BlockedResult).report;
+        const noCd = (runBash('git push origin HEAD && cat .webpieces/tasks.md', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(noCd).not.toContain('cd .webpieces &&');
         expect(noCd).toContain('A `cd` CANNOT rescue bash here');
     });
@@ -526,7 +526,7 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
     ];
 
     it.each(REJECTED)('rejects: %s', (command: string) => {
-        const result = runBash(command, outer, 'guards');
+        const result = runBash(command, outer, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('must come FIRST');
     });
@@ -539,13 +539,13 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
     ];
 
     it.each(ALLOWED)('does not reject: %s', (command: string) => {
-        const result = runBash(command, outer, 'guards');
+        const result = runBash(command, outer, 'guards', 'claude-code');
         if (result !== null) expect((result as BlockedResult).report).not.toContain('must come FIRST');
     });
 
     it('exempts a heredoc — a commit message about `cd` is prose, not a command', () => {
         const command = `git commit -F - <<'EOF'\nUse git fetch && cd /x && git push\nEOF`;
-        const result = runBash(command, outer, 'guards');
+        const result = runBash(command, outer, 'guards', 'claude-code');
         if (result !== null) expect((result as BlockedResult).report).not.toContain('must come FIRST');
     });
 
@@ -554,7 +554,7 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
      * this is the surface the human actually reads.
      */
     it('renders the offending `cd` and the accepted one into the report', () => {
-        const result = runBash('cd . && mkdir -p pintest && cd pintest && pnpm build', outer, 'guards');
+        const result = runBash('cd . && mkdir -p pintest && cd pintest && pnpm build', outer, 'guards', 'claude-code');
         const report = (result as BlockedResult).report;
         expect(report).toContain('`cd pintest`');
         expect(report).toContain('the leading `cd .` WAS accepted');
@@ -567,7 +567,7 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
      * tool's own directory flag, so the deny names that pattern rather than leaving it to be rediscovered.
      */
     it('offers the directory-flag idiom, not just "split it"', () => {
-        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('directory flag');
         expect(report).toContain('git -C <dir>');
         expect(report).toContain('--pack-destination');
@@ -585,7 +585,7 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
      * repeats on every subsequent tool call.
      */
     it('caveats `git -C` to this tree, so it is never read as the cure for a cross-tree skew', () => {
-        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('cd . && mkdir -p x && cd x && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('ONLY for a dir INSIDE this tree');
         expect(report).toContain('`git -C <another tree>` is REFUSED to a subagent');
         expect(report).toContain('never the cure for a version skew');
@@ -615,23 +615,23 @@ describe('runBash / run — an unloadable config blocks work but never read-only
 
     it('allows `cat webpieces.config.json` while the config is invalid', () => {
         breakConfig();
-        expect(runBash('cat webpieces.config.json', root, 'guards')).toBeNull();
+        expect(runBash('cat webpieces.config.json', root, 'guards', 'claude-code')).toBeNull();
     });
 
     it('allows grep/sed inspection of the broken file (the tools needed to find the markers)', () => {
         breakConfig();
-        expect(runBash('grep -n "<<<<<<<" webpieces.config.json', root, 'guards')).toBeNull();
-        expect(runBash("sed -n '1,5p' webpieces.config.json", root, 'guards')).toBeNull();
+        expect(runBash('grep -n "<<<<<<<" webpieces.config.json', root, 'guards', 'claude-code')).toBeNull();
+        expect(runBash("sed -n '1,5p' webpieces.config.json", root, 'guards', 'claude-code')).toBeNull();
     });
 
     it('still fails hard on a git command — a broken config ran NO guards, so work stays blocked', () => {
         breakConfig();
-        expect(() => runBash('git push origin HEAD', root, 'guards')).toThrow('could not be parsed as JSON');
+        expect(() => runBash('git push origin HEAD', root, 'guards', 'claude-code')).toThrow('could not be parsed as JSON');
     });
 
     it('still fails hard on a build command (only INSPECTION is carved out, not "harmless-looking")', () => {
         breakConfig();
-        expect(() => runBash('pnpm run build-all', root, 'guards')).toThrow('could not be parsed as JSON');
+        expect(() => runBash('pnpm run build-all', root, 'guards', 'claude-code')).toThrow('could not be parsed as JSON');
     });
 
     it('still blocks WRITES to other files while the config is invalid', () => {
@@ -642,8 +642,8 @@ describe('runBash / run — an unloadable config blocks work but never read-only
 
     it('back to normal once the config is valid again — inspection and guards both behave', () => {
         writeGuardConfig(root, []);
-        expect(runBash('cat webpieces.config.json', root, 'guards')).toBeNull();
-        const result = runBash('git push origin HEAD', root, 'guards');
+        expect(runBash('cat webpieces.config.json', root, 'guards', 'claude-code')).toBeNull();
+        const result = runBash('git push origin HEAD', root, 'guards', 'claude-code');
         expect(result).toBeInstanceOf(BlockedResult);
     });
 });

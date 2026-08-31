@@ -59,7 +59,11 @@ function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): never {
         handleRead(event, readPath, cwd, mode);
     }
 
-    const result = runBash(command, cwd, mode);
+    // The HARNESS travels with the command. Fault C and fault Y are decided inside the runner, and
+    // both consult the L0 allowlist — which since the gated entry exists cannot be asked without
+    // knowing who is calling. `event.aiType` is the adapter's answer, the same one that routed this
+    // call to the Codex read-parity loop above.
+    const result = runBash(command, cwd, mode, event.aiType);
     if (!result) { emitAllow(); }
     // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
     // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its

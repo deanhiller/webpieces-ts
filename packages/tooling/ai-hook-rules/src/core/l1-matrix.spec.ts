@@ -615,7 +615,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
     });
 
     it(`row ${L1_PRESTAGE_ROW} (the misplaced-\`cd\` pre-stage): absolute path + the row`, () => {
-        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain('must come FIRST');
         expect(report).toContain(matrixPath);
         expect(report).toContain(`ROW ${L1_PRESTAGE_ROW}`);
@@ -624,7 +624,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
     it('row 5 (git from a subdirectory, force-to-root): absolute path + the row', () => {
         const sub = path.join(outer, 'packages', 'http');
         fs.mkdirSync(sub, { recursive: true });
-        const report = (runBash(`cd ${sub} && git status`, outer, 'guards') as BlockedResult).report;
+        const report = (runBash(`cd ${sub} && git status`, outer, 'guards', 'claude-code') as BlockedResult).report;
         expect(report).toContain(matrixPath);
         expect(report).toContain('ROW 5');
     });
@@ -635,14 +635,14 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
         const clean = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1ptr-ok-')));
         initTempRepo(clean);
         writeGuardConfig(clean);
-        expect(runBash('pnpm build && pnpm test', clean, 'guards')).toBeNull();
+        expect(runBash('pnpm build && pnpm test', clean, 'guards', 'claude-code')).toBeNull();
         expect(fs.existsSync(path.join(clean, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC))).toBe(false);
     });
 
     // The DELIVERED text, not merely the pure function: it is interpolated into a JSON decision
     // payload, where a quote corrupts the decision rather than merely the prose.
     it('adds nothing to the deny that could corrupt the JSON payload', () => {
-        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards') as BlockedResult).report;
+        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
         const pointer = report.slice(report.indexOf('The full L1 location matrix'));
         expect(pointer).not.toContain('"');
         expect(pointer).not.toContain('\\');
