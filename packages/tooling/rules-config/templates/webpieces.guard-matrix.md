@@ -22,7 +22,7 @@ numbers from `L0_ROW_*`, both spelled in exactly one place (`core/l0-fault-codes
 | `X` | `guard-bin-missing` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
 | `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | `guard-bin-crashed` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
-| `S` | `managed-hook-surface` | a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release | the guard bin | JS |
+| `S` | `managed-hook-surface` | a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release | the guard bin | JS |
 | `C` | `config-missing` | webpieces.config.json missing | the guard bin | JS |
 | `Y` | `config-out-of-sync` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
 
@@ -52,9 +52,9 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 - **Option 1 (preferred)**: `rm -rf node_modules && pnpm install`  ← pick this when this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite
 
-### `S` — a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release
+### `S` — a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release
 
-- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs all three managed things (ai-hook.sh, the settings.json registration and its managed env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
+- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
 - **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish
 
 ### `C` — webpieces.config.json missing
@@ -92,18 +92,19 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | # | allowed | outcome |
 |---|---|---|
 | 1 | any Read | PASS |
-| 2 | a Write/Edit whose target is webpieces.config.json | PASS |
-| 3 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS |
-| 4 | pnpm|npm install | ALLOW |
-| 5 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
-| 6 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
-| 7 | git checkout main && git pull origin main | ALLOW |
-| 8 | pnpm exec wp-upgrade-shim | ALLOW |
-| 9 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 10 | pnpm wp-prune-unknown-config | ALLOW |
-| 11 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 12 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
-| 13 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 2 | a Codex tool with nothing to judge: webrun, collaborationspawn_agent, collaborationwait_agent, view_image, update_plan | PASS |
+| 3 | a Write/Edit whose target is webpieces.config.json | PASS |
+| 4 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS |
+| 5 | pnpm|npm install | ALLOW |
+| 6 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
+| 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
+| 8 | git checkout main && git pull origin main | ALLOW |
+| 9 | pnpm exec wp-upgrade-shim | ALLOW |
+| 10 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
+| 11 | pnpm wp-prune-unknown-config | ALLOW |
+| 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
+| 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

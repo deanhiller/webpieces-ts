@@ -72,7 +72,7 @@ class ShimStaleDeny {
     /**
      * `[managed-hook-surface]` and the surfaces that drifted, one per line.
      *
-     * `drifted` names WHICH of the three managed things moved — .claude/webpieces/ai-hook.sh, the
+     * `drifted` names WHICH of the managed things moved — .claude/webpieces/ai-hook.sh, each harness's
      * .claude/settings.json hook registration, and its managed env entry (see hook-registration.ts). It
      * is REQUIRED, not optional: this used to be a shim-only message, and an optional list would let a
      * caller silently keep emitting the one-file text after the surface grew — the "two spellings of one
@@ -177,14 +177,14 @@ class ShimStaleDeny {
             '  - any Read',
             '  - any Write/Edit whose target is webpieces.config.json',
             '  - every command on the L0 allowlist, including both Fix Options below',
-            '  THIS IS NOT A DEADLOCK: both options are explicitly ALLOWED through, so run one YOURSELF now - do not hand it back to the human. Every OTHER tool call is blocked until all three match again.',
+            '  THIS IS NOT A DEADLOCK: both options are explicitly ALLOWED through, so run one YOURSELF now - do not hand it back to the human. Every OTHER tool call is blocked until every managed surface matches again.',
             '',
         ];
     }
 
     /**
      * The two cures, house-numbered. ORDER IS LOAD-BEARING: wp-upgrade-shim LEADS because it is the only
-     * cure that repairs all three managed surfaces, it touches no config and imports only fs/path, so it
+     * cure that repairs every managed surface, it touches no config and imports only fs/path, so it
      * runs on a tree too broken to load the rule engine. The `cp` stays last as the pre-0.4.408 fallback.
      *
      * Both are anchored with a leading `cd <root> &&` when the root allows it — CD_PREFIX_*_ANCHORED
@@ -196,7 +196,7 @@ class ShimStaleDeny {
     private fixOptions(): string[] {
         const anchor = (cmd: string): string => (this.cdOk ? `cd ${this.safeRoot} && ${cmd}` : cmd);
         return [
-            '  Fix Option 1: (preferred) the only cure that repairs all three managed things, and it runs on a broken tree',
+            '  Fix Option 1: (preferred) the only cure that repairs every managed surface, and it runs on a broken tree',
             `    run EXACTLY: '${anchor(UPGRADE_SHIM_CMD)}'`,
             `  Fix Option 2: PARTIAL - repairs ${SHIM_MARKER} only. Pick it ONLY when the installed @webpieces/ai-hook-rules is older than 0.4.408, where Fix Option 1 does not exist yet; then upgrade and run Fix Option 1.`,
             `    run EXACTLY: '${anchor(RESTORE_SHIM_CMD)}'`,

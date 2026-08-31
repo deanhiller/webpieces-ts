@@ -6,6 +6,7 @@ import { REJECTIONS_STREAM } from './log-streams';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 import { logStream } from './log-stream';
+import { aiTypeContext } from './ai-type-context';
 import { toError } from './to-error';
 
 /**
@@ -79,7 +80,10 @@ export function logRejection(
         // previously landed here as a couple of lines attributed to whatever rule the report happened
         // to cite, with nothing anywhere identifying L0 as the cause. (WHO made the call is answered by
         // the filename, which logStream prefixes with session/agent/hook — not by a column here.)
-        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\tfault=${result.fault}\n`;
+        // `ai=` joins the same append-only tail as `fault=`, in the same vocabulary the L0 sh shim and
+        // both decision streams use — so `grep ai=codex` spans all five streams. A row from a release
+        // that predates the field carries no `ai=` and reads as `unknown`.
+        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\tfault=${result.fault}\tai=${aiTypeContext.forLog()}\n`;
         fs.appendFileSync(logPath, logLine);
 
         detailPruner.prune(logsDir, MAX_AGE_DAYS);

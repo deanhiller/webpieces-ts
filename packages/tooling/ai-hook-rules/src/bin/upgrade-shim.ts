@@ -10,17 +10,21 @@ import { toError } from '../core/to-error';
 // ---------------------------------------------------------------------------
 // The `wp-upgrade-shim` entry point — the CURE for the managed-hook-surface self-guard (L0 fault S).
 //
-// WHAT IT REPAIRS, and why all three (2026-08-07, extended). This used to write EXACTLY ONE FILE,
+// WHAT IT REPAIRS, and why all of them (2026-08-07, extended). This used to write EXACTLY ONE FILE,
 // ai-hook.sh, and touch nothing else. That was correct while the installed surface WAS one file. It is
-// now three (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
+// now four (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
 // functional change is a cost with no payer; the prose is what gets corrected):
 //
-//   1. .claude/webpieces/ai-hook.sh          the guard shim, registered ABSOLUTE via $CLAUDE_PROJECT_DIR
-//                                            so the MAIN tree governs every tree
+//   1. .claude/webpieces/ai-hook.sh          the ONE guard shim, shared by every harness and registered
+//                                            ABSOLUTE, so the MAIN tree governs every tree
 //   2. the .claude/settings.json registration itself
-//   3. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
+//   3. the .codex/hooks.json registration — the SAME two hooks under Codex's own matchers and its own
+//      $PWD anchor. Repaired only where it already EXISTS: arming a harness is the installer's decision,
+//      this is the cure for one that has drifted
+//   4. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
 //      Bash cwd to the project root — and, because settings `env` is inherited, pins it identically for
-//      every subagent, so a verdict never depends on where an earlier `cd` left the shell
+//      every subagent, so a verdict never depends on where an earlier `cd` left the shell. Claude-only:
+//      Codex has no settings `env`, and its cwd is measured not to drift
 //
 // It also DELETES the retired `.claude/webpieces/guarantee-root.sh` and any settings entry still naming
 // it. That file was the L-1 hook, which existed only to guarantee the once-RELATIVE shim path resolved;
@@ -29,7 +33,7 @@ import { toError } from '../core/to-error';
 // exits 127, which per the hooks reference is a NON-BLOCKING error, i.e. a SILENT UNGUARDED ALLOW — so
 // both happen here, file first.
 //
-// A cure that fixes some of three is worse than no cure, because it reports success. This bin is the
+// A cure that fixes some of them is worse than no cure, because it reports success. This bin is the
 // sanctioned cure named in fault S's message and is on the L0 allowlist, so it must repair everything.
 //
 // Deliberately imports only ./shim and ./hook-registration (fs + path) + toError,
@@ -223,7 +227,7 @@ function verifyRepaired(root: string): number {
  *
  * Up to and including 0.4.588 this module ENDED at the closing brace above. `pnpm exec wp-upgrade-shim`
  * loaded it, defined two functions, and exited 0 having printed nothing and changed no file. Fault S
- * names this command as OPTION 1, the only option that repairs all three managed surfaces, so the
+ * names this command as OPTION 1, the only option that repairs every managed surface, so the
  * guard's own "THIS IS NOT A DEADLOCK" promise was false: OPTION 2 repairs one of three, and OPTION 1
  * did nothing at all. Twenty-one unit tests missed it because every one of them called
  * `runUpgradeShim()` as a FUNCTION — the defect lived entirely in what the module does when SPAWNED.

@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 
 import {
     CHECKOUT_MAIN_PULL_ALLOW_ERE, CHECKOUT_MAIN_PULL_ALLOW_JS, CHECKOUT_MAIN_PULL_CMD,
-    FETCH_ALLOW_ERE, FETCH_ALLOW_JS, isAllowed,
+    FETCH_ALLOW_ERE, FETCH_ALLOW_JS,
 } from './l0-allowlist';
+import { isAllowed } from './l0-decide';
 import { ShimTestkit } from './shim-testkit';
 
 /**

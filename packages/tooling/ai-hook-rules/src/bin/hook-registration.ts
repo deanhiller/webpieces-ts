@@ -2,16 +2,25 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { toError } from '../core/to-error';
+import { AiType } from '../core/agent-event';
 import { SHIM_MARKER, committedShimStale } from './shim';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 /**
- * THE INSTALLED HOOK SURFACE — two hooks, both ABSOLUTE, and the ONE place their spelling is defined.
+ * THE INSTALLED HOOK SURFACE — two hooks per harness, all ABSOLUTE, and the ONE place their spelling is
+ * defined. See `HarnessRegistration` below, which is what makes "per harness" data rather than four
+ * module constants that were only ever true of Claude Code.
  *
  * ─── ONE GOVERNOR: the MAIN tree judges every tree ─────────────────────────────────────────────────
  *
- *   H1  sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook   Write|…|Bash|Read
- *   H2  sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook    Write|Edit|MultiEdit
+ *   Claude Code — .claude/settings.json
+ *     H1  sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook  Write|…|Bash|Read
+ *     H2  sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook   Write|Edit|MultiEdit
+ *   Codex — .codex/hooks.json (the SAME `hooks.PreToolUse` JSON shape, measured)
+ *     H1  sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook                 Bash|apply_patch
+ *     H2  sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook                  apply_patch
+ *
+ * ONE shim file serves all four: `.claude/` there is a path, not a claim about who is calling.
  *
  * This REPLACES a three-hook form in which these two were RELATIVE (`sh ".claude/webpieces/ai-hook.sh"`)
  * and a third hook, L-1 `guarantee-root.sh`, existed solely to guarantee that relative path resolved.
@@ -91,6 +100,12 @@ export class HookRegistrationEntry {
 // webpieces-disable no-any-unknown -- settings.json is opaque consumer JSON
 export interface HookCommand { type: string; command: string; }
 export interface HookEntry { matcher: string; hooks: HookCommand[]; }
+/**
+ * One settings file as webpieces reads it. MEASURED: Codex's `.codex/hooks.json` uses the IDENTICAL
+ * `hooks.PreToolUse[].hooks[].command` shape, so one reader, one writer and one repair serve both files
+ * — the difference between the harnesses is entirely in the VALUES (matcher, shim anchor), which is what
+ * `HarnessRegistration` carries. The `env` block below is Claude Code's alone.
+ */
 export interface ClaudeSettings {
     hooks?: { PreToolUse?: HookEntry[] };
     // Claude Code's settings `env` block: every key is exported into the environment of the session AND
@@ -103,45 +118,145 @@ export interface ClaudeSettings {
 
 export const RULES_BIN = 'wp-ai-rules-hook';
 export const GUARDS_BIN = 'wp-ai-guards-hook';
-export const RULES_MATCHER = 'Write|Edit|MultiEdit';
-// Guards match Bash (git/PR guards), Write|Edit|MultiEdit (file-scoped guards) AND Read — Read carries
-// no guard, but the guards hook owns the per-invocation audit log, so matching Read records every file
-// the AI opens (log-and-allow fast path in hook-core.ts; a Read is never blocked).
-export const GUARDS_MATCHER = 'Write|Edit|MultiEdit|Bash|Read';
 
 /**
- * The guard-hook command — `sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin>`.
+ * ONE HARNESS'S registration surface — where its hooks live, what they match, and how they name the
+ * shim. Data-only → a class, per CLAUDE.md.
  *
- * ABSOLUTE. This replaced a RELATIVE spelling, and the reversal is the whole point of this release.
+ * ─── Why this exists ──────────────────────────────────────────────────────────────────────────────
+ * The matchers and the shim command used to be four module constants written for Claude Code alone.
+ * Applied to Codex they are wrong in both halves, and the way they are wrong is SILENT:
  *
- * The relative form existed to give each git tree its own release, binary and pin. **It never delivered
- * that.** Measured 2026-08-10: a linked worktree has no `node_modules`, so ai-hook.sh's upward walk
- * executes the PRIMARY's binary — `readlink -f` resolved a worktree agent's bin to
- * `<primary>/node_modules/@webpieces/ai-hook-rules`. A worktree ran its own SCRIPT and its own CONFIG,
- * never its own release. The property was fiction, and paying for it cost an entire guard layer: a
- * relative path only resolves at a tree root, so L-1 (guarantee-root.sh) had to deny every `cd` into a
- * project subdirectory, which produced the force-to-root bug class, the reaped-worktree `cd`
- * prescription, and a measured hard deadlock where L-1 told a worktree-isolated agent to `cd` to the
- * primary clone — which the harness refuses for an isolated agent.
+ *   - MATCHER. Codex's file-editing tool is `apply_patch` (MEASURED, codex-cli 0.151.0). A matcher of
+ *     `Write|Edit|MultiEdit` matches it never, so every file rule is unreachable while the settings file
+ *     looks perfectly installed. Its shell tool IS called `Bash` — Codex reuses Claude's name — which is
+ *     the trap: half the matcher works, so the hooks appear to be running.
+ *   - ANCHOR. `$CLAUDE_PROJECT_DIR` does not exist in a Codex hook's environment (measured: 46 vars, no
+ *     such key), so the command expands to `sh "/.claude/webpieces/ai-hook.sh"`, which dies — and per the
+ *     hooks protocol a non-2 non-zero exit is a NON-BLOCKING error, i.e. a silent unguarded allow.
  *
- * Absolute resolves from ANY cwd, so L-1 has no job left and is deleted. One governor: the MAIN tree
- * judges every tree, which is what was already happening via the borrowed binary — the design now says
- * so out loud, and `VersionSyncGuard` blocks the case where that is the wrong answer.
+ * Both halves of that were live in real repos, written by a Codex Desktop sync that transliterated the
+ * Claude setup. Making the registration per-harness DATA is what stops a future harness inheriting a
+ * matcher that was never true for it.
  *
- * Invoked via `sh <file>` rather than executed directly so a missing executable bit on the checked-in
- * shim (fresh clone, a filesystem that drops the bit, git core.fileMode quirks) can never break the hook
- * with a raw `Permission denied` on every tool call. Quoted to survive spaces in the path.
+ * ─── ONE SHIM, both harnesses ─────────────────────────────────────────────────────────────────────
+ * `SHIM_MARKER` is shared deliberately: `.claude/webpieces/ai-hook.sh` is the single fail-closed entry
+ * point, and moving or duplicating it would double the L0 allowlist regexes, the drift surfaces and the
+ * cures. The `.claude/` prefix is a path, not a claim about which agent is calling.
  */
-// webpieces-disable no-function-outside-class -- this module must load on a tree too broken to build a DI container (upgrade-shim.ts depends on that), so it is module-scope like its siblings shim.ts
-export function shimCommand(bin: string): string {
-    return `sh "$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${bin}`;
+export class HarnessRegistration {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        readonly aiType: AiType,
+        /** How the installer and the drift report name this harness to a human. */
+        readonly label: string,
+        /** Which tool names the RULES hook (code-style, file-scoped) must see. */
+        readonly rulesMatcher: string,
+        /**
+         * Which tool names the GUARDS hook must see. Wider than the rules matcher by the shell tool and,
+         * for Claude Code, by `Read` — Read carries no guard, but the guards hook owns the
+         * per-invocation audit log, so matching it records every file the AI opens (log-and-allow fast
+         * path in hook-core.ts; a Read is never blocked). Codex has no Read tool at all: a read arrives
+         * as `Bash` running a pager, which the shell matcher already covers and read-parity synthesizes.
+         */
+        readonly guardsMatcher: string,
+        /** The settings files this harness's hooks can be installed into, relative to the repo root. */
+        readonly settingsFiles: readonly string[],
+        /**
+         * THE PREFIX THE SHIM PATH IS ANCHORED ON, and the reason each harness needs its own.
+         *
+         * **BYTE-STABILITY IS A HARD CONSTRAINT ON THE CODEX VALUE.** Codex trusts a hook entry
+         * TOFU — `~/.codex/config.toml` records a `trusted_hash` per entry — so ANY change to these bytes
+         * invalidates that trust and re-prompts the human, whose third option is `Continue without
+         * trusting (hooks won't run)`: one keystroke to a silently unguarded session. Changing this
+         * string is therefore never a cosmetic edit. The hash is NOT reproducible from outside Codex
+         * (16 encodings tried against a file we authored), so the installer can never repair trust for
+         * itself — see ./codex-trust.ts, which REPORTS and never writes.
+         */
+        readonly shimAnchor: string,
+        /**
+         * True when this harness's settings file also carries the managed `env` block. Claude Code's
+         * settings `env` is inherited by every subagent, which is what makes it the right home for the
+         * Bash-cwd pin (see managed-env.ts). Codex has no equivalent surface — and needs none: its cwd
+         * is MEASURED not to drift at all (`cd x && pwd` prints x, the next call is back at the repo
+         * root, for the coordinator and for subagents alike).
+         */
+        readonly managesEnv: boolean,
+        /** What `managedSurfaceDrift()` calls this harness's registration when it has moved. */
+        readonly registrationSurface: string,
+    ) {}
+
+    /** Which matcher one guard bin registers under. */
+    matcherFor(bin: string): string {
+        return bin === RULES_BIN ? this.rulesMatcher : this.guardsMatcher;
+    }
+
+    /**
+     * The guard-hook command — `sh "<anchor>/.claude/webpieces/ai-hook.sh" <bin>`.
+     *
+     * ABSOLUTE, in both harnesses. Claude's anchor replaced a RELATIVE spelling and that reversal is
+     * documented at length in this file's header: relative resolves only at a tree root, a hook that
+     * cannot resolve exits 127, and per the hooks reference that is a NON-BLOCKING error — a silent
+     * unguarded allow. It also cost an entire guard layer (L-1) whose only job was to police the `cd`
+     * that made the relative path resolvable.
+     *
+     * Invoked via `sh <file>` rather than executed directly so a missing executable bit on the
+     * checked-in shim (fresh clone, a filesystem that drops the bit, git core.fileMode quirks) can never
+     * break the hook with a raw `Permission denied` on every tool call. Quoted to survive spaces.
+     */
+    shimCommand(bin: string): string {
+        return `sh "${this.shimAnchor}/${SHIM_MARKER}" ${bin}`;
+    }
+
+    /** The registration entry for one guard bin under this harness. */
+    entryFor(bin: string): HookRegistrationEntry {
+        return new HookRegistrationEntry(this.matcherFor(bin), this.shimCommand(bin));
+    }
+
+    /** This harness's settings files under one repo root, absolute. */
+    settingsPaths(projectRoot: string): readonly string[] {
+        return this.settingsFiles.map((file: string): string => path.join(projectRoot, ...file.split('/')));
+    }
 }
 
-/** The registration entry for one guard bin. */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function guardHookEntry(bin: string): HookRegistrationEntry {
-    return new HookRegistrationEntry(bin === RULES_BIN ? RULES_MATCHER : GUARDS_MATCHER, shimCommand(bin));
-}
+export const CLAUDE_REGISTRATION = new HarnessRegistration(
+    'claude-code', 'Claude Code',
+    'Write|Edit|MultiEdit',
+    'Write|Edit|MultiEdit|Bash|Read',
+    ['.claude/settings.json', '.claude/settings.local.json'],
+    '$CLAUDE_PROJECT_DIR',
+    true,
+    '.claude/settings.json hook registration',
+);
+
+/**
+ * Codex's registration, every value of it MEASURED against codex-cli 0.151.0 rather than assumed.
+ *
+ * `$PWD` is the anchor because there is no project-dir variable to use and none is needed: the payload
+ * `cwd` and the hook process's own `PWD` are both the repo root on EVERY call — for the coordinator and
+ * for subagents — and a `cd` inside one command never survives into the next. That was measured, not
+ * hoped for, and it is the same effect Claude Code gets from the managed
+ * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR` env entry. See `shimAnchor` for why these exact bytes are
+ * not free to change.
+ */
+export const CODEX_REGISTRATION = new HarnessRegistration(
+    'codex', 'Codex',
+    'apply_patch',
+    'Bash|apply_patch',
+    ['.codex/hooks.json'],
+    '$PWD',
+    false,
+    '.codex/hooks.json hook registration',
+);
+
+/**
+ * Every harness webpieces arms, in installer order.
+ *
+ * The drift check, the repair and the installer all iterate THIS, so a harness cannot be armed by the
+ * installer and then left unvalidated — which is exactly the state `.codex/hooks.json` was in before it
+ * was a managed surface: written by something else, silently wrong, and invisible to every check.
+ */
+export const HARNESS_REGISTRATIONS: readonly HarnessRegistration[] = [CLAUDE_REGISTRATION, CODEX_REGISTRATION];
 
 /**
  * True when this PreToolUse command is one webpieces owns — in ANY spelling it has ever shipped.
@@ -194,9 +309,9 @@ export function registeredBins(settings: ClaudeSettings): readonly string[] {
  * whenever the GUARDS bin was present; it is retired, and a settings file still carrying it is STALE —
  * `repairRegistration()` removes it via isManagedCommand()'s legacy marker.
  */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function expectedEntries(bins: readonly string[]): readonly HookRegistrationEntry[] {
-    return bins.map((bin: string): HookRegistrationEntry => guardHookEntry(bin));
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
+export function expectedEntries(harness: HarnessRegistration, bins: readonly string[]): readonly HookRegistrationEntry[] {
+    return bins.map((bin: string): HookRegistrationEntry => harness.entryFor(bin));
 }
 
 /**
@@ -207,11 +322,11 @@ export function expectedEntries(bins: readonly string[]): readonly HookRegistrat
  * carries no meaning and reordering must not read as drift.
  */
 // webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function registrationStale(settings: ClaudeSettings): boolean {
+export function registrationStale(harness: HarnessRegistration, settings: ClaudeSettings): boolean {
     const bins = registeredBins(settings);
     if (bins.length === 0) return false;
     const have = managedEntries(settings);
-    const want = expectedEntries(bins);
+    const want = expectedEntries(harness, bins);
     if (have.length !== want.length) return true;
     return want.some((w: HookRegistrationEntry): boolean => !have.some((h: HookRegistrationEntry): boolean => h.sameAs(w)));
 }
@@ -306,26 +421,20 @@ export function applyManagedEnv(settings: ClaudeSettings): boolean {
  * that skips half the surface is the failure mode `upgrade-shim.ts`'s header exists to prevent.
  */
 // webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function repairRegistration(settings: ClaudeSettings): boolean {
+export function repairRegistration(harness: HarnessRegistration, settings: ClaudeSettings): boolean {
     const bins = registeredBins(settings);
     if (bins.length === 0) return false;
     let changed = false;
-    if (registrationStale(settings)) {
+    if (registrationStale(harness, settings)) {
         dropManagedEntries(settings);
-        for (const entry of expectedEntries(bins)) addHookEntry(settings, entry);
+        for (const entry of expectedEntries(harness, bins)) addHookEntry(settings, entry);
         changed = true;
     }
-    if (applyManagedEnv(settings)) changed = true;
+    // Only where the harness HAS that surface. Codex's hooks.json has no `env` block to manage, and
+    // inventing one there would write a key Codex does not read — a managed surface nothing consumes is
+    // a surface that can drift with no consequence and no way to notice.
+    if (harness.managesEnv && applyManagedEnv(settings)) changed = true;
     return changed;
-}
-
-/** The two project settings files the installer can write. */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function projectSettingsPaths(projectRoot: string): readonly string[] {
-    return [
-        path.join(projectRoot, '.claude', 'settings.json'),
-        path.join(projectRoot, '.claude', 'settings.local.json'),
-    ];
 }
 
 // webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
@@ -348,13 +457,23 @@ export function writeSettings(settingsPath: string, settings: ClaudeSettings): v
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
 }
 
-/** True when either project settings file under `root` carries a stale registration. */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
-export function registrationStaleAt(root: string | null): boolean {
+/**
+ * True when any settings file ONE HARNESS owns under `root` carries a stale registration.
+ *
+ * Per harness, not per repo, so the drift report can NAME which one moved — `.claude/settings.json` and
+ * `.codex/hooks.json` have different cures, and a fault that says only "the registration is stale" sends
+ * the reader to the wrong file half the time.
+ *
+ * A file that does not exist, or exists and registers no webpieces hooks, is never judged (see
+ * `registrationStale`). That is what keeps a repo which has never armed Codex from suddenly faulting on
+ * a `.codex/hooks.json` it does not have.
+ */
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
+export function registrationStaleAt(harness: HarnessRegistration, root: string | null): boolean {
     if (root === null) return false;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return projectSettingsPaths(root).some((p: string): boolean => registrationStale(readSettings(p)));
+        return harness.settingsPaths(root).some((p: string): boolean => registrationStale(harness, readSettings(p)));
     } catch (err: unknown) {
         const error = toError(err);
         void error; // best-effort: unreadable/invalid settings counts as "not stale" so it never wedges a call
@@ -362,13 +481,19 @@ export function registrationStaleAt(root: string | null): boolean {
     }
 }
 
-/** True when either project settings file under `root` is missing the managed `env` entry. */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
+/**
+ * True when either Claude project settings file under `root` is missing the managed `env` entry.
+ *
+ * CLAUDE-ONLY by construction, and stated as such rather than looped over the harnesses: `env` is a
+ * Claude Code settings surface, Codex has no equivalent, and Codex's cwd is measured not to drift, which
+ * is the whole thing the entry is for. See HarnessRegistration.managesEnv.
+ */
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
 export function envStaleAt(root: string | null): boolean {
     if (root === null) return false;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return projectSettingsPaths(root).some((p: string): boolean => envStale(readSettings(p)));
+        return CLAUDE_REGISTRATION.settingsPaths(root).some((p: string): boolean => envStale(readSettings(p)));
     } catch (err: unknown) {
         const error = toError(err);
         void error; // best-effort: unreadable/invalid settings counts as "not stale" so it never wedges a call
@@ -391,47 +516,66 @@ export class SettingsRepair {
     ) {}
 }
 
-/** Rewrite every stale project settings file under `root`; returns what changed, per file. */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
+/**
+ * Rewrite every stale settings file under `root`, for EVERY harness; returns what changed, per file.
+ *
+ * Existing files only — this never CREATES a registration. Arming a harness is the installer's decision
+ * (`wp-install-ai-hooks`); this is the cure for one that has already been armed and has drifted, so a
+ * repo that has never armed Codex is left exactly as it was.
+ */
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
 export function repairRegistrationAt(root: string): readonly SettingsRepair[] {
     const repairs: SettingsRepair[] = [];
-    for (const settingsPath of projectSettingsPaths(root)) {
-        if (!fs.existsSync(settingsPath)) continue;
-        const settings = readSettings(settingsPath);
-        const neededRegistration = registrationStale(settings);
-        const neededEnv = envStale(settings);
-        if (!repairRegistration(settings)) continue;
-        writeSettings(settingsPath, settings);
-        repairs.push(new SettingsRepair(settingsPath, neededRegistration, neededEnv));
+    for (const harness of HARNESS_REGISTRATIONS) {
+        for (const settingsPath of harness.settingsPaths(root)) {
+            if (!fs.existsSync(settingsPath)) continue;
+            const settings = readSettings(settingsPath);
+            const neededRegistration = registrationStale(harness, settings);
+            const neededEnv = harness.managesEnv && envStale(settings);
+            if (!repairRegistration(harness, settings)) continue;
+            writeSettings(settingsPath, settings);
+            repairs.push(new SettingsRepair(settingsPath, neededRegistration, neededEnv));
+        }
     }
     return repairs;
 }
 
 /**
- * The THREE names the drift check reports, so a deny can say WHICH of them moved.
+ * The names the drift check reports, so a deny can say WHICH surface moved.
  *
- * There were four. `GUARANTEE_ROOT_SURFACE` is gone with L-1 itself: an absolutely-registered shim
- * resolves from any cwd, so there is no launch guarantee left to police and no second .sh file to keep
- * byte-locked. A settings file still carrying the retired H1 entry is not its own surface any more —
- * it is ordinary REGISTRATION drift, which `registrationStaleAt()` already reports and
- * `repairRegistration()` already fixes by removing it.
+ * There were four, then three, and there are now FOUR again — but the fourth is not the one that was
+ * deleted. `GUARANTEE_ROOT_SURFACE` went with L-1 itself: an absolutely-registered shim resolves from
+ * any cwd, so there is no launch guarantee left to police and no second .sh file to keep byte-locked. A
+ * settings file still carrying the retired H1 entry is not its own surface — it is ordinary REGISTRATION
+ * drift, which `registrationStaleAt()` reports and `repairRegistration()` fixes by removing it.
+ *
+ * The new fourth is `.codex/hooks.json`, and it is here because of what happened while it was NOT a
+ * managed surface: something else wrote it, with a matcher that matched no Codex file tool and a shim
+ * path anchored on a variable Codex does not set, and no check in this package could see it. A file the
+ * guards depend on and nothing validates is the exact shape of that incident.
+ *
+ * Each harness's registration surface is its own name, from HarnessRegistration.registrationSurface, so
+ * the deny sends the reader to the file that actually moved.
  */
 export const SHIM_SURFACE = SHIM_MARKER;
-export const REGISTRATION_SURFACE = '.claude/settings.json hook registration';
+export const REGISTRATION_SURFACE = CLAUDE_REGISTRATION.registrationSurface;
+export const CODEX_REGISTRATION_SURFACE = CODEX_REGISTRATION.registrationSurface;
 export const ENV_SURFACE = `.claude/settings.json env.${BASH_CWD_ENV_KEY}`;
 
 /**
- * WHICH of the three managed surfaces disagree with this release — the input to fault S.
+ * WHICH of the managed surfaces disagree with this release — the input to fault S.
  *
- * All three are checked against the SAME root, resolved from the RUNNING MODULE (governingShimRoot),
+ * All of them are checked against the SAME root, resolved from the RUNNING MODULE (governingShimRoot),
  * never from cwd and never from `$CLAUDE_PROJECT_DIR`: the files we compare and the renderers we
  * compare them TO must come from one install, or the check straddles two trees and can never converge.
  */
-// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as shimCommand above
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
 export function managedSurfaceDrift(root: string | null): readonly string[] {
     const drifted: string[] = [];
     if (committedShimStale(root)) drifted.push(SHIM_SURFACE);
-    if (registrationStaleAt(root)) drifted.push(REGISTRATION_SURFACE);
+    for (const harness of HARNESS_REGISTRATIONS) {
+        if (registrationStaleAt(harness, root)) drifted.push(harness.registrationSurface);
+    }
     if (envStaleAt(root)) drifted.push(ENV_SURFACE);
     return drifted;
 }

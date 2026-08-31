@@ -5,7 +5,7 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { isAllowed } from '../bin/shim';
-import { migrate } from '../bin/setup';
+import { migrate } from '../bin/setup-config';
 import { BlockedResult } from './types';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';

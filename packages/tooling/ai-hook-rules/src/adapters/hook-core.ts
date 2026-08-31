@@ -20,6 +20,7 @@ import { managedSurfaceDrift } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream, StreamIdentity } from '../core/log-stream';
+import { aiTypeContext } from '../core/ai-type-context';
 import { L0_FAULT_SHIM_STALE, L0_FAULT_NONE } from '../core/l0-fault-codes';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
@@ -244,9 +245,10 @@ function enforceCommittedShim(payload: AgentPayload, event: AgentHookEvent, cwd:
     // not part of the judgement.
     const shimRoot = governingShimRoot();
     if (mode === 'rules') return;
-    // WHICH of the three managed things moved — ai-hook.sh, the settings.json registration, or its
-    // managed env entry (the Bash-cwd pin that keeps a guard's verdict independent of where an earlier
-    // `cd` left the shell; see managed-env.ts). Nothing validated the registration before it joined this
+    // WHICH of the managed things moved — ai-hook.sh, either harness's hook registration
+    // (.claude/settings.json, .codex/hooks.json), or the Claude settings' managed env entry (the
+    // Bash-cwd pin that keeps a guard's verdict independent of where an earlier `cd` left the shell;
+    // see managed-env.ts). Nothing validated the registration before it joined this
     // fault, so a settings file left on a superseded form silently changed WHO GOVERNS, with no signal
     // anywhere — which is the whole reason the registration is a drift surface and not just an install
     // step.
@@ -311,6 +313,10 @@ export function runPipeline(raw: string, mode: HookMode): HookOutcome {
         // BEFORE enforceCommittedShim(), which can itself write a BLOCK line. See LogStream for why
         // all three of session/agent/hook are needed to keep concurrent writers off one file.
         logStream.identify(new StreamIdentity(event.sessionId, event.agentId, mode));
+        // Same moment, same reason: every JS-side stream stamps `ai=`, and the fault-S line written
+        // inside enforceCommittedShim() is one of them. See AiTypeContext for why the harness is a
+        // process-wide holder rather than a parameter on four writers.
+        aiTypeContext.identify(event.aiType);
 
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays

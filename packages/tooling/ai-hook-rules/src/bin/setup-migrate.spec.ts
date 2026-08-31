@@ -1,4 +1,4 @@
-import { migrate } from './setup';
+import { migrate } from './setup-config';
 import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
 
 /**

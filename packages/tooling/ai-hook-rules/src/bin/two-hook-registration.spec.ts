@@ -7,7 +7,7 @@ import { applyHook, installTargets, GUARDS_HOOK, RULES_HOOK, InstallTarget } fro
 import {
     GUARDS_BIN, RULES_BIN, REGISTRATION_SURFACE, ENV_SURFACE, ClaudeSettings, LEGACY_GUARANTEE_ROOT_MARKER,
     HookEntry, managedSurfaceDrift, readSettings, registrationStale, expectedEntries,
-    repairRegistration, shimCommand, writeSettings, SHIM_SURFACE,
+    repairRegistration, writeSettings, SHIM_SURFACE, CLAUDE_REGISTRATION,
 } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { SHIM_MARKER, renderShim, shimPath } from './shim';
@@ -64,7 +64,7 @@ function stageRetiredThreeHookForm(root: string): string {
 
 describe('the expected registration is TWO absolute entries', () => {
     it('both commands are absolute via $CLAUDE_PROJECT_DIR, and neither is the retired hook', () => {
-        const entries = expectedEntries([GUARDS_BIN, RULES_BIN]);
+        const entries = expectedEntries(CLAUDE_REGISTRATION, [GUARDS_BIN, RULES_BIN]);
         expect(entries).toHaveLength(2);
         for (const entry of entries) {
             expect(entry.command).toContain('$CLAUDE_PROJECT_DIR');
@@ -79,8 +79,8 @@ describe('the expected registration is TWO absolute entries', () => {
      * reported, because a relative command is still a managed command.
      */
     it('the shim command is never emitted RELATIVE again', () => {
-        expect(shimCommand(GUARDS_BIN)).toBe(`sh "$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${GUARDS_BIN}`);
-        expect(shimCommand(GUARDS_BIN).startsWith(`sh "${SHIM_MARKER}"`)).toBe(false);
+        expect(CLAUDE_REGISTRATION.shimCommand(GUARDS_BIN)).toBe(`sh "$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${GUARDS_BIN}`);
+        expect(CLAUDE_REGISTRATION.shimCommand(GUARDS_BIN).startsWith(`sh "${SHIM_MARKER}"`)).toBe(false);
     });
 });
 
@@ -88,7 +88,7 @@ describe('migrating a settings.json written by the RETIRED three-hook release', 
     it('registrationStale() reports it, so fault S fires and the cure runs', () => {
         const root = mktmp();
         const settingsPath = stageRetiredThreeHookForm(root);
-        expect(registrationStale(readSettings(settingsPath))).toBe(true);
+        expect(registrationStale(CLAUDE_REGISTRATION, readSettings(settingsPath))).toBe(true);
     });
 
     /**
@@ -101,12 +101,12 @@ describe('migrating a settings.json written by the RETIRED three-hook release', 
         const root = mktmp();
         const settingsPath = stageRetiredThreeHookForm(root);
         const settings = readSettings(settingsPath);
-        expect(repairRegistration(settings)).toBe(true);
+        expect(repairRegistration(CLAUDE_REGISTRATION, settings)).toBe(true);
         writeSettings(settingsPath, settings);
 
         const commands = commandsIn(settingsPath);
         expect(commands.join()).not.toContain(LEGACY_GUARANTEE_ROOT_MARKER);
-        expect(commands.sort()).toEqual([shimCommand(GUARDS_BIN), shimCommand(RULES_BIN)].sort());
+        expect(commands.sort()).toEqual([CLAUDE_REGISTRATION.shimCommand(GUARDS_BIN), CLAUDE_REGISTRATION.shimCommand(RULES_BIN)].sort());
     });
 });
 
@@ -196,7 +196,7 @@ describe('templates/claude-settings-hook.json is the shape this release installs
     it('registers exactly what expectedEntries() wants, absolute and with no retired hook', () => {
         const entries: readonly HookEntry[] = template().hooks?.PreToolUse ?? [];
         const commands = entries.flatMap((e: HookEntry): string[] => e.hooks.map((h: { command: string }): string => h.command));
-        expect(commands.sort()).toEqual([shimCommand(GUARDS_BIN), shimCommand(RULES_BIN)].sort());
+        expect(commands.sort()).toEqual([CLAUDE_REGISTRATION.shimCommand(GUARDS_BIN), CLAUDE_REGISTRATION.shimCommand(RULES_BIN)].sort());
         expect(commands.join()).not.toContain(LEGACY_GUARANTEE_ROOT_MARKER);
     });
 

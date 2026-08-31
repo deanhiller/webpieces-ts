@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 
-import { migrate } from '../bin/setup';
+import { migrate } from '../bin/setup-config';
 import { run } from './runner';
 import { BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
 

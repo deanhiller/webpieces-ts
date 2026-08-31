@@ -1,5 +1,6 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { L0_SHIM_STREAM } from '../core/log-streams';
+import { AI_TYPES } from '../core/agent-event';
 
 import {
     L0_FAULT_NONE, L0_LAYER, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,
@@ -67,6 +68,7 @@ export const SHIM_LOG_VERDICTS: readonly ShimLogVerdict[] = [
     new ShimLogVerdict('PASS-BIN-ALLOW', 'no sh-side fault; the bin ran and exited 0 — matrix row 1, handed down to L1'),
     new ShimLogVerdict('PASS-BIN-BLOCK', 'no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked'),
     new ShimLogVerdict('ALLOW-READ', 'allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran)'),
+    new ShimLogVerdict('ALLOW-IGNORED', 'a Codex tool with nothing to judge (L0_IGNORED_TOOLS) — PASS, terminal here'),
     new ShimLogVerdict('ALLOW-CONFIG', 'allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here'),
     new ShimLogVerdict('ALLOW-MANIFEST', 'allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here'),
     new ShimLogVerdict('ALLOW-CURE', 'a Bash entry of the allowlist matched — ALLOW'),
@@ -119,7 +121,15 @@ export const SHIM_LOG_FIELDS: readonly ShimLogField[] = [
         'when the shim judged the call, local time with offset'),
     new ShimLogField('<bin-name>', '"$BIN_NAME"',
         'WHICH hook ran - wp-ai-guards-hook or wp-ai-rules-hook; Claude Code runs them in parallel'),
-    new ShimLogField('<tool>', '"$TOOL"', 'the PreToolUse tool name (Bash, Read, Write, Edit, …)'),
+    new ShimLogField('<tool>', '"$TOOL"', 'the PreToolUse tool name (Bash, Read, Write, Edit, apply_patch, …)'),
+    // WHICH HARNESS. Inserted MID-LINE rather than appended, which is this format's house style and is
+    // deliberate: a positional reader that has not been updated fails loudly here instead of silently
+    // reading the wrong column forever (see this array's own header). The values are the `AiType`
+    // union's, produced by AI_TYPE_SH — one vocabulary across all five streams. A row written before
+    // this field existed simply has no `ai=`, which reads as `unknown`; that is a real value, not a
+    // compatibility shim.
+    new ShimLogField(`ai=<${AI_TYPES.join('|')}>`, '"ai=$AI"',
+        'WHICH coding agent made the call, from the one turn_id discriminator (adapters/detect-ai.ts)'),
     new ShimLogField('tree=<name|primary>', '"tree=$WP_TREE"',
         'git\'s own name for the worktree the CALL was made in, derived from the payload\'s cwd'),
     new ShimLogField(`layer=${L0_LAYER}`, `"layer=${L0_LAYER}"`,

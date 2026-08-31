@@ -5,7 +5,7 @@ import * as nodePath from 'path';
 
 import { ExcludePaths, RuleFailError, Option } from '@webpieces/rules-config';
 
-import { migrate } from '../bin/setup';
+import { migrate } from '../bin/setup-config';
 import { effectiveBashCwd, filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash, run } from './runner';
 import { Rule, Violation, BashContext, BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
 

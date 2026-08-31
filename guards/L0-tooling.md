@@ -29,7 +29,7 @@ outside them is machine-owned.
 | `X` | `guard-bin-missing` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
 | `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | `guard-bin-crashed` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
-| `S` | `managed-hook-surface` | a webpieces-managed hook file, the .claude/settings.json registration or its managed env entry does not match this release | the guard bin | JS |
+| `S` | `managed-hook-surface` | a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release | the guard bin | JS |
 | `C` | `config-missing` | webpieces.config.json missing | the guard bin | JS |
 | `Y` | `config-out-of-sync` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
 
@@ -46,7 +46,7 @@ the guard bin runs — a stale, missing or broken validator cannot be trusted to
 | `X` | 1 (preferred) | `pnpm install` | this fault fires at all — nothing is installed in THIS tree, and a new git worktree copies no node_modules |
 | `U` | 1 (preferred) | `pnpm add -D @webpieces/ai-hook-rules` | this fault fires at all — package.json asks for nothing, so pnpm install reports "Lockfile is up to date" and leaves the tree exactly as broken as it found it |
 | `K` | 1 (preferred) | `rm -rf node_modules && pnpm install` | this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite |
-| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs all three managed things (ai-hook.sh, the settings.json registration and its managed env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer |
+| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer |
 | `S` | 2 | `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` | the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish |
 | `C` | 1 (preferred) | edit `webpieces.config.json` yourself | this fault fires at all — it is the only cure that needs no other tool, and it is never denied |
 | `C` | 2 | `pnpm exec wp-install-ai-hooks` | you are at an INTERACTIVE terminal and can answer its two hook-target prompts |
@@ -68,18 +68,19 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 | # | allowed | outcome | bypasses L1 on a HEALTHY tree? |
 |---|---|---|---|
 | 1 | any Read | PASS | no — it repairs nothing, so L1 still judges it |
-| 2 | a Write/Edit whose target is webpieces.config.json | PASS | no — it repairs nothing, so L1 still judges it |
-| 3 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS | no — it repairs nothing, so L1 still judges it |
-| 4 | pnpm\|npm install | ALLOW | yes — it REPAIRS the tooling |
-| 5 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW | yes — it REPAIRS the tooling |
-| 6 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
-| 7 | git checkout main && git pull origin main | ALLOW | yes — it REPAIRS the tooling |
-| 8 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
-| 9 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
-| 10 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
-| 11 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
-| 12 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
-| 13 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
+| 2 | a Codex tool with nothing to judge: webrun, collaborationspawn_agent, collaborationwait_agent, view_image, update_plan | PASS | no — it repairs nothing, so L1 still judges it |
+| 3 | a Write/Edit whose target is webpieces.config.json | PASS | no — it repairs nothing, so L1 still judges it |
+| 4 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS | no — it repairs nothing, so L1 still judges it |
+| 5 | pnpm\|npm install | ALLOW | yes — it REPAIRS the tooling |
+| 6 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW | yes — it REPAIRS the tooling |
+| 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
+| 8 | git checkout main && git pull origin main | ALLOW | yes — it REPAIRS the tooling |
+| 9 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
+| 10 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
+| 11 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
+| 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
+| 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
+| 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a
@@ -94,50 +95,58 @@ below for why the one safe pull spelling is on the list and the bare one is not.
 ONLY through the 3-point fork merge (`pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a
 PR is already open).
 
-### The managed hook surface — what fault `S` compares (THREE things, one set)
+### The managed hook surface — what fault `S` compares (4 things, one set)
 
 | # | surface |
 |---|---|
 | 1 | `.claude/webpieces/ai-hook.sh` |
 | 2 | .claude/settings.json hook registration |
-| 3 | .claude/settings.json env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR |
+| 3 | .codex/hooks.json hook registration |
+| 4 | .claude/settings.json env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR |
 
-The registration is TWO PreToolUse entries, and both are ABSOLUTE — they resolve from any cwd:
+The registration is TWO PreToolUse entries per harness, and all of them are ABSOLUTE — they
+resolve from any cwd:
 
 ```
+# Claude Code
 sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
 sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
+# Codex
+sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
+sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
 ```
 
-`pnpm exec wp-upgrade-shim` repairs all three. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
+`pnpm exec wp-upgrade-shim` repairs all 4. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
 repairs `.claude/webpieces/ai-hook.sh` and nothing else, so it is the fallback for an installed release too old
 to carry the first.
 
 ### The L0 audit line — one tab-separated line per tool call
 
 ```
-<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  layer=L0  row=<1|2|3>  shim=<root>  [bin=<root>]  fault=<D|X|U|K|->  <VERDICT>  <command>
+<iso-ts>  <bin-name>  <tool>  ai=<claude-code|codex>  tree=<name|primary>  layer=L0  row=<1|2|3>  shim=<root>  [bin=<root>]  fault=<D|X|U|K|->  <VERDICT>  <command>
 ```
 
 | # | field | means |
 |---|---|---|
 | 1 | `<iso-ts>` | when the shim judged the call, local time with offset |
 | 2 | `<bin-name>` | WHICH hook ran - wp-ai-guards-hook or wp-ai-rules-hook; Claude Code runs them in parallel |
-| 3 | `<tool>` | the PreToolUse tool name (Bash, Read, Write, Edit, …) |
-| 4 | `tree=<name\|primary>` | git's own name for the worktree the CALL was made in, derived from the payload's cwd |
-| 5 | `layer=L0` | the layer that judged it — constant here, and the first half of the join key a deny cites |
-| 6 | `row=<1\|2\|3>` | WHICH row of the three-row matrix this call took, read off the verdict (hand-down / allowlisted / blocked) |
-| 7 | `shim=<root>` | WHICH COPY of ai-hook.sh ran, resolved from $0 — against tree= it is the straddle detector |
-| 8 | `bin=<root>` | WHICH TREE supplied the binary — printed ONLY when it differs from shim=, so its presence IS the borrow |
-| 9 | `fault=<D\|X\|U\|K\|->` | the sh-side L0 fault, or `-`; S/C/Y are the binary's and are stamped on ITS streams |
-| 10 | `<VERDICT>` | one of the verdict labels below — kept adjacent to the command |
-| 11 | `<command>` | the command PREFIX (the audit spelling; the DECISION reads $CMD, which fails closed on a quote) |
+| 3 | `<tool>` | the PreToolUse tool name (Bash, Read, Write, Edit, apply_patch, …) |
+| 4 | `ai=<claude-code\|codex>` | WHICH coding agent made the call, from the one turn_id discriminator (adapters/detect-ai.ts) |
+| 5 | `tree=<name\|primary>` | git's own name for the worktree the CALL was made in, derived from the payload's cwd |
+| 6 | `layer=L0` | the layer that judged it — constant here, and the first half of the join key a deny cites |
+| 7 | `row=<1\|2\|3>` | WHICH row of the three-row matrix this call took, read off the verdict (hand-down / allowlisted / blocked) |
+| 8 | `shim=<root>` | WHICH COPY of ai-hook.sh ran, resolved from $0 — against tree= it is the straddle detector |
+| 9 | `bin=<root>` | WHICH TREE supplied the binary — printed ONLY when it differs from shim=, so its presence IS the borrow |
+| 10 | `fault=<D\|X\|U\|K\|->` | the sh-side L0 fault, or `-`; S/C/Y are the binary's and are stamped on ITS streams |
+| 11 | `<VERDICT>` | one of the verdict labels below — kept adjacent to the command |
+| 12 | `<command>` | the command PREFIX (the audit spelling; the DECISION reads $CMD, which fails closed on a quote) |
 
 | verdict | means |
 |---|---|
 | `PASS-BIN-ALLOW` | no sh-side fault; the bin ran and exited 0 — matrix row 1, handed down to L1 |
 | `PASS-BIN-BLOCK` | no sh-side fault; the bin ran and exited 2 — matrix row 1, a LATER layer blocked |
 | `ALLOW-READ` | allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran) |
+| `ALLOW-IGNORED` | a Codex tool with nothing to judge (L0_IGNORED_TOOLS) — PASS, terminal here |
 | `ALLOW-CONFIG` | allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here |
 | `ALLOW-MANIFEST` | allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here |
 | `ALLOW-CURE` | a Bash entry of the allowlist matched — ALLOW |
@@ -296,7 +305,7 @@ literals is exactly how a doc comes to prescribe a spelling the allowlist reject
 | 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | run the install **HERE**, in this tree; installing in the primary clone does nothing for this one |
 | 4b | `…-hook not found` / `is NOT declared in package.json anywhere`, and `pnpm install` reports **"Lockfile is up to date"** and changes nothing | `U`; the package used to arrive as a TRANSITIVE dependency of another `@webpieces` package (and a hoisting node-linker put its bins in the root `.bin`). That edge was pruned as unused, so the package left the tree entirely | BLOCK | do NOT run `pnpm install` again — with nothing asking for the package it is a **no-op**, and repeating it converges to the same broken tree (2026-08-05: four identical installs, then the block was handed back to the human). The deny infers the pin your other `@webpieces` deps use and prints the exact `add` line |
 | 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | a *bare* install SKIPS the corrupt package — pnpm sees the right version on disk and considers it installed — so the delete is not optional |
-| 6 | a managed hook surface `no longer matches` what the INSTALLED `@webpieces` expects: the shim, the settings.json registration, or its managed `env` entry | `S`; **normal:** an upgrade brought new shim logic, or a new managed surface. **abnormal:** reverted / hand-edited | BLOCK | the preferred cure is the only one that repairs all THREE; the `cp` fallback repairs the shim alone and exists for installed releases older than 0.4.408, where the bin does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21). Claude Code's own permission prompt may ask you to confirm the `cp` — that prompt is NOT this guard. Do NOT reach for the installer: it also migrates your config and prompts twice, which hangs a non-interactive agent |
+| 6 | a managed hook surface `no longer matches` what the INSTALLED `@webpieces` expects: the shim, either harness's hook registration (`.claude/settings.json`, `.codex/hooks.json`), or the Claude settings' managed `env` entry | `S`; **normal:** an upgrade brought new shim logic, or a new managed surface. **abnormal:** reverted / hand-edited | BLOCK | the preferred cure is the only one that repairs them ALL; the `cp` fallback repairs the shim alone and exists for installed releases older than 0.4.408, where the bin does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21). Claude Code's own permission prompt may ask you to confirm the `cp` — that prompt is NOT this guard. Do NOT reach for the installer: it also migrates your config and prompts twice, which hangs a non-interactive agent |
 | 7 | **any** complaint about `webpieces.config.json`: `not found` (`C`), `is out of sync` (`Y`), an N-error validation banner, or a parse error | `C`/`Y`/validation/syntax — one class, not four | BLOCK | see "The config-validation invariant" above; that section is the authority. Do NOT run `pnpm install` (it cannot help), and DO delete any key reported as unknown |
 | 8 | nothing — no fault | — | → L1 | logged as `layer=L0 row=1`, so "the guard ran and found nothing" is distinguishable from "the guard never ran" |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself rather than handing the block back |
@@ -361,7 +370,7 @@ Two blocks, two one-line cures, no deadlock.
 
 Step 2's cure is bigger than its name suggests, and that is deliberate — the bin is called
 `wp-upgrade-shim` for historical reasons and is deliberately NOT renamed. Fault `S` covers the WHOLE
-managed hook surface, the three things listed in the generated block above, and they only work as a set.
+managed hook surface — every thing listed in the generated block above — and they only work as a set.
 
 It was FOUR. A third hook, `.claude/webpieces/guarantee-root.sh` (L-1), is **deleted**, and so is the
 RELATIVE registration it existed to protect. Both guard hooks are ABSOLUTE now (the generated block
@@ -373,7 +382,7 @@ tree, and when a worktree PINS a different `@webpieces`, L1 row 8 (`trinary-vers
 names the fix. `LEGACY_GUARANTEE_ROOT_MARKER` survives in `hook-registration.ts` as a one-way
 RECOGNISER — nothing emits it; it exists so `repairRegistration()` can find and DELETE a retired entry.
 
-The third managed surface (`env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`) is no longer load-bearing
+The `env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` surface is no longer load-bearing
 for hook RESOLUTION — an absolute hook always resolves. It is kept for VERDICT STABILITY: pinning the
 Bash cwd to the project root means a guard's answer depends on the command, not on where an earlier `cd`
 left the shell, and because settings `env` is **inherited**, the main agent and every subagent get the
@@ -396,7 +405,7 @@ rendered from `SHIM_LOG_FIELDS` and `SHIM_LOG_VERDICTS`; what follows is why eac
 `layer=` and `row=` are the **join keys**, and they are why that diff is a lookup rather than an
 investigation: every L0 deny opens `[<guard>] (layer=L0 fault=<code> row=3, …)` with the identical
 triple, and `webpieces.guard-matrix.md` prints the same row. One grep of `fault=S` or of
-`layer=L0 row=3` lands you in all three artifacts.
+`layer=L0 row=3` lands you in the deny, the log line and the matrix doc alike.
 
 `shim=` is on every line: compared against `tree=` it is the STRADDLE detector (`tree=agent-X
 shim=<repo>` = standing in one tree, judged by another), and that pair varies constantly.
@@ -443,7 +452,9 @@ it never blocks or fails a hook (an unwritable log directory leaves the outcome 
 | the generated block of THIS file | `ai-hook-rules/src/core/l0-tooling-doc.ts` | `L0ToolingDoc.render/extract/splice`, `L0_DOC_BEGIN` |
 | the allowlist | `ai-hook-rules/src/bin/l0-allowlist.ts` | `L0_ALLOWLIST`, `isAllowed`, `L0_CURE_ALLOW_JS` |
 | `S` enforcement | `ai-hook-rules/src/adapters/hook-core.ts` | `enforceCommittedShim`, `shimStaleRecoveryDecision` |
-| the three managed surfaces | `ai-hook-rules/src/bin/hook-registration.ts` | `managedSurfaceDrift`, `shimCommand`, `SHIM_SURFACE`, `REGISTRATION_SURFACE`, `ENV_SURFACE` |
+| the managed surfaces, per harness | `ai-hook-rules/src/bin/hook-registration.ts` | `HarnessRegistration`, `HARNESS_REGISTRATIONS`, `managedSurfaceDrift`, `SHIM_SURFACE`, `REGISTRATION_SURFACE`, `CODEX_REGISTRATION_SURFACE`, `ENV_SURFACE` |
+| Codex hook trust (read-only) | `ai-hook-rules/src/bin/codex-trust.ts` | `CodexTrustProbe`, `CodexTrustStatus` |
+| Codex guard-presence attestation | `ai-hook-rules/src/bin/codex-guard-presence.ts` | `CodexGuardPresence`, `CodexSessionDetector` |
 | fault `S`'s deny text | `ai-hook-rules/src/bin/shim-deny-reason.ts` | `shimStaleDenyReason` |
 | `D`/`X`/`U`/`K` enforcement | `ai-hook-rules/templates/ai-hook.sh` | the pre-binary `sh` block |
 | the audit log | `ai-hook-rules/src/bin/shim-audit-log.ts` | `SHIM_LOG_FIELDS`, `SHIM_LOG_PRINTF`, `SHIM_LOG_VERDICTS`, `WP_LOG_SH`, `RESOLVE_LOG_DIR_SH` |
