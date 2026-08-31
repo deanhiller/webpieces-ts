@@ -415,14 +415,12 @@ and the agent honoured it to the letter — it never touched the file — while 
 CODE, which has the identical effect from the owner's seat. **A rule that protects a FILE does not
 protect the SETTING that file selects.**
 
-**Enforcement:** `experiment-lifecycle-reviewer` (`.claude/agents/experiment-lifecycle-reviewer.md`).
-Its `commands.pr-gate.checklists` entry lands in the FOLLOW-UP PR — it will be REQUIRED, over
-`packages/**`, `webpieces.config.json` and this file — because the Claude Code harness builds its agent
-registry at session start, so the PR that creates a brand-new required reviewer cannot spawn it and is
-refused by its own provenance check. Same ordering as a rule and the config key that turns it on. Once
-registered, a red verdict blocks the PR, and its `output` names the flag, the file, and the restoration
-that should have happened instead. It is a REVIEWER and not a rule
-for the reason the paragraph above gives: a rule can only see a FILE, and this defect is visible only in
+**Enforcement:** `experiment-lifecycle-reviewer` (`.claude/agents/experiment-lifecycle-reviewer.md`) is
+REGISTERED in `commands.pr-gate.checklists` and REQUIRED, over `packages/**`, `webpieces.config.json`
+and this file — the three places an experiment's ending shows up: the flags and their read paths, the
+config, and the "ships OFF and stays OFF for two years" policy prose. A red verdict blocks the PR, and
+its `output` names the flag, the file, and the restoration that should have happened instead. It is a
+REVIEWER and not a rule for the reason the paragraph above gives: a rule can only see a FILE, and this defect is visible only in
 a diff's effect on a SETTING. `.claude/review/experiment-lifecycle.md` lists the seven shapes it rejects
 — deleting or renaming a flag, making a flagged behaviour unconditional, deleting the OFF branch while
 keeping the key, flipping a default to ON, narrowing what a flag controls, writing an
