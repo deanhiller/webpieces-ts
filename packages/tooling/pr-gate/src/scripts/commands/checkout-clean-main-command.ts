@@ -84,7 +84,7 @@ export class CheckoutCleanMainCommand {
         await this.cleanupCommand.run(new CleanupOptions(
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
             new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
-            false, false));
+            false, false, false));
         this.sweep(repoRoot);
         this.reportStashed(stashed);
     }

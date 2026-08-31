@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'child_process';
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -14,19 +14,25 @@ import { WorktreeService } from './worktrees';
  * Against REAL git and a REAL locked worktree, deliberately.
  *
  * The whole defect lived in what `git worktree list --porcelain` says about a lock the Claude Code
- * harness took — so a hand-built porcelain fixture would only ever confirm the author's own model of
+ * harness takes — so a hand-built porcelain fixture would only ever confirm the author's own model of
  * that output, which is precisely the thing that was wrong. Every lock reason asserted on below comes
  * back out of git, and the one reap that removes a directory removes a real one.
  *
- * `gh` is the single exception: a temp-repo has no GitHub, and "merged PR" is the proof the whole
- * verdict turns on. It is faked as an executable on PATH rather than mocked in-process, so the code
- * under test still spawns a subprocess and parses its stdout exactly as it does in the field.
+ * TWO fakes, both for things a temp repo cannot have:
+ *  - `gh`, because a temp repo has no GitHub and "merged PR" is the proof the whole verdict turns on.
+ *    Faked as an executable on PATH rather than mocked in-process, so the code under test still spawns
+ *    a subprocess and parses its stdout exactly as it does in the field.
+ *  - `$CLAUDE_CONFIG_DIR`, pointed at a temp tree holding fixture agent transcripts. Reading the real
+ *    `~/.claude` would make these assertions depend on whatever agents happened to be running.
  */
 
 let primary = '';
 let worktrees = '';
 let fakeBin = '';
+let configDir = '';
+let subagents = '';
 let originalPath = '';
+let originalConfigDir: string | undefined;
 
 const MERGED_BRANCH = 'dean/landed';
 const MERGED_PR = 999;
@@ -38,19 +44,22 @@ function git(cwd: string, ...args: string[]): string {
     return result.stdout.trim();
 }
 
-/**
- * A pid that is definitively NOT running: fork a trivial child, wait for it to exit, then reuse its
- * number. Hardcoding one and hoping is the failure mode this exists to avoid.
- */
-function deadPid(): number {
-    const child = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-    if (typeof child.pid !== 'number') throw new Error('could not spawn a child to harvest a dead pid');
-    return child.pid;
+// The reason string the Claude Code harness writes, in its exact observed shape. The pid is REAL and
+// alive on purpose: it is the shared session pid in the field, and the point of this change is that
+// its liveness decides nothing.
+function agentReason(agent: string): string {
+    return `claude agent ${agent} (pid ${String(process.pid)} start Wed Aug 19 13:11:24 2026)`;
 }
 
-// The reason string the Claude Code harness writes, in its exact observed shape.
-function agentReason(agent: string, pid: number): string {
-    return `claude agent ${agent} (pid ${String(pid)} start Wed Aug 19 13:11:24 2026)`;
+/**
+ * Fixture harness state for one agent. `lastBlock` is the content block its transcript ends on —
+ * `text` for an agent that returned, `tool_use` for one still inside a tool call.
+ */
+function writeAgentState(agent: string, worktreePath: string, lastBlock: string): void {
+    writeFileSync(join(subagents, `${agent}.meta.json`),
+        JSON.stringify({ agentType: 'general-purpose', worktreePath, spawnedWithWorktree: true }), 'utf8');
+    writeFileSync(join(subagents, `${agent}.jsonl`),
+        `{"type":"assistant","message":{"content":[{"type":"${lastBlock}"}]}}\n`, 'utf8');
 }
 
 /** Add a worktree on a NEW branch, with one commit on it, and lock it with `reason`. */
@@ -65,8 +74,8 @@ function addLockedWorktree(name: string, branch: string, reason: string | null):
     return treePath;
 }
 
-function verdictFor(treePath: string): DeletableWorktree {
-    const found = new MergedBranchesService().computeMergedBranches(primary).worktrees
+function verdictFor(treePath: string, ignoreStaleLocks: boolean = false): DeletableWorktree {
+    const found = new MergedBranchesService().computeMergedBranches(primary, ignoreStaleLocks).worktrees
         .find((tree: DeletableWorktree): boolean => tree.path === treePath);
     if (found === undefined) throw new Error(`no verdict recorded for ${treePath}`);
     return found;
@@ -94,18 +103,29 @@ beforeEach((): void => {
     chmodSync(join(fakeBin, 'gh'), 0o755);
     originalPath = process.env.PATH ?? '';
     process.env.PATH = `${fakeBin}:${originalPath}`;
+
+    // An EMPTY harness state tree by default: "the harness knows nothing about that agent", which is
+    // the honest default for a temp repo and exercises the fail-safe path.
+    configDir = realpathSync(mkdtempSync(join(tmpdir(), 'agent-lock-claude-')));
+    subagents = join(configDir, 'projects', '-tmp-repo', 'session-1', 'subagents');
+    mkdirSync(subagents, { recursive: true });
+    originalConfigDir = process.env['CLAUDE_CONFIG_DIR'];
+    process.env['CLAUDE_CONFIG_DIR'] = configDir;
 });
 
 afterEach((): void => {
     process.env.PATH = originalPath;
+    if (originalConfigDir === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
+    else process.env['CLAUDE_CONFIG_DIR'] = originalConfigDir;
     rmSync(primary, { recursive: true, force: true });
     rmSync(worktrees, { recursive: true, force: true });
     rmSync(fakeBin, { recursive: true, force: true });
+    rmSync(configDir, { recursive: true, force: true });
 });
 
 describe('the lock reason comes out of real `git worktree list --porcelain`', (): void => {
     it('carries the harness reason verbatim, and parses to the agent name and pid', (): void => {
-        const reason = agentReason('agent-a017f6be7c518c68c', 64914);
+        const reason = agentReason('agent-a017f6be7c518c68c');
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, reason);
 
         const tree = new WorktreeService().listWorktrees(primary)
@@ -116,7 +136,7 @@ describe('the lock reason comes out of real `git worktree list --porcelain`', ()
 
         const lock = new AgentWorktreeLockReader().parse(tree?.lockReason ?? '');
         expect(lock?.agent).toBe('agent-a017f6be7c518c68c');
-        expect(lock?.pid).toBe(64914);
+        expect(lock?.pid).toBe(process.pid);
         expect(lock?.startedAt).toBe('Wed Aug 19 13:11:24 2026');
     });
 
@@ -130,34 +150,17 @@ describe('the lock reason comes out of real `git worktree list --porcelain`', ()
         expect(tree?.lockReason).toBe('');
         expect(new AgentWorktreeLockReader().parse('')).toBeNull();
     });
-
-    // process.pid is definitionally alive; the harvested child pid is definitionally not.
-    it('judges liveness off the pid in the reason', (): void => {
-        const reader = new AgentWorktreeLockReader();
-        const live = reader.parse(agentReason('agent-live', process.pid));
-        const gone = reader.parse(agentReason('agent-gone', deadPid()));
-
-        expect(live !== null && reader.isRunning(live)).toBe(true);
-        expect(gone !== null && reader.isRunning(gone)).toBe(false);
-    });
 });
 
 describe('wp-cleanup verdicts for a locked worktree', (): void => {
-    it('SPARES an agent lock whose pid is still running, naming the agent and the pid', (): void => {
-        const treePath = addLockedWorktree('live', MERGED_BRANCH, agentReason('agent-live', process.pid));
-
-        const verdict = verdictFor(treePath);
-
-        expect(verdict.deletable).toBe(false);
-        expect(verdict.unlockBeforeRemove).toBe(false);
-        expect(verdict.reason).toContain('agent-live');
-        expect(verdict.reason).toContain(`pid ${String(process.pid)}`);
-        expect(verdict.reason).toContain('still running');
-    });
-
-    it('marks an agent lock whose pid is GONE deletable when its branch is merged', (): void => {
-        const pid = deadPid();
-        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-dead', pid));
+    /**
+     * THE BUG, pinned. Every worktree in a session records the SAME pid — the session process — so
+     * `process.pid` here is exactly what the field sees, and it is ALIVE. The verdict must still be
+     * deletable, and the reason must not claim anybody is working anywhere.
+     */
+    it('reaps a merged worktree whose agent has RETURNED, whatever the live pid in the lock says', (): void => {
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
 
         const verdict = verdictFor(treePath);
 
@@ -165,20 +168,64 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
         expect(verdict.unlockBeforeRemove).toBe(true);
         expect(verdict.pr).toBe(MERGED_PR);
         expect(verdict.reason).toContain(`PR #${String(MERGED_PR)} merged`);
-        expect(verdict.reason).toContain('agent-dead');
-        expect(verdict.reason).toContain(`pid ${String(pid)} is gone`);
-        expect(verdict.reason).toContain('stale lock');
+        expect(verdict.reason).toContain('agent-done');
+        expect(verdict.reason).not.toContain('still running');
     });
 
-    // The asymmetry: a dead agent is not a licence to delete unmerged work, only to stop pretending
-    // the lock protects anything.
-    it('SPARES an agent lock whose pid is gone when the branch is NOT provably merged', (): void => {
-        const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-dead', deadPid()));
+    // "The harness has never heard of that agent" is not a veto — an unreadable ~/.claude would
+    // otherwise restore the exact accumulation this change exists to end. The branch evidence is what
+    // licensed this reap; the harness only ever gets to stop one.
+    it('reaps a merged worktree when the harness knows nothing about its agent', (): void => {
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-unknown'));
+
+        const verdict = verdictFor(treePath);
+
+        expect(verdict.deletable).toBe(true);
+        expect(verdict.unlockBeforeRemove).toBe(true);
+    });
+
+    it('SPARES a merged worktree whose agent is still mid-tool-call', (): void => {
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-live'));
+        writeAgentState('agent-live', treePath, 'tool_use');
 
         const verdict = verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
-        expect(verdict.reason).toContain('agent-dead');
+        expect(verdict.unlockBeforeRemove).toBe(false);
+        expect(verdict.reason).toContain('agent-live');
+        expect(verdict.reason).toContain('working in here');
+    });
+
+    // The case the lock exists for. Uncommitted or untracked files are work no archive tag captures,
+    // and nothing — not a merged PR, not a returned agent — overrides that.
+    it('SPARES a merged worktree that has uncommitted work in it', (): void => {
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
+        writeFileSync(join(treePath, 'half-finished.txt'), 'not committed\n', 'utf8');
+
+        const verdict = verdictFor(treePath);
+
+        expect(verdict.deletable).toBe(false);
+        expect(verdict.reason).toContain('uncommitted or untracked files');
+    });
+
+    /**
+     * The asymmetry: a returned agent is not a licence to delete unmerged work, only to stop
+     * pretending the lock protects it. And the message says only what is KNOWN — it replaced
+     * "pid N still running — that agent is working in here", which was asserted as fact about seven
+     * agents that had finished, several with merged PRs.
+     */
+    it('SPARES an unmerged worktree and does NOT claim anyone is working in it', (): void => {
+        const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
+
+        const verdict = verdictFor(treePath);
+
+        expect(verdict.deletable).toBe(false);
+        expect(verdict.reason).toContain('agent-done');
+        expect(verdict.reason).toContain('cannot be verified');
+        expect(verdict.reason).toContain('shared Claude Code session process');
+        expect(verdict.reason).not.toContain('working in here');
     });
 
     /**
@@ -209,9 +256,56 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
     });
 });
 
-describe('reaping a dead agent\'s merged worktree', (): void => {
+/**
+ * `--ignore-stale-locks`: one flag in place of N hand-run `git worktree unlock`s.
+ *
+ * What it moves is narrow and deliberate — a locked worktree whose branch is not provably dead stops
+ * being reported as merely LOCKED and is judged on its real branch and commit state, so it can reach
+ * the husk reap or the numbered block a human answers. What it does NOT move is the dirty rail and
+ * the live-agent veto.
+ */
+describe('--ignore-stale-locks', (): void => {
+    it('judges a locked, unmerged worktree on its branch instead of hiding it behind the lock', (): void => {
+        const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
+
+        const spared = verdictFor(treePath);
+        const judged = verdictFor(treePath, true);
+
+        expect(spared.classification).toBe('locked-worktree');
+        expect(judged.classification).not.toBe('locked-worktree');
+        expect(judged.unlockBeforeRemove).toBe(true);
+        expect(judged.reason).toContain('treated as no evidence, as asked');
+    });
+
+    it('still spares a DIRTY worktree', (): void => {
+        const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
+        writeFileSync(join(treePath, 'half-finished.txt'), 'not committed\n', 'utf8');
+
+        const verdict = verdictFor(treePath, true);
+
+        expect(verdict.deletable).toBe(false);
+        expect(verdict.classification).toBe('locked-worktree');
+        expect(verdict.reason).toContain('uncommitted or untracked files');
+    });
+
+    it('still spares a worktree whose agent is mid-tool-call', (): void => {
+        const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-live'));
+        writeAgentState('agent-live', treePath, 'tool_use');
+
+        const verdict = verdictFor(treePath, true);
+
+        expect(verdict.deletable).toBe(false);
+        expect(verdict.classification).toBe('locked-worktree');
+        expect(verdict.reason).toContain('working in here');
+    });
+});
+
+describe('reaping a returned agent\'s merged worktree', (): void => {
     it('unlocks it, removes the directory and the branch, and logs the SHA and a recover= command', (): void => {
-        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-dead', deadPid()));
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
         const tip = git(primary, 'rev-parse', MERGED_BRANCH);
         const verdict = verdictFor(treePath);
 
@@ -257,7 +351,8 @@ describe('reaping a dead agent\'s merged worktree', (): void => {
 // The reaper's own rails are unrelated to locking and must not have moved.
 describe('the standing-in-it rail is untouched', (): void => {
     it('refuses to reap the worktree the command is running in, lock or no lock', (): void => {
-        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-dead', deadPid()));
+        const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
+        writeAgentState('agent-done', treePath, 'text');
         const verdict = verdictFor(treePath);
 
         const result = new WorktreeReaper().reapWorktrees(primary, treePath, 'wp-cleanup', [verdict]);

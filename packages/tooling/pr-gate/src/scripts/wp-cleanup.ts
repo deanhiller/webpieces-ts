@@ -9,6 +9,7 @@ import {
     DeleteSelection,
     FLAG_DELETE_BRANCHES,
     FLAG_DELETE_WORKTREES,
+    FLAG_IGNORE_STALE_LOCKS,
     FLAG_INTERACTIVE,
     FLAG_REPORT,
 } from './commands/cleanup-options';
@@ -30,5 +31,6 @@ runMain(async (): Promise<void> => {
         new DeleteSelection(FLAG_DELETE_BRANCHES, args.has(FLAG_DELETE_BRANCHES), args.value(FLAG_DELETE_BRANCHES)),
         new DeleteSelection(FLAG_DELETE_WORKTREES, args.has(FLAG_DELETE_WORKTREES), args.value(FLAG_DELETE_WORKTREES)),
         args.has(FLAG_REPORT),
-        args.has(FLAG_INTERACTIVE)));
+        args.has(FLAG_INTERACTIVE),
+        args.has(FLAG_IGNORE_STALE_LOCKS)));
 });

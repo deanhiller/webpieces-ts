@@ -95,7 +95,7 @@ beforeAll(() => {
 
     // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so
     // NOTHING is provably merged, and therefore nothing is reapable.
-    merged.writeMergedBranches(repo, merged.computeMergedBranches(repo));
+    merged.writeMergedBranches(repo, merged.computeMergedBranches(repo, false));
 });
 
 afterAll(() => {
@@ -155,7 +155,7 @@ describe('branch-creation-guard against real git — the merged half', () => {
      * way the refresher would have written it, and the guard is asked what it does with it.
      */
     it('does offer a worktree whose PR is merged — but still only via wp-cleanup', () => {
-        const cache = merged.computeMergedBranches(repo);
+        const cache = merged.computeMergedBranches(repo, false);
         // git reports its own canonicalised path (on macOS /var/… resolves to /private/var/…), so take
         // the path from git rather than reconstructing it — reconcile() matches on exactly this string.
         const wt1 = cache.worktrees[0].path;

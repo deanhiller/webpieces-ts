@@ -109,7 +109,10 @@ export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, ar
             // `gh pr list --state merged` call. The branch-creation-guard reads the result to enforce its
             // cap without ever touching the network itself. Deliberately allowed to go stale.
             const mergedBranches = new MergedBranchesService();
-            const cache = mergedBranches.computeMergedBranches(repoRoot);
+            // `false`: the background refresher NEVER ignores a standing agent lock. That flag is
+            // wp-cleanup's, and it means "a human asked for this run" — nothing an unattended
+            // refresher can claim on somebody's behalf.
+            const cache = mergedBranches.computeMergedBranches(repoRoot, false);
             mergedBranches.writeMergedBranches(repoRoot, cache);
 
             // Third step, same detached run: actually DELETE the dead branches. Reporting them was

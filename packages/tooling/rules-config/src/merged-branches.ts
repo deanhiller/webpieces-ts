@@ -6,7 +6,7 @@ import { AtomicFile } from './atomic-file';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
 import { Worktree, WorktreeService } from './worktrees';
-import { WorktreeLockVerdicts } from './worktree-lock-verdicts';
+import { LockDecision, WorktreeLockVerdicts } from './worktree-lock-verdicts';
 import {
     CacheFreshness,
     CACHE_STALE_AFTER_MS,
@@ -290,7 +290,7 @@ export class MergedBranchesService {
      * The SLOW path, run only inside the detached refresher. ONE bulk `gh` call, then a purely local
      * classification. Never run on the hook's blocking path.
      */
-    computeMergedBranches(repoRoot: string): MergedBranchesCache {
+    computeMergedBranches(repoRoot: string, ignoreStaleAgentLocks: boolean): MergedBranchesCache {
         const merged = this.fetchMergedPrs(repoRoot);
         const byBranch = new Map<string, number>();
         for (const entry of merged) byBranch.set(entry.branch, entry.pr);
@@ -335,7 +335,7 @@ export class MergedBranchesService {
             else keep.push(verdict.entry);
         }
 
-        const worktrees = this.classifyWorktrees(repoRoot, trees, prs);
+        const worktrees = this.classifyWorktrees(repoRoot, trees, prs, ignoreStaleAgentLocks);
         return new MergedBranchesCache(new Date().toISOString(), deletable, keep, worktrees);
     }
 
@@ -345,18 +345,24 @@ export class MergedBranchesService {
      *
      * A worktree is deletable when its directory is already gone (`prunable`), or when its branch is
      * dead by the very same proof the branch cap uses — a MERGED PR, its own or that of the branch it
-     * snapshots. Nothing else. It is spared when it is LOCKED BY SOMETHING STILL THERE (see
-     * lockVerdict), when it is the worktree we are standing in right now (removing your own cwd is not
-     * a thing to suggest to an agent), or when its branch is anything short of provably merged —
-     * INCLUDING a branch with no commits yet, which is what every worktree looks like while an agent
-     * is working in it. `deletable` means PROVABLY dead and nothing weaker; wp-cleanup reaps the
-     * zero-commit ones on top of that, but only after checking on disk whether anybody is holding
+     * snapshots. Nothing else. It is spared when its LOCK still stands (see WorktreeLockVerdicts for
+     * what makes one stand), when it is the worktree we are standing in right now (removing your own
+     * cwd is not a thing to suggest to an agent), or when its branch is anything short of provably
+     * merged — INCLUDING a branch with no commits yet, which is what every worktree looks like while
+     * an agent is working in it. `deletable` means PROVABLY dead and nothing weaker; wp-cleanup reaps
+     * the zero-commit ones on top of that, but only after checking on disk whether anybody is holding
      * them (see CLASSIFICATION_NO_COMMITS), which is a question these verdicts do not answer.
+     *
+     * THE BRANCH VERDICT IS COMPUTED BEFORE THE LOCK IS RULED ON, which is new and is the point: one
+     * of the four things that can override an agent lock is the branch already being provably dead,
+     * and that cannot be weighed until it is known. Two extra local git calls per locked worktree, on
+     * a path that only ever runs in the detached refresher and in wp-cleanup itself.
      */
     private classifyWorktrees(
         repoRoot: string,
         trees: Worktree[],
         prs: PrLookup,
+        ignoreStaleAgentLocks: boolean,
     ): DeletableWorktree[] {
         const out: DeletableWorktree[] = [];
 
@@ -369,37 +375,45 @@ export class MergedBranchesService {
                     CLASSIFICATION_PRUNABLE));
                 continue;
             }
-            // A dead agent's lock returns null here and the worktree is judged on its branch below,
-            // exactly like an unlocked one — with `unlockBeforeRemove` set so the reap clears the lock.
-            const staleLock = tree.locked ? this.locks.staleAgentLock(tree) : null;
-            if (tree.locked && staleLock === null) {
+
+            const verdict = tree.branch === '' ? null : this.classify(repoRoot, tree.branch, prs);
+            // An OVERRIDDEN lock leaves the worktree judged on its branch below, exactly like an
+            // unlocked one — with `unlockBeforeRemove` set by annotate() so the reap clears the lock.
+            const decision = tree.locked ? this.lockDecision(tree, verdict, ignoreStaleAgentLocks) : null;
+            if (decision !== null && decision.spare) {
                 out.push(new DeletableWorktree(
-                    tree.path, tree.branch, this.locks.sparedReason(tree), 0, false, CLASSIFICATION_LOCKED));
+                    tree.path, tree.branch, decision.reason, 0, false, CLASSIFICATION_LOCKED));
                 continue;
             }
             if (tree.path === repoRoot) {
                 out.push(this.locks.annotate(new DeletableWorktree(
                     tree.path, tree.branch, 'you are standing in it', 0, false, CLASSIFICATION_CURRENT),
-                staleLock));
+                decision));
                 continue;
             }
-            if (tree.branch === '') {
+            if (verdict === null) {
                 out.push(this.locks.annotate(new DeletableWorktree(
                     tree.path, '', 'detached HEAD — no branch to check, so a human must decide', 0, false,
-                    CLASSIFICATION_DETACHED), staleLock));
+                    CLASSIFICATION_DETACHED), decision));
                 continue;
             }
 
             // The branch's OWN classification token rides along unchanged. That is what lets wp-cleanup
             // group probably-dead worktrees exactly the way it groups probably-dead branches, instead of
             // inventing a second, parallel notion of "how dead is this".
-            const verdict = this.classify(repoRoot, tree.branch, prs);
             out.push(this.locks.annotate(new DeletableWorktree(
                 tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable,
-                verdict.entry.classification), staleLock));
+                verdict.entry.classification), decision));
         }
 
         return out;
+    }
+
+    // The lock verdict for one worktree. The evidence gathering (and what it deliberately declines to
+    // gather) lives in WorktreeLockVerdicts — see `gather` there.
+    private lockDecision(tree: Worktree, verdict: Verdict | null, ignoreStaleAgentLocks: boolean): LockDecision {
+        return this.locks.decide(this.locks.gather(
+            tree, verdict !== null && verdict.deletable, ignoreStaleAgentLocks));
     }
 
     /**

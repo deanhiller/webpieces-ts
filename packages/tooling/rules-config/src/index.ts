@@ -398,7 +398,21 @@ export {
     AgentWorktreeLock,
     AgentWorktreeLockReader,
 } from './agent-worktree-lock';
-export { WorktreeLockVerdicts } from './worktree-lock-verdicts';
+export {
+    HARNESS_NOT_CONSULTED,
+    LOCK_LIVENESS_UNVERIFIABLE,
+    LockDecision,
+    LockEvidence,
+    WorktreeLockVerdicts,
+} from './worktree-lock-verdicts';
+export {
+    AGENT_ACTIVITY_LIVE,
+    AGENT_ACTIVITY_RETURNED,
+    AGENT_ACTIVITY_UNKNOWN,
+    AGENT_TRANSCRIPT_QUIET_MS,
+    AgentActivity,
+    HarnessAgentActivityReader,
+} from './harness-agent-activity';
 export {
     ReapedBranch,
     ReapResult,

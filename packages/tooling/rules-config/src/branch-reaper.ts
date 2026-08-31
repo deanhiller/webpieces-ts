@@ -136,7 +136,9 @@ export class BranchReaper {
         cache: MergedBranchesCache | null = null,
         retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
     ): ReapResult {
-        const verdicts = cache ?? this.mergedBranches.computeMergedBranches(repoRoot);
+        // `false`: this is the BRANCH reap, and worktree locks are none of its business. Ignoring one
+        // would only widen the WORKTREE verdicts it never reads.
+        const verdicts = cache ?? this.mergedBranches.computeMergedBranches(repoRoot, false);
         // 'keep' means "never delete anything" — the reap becomes a pure report. Everything still lands
         // in `spared` so the human sees exactly what WOULD have been reaped under the other policies.
         if (retention === BRANCH_RETENTION_KEEP) {

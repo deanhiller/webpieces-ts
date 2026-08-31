@@ -98,7 +98,7 @@ describe('MergedBranchesService.computeMergedBranches', () => {
         world.mergedPrs = [{ number: 188, headRefName: 'dean/config-overhaul' }];
         world.localBranches = ['main', 'dean/config-overhaul', 'dean/still-working'];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(names(cache.deletable)).toEqual(['dean/config-overhaul']);
         expect(cache.deletable[0].pr).toBe(188);
@@ -122,7 +122,7 @@ describe('MergedBranchesService.computeMergedBranches', () => {
             'dean/http-clientSquash',
         ];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(names(cache.deletable)).toEqual([
             'dean/http-client',
@@ -140,7 +140,7 @@ describe('MergedBranchesService.computeMergedBranches', () => {
         world.mergedPrs = [];
         world.localBranches = ['main', 'dean/in-flightwp2'];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable.length).toBe(0);
         expect(names(cache.keep)).toEqual(['dean/in-flightwp2']);
@@ -164,7 +164,7 @@ describe('MergedBranchesService empty-branch husks', () => {
         world.localBranches = ['main', 'dean/never-committed'];
         world.commitsAhead = { 'dean/never-committed': 0 };
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable).toEqual([]);
         expect(names(cache.keep)).toEqual(['dean/never-committed']);
@@ -182,7 +182,7 @@ describe('MergedBranchesService empty-branch husks', () => {
         world.localBranches = ['main', 'dean/real-work'];
         world.commitsAhead = { 'dean/real-work': 3 };
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable.length).toBe(0);
         expect(names(cache.keep)).toEqual(['dean/real-work']);
@@ -197,7 +197,7 @@ describe('MergedBranchesService safety rails', () => {
         world.localBranches = ['main', 'dean/current'];
         world.currentBranch = 'dean/current';
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable.length).toBe(0);
         expect(names(cache.keep)).toEqual(['dean/current']);
@@ -209,7 +209,7 @@ describe('MergedBranchesService safety rails', () => {
         world.ghOk = false;
         world.localBranches = ['main', 'dean/a', 'dean/b'];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable.length).toBe(0);
         expect(names(cache.keep)).toEqual(['dean/a', 'dean/b']);
@@ -228,7 +228,7 @@ describe('MergedBranchesService worktree verdicts', () => {
         world.localBranches = ['main', 'dean/held'];
         world.worktrees = [{ path: '/work/held', branch: 'dean/held' }];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.deletable.length).toBe(0);
         expect(names(cache.keep)).toEqual(['dean/held']);
@@ -247,7 +247,7 @@ describe('MergedBranchesService worktree verdicts', () => {
             { path: '/work/live', branch: 'dean/live' },
         ];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.worktrees.map((t: { deletable: boolean }): boolean => t.deletable)).toEqual([false, false]);
         expect(cache.worktrees[0].reason).toContain('locked');
@@ -257,7 +257,7 @@ describe('MergedBranchesService worktree verdicts', () => {
         world.localBranches = ['main', 'dean/gone'];
         world.worktrees = [{ path: '/work/gone', branch: 'dean/gone', extra: 'prunable gitdir file points to nowhere' }];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.worktrees[0].deletable).toBe(true);
         expect(cache.worktrees[0].reason).toContain('prune');
@@ -289,7 +289,7 @@ describe('MergedBranchesService worktree classifications', () => {
             { path: '/work/abandoned', branch: 'dean/abandoned' },
         ];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
         const byPath = new Map(cache.worktrees.map(
             (tree: { path: string; classification: string }): [string, string] => [tree.path, tree.classification]));
 
@@ -308,7 +308,7 @@ describe('MergedBranchesService worktree classifications', () => {
             { path: '/work/locked', branch: 'dean/locked', extra: 'locked because I said so' },
         ];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.worktrees[0].classification).toBe(CLASSIFICATION_PRUNABLE);
         expect(cache.worktrees[1].classification).toBe(CLASSIFICATION_LOCKED);
@@ -320,7 +320,7 @@ describe('MergedBranchesService worktree classifications', () => {
         world.localBranches = ['main'];
         world.worktrees = [{ path: '/repo', branch: 'main' }];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
         const here = cache.worktrees.find(
             (tree: { path: string }): boolean => tree.path === '/repo');
 
@@ -341,7 +341,7 @@ describe('MergedBranchesService worktree classifications', () => {
  */
 describe('spared-branch classification (Part 5)', () => {
     function spared(branch: string): DeletableBranch {
-        const found = svc.computeMergedBranches('/repo').keep
+        const found = svc.computeMergedBranches('/repo', false).keep
             .find((entry: DeletableBranch): boolean => entry.branch === branch);
         if (found === undefined) throw new Error(`${branch} was not spared`);
         return found;
@@ -391,7 +391,7 @@ describe('spared-branch classification (Part 5)', () => {
 
 describe('classification keeps the situations distinct, and still deletes nothing', () => {
     function spared(branch: string): DeletableBranch {
-        const found = svc.computeMergedBranches('/repo').keep
+        const found = svc.computeMergedBranches('/repo', false).keep
             .find((entry: DeletableBranch): boolean => entry.branch === branch);
         if (found === undefined) throw new Error(`${branch} was not spared`);
         return found;
@@ -405,9 +405,9 @@ describe('classification keeps the situations distinct, and still deletes nothin
         world.commitsAhead = { 'a/superseded': 1, 'b/never': 3, 'c/in-main': 2 };
         world.cherry = { 'b/never': '+ aaa\n', 'c/in-main': '- aaa\n- bbb\n' };
 
-        const classes = svc.computeMergedBranches('/repo').keep
+        const classes = svc.computeMergedBranches('/repo', false).keep
             .map((entry: DeletableBranch): string => entry.classification);
-        const reasons = new Set(svc.computeMergedBranches('/repo').keep
+        const reasons = new Set(svc.computeMergedBranches('/repo', false).keep
             .map((entry: DeletableBranch): string => entry.reason));
 
         expect(new Set(classes).size).toBe(3);
@@ -422,7 +422,7 @@ describe('classification keeps the situations distinct, and still deletes nothin
         world.commitsAhead = { 'a/superseded': 1, 'b/never': 3, 'c/in-main': 2 };
         world.cherry = { 'c/in-main': '- aaa\n- bbb\n' };
 
-        expect(svc.computeMergedBranches('/repo').deletable).toEqual([]);
+        expect(svc.computeMergedBranches('/repo', false).deletable).toEqual([]);
     });
 
     // A closed PR with NOTHING merged after it is not evidence of supersession — it may simply be work
@@ -443,7 +443,7 @@ describe('classification keeps the situations distinct, and still deletes nothin
         world.localBranches = ['main', 'dean/merged', 'dean/mergedPreMerge1', 'dean/husk'];
         world.commitsAhead = { 'dean/husk': 0 };
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
         const byBranch = new Map(cache.deletable
             .map((entry: DeletableBranch): [string, string] => [entry.branch, entry.classification]));
 
@@ -469,7 +469,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
         world.allPrs = [{ number: 42, headRefName: 'dean/feature', state: 'OPEN' }];
         world.localBranches = ['main', 'dean/feature', 'dean/featurePreMerge1', 'dean/featurePreMerge2'];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
         const byBranch = new Map(cache.deletable
             .map((entry: DeletableBranch): [string, DeletableBranch] => [entry.branch, entry]));
 
@@ -486,7 +486,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
     it('still classifies it as a live snapshot when the base has no PR at all', () => {
         world.localBranches = ['main', 'dean/feature', 'dean/featureSquash'];
 
-        const entry = svc.computeMergedBranches('/repo').deletable
+        const entry = svc.computeMergedBranches('/repo', false).deletable
             .find((row: DeletableBranch): boolean => row.branch === 'dean/featureSquash')!;
 
         expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_LIVE);
@@ -502,7 +502,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
     it('falls back to never-proposed when the base branch no longer exists', () => {
         world.localBranches = ['main', 'dean/orphanPreMerge1'];
 
-        const entry = svc.computeMergedBranches('/repo').keep
+        const entry = svc.computeMergedBranches('/repo', false).keep
             .find((row: DeletableBranch): boolean => row.branch === 'dean/orphanPreMerge1')!;
 
         expect(entry.classification).toBe(CLASSIFICATION_NEVER_PROPOSED);
@@ -515,7 +515,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
         world.mergedPrs = [{ number: 7, headRefName: 'dean/landed' }];
         world.localBranches = ['main', 'dean/landed', 'dean/landedPreMerge1'];
 
-        const entry = svc.computeMergedBranches('/repo').deletable
+        const entry = svc.computeMergedBranches('/repo', false).deletable
             .find((row: DeletableBranch): boolean => row.branch === 'dean/landedPreMerge1')!;
 
         expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
@@ -543,7 +543,7 @@ describe('worktree liveness is "live unless merged"', () => {
         world.commitsAhead = { 'dean/apipath': 0 };
         world.worktrees = [{ path: '/wt/apipath', branch: 'dean/apipath' }];
 
-        const verdict = svc.computeMergedBranches('/repo').worktrees
+        const verdict = svc.computeMergedBranches('/repo', false).worktrees
             .find((tree: DeletableWorktree): boolean => tree.path === '/wt/apipath');
 
         expect(verdict?.deletable).toBe(false);
@@ -556,7 +556,7 @@ describe('worktree liveness is "live unless merged"', () => {
         world.localBranches = ['main', 'dean/landed'];
         world.worktrees = [{ path: '/wt/landed', branch: 'dean/landed' }];
 
-        const verdict = svc.computeMergedBranches('/repo').worktrees
+        const verdict = svc.computeMergedBranches('/repo', false).worktrees
             .find((tree: DeletableWorktree): boolean => tree.path === '/wt/landed');
 
         expect(verdict?.deletable).toBe(true);
@@ -571,7 +571,7 @@ describe('worktree liveness is "live unless merged"', () => {
         world.commitsAhead = { 'dean/in-review': 1 };
         world.worktrees = [{ path: '/wt/review', branch: 'dean/in-review' }];
 
-        const verdict = svc.computeMergedBranches('/repo').worktrees
+        const verdict = svc.computeMergedBranches('/repo', false).worktrees
             .find((tree: DeletableWorktree): boolean => tree.path === '/wt/review');
 
         expect(verdict?.deletable).toBe(false);
@@ -594,7 +594,7 @@ describe('worktree liveness is "live unless merged"', () => {
             { path: '/wt/gone', branch: 'dean/parked', extra: 'prunable' },
         ];
 
-        const cache = svc.computeMergedBranches('/repo');
+        const cache = svc.computeMergedBranches('/repo', false);
 
         expect(cache.worktrees.map((tree: DeletableWorktree): string => tree.path).sort())
             .toEqual(['/wt/gone', '/wt/held', '/wt/husk', '/wt/merged']);

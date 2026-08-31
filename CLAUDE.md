@@ -765,9 +765,19 @@ It removes what it can PROVE is dead — a worktree whose directory is already g
 dead by a merged PR (its own, or the one it snapshots); a branch that is merged or is a squash-merge
 backup of a merged one — **plus every zero-commit husk**: a ref identical to `origin/main`, where the
 delete costs a NAME and not a commit. A husk is spared only when somebody is provably HOLDING it: a
-worktree with uncommitted or untracked files, one LOCKED by something still there (whoever the lock
-reason names, or a claude agent whose pid is still running), the tree you are standing in, a detached
-HEAD — each reported with that as its reason. Every removal is logged with its pre-delete SHA and a
+worktree with uncommitted or untracked files, one LOCKED by something still there, the tree you are
+standing in, a detached HEAD — each reported with that as its reason.
+
+**A claude-agent lock is judged on evidence, never on the pid in it.** The harness writes
+`claude agent agent-<id> (pid N …)` on every worktree it opens, and that pid is the SHARED Claude Code
+SESSION process — the same number for every subagent, alive for the whole session. So it says nothing,
+and wp-cleanup no longer asks the kernel about it. A locked agent worktree is removed only when the
+branch evidence already proves it dead (a merged PR, a snapshot of a live ref, a zero-commit husk) AND
+the directory is clean AND the harness does not report that agent as mid-tool-call. Harness state can
+only ever VETO that removal, never authorise one. Where liveness genuinely cannot be established the
+worktree is SPARED and the message says so, instead of claiming somebody is working in it.
+
+Every removal is logged with its pre-delete SHA and a
 `recover=` command that brings back both the directory and its branch. Do not stop to ask whether it is
 safe to run — it is the sanctioned cleanup command, and asking is what let stale branches and worktrees
 pile up in the first place.
@@ -780,8 +790,15 @@ pnpm wp-cleanup --report                 # the whole classified picture, deletes
 pnpm wp-cleanup --delete-branches=all    # or =none, or =1,3 by the numbers just printed
 pnpm wp-cleanup --delete-worktrees=1,2
 pnpm wp-cleanup --interactive            # prompt even with no tty
+pnpm wp-cleanup --ignore-stale-locks     # treat a standing claude-agent lock as no evidence
 pnpm wp-cleanup --help
 ```
+
+`--ignore-stale-locks` is the escape hatch for the one thing the command could not previously be told:
+that an agent lock is stale. Every locked worktree is then classified on its real branch and commit
+state, and the ones that come back dead are unlocked and removed — one flag in place of the
+`git worktree unlock` a human otherwise runs per directory. A DIRTY worktree, and one whose agent the
+harness still reports as mid-tool-call, are spared under it anyway.
 
 The numbers in a `--delete-*` flag are the numbers printed on the SAME run; a number past the end of the
 block stops the run rather than deleting the wrong ref. An explicit flag always beats the terminal sniff
