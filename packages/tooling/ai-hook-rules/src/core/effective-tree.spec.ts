@@ -635,10 +635,10 @@ describe('atRoot() emits a remedy that is runnable AND allowlisted', () => {
     });
 
     it('produces a line the L0 allowlist ACCEPTS — the round trip that matters', () => {
-        expect(isAllowed('Bash', atRoot(spaced, 'pnpm install'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm install'), '', 'claude-code')).toBe('allow');
         // `git fetch origin main`, NOT `git pull origin main`: the pull left the L0 allowlist (audit
         // finding C6) because a terminal entry for it short-circuited redirect-how-to-merge-main.
-        expect(isAllowed('Bash', atRoot(spaced, 'git fetch origin main'), '')).toBe('allow');
-        expect(isAllowed('Bash', atRoot(spaced, 'pnpm exec wp-upgrade-shim'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'git fetch origin main'), '', 'claude-code')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm exec wp-upgrade-shim'), '', 'claude-code')).toBe('allow');
     });
 });

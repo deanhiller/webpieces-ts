@@ -11,7 +11,7 @@ import { L0_SHIM_STREAM } from '../core/log-streams';
  * THE sh ↔ JS TWIN LOCK for the tools L0 has nothing to judge.
  *
  * L0 has two enforcement points that must answer the identical question: the rendered POSIX-sh shim,
- * which decides D/X/U/K before the guard bin runs, and `isAllowed()` in this binary, which decides S/C/Y
+ * which decides D/X/U/K before the guard bin runs, and `isAllowed(, 'claude-code')` in this binary, which decides S/C/Y
  * after it. A disagreement is invisible — one half allows, the other denies, and which one you meet
  * depends on which fault happens to be up. So the two are driven over one corpus here, the sh half
  * through a REAL /bin/sh rather than a re-implementation (a re-implementation is a third answer, and a
@@ -47,7 +47,7 @@ function shimVerdict(toolName: string, toolInput: Record<string, string>): ShimV
 
 describe('the ignored-tool twins agree, tool by tool', () => {
     it.each([...L0_IGNORED_TOOLS])('%s: both halves PASS it while the guards are down', (toolName: string) => {
-        expect(isAllowed(toolName, '', '')).toBe('pass');
+        expect(isAllowed(toolName, '', '', 'claude-code')).toBe('pass');
         const verdict = shimVerdict(toolName, {});
         expect(verdict.denied, `${toolName} was DENIED by the sh half`).toBe(false);
         expect(verdict.log).toContain('ALLOW-IGNORED');
@@ -60,7 +60,7 @@ describe('the ignored-tool twins agree, tool by tool', () => {
      */
     it('apply_patch is NOT ignored: both halves fail closed on it', () => {
         expect(L0_IGNORED_TOOLS.has('apply_patch')).toBe(false);
-        expect(isAllowed('apply_patch', '*** Begin Patch\n*** Add File: a.ts\n+a\n*** End Patch', '')).toBeNull();
+        expect(isAllowed('apply_patch', '*** Begin Patch\n*** Add File: a.ts\n+a\n*** End Patch', '', 'claude-code')).toBeNull();
         const verdict = shimVerdict('apply_patch', { command: '*** Begin Patch\\n*** Add File: a.ts\\n+a\\n*** End Patch' });
         expect(verdict.denied).toBe(true);
         expect(verdict.log).toContain('\tDENY\t');
@@ -72,7 +72,7 @@ describe('the ignored-tool twins agree, tool by tool', () => {
      * Codex tool is waved past every fault on the day it ships.
      */
     it('an unrecognised tool is NOT ignored — L0 fails closed on what it has never seen', () => {
-        expect(isAllowed('some_future_codex_tool', 'rm -rf /', '')).toBeNull();
+        expect(isAllowed('some_future_codex_tool', 'rm -rf /', '', 'claude-code')).toBeNull();
         expect(shimVerdict('some_future_codex_tool', { command: 'rm -rf /' }).denied).toBe(true);
     });
 });

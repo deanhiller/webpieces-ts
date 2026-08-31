@@ -185,14 +185,14 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
     it('row 5: the remedy the runner actually emits is accepted by the L0 allowlist', () => {
         // atRoot() is what gitFromSubdirBlock prints. For an L0-listed command it must survive the
         // outermost layer too, or the cure is untypable while a tooling fault is up.
-        expect(isAllowed('Bash', atRoot('/repo', 'git status'), '')).not.toBeNull();
+        expect(isAllowed('Bash', atRoot('/repo', 'git status'), '', 'claude-code')).not.toBeNull();
     });
 
     // Use case 11 states this out loud: `cd <root> && git push` is NOT allowed onward — it earns the
     // push guard's real answer, one turn later, by design. Pinned so nobody "fixes" the L0 allowlist to
     // make row 5's cure universally passable.
     it('does not promise the cure passes the LATER guards — `git push` is still not L0-allowed', () => {
-        expect(isAllowed('Bash', atRoot('/repo', 'git push'), '')).toBeNull();
+        expect(isAllowed('Bash', atRoot('/repo', 'git push'), '', 'claude-code')).toBeNull();
     });
 
     it('row 8: the cure is prose, and the guard names it verbatim in the deny', () => {

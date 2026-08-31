@@ -13,6 +13,7 @@ import {
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
     ADD_HOOK_PKG_CMD, HOOK_PKG, WORKSPACE_MANIFEST, PACKAGE_MANIFEST,
 } from './l0-allowlist';
+import { CODEX_READ_STILL_ALLOWED, L0_CODEX_ALLOW_ERE_SH } from './l0-codex-read';
 import { L0_IGNORED_TOOLS_SH } from './l0-ignored-tools';
 import { AI_TYPE_SH } from '../adapters/detect-ai';
 import { WP_LOG_SH } from './shim-audit-log';
@@ -27,6 +28,9 @@ export * from './l0-allowlist';
 // READ_TOOLS) and the tool-shaped set it consults. ONE name to import L0 by, still.
 export * from './l0-decide';
 export * from './l0-ignored-tools';
+// …and the harness-GATED half, split out for the same size reason: it owns the read-shaped vocabulary
+// and the Codex-only union built from it. ONE name to import L0 by, still.
+export * from './l0-codex-read';
 // Same treatment for the audit-log fragment: one name to import the whole rendered shim by.
 export * from './shim-audit-log';
 
@@ -146,7 +150,7 @@ fi`;
 const ESCAPES_SH = `BS='\\'                      # one literal backslash, so no \\u001b / \\n escape sits in this source
 ESC="\${BS}u001b"           # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
 NL="\${BS}n"                # the 2 chars: backslash n — parsed as a real newline inside the JSON string
-WP_STILL_ALLOWED="Still allowed while this block is up:\${NL}  - any Read\${NL}  - any Write/Edit whose target is ${CONFIG_FILENAME}, ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST}\${NL}  - every command on the L0 allowlist, including the Fix Options below\${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."`;
+WP_STILL_ALLOWED="Still allowed while this block is up:\${NL}  - any Read, and ${CODEX_READ_STILL_ALLOWED}\${NL}  - any Write/Edit whose target is ${CONFIG_FILENAME}, ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST}\${NL}  - every command on the L0 allowlist, including the Fix Options below\${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
 //
@@ -288,6 +292,17 @@ esac
 if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE_SH}'; then
   wp_log "\$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
+fi
+# THE HARNESS-GATED TAIL OF THE SAME LIST, and the ONLY place \$AI changes a decision. Under Claude Code
+# the guard is false and the next line is the deny — byte for byte the path a Claude payload took before
+# this branch existed. Under Codex it is the twin of the ALLOW-READ arm above: Codex has NO Read tool, so
+# a read arrives as this Bash command, and without this every L0 fault denies a Codex session the very
+# reads the deny is telling it to perform. The pattern is anchored on its own (no cd prefix, no capture
+# tail) — see L0_CODEX_ALLOW_ERE. TERMINAL, exactly like the Read arm, and for the same reason: on this
+# path the bin never runs, so there is nothing to fall through to.
+if [ "\$AI" = codex ] && printf '%s' "\$CMD" | grep -Eq '${L0_CODEX_ALLOW_ERE_SH}'; then
+  wp_log "\$WP_FAULT" ALLOW-CODEX-READ
+  exit 0
 fi
 wp_log "\$WP_FAULT" "\$DENY_LABEL"  # every fail-closed block, with the fault that caused it`;
 

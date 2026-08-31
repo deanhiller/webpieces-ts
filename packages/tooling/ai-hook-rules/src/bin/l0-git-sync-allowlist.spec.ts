@@ -127,18 +127,18 @@ describe('checkout-main-pull allowlist (POSIX ERE ↔ JS regex twins)', () => {
 });
 
 /**
- * The same matrix through the UNION — `isAllowed()`, the single question sh and JS both ask. Per-entry
+ * The same matrix through the UNION — `isAllowed(, 'claude-code')`, the single question sh and JS both ask. Per-entry
  * twins can be right while the joined `L0_ALLOW_ERE` is wrong (an alternation swallowing a neighbour is
  * exactly how a removed entry stays reachable), so the removal is asserted where the decision is made.
  */
 describe('THE L0 union agrees: fetch and the on-main sync in, every other pull out', () => {
     it.each([['git fetch'], ['git fetch --prune origin main'], [CHECKOUT_MAIN_PULL_CMD]])(
         'allows %s', (cmd: string) => {
-            expect(isAllowed('Bash', cmd, '')).toBe('allow');
+            expect(isAllowed('Bash', cmd, '', 'claude-code')).toBe('allow');
         });
 
     it.each([['git pull'], ['git pull origin main'], ['git checkout feat && git pull origin main']])(
         'refuses %s', (cmd: string) => {
-            expect(isAllowed('Bash', cmd, '')).toBeNull();
+            expect(isAllowed('Bash', cmd, '', 'claude-code')).toBeNull();
         });
 });

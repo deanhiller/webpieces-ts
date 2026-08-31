@@ -105,6 +105,7 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
 | 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
 | 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

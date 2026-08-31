@@ -17,21 +17,21 @@ import { CONFIG_FILENAME } from '../core/load-config';
 describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shim', () => {
     it('passes ANY Read through (you must read to know how to fix)', () => {
         // A read carries no command; even an unrelated path is let through.
-        expect(shimStaleRecoveryDecision('Read', '', '/repo/src/anything.ts')).toBe('pass');
-        expect(shimStaleRecoveryDecision('Read', '', '')).toBe('pass');
+        expect(shimStaleRecoveryDecision('Read', '', '/repo/src/anything.ts', 'claude-code')).toBe('pass');
+        expect(shimStaleRecoveryDecision('Read', '', '', 'claude-code')).toBe('pass');
     });
 
     it('allows the three Bash cures directly (allow-cure), including the 2>&1 | tail spelling', () => {
         for (const cmd of [INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD, `${INSTALL_HOOKS_CMD} 2>&1 | tail -20`]) {
-            expect(shimStaleRecoveryDecision('Bash', cmd, ''), `cure: ${cmd}`).toBe('allow-cure');
+            expect(shimStaleRecoveryDecision('Bash', cmd, '', 'claude-code'), `cure: ${cmd}`).toBe('allow-cure');
         }
     });
 
     it('passes an edit to webpieces.config.json through (the always-allowed recovery target)', () => {
         for (const tool of ['Write', 'Edit', 'MultiEdit']) {
-            expect(shimStaleRecoveryDecision(tool, '', `/repo/${CONFIG_FILENAME}`), `${tool} at root`).toBe('pass');
+            expect(shimStaleRecoveryDecision(tool, '', `/repo/${CONFIG_FILENAME}`, 'claude-code'), `${tool} at root`).toBe('pass');
             // basename match, so a config in a subdir/nested clone is recognised too.
-            expect(shimStaleRecoveryDecision(tool, '', path.join('/repo/packages/app', CONFIG_FILENAME)), `${tool} nested`).toBe('pass');
+            expect(shimStaleRecoveryDecision(tool, '', path.join('/repo/packages/app', CONFIG_FILENAME), 'claude-code'), `${tool} nested`).toBe('pass');
         }
     });
 
@@ -48,12 +48,12 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
         fs.writeFileSync(path.join(root, CONFIG_FILENAME), '{}\n');
         for (const tool of ['Write', 'Edit', 'MultiEdit']) {
             for (const name of ['pnpm-workspace.yaml', 'package.json']) {
-                expect(shimStaleRecoveryDecision(tool, '', path.join(root, name)), `${tool} ${name}`).toBe('pass');
+                expect(shimStaleRecoveryDecision(tool, '', path.join(root, name), 'claude-code'), `${tool} ${name}`).toBe('pass');
             }
         }
         // …and a project manifest, which has no config beside it, is NOT on the list.
         fs.mkdirSync(path.join(root, 'packages', 'lib'), { recursive: true });
-        expect(shimStaleRecoveryDecision('Edit', '', path.join(root, 'packages', 'lib', 'package.json'))).toBe('deny');
+        expect(shimStaleRecoveryDecision('Edit', '', path.join(root, 'packages', 'lib', 'package.json'), 'claude-code')).toBe('deny');
     });
 
     it('denies all OTHER work: a chained cure, an unrelated command, and edits to other files', () => {
@@ -66,7 +66,7 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
             ['MultiEdit', '', '/repo/src/Config.ts'],                  // NOT webpieces.config.json
         ];
         for (const [tool, cmd, file] of deny) {
-            expect(shimStaleRecoveryDecision(tool, cmd, file), `${tool} ${cmd} ${file}`).toBe('deny');
+            expect(shimStaleRecoveryDecision(tool, cmd, file, 'claude-code'), `${tool} ${cmd} ${file}`).toBe('deny');
         }
     });
 });

@@ -23,7 +23,7 @@ import * as path from 'path';
  *
  * A match does NOT replace the bash guards — the caller runs BOTH, and either may deny.
  */
-const READ_COMMANDS: ReadonlySet<string> = new Set(['cat', 'head', 'tail', 'less', 'more', 'bat']);
+export const READ_COMMANDS: ReadonlySet<string> = new Set(['cat', 'head', 'tail', 'less', 'more', 'bat']);
 
 /** Shell syntax that makes a command more than one command, or redirects it. Any hit ⇒ not a read. */
 const NOT_ONE_COMMAND = /[;|&`<>]|\$\(/;
@@ -31,8 +31,19 @@ const NOT_ONE_COMMAND = /[;|&`<>]|\$\(/;
 /** Flags that consume the FOLLOWING token as their value, so it is never mistaken for a file. */
 const VALUE_FLAGS: ReadonlySet<string> = new Set(['-n', '-c', '-b', '-e', '-f']);
 
-/** The only `sed` script shape that is a read: a line range printed with `-n`. */
-const SED_RANGE = /^\d+(,\d+)?p$/;
+/**
+ * The only `sed` script shape that is a read: a line range printed with `-n` — as a regex BODY, so the
+ * L0 allowlist's ERE twin can be built from the same characters instead of retyping them.
+ *
+ * EXPORTED for `bin/l0-allowlist.ts`. The L0 entry that lets a Codex session read its way out of an L0
+ * fault has to mean the same thing as this module or the two definitions of "read-shaped" drift, and a
+ * drifted L0 entry is either a hole or a deadlock. It cannot literally CALL this module — L0's sh half
+ * has no JS at all — so the shared thing is the vocabulary, and `codex-l0-read.spec.ts` asserts the two
+ * agree over a corpus.
+ */
+export const SED_RANGE_BODY = '[0-9]+(,[0-9]+)?p';
+
+const SED_RANGE = new RegExp('^' + SED_RANGE_BODY + '$');
 
 export class ShellReadParity {
     /**

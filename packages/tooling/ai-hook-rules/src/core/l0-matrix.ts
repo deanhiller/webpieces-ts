@@ -4,6 +4,7 @@ import {
     ADD_HOOK_PKG_CMD, CHECKOUT_MAIN_PULL_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call,
     L0_ALLOWLIST, RECOVERY_CMD, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
 } from '../bin/shim';
+import { CODEX_READ_STILL_ALLOWED } from '../bin/l0-codex-read';
 import { ENV_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import {
@@ -115,7 +116,7 @@ export const CONFIG_MISSING_REPORT = [
     `    → ${l0MatrixCitation(L0_FAULT_CONFIG_MISSING)}`,
     '',
     'Still allowed while this block is up:',
-    '  - any Read',
+    `  - any Read, and ${CODEX_READ_STILL_ALLOWED}`,
     `  - any Write/Edit whose target is ${CONFIG_FILENAME}`,
     '  - every command on the L0 allowlist, including the Fix Options below',
     '  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human.',
