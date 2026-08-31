@@ -57,7 +57,8 @@ class EndpointPlan {
  *
  * It owns:
  * - @ApiPath / @PubSub convention validation + the endpoint plans from the contract's decorators
- * - Resolving the callee's base URL from svcName (ClientRegistry override, else GCP derivation)
+ * - Resolving the callee's base URL from svcName through `ClientRegistry.resolve` — the SAME chain the
+ *   RPC client runs: a registered mapping, else the installed deriver, else throw
  * - Context propagation onto the task headers (a credential is never a context key, so none can ride along)
  * - Handing a fully-built TaskRequest to the bound {@link TaskInvoker}
  */
