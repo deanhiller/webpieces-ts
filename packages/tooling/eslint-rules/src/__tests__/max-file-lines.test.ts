@@ -58,6 +58,22 @@ ruleTester.run('max-file-lines', rule, {
         {
             code: '',
         },
+        // MACHINE-GENERATED trees are exempt with no configuration — a 43,000-line codegen output
+        // must not block a PR that merely touched it (the same floor both other engines apply).
+        {
+            code: Array(43000).fill(0).map((_, i) => `const line${i} = ${i};`).join('\n'),
+            filename: '/repo/services/public-api/src/__generated__/graphql.ts',
+        },
+        {
+            code: Array(43000).fill(0).map((_, i) => `const line${i} = ${i};`).join('\n'),
+            filename: '/repo/services/orders/src/schema.generated.ts',
+        },
+        // An explicit allowedPaths glob exempts a tree this repo did not author.
+        {
+            code: Array(2000).fill(0).map((_, i) => `const line${i} = ${i};`).join('\n'),
+            filename: '/repo/vendor/sdk/client.ts',
+            options: [{ max: 700, allowedPaths: ['**/vendor/**'] }],
+        },
         // File with comments and blank lines (all count)
         {
             code: `// Comment line 1
@@ -73,6 +89,20 @@ function func() {
     ],
 
     invalid: [
+        // A hand-written file OUTSIDE every exempt glob is still protected — that protection is the
+        // whole point, and the exemption must not weaken it.
+        {
+            code: Array(1500).fill(0).map((_, i) => `const line${i} = ${i};`).join('\n'),
+            filename: '/repo/services/orders/src/OrderService.ts',
+            errors: [{ messageId: 'tooLong', data: { actual: '1500', max: '700' } }],
+        },
+        // allowedPaths on a SIBLING tree does not exempt it either.
+        {
+            code: Array(1500).fill(0).map((_, i) => `const line${i} = ${i};`).join('\n'),
+            filename: '/repo/services/orders/src/OrderService.ts',
+            options: [{ max: 700, allowedPaths: ['**/vendor/**'] }],
+            errors: [{ messageId: 'tooLong', data: { actual: '1500', max: '700' } }],
+        },
         // File with 701 lines (exceeds default limit)
         {
             code: Array(701)

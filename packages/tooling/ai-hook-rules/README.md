@@ -114,7 +114,9 @@ and per-line opt-outs use `// webpieces-disable <rule> -- reason`.
 ## Starter rules
 
 - `no-any` — disallow the `any` keyword
-- `max-file-lines` — cap file length
+- `max-file-lines` — cap file length (machine-generated trees — `**/__generated__/**`, `**/generated/**`,
+  `**/*.generated.ts(x)`, `dist` — are exempt with no configuration; `allowedPaths` adds your own
+  un-authored trees to that list, and is never for hand-written code)
 - `file-location` — every `.ts` must belong to a project's `src/`
 - `no-destructure` — use explicit property access
 - `require-return-type` — every function declares its return type

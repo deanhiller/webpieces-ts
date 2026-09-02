@@ -151,9 +151,37 @@ export class MyController {
 }
 ```
 
+## MACHINE-GENERATED files are exempt — do NOT refactor them, and do NOT turn the rule off
+
+A codegen output (a `graphql-codegen` client preset, a schema dump, a compiled bundle) is long because
+of an upstream schema nobody in this repo owns. "Refactor it" is not advice there, and the fix is NOT
+`turnOffRuleUntilEpoch` — that is a GLOBAL off-switch that also stops the rule on hand-written code,
+i.e. it removes the protection exactly when a real 1,500-line service class can slip in.
+
+These trees are exempt with **no configuration at all**:
+
+```
+**/__generated__/**   **/generated/**   **/*.generated.ts   **/*.generated.tsx   dist
+```
+
+For any other tree the repo does not author, add it to `allowedPaths` — which ADDS to the list above
+rather than replacing it:
+
+```jsonc
+"max-file-lines": {
+  "limit": 900,
+  "mode": "NEW_AND_MODIFIED_FILES",
+  "disableAllowed": false,
+  "allowedPaths": ["**/__generated__/**", "libraries/vendor-sdk/**"]
+}
+```
+
+**Never list hand-written code in `allowedPaths`.** It is for files whose size is not yours to
+control; a long file you wrote gets refactored, per the rest of this doc.
+
 ## Escape Hatch
 
-If refactoring is genuinely not feasible (generated files, complex algorithms, etc.),
+If refactoring is genuinely not feasible (a complex algorithm that truly cannot be split),
 add a disable comment at the TOP of the file (within first 5 lines) with a DATE:
 
 ```typescript

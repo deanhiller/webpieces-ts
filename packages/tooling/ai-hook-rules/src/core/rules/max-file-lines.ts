@@ -1,4 +1,4 @@
-import { MaxFileLinesConfig, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
+import { MaxFileLinesConfig, writeTemplateIfMissing, RepoRootFinder, isPathExcluded, GENERATED_CODE_PATHS, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -13,18 +13,23 @@ export class MaxFileLinesRule extends FileRuleBase<MaxFileLinesConfig> {
 
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    override readonly defaultOptions = { limit: DEFAULT_LIMIT };
+    override readonly defaultOptions = { limit: DEFAULT_LIMIT, allowedPaths: [] };
     get fixHint(): FixHint {
         return new FixHint(
             'File exceeds the max-file-lines limit.',
-            'Refactor to reduce the file size — READ the instruct-ai doc at the absolute path on the violation line above.',
-            [],
+            'Pick one:',
+            [
+                new Option('Refactor to reduce the file size — READ the instruct-ai doc at the absolute path on the violation line above.', true),
+                new Option('If this file is MACHINE-GENERATED and its size is not yours to control, add its tree to max-file-lines.allowedPaths in webpieces.config.json (the generated trees in GENERATED_CODE_PATHS are already exempt with no config at all). Never do this for hand-written code.'),
+            ],
             new DisableEscape(this.config.disableAllowed ?? true, '// eslint-disable-next-line @webpieces/max-file-lines  (also suppresses the eslint rule)'),
         );
     }
 
     check(ctx: FileContext): readonly Violation[] {
         const limit = this.config.limit ?? DEFAULT_LIMIT;
+        // Machine-generated trees are exempt unconditionally; allowedPaths ADDS to that floor.
+        if (isPathExcluded(ctx.relativePath, [...GENERATED_CODE_PATHS, ...(this.config.allowedPaths ?? [])])) return [];
         if (ctx.projectedFileLines <= limit) return [];
         writeTemplateIfMissing(ctx.workspaceRoot, INSTRUCT_FILE);
         const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);

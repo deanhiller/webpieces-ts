@@ -113,15 +113,27 @@ export class MaxMethodLinesConfig extends BaseRuleConfig {
     };
 }
 
+// max-file-lines — caps a file's line count.
+//
+// `allowedPaths` exempts whole file trees, matched with the shared `isPathExcluded` glob/prefix/segment
+// semantics (the same field, same matcher and same meaning as no-function-outside-class / no-js-files /
+// no-destructure). It is for files the repo did NOT author and cannot shrink — never a standing amnesty
+// for hand-written code, which is what the inline disable and a refactor are for.
+//
+// The machine-generated trees in GENERATED_CODE_PATHS are exempt WITHOUT configuration, and
+// `allowedPaths` ADDS to that floor rather than replacing it — see generated-code-paths.ts for why a
+// 42,000-line graphql-codegen output must not be able to cost a repo the whole rule.
 export class MaxFileLinesConfig extends BaseRuleConfig {
     declare mode?: FileLimitMode;
     limit?: number;
     disableAllowed?: boolean;
+    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<MaxFileLinesConfig> = {
         mode: new FieldDef('string', FILE_LIMIT_MODES),
         limit: FieldDef.optional('number'),
         disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
 }

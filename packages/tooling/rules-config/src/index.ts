@@ -42,6 +42,9 @@ export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths, isWebpiecesStateDir } from './exclude-hook-paths';
 export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
+// The machine-generated trees a line-count rule never fires on. A FLOOR, not a default value:
+// `max-file-lines.allowedPaths` adds to it, so configuring your own tree cannot lose it.
+export { GENERATED_CODE_PATHS } from './generated-code-paths';
 // THE one `no-custom-css` path exemption. Both engines that enforce the rule (the edit-time hook and the
 // CI validator) consult this class, so `allowGlobs` cannot be honoured by one half and ignored by the other.
 export { NoCustomCssScope } from './no-custom-css-scope';
