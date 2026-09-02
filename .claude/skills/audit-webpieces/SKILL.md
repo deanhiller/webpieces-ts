@@ -49,8 +49,8 @@ specific number — never `cat` it.
 
 Timing: ~3s per repo. `--no-npm` skips the one network call. `--max-sessions N` caps transcript scan.
 
-Subcommands exist individually (`guards`, `isolation`, `transcripts`, `skew`, `docdrift`, `matrix`,
-`merges`) when Dean asks about one area only. `builds_ledger.py` is a separate script because its
+Subcommands exist individually (`guards`, `isolation`, `transcripts`, `parity`, `skew`, `docdrift`,
+`matrix`, `merges`) when Dean asks about one area only. `builds_ledger.py` is a separate script because its
 source is the one piece of webpieces state that is NOT per-repo — see Step 2b.
 
 ## Step 2b — the machine-wide build ledger
@@ -127,7 +127,8 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 
 | Area | Signal | Where it comes from |
 |---|---|---|
-| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl` |
+| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | Claude transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl`; Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
+| Codex parity | per-surface `claude_hits` vs `codex_hits` across all five streams, and the whole-harness verdict. **A rule with Claude traffic and ZERO Codex traffic is a coverage hole** — the detector for a tool-name mapping we got wrong | all five guard streams' `ai=` field |
 | Guard cycles | block rate, **consecutive blocks on one rule in one session**, **same cure prescribed ≥4×**, non-`-` fault codes | `<repo>/.webpieces/logs/L2-decisions/`, `rejections/` |
 | Stale-main health | `stale_main_health` — per session: did `localMain=` ADVANCE (the block worked) or repeat (the cure is not taking), plus `kinds` splitting the blocks into prevented-a-stale-read / cure-bundled-with-`&&` / cure-bundled-with-`;` / off-repo, and `blocks_that_bought_nothing` | `L2-decisions/` `localMain=`/`originMain=` |
 | Isolation | worktrees with no `logs/` of their own, **commands run inside a worktree judged with `root=` the primary tree**, L0 `shim=` vs L1 `root=` disagreement, build.log in two trees | `L0-shim/`, `L1-location/` |
@@ -136,6 +137,25 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 | Build ledger | **killed-and-re-run builds**, **overlapping builds** (max concurrent, overlapped minutes), orphaned STARTs with a dead pid, repeat builds of one repo+branch, duration outliers, ad-hoc vs gate `by=` split | `~/.webpieces/builds.log` (+ rotated `.1`…`.5`) — MACHINE-wide, not per repo |
 | 3-point merges | branches re-merged 3+ times, merges staged in `index.json` but never finalized, CONFLICT with no later FINALIZE, conflict files, orphan `staged/` dirs | `.webpieces/merge-info/index.json`, `logs/branch-mutations.log` |
 | Doc drift | paths quoted in CLAUDE.md / `.webpieces/instruct-ai/*.md` / `.claude/**/*.md` / user skills that **do not exist**, with a dedicated `build.log` path check | filesystem |
+
+### The two harnesses
+
+Every guard row carries a trailing `ai=` field, so every metric above has a per-harness twin
+(`guards.by_ai`, `transcripts.totals_by_harness`) and `digest.py` prints the two side by side.
+Four things to hold on to:
+
+- The values are the `AiType` union's own strings: **`claude-code` and `codex`**, never `claude`.
+- A row with no `ai=` predates the field and reads as **`unknown`** — a real value, not a gap. Do
+  not fold it into either harness.
+- **Thresholds are applied PER HARNESS, against that harness's own denominator.** A harness under
+  `MIN_DECISIONS_FOR_RATE` is marked `low_sample` and gets no verdict, so a young Codex sample is
+  never reported as a regression.
+- **Codex sessions with ZERO guard rows is the finding to look for**, not zero blocks. Codex
+  transcripts are flat by date with no per-project directory, so they are selected by
+  `session_meta.payload.cwd`; sessions present in `~/.codex/sessions` for a repo whose guard logs
+  show no `ai=codex` rows means the hooks never ran — the one-keystroke "Continue without trusting
+  (hooks won't run)" path, or a matcher that matches nothing. It looks exactly like peace and quiet
+  in every total.
 
 Guard logs and transcripts **join on session id** — guard log filenames are
 `<sessionId>-<callId>-guards.log`, and the transcript is `<sessionId>.jsonl`. Use that to turn "76

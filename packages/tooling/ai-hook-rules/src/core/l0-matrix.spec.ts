@@ -5,7 +5,7 @@ import { CONFIG_FILENAME, loadTemplate } from '@webpieces/rules-config';
 
 import {
     L0AllowEntry, L0Call, L0_ALLOWLIST, L0_ALLOW_ERE, L0_ALLOW_JS, L0_CURE_ALLOW_JS,
-    CD_PREFIX_JS_SRC, CAPTURE_TAIL_JS_SRC, CODEX_READ_CMD, isAllowed,
+    CD_PREFIX_JS_SRC, CAPTURE_TAIL_JS_SRC, CODEX_READ_CMD, isAllowed, EVERY_HARNESS,
 } from '../bin/shim';
 import { ShimTestkit } from '../bin/shim-testkit';
 import { shimStaleRecoveryDecision } from '../adapters/hook-core';
@@ -16,13 +16,13 @@ import { L0Cure, L0Fault, L0_FAULTS, GUARD_MATRIX_DOC, renderGuardMatrixDoc, gua
 import { AiType } from './agent-event';
 
 /**
- * WHICH HARNESS a sample must be judged as. An entry gated on `aiType` is unreachable from any other
+ * WHICH HARNESS a sample must be judged as. An entry gated on one harness is unreachable from any other
  * harness by construction, so driving its samples as `claude-code` would assert the opposite of what
  * the entry says. Ungated entries — and every NOT_ALLOWED case, the row that must not move — are
  * driven as `claude-code`.
  */
 function harnessOf(entry: L0AllowEntry): AiType {
-    return entry.aiType ?? 'claude-code';
+    return entry.harness === EVERY_HARNESS ? 'claude-code' : entry.harness;
 }
 
 const kit = new ShimTestkit();
@@ -153,7 +153,7 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
      * `isAllowed` decides the fault-S carve-out through `shimStaleRecoveryDecision` as well.
      */
     it('answers null for a gated entry`s samples under any OTHER harness', () => {
-        const gated = L0_ALLOWLIST.filter((e: L0AllowEntry): boolean => e.aiType !== null);
+        const gated = L0_ALLOWLIST.filter((e: L0AllowEntry): boolean => e.harness !== EVERY_HARNESS);
         expect(gated.length, 'this test is vacuous with no gated entry').toBeGreaterThan(0);
         for (const entry of gated) {
             for (const s of entry.allSamples()) {

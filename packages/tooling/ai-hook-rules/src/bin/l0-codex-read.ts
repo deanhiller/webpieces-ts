@@ -11,8 +11,8 @@ import { READ_COMMANDS, SED_RANGE_BODY } from '../core/shell-read-parity';
 // message is telling it to perform. That is a hard deadlock, and it is the exact failure class this
 // whole module exists to remove.
 //
-// So this entry is entry 1's twin for the other harness, and it is GATED ON `aiType` (see
-// L0AllowEntry.aiType). A Claude payload can never reach it — Claude already has `Read`, and widening
+// So this entry is entry 1's twin for the other harness, and it is GATED ON its harness (see
+// L0AllowEntry.harness). A Claude payload can never reach it — Claude already has `Read`, and widening
 // L0's Bash surface for a harness that does not need it is a change to the one behaviour that must not
 // change. `codex-l0-read.spec.ts` proves the unreachability rather than asserting it in a comment.
 //

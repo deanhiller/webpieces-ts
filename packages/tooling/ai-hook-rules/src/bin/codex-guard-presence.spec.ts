@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces, Option } from '@webpieces/rules-config';
 
 import { CodexGuardPresence, CodexSessionDetector } from './codex-guard-presence';
 import { L0_SHIM_STREAM } from '../core/log-streams';
@@ -75,7 +75,7 @@ describe('CodexSessionDetector — the fingerprints are MEASURED, including the 
 });
 
 describe('CodexGuardPresence', () => {
-    const presence = new CodexGuardPresence();
+    const presence = new CodexGuardPresence(new CodexSessionDetector());
 
     it('BLOCKS a Codex session that produced zero L0 shim rows', () => {
         const verdict = presence.check(root, CODEX_ENV);
@@ -85,14 +85,29 @@ describe('CodexGuardPresence', () => {
     });
 
     /**
-     * The refusal names BOTH causes, because they have different cures and an agent handed only one will
-     * run it, see nothing change, and conclude the check is broken.
+     * BOTH causes, because they have different cures and an agent handed only one will run it, see
+     * nothing change, and conclude the check is broken.
+     *
+     * They are `Option`s on the verdict, not "Fix:" lines inside `reason` — the ONE top-level handler
+     * renders a cure list, and hand-numbering one in a string literal is an automatic review reject. So
+     * this asserts the STRUCTURE as well as the text: two options, the likelier one marked preferred.
      */
-    it('names the untrusted-prompt cause AND the wrong-matcher cause, each with its own cure', () => {
-        const reason = presence.check(root, CODEX_ENV).reason;
-        expect(reason).toContain('Continue without trusting');
-        expect(reason).toContain('Trust all');
-        expect(reason).toContain('wp-install-ai-hooks --target=project');
+    it('offers the untrusted-prompt cure AND the wrong-matcher cure, as Options', () => {
+        const verdict = presence.check(root, CODEX_ENV);
+        expect(verdict.cures).toHaveLength(2);
+        const text = verdict.cures.map((o: Option): string => o.text).join('\n');
+        expect(text).toContain('Continue without trusting');
+        expect(text).toContain('Trust all');
+        expect(text).toContain('wp-install-ai-hooks --target=project');
+        // The reason carries the EVIDENCE and no cure — the two halves must not both tell the story.
+        expect(verdict.reason).not.toContain('wp-install-ai-hooks');
+    });
+
+    /** Both green paths carry no cures at all: there is nothing to fix. */
+    it('offers no cures on either green path', () => {
+        writeShimRows(1);
+        expect(presence.check(root, CODEX_ENV).cures).toEqual([]);
+        expect(presence.check(root, PLAIN_ENV).cures).toEqual([]);
     });
 
     it('ALLOWS a Codex session once the shim has written even one row', () => {

@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces } from '@webpieces/rules-config';
+import { injectable, bindingScopeValues } from 'inversify';
+
+import { dotWebpieces, Option } from '@webpieces/rules-config';
 
 import { L0_SHIM_STREAM } from '../core/log-streams';
 import { toError } from '../core/to-error';
@@ -29,11 +31,16 @@ import { toError } from '../core/to-error';
  * It is deliberately a count of rows and not a check of any row's content: what is being attested is
  * that the hook EXECUTED, not what it decided.
  *
- * ─── Scope, stated honestly ───────────────────────────────────────────────────────────────────────
- * This is a REUSABLE CHECK, not yet a gate. `check()` returns a verdict and a message; wiring it into
- * `wp-build` and the PR gate's build stage is a follow-up, because the build path lives in a different
- * published package (`@webpieces/pr-gate`) and a half-wired gate — one that detects but never blocks —
- * would be worse than none: it would read as coverage nobody has.
+ * ─── Where it is WIRED ────────────────────────────────────────────────────────────────────────────
+ * `BuildAffected.runBuildGate` (@webpieces/pr-gate) calls it before resolving the build command, so ALL
+ * THREE build entry points are covered by one call: `wp-build`, stage ② (`wp-review-upsert-pr`) and
+ * stage ③ (`wp-finish-upsert-pr`). Attesting at the build is the right place because the build is the
+ * moment a session's work is about to be claimed as verified — an unguarded session that never builds
+ * has produced nothing to trust.
+ *
+ * It BLOCKS, and blocking is the whole point. This check was deliberately shipped detached for one
+ * release rather than half-wired, because a check that detects and never refuses reads as coverage
+ * nobody actually has.
  */
 
 /**
@@ -48,6 +55,7 @@ import { toError } from '../core/to-error';
  * silently answer "not Codex" — which for a check that BLOCKS on absence of evidence is the dangerous
  * direction: it would turn an unguarded session into an unchecked one.
  */
+@injectable(bindingScopeValues.Singleton)
 export class CodexSessionDetector {
     /** The env keys that identify a Codex-managed process. */
     static readonly ENV_KEYS: readonly string[] = ['CODEX_MANAGED_BY_NPM', 'CODEX_MANAGED_PACKAGE_ROOT'];
@@ -65,7 +73,14 @@ export class CodexSessionDetector {
     }
 }
 
-/** The answer, with the sentence a human or an agent reads. Data-only → a class, per CLAUDE.md. */
+/**
+ * The answer, with the sentence a human or an agent reads. Data-only → a class, per CLAUDE.md.
+ *
+ * `cures` are `Option`s rather than "Fix:" lines inside `reason`, because the ONE top-level handler
+ * owns the rendering of a cure list — a hand-numbered list in a string literal is an automatic review
+ * reject, and it also means the two cures could not be re-ordered or counted by anything but a human
+ * reading prose. Empty on both green paths: there is nothing to fix.
+ */
 export class GuardPresenceVerdict {
     constructor(
         /** True ⇒ the caller may proceed. False ⇒ BLOCK: a Codex session ran with no guard rows. */
@@ -74,6 +89,8 @@ export class GuardPresenceVerdict {
         readonly reason: string,
         /** How many L0 shim rows this tree has for the session under attestation. */
         readonly rows: number,
+        /** What to DO about it, for the caller to hand to RuleFailError. Empty when `ok`. */
+        readonly cures: readonly Option[] = [],
     ) {}
 }
 
@@ -83,8 +100,11 @@ export class GuardPresenceVerdict {
  * Outside a Codex session it is a no-op that says so, which is what makes it safe to call
  * unconditionally from a shared build path.
  */
+@injectable(bindingScopeValues.Singleton)
 export class CodexGuardPresence {
-    private readonly detector = new CodexSessionDetector();
+    // Injected BY TYPE — no Symbol token, per CLAUDE.md's DI convention. The detector is a separate
+    // class because "is this Codex?" is a question other callers ask without wanting the attestation.
+    constructor(private readonly detector: CodexSessionDetector) {}
 
     /**
      * `root` is the tree whose `.webpieces` logs are the evidence — the same root every other webpieces
@@ -98,26 +118,38 @@ export class CodexGuardPresence {
         if (rows > 0) {
             return new GuardPresenceVerdict(true, `Codex session with ${String(rows)} L0 guard row(s) — the guards ran`, rows);
         }
-        return new GuardPresenceVerdict(false, this.refusal(root), 0);
+        return new GuardPresenceVerdict(false, this.refusal(root), 0, CodexGuardPresence.CURES);
     }
 
     /**
-     * The refusal text. It names the two causes that produce this identical symptom, because they have
-     * DIFFERENT cures and an agent handed only one of them will run it, see nothing change, and conclude
-     * the check is broken.
+     * BOTH cures, always both, in likelihood order.
+     *
+     * Two unrelated failures produce this one symptom, and they have DIFFERENT fixes — an agent handed
+     * only the likelier one will run it, see nothing change, and conclude the check is broken. So the
+     * list is fixed rather than guessed at: nothing observable at build time distinguishes "the human
+     * declined the trust prompt" from "the matcher names a tool Codex never emits".
+     */
+    static readonly CURES: readonly Option[] = [
+        new Option(
+            'You answered "Continue without trusting (hooks won\'t run)" at Codex\'s hook prompt.\n'
+            + 'Restart `codex` in this repo and choose "Trust all".',
+            true),
+        new Option(
+            '.codex/hooks.json registers a matcher Codex never emits, or a shim path that does not\n'
+            + 'resolve. Run EXACTLY: \'pnpm exec wp-install-ai-hooks --target=project\''),
+    ];
+
+    /**
+     * The refusal's EVIDENCE — what was measured and where. The cures are Options (above); this is only
+     * the finding, so the top-level handler renders the two halves in its own house style.
      */
     private refusal(root: string): string {
         return [
-            '❌ webpieces: this is a Codex session and NOT ONE guard has run in this tree.',
+            'This is a Codex session and NOT ONE guard has run in this tree.',
             '',
             `  no rows in ${path.join(dotWebpieces.logs(root), L0_SHIM_STREAM)}`,
             '    → the L0 shim writes one row per tool call on EVERY path, including the healthy one, so',
             '      zero rows means the PreToolUse hook never executed. Every tool call so far was unguarded.',
-            '',
-            '  Cause 1 (most likely): you answered "Continue without trusting (hooks won\'t run)" at Codex\'s',
-            '    hook prompt. Fix: restart `codex` in this repo and choose "Trust all".',
-            '  Cause 2: .codex/hooks.json registers a matcher Codex never emits, or a shim path that does',
-            '    not resolve. Fix: run EXACTLY: \'pnpm exec wp-install-ai-hooks --target=project\'',
         ].join('\n');
     }
 

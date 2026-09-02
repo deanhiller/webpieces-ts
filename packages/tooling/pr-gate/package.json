@@ -1,42 +1,43 @@
 {
-    "name": "@webpieces/pr-gate",
-    "version": "0.0.0-dev",
-    "description": "Gated PR system: 3-point squash-merge, merge validation gate, and red/yellow/green PR dashboard. Standalone scripts, no Nx dependency required.",
-    "type": "commonjs",
-    "main": "./src/index.js",
-    "files": [
-        "src/**/*"
-    ],
-    "author": "Dean Hiller",
-    "license": "Apache-2.0",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/deanhiller/webpieces-ts.git",
-        "directory": "packages/tooling/pr-gate"
+  "name": "@webpieces/pr-gate",
+  "version": "0.0.0-dev",
+  "description": "Gated PR system: 3-point squash-merge, merge validation gate, and red/yellow/green PR dashboard. Standalone scripts, no Nx dependency required.",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "files": [
+    "src/**/*"
+  ],
+  "author": "Dean Hiller",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deanhiller/webpieces-ts.git",
+    "directory": "packages/tooling/pr-gate"
+  },
+  "dependencies": {
+    "@inversifyjs/binding-decorators": "1.1.5",
+    "@webpieces/ai-hook-rules": "workspace:*",
+    "@webpieces/rules-config": "workspace:*",
+    "inversify": "7.10.4",
+    "reflect-metadata": "0.2.2"
+  },
+  "publishConfig": {
+    "bin": {
+      "wp-build": "./src/scripts/wp-build.js",
+      "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
+      "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
+      "wp-start-update": "./src/scripts/wp-start-update.js",
+      "wp-finish-update": "./src/scripts/wp-finish-update.js",
+      "wp-cleanup": "./src/scripts/wp-cleanup.js",
+      "wp-checkout-clean-main": "./src/scripts/wp-checkout-clean-main.js",
+      "wp-land-pr": "./src/scripts/wp-land-pr.js",
+      "wp-check-pr": "./src/scripts/wp-check-pr.js",
+      "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
+      "wp-push-dev": "./src/scripts/wp-push-dev.js",
+      "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js",
+      "wp-authorize": "./src/scripts/wp-authorize.js",
+      "wp-check-auth": "./src/scripts/wp-check-auth.js"
     },
-    "dependencies": {
-        "@webpieces/rules-config": "workspace:*",
-        "@inversifyjs/binding-decorators": "1.1.5",
-        "inversify": "7.10.4",
-        "reflect-metadata": "0.2.2"
-    },
-    "publishConfig": {
-        "bin": {
-            "wp-build": "./src/scripts/wp-build.js",
-            "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
-            "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
-            "wp-start-update": "./src/scripts/wp-start-update.js",
-            "wp-finish-update": "./src/scripts/wp-finish-update.js",
-            "wp-cleanup": "./src/scripts/wp-cleanup.js",
-            "wp-checkout-clean-main": "./src/scripts/wp-checkout-clean-main.js",
-            "wp-land-pr": "./src/scripts/wp-land-pr.js",
-            "wp-check-pr": "./src/scripts/wp-check-pr.js",
-            "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
-            "wp-push-dev": "./src/scripts/wp-push-dev.js",
-            "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js",
-            "wp-authorize": "./src/scripts/wp-authorize.js",
-            "wp-check-auth": "./src/scripts/wp-check-auth.js"
-        },
-        "access": "public"
-    }
+    "access": "public"
+  }
 }
