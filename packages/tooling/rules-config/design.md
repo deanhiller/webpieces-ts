@@ -14,7 +14,6 @@ appears in each root's tree.
 graph TD
     AtomicFile["AtomicFile"]
     BranchMutationLog["BranchMutationLog"]
-    ChecklistRefusalRenderer["ChecklistRefusalRenderer"]
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
@@ -38,7 +37,6 @@ graph TD
     MainSyncStatusService --> MainSyncFileStore
     MainSyncStatusService --> WorktreeService
     RepoRootFinder --> DotWebpieces
-    ReviewJsonService --> ChecklistRefusalRenderer
     ReviewJsonService --> DotWebpieces
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader

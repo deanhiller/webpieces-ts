@@ -9,15 +9,13 @@ import { CleanupOptions } from './commands/cleanup-options';
 import { CheckoutCleanMainCommand } from './commands/checkout-clean-main-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
-import { AuthorizeCommand } from './commands/authorize-command';
-import { CheckAuthCommand } from './commands/check-auth-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { PushDevStateStore } from './workflow/push-dev-state';
-import { CliArgSet, RepoRootFinder } from '@webpieces/rules-config';
+import { RepoRootFinder } from '@webpieces/rules-config';
 
 /**
  * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the command
@@ -37,8 +35,6 @@ export class PrGateApp {
         private readonly checkoutCleanMainCommand: CheckoutCleanMainCommand,
         private readonly landPrCommand: LandPrCommand,
         private readonly checkPrCommand: CheckPrCommand,
-        private readonly authorizeCommand: AuthorizeCommand,
-        private readonly checkAuthCommand: CheckAuthCommand,
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
         private readonly reapWorktreeCommand: ReapWorktreeCommand,
         private readonly buildCommand: BuildCommand,
@@ -147,19 +143,6 @@ export class PrGateApp {
     reviewUpsertPr(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
         this.assertNoResolveInProgress('wp-review-upsert-pr');
         return this.reviewUpsertPrCommand.run(opts);
-    }
-
-    /**
-     * `wp-authorize`: HUMAN ONLY — sign an authorization allowing one review checklist to be overridden.
-     * Reads from /dev/tty, so an agent cannot drive it. See AuthorizeCommand for why that is the mechanism.
-     */
-    authorize(args: CliArgSet): void {
-        this.authorizeCommand.run(args);
-    }
-
-    /** `wp-check-auth`: read-only verification of those authorizations — the half agents run. */
-    checkAuth(args: CliArgSet): void {
-        this.checkAuthCommand.run(args);
     }
 
     /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */

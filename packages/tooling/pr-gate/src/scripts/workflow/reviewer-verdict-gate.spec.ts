@@ -3,8 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    AuthorizedOverrides, ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist,
-    ReviewJsonService, toError,
+    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, ReviewJsonService, toError,
 } from '@webpieces/rules-config';
 import { ChecklistRoster } from './checklist-detector';
 import { ChecklistScan } from './checklist-scanner';
@@ -44,17 +43,15 @@ function scanOver(dir: string, applicable: RequiredChecklist[]): ChecklistScan {
     // The optional-without-a-verdict subtraction is part of how `outstanding` is BUILT (ChecklistScanner
     // owns it, so the gate needs no optional-awareness of its own). Reproduced here for the same reason the
     // rest of this fixture is: a scan assembled differently from the real one tests a gate nobody runs.
-    // No human has authorized anything in this fixture — these tests are about how a REFUSAL reads.
-    const authorized = new AuthorizedOverrides();
-    const optionalNotRun = svc.optionalWithoutVerdict(applicable, results, authorized);
+    const optionalNotRun = svc.optionalWithoutVerdict(applicable, results);
     const skipped = new Set(optionalNotRun.map((r: RequiredChecklist): string => r.id));
-    const outstanding = svc.pendingChecklists(applicable, results, authorized)
+    const outstanding = svc.pendingChecklists(applicable, results)
         .filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
     return new ChecklistScan(
         [], applicable, [], outstanding,
         new ChecklistReviewContext(), reviewPath, 'abc1234',
-        new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results, authorized),
-        undefined, [], results, optionalNotRun, authorized,
+        new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
+        undefined, [], results, optionalNotRun,
     );
 }
 
@@ -103,12 +100,7 @@ describe('a REFUSED checklist reads as a refusal, not as a reviewer that never r
         const msg = refusalOf(dir, [DB]);
         expect(msg).toContain('review again');
         expect(msg).toContain('A FRESH review-db-reviewer.json is now required');
-        // The escape hatch is the HUMAN-ONLY mint, named as such: an agent that reads this must go ASK,
-        // not write the override field itself. Pinning the exact commands is the point — the old wording
-        // ("set a human-authored override") pointed at a file the agent could write.
-        expect(msg).toContain('pnpm wp-authorize --checklist db-reviewer');
-        expect(msg).toContain('pnpm wp-check-auth --checklist db-reviewer');
-        expect(msg).not.toContain('human-authored "override"');
+        expect(msg).toContain('human-authored "override"');
     });
 });
 

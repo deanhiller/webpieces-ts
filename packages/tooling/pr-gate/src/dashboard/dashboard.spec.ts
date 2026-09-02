@@ -544,7 +544,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
 
         expect(md).toContain(OVERRIDE_PROSE);
         expect(md).toContain(
-            '#### 🟠 checklist-envvars — OVERRIDDEN — a human authorized shipping it (pnpm wp-authorize)',
+            '#### 🟠 checklist-envvars — OVERRIDDEN — shipped with a stated justification',
         );
         expect(md).not.toContain('**Checklists:** '); // the dashboard row belongs to the PR body only
     });

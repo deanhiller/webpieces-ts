@@ -25,14 +25,6 @@
                     "level": 3
                 },
                 {
-                    "id": "ChecklistRefusalRenderer",
-                    "className": "ChecklistRefusalRenderer",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/checklist-refusal.ts",
-                    "level": 2
-                },
-                {
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
@@ -227,15 +219,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
-                },
-                {
-                    "from": "ReviewJsonService",
-                    "to": "ChecklistRefusalRenderer",
-                    "injection": "type",
-                    "token": "ChecklistRefusalRenderer",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-refusal.ts#ChecklistRefusalRenderer",
-                    "paramName": "refusals",
-                    "paramType": "ChecklistRefusalRenderer"
                 },
                 {
                     "from": "ReviewJsonService",

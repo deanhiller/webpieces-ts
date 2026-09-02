@@ -17,8 +17,6 @@ graph TD
     AgentWorktreeLockReader["AgentWorktreeLockReader"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
-    AuthorizationContextResolver["AuthorizationContextResolver"]
-    AuthorizeCommand["AuthorizeCommand"]
     BranchArchiver["BranchArchiver"]
     BranchMutationLog["BranchMutationLog"]
     BranchNaming["BranchNaming"]
@@ -28,13 +26,11 @@ graph TD
     BuildCommand["BuildCommand"]
     BuildGateLog["BuildGateLog"]
     BuildsLog["BuildsLog"]
-    CheckAuthCommand["CheckAuthCommand"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistCommentRenderer["ChecklistCommentRenderer"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
-    ChecklistRefusalRenderer["ChecklistRefusalRenderer"]
     ChecklistScanner["ChecklistScanner"]
     CheckoutCleanMainCommand["CheckoutCleanMainCommand"]
     CleanTmp["CleanTmp"]
@@ -65,7 +61,6 @@ graph TD
     HarnessAgentActivityReader["HarnessAgentActivityReader"]
     HomeConfigService["HomeConfigService"]
     HomeDocKeys["HomeDocKeys"]
-    HumanAuthorizationService["HumanAuthorizationService"]
     LandPrCommand["LandPrCommand"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
@@ -89,7 +84,6 @@ graph TD
     ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
-    ReviewChangedFiles["ReviewChangedFiles"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
@@ -112,12 +106,6 @@ graph TD
     WorktreeService["WorktreeService"]
     ActiveHatchReport --> ConfigFile
     AiBranchName --> BranchNaming
-    AuthorizationContextResolver --> AiBranchName
-    AuthorizationContextResolver --> DiffBasisResolver
-    AuthorizationContextResolver --> ReviewChangedFiles
-    AuthorizeCommand --> AuthorizationContextResolver
-    AuthorizeCommand --> HumanAuthorizationService
-    AuthorizeCommand --> RepoRootFinder
     BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
@@ -136,9 +124,6 @@ graph TD
     BuildGateLog --> GateLogFile
     BuildGateLog --> StageOutputLog
     BuildsLog --> DotWebpieces
-    CheckAuthCommand --> AuthorizationContextResolver
-    CheckAuthCommand --> HumanAuthorizationService
-    CheckAuthCommand --> RepoRootFinder
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
@@ -146,9 +131,8 @@ graph TD
     ChecklistScanner --> AiBranchName
     ChecklistScanner --> ChecklistDetector
     ChecklistScanner --> DiffBasisResolver
-    ChecklistScanner --> HumanAuthorizationService
+    ChecklistScanner --> DiffScope
     ChecklistScanner --> PrContextWriter
-    ChecklistScanner --> ReviewChangedFiles
     ChecklistScanner --> ReviewJsonService
     CheckoutCleanMainCommand --> CleanupCommand
     CheckoutCleanMainCommand --> MainCheckout
@@ -214,7 +198,6 @@ graph TD
     GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
     HomeConfigService --> HomeDocKeys
-    HumanAuthorizationService --> DotWebpieces
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
@@ -246,9 +229,7 @@ graph TD
     OrphanDirSweeper --> OrphanDirScanner
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
-    PrGateApp --> AuthorizeCommand
     PrGateApp --> BuildCommand
-    PrGateApp --> CheckAuthCommand
     PrGateApp --> CheckPrCommand
     PrGateApp --> CheckoutCleanMainCommand
     PrGateApp --> CleanupCommand
@@ -279,8 +260,6 @@ graph TD
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
     RepoRootFinder --> DotWebpieces
-    ReviewChangedFiles --> DiffScope
-    ReviewJsonService --> ChecklistRefusalRenderer
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewerInstructionsService

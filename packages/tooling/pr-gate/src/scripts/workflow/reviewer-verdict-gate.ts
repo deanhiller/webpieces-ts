@@ -45,7 +45,7 @@ export class ReviewerVerdictGate {
         // The split is computed from the verdicts the SCAN already loaded, never from a second read of disk:
         // a re-read here could disagree with the set that produced `outstanding`, and a checklist that is
         // "outstanding" per one read and "clear" per another belongs to neither section of the message.
-        const refused = this.reviewJsonService.refusedChecklists(scan.outstanding, scan.results, scan.authorized);
+        const refused = this.reviewJsonService.refusedChecklists(scan.outstanding, scan.results);
         const refusedIds = new Set(refused.map((r: RequiredChecklist): string => r.id));
         const neverRan = scan.outstanding.filter((r: RequiredChecklist): boolean => !refusedIds.has(r.id));
         // Rendered BEFORE the throw and, per checklist, with the verdict resolved before its file is moved —
@@ -140,7 +140,7 @@ export class ReviewerVerdictGate {
      * which the un-archived wording of `refusalError` describes correctly).
      */
     private retireAndReport(scan: ChecklistScan, req: RequiredChecklist): string {
-        const verdict = this.reviewJsonService.resolveVerdict(req, scan.results, scan.authorized);
+        const verdict = this.reviewJsonService.resolveVerdict(req, scan.results);
         return this.reviewJsonService.refusalError(req, verdict, this.archiveOrWarn(scan.reviewPath, req.id));
     }
 

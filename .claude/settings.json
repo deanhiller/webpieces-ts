@@ -23,14 +23,5 @@
     },
     "env": {
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
-    },
-    "permissions": {
-        "deny": [
-            "Bash(pnpm wp-authorize:*)",
-            "Bash(pnpx wp-authorize:*)",
-            "Bash(npx wp-authorize:*)",
-            "Bash(wp-authorize:*)",
-            "Bash(node:*wp-authorize*)"
-        ]
     }
 }

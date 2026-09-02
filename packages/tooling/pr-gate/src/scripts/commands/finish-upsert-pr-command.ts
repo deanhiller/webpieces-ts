@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
-    writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, AuthorizedOverrides,
+    writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
     InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -177,9 +177,7 @@ export class FinishUpsertPrCommand {
         // applicable set for free — an unchanged checklist needs no re-review, a newly-applicable one refuses
         // until its file is written.
         const featureName = this.aiBranchName.getFeatureName();
-        const prGate = loadAndValidate(repoRoot).prGate;
-        const scan = this.checklistScanner.scan(
-            repoRoot, prGate.checklists, prGate.gateSalt, new ChecklistScanOptions(true, 'stage3-finish'));
+        const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
         const required = scan.applicable;
         // The applicable checklists that are supposed to HAVE a verdict — everything except the optional ones
         // nobody ran. Used for provenance and for the dashboard rows, both of which ask "who reviewed this?"
@@ -192,14 +190,13 @@ export class FinishUpsertPrCommand {
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
         // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadReviewJson(
-            reviewJsonPath(repoRoot, featureName), required, scan.authorized);
+        const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, featureName), required);
 
         // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, prGate);
+        const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -210,7 +207,7 @@ export class FinishUpsertPrCommand {
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
-        const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted, scan.authorized);
+        const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted);
         const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance));
         this.archiveConsumedReview(repoRoot, featureName, result);
 
@@ -376,10 +373,7 @@ export class FinishUpsertPrCommand {
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private computeDashboardInput(
-        repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string,
-        required: readonly RequiredChecklist[], authorized: AuthorizedOverrides,
-    ): DashboardInput {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string, required: readonly RequiredChecklist[]): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -390,7 +384,7 @@ export class FinishUpsertPrCommand {
 
         const gateResults = this.dashboard.computeGateResults(config.gates, changedFiles);
         const disables = this.dashboard.countAddedDisables(patch);
-        const rows = this.checklistRows(required, review, authorized);
+        const rows = this.checklistRows(required, review);
         // buildCommand travels into the dashboard so the PR-body footer can NAME the command that vouched
         // for this commit. The footer used to assert "build ran via nx affected" on every repo, which was
         // simply false wherever buildCommand is not nx.
@@ -420,11 +414,9 @@ export class FinishUpsertPrCommand {
     // it re-validates the same set and finds it clean. This comment used to credit loadReviewJson, which made
     // the ordering look deliberate while the gate's generic "no verdict yet" message masked every refusal.
     // WARN belongs in that list: yellow SHIPS, so it is not outstanding and reaches the dashboard.
-    private checklistRows(
-        required: readonly RequiredChecklist[], review: ReviewJson, authorized: AuthorizedOverrides,
-    ): ChecklistRow[] {
+    private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
         return required.map((req: RequiredChecklist): ChecklistRow => {
-            const verdict = this.reviewJsonService.resolveVerdict(req, review.results, authorized);
+            const verdict = this.reviewJsonService.resolveVerdict(req, review.results);
             return new ChecklistRow(req.id, verdict.status, verdict.detail);
         });
     }
@@ -447,7 +439,7 @@ export class FinishUpsertPrCommand {
             // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
             // i.e. as an unreviewed obligation, when in fact it never had one.
             const verdict = ran
-                ? this.reviewJsonService.resolveVerdict(req, review.results, scan.authorized)
+                ? this.reviewJsonService.resolveVerdict(req, review.results)
                 : new ChecklistVerdict(entry.def.id, '', '');
             const row = new ChecklistCommentRow(
                 entry.def.subagent, verdict.status, verdict.detail, ran,
