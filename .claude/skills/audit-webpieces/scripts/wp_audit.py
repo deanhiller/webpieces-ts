@@ -42,8 +42,22 @@ def parse_ts(s):
         return None
 
 
+# An absolute window beats `--hours` for anything that goes in a committed report: an hours count
+# is relative to whenever the command ran, so the report can never be reproduced from it. WINDOW_END
+# also lets a CLOSED period ("Monday through Wednesday") actually close, instead of silently running
+# on to now. Both are set once from argv in main(); None means "unbounded on that side".
+WINDOW_START = None
+WINDOW_END = None
+
+
 def cutoff(hours):
+    if WINDOW_START is not None:
+        return WINDOW_START
     return datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+def in_window(ts):
+    return ts is not None and (WINDOW_END is None or ts <= WINDOW_END)
 
 
 def sanitized(repo: Path) -> str:
@@ -98,7 +112,7 @@ def iter_guard_rows(repo: Path, subdir: str, since):
                     continue
                 fields = tsv(line)
                 ts = row_ts(fields[0])
-                if ts is None or ts < since:
+                if ts is None or ts < since or not in_window(ts):
                     continue
                 yield f, ts, fields
         except OSError:
@@ -119,6 +133,96 @@ def top(counter, n=12):
 
 # ---------------------------------------------------------------- guards
 
+# `stale-main-bash-guard` is reliably the loudest rule in the logs, and its block COUNT says nothing
+# about its health. A block that stops an agent reading fifteen-commit-stale source is a SPEED WIN:
+# it costs one round trip and saves a wrong answer plus everything built on top of it. CORRECTNESS IS
+# SPEED here. The health question is never "how often did it fire" but "did firing get the tree
+# FRESH".
+#
+# `localMain=`/`originMain=` on each block row make that computable. If a later block's `localMain`
+# equals an earlier block's `originMain`, the agent pulled and the tree genuinely moved forward - the
+# guard worked and origin simply moved again. If the SAME pair repeats, the cure did not take, and
+# only THAT is a deadlock.
+STALE_STATE_RE = re.compile(r"localMain=([0-9a-f]+)\s+originMain=([0-9a-f]+)")
+CURE_VERB_RE = re.compile(r"wp-checkout-clean-main|git\s+pull|git\s+fetch")
+# `<cure> && <work>` vs `<cure>; <work>` is the whole safety question - see _classify_stale_block.
+CURE_PREFIX_AND_RE = re.compile(r"^\s*(?:pnpm\s+)?(?:wp-checkout-clean-main|git\s+(?:pull|fetch))"
+                                r"[^;&|]*(?:\|[^;&]*)?&&")
+# A path that cannot be stale in any sense the guard cares about: it is not tracked content.
+OFF_REPO_RE = re.compile(r"/private/tmp/|/tmp/|~/\.claude|/Users/[^/]+/\.claude|localhost:|127\.0\.0\.1")
+REPO_READ_RE = re.compile(
+    r"\b(cat|sed\s+-n|head|tail|grep\s+-[a-zA-Z]*r|ls|find|wc)\b[^|;]*"
+    r"\b(services/|libraries/|packages/|apps/|scripts/|docs/|src/|eslint\.config|package\.json)")
+
+
+def _classify_stale_block(cmd):
+    """What KIND of stale-main block is this? The four answers have opposite meanings.
+
+    prevented_stale_read   the agent was about to read tracked source off a stale tree. The guard
+                           bought a correct answer for one round trip. This is the rule EARNING its
+                           keep; it belongs in "checked and clean", never in a cost finding.
+    cure_bundled_semicolon the agent joined the cure to the work with `;`, so the work runs even if
+                           the pull failed - and 7 of 9 observed cases also `>/dev/null 2>&1` the
+                           cure, making the failure invisible. Refusing is right, because the
+                           two-step genuinely IS safer: the next call is a fresh evaluation that
+                           recomputes localMain vs originMain, so a failed pull re-blocks. An allowed
+                           compound never gets that second look. A high count here is a finding about
+                           the AGENT, not the guard.
+    cure_bundled_and       the agent joined them with `&&`. The shell already guarantees the work is
+                           skipped if the cure fails, which is exactly the property the guard needs.
+                           Blocking this is a TOOLING finding - it costs a round trip and buys
+                           nothing.
+    blocked_badly          the target is outside the repo (scratchpad, skill file, localhost health
+                           check, `ps`). Nothing there can be stale. Also a tooling finding.
+    """
+    if CURE_PREFIX_AND_RE.search(cmd):
+        return "cure_bundled_and"
+    if CURE_VERB_RE.search(cmd):
+        return "cure_bundled_semicolon"
+    if REPO_READ_RE.search(cmd) and not OFF_REPO_RE.search(cmd):
+        return "prevented_stale_read"
+    if OFF_REPO_RE.search(cmd):
+        return "blocked_badly"
+    return "unclassified"
+
+
+def _stale_main_health(repo, sess, rows):
+    """Did blocking actually get this session's tree FRESH? Returns None when the rule never fired."""
+    blocks = [r for r in rows
+              if (r[1].startswith("BLOCK") or r[1].startswith("DENY"))
+              and "stale-main" in (r[4] or "")]
+    if not blocks:
+        return None
+    kinds = Counter(_classify_stale_block(r[3] or "") for r in blocks)
+    pairs, seen_origins, advanced, repeated = [], set(), 0, 0
+    prev_pair = None
+    for r in blocks:
+        m = STALE_STATE_RE.search(r[5].get("_raw", ""))
+        if not m:
+            continue
+        pair = (m.group(1), m.group(2))
+        if pair[0] in seen_origins:
+            advanced += 1          # local main caught up to what origin was at an earlier block
+        if pair == prev_pair:
+            repeated += 1          # same state twice running: the cure did NOT take
+        seen_origins.add(pair[1])
+        pairs.append(pair)
+        prev_pair = pair
+    costly = kinds.get("cure_bundled_and", 0) + kinds.get("blocked_badly", 0)
+    return {
+        "repo": repo.name, "session": sess, "blocks": len(blocks),
+        "kinds": dict(kinds),
+        "distinct_states": len(set(pairs)),
+        "advanced": advanced,
+        "repeated_identical_state": repeated,
+        "blocks_that_bought_nothing": costly,
+        # The verdict. "healthy" means the blocks moved the tree forward and origin kept moving -
+        # the rule working, and cheap. "cure-not-taking" is the real deadlock, and it is rare.
+        "verdict": ("cure-not-taking" if repeated and not advanced
+                    else "healthy: blocks got the tree fresh, origin moved again" if advanced
+                    else "single-state: fired but never re-blocked on a new state"),
+    }
+
 
 def audit_guards(repos, hours):
     since = cutoff(hours)
@@ -129,6 +233,7 @@ def audit_guards(repos, hours):
     streaks = []          # deadlock candidates
     cure_churn = []       # same cure emitted over and over
     uncurable = []
+    stale_health = []     # per-session verdict for stale-main-bash-guard (see _stale_main_health)
 
     for repo in repos:
         # per (session) ordered stream of L2 decisions.
@@ -152,6 +257,7 @@ def audit_guards(repos, hours):
             cmd = fields[3] if len(fields) > 3 else ""
             rule = fields[5] if len(fields) > 5 else "-"
             meta = kv(fields)
+            meta["_raw"] = "\t".join(fields)
             decisions[decision] += 1
             per_repo[repo.name][decision] += 1
             if decision.startswith("BLOCK") or decision.startswith("DENY"):
@@ -178,6 +284,10 @@ def audit_guards(repos, hours):
                     run_rule, run = None, []
             if len(run) >= 3:
                 streaks.append(_streak(repo, sess, run_rule, run))
+
+            health = _stale_main_health(repo, sess, rows)
+            if health:
+                stale_health.append(health)
 
             cures = Counter(
                 r[5].get("cure", "-") for r in rows
@@ -215,6 +325,9 @@ def audit_guards(repos, hours):
         "faults": dict(faults),
         "deadlock_streaks": streaks[:20],
         "cure_churn": sorted(cure_churn, key=lambda c: -c["times_prescribed"])[:15],
+        # Read this BEFORE reading blocks_by_rule. A stale-main block count is not a cost until
+        # `kinds` says which of the blocks bought nothing.
+        "stale_main_health": sorted(stale_health, key=lambda h: -h["blocks"])[:15],
         "uncurable_faults": uncurable[:20],
         "per_repo_decisions": {k: dict(v) for k, v in per_repo.items()},
     }
@@ -464,6 +577,8 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
             except Exception:
                 continue
             ts = parse_ts(row.get("timestamp"))
+            if ts and not in_window(ts):
+                continue
             if ts:
                 first = ts if first is None else min(first, ts)
                 last = ts if last is None else max(last, ts)
@@ -523,7 +638,13 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
                         or bool(BLOCK_MARK_RE.search(txt[:600]))
                     )
                     is_block = guard_hit
-                    if errored and not guard_hit:
+                    # A prompt the human declined or left sitting is HUMAN latency, not AI waste,
+                    # and its `dur` is however long Dean took to answer. One 109-minute
+                    # AskUserQuestion once accounted for 43% of the fleet's whole "failed call"
+                    # time and made the top finding a measurement artifact. It is not an error.
+                    human_wait = name == "AskUserQuestion" or txt.startswith(
+                        "The user doesn't want to proceed")
+                    if errored and not guard_hit and not human_wait:
                         error_calls += 1
                         error_seconds += dur
                     if is_block:
@@ -877,6 +998,11 @@ def audit_docdrift(repos):
 MATRIX_FILES = {
     "L2": "webpieces.branch-state-matrix.md",
     "L0": "webpieces.guard-matrix.md",
+    # L1 has its own matrix and always did. Omitting it here did not report "L1 is undocumented" —
+    # it reported the OPPOSITE of the truth, "a layer emitting row numbers no matrix defines", on
+    # every repo at once. A layer missing from this dict is indistinguishable from a layer with no
+    # matrix, so ADD the layer here before believing that finding about it.
+    "L1": "webpieces.location-matrix.md",
 }
 ACT_RE = re.compile(r"\b(allow|block|exempt|pass|deny)\b", re.I)
 # decision token in the logs -> family
@@ -1220,17 +1346,35 @@ def main():
     ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "skew",
                                     "docdrift", "matrix", "merges", "all"])
     ap.add_argument("--repos", nargs="+", required=True)
+    ap.add_argument("--since", default=None,
+                    help="window START, ISO-8601 UTC. Overrides --hours. Preferred for reports.")
+    ap.add_argument("--until", default=None,
+                    help="window END, ISO-8601 UTC. Defaults to now. Required to audit a CLOSED "
+                         "period, otherwise the window runs on past the one you asked for.")
     ap.add_argument("--hours", type=float, default=168.0)
     ap.add_argument("--max-sessions", type=int, default=400)
     ap.add_argument("--no-npm", action="store_true")
     args = ap.parse_args()
+
+    global WINDOW_START, WINDOW_END
+
+    def _iso(v):
+        d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+    if args.since:
+        WINDOW_START = _iso(args.since)
+    if args.until:
+        WINDOW_END = _iso(args.until)
 
     repos = resolve_repos(args.repos)
     if not repos:
         print(json.dumps({"error": "no git repos matched", "given": args.repos}))
         return 1
 
-    res = {"repos": [str(r) for r in repos], "generated": datetime.now(timezone.utc).isoformat()}
+    res = {"repos": [str(r) for r in repos], "generated": datetime.now(timezone.utc).isoformat(),
+           "window_start_utc": (WINDOW_START or cutoff(args.hours)).isoformat(),
+           "window_end_utc": (WINDOW_END or datetime.now(timezone.utc)).isoformat()}
     if args.cmd in ("guards", "all"):
         res["guards"] = audit_guards(repos, args.hours)
     if args.cmd in ("isolation", "all"):

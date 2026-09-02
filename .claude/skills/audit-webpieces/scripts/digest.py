@@ -25,6 +25,27 @@ def mins(sec):
     return round((sec or 0) / 60, 1)
 
 
+def versions(raw):
+    """Which @webpieces RELEASE governed each repo during the window.
+
+    Findings from the guard logs and transcripts carry no version of their own, so this table is
+    how they get attributed: a repo pinned two releases back produced its blocks under code that
+    may already be fixed. Weight findings from repos on `npm_latest`; treat the rest as history.
+    """
+    sk = raw.get("skew") or {}
+    rows = []
+    for r in sk.get("rows", []):
+        pins = {v for v in (r.get("pins") or {}).values() if v and v[0].isdigit() or (v and v[0] in "^~")}
+        rows.append({
+            "repo": Path(r["repo"]).name,
+            "installed": r.get("installed_primary"),
+            "pinned": sorted(pins) or None,
+            "worktrees": sorted({v for v in (r.get("worktree_installs") or {}).values() if v}),
+            "behind_main": r.get("commits_behind_origin_main"),
+        })
+    return {"npm_latest": sk.get("npm_latest"), "repos": rows}
+
+
 def build(raw):
     out = []
     g = raw.get("guards") or {}
@@ -38,6 +59,9 @@ def build(raw):
     # 1 — guard deadlock cycles
     streaks = [s for s in g.get("deadlock_streaks", []) if s["consecutive_blocks"] >= MIN_DEADLOCK_STREAK]
     churn = [c for c in g.get("cure_churn", []) if c["times_prescribed"] >= MIN_CURE_REPEATS]
+    health = g.get("stale_main_health", [])
+    wasted_blocks = sum(h.get("blocks_that_bought_nothing", 0) for h in health)
+    not_taking = [h for h in health if h.get("verdict") == "cure-not-taking"]
     dec = g.get("decisions", {})
     total_dec = sum(dec.values()) or 1
     blocked = sum(v for k, v in dec.items() if k.startswith(("BLOCK", "DENY")))
@@ -46,8 +70,15 @@ def build(raw):
         out.append({
             "area": "Guard cycles / deadlock",
             "headline": f"{blocked} blocked decisions ({rate:.1%} of {total_dec}); "
-                        f"{len(streaks)} deadlock streaks; {len(churn)} cures prescribed on repeat",
+                        f"{len(streaks)} deadlock streaks; {len(churn)} cures prescribed on repeat; "
+                        f"stale-main: {wasted_blocks} blocks bought nothing, "
+                        f"{len(not_taking)} sessions where the cure did not take",
             "evidence": {
+                # Read this FIRST. A stale-main block count is not a cost until `kinds` says which
+                # of the blocks bought nothing — see the Step 4 rule in SKILL.md.
+                "stale_main_health": health[:6],
+                "stale_main_blocks_that_bought_nothing": wasted_blocks,
+                "stale_main_cure_not_taking": not_taking[:4],
                 "top_blocking_rules": g.get("blocks_by_rule", [])[:6],
                 "deadlock_streaks": streaks[:6],
                 "cure_churn": churn[:6],
@@ -161,11 +192,18 @@ def main():
     raw = json.loads(Path(sys.argv[1]).read_text())
     items = build(raw)
     if "--json" in sys.argv:
-        json.dump({"repos": raw.get("repos"), "generated": raw.get("generated"), "major": items},
+        json.dump({"repos": raw.get("repos"), "generated": raw.get("generated"),
+                   "versions": versions(raw), "major": items},
                   sys.stdout, indent=1, default=str)
         print()
         return
+    v = versions(raw)
     print(f"# repos: {len(raw.get('repos', []))}   generated: {raw.get('generated')}")
+    print(f"# @webpieces npm latest: {v['npm_latest']}")
+    print("# repo versions (installed / pinned / worktrees / behind-main):")
+    for r in v["repos"]:
+        print(f"#   {r['repo']:<24} {str(r['installed']):<12} pin={r['pinned']} "
+              f"wt={r['worktrees']} behind={r['behind_main']}")
     if not items:
         print("\nNo MAJOR findings above threshold.")
         return

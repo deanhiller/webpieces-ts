@@ -33,12 +33,15 @@ ls -d ~/workspace/onetablet/monorepo-nx* ~/workspace/ctoteachings/monorepo* ~/wo
 
 ## Step 2 — collect
 
-`SK=~/.claude/skills/audit-webpieces/scripts`, `OUT=<your scratchpad>`.
+`SK=<this skill's base directory>/scripts`, `OUT=<your scratchpad>`. The base directory is the one
+named at the top of this skill — it lives in the REPO (`<repo>/.claude/skills/audit-webpieces`), not
+under `~/.claude/skills`. Do not type a remembered path; use the one the skill header gave you.
 
 ```bash
 python3 $SK/wp_audit.py all --repos <repo> [<repo>...] --hours <N> > $OUT/all.json
 python3 $SK/digest.py $OUT/all.json > $OUT/digest.md
-python3 $SK/builds_ledger.py --since <ISO-8601 UTC> --repos <repo> [<repo>...] > $OUT/builds.json
+python3 $SK/builds_ledger.py --since <ISO-8601 UTC> [--until <ISO-8601 UTC>] \
+        --repos <repo> [<repo>...] > $OUT/builds.json
 ```
 
 Read `digest.md` (~15-25 KB). That is your working set. Go back to `all.json` with `jq`/python for a
@@ -75,6 +78,10 @@ rotated generations too, **oldest first**. `builds_ledger.py` does that for you.
 count is relative to when the command happened to run, so a committed report can never be
 reproduced from it. Quote the exact UTC window in the report.
 
+**For a CLOSED period — "Monday through Wednesday", "last week" — pass `--until` as well.** Without
+it the window runs to *now*, so a Mon-Wed audit silently swallows Thursday and the report stops
+matching its own scope line. Convert Dean's LOCAL days to UTC first; this box is not on UTC.
+
 ### Be honest about coverage
 
 The ledger did not exist before 0.4.687 landed on this box — **2026-08-21T05:59:13Z is the earliest
@@ -93,6 +100,7 @@ that says nothing. State the covered fraction of the window in the scope line.
 | **Orphaned builds** | a `START` with no `DONE-` row whose `pid` is **dead** (`kill -0` → ESRCH) | a build died without recording an outcome, so nobody — no agent, no gate — can tell whether it passed. A START with no DONE whose pid is **alive** is just a build running right now: report it separately, never as a finding. |
 | **Repeat builds** | same `repo=`+`branch=` built ≥3 times inside an hour | the "re-ran the build to see a different slice of the output" antipattern CLAUDE.md names by measurement (23.9 minutes across nine builds, five with no code change between). The ledger cannot see whether a file changed in between, so this is a **candidate** list — confirm against the transcript collector's `redundant_builds` / file-edit history before calling it. |
 | **Duration outliers** | `took=` far above the median for the same repo | a 3x-median build usually means contention (cross-check the overlap window) or a cold nx cache — say which, because the fixes are opposite. |
+| **`wp=` version mix** | `by_version` — builds, minutes, fails and kills per governing release; `latest_in_window` and `pct_on_latest` | a finding produced under an older release may already be FIXED. Weight the latest; see "Attribute every finding to a release" below. |
 | **`by=` breakdown** | share of `build` (ad-hoc) vs `review`/`finish` (gate) | three gate stages are meant to cost **one** build: stage 2 records the sha it verified and stage 3 skips its own build when HEAD has not moved. A high ad-hoc ratio means agents are building outside the gate and then making the gate build it again. |
 
 Cross-check the ledger against the transcript collector rather than reading either alone: the
@@ -121,6 +129,7 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 |---|---|---|
 | Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl` |
 | Guard cycles | block rate, **consecutive blocks on one rule in one session**, **same cure prescribed ≥4×**, non-`-` fault codes | `<repo>/.webpieces/logs/L2-decisions/`, `rejections/` |
+| Stale-main health | `stale_main_health` — per session: did `localMain=` ADVANCE (the block worked) or repeat (the cure is not taking), plus `kinds` splitting the blocks into prevented-a-stale-read / cure-bundled-with-`&&` / cure-bundled-with-`;` / off-repo, and `blocks_that_bought_nothing` | `L2-decisions/` `localMain=`/`originMain=` |
 | Isolation | worktrees with no `logs/` of their own, **commands run inside a worktree judged with `root=` the primary tree**, L0 `shim=` vs L1 `root=` disagreement, build.log in two trees | `L0-shim/`, `L1-location/` |
 | Version skew | pin vs installed per tree, worktree installs vs primary, npm latest | `pnpm-workspace.yaml`, `node_modules/@webpieces/nx-webpieces-rules` |
 | Matrix conformance | logged `layer=`/`row=`/`fault=` vs the **normative** table in `webpieces.branch-state-matrix.md` (L2) and `webpieces.guard-matrix.md` (L0): decision disagrees with the row's `act`, row cited that the matrix does not define, undocumented fault code, layer that logs rows with no matrix table, rows never exercised | `.webpieces/instruct-ai/*.md` + guard logs |
@@ -142,6 +151,39 @@ Ten findings is too many; three real ones is a good audit.
 
 Interpretation that matters:
 
+- **Attribute every finding to a RELEASE, and weight the latest one.** This is the first filter, not
+  a footnote: webpieces ships often, and a defect measured under a release that has since been
+  superseded is history. Two sources give you the attribution — `by_version` in `builds.json` (every
+  `START` row carries `wp=<version>`, so a build finding is attributable exactly), and the version
+  header `digest.py` prints (npm latest, plus each repo's installed / pinned / per-worktree
+  versions), which is how a guard or transcript finding — those carry no version of their own —
+  gets attributed via the repo it came from. State the version beside every finding. When a finding
+  appears ONLY on a release that is no longer installed anywhere, say so and rank it below the
+  live ones rather than dropping it silently. When `pct_on_latest` is low, say that too: it means
+  the window is mostly measuring old code and the whole audit is weaker evidence about today.
+- **`stale-main-bash-guard` is judged by whether the tree got FRESH, never by its block count.** It
+  is reliably the loudest rule in the logs, and the count on its own means nothing — a block that
+  stops an agent reading fifteen-commit-stale source is a **speed win**: one round trip spent, a
+  wrong answer and everything built on top of it saved. **Correctness is how this guard buys speed**,
+  so a high count is evidence it is working until you show otherwise. Read `stale_main_health` BEFORE
+  `blocks_by_rule`, and split the blocks four ways:
+
+  | `kinds` bucket | verdict |
+  |---|---|
+  | `prevented_stale_read` | the guard EARNING its keep. Goes in "checked and clean", never in a cost finding. |
+  | `cure_bundled_semicolon` | `<cure>; <work>` — the work runs even if the pull failed, and agents usually `>/dev/null 2>&1` the cure so the failure is invisible. Refusing is right: the two-step IS safer, because the next call is a fresh evaluation that recomputes `localMain` vs `originMain`, so a failed pull re-blocks — an allowed compound never gets that second look. A high count is a finding about the **AGENT**. |
+  | `cure_bundled_and` | `<cure> && <work>` — the shell already guarantees the work is skipped if the cure fails, which is exactly the property the guard needs. **Blocking this is a TOOLING finding**: a round trip spent for nothing. |
+  | `blocked_badly` | target is outside the repo — a scratchpad file, a skill file, `curl localhost`, `ps -p`. Nothing there can be stale. Also a tooling finding. |
+
+  Then read the verdict, which is computed from the state chain, not from counts:
+  **`healthy`** — a later block's `localMain` equals an earlier block's `originMain`, so the agent
+  pulled, the tree genuinely moved forward, and origin simply moved again. That is the guard working
+  and it is cheap; do not report it as cost. **`cure-not-taking`** — the same `(localMain,
+  originMain)` pair repeats with no advance. *That* is the real deadlock, it is rare, and it is the
+  only shape here that earns a MAJOR. Quote the repeated pair as the evidence.
+
+  The number to report as cost is `blocks_that_bought_nothing` (`cure_bundled_and` + `blocked_badly`),
+  never the raw block count.
 - **Contention is measurable now — stop guessing at it.** Before the ledger, "agents slowed each
   other down" was folklore backed by one hand-timed comparison. `overlapped_minutes` and
   `max_concurrent` are the real number, and a window with zero overlap is a genuine finding in the
@@ -161,6 +203,15 @@ Interpretation that matters:
 - Distinguish **guards working as intended** (a block that stopped a real mistake, once) from
   **guards costing time** (the same block N times with no progress between). Only the second is a
   finding. Say so explicitly when a high block count is the guard doing its job.
+- **A block COUNT is never a finding until the blocks are CLASSIFIED.** Counting alone gets the sign
+  wrong, not just the size. Written from a live miss: an audit led with `stale-main-bash-guard` as a
+  tooling defect on a count plus one quoted log line; classifying all 44 blocks in that session
+  inverted the conclusion — most of them were the guard correctly refusing a wrong answer, or
+  refusing the agent's attempt to smuggle one past it. **The default assumption is that the guard is
+  right and the AGENT is the defect**, and it takes evidence to move off it. In particular a `cure=`
+  repeated N times means the STATE kept recurring, not that the cure failed: prove it by checking
+  whether the state actually advanced (`localMain=` chaining forward) before ever calling a cure
+  broken.
 - **Matrix mismatches are correctness bugs, not slowdowns.** The matrices are what an agent reasons
   from; if the log says row 5 and the matrix says row 5 allows what was blocked, either the guard is
   misrouting or the doc is stale. Say which you think it is. Note `PASS` and `allow` are the same
@@ -197,11 +248,15 @@ Structure:
 1. **Scope line** — repos, window (**as an absolute UTC range**, not "last N hours"), sessions
    scanned, guard decisions scanned, builds in the ledger — and, when the window starts before
    `ledger_earliest_row`, the fraction of it the ledger actually covers.
-2. **Top findings, ranked by cost**, each: what · measured cost · evidence (repo, session id,
+2. **Versions audited** — a short table: npm latest, and per repo the installed / pinned version
+   (flagging any worktree that disagrees), plus the `by_version` build mix with `pct_on_latest`.
+   This table is what makes the rest of the report readable a release later: without it nobody can
+   tell whether a finding still applies. Every finding in §3 names the release it was measured on.
+3. **Top findings, ranked by cost**, each: what · measured cost · evidence (repo, session id,
    rule, counts, one quoted line) · why it costs · suggested direction (a sentence — you are not
    fixing it).
-3. **Numbers table** — active hours, blocked minutes, builds vs redundant builds, block rate per repo.
-4. **Checked and clean** — one line per area with nothing MAJOR, so a clean area is visibly clean
+4. **Numbers table** — active hours, blocked minutes, builds vs redundant builds, block rate per repo.
+5. **Checked and clean** — one line per area with nothing MAJOR, so a clean area is visibly clean
    rather than silently absent.
 
 Finish by telling Dean the path and the single most expensive finding in one sentence.
