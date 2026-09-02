@@ -7,7 +7,7 @@ ESLint rules for WebPieces code patterns and architecture enforcement.
 - `catch-error-pattern` - Enforce toError() usage in catch blocks
 - `no-unmanaged-exceptions` - Discourage try-catch outside tests
 - `max-method-lines` - Enforce maximum method length (test-framework container callbacks such as `describe(...)` are exempt in `*.spec.ts` / `*.test.ts` — see below)
-- `max-file-lines` - Enforce maximum file length
+- `max-file-lines` - Enforce maximum file length (machine-generated trees are exempt with no config; `allowedPaths` adds your own un-authored trees)
 - `enforce-architecture` - Enforce architecture dependency boundaries
 - `no-json-property-primitive-type` - Ban @JsonProperty({ type: String/Number/Boolean })
 - `require-typed-template` - Require [templateClassType] on ng-template with let- variables (Angular)
