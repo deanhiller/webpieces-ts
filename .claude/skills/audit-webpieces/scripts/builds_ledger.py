@@ -23,6 +23,7 @@ Emits JSON on stdout. Read-only.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -139,7 +140,7 @@ def wasted(builds):
                 break
         out.append({
             "killed_id": b["id"], "repo": b["repo"], "tree": b["tree"], "branch": b["branch"],
-            "by": b["by"], "signal": SIGNAL_EXITS[code], "exit": code,
+            "by": b["by"], "wp": b["wp"], "signal": SIGNAL_EXITS[code], "exit": code,
             "burned_min": round((b["took_ms"] or 0) / 60000, 1),
             "rerun_id": rerun["id"] if rerun else None,
             "rerun_outcome": rerun["outcome"] if rerun else None,
@@ -196,6 +197,7 @@ def concurrency(builds):
         "worst_overlaps": [{
             "a": f'{byid[a]["repo"]}::{byid[a]["tree"]}',
             "b": f'{byid[b2]["repo"]}::{byid[b2]["tree"]}',
+            "wp": sorted({byid[a]["wp"] or "?", byid[b2]["wp"] or "?"}),
             "minutes": round(ms / 60000, 1),
         } for (a, b2), ms in top_pairs],
     }
@@ -240,6 +242,7 @@ def repeats(builds, window_min=60, threshold=3):
                     "first": grp[0]["start_t"],
                     "total_build_min": round(sum((g["took_ms"] or 0) for g in grp) / 60000, 1),
                     "by": sorted({g["by"] for g in grp}),
+                    "wp": sorted({g["wp"] or "?" for g in grp}),
                 })
                 break
     return sorted(out, key=lambda r: -r["builds"])
@@ -255,10 +258,69 @@ def outliers(builds):
     return {
         "median_min": round(median, 1),
         "slowest": [{"repo": b["repo"], "tree": b["tree"], "branch": b["branch"], "by": b["by"],
+                     "wp": b["wp"],
                      "minutes": round((b["took_ms"] or 0) / 60000, 1),
                      "outcome": b["outcome"], "start_t": b["start_t"],
                      "x_median": round(((b["took_ms"] or 0) / 60000) / median, 1) if median else 0}
                     for b in slow],
+    }
+
+
+def semver_key(v):
+    """Sort key for a `wp=` version string. Unparseable versions sort first, never crash."""
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
+
+
+def by_version(builds):
+    """Per-@webpieces-version breakdown of the builds in the window.
+
+    Every START row carries `wp=<version>` — the release that GOVERNED that build. Without this,
+    an audit blends findings produced by a release that has since been fixed with findings from
+    the release actually running now, and every conclusion is a release or more out of date.
+    `latest_in_window` is the one to weight; anything attributed only to an older version is
+    history, not a live defect.
+    """
+    agg = {}
+    for b in builds:
+        v = b.get("wp") or "?"
+        a = agg.setdefault(v, {"count": 0, "minutes": 0.0, "fail": 0, "killed": 0,
+                               "repos": set(), "first": None, "last": None})
+        a["count"] += 1
+        a["minutes"] += (b["took_ms"] or 0) / 60000
+        if b["outcome"] == "fail":
+            a["fail"] += 1
+        try:
+            if int(b["exit"] or 0) in SIGNAL_EXITS:
+                a["killed"] += 1
+        except (TypeError, ValueError):
+            pass
+        a["repos"].add(Path(b["repo"] or "?").name)
+        if a["first"] is None or b["start_ms"] < a["first"][0]:
+            a["first"] = (b["start_ms"], b["start_t"])
+        if a["last"] is None or b["start_ms"] > a["last"][0]:
+            a["last"] = (b["start_ms"], b["start_t"])
+
+    total = sum(a["count"] for a in agg.values()) or 1
+    known = [v for v in agg if v != "?"]
+    latest = max(known, key=semver_key) if known else None
+    out = {}
+    for v, a in agg.items():
+        out[v] = {
+            "builds": a["count"],
+            "minutes": round(a["minutes"], 1),
+            "fail": a["fail"],
+            "killed": a["killed"],
+            "pct": round(100 * a["count"] / total),
+            "repos": sorted(a["repos"]),
+            "first_seen": a["first"][1],
+            "last_seen": a["last"][1],
+            "is_latest_in_window": v == latest,
+        }
+    return {
+        "latest_in_window": latest,
+        "builds_on_latest": out.get(latest, {}).get("builds", 0) if latest else 0,
+        "pct_on_latest": out.get(latest, {}).get("pct", 0) if latest else 0,
+        "versions": dict(sorted(out.items(), key=lambda kv2: semver_key(kv2[0]))),
     }
 
 
@@ -289,6 +351,9 @@ def main():
     # reproduced. An absolute UTC instant can.
     ap.add_argument("--since", default=None,
                     help="window start, ISO-8601 UTC (e.g. 2026-08-20T11:00:00Z). Overrides --hours.")
+    ap.add_argument("--until", default=None,
+                    help="window END, ISO-8601 UTC. Defaults to now. Use it to audit a CLOSED "
+                         "period (e.g. Mon-Wed) so the report is reproducible from its own scope line.")
     ap.add_argument("--hours", type=float, default=24.0)
     ap.add_argument("--home", default=str(Path.home()))
     ap.add_argument("--repos", nargs="*", default=None,
@@ -304,8 +369,15 @@ def main():
     else:
         since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
     since_ms = int(since.timestamp() * 1000)
+    if args.until:
+        until = datetime.fromisoformat(args.until.replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+    else:
+        until = datetime.now(timezone.utc)
+    until_ms = int(until.timestamp() * 1000)
 
-    builds = build_records(rows, since_ms)
+    builds = [b for b in build_records(rows, since_ms) if b["start_ms"] <= until_ms]
     if args.repos:
         pref = [os.path.expanduser(p).rstrip("/") for p in args.repos]
         builds = [b for b in builds if any((b["repo"] or "").startswith(p) for p in pref)]
@@ -321,11 +393,14 @@ def main():
         # must say so rather than presenting silence as quiet.
         "window_starts_before_ledger": bool(earliest and since_ms < earliest),
         "window_start_utc": since.isoformat(),
-        "window_end_utc": datetime.now(timezone.utc).isoformat(),
+        "window_end_utc": until.isoformat(),
         "rows": len(rows),
         "builds_in_window": len(builds),
         "total_build_minutes": round(sum((b["took_ms"] or 0) for b in builds) / 60000, 1),
         "by_caller": by_caller(builds),
+        # Which RELEASE governed each build. Weight `latest_in_window`; a finding attributable
+        # only to an older `wp=` may already be fixed.
+        "by_version": by_version(builds),
         "wasted": wasted(builds),
         "concurrency": concurrency(builds),
         "orphans": orphans(builds),
