@@ -20,7 +20,7 @@ import { CODEX_READ_STILL_ALLOWED } from './l0-codex-read';
  * Under any L0 fault the shim goes default-deny and permits only the allowlist. Entry 1 is "any Read",
  * which is what makes a fault SURVIVABLE for Claude Code: denied all work, the agent still reads the
  * config, the logs and the matrix doc and diagnoses its way out. CODEX HAS NO `Read` TOOL — a read
- * arrives as `Bash` running `sed -n '1,240p' <file>` — so before the aiType-gated entry, a Codex session
+ * arrives as `Bash` running `sed -n '1,240p' <file>` — so before the harness-gated entry, a Codex session
  * under D/X/U/K/S was denied EVERYTHING, including the reads the deny was instructing it to perform.
  *
  * This file is the acceptance evidence for the fix, in four parts:
@@ -88,7 +88,7 @@ describe('the Codex L0 read entry — sh and JS answer identically', () => {
      * impossible.
      */
     it('is built from exactly the bodies the gated allowlist entries carry', () => {
-        const gated = L0_ALLOWLIST.filter((e: L0AllowEntry): boolean => e.aiType === 'codex');
+        const gated = L0_ALLOWLIST.filter((e: L0AllowEntry): boolean => e.harness === 'codex');
         expect(gated.length, 'no gated entry — this whole file would be vacuous').toBe(1);
         const eres = gated.map((e: L0AllowEntry): string => e.ere ?? '');
         const jss = gated.map((e: L0AllowEntry): string => e.js ?? '');

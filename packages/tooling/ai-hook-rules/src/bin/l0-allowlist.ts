@@ -1,6 +1,8 @@
 import { CONFIG_FILENAME, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
 
-import { AiType } from '../core/agent-event';
+// The shape of ONE entry, in its own module so the LIST below is not crowded out by the types that
+// describe it. `./shim` stars both, so consumers see no seam.
+import { EVERY_HARNESS, L0AllowEntry, L0Call } from './l0-entry';
 // The harness-GATED half of L0, in its own module for the same size reason this one was split out of
 // ./shim. It owns the read-shaped vocabulary AND the union built from it; this file owns the entry
 // that puts it on the list, so the dependency runs one way and there is no cycle.
@@ -487,79 +489,17 @@ export const INSTALL_HOOKS_TARGET_CMD = 'pnpm wp-install-ai-hooks --target=proje
 // L0_ALLOWLIST is that list as DATA — the one array isAllowed(), the rendered shim's grep and the
 // published matrix doc (webpieces.guard-matrix.md) all derive from, so the doc cannot describe an
 // allowlist the code does not have. Adding an entry here is the ONLY way to widen L0.
-// ---------------------------------------------------------------------------
-
-/** One tool call as L0 judges it: the tool name, the Bash command (or ''), the file target (or ''). */
-export class L0Call {
-    constructor(
-        readonly toolName: string,
-        readonly command: string,
-        readonly filePath: string,
-    ) {}
-}
-
-/**
- * One entry of THE L0 allowlist. Data-only → a class, per CLAUDE.md.
- *
- * `ere`/`js` are the twin regex BODIES for a Bash entry, or null for a tool-shaped entry (Read, the
- * webpieces.config.json target) that no regex can express. `sample` is a call this entry must accept —
- * it is what the matrix-coverage and cure-reachability tests drive isAllowed() with.
- *
- * `extraSamples` pins ADDITIONAL spellings the same entry must accept. A spelling that some deny
- * message prescribes belongs here, or nothing stops a later tightening of the pattern from making that
- * message's cure untypable again — which is the deadlock shape this whole module exists to prevent.
- *
- * `cure` is the ONE thing that is not uniform across the list, and it is not about L0 at all — see
- * L0_CURE_ALLOW_JS below. Every entry is judged identically while an L0 fault is up; `cure` decides
- * only whether the entry ALSO bypasses the downstream (L1) guards on a HEALTHY tree.
- */
-export class L0AllowEntry {
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        readonly label: string,
-        readonly kind: 'pass' | 'allow',
-        /**
-         * True when this entry REPAIRS the tooling (install, sync, shim restore). A cure has to run
-         * before webpieces.config.json can even be loaded, so it bypasses everything, always. A
-         * non-cure (read-only orientation) is allowed while a fault is up and is otherwise an ordinary
-         * command the downstream guards still judge.
-         */
-        readonly cure: boolean,
-        readonly ere: string | null,
-        readonly js: string | null,
-        /**
-         * The ONE harness this entry exists for, or null for the entries every harness gets.
-         *
-         * A gated entry is unreachable from any other harness — it is spliced into its own union, which
-         * both halves of L0 consult only after answering "which harness sent this call?". It exists
-         * because the two harnesses do not have the same TOOLS: `Read` is entry 1 for Claude Code and
-         * Codex has no such tool, so read parity at L0 can only be expressed per harness. Anything added
-         * here later must satisfy the property stated on AI_TYPE_SH: the sh half's answer is an
-         * approximation, so a gated entry may never grant more than the OTHER harness already has.
-         */
-        readonly aiType: AiType | null,
-        readonly sample: L0Call,
-        readonly extraSamples: readonly L0Call[] = [],
-    ) {}
-
-    /** Every call this entry pins: the canonical sample plus every extra spelling. */
-    allSamples(): readonly L0Call[] {
-        return [this.sample, ...this.extraSamples];
-    }
-}
-
-
 export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
-    new L0AllowEntry('any Read', 'pass', false, null, null, null, new L0Call('Read', '', 'README.md')),
+    new L0AllowEntry('any Read', 'pass', false, null, null, EVERY_HARNESS, new L0Call('Read', '', 'README.md')),
     // TOOL-SHAPED, like the Read entry above and for the same reason: no regex can express "this tool
     // has nothing to judge". See L0_IGNORED_TOOLS for why the list is explicit and why `apply_patch`
     // (Codex's only WRITE) is deliberately not on it.
     new L0AllowEntry(`a Codex tool with nothing to judge: ${[...L0_IGNORED_TOOLS].join(', ')}`,
         'pass', false, null, null,
-        null, new L0Call('update_plan', '', ''),
+        EVERY_HARNESS, new L0Call('update_plan', '', ''),
         [new L0Call('view_image', '', ''), new L0Call('webrun', '', '')]),
     new L0AllowEntry(`a Write/Edit whose target is ${CONFIG_FILENAME}`, 'pass', false, null, null,
-        null, new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`)),
+        EVERY_HARNESS, new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`)),
     // THE MANIFEST ESCAPE, and it is an escape L1 row 8 already PROMISED before it existed. Its report
     // says "STILL ALLOWED HERE: ... edits to pnpm-workspace.yaml / package.json / webpieces.config.json"
     // and its docblock calls that one of "two structurally independent escapes" — but only
@@ -578,37 +518,37 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     // of every worktree — and no other package.json in the repo.
     new L0AllowEntry(`a Write/Edit whose target is a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin`,
         'pass', false, null, null,
-        null, new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
+        EVERY_HARNESS, new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
         [new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`)]),
     new L0AllowEntry('pnpm|npm install', 'allow', true, INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
-        null, new L0Call('Bash', 'pnpm install', '')),
+        EVERY_HARNESS, new L0Call('Bash', 'pnpm install', '')),
     new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', true, RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
-        null, new L0Call('Bash', RECOVERY_CMD, '')),
+        EVERY_HARNESS, new L0Call('Bash', RECOVERY_CMD, '')),
     // webpieces-disable no-fetch -- prose naming the git sync subcommand in a doc label, not an HTTP call
     new L0AllowEntry('git fetch - a bare git pull and git merge are NOT on the list', 'allow', true, FETCH_BODY_ERE, FETCH_BODY_JS,
-        null, new L0Call('Bash', 'git fetch', ''),
+        EVERY_HARNESS, new L0Call('Bash', 'git fetch', ''),
         [new L0Call('Bash', 'git fetch --prune origin main', '')]),
     // The one fork-point-safe pull: it ends on MAIN, so no feature branch is merged into. A bare
     // `git pull origin main` is deliberately NOT here — see CHECKOUT_MAIN_PULL_BODY_ERE.
     new L0AllowEntry(CHECKOUT_MAIN_PULL_CMD, 'allow', true, CHECKOUT_MAIN_PULL_BODY_ERE, CHECKOUT_MAIN_PULL_BODY_JS,
-        null, new L0Call('Bash', CHECKOUT_MAIN_PULL_CMD, '')),
+        EVERY_HARNESS, new L0Call('Bash', CHECKOUT_MAIN_PULL_CMD, '')),
     new L0AllowEntry(UPGRADE_SHIM_CMD, 'allow', true, UPGRADE_SHIM_BODY_ERE, UPGRADE_SHIM_BODY_JS,
-        null, new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
+        EVERY_HARNESS, new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
     new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', true, RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
-        null, new L0Call('Bash', RESTORE_SHIM_CMD, '')),
+        EVERY_HARNESS, new L0Call('Bash', RESTORE_SHIM_CMD, '')),
     // The cure for unknown keys in webpieces.config.json — see PRUNE_CONFIG_BODY_ERE for why a cure the
     // messages name must be reachable from inside the block those messages are read under.
     new L0AllowEntry(PRUNE_UNKNOWN_COMMAND, 'allow', true, PRUNE_CONFIG_BODY_ERE, PRUNE_CONFIG_BODY_JS,
-        null, new L0Call('Bash', PRUNE_UNKNOWN_COMMAND, ''),
+        EVERY_HARNESS, new L0Call('Bash', PRUNE_UNKNOWN_COMMAND, ''),
         [new L0Call('Bash', 'pnpm exec wp-prune-unknown-config', '')]),
     new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', true, INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
-        null, new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
+        EVERY_HARNESS, new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
         [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
     // The fault-U cure. `@<version>` is pinned as an extra sample because the deny INFERS a pin from the
     // repo's other @webpieces pins and prescribes the versioned spelling — the exact shape that must not
     // become untypable under a later tightening.
     new L0AllowEntry(`${ADD_HOOK_PKG_CMD} (an @version and extra flags allowed)`, 'allow', true, ADD_HOOK_PKG_BODY_ERE, ADD_HOOK_PKG_BODY_JS,
-        null, new L0Call('Bash', ADD_HOOK_PKG_CMD, ''),
+        EVERY_HARNESS, new L0Call('Bash', ADD_HOOK_PKG_CMD, ''),
         [
             new L0Call('Bash', `${ADD_HOOK_PKG_CMD}@0.4.574`, ''),
             new L0Call('Bash', `pnpm add -D -w ${HOOK_PKG}@0.4.574`, ''),
@@ -620,7 +560,7 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     new L0AllowEntry(
         'read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list',
         'allow', false, ORIENT_BODY_ERE, ORIENT_BODY_JS,
-        null, new L0Call('Bash', ORIENT_CMD, ''),
+        EVERY_HARNESS, new L0Call('Bash', ORIENT_CMD, ''),
         [
             new L0Call('Bash', 'git rev-parse --show-toplevel', ''),
             new L0Call('Bash', 'git worktree list', ''),
@@ -651,9 +591,9 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
 // The UNGATED bodies — every entry that is not scoped to one harness. A gated entry is spliced into its
 // own union below instead, which is what makes it unreachable from the harness it is not for.
 const L0_BODIES_ERE = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.ere === null || e.aiType !== null ? [] : [e.ere]));
+    (e: L0AllowEntry): string[] => (e.ere === null || e.harness !== EVERY_HARNESS ? [] : [e.ere]));
 const L0_BODIES_JS = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.js === null || e.aiType !== null ? [] : [e.js]));
+    (e: L0AllowEntry): string[] => (e.js === null || e.harness !== EVERY_HARNESS ? [] : [e.js]));
 
 // The ONE Bash allowlist. Anchored and tailed exactly like each individual hatch, so it inherits every
 // security property: no shell operator can ride along, and only the optional leading `cd <path> &&` /
@@ -693,6 +633,6 @@ export const L0_ALLOW_JS =
 // union is consulted by runner.ts where NO harness has been established either, so a gated body spliced
 // in would be judged with the gate missing — i.e. reachable from the harness it was written to exclude.
 const L0_CURE_BODIES_JS = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.js === null || !e.cure || e.aiType !== null ? [] : [e.js]));
+    (e: L0AllowEntry): string[] => (e.js === null || !e.cure || e.harness !== EVERY_HARNESS ? [] : [e.js]));
 export const L0_CURE_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + '(' + L0_CURE_BODIES_JS.join('|') + ')' + CAPTURE_TAIL_JS_SRC);

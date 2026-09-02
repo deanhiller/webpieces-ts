@@ -84,9 +84,12 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # dependency that invalidates the order fails a test rather than a release.
 ORDER=(
     packages/tooling/rules-config
-    packages/tooling/pr-gate
     packages/tooling/eslint-rules
+    # ai-hook-rules moved AHEAD of pr-gate when pr-gate began depending on it (BuildAffected consumes
+    # CodexGuardPresence for the guard-presence gate). publish-packages.spec.ts re-derives this from
+    # the real manifests and caught the inversion.
     packages/tooling/ai-hook-rules
+    packages/tooling/pr-gate
     packages/tooling/code-rules
     packages/tooling/nx-webpieces-rules
     # core-util has no @webpieces dependency; core-context depends on it. These two were the wrong way

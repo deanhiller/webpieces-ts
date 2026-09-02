@@ -3,9 +3,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { BuildsLog, DotWebpieces, HomeConfigService, RepoRootFinder, toError } from '@webpieces/rules-config';
+import { BuildsLog, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
+import { CodexGuardPresence, CodexSessionDetector } from '@webpieces/ai-hook-rules';
 import { BuildAffected } from './build-affected';
 import { BuildGateLog } from './build-gate-log';
+import { GateLogFile } from './gate-log-file';
+import { StageOutputLog } from './stage-output-log';
 import { BuildArtifactGate, BuildArtifactVerdict } from './build-artifact-gate';
 import { GeneratedArtifactRegistry, GeneratedArtifacts, ARTIFACT_SOURCE_NX } from './generated-artifact-registry';
 import { GitExec } from './git-exec';
@@ -20,7 +23,27 @@ const KNOWN = new GeneratedArtifacts(
 function newGate(): BuildArtifactGate {
     const registry = new GeneratedArtifactRegistry();
     registry.seed(KNOWN);
-    return new BuildArtifactGate(new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, new BuildAffected(new HomeConfigService(), new BuildGateLog(), new BuildsLog(new DotWebpieces())));
+    return new BuildArtifactGate(
+        new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, buildAffected());
+}
+
+/**
+ * A real BuildAffected, constructed with its CURRENT dependencies.
+ *
+ * This call was already stale at the fork point — it passed `HomeConfigService` and a zero-arg
+ * `BuildGateLog`, neither of which BuildAffected has taken for some time — and it stayed silent
+ * because `tsconfig.lib.json` excludes specs and vitest strips types with esbuild, so a spec is not
+ * type-checked by the build. Adding the guard-presence dependency widened that mismatch, so it is
+ * corrected here rather than left to rot one parameter further out.
+ */
+function buildAffected(): BuildAffected {
+    const files = new GateLogFile();
+    const stageConsole = new StageOutputLog(files);
+    return new BuildAffected(
+        new BuildGateLog(files, stageConsole),
+        new BuildsLog(new DotWebpieces()),
+        stageConsole,
+        new CodexGuardPresence(new CodexSessionDetector()));
 }
 
 // The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just

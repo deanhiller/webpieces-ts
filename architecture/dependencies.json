@@ -381,27 +381,26 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "bundle",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
-                "ai-hook-rules",
                 "code-rules",
                 "eslint-rules",
                 "pr-gate"
             ]
         },
         "pr-gate": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "designFile": "packages/tooling/pr-gate/design.json",
             "dependsOn": [
-                "rules-config"
+                "ai-hook-rules"
             ]
         },
         "rules-config": {

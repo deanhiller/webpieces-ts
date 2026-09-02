@@ -10,9 +10,14 @@ Every subcommand prints ONE json object to stdout. Nothing is ever written.
   guards       L0/L1/L2/rejection logs: blocks, deadlock streaks, uncurable faults
   isolation    worktree / .webpieces / shim-vs-root mismatches
   transcripts  wall-clock, tool histogram, redundant builds, blocked-call cost
+  parity       per-rule Claude-vs-Codex traffic, and the coverage holes it exposes
   skew         @webpieces pin vs installed, across every repo and worktree
   docdrift     paths quoted in docs/skills that do not exist on disk
   all          all of the above
+
+Two harnesses are governed by the same guards now, so every guard metric carries a
+per-harness breakdown and `parity` exists to answer the one question a total cannot:
+is Codex actually being guarded, or does it merely look quiet?
 """
 
 import argparse
@@ -26,6 +31,50 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 PROJECTS = Path.home() / ".claude" / "projects"
+# Codex transcripts are flat BY DATE with no per-project directory — the repo is named by
+# `session_meta.payload.cwd` inside each file, which is why the reader below has to open every
+# rollout in the window instead of globbing a sanitized path the way the Claude reader can.
+CODEX_SESSIONS = Path.home() / ".codex" / "sessions"
+
+# ---------------------------------------------------------------- harness
+
+
+# The values are the AiType union's OWN strings, taken from
+# packages/tooling/ai-hook-rules/src/core/agent-event.ts. Note `claude-code`, NOT `claude` — a
+# reader that guesses the short spelling silently reports every Claude row as `unknown` and then
+# reports a 100% Codex coverage hole, which is the exact wrong answer this section exists to give
+# correctly.
+AI_CLAUDE = "claude-code"
+AI_CODEX = "codex"
+
+# What a row written before the `ai=` field existed reads as. It is a REAL VALUE, not a
+# compatibility shim: `unknown` is countable and greppable, and it says something true — nothing
+# established the harness for that row. Silently folding those into `claude-code` would invent
+# evidence, and dropping them would understate the volume.
+AI_UNKNOWN = "unknown"
+
+AI_HARNESSES = (AI_CLAUDE, AI_CODEX, AI_UNKNOWN)
+
+
+def harness_of(meta):
+    """The harness a guard row was written for, from its trailing `ai=` field.
+
+    Every one of the five TSV streams carries `ai=` as a trailing k=v field, so `kv()` already
+    parses it for free — this only maps it onto the closed vocabulary. Anything absent or
+    unrecognised is `unknown` rather than a guess.
+    """
+    v = (meta or {}).get("ai") or ""
+    return v if v in (AI_CLAUDE, AI_CODEX) else AI_UNKNOWN
+
+
+def by_ai_dict(counters):
+    """{harness: {key: n}} with the empty harnesses kept, so a ZERO is visible rather than absent.
+
+    A missing key and a zero read identically to a model skimming JSON, and the whole point of the
+    parity section is that zero Codex traffic is a FINDING. So the harnesses are always all there.
+    """
+    return {h: dict(counters.get(h, Counter())) for h in AI_HARNESSES}
+
 
 # ---------------------------------------------------------------- helpers
 
@@ -98,11 +147,33 @@ def row_ts(first):
     return parse_ts(m.group(1)) if m else parse_ts(first)
 
 
+def guard_log_dirs(repo: Path, subdir: str):
+    """Every directory this repo writes `subdir` rows into — the primary tree AND each worktree.
+
+    An agent working in a linked worktree that has its own `.webpieces` writes its guard rows to
+    `.webpieces/worktrees/<agent>/logs/<subdir>`, not to the primary tree's. Reading only the
+    primary makes every worktree session invisible, and worktrees are where agent work happens —
+    so the harness breakdown would have reported `unknown` forever while the `ai=` rows sat
+    unread one directory over. (`audit_isolation` already knows both locations exist; it reports
+    `worktrees_with_own_logs`.)
+    """
+    out = [repo / ".webpieces" / "logs" / subdir]
+    wt = repo / ".webpieces" / "worktrees"
+    if wt.is_dir():
+        try:
+            out.extend(sorted(d / "logs" / subdir for d in wt.iterdir() if d.is_dir()))
+        except OSError:
+            pass
+    return [d for d in out if d.is_dir()]
+
+
 def iter_guard_rows(repo: Path, subdir: str, since):
     """Yield (path, ts, fields) for every row newer than `since`."""
-    d = repo / ".webpieces" / "logs" / subdir
-    if not d.is_dir():
-        return
+    for d in guard_log_dirs(repo, subdir):
+        yield from _iter_dir_rows(d, since)
+
+
+def _iter_dir_rows(d: Path, since):
     for f in sorted(d.glob("*.log")):
         try:
             if datetime.fromtimestamp(f.stat().st_mtime, timezone.utc) < since:
@@ -211,6 +282,7 @@ def _stale_main_health(repo, sess, rows):
     costly = kinds.get("cure_bundled_and", 0) + kinds.get("blocked_badly", 0)
     return {
         "repo": repo.name, "session": sess, "blocks": len(blocks),
+        "ai": dict(Counter(harness_of(r[5]) for r in blocks)),
         "kinds": dict(kinds),
         "distinct_states": len(set(pairs)),
         "advanced": advanced,
@@ -234,6 +306,13 @@ def audit_guards(repos, hours):
     cure_churn = []       # same cure emitted over and over
     uncurable = []
     stale_health = []     # per-session verdict for stale-main-bash-guard (see _stale_main_health)
+    # Per-HARNESS twins of the three aggregates above. Kept separately rather than replacing the
+    # totals: the totals are what the existing thresholds are calibrated against, and a Codex
+    # sample is currently tiny next to Claude's, so a merged number would be dominated by Claude
+    # and a split-only number would break every comparison to earlier reports.
+    decisions_by_ai = defaultdict(Counter)
+    blocks_by_ai = defaultdict(Counter)
+    faults_by_ai = defaultdict(Counter)
 
     for repo in repos:
         # per (session) ordered stream of L2 decisions.
@@ -258,12 +337,16 @@ def audit_guards(repos, hours):
             rule = fields[5] if len(fields) > 5 else "-"
             meta = kv(fields)
             meta["_raw"] = "\t".join(fields)
+            ai = harness_of(meta)
             decisions[decision] += 1
+            decisions_by_ai[ai][decision] += 1
             per_repo[repo.name][decision] += 1
             if decision.startswith("BLOCK") or decision.startswith("DENY"):
                 blocks[rule] += 1
+                blocks_by_ai[ai][rule] += 1
             if meta.get("fault", "-") not in ("-", ""):
                 faults[meta["fault"]] += 1
+                faults_by_ai[ai][meta["fault"]] += 1
             sess, _call = session_of(f)
             stream[sess].append((ts, decision, tool, cmd, rule, meta))
 
@@ -289,21 +372,25 @@ def audit_guards(repos, hours):
             if health:
                 stale_health.append(health)
 
+            # Keyed by (cure, harness) so a cure that loops on ONE harness is not diluted by the
+            # other having followed it successfully — that difference IS the finding.
             cures = Counter(
-                r[5].get("cure", "-") for r in rows
+                (r[5].get("cure", "-"), harness_of(r[5])) for r in rows
                 if (r[1].startswith("BLOCK") or r[1].startswith("DENY"))
                 and r[5].get("cure", "-") not in ("-", "")
             )
-            for cure, n in cures.items():
+            for (cure, ai), n in cures.items():
                 if n >= 4:
                     cure_churn.append(
-                        {"repo": repo.name, "session": sess, "cure": cure[:160], "times_prescribed": n}
+                        {"repo": repo.name, "session": sess, "ai": ai,
+                         "cure": cure[:160], "times_prescribed": n}
                     )
             for r in rows:
                 fault = r[5].get("fault", "-")
                 if fault not in ("-", ""):
                     uncurable.append(
                         {"repo": repo.name, "session": sess, "ts": r[0].isoformat(),
+                         "ai": harness_of(r[5]),
                          "fault": fault, "rule": r[4], "tool": r[2],
                          "cure": r[5].get("cure", "-")[:160], "cmd": r[3][:140]}
                     )
@@ -315,6 +402,7 @@ def audit_guards(repos, hours):
                          if f_.startswith("[") and f_.endswith("]")), None)
             if rule:
                 blocks["rejection:" + rule] += 1
+                blocks_by_ai[harness_of(kv(fields))]["rejection:" + rule] += 1
                 per_repo[repo.name]["REJECT_WRITE"] += 1
 
     streaks.sort(key=lambda s: -s["consecutive_blocks"])
@@ -330,6 +418,14 @@ def audit_guards(repos, hours):
         "stale_main_health": sorted(stale_health, key=lambda h: -h["blocks"])[:15],
         "uncurable_faults": uncurable[:20],
         "per_repo_decisions": {k: dict(v) for k, v in per_repo.items()},
+        # The same three aggregates, split by harness. Read alongside `codex_parity`: a harness
+        # with no blocks might be perfectly behaved, or might never have reached the guards at all,
+        # and only the parity section can tell those apart.
+        "by_ai": {
+            "decisions": by_ai_dict(decisions_by_ai),
+            "blocks_by_rule": {h: top(blocks_by_ai.get(h, Counter()), 12) for h in AI_HARNESSES},
+            "faults": by_ai_dict(faults_by_ai),
+        },
     }
 
 
@@ -339,12 +435,139 @@ def _streak(repo, sess, rule, run):
         "repo": repo.name,
         "session": sess,
         "rule": rule,
+        "ai": harness_of(run[0][5]),
         "consecutive_blocks": len(run),
         "span_seconds": round(span),
         "first_ts": run[0][0].isoformat(),
         "cure_prescribed": run[0][5].get("cure", "-")[:160],
         "fault": run[0][5].get("fault", "-"),
         "sample_cmds": [r[3][:120] for r in run[:4]],
+    }
+
+
+# ---------------------------------------------------------------- codex parity
+
+
+# How much Claude traffic a surface needs before its Codex silence means anything. Below this the
+# surface is simply rare, and calling it a hole would bury the real ones in noise.
+PARITY_MIN_CLAUDE_HITS = 5
+
+# The L0 verdict vocabulary, as SHIM_LOG_VERDICTS spells it: PASS-BIN-ALLOW, ALLOW-CODEX-READ,
+# DENY-STALE, and so on — screaming-kebab, at least two segments, no `=`.
+SHIM_VERDICT_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
+
+
+def _parity_surfaces(repo, since, hits):
+    """Count every guard surface each harness actually REACHED, across all five streams.
+
+    "Surface" is deliberately wider than "rule". A wrong tool-name matcher does not show up as a
+    rule that never fired — it shows up as a harness whose calls never arrive at the LAYER at all,
+    because the hook never matched and the shim never ran. So the L0 verdict vocabulary and the L1
+    matrix rows are counted as surfaces beside the L2 rule names and the write rejections. That is
+    what would have caught the inert `.codex/hooks.json`: Codex at zero on `L0:*` while Claude sat
+    in the hundreds, with no rule anywhere looking wrong.
+    """
+    # L0-shim: `<ts> <hook> <tool> ai=.. tree=.. layer=L0 row=.. shim=.. fault=.. <VERDICT> <cmd>`
+    # The verdict is matched by SHAPE, not by "is it uppercase" — an ISO timestamp answers True to
+    # str.isupper() (its only cased character is the `T`), so the loose test made every row its own
+    # surface and produced thousands of one-hit entries instead of the dozen real verdicts.
+    for _f, _ts, fields in iter_guard_rows(repo, "L0-shim", since):
+        meta = kv(fields)
+        verdict = next((x for x in fields[1:] if SHIM_VERDICT_RE.fullmatch(x)), "?")
+        hits["L0:" + verdict][harness_of(meta)] += 1
+
+    # calls/: every call the bin judged at all, with its guards= verdict.
+    for _f, _ts, fields in iter_guard_rows(repo, "calls", since):
+        meta = kv(fields)
+        hits["calls:" + meta.get("guards", "?")][harness_of(meta)] += 1
+
+    # L1-location/: the matrix ROW is the surface — a row nothing ever reaches on one harness is
+    # the location stack failing to see that harness.
+    for _f, _ts, fields in iter_guard_rows(repo, "L1-location", since):
+        meta = kv(fields)
+        hits["L1:row=" + meta.get("row", "?")][harness_of(meta)] += 1
+
+    # L2-decisions/: the named rules. Field 5 is the rule; '-' means no rule spoke.
+    for _f, _ts, fields in iter_guard_rows(repo, "L2-decisions", since):
+        meta = kv(fields)
+        rule = fields[5] if len(fields) > 5 else "-"
+        if rule and rule != "-":
+            hits["rule:" + rule][harness_of(meta)] += 1
+
+    # rejections/: a Write/Edit refused by a code-rule.
+    for _f, _ts, fields in iter_guard_rows(repo, "rejections", since):
+        meta = kv(fields)
+        rule = next((re.sub(r"[\[\]]", "", x) for x in fields[1:6]
+                     if x.startswith("[") and x.endswith("]")), None)
+        if rule:
+            hits["rejection:" + rule][harness_of(meta)] += 1
+
+
+def audit_parity(repos, hours):
+    """Is Codex actually being GUARDED, or does it just look quiet?
+
+    A total block count cannot answer that. Zero Codex blocks is the reading you get both when
+    Codex is perfectly behaved and when no guard ever ran for it — and the second is the failure
+    that shipped: `.codex/hooks.json` matched tool names Codex does not emit and referenced
+    `$CLAUDE_PROJECT_DIR`, which is unset there, so every hook died and nothing anywhere looked
+    wrong. Comparing per-surface traffic BETWEEN harnesses is what makes that visible.
+    """
+    since = cutoff(hours)
+    hits = defaultdict(Counter)          # surface -> harness -> n
+    per_repo = {}
+
+    for repo in repos:
+        before = {s: dict(c) for s, c in hits.items()}
+        _parity_surfaces(repo, since, hits)
+        delta = Counter()
+        for s, c in hits.items():
+            for h, n in c.items():
+                delta[h] += n - before.get(s, {}).get(h, 0)
+        per_repo[repo.name] = dict(delta)
+
+    totals = Counter()
+    for c in hits.values():
+        for h, n in c.items():
+            totals[h] += n
+
+    rules, holes = [], []
+    for surface in sorted(hits):
+        c = hits[surface]
+        row = {
+            "surface": surface,
+            "claude_hits": c.get(AI_CLAUDE, 0),
+            "codex_hits": c.get(AI_CODEX, 0),
+            "unknown_hits": c.get(AI_UNKNOWN, 0),
+        }
+        rules.append(row)
+        if row["claude_hits"] >= PARITY_MIN_CLAUDE_HITS and row["codex_hits"] == 0:
+            holes.append(row)
+
+    # The whole-harness verdict, which subsumes every per-surface hole when it fires. If Codex
+    # produced no rows AT ALL in a window where it was used, no surface comparison is meaningful —
+    # the finding is "the hooks never ran", not "these N rules have holes".
+    if totals[AI_CODEX] == 0:
+        # Every per-surface hole here is the SAME fact restated once per surface, so listing them
+        # would bury the one finding under eleven copies of it.
+        holes = []
+        verdict = ("NO CODEX ROWS IN WINDOW — either Codex was not used, or its hooks never ran. "
+                   "Cross-check against ~/.codex/sessions for this repo before concluding either: "
+                   "sessions present with zero rows is the unguarded-session failure. Per-surface "
+                   "holes are not listed: with no Codex traffic at all they would each restate this.")
+    elif not holes:
+        verdict = "no coverage holes: every surface Claude reached, Codex reached too"
+    else:
+        verdict = f"{len(holes)} surfaces with Claude traffic and ZERO Codex traffic"
+
+    rules.sort(key=lambda r: -(r["claude_hits"] + r["codex_hits"]))
+    return {
+        "window_hours": hours,
+        "min_claude_hits_for_a_hole": PARITY_MIN_CLAUDE_HITS,
+        "rows_by_ai": dict(totals),
+        "per_repo_rows_by_ai": per_repo,
+        "verdict": verdict,
+        "coverage_holes": sorted(holes, key=lambda r: -r["claude_hits"])[:20],
+        "surfaces": rules[:60],
     }
 
 
@@ -490,6 +713,53 @@ def _text_of(content):
     return ""
 
 
+def _codex_rollouts(since):
+    """Every Codex rollout touched in the window, paired with the repo cwd it names.
+
+    Codex stores sessions as `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` — flat by DATE, with
+    no per-project directory, so unlike the Claude reader there is no path to glob for a repo. The
+    repo is a FIELD (`session_meta.payload.cwd`) inside the file, which means selection costs one
+    open per rollout. Cheap in practice: only the first `session_meta` record is needed, so the
+    scan stops at it.
+    """
+    out = []
+    if not CODEX_SESSIONS.is_dir():
+        return out
+    for f in CODEX_SESSIONS.glob("*/*/*/rollout-*.jsonl"):
+        try:
+            if datetime.fromtimestamp(f.stat().st_mtime, timezone.utc) < since:
+                continue
+            cwd = None
+            with f.open(errors="replace") as fh:
+                for line in fh:
+                    if '"session_meta"' not in line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    if row.get("type") == "session_meta":
+                        cwd = ((row.get("payload") or {}).get("cwd")) or None
+                        break
+            if cwd:
+                out.append((f, Path(cwd)))
+        except OSError:
+            continue
+    return out
+
+
+def _codex_repo_of(cwd: Path, repos):
+    """Which audited repo this rollout ran in — the repo itself, or any worktree beneath it."""
+    s = str(cwd)
+    best = None
+    for repo in repos:
+        r = str(repo)
+        if s == r or s.startswith(r + "/"):
+            if best is None or len(r) > len(str(best)):
+                best = repo
+    return best
+
+
 def audit_transcripts(repos, hours, max_sessions=400):
     since = cutoff(hours)
     sessions = []
@@ -514,8 +784,48 @@ def audit_transcripts(repos, hours, max_sessions=400):
         if s:
             sessions.append(s)
 
+    # The Codex half. Same session shape, same counters, so every downstream aggregate works
+    # unchanged and the harness is just another column.
+    codex_seen = 0
+    for f, cwd in _codex_rollouts(since):
+        repo = _codex_repo_of(cwd, repos)
+        if repo is None:
+            continue
+        codex_seen += 1
+        if codex_seen > max_sessions:
+            break
+        s = _scan_codex_session(repo, f, since, tool_hist, blocked_rules)
+        if s:
+            sessions.append(s)
+
     def total(k):
         return round(sum(s[k] for s in sessions), 1)
+
+    def by_harness():
+        """Per-harness totals, so a Codex regression is judged against Codex's own volume.
+
+        Kept as counts AND sessions: a rate computed over four Codex sessions is not comparable
+        to one computed over four hundred Claude sessions, and the denominator is the only thing
+        that says so.
+        """
+        out = {}
+        for h in AI_HARNESSES:
+            rows = [s for s in sessions if s.get("harness") == h]
+            if not rows:
+                continue
+            out[h] = {
+                "sessions": len(rows),
+                "active_hours": round(sum(s["active_seconds"] for s in rows) / 3600, 1),
+                "tool_seconds": round(sum(s["tool_seconds"] for s in rows), 1),
+                "builds": sum(s["builds"] for s in rows),
+                "redundant_builds": sum(s["redundant_builds"] for s in rows),
+                "blocked_calls": sum(s["blocked_calls"] for s in rows),
+                "blocked_seconds": round(sum(s["blocked_seconds"] for s in rows), 1),
+                "error_calls": sum(s["error_calls"] for s in rows),
+                "error_seconds": round(sum(s["error_seconds"] for s in rows), 1),
+                "repeated_cmd_calls": sum(s["repeated_cmd_calls"] for s in rows),
+            }
+        return out
 
     worst_builds = sorted(sessions, key=lambda s: -s["redundant_builds"])[:12]
     worst_blocked = sorted(sessions, key=lambda s: -s["blocked_seconds"])[:12]
@@ -524,6 +834,9 @@ def audit_transcripts(repos, hours, max_sessions=400):
     return {
         "window_hours": hours,
         "sessions_scanned": len(sessions),
+        "sessions_by_harness": {h: sum(1 for s in sessions if s.get("harness") == h)
+                                for h in AI_HARNESSES},
+        "totals_by_harness": by_harness(),
         "totals": {
             "wall_hours_span": round(total("wall_seconds") / 3600, 1),
             "active_hours": round(total("active_seconds") / 3600, 1),
@@ -671,6 +984,7 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
     repeated = sum(n - 1 for n in cmd_counts.values() if n > 1)
     return {
         "repo": repo.name,
+        "harness": AI_CLAUDE,
         "session": path.stem,
         "transcript": str(path),
         "started": first.isoformat(),
@@ -691,6 +1005,170 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
         "repeated_cmd_calls": repeated,
         "top_repeated_cmds": [{"cmd": k, "n": v} for k, v in cmd_counts.most_common(4) if v > 1],
         "output_tokens": out_tokens,
+        "block_samples": block_samples,
+    }
+
+
+# A Codex shell call arrives in the rollout as a `custom_tool_call` named `exec`, whose `input` is a
+# JS snippet calling `tools.exec_command({"cmd": "...", ...})`. The command is the only field this
+# reader needs, and pulling it with a regex avoids depending on the snippet staying one statement.
+CODEX_EXEC_CMD_RE = re.compile(r'"cmd"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _codex_text(output):
+    """A tool output, which is a plain string on function calls and a content list on exec calls."""
+    if isinstance(output, str):
+        return output
+    if isinstance(output, list):
+        return "\n".join(c.get("text", "") for c in output
+                         if isinstance(c, dict) and isinstance(c.get("text"), str))
+    return ""
+
+
+def _scan_codex_session(repo, path, since, tool_hist, blocked_rules):
+    """The Codex twin of _scan_session, producing the identical session dict.
+
+    Deliberately the same counters, so `totals_by_harness` is a like-for-like comparison rather
+    than two metrics that merely share names. The differences are all in the wire format:
+
+      * tool calls are `response_item` payloads — `custom_tool_call` (the `exec` shell tool) and
+        `function_call` (namespaced tools like `collaboration.spawn_agent`), correlated to their
+        outputs by `call_id` rather than by Claude's `tool_use_id`;
+      * there is no `Read`/`Write`/`Edit` tool. A read is a shell `sed -n`/`cat`, and an edit is
+        `apply_patch` — which is why the mutation test below looks at the COMMAND, not the tool
+        name, or every Codex session would look like it never edited anything and every build
+        would be scored redundant;
+      * tool names are prefixed `codex:` in the histogram so the two harnesses' tools cannot be
+        silently summed into one bar.
+    """
+    first = last = prev = None
+    active_seconds = 0.0
+    pending = {}
+    tool_seconds = build_seconds = blocked_seconds = 0.0
+    builds = redundant_builds = blocked_calls = log_read_calls = error_calls = 0
+    error_seconds = 0.0
+    dirty = True
+    cmd_counts = Counter()
+    build_cmds = Counter()
+    log_files = Counter()
+    block_samples = []
+    session_id = path.stem
+
+    try:
+        fh = path.open(errors="replace")
+    except OSError:
+        return None
+
+    with fh:
+        for line in fh:
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            ts = parse_ts(row.get("timestamp"))
+            if ts and not in_window(ts):
+                continue
+            if ts and ts < since:
+                continue
+            if ts:
+                first = ts if first is None else min(first, ts)
+                last = ts if last is None else max(last, ts)
+                if prev is not None:
+                    gap = (ts - prev).total_seconds()
+                    if 0 < gap <= 300:
+                        active_seconds += gap
+                prev = ts
+
+            payload = row.get("payload") or {}
+            if row.get("type") != "response_item" or not isinstance(payload, dict):
+                continue
+            kind = payload.get("type")
+
+            if kind in ("custom_tool_call", "function_call"):
+                ns = payload.get("namespace") or ""
+                name = (ns + payload.get("name", "?")) if ns else payload.get("name", "?")
+                tool_hist["codex:" + name] += 1
+                if kind == "custom_tool_call":
+                    m = CODEX_EXEC_CMD_RE.search(payload.get("input") or "")
+                    cmd = m.group(1).encode().decode("unicode_escape") if m else ""
+                else:
+                    cmd = payload.get("arguments") or ""
+                cmd_counts[cmd.strip()[:200]] += 1
+                pending[payload.get("call_id")] = (ts, name, cmd)
+
+                if BUILD_RE.search(cmd):
+                    builds += 1
+                    build_cmds[cmd.strip()[:120]] += 1
+                    if not dirty:
+                        redundant_builds += 1
+                    dirty = False
+                elif "apply_patch" in cmd or MUTATE_BASH_RE.search(cmd):
+                    dirty = True
+                m = LOGREAD_RE.search(cmd)
+                if m:
+                    log_read_calls += 1
+                    log_files[m.group(2)] += 1
+
+            elif kind in ("custom_tool_call_output", "function_call_output"):
+                started, name, cmd = pending.pop(payload.get("call_id"), (None, "?", ""))
+                dur = (ts - started).total_seconds() if (ts and started) else 0.0
+                dur = max(0.0, min(dur, 3600.0))
+                tool_seconds += dur
+                txt = _codex_text(payload.get("output"))
+                # Codex has no `is_error` flag on the record, so a failed call is recognised the
+                # same way a human would: the guard markers, or a non-zero exit the exec harness
+                # prints. Anything less specific would count ordinary greps that found nothing.
+                guard_hit = bool(BLOCK_MARK_RE.search(txt[:600]))
+                errored = (not guard_hit) and bool(
+                    re.search(r"exited with (?:code )?[1-9]|Exit code: [1-9]", txt[:600]))
+                if guard_hit:
+                    blocked_calls += 1
+                    blocked_seconds += dur
+                    marks = {m for m in BLOCK_MARK_RE.findall(txt[:600])
+                             if not m.startswith(("❌", "Fix Option"))}
+                    for m in (marks or {"unclassified"}):
+                        blocked_rules[m] += 1
+                    if len(block_samples) < 3:
+                        block_samples.append({"tool": name, "cmd": cmd[:120],
+                                              "excerpt": " ".join(txt.split())[:220]})
+                elif errored:
+                    error_calls += 1
+                    error_seconds += dur
+                if BUILD_RE.search(cmd or ""):
+                    build_seconds += dur
+
+    if first is None or last is None:
+        return None
+    avg_build = (build_seconds / builds) if builds else 0.0
+    repeated = sum(n - 1 for n in cmd_counts.values() if n > 1)
+    return {
+        "repo": repo.name,
+        "harness": AI_CODEX,
+        "session": session_id,
+        "transcript": str(path),
+        "started": first.isoformat(),
+        "wall_seconds": (last - first).total_seconds(),
+        "active_seconds": round(active_seconds, 1),
+        "tool_seconds": round(tool_seconds, 1),
+        "build_seconds": round(build_seconds, 1),
+        "redundant_build_seconds": round(avg_build * redundant_builds, 1),
+        "blocked_seconds": round(blocked_seconds, 1),
+        "builds": builds,
+        "redundant_builds": redundant_builds,
+        "blocked_calls": blocked_calls,
+        "error_calls": error_calls,
+        "error_seconds": round(error_seconds, 1),
+        "log_read_calls": log_read_calls,
+        "top_log_files": top(log_files, 4),
+        "top_build_cmds": top(build_cmds, 4),
+        "repeated_cmd_calls": repeated,
+        "top_repeated_cmds": [{"cmd": k, "n": v} for k, v in cmd_counts.most_common(4) if v > 1],
+        # Codex rollouts carry token counts on `event_msg`/`token_count` records rather than on
+        # each assistant turn. Reported as 0 rather than guessed at — see SKILL.md.
+        "output_tokens": 0,
         "block_samples": block_samples,
     }
 
@@ -1343,7 +1821,7 @@ def resolve_repos(patterns):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "skew",
+    ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "parity", "skew",
                                     "docdrift", "matrix", "merges", "all"])
     ap.add_argument("--repos", nargs="+", required=True)
     ap.add_argument("--since", default=None,
@@ -1381,6 +1859,8 @@ def main():
         res["isolation"] = audit_isolation(repos, args.hours)
     if args.cmd in ("transcripts", "all"):
         res["transcripts"] = audit_transcripts(repos, args.hours, args.max_sessions)
+    if args.cmd in ("parity", "all"):
+        res["codex_parity"] = audit_parity(repos, args.hours)
     if args.cmd in ("skew", "all"):
         res["skew"] = audit_skew(repos, check_npm=not args.no_npm)
     if args.cmd in ("docdrift", "all"):

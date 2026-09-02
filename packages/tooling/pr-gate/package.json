@@ -15,8 +15,9 @@
         "directory": "packages/tooling/pr-gate"
     },
     "dependencies": {
-        "@webpieces/rules-config": "workspace:*",
         "@inversifyjs/binding-decorators": "1.1.5",
+        "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/rules-config": "workspace:*",
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2"
     },
