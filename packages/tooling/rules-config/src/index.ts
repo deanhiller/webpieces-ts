@@ -310,7 +310,6 @@ export {
     CK_FAIL,
     CK_MISSING,
     CK_BAD_FORMAT,
-    CK_UNAUTHORIZED,
     VERDICT_GREEN,
     VERDICT_YELLOW,
     VERDICT_RED,
@@ -322,16 +321,6 @@ export {
     reviewJsonPath,
     reviewJsonSchemaHint,
 } from './review-json';
-export {
-    HumanApproval,
-    AuthorizationFile,
-    AuthorizationContext,
-    AuthorizationCheck,
-    AuthorizedOverrides,
-    HumanAuthorizationService,
-    AUTHORIZATIONS_DIR,
-    DEFAULT_APPROVAL_HOURS,
-} from './human-authorization';
 export {
     MainSyncStatus,
     MainSyncStatusFile,
