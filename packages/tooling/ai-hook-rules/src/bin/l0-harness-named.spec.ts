@@ -24,8 +24,12 @@ import { AI_TYPES, AiType } from '../core/agent-event';
  * correct, and only reading the text catches that.
  */
 describe('the L0 allowlist names its harness — always, and out loud', () => {
-    const SRC = path.join(__dirname, 'l0-allowlist.ts');
-    const source = fs.readFileSync(SRC, 'utf8');
+    // TWO files now: `l0-entry.ts` declares the field and the union, `l0-allowlist.ts` carries the
+    // entries that must name a harness. Both are read, because the defect this pins could be
+    // reintroduced from either side — a default on the declaration, or an entry that omits it.
+    const ENTRY = fs.readFileSync(path.join(__dirname, 'l0-entry.ts'), 'utf8');
+    const LIST = fs.readFileSync(path.join(__dirname, 'l0-allowlist.ts'), 'utf8');
+    const source = ENTRY + '\n' + LIST;
 
     /** Every value the field may hold. There is no fourth, and no absence. */
     const LEGAL: readonly string[] = [EVERY_HARNESS, ...AI_TYPES];

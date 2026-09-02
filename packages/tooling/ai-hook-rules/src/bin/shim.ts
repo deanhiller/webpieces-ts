@@ -23,6 +23,7 @@ import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 // The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
 // every existing `from './shim'` import keeps working and there is still ONE name to import L0 by.
+export * from './l0-entry';
 export * from './l0-allowlist';
 // …and its two siblings, split out for the same size reason: the decision (isAllowed / isRootManifest /
 // READ_TOOLS) and the tool-shaped set it consults. ONE name to import L0 by, still.

@@ -225,6 +225,22 @@
                     "level": 2
                 },
                 {
+                    "id": "CodexGuardPresence",
+                    "className": "CodexGuardPresence",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/ai-hook-rules/src/bin/codex-guard-presence.ts",
+                    "level": 4
+                },
+                {
+                    "id": "CodexSessionDetector",
+                    "className": "CodexSessionDetector",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/ai-hook-rules/src/bin/codex-guard-presence.ts",
+                    "level": 5
+                },
+                {
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
@@ -906,6 +922,15 @@
                 },
                 {
                     "from": "BuildAffected",
+                    "to": "CodexGuardPresence",
+                    "injection": "type",
+                    "token": "CodexGuardPresence",
+                    "tokenKey": "class:packages/tooling/ai-hook-rules/src/bin/codex-guard-presence.ts#CodexGuardPresence",
+                    "paramName": "guardPresence",
+                    "paramType": "CodexGuardPresence"
+                },
+                {
+                    "from": "BuildAffected",
                     "to": "StageOutputLog",
                     "injection": "type",
                     "token": "StageOutputLog",
@@ -1245,6 +1270,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts#WorktreeCleanupSection",
                     "paramName": "worktreeSection",
                     "paramType": "WorktreeCleanupSection"
+                },
+                {
+                    "from": "CodexGuardPresence",
+                    "to": "CodexSessionDetector",
+                    "injection": "type",
+                    "token": "CodexSessionDetector",
+                    "tokenKey": "class:packages/tooling/ai-hook-rules/src/bin/codex-guard-presence.ts#CodexSessionDetector",
+                    "paramName": "detector",
+                    "paramType": "CodexSessionDetector"
                 },
                 {
                     "from": "DevDeployRefs",

@@ -235,7 +235,8 @@ describe('guard-presence attestation', () => {
             try {
                 await captureStdout((): Promise<void> => gate().runBuildGate(dir, opts()));
             } catch (err: unknown) {
-                caught = toError(err);
+                const error = toError(err);
+                caught = error;
             }
             expect(caught, 'an unguarded Codex session must not build').not.toBeNull();
             expect(String(caught?.message)).toContain('NOT ONE guard has run');
