@@ -57,3 +57,21 @@ and passes.
 **This is not permission to skip RULE 2.** An issue the reviewer had to reconstruct from your diff is an
 issue with no reasoning in it — it records *what* changed, which the diff already says, and not *why*,
 which is the only part that was ever worth writing down.
+
+**Enforcement:** `ticket-required-reviewer` (`.claude/agents/ticket-required-reviewer.md`) is REGISTERED
+in `commands.pr-gate.checklists` and REQUIRED, over `**` plus `.claude/**` and `.github/**` — which is
+every file in the repo, and is deliberately universal where every other checklist here is content-scoped:
+this one is scoped to the PR, not to the diff, so a one-line typo fix is in scope exactly like a
+framework change is. (The two dot-directory patterns are not redundant. Checklist patterns run through
+`isPathExcluded`, which calls minimatch without `{ dot: true }`, so a bare `**` measurably does not match
+`.claude/rules/tickets.md` — and a docs-only PR is the shape least likely to be ticketed by hand.)
+
+**There is no red path for a missing ticket, so "enforcement" here means the issue gets CREATED, not that
+the PR gets blocked.** That is the whole of RULE 3 restated at the checklist level: the reviewer files the
+issue, writes the `Fixes #NNN` line into the PR body, and passes green. It is also the first checklist in
+this repo that WRITES to GitHub rather than only reporting — every reviewer before it reads the diff and
+emits a verdict, and this one takes an action in the outside world. `.claude/review/ticket-required.md` is
+what it reads, and it is where the checks live. It keeps a red verdict only for the two shapes that are
+not a missing ticket at all — a body pointing at an issue in a DIFFERENT repository, and a `Fixes #NNN`
+aimed at an issue that plainly describes other work, which on merge auto-closes somebody else's open
+issue. A wrong link is worse than no link; no link, it just files one.
