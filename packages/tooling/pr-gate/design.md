@@ -62,6 +62,7 @@ graph TD
     HomeConfigService["HomeConfigService"]
     HomeDocKeys["HomeDocKeys"]
     LandPrCommand["LandPrCommand"]
+    LandedTreeResolver["LandedTreeResolver"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
     MergeBodyTempFile["MergeBodyTempFile"]
@@ -201,11 +202,13 @@ graph TD
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
+    LandPrCommand --> LandedTreeResolver
     LandPrCommand --> LandedWorktreeReaper
     LandPrCommand --> MergeBodyTempFile
     LandPrCommand --> MergeInfoIndex
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandedTreeResolver --> WorktreeService
     LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
     MergeEnd --> BranchNaming
@@ -259,6 +262,7 @@ graph TD
     ReapWorktreeCommand --> ReapOutcomeSignal
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
+    ReapWorktreeCommand --> WorktreeService
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistNotice
