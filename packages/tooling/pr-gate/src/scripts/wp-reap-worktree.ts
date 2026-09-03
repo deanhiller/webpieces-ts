@@ -11,9 +11,10 @@ import { PrGateApp } from './pr-gate-app';
  * worktree it just landed from can be removed by a process that is not standing in it. There is no
  * `wp-reap-worktree` verb for a human: `pnpm wp-cleanup` is that verb and does strictly more.
  *
- * Unlike its siblings it TAKES arguments (`<worktree-path> <branch>`), so `CliArgs.assertNoArgs` —
- * which exists to stop a stray flag from silently starting a mutation flow — would be wrong here.
- * ReapWorktreeCommand validates argv itself and refuses to do anything without both values.
+ * Unlike its siblings it TAKES arguments (`<worktree-path> <branch> <head-sha>`), so
+ * `CliArgs.assertNoArgs` — which exists to stop a stray flag from silently starting a mutation flow —
+ * would be wrong here. ReapWorktreeCommand validates argv itself and refuses to do anything without all
+ * three values; the sha is what stops a removal being decided by a branch NAME.
  */
 runMain(async (): Promise<void> => {
     const container = new Container({ autobind: true });

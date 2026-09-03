@@ -6,6 +6,7 @@ import {
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { LandedTree, LandedTreeResolver, LANDED_TREE_ABSENT } from '../workflow/landed-tree-resolver';
 import { LandedWorktreeReaper, WorktreeReapHandoff } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
@@ -42,9 +43,26 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  *     and reaping the landed worktree. That half belongs to the tree whose `<branch>` really is the
  *     commit being squashed, and it must NOT be attempted from anywhere else: another clone's
  *     `<branch>` is a different commit, so archiving it there would tag the wrong objects under the
- *     right name. {@link LandPrCommand.bookkeeping} tests that by comparing this tree's `<branch>`
- *     against the PR's own `headRefOid`, and when they disagree the merge still happens and the
- *     bookkeeping is SKIPPED OUT LOUD.
+ *     right name.
+ *
+ * ─── WHICH tree that is, is a FACT — it is not "the one I am standing in" ──────────────────────────
+ * That distinction used to be resolved from `process.cwd()`, and it was wrong twice over.
+ *
+ * It was wrong MECHANICALLY: `pnpm` hoists a bin's cwd to the workspace root, and a Claude Code agent
+ * worktree lives at `<primary>/.claude/worktrees/agent-<id>` — INSIDE the primary clone — so pnpm walked
+ * straight past it and `git branch --show-current` answered `main`. Landing a worktree PR, i.e. every
+ * `/full-cycle` run, reported "No open PR found for this branch" for a PR that was open, and the #512
+ * worktree reap was unreachable dead code. The invocation directory is now read from `INIT_CWD` (pnpm
+ * exports the directory the human actually typed in) and given to BOTH the repo-root resolution and the
+ * `git` call, so neither can be answered by the hoisted directory.
+ *
+ * And it was wrong in PRINCIPLE, which is the larger half: most of the time the `/full-cycle` subagent
+ * lands its own PR, but many times it does not — CI was still running when it finished, it errored, or a
+ * coordinator picks the work up an hour later, by which point that agent is gone and its worktree is a
+ * directory nobody is standing in. So `--pr <n>` names the PR, and {@link LandedTreeResolver} finds its
+ * tree by the pair `(headRefName, headRefOid)` — never by branch name alone. The reap target is the
+ * worktree whose HEAD is the exact commit GitHub squashed, whichever directory the operator is in, and
+ * when nothing local holds that commit the merge still happens and the bookkeeping is SKIPPED OUT LOUD.
  */
 @injectable(bindingScopeValues.Singleton)
 export class LandPrCommand {
@@ -58,23 +76,40 @@ export class LandPrCommand {
         private readonly mergeInfoIndex: MergeInfoIndex,
         private readonly landedWorktree: LandedWorktreeReaper,
         private readonly bodyFile: MergeBodyTempFile,
+        private readonly landedTree: LandedTreeResolver,
     ) {}
 
-    async run(): Promise<void> {
-        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        const base = this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
+    /**
+     * THE INVOCATION DIRECTORY, which is not `process.cwd()`.
+     *
+     * `pnpm` runs a workspace bin with its cwd hoisted to the workspace root and exports the directory
+     * the operator was actually in as `INIT_CWD`. Every agent worktree is NESTED inside the primary
+     * clone, so the hoist silently relocated this command into a different tree holding a different
+     * branch — see the class doc. `process.cwd()` remains the answer when nothing set `INIT_CWD` (a
+     * direct `node` invocation, or a spec), which is the case where the two are the same anyway.
+     */
+    private invocationCwd(): string {
+        const init = process.env['INIT_CWD'] ?? '';
+        return init !== '' ? init : process.cwd();
+    }
 
-        const ref = this.readPr(base);
-        if (ref === null) {
-            throw new InformAiError(
-                '\n' + SEP + '❌ No open PR found for this branch\n' + SEP + '\n' +
-                `No open PR has head branch "${base}". Nothing to land.\n` +
-                'If the PR is already merged, run `pnpm wp-cleanup`.\n' +
-                'If it was never posted, run the gated flow — it posts the PR AND writes the description\n' +
-                'that becomes this commit body:\n' +
-                '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP,
-            );
-        }
+    async run(request: LandPrRequest): Promise<void> {
+        if (request.prFlagPresent && !/^\d+$/.test(request.prNumber)) throw this.badPrNumber(request);
+        const cwd = this.invocationCwd();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(cwd);
+        // `--pr <n>` selects the PR outright; with no flag it is this branch's, read from the tree the
+        // operator is really standing in.
+        const selector = request.prNumber !== ''
+            ? request.prNumber
+            : this.branchNaming.baseBranchName(
+                execSync('git branch --show-current', { cwd, encoding: 'utf8' }).trim());
+
+        const ref = this.readPr(selector);
+        if (ref === null) throw this.noSuchPr(request, selector);
+        // The PR's OWN head branch, never the selector: with `--pr <n>` the operator named a number and
+        // has said nothing about branches, and even in the zero-arg case GitHub is the authority on which
+        // branch that PR is merging.
+        const base = ref.headRefName !== '' ? ref.headRefName : selector;
         if (ref.body === '') throw this.emptyDescription(ref);
         const unfit = this.notFitForGitLog(ref.body);
         if (unfit !== '') throw this.descriptionUnfitForGitLog(ref, unfit);
@@ -97,7 +132,7 @@ export class LandPrCommand {
         );
 
         const bookkeeping = outcome.merged
-            ? this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention)
+            ? this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention, cwd)
             : '';
         process.stdout.write(
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
@@ -108,6 +143,51 @@ export class LandPrCommand {
                 : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr will keep leaving PRs for a human.)\n`) +
             '\n',
         );
+    }
+
+    /**
+     * `--pr` without a usable number. It REFUSES rather than falling back to the branch, because the
+     * fallback would land a different PR from the one the operator was reaching for, and a squash into
+     * main is not a place to guess. `--pr` bare and `--pr HEAD` land here alike.
+     */
+    private badPrNumber(request: LandPrRequest): InformAiError {
+        const got = request.prNumber === '' ? 'nothing' : `"${request.prNumber}"`;
+        return new InformAiError(
+            '\n' + SEP + '❌ --pr needs a PR NUMBER\n' + SEP + '\n' +
+            `\`--pr\` was given ${got}. It takes the digits of one pull request:\n` +
+            '  pnpm wp-land-pr --pr 1087\n\n' +
+            'To land the PR of the branch you are standing on, pass no flag at all:\n' +
+            '  pnpm wp-land-pr\n' + SEP);
+    }
+
+    /**
+     * The refusal when `gh` has no open PR for what we asked about — and it must say WHICH question was
+     * asked, because the two have different cures.
+     *
+     * The branch form used to be the only one, and it was the face of the cwd bug: run from an agent
+     * worktree, pnpm's hoist made the branch read `main`, and an operator with an open PR in front of
+     * them was told there was none. So the branch form now says what it looked up and where it read that
+     * branch FROM, which is the one fact that makes a wrong answer recognisable as a wrong answer, and it
+     * names the `--pr <n>` form that does not depend on the tree at all.
+     */
+    private noSuchPr(request: LandPrRequest, selector: string): InformAiError {
+        if (request.prNumber !== '') {
+            return new InformAiError(
+                '\n' + SEP + `❌ No open PR #${request.prNumber}\n` + SEP + '\n' +
+                `\`gh pr view ${request.prNumber}\` found no OPEN pull request with that number.\n` +
+                'If it is already merged, run `pnpm wp-cleanup` from the primary clone to finish the\n' +
+                'branch and worktree bookkeeping. Otherwise check the number with `gh pr list`.\n' + SEP);
+        }
+        return new InformAiError(
+            '\n' + SEP + '❌ No open PR found for this branch\n' + SEP + '\n' +
+            `No open PR has head branch "${selector}", read from ${this.invocationCwd()}. Nothing to land.\n` +
+            'If that is not the branch you expected, land it by number instead — it does not depend on\n' +
+            'which directory you are standing in:\n' +
+            '  pnpm wp-land-pr --pr <n>\n' +
+            'If the PR is already merged, run `pnpm wp-cleanup`.\n' +
+            'If it was never posted, run the gated flow — it posts the PR AND writes the description\n' +
+            'that becomes this commit body:\n' +
+            '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP);
     }
 
     /**
@@ -212,23 +292,32 @@ export class LandPrCommand {
      * it is more precise in both directions — a second clone sitting on the SAME commit can safely
      * archive it, and a tree that has committed further work since finish ran correctly declines.
      */
-    private bookkeeping(repoRoot: string, base: string, ref: PrIdentity, retention: string): string {
-        const local = this.revParse(repoRoot, base);
-        if (ref.headRefOid !== '' && local !== '' && local !== ref.headRefOid) {
-            return this.notTheLandedTipNotice(base, local, ref);
-        }
-        return this.archiveAndPromote(repoRoot, base, ref, retention) + this.nextStep(repoRoot, base);
+    private bookkeeping(
+        repoRoot: string, base: string, ref: PrIdentity, retention: string, cwd: string,
+    ): string {
+        const tree = this.landedTree.resolve(repoRoot, base, ref.headRefOid);
+        if (!tree.bookkeepingAllowed) return this.notTheLandedTipNotice(base, tree, ref);
+        return this.archiveAndPromote(repoRoot, base, ref, retention)
+            + this.nextStep(repoRoot, tree, cwd);
     }
 
-    /** What was skipped, why, and what the two SHAs are — so the reader can tell WHICH cause it was. */
-    private notTheLandedTipNotice(base: string, local: string, ref: PrIdentity): string {
-        return '\n   ⚠️  Archive + worktree cleanup SKIPPED — this tree\'s branch is not the commit that landed:\n' +
-            `         ${base} here → ${local}\n` +
+    /**
+     * What was skipped, why, and what the two SHAs are — so the reader can tell WHICH cause it was.
+     *
+     * Two causes, one message, because the cure is the same for both: the objects the PR squashed are not
+     * in this repo under that name, so nothing here may archive them or reap a tree for them.
+     */
+    private notTheLandedTipNotice(base: string, tree: LandedTree, ref: PrIdentity): string {
+        const found = tree.kind === LANDED_TREE_ABSENT
+            ? `         ${base} is not in this repo at all\n`
+            : `         ${base} here → ${tree.localSha}\n`;
+        return '\n   ⚠️  Archive + worktree cleanup SKIPPED — nothing here holds the commit that landed:\n' +
+            found +
             `         PR #${ref.number} squashed → ${ref.headRefOid}\n` +
             '       Archiving from here would tag the wrong objects under the right name, and the\n' +
             `       merge-info record and (if any) the worktree holding ${base} live with the other tip.\n` +
-            '       Either this is a second clone of the repo — finish the bookkeeping in the tree that\n' +
-            '       posted the PR with `pnpm wp-cleanup` — or this tree has commits made after\n' +
+            '       Either this is a second clone of the repo — finish the bookkeeping in the clone that\n' +
+            '       posted the PR with `pnpm wp-cleanup` — or that tree has commits made after\n' +
             '       `pnpm wp-finish-upsert-pr` ran, which the PR does not contain.\n';
     }
 
@@ -248,8 +337,9 @@ export class LandPrCommand {
      * hand-off is not safely achievable the #512 notice is printed unchanged, because an honest
      * limitation beats a command that deletes its own working directory mid-run.
      */
-    private nextStep(repoRoot: string, base: string): string {
-        const handoff: WorktreeReapHandoff | null = this.landedWorktree.plan(repoRoot, base);
+    private nextStep(repoRoot: string, tree: LandedTree, cwd: string): string {
+        const handoff: WorktreeReapHandoff | null
+            = this.landedWorktree.plan(repoRoot, tree.worktree, cwd);
         if (handoff === null) return '   Next: `pnpm wp-cleanup` to delete the merged branch.\n';
         if (!handoff.canReap) return this.landedWorktree.manualNotice(handoff);
         return this.landedWorktree.handOff(handoff);
@@ -306,9 +396,9 @@ export class LandPrCommand {
      * class doc). `headRefOid` is read BEFORE the merge, because it is what the bookkeeping check
      * compares against and the merge is what makes the branch's fate uninteresting to GitHub.
      */
-    private readPr(baseBranch: string): PrIdentity | null {
+    private readPr(selector: string): PrIdentity | null {
         const result = spawnSync(
-            'gh', ['pr', 'view', baseBranch, '--json', 'number,title,url,body,headRefOid'],
+            'gh', ['pr', 'view', selector, '--json', 'number,title,url,body,headRefOid,headRefName'],
             { encoding: 'utf8' },
         );
         if (result.status !== 0) return null;
@@ -330,7 +420,7 @@ export class LandPrCommand {
             const body = this.str(raw['body']).replace(/\r\n/g, '\n').trim();
             return new PrIdentity(
                 number, this.str(raw['title']), this.str(raw['url']), body === '' ? '' : body + '\n',
-                this.str(raw['headRefOid']),
+                this.str(raw['headRefOid']), this.str(raw['headRefName']),
             );
         } catch (err: unknown) {
             const error = toError(err);
@@ -346,20 +436,52 @@ export class LandPrCommand {
 }
 
 // The open PR as GitHub holds it: its number, title, web URL, DESCRIPTION (= the gated commit body) and
-// the head commit being squashed.
+// the PAIR that identifies its tree locally — the head branch's name and the commit being squashed.
 class PrIdentity {
     number: string;
     title: string;
     url: string;
     body: string;
     headRefOid: string;
+    /**
+     * The PR's head BRANCH. Required alongside `headRefOid` because neither half identifies a tree on its
+     * own: the name is what a worktree list can be searched by, the sha is what makes a hit the right
+     * one. It also frees `--pr <n>` from needing the operator to be standing anywhere in particular.
+     */
+    headRefName: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(number: string, title: string, url: string, body: string, headRefOid: string) {
+    constructor(
+        number: string, title: string, url: string, body: string, headRefOid: string, headRefName: string,
+    ) {
         this.number = number;
         this.title = title;
         this.url = url;
         this.body = body;
         this.headRefOid = headRefOid;
+        this.headRefName = headRefName;
+    }
+}
+
+/**
+ * Data-only (per CLAUDE.md, classes for data): what the operator asked `wp-land-pr` to land.
+ *
+ * `prNumber` is '' for the zero-arg form — "this branch's PR" — which stays the shorthand the worker
+ * uses. It is NOT an optional constructor parameter with a default at the call site: `wp-land-pr.ts`
+ * builds exactly one of these from the parsed argv, so there is one spelling of the decision.
+ */
+export class LandPrRequest {
+    /**
+     * Was `--pr` on the command line at all? Kept SEPARATE from the value because `--pr` with no number
+     * is a mistake, not a request to guess: collapsing the two would silently land whatever PR the
+     * current directory's branch happens to have, which is the opposite of what the operator typed.
+     */
+    prFlagPresent: boolean;
+    /** The `--pr <n>` value verbatim, or '' to infer the PR from the invocation directory's branch. */
+    prNumber: string;
+
+    constructor(prFlagPresent: boolean, prNumber: string) {
+        this.prFlagPresent = prFlagPresent;
+        this.prNumber = prNumber;
     }
 }

@@ -207,11 +207,20 @@ flow are not interchangeable.
 5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `review.json` (its `title`
    becomes the PR title) and every reviewer's verdict, then pushes and creates/updates the PR. It re-runs
    the build gate ONLY if HEAD moved since stage ②, so the three stages still cost one build.
-6. **`pnpm wp-land-pr`** — squash-merge THIS branch's already-posted PR into main with the gated commit
-   body, then archive the pre-squash tip and reap the landed worktree. It runs no build gate and
-   re-renders nothing — the bytes that land are the bytes stage ③ produced. NOT gated on
-   `pr-gate.mergeMode`: running it IS the intent to merge, so it works on a `mergeMode: NONE` repo whose
-   policy is "a human decides when".
+6. **`pnpm wp-land-pr`** — squash-merge an already-posted PR into main with the gated commit body, then
+   archive the pre-squash tip and reap the landed worktree. It runs no build gate and re-renders nothing
+   — the bytes that land are the bytes stage ③ produced. NOT gated on `pr-gate.mergeMode`: running it IS
+   the intent to merge, so it works on a `mergeMode: NONE` repo whose policy is "a human decides when".
+
+   **`pnpm wp-land-pr --pr <n>` lands SOMEBODY ELSE'S PR**, and it is the form a coordinator wants. With
+   no flag the PR is this branch's, which only the agent standing on that branch can ask for — and most
+   of the time that agent is gone by the time the PR is landable (CI was still running when it finished,
+   it errored, or the work was picked up an hour later), leaving its worktree a directory nobody is in.
+   `--pr <n>` names the PR outright, and the bookkeeping still finds the right tree: the worktree to
+   archive from and reap is the one whose HEAD is the exact commit GitHub squashed — matched on the PR's
+   `(headRefName, headRefOid)` PAIR, never on a branch name — so it resolves identically from the primary
+   clone, from that worktree, or from an unrelated one. When nothing local holds that commit, the merge
+   still happens and the archive/reap half is skipped out loud rather than tagging the wrong objects.
 
    **The commit body is the PR DESCRIPTION**, which stage ③ writes as one compact string (PR link, risk,
    non-green flags, short summary, build-command footer) and reuses verbatim as its `--body-file`. The

@@ -45,36 +45,6 @@ describe('WorktreeService.isLinkedWorktree', () => {
     });
 });
 
-describe('WorktreeService.currentWorktree', () => {
-    const PORCELAIN = [
-        'worktree /repo',
-        'HEAD aaa',
-        'branch refs/heads/main',
-        '',
-        'worktree /work/feature',
-        'HEAD bbb',
-        'branch refs/heads/dean/feature',
-        '',
-    ].join('\n');
-
-    it('finds the record whose path is the tree we are standing in', () => {
-        git.porcelain = PORCELAIN;
-        const tree = new WorktreeService().currentWorktree('/work/feature');
-        expect(tree?.branch).toBe('dean/feature');
-        expect(tree?.isMain).toBe(false);
-    });
-
-    it('matches the primary clone too, and normalizes a trailing slash', () => {
-        git.porcelain = PORCELAIN;
-        expect(new WorktreeService().currentWorktree('/repo/')?.isMain).toBe(true);
-    });
-
-    it('returns null when the root is not one of git\'s worktrees', () => {
-        git.porcelain = PORCELAIN;
-        expect(new WorktreeService().currentWorktree('/somewhere/else')).toBeNull();
-    });
-});
-
 describe('WorktreeService', () => {
     it('parses the porcelain records, marking the FIRST as the primary clone', () => {
         git.porcelain = [
@@ -97,6 +67,35 @@ describe('WorktreeService', () => {
         expect(trees[1].path).toBe('/work/feature');
         // refs/heads/ is stripped — `git branch -D` takes the short name.
         expect(trees[1].branch).toBe('dean/feature');
+    });
+
+    /**
+     * The `HEAD <sha>` line was already on the wire and the parser dropped it, which left a branch NAME
+     * as the only way to identify a tree. It is not one: a second clone or a stale worktree holds the
+     * same name at a different commit, and `wp-land-pr` needs the pair to pick the tree whose HEAD is
+     * the exact commit GitHub squashed. Reading it costs nothing — no extra git call.
+     */
+    it('carries each record\'s HEAD sha, which a branch name alone cannot identify', () => {
+        git.porcelain = [
+            'worktree /repo',
+            'HEAD aaa',
+            'branch refs/heads/main',
+            '',
+            'worktree /work/feature',
+            'HEAD bbb',
+            'branch refs/heads/dean/feature',
+            '',
+            'worktree /work/detached',
+            'HEAD ccc',
+            'detached',
+            '',
+        ].join('\n');
+
+        const trees = new WorktreeService().listWorktrees('/repo');
+
+        expect(trees.map((tree: Worktree): string => tree.head)).toEqual(['aaa', 'bbb', 'ccc']);
+        // A detached worktree still has a HEAD — it is only the BRANCH that is missing.
+        expect(trees[2].branch).toBe('');
     });
 
     it('reads detached, prunable and locked records', () => {

@@ -3,7 +3,9 @@ import {
     DeletableWorktree,
     InformAiError,
     RepoRootFinder,
+    Worktree,
     WorktreeReapResult,
+    WorktreeService,
     loadAndValidate,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -29,7 +31,8 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * PR. LandedWorktreeReaper spawns it by absolute path; see that class for why a child rather than a
  * `process.chdir`.
  *
- * WHAT IT WILL NOT TAKE ON TRUST. The parent tells it a path and a branch; it believes neither.
+ * WHAT IT WILL NOT TAKE ON TRUST. The parent tells it a path, a branch and the HEAD sha it selected the
+ * tree by; it believes none of the three.
  * The verdict is recomputed here, from scratch, by the same MergedBranchesService that backs
  * `wp-cleanup` — so a worktree is removed only when it is PROVABLY dead (its PR is merged), and never
  * because a caller said so. That is what keeps "never remove a tree still holding unmerged work" true
@@ -45,6 +48,7 @@ export class ReapWorktreeCommand {
         private readonly repoRootFinder: RepoRootFinder,
         private readonly worktreeSection: WorktreeCleanupSection,
         private readonly signal: ReapOutcomeSignal,
+        private readonly worktrees: WorktreeService,
     ) {}
 
     /**
@@ -106,6 +110,18 @@ export class ReapWorktreeCommand {
                 + '       Refusing to remove a worktree whose branch changed since the PR landed.\n');
             return null;
         }
+        // …and the NAME is not the identity. The parent selected this directory because its HEAD was the
+        // exact commit GitHub squashed; that selection is recomputed here from git rather than taken on
+        // trust, so a commit made in that tree between landing and reaping — work the archive tag of the
+        // squashed tip does not contain — stops the removal instead of being buried with it.
+        const here = this.headOf(repoRoot, wanted);
+        if (here !== request.head) {
+            process.stdout.write(
+                `\n   ⚠️  ${request.worktreePath} is at ${here === '' ? '(unknown)' : here}, not the landed\n`
+                + `       commit ${request.head}.\n`
+                + '       Refusing to remove a worktree whose HEAD moved since the PR landed.\n');
+            return null;
+        }
         if (!target.deletable) {
             process.stdout.write(
                 `\n   ⚠️  ${request.worktreePath} is not provably dead: ${target.reason}\n`
@@ -113,6 +129,16 @@ export class ReapWorktreeCommand {
             return null;
         }
         return target;
+    }
+
+    /**
+     * That worktree's HEAD as git reports it right now, '' when git cannot place the path at all.
+     * '' can never equal a real sha, so "git would not answer" fails SAFE — it declines the removal.
+     */
+    private headOf(repoRoot: string, resolvedPath: string): string {
+        const tree = this.worktrees.listWorktrees(repoRoot)
+            .find((candidate: Worktree): boolean => path.resolve(candidate.path) === resolvedPath);
+        return tree?.head ?? '';
     }
 
     // The reap report, plus the spared case — which report() renders as '' because from wp-cleanup's
@@ -126,29 +152,39 @@ export class ReapWorktreeCommand {
         return this.worktreeSection.report(repoRoot, result);
     }
 
-    // `<worktree-path> <branch>`, both required. Thrown rather than printed: bad argv means the caller
-    // is broken, and there is no landed PR in this process whose success a non-zero exit could misreport.
+    /**
+     * `<worktree-path> <branch> <head-sha>`, all three required. The sha is not optional and has no
+     * default: a defaulted '' would mean "do not check", i.e. exactly the name-only removal both
+     * processes exist to refuse, so a caller that omits it must fail to run rather than run wider.
+     *
+     * Thrown rather than printed: bad argv means the caller is broken, and there is no landed PR in this
+     * process whose success a non-zero exit could misreport.
+     */
     private parse(args: string[]): ReapRequest {
         const worktreePath = args[0] ?? '';
         const branch = args[1] ?? '';
-        if (worktreePath === '' || branch === '') {
+        const head = args[2] ?? '';
+        if (worktreePath === '' || branch === '' || head === '') {
             throw new InformAiError(
                 '\n' + SEP + '❌ wp-reap-worktree: missing arguments\n' + SEP + '\n'
-                + 'Usage: node wp-reap-worktree.js <worktree-path> <branch>\n\n'
+                + 'Usage: node wp-reap-worktree.js <worktree-path> <branch> <head-sha>\n\n'
                 + 'This is an INTERNAL entry point, spawned by `pnpm wp-land-pr` with cwd set to the\n'
                 + 'primary clone. To clean up by hand, run `pnpm wp-cleanup` from the primary clone.\n' + SEP);
         }
-        return new ReapRequest(worktreePath, branch);
+        return new ReapRequest(worktreePath, branch, head);
     }
 }
 
-// Data-only (per CLAUDE.md, classes for data): the pair of argv values this entry point takes.
+// Data-only (per CLAUDE.md, classes for data): the argv values this entry point takes.
 class ReapRequest {
     worktreePath: string;
     branch: string;
+    /** The commit the parent proved this worktree was at — re-verified here, never trusted. */
+    head: string;
 
-    constructor(worktreePath: string, branch: string) {
+    constructor(worktreePath: string, branch: string, head: string) {
         this.worktreePath = worktreePath;
         this.branch = branch;
+        this.head = head;
     }
 }

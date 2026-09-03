@@ -22,6 +22,7 @@ import { toError } from './to-error';
 // main worktree. Keys are space-separated; `detached`, `bare` and `locked` may appear bare (no value).
 const WORKTREE_KEY = 'worktree ';
 const BRANCH_KEY = 'branch ';
+const HEAD_KEY = 'HEAD ';
 const LOCKED_KEY = 'locked ';
 const REFS_HEADS = 'refs/heads/';
 
@@ -47,6 +48,18 @@ export class Worktree {
     path: string;
     // Short branch name (refs/heads/ stripped). Empty when the worktree is detached or bare.
     branch: string;
+    /**
+     * The commit this worktree's HEAD is at, verbatim from the `HEAD <sha>` line every porcelain record
+     * already carries. '' only for a bare worktree, which has no HEAD at all.
+     *
+     * Load-bearing, and the reason it stopped being dropped by the parser: a BRANCH NAME does not
+     * identify a tree. A second clone, or a stale worktree, can hold the same name at a different
+     * commit — which is the wrong-objects-under-the-right-name failure `wp-land-pr` already refused to
+     * make from the tree it happened to be standing in. Pairing the name with this sha turns that veto
+     * into a SELECTION: the tree to archive from and reap is the one whose HEAD is the exact commit
+     * GitHub squashed, whichever directory the operator is standing in. See LandedTreeResolver.
+     */
+    head: string;
     // The primary clone — the one that owns .git. Never counted against the cap, never removable.
     isMain: boolean;
     // git already knows this worktree's directory is gone; `git worktree prune` will clear it.
@@ -67,6 +80,9 @@ export class Worktree {
     constructor(
         path: string,
         branch: string,
+        // REQUIRED, with no default, for the same reason lockReason is: a defaulted '' would read as
+        // "this tree is not at any commit", and every sha comparison built on it would silently decline.
+        head: string,
         isMain: boolean,
         prunable: boolean,
         locked: boolean,
@@ -77,6 +93,7 @@ export class Worktree {
     ) {
         this.path = path;
         this.branch = branch;
+        this.head = head;
         this.isMain = isMain;
         this.prunable = prunable;
         this.locked = locked;
@@ -147,6 +164,12 @@ export class WorktreeService {
      * Returns FALSE on anything uncertain (no `.git` at all, unreadable, a submodule's `.git` file
      * in a non-worktree checkout). False is the fail-open direction here: callers then print both
      * forms rather than confidently printing the wrong one.
+     *
+     * This answers "am I in a linked worktree", which is a question about MESSAGE WORDING and nothing
+     * else. It is deliberately NOT a way to ask "which worktree am I in" so as to then act on that tree:
+     * a `currentWorktree(root)` used to exist for exactly that and it is deleted, because pnpm hoists a
+     * bin's cwd out of a nested `.claude/worktrees/**` tree and made the answer confidently wrong. Work
+     * that has to NAME a tree resolves it from a commit — see pr-gate's LandedTreeResolver.
      */
     isLinkedWorktree(root: string): boolean {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -187,19 +210,6 @@ export class WorktreeService {
     }
 
     /**
-     * The worktree record for the tree rooted at `root`, or null when it is not one of git's
-     * worktrees (or git could not answer). Callers use it to name the exact directory a
-     * `git worktree remove` has to take — a reap instruction with the wrong path is worse than none.
-     */
-    currentWorktree(root: string): Worktree | null {
-        const resolved = path.resolve(root);
-        for (const tree of this.listWorktrees(root)) {
-            if (path.resolve(tree.path) === resolved) return tree;
-        }
-        return null;
-    }
-
-    /**
      * Parse the porcelain records. A record starts at a `worktree <path>` line and runs to the blank
      * line; the FIRST record is the main worktree (git guarantees the ordering). A `prunable` worktree
      * still appears in the list, which is exactly why it can be reaped.
@@ -208,15 +218,17 @@ export class WorktreeService {
         const trees: Worktree[] = [];
         let path = '';
         let branch = '';
+        let head = '';
         let prunable = false;
         let locked = false;
         let lockReason = '';
 
         const flush = (): void => {
             if (path === '') return;
-            trees.push(new Worktree(path, branch, trees.length === 0, prunable, locked, lockReason));
+            trees.push(new Worktree(path, branch, head, trees.length === 0, prunable, locked, lockReason));
             path = '';
             branch = '';
+            head = '';
             prunable = false;
             locked = false;
             lockReason = '';
@@ -230,6 +242,9 @@ export class WorktreeService {
                 // A new record begins — flush the previous one in case the blank line was missing.
                 flush();
                 path = line.slice(WORKTREE_KEY.length).trim();
+            } else if (line.startsWith(HEAD_KEY)) {
+                // Already on the wire — git emits it for every non-bare record, detached ones included.
+                head = line.slice(HEAD_KEY.length).trim();
             } else if (line.startsWith(BRANCH_KEY)) {
                 const ref = line.slice(BRANCH_KEY.length).trim();
                 branch = ref.startsWith(REFS_HEADS) ? ref.slice(REFS_HEADS.length) : ref;
