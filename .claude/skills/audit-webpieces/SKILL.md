@@ -50,8 +50,12 @@ specific number — never `cat` it.
 Timing: ~3s per repo. `--no-npm` skips the one network call. `--max-sessions N` caps transcript scan.
 
 Subcommands exist individually (`guards`, `isolation`, `transcripts`, `parity`, `skew`, `docdrift`,
-`matrix`, `merges`, `retbytes`) when Dean asks about one area only. `retbytes` rides on the SAME
-transcript pass as `transcripts` — asking for both, or for `all`, still opens every session once. `builds_ledger.py` is a separate script because its
+`matrix`, `merges`, `retbytes`, `cycletime`) when Dean asks about one area only. `retbytes` and
+`cycletime` ride on the SAME
+transcript pass as `transcripts` — asking for all four, or for `all`, still opens every session
+once. **`cycletime` additionally shells out to `pmset -g log` and to `gh` (one `pr list` per repo,
+one `pr checks` per PR), so it is the one subcommand that is not instant and the one that can come
+back with a bucket marked `unavailable`.** `builds_ledger.py` is a separate script because its
 source is the one piece of webpieces state that is NOT per-repo — see Step 2b.
 
 ## Step 2b — the machine-wide build ledger
@@ -138,6 +142,7 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 | Build ledger | **killed-and-re-run builds**, **overlapping builds** (max concurrent, overlapped minutes), orphaned STARTs with a dead pid, repeat builds of one repo+branch, duration outliers, ad-hoc vs gate `by=` split | `~/.webpieces/builds.log` (+ rotated `.1`…`.5`) — MACHINE-wide, not per repo |
 | 3-point merges | branches re-merged 3+ times, merges staged in `index.json` but never finalized, CONFLICT with no later FINALIZE, conflict files, orphan `staged/` dirs | `.webpieces/merge-info/index.json`, `logs/branch-mutations.log` |
 | Return-byte cost | what every tool result POURS INTO CONTEXT: `by_tool` chars/calls/avg, `by_emitter` (payload signature with paths, shas, uuids, timestamps and digits MASKED, so one message against two paths is ONE row), `webpieces_authored` and its share, `always_loaded_md` (the fixed per-repo-per-session tax), `worst_sessions`. Every row carries `repeat_chars` — the chars from emissions AFTER the first of an identical payload in the SAME session | the transcripts themselves. They already hold every byte verbatim, so nothing is instrumented, it works RETROACTIVELY, and it sees hook blocks, MCP servers and raw Bash — surfaces a `wp-*`-side length counter could never log, because there `wp-*` never runs |
+| Cycle time | **where the WALL CLOCK went**: every second of every session attributed to exactly one of `HUMAN` / `MACHINE_ASLEEP` / `CI` / `LOCAL_BUILD` / `REVIEWER` / `WEBPIECES_TOOLING` / `CLAUDE_OUTAGE`, with **`AI` as the residual**. Plus the phase timeline (branch → `wp-start-upsert-pr` → `wp-review-upsert-pr` → `wp-finish-upsert-pr` → `wp-land-pr`) in **wall-clock AND blocking** time with per-phase bucket attribution, p50/p75/p95/p99 with `n`, and a `reconciliation` verdict asserting `sum(buckets) == wall_clock` | the transcripts' assistant→user boundaries and tool_use/tool_result pairs; `pmset -g log` (Sleep→Wake, a rolling buffer of days-to-weeks, so **report the coverage fraction**); `gh pr checks` `startedAt`/`completedAt`; `~/.webpieces/builds.log` via `builds_ledger.py` |
 | Doc drift | paths quoted in CLAUDE.md / `.webpieces/instruct-ai/*.md` / `.claude/**/*.md` / user skills that **do not exist**, with a dedicated `build.log` path check | filesystem |
 
 ### The two harnesses
@@ -183,6 +188,28 @@ Interpretation that matters:
   appears ONLY on a release that is no longer installed anywhere, say so and rank it below the
   live ones rather than dropping it silently. When `pct_on_latest` is low, say that too: it means
   the window is mostly measuring old code and the whole audit is weaker evidence about today.
+- **Cycle time: ATTRIBUTE, NEVER DROP — and AI is the RESIDUAL.** `transcripts` answers "how much
+  did the AI waste"; only `cycletime` answers "why did this take from Tuesday to Thursday", because
+  `active_seconds` throws away every gap over five minutes and a shut laptop, a ten-minute human
+  answer, a Claude outage and a twelve-minute CI run all vanish into the same nothing. Four rules
+  when you read it:
+
+  - **Read `reconciliation` BEFORE any percentage.** It asserts `sum(buckets) == wall_clock` over a
+    deterministic random sample. A `FAIL` means the model is wrong and every percentage below it is
+    unusable — say that out loud instead of quoting the table. A `PASS` proves the interval algebra
+    lost no seconds; it does **not** prove a bucket was correctly identified, which is what
+    `sources` is for.
+  - **Check `sources` before blaming the AI.** AI is the residual by construction, so every
+    unavailable or partially-covered source — `pmset` outrunning its rolling buffer, `gh` failing,
+    a window starting before the build ledger existed — inflates AI directly. Discount the AI share
+    by the missing coverage and say so; never report a residual as a measurement.
+  - **Report wall-clock and blocking together, never wall-clock alone.** `wp-finish-upsert-pr` arms
+    auto-merge and the agent stops, so post-finish CI is wall-clock nobody is waiting on. Quoting
+    only wall-clock invoices Dean for time he is not paying, and makes CI look like the problem.
+  - **A percentile without its `n` is a guess.** Complete branch→land cycles are rare — a whole week
+    across thirteen repos may yield a handful. The collector refuses p75/p95/p99 below n=20 and all
+    percentiles below n=8, and prints the refusal as the value. Quote the refusal; do not go find
+    the number yourself.
 - **`stale-main-bash-guard` is judged by whether the tree got FRESH, never by its block count.** It
   is reliably the loudest rule in the logs, and the count on its own means nothing — a block that
   stops an agent reading fifteen-commit-stale source is a **speed win**: one round trip spent, a
@@ -304,7 +331,8 @@ Structure:
 5. **Checked and clean** — one line per area with nothing MAJOR, so a clean area is visibly clean
    rather than silently absent. The areas are: guard cycles, stale-main health, wasted time,
    isolation, version skew, matrix conformance, build ledger, 3-point merges, doc drift, Codex
-   parity, and **return-byte cost**.
+   parity, **return-byte cost**, and **cycle time** (name its reconciliation verdict here even when
+   it is clean — a `PASS` is what licenses every other number in the report).
 
 Finish by telling Dean the path and the single most expensive finding in one sentence.
 

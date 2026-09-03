@@ -23,6 +23,7 @@ is Codex actually being guarded, or does it merely look quiet?
 import argparse
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -928,6 +929,679 @@ def rb_report(acc, repos, hours):
     }
 
 
+# ---------------------------------------------------------------- cycle time
+#
+# WHERE THE WALL CLOCK ACTUALLY WENT.
+#
+# `transcripts` answers "how much did the AI waste". It cannot answer "why did this take from
+# Tuesday to Thursday", because it DISCARDS every gap over five minutes (`0 < gap <= 300`). That
+# one cap deletes exactly the evidence the question needs: a ten-minute human answer, a closed
+# laptop, a Claude outage and a twelve-minute CI run all vanish into the same nothing, and the
+# remaining number looks tidy because the awkward part was thrown away.
+#
+# So this collector has one law: ATTRIBUTE, NEVER DROP. Every second between a session's first and
+# last row lands in exactly ONE bucket, and the buckets SUM to that session's wall clock. When they
+# do not sum, `reconciliation` says so loudly instead of printing confident percentages over a
+# number that is quietly missing an hour.
+#
+# The second law is that AI IS THE RESIDUAL. Seven buckets are MEASURED from sources outside the
+# agent's own narration — the transcript's assistant->user boundaries, `pmset -g log`, GitHub check
+# runs, the machine-wide build ledger. AI is whatever is left over. Invert that — measure AI and
+# leave something else as the residual — and the residual silently absorbs every measurement error
+# and every unavailable source, so the agent gets blamed for a closed laptop lid. That ordering is
+# the whole design, not an implementation detail.
+
+# The PRIORITY LADDER. Buckets overlap in reality (CI runs while Dean is at lunch while a build is
+# going), so "exactly one bucket" requires a stated tie-break, and this is it — highest first, AI
+# last because it is the residual. The ordering encodes a claim about the seconds, not about the
+# importance of the bucket:
+#
+#   MACHINE_ASLEEP      nothing local ran; this beats everything, including a human gap
+#   HUMAN               the agent is idle awaiting Dean; a fact from the transcript, not a guess
+#   CI                  remote work, exact start/end from GitHub
+#   LOCAL_BUILD         exact `took=` from the ledger; ranks above the wp-* call that wrapped it,
+#                       which is what makes WEBPIECES_TOOLING "wp-* minus the build inside it"
+#   REVIEWER            a spawned Agent, start and return both timestamped
+#   WEBPIECES_TOOLING   the rest of a wp-* call
+#   CLAUDE_OUTAGE       api errors and in-turn stalls
+#   AI                  everything else
+CT_BUCKETS = ("MACHINE_ASLEEP", "HUMAN", "CI", "LOCAL_BUILD", "REVIEWER",
+              "WEBPIECES_TOOLING", "CLAUDE_OUTAGE", "AI")
+CT_MEASURED = CT_BUCKETS[:-1]
+
+# Buckets a session is not BLOCKED on. Nobody is waiting while the lid is shut or while Dean is
+# thinking, and no session covers a phase at all once the agent has reported and stopped — that is
+# what separates a phase's wall-clock from its blocking time. Reporting only wall-clock makes CI
+# after `wp-finish-upsert-pr` (which arms auto-merge and lets the agent go) look like a cost Dean
+# is paying while he is not paying it.
+CT_NONBLOCKING = ("MACHINE_ASLEEP", "HUMAN", "NO_SESSION")
+
+# A wp-* command. Deliberately the bin names, not `pnpm`, so `pnpm exec vitest` is not swept in.
+CT_WP_RE = re.compile(r"\bwp-[a-z][a-z0-9-]*\b")
+
+# Phase boundaries. Every one of these is a timestamped Bash call in the transcript, so the phase
+# timeline needs no instrumentation at all. Order matters when matching: `wp-start-upsert-pr` and
+# `wp-start-update` are different commands and only the first opens a cycle.
+CT_MARKERS = (
+    ("start", re.compile(r"wp-start-upsert-pr")),
+    ("review", re.compile(r"wp-review-upsert-pr")),
+    ("finish", re.compile(r"wp-finish-upsert-pr")),
+    ("land", re.compile(r"wp-land-pr")),
+    ("branch", re.compile(r"git\s+(?:checkout\s+-b|switch\s+-c)\b")),
+)
+CT_PHASES = (
+    ("1 branch->start", "branch", "start"),
+    ("2 start->review", "start", "review"),
+    ("3 review->finish", "review", "finish"),
+    ("4 finish->land", "finish", "land"),
+)
+
+# The Claude-API failure markers, kept NARROW on purpose. A `429` in some tool's output is that
+# tool's problem, not an outage of the model, so nothing here matches inside a tool_result — only
+# the harness's own synthetic assistant rows (`isApiErrorMessage`) and their text.
+CT_OUTAGE_RE = re.compile(
+    r"overloaded_error|rate_limit_error|api_error|API Error"
+    r"|Connection lost mid-response|The response stopped arriving"
+    r"|\b(?:429|529)\b")
+# A gap INSIDE one assistant turn, with no tool call outstanding, longer than this. The model is
+# either retrying behind the scenes or the stream stalled; either way nothing local is running.
+# Two minutes because ordinary thinking between two assistant rows is seconds, not minutes.
+CT_STALL_SECONDS = 120.0
+
+# Reconciliation. A deterministic seed, so two runs over the same window sample the same sessions
+# and the verdict is reproducible — "random" here means "not cherry-picked", not "different every
+# time", and a report nobody can reproduce is not evidence.
+CT_SAMPLE_SEED = 20260903
+CT_SAMPLE_N = 60
+CT_TOLERANCE_SECONDS = 1.0     # float noise on a sum of ~10^5 seconds
+CT_TOLERANCE_PCT = 0.05        # and never worse than this share of the session
+
+# Percentile floors. p99 over six samples is the maximum wearing a hat: it IS the maximum, dressed
+# up as a distribution. Below the floors the honest output is fewer statistics, said out loud.
+CT_P_FULL_N = 20               # >= this: p50/p75/p95/p99
+CT_P_MEDIAN_N = 8              # >= this: p50 only. Below it: raw values, no percentiles.
+
+
+def ct_new():
+    """A fresh cycle-time accumulator, threaded through the two transcript scanners.
+
+    Like `rb_new()`, this rides on the SAME pass the wasted-time scan already makes. Opening every
+    transcript a second time to ask a second question about it is the exact antipattern this whole
+    skill exists to measure.
+    """
+    return {"sessions": [], "markers": {}}
+
+
+def _ct_gap(ct_iv, row, typ, msg, prior, ts, prev_type, pending):
+    """Attribute the gap between two consecutive transcript rows. Called on EVERY row.
+
+    Two shapes are recognised and the rest falls through to the residual:
+
+    * HUMAN — the previous row ended an assistant turn and this row is a real user message (a
+      string, or a content list carrying no `tool_result`). The assistant->user boundary is a
+      FACT in the file, not a heuristic, which is why HUMAN is the one bucket that costs nothing
+      to be sure of. A tool_result is the harness talking, not Dean, and is excluded.
+    * CLAUDE_OUTAGE — the harness's own `isApiErrorMessage` row, or the text of a `<synthetic>`
+      assistant row naming an overload/rate-limit/api_error; plus a stall INSIDE one assistant
+      turn with no tool call outstanding. Both are softer than HUMAN and are labelled `good`, not
+      `exact`, in the report.
+    """
+    gap = (ts - prior).total_seconds()
+    if gap <= 0:
+        return
+    iv = (prior.timestamp(), ts.timestamp())
+    if row.get("isApiErrorMessage"):
+        ct_iv["CLAUDE_OUTAGE"].append(iv)
+        return
+    if typ == "user":
+        content = msg.get("content")
+        is_tool = isinstance(content, list) and any(
+            isinstance(c, dict) and c.get("type") == "tool_result" for c in content)
+        if not is_tool and prev_type == "assistant":
+            ct_iv["HUMAN"].append(iv)
+        return
+    if typ == "assistant":
+        if (msg.get("model") == "<synthetic>"
+                and CT_OUTAGE_RE.search(_text_of(msg.get("content"))[:400])):
+            ct_iv["CLAUDE_OUTAGE"].append(iv)
+        elif prev_type == "assistant" and not pending and gap > CT_STALL_SECONDS:
+            ct_iv["CLAUDE_OUTAGE"].append(iv)
+
+
+def _ct_call(ct_iv, name, cmd, lo, hi):
+    """Attribute one completed tool call — spawn-to-return, both timestamps from the file.
+
+    `AskUserQuestion` is HUMAN, not AI and not an error: one 109-minute prompt once accounted for
+    43% of the fleet's whole "failed call" time, and the `transcripts` scan already carries that
+    scar. Here the same fact is used positively — that duration IS the measurement of Dean.
+    """
+    if hi <= lo:
+        return
+    if name == "Agent":
+        ct_iv["REVIEWER"].append((lo, hi))
+    elif name == "AskUserQuestion":
+        ct_iv["HUMAN"].append((lo, hi))
+    elif name == "Bash" and isinstance(cmd, str) and CT_WP_RE.search(cmd):
+        ct_iv["WEBPIECES_TOOLING"].append((lo, hi))
+
+
+def _ct_marker(cmd):
+    """The phase boundary this command is, or None. Order matters — see CT_MARKERS."""
+    for stage, pat in CT_MARKERS:
+        if pat.search(cmd):
+            return stage
+    return None
+
+
+def _ct_close(ct, repo, session, harness, first, last, ct_iv, ct_marks):
+    """Hand one finished session to the accumulator. No-op when `cycletime` was not asked for."""
+    if ct is None:
+        return
+    ct["sessions"].append({"repo": str(repo), "repo_name": repo.name, "session": session,
+                           "harness": harness, "lo": first.timestamp(), "hi": last.timestamp(),
+                           "raw": ct_iv})
+    if ct_marks:
+        ct["markers"].setdefault(str(repo), []).extend(ct_marks)
+
+
+def iv_merge(ivs):
+    """Sort and union a list of (lo, hi) float-epoch intervals, dropping empty ones."""
+    out = []
+    for lo, hi in sorted((a, b) for a, b in ivs if b > a):
+        if out and lo <= out[-1][1]:
+            if hi > out[-1][1]:
+                out[-1] = (out[-1][0], hi)
+        else:
+            out.append((lo, hi))
+    return out
+
+
+def iv_clip(ivs, lo, hi):
+    """Intersect with [lo, hi]. Every source is clipped to the session before it is counted."""
+    out = []
+    for a, b in ivs:
+        a2, b2 = max(a, lo), min(b, hi)
+        if b2 > a2:
+            out.append((a2, b2))
+    return out
+
+
+def iv_sub(a, b):
+    """a minus b, both assumed merged. This is what makes the ladder mutually exclusive."""
+    out = []
+    for lo, hi in a:
+        cur = lo
+        for blo, bhi in b:
+            if bhi <= cur or blo >= hi:
+                continue
+            if blo > cur:
+                out.append((cur, min(blo, hi)))
+            cur = max(cur, bhi)
+            if cur >= hi:
+                break
+        if cur < hi:
+            out.append((cur, hi))
+    return [(x, y) for x, y in out if y > x]
+
+
+def iv_and(a, b, lo, hi):
+    """a INTERSECT b, within [lo, hi]. Written as two subtractions so there is one algebra."""
+    return iv_sub(iv_clip(a, lo, hi), iv_sub([(lo, hi)] if hi > lo else [], iv_merge(b)))
+
+
+def iv_len(ivs):
+    return sum(b - a for a, b in ivs)
+
+
+def ct_resolve(lo, hi, raw, covered=None):
+    """Walk the ladder once, handing each second to the highest-priority bucket that claims it.
+
+    `covered` is the sub-window a session actually spans. Inside it the leftover is AI; outside it
+    the leftover is NO_SESSION — nobody was working at all. Keeping those apart is the difference
+    between "the agent sat there for 40 minutes" and "the agent had already finished and gone".
+    """
+    taken = []
+    secs = {}
+    segs = {}
+    for b in CT_MEASURED:
+        ivs = iv_sub(iv_clip(iv_merge(raw.get(b) or []), lo, hi), taken)
+        segs[b] = ivs
+        secs[b] = iv_len(ivs)
+        taken = iv_merge(taken + ivs)
+    rest = iv_sub([(lo, hi)] if hi > lo else [], taken)
+    if covered is None:
+        segs["AI"] = rest
+        secs["AI"] = iv_len(rest)
+    else:
+        ai = iv_and(rest, covered, lo, hi)
+        segs["AI"] = ai
+        secs["AI"] = iv_len(ai)
+        segs["NO_SESSION"] = iv_sub(rest, ai)
+        secs["NO_SESSION"] = iv_len(segs["NO_SESSION"])
+    return secs, segs
+
+
+def ct_sleep_intervals():
+    """MACHINE_ASLEEP, from `pmset -g log` — the one source nobody had, and it needs no agent.
+
+    macOS records a `Sleep` row when the machine (or the lid) goes down and a `Wake` row when it
+    comes back to FullWake. `DarkWake` rows are deliberately NOT wakes: the box briefly services a
+    timer and goes back down, and to Dean the laptop was shut the whole time.
+
+    The log is a ROLLING BUFFER of days to weeks, so a long window can start before it. The
+    earliest row is returned so the report can state the covered fraction instead of quietly
+    scoring an uncovered period as "awake" — the same honesty `ledger_earliest_row` buys the
+    build ledger.
+    """
+    meta = {"source": "pmset -g log", "available": False, "events": 0, "earliest": None}
+    try:
+        p = subprocess.run(["pmset", "-g", "log"], capture_output=True, text=True,
+                           timeout=60, errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        meta["unavailable_reason"] = "pmset did not run"
+        return [], meta
+    if p.returncode != 0:
+        meta["unavailable_reason"] = "pmset exited %s" % p.returncode
+        return [], meta
+    row_re = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([+-]\d{4})\s+(\S+(?: \S+)?)\s")
+    ivs = []
+    asleep = None
+    earliest = None
+    events = 0
+    for line in p.stdout.splitlines():
+        m = row_re.match(line)
+        if not m:
+            continue
+        try:
+            when = datetime.strptime(m.group(1) + " " + m.group(2), "%Y-%m-%d %H:%M:%S %z")
+        except ValueError:
+            continue
+        t = when.timestamp()
+        if earliest is None or t < earliest:
+            earliest = t
+        dom = m.group(3).strip()
+        if dom == "Sleep":
+            events += 1
+            if asleep is None:
+                asleep = t
+        elif dom == "Wake":
+            events += 1
+            if asleep is not None and t > asleep:
+                ivs.append((asleep, t))
+            asleep = None
+    meta["available"] = True
+    meta["events"] = events
+    meta["earliest"] = (datetime.fromtimestamp(earliest, timezone.utc).isoformat()
+                        if earliest else None)
+    meta["_earliest_epoch"] = earliest
+    meta["sleep_intervals"] = len(ivs)
+    return iv_merge(ivs), meta
+
+
+def ct_build_intervals(repos, since):
+    """LOCAL_BUILD, from the machine-wide ledger via builds_ledger.py — never a second parser.
+
+    `builds_ledger.read_ledger` already handles the five rotated generations, oldest first, and
+    `build_records` already pairs a START with its DONE and hands back `took_ms`. Writing that
+    again here would be a second source of truth free to disagree with the one the report already
+    quotes elsewhere.
+    """
+    meta = {"source": "~/.webpieces/builds.log", "available": False, "builds": 0,
+            "earliest": None}
+    # This skill is READ-ONLY, and an ordinary import is a WRITE: CPython drops a `__pycache__`
+    # next to the module. One .pyc is harmless in itself and completely wrong here — the skill's
+    # own hard limit is that the report file is the only thing it creates, and an audit that
+    # litters the tree it is auditing has already failed its first rule.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    was = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        import builds_ledger
+    except Exception:
+        meta["unavailable_reason"] = "builds_ledger.py not importable"
+        return {}, meta
+    finally:
+        sys.dont_write_bytecode = was
+    try:
+        rows, files = builds_ledger.read_ledger(Path.home())
+    except OSError:
+        meta["unavailable_reason"] = "ledger unreadable"
+        return {}, meta
+    if not rows:
+        meta["unavailable_reason"] = "ledger empty"
+        return {}, meta
+    meta["available"] = True
+    meta["generations"] = files
+    earliest = rows[0]["_ms"] / 1000.0
+    meta["earliest"] = datetime.fromtimestamp(earliest, timezone.utc).isoformat()
+    meta["_earliest_epoch"] = earliest
+    by_repo = {}
+    for b in builds_ledger.build_records(rows, int(since.timestamp() * 1000)):
+        if not b.get("took_ms"):
+            continue
+        lo = b["start_ms"] / 1000.0
+        by_repo.setdefault(_ct_repo_key(b.get("repo") or "", repos), []).append(
+            (lo, lo + b["took_ms"] / 1000.0))
+        meta["builds"] += 1
+    return {k: iv_merge(v) for k, v in by_repo.items()}, meta
+
+
+def _ct_repo_key(path, repos):
+    """The audited repo a ledger/CI row belongs to. A worktree is its parent repo, not its own."""
+    s = str(path)
+    best = ""
+    for r in repos:
+        rs = str(r)
+        if s == rs or s.startswith(rs + "/") or rs in s:
+            if len(rs) > len(best):
+                best = rs
+    return best or s
+
+
+CT_CI_MAX_PRS = 25
+
+
+def ct_ci_intervals(repos, since):
+    """CI, from GitHub check runs — `startedAt`/`completedAt`, which are exact and remote.
+
+    One `gh pr list` per repo and one `gh pr checks` per PR, both capped and both on a short
+    timeout: `gh` is a network call and this is an audit, not a build. Anything that fails is
+    marked unavailable rather than guessed at, so the gap shows up in `reconciliation` as AI
+    residual we cannot account for — visibly — instead of being folded into AI in silence.
+    """
+    meta = {"source": "gh pr checks", "available": False, "prs": 0, "checks": 0, "errors": [],
+            "repos_total": len(repos), "repos_covered": 0}
+    by_repo = {}
+    iso = since.isoformat().replace("+00:00", "Z")
+    for repo in repos:
+        try:
+            p = subprocess.run(
+                ["gh", "pr", "list", "--state", "all", "--limit", "40", "--json",
+                 "number,createdAt,mergedAt,headRefName"],
+                cwd=str(repo), capture_output=True, text=True, timeout=45, errors="replace")
+        except (OSError, subprocess.SubprocessError):
+            meta["errors"].append("%s: gh pr list failed" % repo.name)
+            continue
+        if p.returncode != 0:
+            meta["errors"].append("%s: gh pr list exit %s" % (repo.name, p.returncode))
+            continue
+        try:
+            prs = json.loads(p.stdout or "[]")
+        except ValueError:
+            continue
+        meta["available"] = True
+        meta["repos_covered"] += 1
+        ivs = []
+        for pr in prs[:CT_CI_MAX_PRS]:
+            if (pr.get("createdAt") or "") < iso:
+                continue
+            meta["prs"] += 1
+            try:
+                c = subprocess.run(
+                    ["gh", "pr", "checks", str(pr["number"]), "--json",
+                     "name,startedAt,completedAt,state"],
+                    cwd=str(repo), capture_output=True, text=True, timeout=45, errors="replace")
+            except (OSError, subprocess.SubprocessError):
+                continue
+            try:
+                checks = json.loads(c.stdout or "[]")
+            except ValueError:
+                continue
+            for ck in checks:
+                a, b = parse_ts(ck.get("startedAt")), parse_ts(ck.get("completedAt"))
+                if a and b and b > a:
+                    ivs.append((a.timestamp(), b.timestamp()))
+                    meta["checks"] += 1
+        by_repo[str(repo)] = iv_merge(ivs)
+    if not meta["available"]:
+        meta["unavailable_reason"] = "gh returned nothing usable for any repo"
+    return by_repo, meta
+
+
+def ct_pct(values, q):
+    """Linear-interpolated percentile. Small enough to inline; a dependency would not be."""
+    s = sorted(values)
+    if not s:
+        return None
+    if len(s) == 1:
+        return round(s[0], 1)
+    k = (len(s) - 1) * q
+    f = int(k)
+    c = min(f + 1, len(s) - 1)
+    return round(s[f] + (s[c] - s[f]) * (k - f), 1)
+
+
+def ct_percentiles(values, what):
+    """Percentiles WITH their denominator, and a refusal when the denominator is too small.
+
+    A percentile is a claim about a distribution, and n is the only thing that says whether there
+    is one. Over a week across thirteen repos there may be six complete branch->land cycles; p99
+    on six samples is the maximum wearing a hat. So the floors are enforced here and the refusal
+    is printed as the value — silence would read as "we looked and it was fine".
+    """
+    n = len(values)
+    mins = [round(v / 60.0, 1) for v in values]
+    row = {"what": what, "n": n, "unit": "minutes",
+           "floors": "n>=%d: p50/p75/p95/p99 | n>=%d: p50 only | below: raw values"
+                     % (CT_P_FULL_N, CT_P_MEDIAN_N)}
+    if n == 0:
+        row["verdict"] = "no samples in window"
+        return row
+    row["total_minutes"] = round(sum(mins), 1)
+    row["min"] = min(mins)
+    row["max"] = max(mins)
+    if n < CT_P_MEDIAN_N:
+        row["verdict"] = ("n=%d below the %d floor: RAW VALUES ONLY, no percentile reported"
+                          % (n, CT_P_MEDIAN_N))
+        row["raw_minutes"] = sorted(mins)
+        return row
+    row["p50"] = round(ct_pct(values, 0.50) / 60.0, 1)
+    if n < CT_P_FULL_N:
+        row["verdict"] = ("n=%d below the %d floor: p50 only, p75/p95/p99 REFUSED"
+                          % (n, CT_P_FULL_N))
+        return row
+    row["p75"] = round(ct_pct(values, 0.75) / 60.0, 1)
+    row["p95"] = round(ct_pct(values, 0.95) / 60.0, 1)
+    row["p99"] = round(ct_pct(values, 0.99) / 60.0, 1)
+    row["verdict"] = "n=%d, percentiles reported" % n
+    return row
+
+
+def ct_cycles(acc):
+    """Group the phase markers into branch->land cycles, per repo, in time order.
+
+    A cycle opens on a branch creation, or on a `wp-start-upsert-pr` when one is already open (a
+    second start means the first cycle never landed), and closes on `wp-land-pr`. Each stage keeps
+    its FIRST timestamp inside the cycle, so a stage re-run stays INSIDE its phase — a retried
+    review is a cost of that phase, not a new phase.
+    """
+    out = []
+    for repo, marks in acc["markers"].items():
+        cur = None
+        for m in sorted(marks, key=lambda x: x["ts"]):
+            stage = m["stage"]
+            if stage == "branch" or (stage == "start" and cur and "start" in cur["stages"]):
+                if cur and len(cur["stages"]) > 1:
+                    out.append(cur)
+                cur = {"repo": repo, "stages": {}, "landed": False}
+            if cur is None:
+                cur = {"repo": repo, "stages": {}, "landed": False}
+            cur["stages"].setdefault(stage, m["ts"])
+            if stage == "land":
+                cur["landed"] = True
+                out.append(cur)
+                cur = None
+        if cur and len(cur["stages"]) > 1:
+            out.append(cur)
+    return out
+
+
+def ct_report(acc, repos, hours):
+    """Resolve every session against the ladder, then reconcile, then phase, then percentiles."""
+    since = cutoff(hours)
+    win_lo = since.timestamp()
+    win_hi = (WINDOW_END or datetime.now(timezone.utc)).timestamp()
+    sleep_ivs, sleep_meta = ct_sleep_intervals()
+    build_by_repo, build_meta = ct_build_intervals(repos, since)
+    ci_by_repo, ci_meta = ct_ci_intervals(repos, since)
+
+    def coverage(meta):
+        """The fraction of the window this source could see at all. Blindness is not quiet."""
+        e = meta.get("_earliest_epoch")
+        if not meta.get("available"):
+            return 0.0
+        if e is None or e <= win_lo:
+            return 1.0
+        span = win_hi - win_lo
+        return round(max(0.0, (win_hi - e) / span), 3) if span > 0 else 0.0
+
+    sources = {
+        "MACHINE_ASLEEP": dict(sleep_meta, coverage_fraction=coverage(sleep_meta)),
+        "LOCAL_BUILD": dict(build_meta, coverage_fraction=coverage(build_meta)),
+        # CI coverage is per REPO, not per second: `gh` can succeed for eight repos and fail for
+        # four (no remote, no auth, a private org), and reporting that as full coverage would push
+        # four repos' whole CI time into the AI residual while claiming CI was measured.
+        "CI": dict(ci_meta, coverage_fraction=round(
+            ci_meta.get("repos_covered", 0) / max(1, ci_meta.get("repos_total", 1)), 3)),
+    }
+    for k, v in sources.items():
+        v.pop("_earliest_epoch", None)
+        if not v.get("available"):
+            v["bucket_state"] = "unavailable - its seconds fall through to AI and are NOT measured"
+
+    resolved = []
+    per_repo_segs = {}
+    for s in acc["sessions"]:
+        raw = dict(s["raw"])
+        key = _ct_repo_key(s["repo"], repos)
+        raw["MACHINE_ASLEEP"] = sleep_ivs
+        raw["LOCAL_BUILD"] = build_by_repo.get(key, [])
+        raw["CI"] = ci_by_repo.get(key, [])
+        secs, segs = ct_resolve(s["lo"], s["hi"], raw)
+        resolved.append({"repo": s["repo_name"], "session": s["session"],
+                         "harness": s["harness"], "lo": s["lo"], "hi": s["hi"],
+                         "wall_seconds": s["hi"] - s["lo"], "buckets": secs})
+        bag = per_repo_segs.setdefault(key, {b: [] for b in CT_BUCKETS})
+        for b in CT_BUCKETS:
+            bag[b] += segs.get(b, [])
+        bag.setdefault("_covered", []).append((s["lo"], s["hi"]))
+
+    totals = {b: round(sum(r["buckets"][b] for r in resolved), 1) for b in CT_BUCKETS}
+    wall = round(sum(r["wall_seconds"] for r in resolved), 1)
+    by_bucket = [{"bucket": b, "hours": round(totals[b] / 3600, 2),
+                  "pct": round(100.0 * totals[b] / wall, 1) if wall else 0.0}
+                 for b in CT_BUCKETS]
+    by_bucket.sort(key=lambda r: -r["hours"])
+
+    rnd = random.Random(CT_SAMPLE_SEED)
+    sample = rnd.sample(resolved, min(CT_SAMPLE_N, len(resolved))) if resolved else []
+    worst_abs = worst_pct = 0.0
+    worst_row = None
+    for r in sample:
+        drift = abs(sum(r["buckets"].values()) - r["wall_seconds"])
+        pct = (100.0 * drift / r["wall_seconds"]) if r["wall_seconds"] else 0.0
+        if drift > worst_abs:
+            worst_abs, worst_row = drift, {"repo": r["repo"], "session": r["session"],
+                                           "wall_seconds": round(r["wall_seconds"], 1),
+                                           "sum_seconds": round(sum(r["buckets"].values()), 1)}
+        worst_pct = max(worst_pct, pct)
+    passed = worst_abs <= CT_TOLERANCE_SECONDS and worst_pct <= CT_TOLERANCE_PCT
+    measured = wall - totals["AI"]
+    reconciliation = {
+        "rule": "every second of a session lands in exactly one bucket; the buckets MUST sum to "
+                "that session's wall clock",
+        "sessions_total": len(resolved),
+        "sessions_sampled": len(sample),
+        "sample": "deterministic seed %d, so the verdict is reproducible" % CT_SAMPLE_SEED,
+        "tolerance": "<= %.1fs absolute AND <= %.2f%% of the session"
+                     % (CT_TOLERANCE_SECONDS, CT_TOLERANCE_PCT),
+        "worst_abs_drift_seconds": round(worst_abs, 3),
+        "worst_pct_drift": round(worst_pct, 4),
+        "worst_session": worst_row,
+        "verdict": "PASS" if passed else "FAIL - DO NOT TRUST THE PERCENTAGES ABOVE",
+        "what_a_pass_proves": "the ladder, the clipping and the interval algebra lose no seconds. "
+                              "It does NOT prove a bucket is correctly IDENTIFIED - see "
+                              "`sources` for which measured buckets were available at all.",
+        "measured_fraction_of_wall": round(measured / wall, 3) if wall else 0.0,
+        "residual_note": "AI is %s%% of wall. Every unavailable source in `sources` inflates it, "
+                         "because the residual is where unmeasured time goes by construction."
+                         % (round(100.0 * totals["AI"] / wall, 1) if wall else 0.0),
+    }
+
+    phases = []
+    cycle_walls = []
+    cycle_blocking = []
+    per_phase = {name: {"wall": [], "blocking": []} for name, _, _ in CT_PHASES}
+    for c in ct_cycles(acc):
+        bag = per_repo_segs.get(_ct_repo_key(c["repo"], repos))
+        cw = cb = 0.0
+        for name, a, b in CT_PHASES:
+            ta, tb = c["stages"].get(a), c["stages"].get(b)
+            if ta is None or tb is None or tb <= ta:
+                continue
+            raw = {k: (bag.get(k) or []) for k in CT_MEASURED} if bag else {}
+            secs, _ = ct_resolve(ta, tb, raw, covered=(bag or {}).get("_covered") or [])
+            blocking = (tb - ta) - sum(secs.get(k, 0.0) for k in CT_NONBLOCKING)
+            per_phase[name]["wall"].append(tb - ta)
+            per_phase[name]["blocking"].append(max(0.0, blocking))
+            cw += tb - ta
+            cb += max(0.0, blocking)
+            phases.append({"phase": name, "repo": Path(c["repo"]).name, "landed": c["landed"],
+                           "wall_seconds": round(tb - ta, 1),
+                           "blocking_seconds": round(blocking, 1),
+                           "buckets": {k: round(v, 1) for k, v in secs.items() if v > 0}})
+        if c["landed"] and cw:
+            cycle_walls.append(cw)
+            cycle_blocking.append(cb)
+
+    phase_table = []
+    for name, _, _ in CT_PHASES:
+        rows = [p for p in phases if p["phase"] == name]
+        agg = {}
+        for p in rows:
+            for k, v in p["buckets"].items():
+                agg[k] = agg.get(k, 0.0) + v
+        phase_table.append({
+            "phase": name, "n": len(rows),
+            "wall_minutes": round(sum(p["wall_seconds"] for p in rows) / 60, 1),
+            "blocking_minutes": round(sum(p["blocking_seconds"] for p in rows) / 60, 1),
+            "buckets_minutes": dict(sorted(((k, round(v / 60, 1)) for k, v in agg.items()),
+                                           key=lambda kv: -kv[1])),
+        })
+
+    percentiles = [ct_percentiles(per_phase[n]["wall"], n + " (wall)") for n, _, _ in CT_PHASES]
+    percentiles += [ct_percentiles(per_phase[n]["blocking"], n + " (blocking)")
+                    for n, _, _ in CT_PHASES]
+    percentiles.append(ct_percentiles(cycle_walls, "whole cycle branch->land (wall)"))
+    percentiles.append(ct_percentiles(cycle_blocking, "whole cycle branch->land (blocking)"))
+
+    return {
+        "window_hours": hours,
+        "law": "ATTRIBUTE, NEVER DROP. AI is the RESIDUAL and everything else is MEASURED - "
+               "invert that and the residual absorbs every error and the agent gets blamed for a "
+               "closed laptop lid.",
+        "priority_ladder": list(CT_BUCKETS),
+        "sessions": len(resolved),
+        "wall_hours_summed_over_sessions": round(wall / 3600, 2),
+        "wall_note": "sessions RUN CONCURRENTLY, so this is agent-hours, not elapsed hours",
+        "by_bucket": by_bucket,
+        "sources": sources,
+        "reconciliation": reconciliation,
+        "phase_table": phase_table,
+        "phase_note": "wall vs blocking differ because `wp-finish-upsert-pr` arms auto-merge and "
+                      "the agent stops - that CI is wall-clock Dean is not paying for",
+        "percentiles": percentiles,
+        "cycles_complete": len(cycle_walls),
+        "phases_observed": len(phases),
+        "worst_sessions": sorted(
+            [{"repo": r["repo"], "session": r["session"],
+              "wall_minutes": round(r["wall_seconds"] / 60, 1),
+              "top_bucket": max(r["buckets"].items(), key=lambda kv: kv[1])[0],
+              "buckets_minutes": {k: round(v / 60, 1) for k, v in r["buckets"].items() if v > 60}}
+             for r in resolved], key=lambda r: -r["wall_minutes"])[:12],
+    }
+
+
 def _codex_rollouts(since):
     """Every Codex rollout touched in the window, paired with the repo cwd it names.
 
@@ -975,13 +1649,17 @@ def _codex_repo_of(cwd: Path, repos):
     return best
 
 
-def audit_transcripts(repos, hours, max_sessions=400, ret=None):
+def audit_transcripts(repos, hours, max_sessions=400, ret=None, ct=None):
     """Walk the window's transcripts ONCE.
 
     `ret` is an optional return-byte accumulator (rb_new()). It rides along on the same pass
     because the `retbytes` numbers come from the exact tool_result blocks these scanners already
     flatten — opening every transcript a second time to measure them would double the cost of the
     audit for no new information.
+
+    `ct` is the cycle-time accumulator (ct_new()) and rides along for the identical reason: its
+    HUMAN, REVIEWER, WEBPIECES_TOOLING and CLAUDE_OUTAGE intervals all come off the same rows and
+    the same tool_use/tool_result pairing this walk already does.
     """
     since = cutoff(hours)
     sessions = []
@@ -1002,7 +1680,7 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None):
     files = files[:max_sessions]
 
     for repo, d, f, _mt in files:
-        s = _scan_session(repo, d, f, since, tool_hist, blocked_rules, ret)
+        s = _scan_session(repo, d, f, since, tool_hist, blocked_rules, ret, ct)
         if s:
             sessions.append(s)
 
@@ -1016,7 +1694,7 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None):
         codex_seen += 1
         if codex_seen > max_sessions:
             break
-        s = _scan_codex_session(repo, f, since, tool_hist, blocked_rules, ret)
+        s = _scan_codex_session(repo, f, since, tool_hist, blocked_rules, ret, ct)
         if s:
             sessions.append(s)
 
@@ -1083,8 +1761,14 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None):
     }
 
 
-def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
+def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=None):
     first = last = prev = None
+    # Cycle-time state. `prev_type` and `prior` exist only so a gap can be ATTRIBUTED to the pair
+    # of rows that bracket it — which is the whole difference between this and the 300s cap above,
+    # where a gap is only ever compared to a threshold and then forgotten.
+    ct_iv = {"HUMAN": [], "REVIEWER": [], "WEBPIECES_TOOLING": [], "CLAUDE_OUTAGE": []}
+    ct_marks = []
+    prev_type = None
     active_seconds = 0.0
     pending = {}            # tool_use_id -> (ts, tool, cmd)
     tool_seconds = build_seconds = redundant_build_seconds = blocked_seconds = 0.0
@@ -1114,6 +1798,7 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
             ts = parse_ts(row.get("timestamp"))
             if ts and not in_window(ts):
                 continue
+            prior = prev
             if ts:
                 first = ts if first is None else min(first, ts)
                 last = ts if last is None else max(last, ts)
@@ -1124,6 +1809,11 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
                 prev = ts
             typ = row.get("type")
             msg = row.get("message") or {}
+
+            if ct is not None and ts and prior is not None:
+                _ct_gap(ct_iv, row, typ, msg, prior, ts, prev_type, pending)
+            if typ in ("assistant", "user"):
+                prev_type = typ
 
             if typ == "assistant":
                 u = msg.get("usage") or {}
@@ -1138,6 +1828,12 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
                     if isinstance(cmd, str):
                         cmd_counts[cmd.strip()[:200]] += 1
                     pending[c.get("id")] = (ts, name, cmd if isinstance(cmd, str) else "")
+
+                    if ct is not None and ts and name == "Bash" and isinstance(cmd, str):
+                        st = _ct_marker(cmd)
+                        if st:
+                            ct_marks.append({"ts": ts.timestamp(), "stage": st,
+                                             "session": path.stem})
 
                     if name in MUTATE_TOOLS:
                         dirty = True
@@ -1167,6 +1863,8 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
                     tool_seconds += dur
                     txt = _text_of(c.get("content"))
                     rb_record(ret, repo.name, path.stem, AI_CLAUDE, name, txt)
+                    if ct is not None and ts and started:
+                        _ct_call(ct_iv, name, cmd, started.timestamp(), ts.timestamp())
                     errored = bool(c.get("is_error"))
                     # MCP payloads quote arbitrary prose; only a real error counts there.
                     guard_hit = (not name.startswith("mcp__")) and (
@@ -1200,6 +1898,7 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
 
     if first is None or last is None:
         return None
+    _ct_close(ct, repo, path.stem, AI_CLAUDE, first, last, ct_iv, ct_marks)
     # attribute redundant-build time by average build duration
     avg_build = (build_seconds / builds) if builds else 0.0
     redundant_build_seconds = avg_build * redundant_builds
@@ -1248,7 +1947,7 @@ def _codex_text(output):
     return ""
 
 
-def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
+def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None, ct=None):
     """The Codex twin of _scan_session, producing the identical session dict.
 
     Deliberately the same counters, so `totals_by_harness` is a like-for-like comparison rather
@@ -1276,6 +1975,11 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
     log_files = Counter()
     block_samples = []
     session_id = path.stem
+    # Codex has no Agent tool and no `isApiErrorMessage`, so REVIEWER and CLAUDE_OUTAGE are
+    # structurally unmeasurable here and stay empty rather than being guessed at from prose. Its
+    # HUMAN boundary is a `message`/`role=user` payload, the same fact in a different wire format.
+    ct_iv = {"HUMAN": [], "REVIEWER": [], "WEBPIECES_TOOLING": [], "CLAUDE_OUTAGE": []}
+    ct_marks = []
 
     try:
         fh = path.open(errors="replace")
@@ -1296,6 +2000,7 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
                 continue
             if ts and ts < since:
                 continue
+            prior = prev
             if ts:
                 first = ts if first is None else min(first, ts)
                 last = ts if last is None else max(last, ts)
@@ -1310,6 +2015,10 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
                 continue
             kind = payload.get("type")
 
+            if (ct is not None and ts and prior is not None and kind == "message"
+                    and payload.get("role") == "user"):
+                ct_iv["HUMAN"].append((prior.timestamp(), ts.timestamp()))
+
             if kind in ("custom_tool_call", "function_call"):
                 ns = payload.get("namespace") or ""
                 name = (ns + payload.get("name", "?")) if ns else payload.get("name", "?")
@@ -1321,6 +2030,11 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
                     cmd = payload.get("arguments") or ""
                 cmd_counts[cmd.strip()[:200]] += 1
                 pending[payload.get("call_id")] = (ts, name, cmd)
+
+                if ct is not None and ts:
+                    st = _ct_marker(cmd)
+                    if st:
+                        ct_marks.append({"ts": ts.timestamp(), "stage": st, "session": session_id})
 
                 if BUILD_RE.search(cmd):
                     builds += 1
@@ -1342,6 +2056,8 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
                 tool_seconds += dur
                 txt = _codex_text(payload.get("output"))
                 rb_record(ret, repo.name, session_id, AI_CODEX, name, txt)
+                if ct is not None and ts and started:
+                    _ct_call(ct_iv, "Bash", cmd, started.timestamp(), ts.timestamp())
                 # Codex has no `is_error` flag on the record, so a failed call is recognised the
                 # same way a human would: the guard markers, or a non-zero exit the exec harness
                 # prints. Anything less specific would count ordinary greps that found nothing.
@@ -1366,6 +2082,7 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
 
     if first is None or last is None:
         return None
+    _ct_close(ct, repo, session_id, AI_CODEX, first, last, ct_iv, ct_marks)
     avg_build = (build_seconds / builds) if builds else 0.0
     repeated = sum(n - 1 for n in cmd_counts.values() if n > 1)
     return {
@@ -2046,7 +2763,8 @@ def resolve_repos(patterns):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "parity", "skew",
-                                    "docdrift", "matrix", "merges", "retbytes", "all"])
+                                    "docdrift", "matrix", "merges", "retbytes", "cycletime",
+                                    "all"])
     ap.add_argument("--repos", nargs="+", required=True)
     ap.add_argument("--since", default=None,
                     help="window START, ISO-8601 UTC. Overrides --hours. Preferred for reports.")
@@ -2083,13 +2801,16 @@ def main():
         res["isolation"] = audit_isolation(repos, args.hours)
     # ONE transcript pass serves both `transcripts` and `retbytes`: the byte accounting is fed from
     # the same tool_result blocks the wasted-time scan already flattens.
-    if args.cmd in ("transcripts", "retbytes", "all"):
+    if args.cmd in ("transcripts", "retbytes", "cycletime", "all"):
         ret = rb_new() if args.cmd in ("retbytes", "all") else None
-        tr = audit_transcripts(repos, args.hours, args.max_sessions, ret)
+        ct = ct_new() if args.cmd in ("cycletime", "all") else None
+        tr = audit_transcripts(repos, args.hours, args.max_sessions, ret, ct)
         if args.cmd in ("transcripts", "all"):
             res["transcripts"] = tr
         if ret is not None:
             res["retbytes"] = rb_report(ret, repos, args.hours)
+        if ct is not None:
+            res["cycletime"] = ct_report(ct, repos, args.hours)
     if args.cmd in ("parity", "all"):
         res["codex_parity"] = audit_parity(repos, args.hours)
     if args.cmd in ("skew", "all"):
