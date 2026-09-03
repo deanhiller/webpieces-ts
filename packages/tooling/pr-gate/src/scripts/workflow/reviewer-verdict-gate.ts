@@ -141,7 +141,8 @@ export class ReviewerVerdictGate {
      */
     private retireAndReport(scan: ChecklistScan, req: RequiredChecklist): string {
         const verdict = this.reviewJsonService.resolveVerdict(req, scan.results);
-        return this.reviewJsonService.refusalError(req, verdict, this.archiveOrWarn(scan.reviewPath, req.id));
+        return this.reviewJsonService.refusalError(
+            req, verdict, scan.reviewPath, this.archiveOrWarn(scan.reviewPath, req.id));
     }
 
     // The archive path, or '' when there was nothing to move or the move failed (see retireAndReport).

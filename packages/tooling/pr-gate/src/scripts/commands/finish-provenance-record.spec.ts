@@ -138,7 +138,7 @@ function unattributableHarness(sessionId: string, agentType: string): string {
 function writeVerdict(repoRoot: string, id: string): void {
     const dir = path.join(repoRoot, '.webpieces', 'pr-review', 'dean/feat');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ verdict: 'green', override: '' }));
+    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ verdict: 'green' }));
 }
 
 function refusalFor(repoRoot: string, required: RequiredChecklist[]): string {

@@ -26,6 +26,20 @@ import { toError } from '../core/to-error';
 //      every subagent, so a verdict never depends on where an earlier `cd` left the shell. Claude-only:
 //      Codex has no settings `env`, and its cwd is measured not to drift
 //
+// WHAT IT DELIBERATELY DOES *NOT* DO: sweep this tree's dangling `node_modules/.bin/wp-*` symlinks. That
+// is the same class of defect as the retired-file removal below — an entry pointing at a missing file is
+// worse than absence, because `ls node_modules/.bin` advertises a capability that only fails on execution
+// — and it WOULD read naturally here. It is not here because the one implementation of that sweep lives in
+// `@webpieces/rules-config` (`stale-bin-sweep.ts`), which this module may not import: the barrel pulls in
+// inversify and the config loader, and a subpath import resolves against the INSTALLED rules-config, which
+// is a release behind this source (see .claude/rules/published-vs-local-source.md) — so a spawned
+// `wp-upgrade-shim` would die on module resolution, in the one command an L0-blocked session has left. A
+// second copy of the sweep here would be a second spelling of it, which is worse again.
+//
+// It does not need to be here. The sweep rides the `wp-*` startup pass that regenerates
+// `.webpieces/instruct-ai/*`, so ANY `wp-*` command heals the tree — including the `pnpm install` +
+// `pnpm exec wp-upgrade-shim` sequence this bin's own advice ends with.
+//
 // It also DELETES the retired `.claude/webpieces/guarantee-root.sh` and any settings entry still naming
 // it. That file was the L-1 hook, which existed only to guarantee the once-RELATIVE shim path resolved;
 // an absolute path resolves from any cwd, so it has no job left. Removing the file without removing the

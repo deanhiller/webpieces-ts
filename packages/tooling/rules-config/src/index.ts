@@ -304,6 +304,9 @@ export {
     PrContext,
     ChecklistResult,
     ChecklistVerdict,
+    ChecklistOverride,
+    ChecklistOverrideService,
+    checklistOverrideService,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -428,3 +431,8 @@ export {
     DEFAULT_UPSERT_PR_COMMAND,
     DEFAULT_MERGE_COMPLETE_COMMAND,
 } from './commands-config';
+export {
+    StaleBinRemoval,
+    StaleBinSweeper,
+    staleBinSweeper,
+} from './stale-bin-sweep';

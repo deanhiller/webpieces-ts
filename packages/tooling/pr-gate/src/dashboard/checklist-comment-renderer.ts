@@ -198,7 +198,12 @@ export class ChecklistCommentRenderer {
         if (!row.ran) return 'skipped, not applicable to this diff (expected ✅)';
         if (row.status === CK_PASS) return 'passed';
         if (row.status === CK_WARN) return 'passed with concerns';
-        if (row.status === CK_OVERRIDDEN) return 'OVERRIDDEN — shipped with a stated justification';
+        // Names the FILE the authorization lives in, so a reader of the PR can go and check the provenance
+        // rather than take "someone approved this" on trust. The reason, who authorized it and when are
+        // rendered verbatim in this row's section below.
+        if (row.status === CK_OVERRIDDEN) {
+            return `OVERRIDDEN — a human authorized shipping it (recorded in override-${row.subagent}.json)`;
+        }
         if (row.status === CK_FAIL) return 'FAILED review';
         if (row.status === CK_MISSING) return 'no verdict written';
         return `unknown verdict (${row.status})`;

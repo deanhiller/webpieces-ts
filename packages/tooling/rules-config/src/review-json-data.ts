@@ -7,6 +7,8 @@
  * `from '@webpieces/rules-config'` keep resolving exactly as before and no consumer changes.
  */
 
+import { ChecklistOverride } from './checklist-override';
+
 // The three colors a reviewer subagent may report in `review-<id>.json`. A TRI-state, not a boolean,
 // because the boolean it replaced gave a reviewer no way to say "this passes, but a human should look at
 // X" — the only way to raise a concern was to FAIL the PR and then override your own failure, which reads
@@ -19,25 +21,33 @@ export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as 
 // The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<featureSlug>/review-<id>.json`, one per
 // matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
 // file. It records the OUTCOME:
-//   status:'green'                  → PASS
-//   status:'yellow'                 → WARN (passes; the concern is published on the PR, nothing is blocked)
-//   status:'red' + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
-//   status:'red' + no override      → FAIL (refuse; `output` is printed verbatim)
-// `override` is deliberately free text, not a boolean — it forces the ship-anyway decision to be stated
-// in words and surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
+//   status:'green'                       → PASS
+//   status:'yellow'                      → WARN (passes; the concern is published on the PR, nothing is blocked)
+//   status:'red' + an override-<id>.json → OVERRIDDEN (pass; the human's stated reason reaches the PR)
+//   status:'red' + no override file      → FAIL (refuse; `output` is printed verbatim)
+//
+// THE `override` FIELD IS GONE FROM THIS FILE, and there is no compatibility mode. The ship-anyway
+// justification used to live here as free text, which made the ONE participant who hears the human — the
+// coordinating agent — the one participant that could not record it, because editing a reviewer's verdict
+// file is (correctly) refused by the harness. It now lives in its own `override-<id>.json`; see
+// ChecklistOverride. A verdict file still carrying an `override` key is reported through `problem` with the
+// destination named, exactly as the removed `success` field is. Data-only (per CLAUDE.md).
 export class ChecklistResult {
     id: string;
     status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
     output: string;    // what the reviewer found; printed verbatim when the checklist fails
-    override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟠 overridden)
+    // The HUMAN's authorization loaded from `override-<id>.json` beside this verdict, or null when there is
+    // none. Loaded alongside the verdict so `resolveVerdict` needs no second read of disk and every command
+    // resolves the same outcome from the same bytes.
+    override: ChecklistOverride | null;
     // '' = a well-formed verdict. Non-empty = the file exists and parses but its verdict cannot be READ
-    // (most often: it still uses the removed `success` field). Carried as data rather than thrown so the
-    // complaint can be reported by BOTH wp-review-upsert-pr and wp-finish-upsert-pr in identical words, and so a
-    // legacy file is never silently mistaken for a missing one.
+    // (most often: it still uses the removed `success` field, or the moved `override` field). Carried as
+    // data rather than thrown so the complaint can be reported by BOTH wp-review-upsert-pr and
+    // wp-finish-upsert-pr in identical words, and so a legacy file is never silently mistaken for a missing one.
     problem: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, status: string, output: string, override: string, problem = '') {
+    constructor(id: string, status: string, output: string, override: ChecklistOverride | null, problem = '') {
         this.id = id;
         this.status = status;
         this.output = output;
@@ -156,7 +166,7 @@ export class ReviewJson {
 // PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
 export const CK_PASS = 'pass';               // review-<id>.json status:'green'
 export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
-export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json status:'red' + non-empty override → 🟠
+export const CK_OVERRIDDEN = 'overridden';   // status:'red' + a human's override-<id>.json → 🟠
 export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
 export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
 export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)

@@ -25,6 +25,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ChecklistOverrideService",
+                    "className": "ChecklistOverrideService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/checklist-override.ts",
+                    "level": 2
+                },
+                {
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
@@ -103,6 +111,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/rules-config-design.ts",
                     "level": 0
+                },
+                {
+                    "id": "StaleBinSweeper",
+                    "className": "StaleBinSweeper",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/stale-bin-sweep.ts",
+                    "level": 2
                 },
                 {
                     "id": "StateDirMigrator",
@@ -222,6 +238,15 @@
                 },
                 {
                     "from": "ReviewJsonService",
+                    "to": "ChecklistOverrideService",
+                    "injection": "type",
+                    "token": "ChecklistOverrideService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-override.ts#ChecklistOverrideService",
+                    "paramName": "overrides",
+                    "paramType": "ChecklistOverrideService"
+                },
+                {
+                    "from": "ReviewJsonService",
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
@@ -318,6 +343,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/instruct-ai-docs.ts#InstructAiDocSet",
                     "paramName": "docs",
                     "paramType": "InstructAiDocSet"
+                },
+                {
+                    "from": "TemplateWriter",
+                    "to": "StaleBinSweeper",
+                    "injection": "type",
+                    "token": "StaleBinSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/stale-bin-sweep.ts#StaleBinSweeper",
+                    "paramName": "staleBins",
+                    "paramType": "StaleBinSweeper"
                 }
             ],
             "unresolved": []
