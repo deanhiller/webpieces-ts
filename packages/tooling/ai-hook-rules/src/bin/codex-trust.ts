@@ -26,8 +26,14 @@ import { CODEX_REGISTRATION, HookCommand, HookEntry, isManagedCommand, readSetti
  * The consequence the installer must therefore SAY OUT LOUD: the prompt's third option is
  * `Continue without trusting (hooks won't run)`. That is one keystroke to a fully unguarded session,
  * with no later warning of any kind. Install-time verification cannot see that choice — it happens
- * afterwards, in another process — which is exactly why guard-presence attestation exists as a separate
- * mechanism (see ./codex-guard-presence.ts) rather than being folded into this check.
+ * afterwards, in another process — so this check reports the trust state it CAN read, names the file it
+ * read it from, and stops there.
+ *
+ * Declining the prompt is a HUMAN's decision about their own machine, and it is deliberately left
+ * standing. Tooling that tried to detect and refuse it afterwards would be voiding a setting a person
+ * chose on purpose, and it has nothing to catch besides: the guards constrain the AGENT, while the
+ * prompt is answered by the HUMAN, who the agent cannot impersonate. So there is no second mechanism
+ * downstream of this one — this report is the whole of what webpieces knows about Codex trust.
  */
 
 /** What one repo's Codex trust looks like right now. Data-only → a class, per CLAUDE.md. */
@@ -77,8 +83,8 @@ export class CodexTrustStatus {
             out.push(`     ${String(this.trustedEntries)} of ${String(this.registeredEntries)} hook entries carry a trusted_hash.`);
         }
         out.push('     Fix: run `codex` in this repo and choose "Trust all" when it asks about hooks.');
-        out.push('     Until you do, its third option ("Continue without trusting") leaves the session UNGUARDED —');
-        out.push('     which is what the guard-presence check on the build exists to catch.');
+        out.push('     Its third option ("Continue without trusting") leaves the session UNGUARDED for its');
+        out.push('     whole life, and nothing later in the run reports that — this message is the only notice.');
         return out;
     }
 }

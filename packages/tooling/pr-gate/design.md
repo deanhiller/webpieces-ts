@@ -35,8 +35,6 @@ graph TD
     ChecklistScanner["ChecklistScanner"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
-    CodexGuardPresence["CodexGuardPresence"]
-    CodexSessionDetector["CodexSessionDetector"]
     ConfigFile["ConfigFile"]
     Dashboard["Dashboard"]
     DevDeployRefs["DevDeployRefs"]
@@ -114,7 +112,6 @@ graph TD
     BranchReaper --> MergedBranchesService
     BuildAffected --> BuildGateLog
     BuildAffected --> BuildsLog
-    BuildAffected --> CodexGuardPresence
     BuildAffected --> StageOutputLog
     BuildArtifactGate --> BuildAffected
     BuildArtifactGate --> GeneratedArtifactRegistry
@@ -144,7 +141,6 @@ graph TD
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
-    CodexGuardPresence --> CodexSessionDetector
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevDeployRefs
     DevResolveRunner --> DevDeployWatchHints

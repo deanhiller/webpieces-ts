@@ -4,7 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { BuildsLog, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
-import { CodexGuardPresence, CodexSessionDetector } from '@webpieces/ai-hook-rules';
 import { BuildAffected } from './build-affected';
 import { BuildGateLog } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -30,11 +29,11 @@ function newGate(): BuildArtifactGate {
 /**
  * A real BuildAffected, constructed with its CURRENT dependencies.
  *
- * This call was already stale at the fork point — it passed `HomeConfigService` and a zero-arg
- * `BuildGateLog`, neither of which BuildAffected has taken for some time — and it stayed silent
- * because `tsconfig.lib.json` excludes specs and vitest strips types with esbuild, so a spec is not
- * type-checked by the build. Adding the guard-presence dependency widened that mismatch, so it is
- * corrected here rather than left to rot one parameter further out.
+ * This call was once stale — it passed `HomeConfigService` and a zero-arg `BuildGateLog`, neither of
+ * which BuildAffected had taken for some time — and it stayed silent because `tsconfig.lib.json`
+ * excludes specs and vitest strips types with esbuild, so a spec is not type-checked by the build.
+ * That is why it is written out in full against the CURRENT constructor rather than hidden behind a
+ * helper: the only thing keeping it honest is a reader, so it has to be legible to one.
  */
 function buildAffected(): BuildAffected {
     const files = new GateLogFile();
@@ -42,8 +41,7 @@ function buildAffected(): BuildAffected {
     return new BuildAffected(
         new BuildGateLog(files, stageConsole),
         new BuildsLog(new DotWebpieces()),
-        stageConsole,
-        new CodexGuardPresence(new CodexSessionDetector()));
+        stageConsole);
 }
 
 // The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just

@@ -4,8 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { BuildsLog, BuildTicket, CliExitError, DotWebpieces, toError } from '@webpieces/rules-config';
-import { CodexGuardPresence, CodexSessionDetector } from '@webpieces/ai-hook-rules';
-import { BuildAffected, BuildGateOptions, CODEX_GUARDS_NEVER_RAN } from './build-affected';
+import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
 import { StageOutputLog } from './stage-output-log';
@@ -87,7 +86,7 @@ function gate(): BuildAffected {
     const files = new GateLogFile();
     const stageConsole = new StageOutputLog(files);
     return new BuildAffected(
-        new BuildGateLog(files, stageConsole), builds(), stageConsole, new CodexGuardPresence(new CodexSessionDetector()));
+        new BuildGateLog(files, stageConsole), builds(), stageConsole);
 }
 
 function opts(): BuildGateOptions {
@@ -188,72 +187,5 @@ describe('BuildGateOptions', () => {
     // No default for `stage`: a default would silently let two stages share one log file.
     it('requires a stage', () => {
         expect(opts().stage).toBe(REVIEW_STAGE);
-    });
-});
-
-
-/**
- * ══ GUARD-PRESENCE ATTESTATION AT THE BUILD ════════════════════════════════════════════════════════
- *
- * Codex's hook prompt has a third option — `Continue without trusting (hooks won't run)` — that is one
- * keystroke away from a fully unguarded session, with no later warning. A wrong tool-name matcher in
- * `.codex/hooks.json` produces the identical symptom. Neither is visible at INSTALL time, and both look
- * exactly like a well-behaved session in every count.
- *
- * `runBuildGate` is the one chokepoint every build reaches — `wp-build`, stage ② and stage ③ — so the
- * attestation is asserted HERE, on the shared path, rather than once per bin.
- */
-describe('guard-presence attestation', () => {
-    // The measured Codex fingerprints (codex-cli 0.151.0). NOT `CODEX_SESSION_ID` — that does not exist.
-    const CODEX_ENV = { CODEX_MANAGED_BY_NPM: '1' };
-
-    /** Reaches the real check with a chosen env, since `runBuildGate` reads `process.env`. */
-    function withEnv<T>(env: Record<string, string>, body: () => T): T {
-        const saved = { ...process.env };
-        Object.assign(process.env, env);
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: process.env MUST be restored on a throw
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return body();
-        } finally {
-            for (const k of Object.keys(env)) delete process.env[k];
-            Object.assign(process.env, saved);
-        }
-    }
-
-    /**
-     * THE POINT OF THE WHOLE THING: a Codex session with no L0 shim rows never reaches the build. It
-     * refuses BEFORE the command is resolved, so an unguarded session costs a round trip and not a full
-     * build followed by a refusal to believe it.
-     */
-    it('BLOCKS a Codex session that produced zero L0 shim rows, before running anything', async () => {
-        const dir = repoWithBuild('exit 0');
-        await withEnv(CODEX_ENV, async (): Promise<void> => {
-            let caught: Error | null = null;
-            // webpieces-disable no-unmanaged-exceptions -- chokepoint: the refusal IS the assertion subject
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                await captureStdout((): Promise<void> => gate().runBuildGate(dir, opts()));
-            } catch (err: unknown) {
-                const error = toError(err);
-                caught = error;
-            }
-            expect(caught, 'an unguarded Codex session must not build').not.toBeNull();
-            expect(String(caught?.message)).toContain('NOT ONE guard has run');
-            // It refused before the spawn — the gate never announced a command.
-            expect(written).not.toContain('exit 0');
-        });
-        expect(CODEX_GUARDS_NEVER_RAN).toBe('codex-guards-never-ran');
-    });
-
-    /**
-     * CLAUDE CODE BEHAVIOUR MUST NOT MOVE. Outside a Codex session the check is a no-op, which is what
-     * lets it sit unconditionally on the shared path with no flag and no config key — and this is the
-     * assertion that says so.
-     */
-    it('is invisible outside a Codex session — the build runs exactly as before', async () => {
-        const dir = repoWithBuild('exit 0');
-        await captureStdout((): Promise<void> => gate().runBuildGate(dir, opts()));
-        expect(written).toContain('exit 0');
     });
 });

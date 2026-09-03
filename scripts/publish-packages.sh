@@ -85,9 +85,10 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 ORDER=(
     packages/tooling/rules-config
     packages/tooling/eslint-rules
-    # ai-hook-rules moved AHEAD of pr-gate when pr-gate began depending on it (BuildAffected consumes
-    # CodexGuardPresence for the guard-presence gate). publish-packages.spec.ts re-derives this from
-    # the real manifests and caught the inversion.
+    # ai-hook-rules is AHEAD of pr-gate because pr-gate's manifest declares it. Do not reorder this pair
+    # by reading the imports: publish-packages.spec.ts re-derives the order from the real MANIFESTS, which
+    # is what caught the inversion when the dependency was first added, and a manifest can declare a
+    # dependency no source file imports.
     packages/tooling/ai-hook-rules
     packages/tooling/pr-gate
     packages/tooling/code-rules
