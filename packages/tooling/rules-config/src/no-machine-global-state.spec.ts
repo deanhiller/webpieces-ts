@@ -13,8 +13,8 @@ import * as rulesConfig from './index';
  * `gh pr view --json body`, and the store is a cache of a fact the remote owns — one that can only be
  * missing, stale, or on the wrong computer.
  *
- * So they are DELETED, not deprecated, per CLAUDE.md § "NO webpieces surface is released
- * backwards-compatible". This spec is the thing that goes red — by name — if any of them comes back,
+ * So they are DELETED, not deprecated, per `.claude/rules/no-backwards-compat.md`.
+ * This spec is the thing that goes red — by name — if any of them comes back,
  * because the failure mode is not a compile error: a resurrected store would simply start writing
  * outside the repo again, silently. See `decisions/0005-the-pr-description-is-the-merge-body.md`.
  *

@@ -148,7 +148,8 @@ describe('the generated block renders every array it claims to render', () => {
  * CURE REACHABILITY, over the WHOLE doc rather than only the generated block.
  *
  * The L0 allowlist matches whole command strings, so a command a blocked reader can copy out of this
- * file and cannot then run is worse than no command at all — that is the deadlock shape CLAUDE.md
+ * file and cannot then run is worse than no command at all — that is the deadlock shape
+ * `.claude/rules/*.md`
  * records three times. The generated block gets this by construction (it renders from the cures); the
  * hand-written half gets it from this assertion.
  */

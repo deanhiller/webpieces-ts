@@ -5,7 +5,8 @@ make a flagged behaviour unconditional, and never record an experiment as ended 
 quotes a human deciding that this specific experiment is over.**
 
 This is the checklist for `experiment-lifecycle-reviewer`, a REQUIRED reviewer over every PR that
-touches `packages/**`, `webpieces.config.json`, or `CLAUDE.md`. A 🔴 verdict BLOCKS the PR.
+touches `packages/**`, `webpieces.config.json`, `CLAUDE.md`, or `.claude/rules/**` (where the experiment
+policy prose lives, having moved out of `CLAUDE.md`). A 🔴 verdict BLOCKS the PR.
 
 **This reviewer is registered.** Its `commands.pr-gate.checklists` entry is in
 `webpieces.config.json`, so the gate names it on every PR touching those three patterns. It arrived in
@@ -15,8 +16,8 @@ spawned in that session, so a PR that both creates a required reviewer and regis
 its own provenance check with no way to satisfy it. That ordering applies to any brand-new required
 reviewer somebody adds next.
 
-The binding rule is CLAUDE.md §"ONLY A HUMAN ENDS AN EXPERIMENT". This doc is how you enforce it against
-a diff.
+The binding rule is `.claude/rules/experiments.md` §"ONLY A HUMAN ENDS AN EXPERIMENT". This doc is how
+you enforce it against a diff.
 
 ## Why this is NOT the compatibility policy, and must not be confused with it
 
@@ -79,8 +80,9 @@ setting. Never judge whether the protected file was touched.** "The diff does no
   ONE declared default: false), `DEFAULT_MAX_CONCURRENT_BUILDS`.
 - `packages/tooling/rules-config/src/home-config-retired-keys.ts` — `RETIRED_HOME_CONFIG_KEYS` (hard
   failure) and `ENDED_EXPERIMENTS` (the record of a human's decision).
-- `CLAUDE.md` §"ONLY A HUMAN ENDS AN EXPERIMENT" and the `whole-repo-build-guard` paragraph above it —
-  the prose statement of the OFF-for-two-years policy.
+- `.claude/rules/experiments.md` §"ONLY A HUMAN ENDS AN EXPERIMENT" and the `whole-repo-build-guard`
+  paragraph at the end of `.claude/rules/build-verification.md` — the prose statement of the
+  OFF-for-two-years policy.
 
 ---
 
@@ -152,19 +154,21 @@ the key is spelled or where it still appears. A key that parses is not a flag; a
 
 ### 4. 🔴 Flipping a default
 
-CLAUDE.md states that every `experimental.*` flag ships OFF and stays OFF for **two years**. A diff that
+`.claude/rules/build-verification.md` states that every `experimental.*` flag ships OFF and stays OFF
+for **two years**. A diff that
 moves one to ON by default — or that shortens that window — ends the experiment just as surely as
 deleting the flag, because the machines that never opted in are now running the experimental behaviour.
 
 **Grep the diff:**
 
 ```bash
-git diff <base>...HEAD -- packages/ CLAUDE.md | grep -nE '^[-+].*(GUARD_OFF_WHEN_ABSENT|whenAbsent|DEFAULT_MAX_CONCURRENT_BUILDS|ships OFF|two years)'
+git diff <base>...HEAD -- packages/ CLAUDE.md .claude/rules/ | grep -nE '^[-+].*(GUARD_OFF_WHEN_ABSENT|whenAbsent|DEFAULT_MAX_CONCURRENT_BUILDS|ships OFF|two years)'
 ```
 
 🔴 for `GUARD_OFF_WHEN_ABSENT = true`, for a per-key default table appearing beside it (a second place a
 default is stated is free to disagree with the first), for a `whenAbsent` argument changed from
-`GUARD_OFF_WHEN_ABSENT` to a literal, and for a CLAUDE.md edit shortening "two years" or softening
+`GUARD_OFF_WHEN_ABSENT` to a literal, and for a `.claude/rules/**` (or `CLAUDE.md`) edit shortening
+"two years" or softening
 "ships OFF and stays OFF".
 
 Changing `DEFAULT_MAX_CONCURRENT_BUILDS` is a numeric TUNING, not a flip — 🟡 at most, and only if the
@@ -265,7 +269,8 @@ way), and say in your verdict that you verified the citation.
   decision about a specific experiment.
 
 If a diff needs the flag gone in order to work and no authorization exists, the correct outcome is the
-one CLAUDE.md prescribes: **say the experiment looks finished, and leave the flag alone.** Put that
+one `.claude/rules/experiments.md` prescribes: **say the experiment looks finished, and leave the flag
+alone.** Put that
 sentence in your verdict so the next agent knows what to do instead of guessing.
 
 ---

@@ -15,7 +15,7 @@ import { AiType } from '../core/agent-event';
 /**
  * The token an L0 entry uses to say it serves EVERY harness — SAID OUT LOUD.
  *
- * This used to be `null`, and `null` is shim shape #5 from CLAUDE.md: a widening expressed as an
+ * This used to be `null`, and `null` is shim shape #5 from `.claude/rules/no-backwards-compat.md`: a widening expressed as an
  * ABSENCE. It made the widest setting the shortest thing to type and, worse, impossible to grep —
  * there is no search that lists "the entries every harness gets", because they were identified by
  * a field that was not there. `grep -n EVERY_HARNESS` now lists every one of them.

@@ -143,7 +143,7 @@ export class BuildsLog {
      *
      * `by` is the CALLER — `BuildGateOptions.stage`, i.e. `build` | `review` | `finish`. There is no
      * second "caller" concept anywhere: the stage id already is one, and a second spelling of it would
-     * be the shim CLAUDE.md rejects.
+     * be the shim `.claude/rules/no-backwards-compat.md` rejects.
      *
      * Returns a ticket even when the append failed. A build whose START row never landed still has to be
      * able to call `finish()`; the alternative is a nullable return that every call site must branch on

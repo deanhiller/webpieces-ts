@@ -24,4 +24,4 @@ Pure config + schema + shared utilities with no execution engine — this is why
 
 Do not add a fallback because rejection "would deadlock the consumer" — it cannot. Editing `webpieces.config.json` is permitted even while it is invalid, and `pnpm install` is always permitted, so a rejected config is always repairable in place.
 
-Note this is about config SHAPE, not release ordering: published validators still lag local source by a release, so a new key and the config that uses it must ship in separate PRs (see CLAUDE.md, "Published vs local source").
+Note this is about config SHAPE, not release ordering: published validators still lag local source by a release, so a new key and the config that uses it must ship in separate PRs (see `.claude/rules/published-vs-local-source.md`).

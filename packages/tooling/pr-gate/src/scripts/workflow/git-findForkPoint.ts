@@ -149,7 +149,8 @@ export class ForkPoint {
         process.stderr.write('\n');
         // The "do NOT `git checkout main`" caveat is scoped to the WORKTREE case, where it is true.
         // Stated unconditionally it forbids a command that is perfectly good in the primary clone —
-        // and that CLAUDE.md's own post-merge cleanup recipe uses — which is how an agent talked
+        // and that `.claude/rules/finishing-a-feature.md`'s own post-merge cleanup recipe uses
+        // — which is how an agent talked
         // itself into believing a new branch was its only exit.
         process.stderr.write('2. Create a new branch OFF origin/main (this form works from ANY tree; inside a\n');
         process.stderr.write('   worktree do NOT `git checkout main` first — it fatals with "main is already\n');

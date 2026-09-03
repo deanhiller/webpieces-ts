@@ -200,7 +200,7 @@ precedes L0.
 that uses it ship in SEPARATE PRs.
 
 **Config shape changes are a hard cut, never a fallback.** See the `webpieces.config.json` section of
-`CLAUDE.md`. A moved or renamed key is REJECTED with an error naming the destination, recorded in
+`.claude/rules/no-backwards-compat.md`. A moved or renamed key is REJECTED with an error naming the destination, recorded in
 `packages/tooling/rules-config/src/retired-config-keys.ts`. No `?? legacyKey`, no alias table. This is
 safe because every reader of the config is a coding agent, and because editing the config and running
 `pnpm install` are always permitted even while the config is invalid — so a rejection cannot wedge a

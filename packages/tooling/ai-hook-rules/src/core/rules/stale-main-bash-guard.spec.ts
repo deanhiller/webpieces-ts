@@ -176,7 +176,8 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
  *
  * Fleet-wide this rule handed agents FOUR refresh-main cures across 238 prescriptions, and
  * `pnpm wp-sync-main` — the command CLAUDE.md names, and the only one that also sweeps the
- * orphan directories — appeared in 6 of them. The other 231 prescribed the hand-rolled pair CLAUDE.md
+ * orphan directories — appeared in 6 of them. The other 231 prescribed the hand-rolled pair
+ * `.claude/rules/finishing-a-feature.md`
  * explicitly forbids, so agents caught between the guard and the instructions improvised hybrids of
  * both, four distinct spellings observed, one blocked round trip each. A cure is an instruction the AI
  * follows LITERALLY; the retired spellings are gone rather than softened.

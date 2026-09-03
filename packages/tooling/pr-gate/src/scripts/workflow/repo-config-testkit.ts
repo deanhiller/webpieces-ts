@@ -14,8 +14,9 @@ import { allRuleNames, retiredRuleFor, sectionForRule, seedEntryForRule } from '
  *  1. `checklists` is dropped. Its `doc` paths are validated REPO-RELATIVE and point at
  *     `.claude/review/*.md`, which exist here and not in a temp clone.
  *  2. Every locally-known rule with no entry is SEEDED. The repo's config is validated by the PUBLISHED
- *     validator and therefore lags local source by one release (CLAUDE.md, "Published vs local
- *     source"): a rule added in this working tree cannot get a config entry until its release ships,
+ *     validator and therefore lags local source by one release
+ *     (`.claude/rules/published-vs-local-source.md`): a rule added in this working tree cannot get a
+ *     config entry until its release ships,
  *     while the LOCAL validator a spec runs already demands one. Without this, adding any rule turns
  *     these specs red for exactly one release — a failure that says nothing about the code under test.
  *  3. Every RETIRED rule entry is dropped — the same one-release lag pointing the other way. When a rule

@@ -117,10 +117,10 @@ run over there". The question is therefore not *"how do we measure the worktree?
 | # | constraint | source |
 |---|---|---|
 | C1 | shim + binary + measured `package.json` come from one tree | `shim.ts:479-502`, INVARIANT-1TREE |
-| C2 | a cure must always stay reachable — no state may deny its own fix | CLAUDE.md, L0 allowlist design |
+| C2 | a cure must always stay reachable — no state may deny its own fix | `.claude/rules/no-backwards-compat.md`, L0 allowlist design |
 | C3 | works when there is **no** `node_modules` anywhere (fresh clone, brand-new sibling worktree) | fault X/U exists for exactly this |
 | C4 | the committed hook entry point is a **checked-in file** that must match the running release, or fault S fires | `l0-matrix.ts` fault S |
-| C5 | consumers run the **previous published release**; anything new must be adopted by a release *before* it can do anything | CLAUDE.md § "Published vs local source" |
+| C5 | consumers run the **previous published release**; anything new must be adopted by a release *before* it can do anything | `.claude/rules/published-vs-local-source.md` |
 | C6 | POSIX `sh` only at the entry point — no node, no bash-isms | the entry point runs before any install is proven |
 | C7 | must not let an AI choose its own governing binary (that is disabling its own guards) | the guards exist to constrain the agent |
 

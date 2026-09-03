@@ -46,8 +46,8 @@ export const GUARD_MATRIX_DOC = 'webpieces.guard-matrix.md';
  *
  * Both halves are asserted (l0-matrix.spec.ts): the call must be accepted by isAllowed(), and the deny
  * message must actually name it. That pairing is the anti-deadlock invariant — a message that
- * prescribes a command the allowlist rejects is exactly the shape of the three deadlocks CLAUDE.md
- * records, and it is how the dead `wp-setup-ai-hooks` bin in the config-missing text was caught.
+ * prescribes a command the allowlist rejects is exactly the shape of the three deadlocks
+ * `.claude/rules/*.md` records, and it is how the dead `wp-setup-ai-hooks` bin in the config-missing text was caught.
  */
 export class L0Cure {
     // eslint-disable-next-line @typescript-eslint/max-params

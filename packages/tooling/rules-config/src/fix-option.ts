@@ -8,7 +8,8 @@
  *
  * WHY it was moved down (2026-08-18): `RuleFailError.fixHints` used to be `readonly string[]` while
  * `FixHint.fixOptions` was `readonly Option[]`. That was TWO shapes for one concept — the shim shape
- * CLAUDE.md calls "two spellings of one thing" — and the `string[]` half could not express `preferred`
+ * `.claude/rules/no-backwards-compat.md` calls "two spellings of one thing" — and the `string[]` half
+ * could not express `preferred`
  * at all, so a build-time rule had no way to say which cure to reach for first. There is now exactly one
  * spelling; the old one does not compile.
  *

@@ -41,7 +41,8 @@ const MAX_TARGET_LEN = 160;
  *   BLOCK_HUMAN      blocked, and it needs a human decision — or a delegation (spawn a subagent) that
  *                    the blocked agent cannot perform for itself.
  *
- * Hard cut, per CLAUDE.md: `'BLOCK'` is GONE rather than aliased, so every construction site fails to
+ * Hard cut, per `.claude/rules/no-backwards-compat.md`: `'BLOCK'` is GONE rather than aliased, so every
+ * construction site fails to
  * compile and has to say which kind of block it is. Before, that question had exactly one wrong
  * answer available — silence.
  */

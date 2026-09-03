@@ -68,7 +68,8 @@ describe('@AuthLocalOnly records the local-only mode', () => {
     });
 
     /**
-     * A message that lists four of five modes is CLAUDE.md shim shape #6: whichever menu the caller
+     * A message that lists four of five modes is `.claude/rules/no-backwards-compat.md` shim shape #6:
+     * whichever menu the caller
      * hits becomes the API they believe exists, and the mode missing from the menu is the one that
      * gets hand-rolled with a runtime throw all over again.
      */

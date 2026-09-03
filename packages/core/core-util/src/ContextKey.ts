@@ -45,7 +45,8 @@
  *
  * The constructor is PRIVATE — you cannot make a key without picking a branch, and there
  * is no default. A default would make the permissive branch the shortest thing to type,
- * which is exactly the "widening that is an ABSENCE rather than a token" that CLAUDE.md
+ * which is exactly the "widening that is an ABSENCE rather than a token" that
+ * `.claude/rules/no-backwards-compat.md`
  * rejects. `provenance` is a REQUIRED positional argument on the trusted factory only, so
  * "trusted with no stated reason" cannot be written down.
  *
@@ -82,7 +83,8 @@
  * statement, never a default.
  *
  * The type parameter `T` is the TRUST LEVEL, carried as a phantom type so the accessor verbs can
- * reject the wrong kind of key at COMPILE time rather than throwing at runtime (CLAUDE.md treats a
+ * reject the wrong kind of key at COMPILE time rather than throwing at runtime (`.claude/rules/no-backwards-compat.md`
+ * treats a
  * runtime throw standing in for an expressible type as a defect).
  */
 
@@ -117,7 +119,7 @@ export type AnyUntrustedContextKey = ContextKey<unknown, 'untrusted'>;
  * goes straight to `putUntrusted` with no cast. Written as one type with a mixed `Trust` parameter
  * there would be nothing to drop, the `else` would stay mixed, and the class would need a second
  * `isUntrusted()` predicate to type the branch its own negative already decided — one runtime question
- * with two spellings, which is the shim shape CLAUDE.md rejects.
+ * with two spellings, which is the shim shape `.claude/rules/no-backwards-compat.md` rejects.
  *
  * Mixed in TRUST as well as in value type, so it is READ-ONLY territory: `getAny(key)` takes one, but
  * no WRITE verb does. A write must name the trust level, which is what keeps the `trusted` label

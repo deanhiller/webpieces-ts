@@ -104,7 +104,8 @@ describe('every declared bin has a process launcher', () => {
                 bin?: Record<string, string>;
                 publishConfig?: { bin?: Record<string, string> };
             };
-            // A top-level `bin` is itself banned here (see CLAUDE.md), but if one ever appears it must
+            // A top-level `bin` is itself banned here (see `.claude/rules/packaging-and-bins.md`), but if one
+            // ever appears it must
             // still launch something, so both maps are audited.
             const bins = { ...(manifest.publishConfig?.bin ?? {}), ...(manifest.bin ?? {}) };
             for (const [name, target] of Object.entries(bins)) {

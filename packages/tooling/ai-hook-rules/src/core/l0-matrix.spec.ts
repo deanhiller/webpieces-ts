@@ -182,7 +182,9 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
 /**
  * THE ANTI-DEADLOCK TEST.
  *
- * CLAUDE.md records three separate deadlocks of exactly one shape: a deny that prescribes a command
+ * `.claude/rules/published-vs-local-source.md`, `.claude/rules/no-backwards-compat.md` and
+ * `.claude/rules/packaging-and-bins.md` record three separate deadlocks of exactly one
+ * shape: a deny that prescribes a command
  * the allowlist then rejects (`2>&1 | tail -15`, the `cd` prefix, the `.claude/` `cp`). The assistant
  * reads its own denial as "the guard blocks its own fix" and hands the block back to the human.
  *

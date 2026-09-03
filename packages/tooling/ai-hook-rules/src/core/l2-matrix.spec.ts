@@ -240,7 +240,8 @@ describe('cure= is looked up from the matrix, not authored twice', () => {
      * ONE SPELLING FOR "make local `main` current", and it is the one CLAUDE.md names.
      *
      * Fleet-wide this rule emitted FOUR refresh-main cures across 238 prescriptions and the sanctioned
-     * one appeared in 6 of them — so the guard prescribed the hand-rolled form CLAUDE.md explicitly
+     * one appeared in 6 of them — so the guard prescribed the hand-rolled form
+     * `.claude/rules/finishing-a-feature.md` explicitly
      * forbids 231 times out of 238, and agents caught between the two authorities improvised hybrids of
      * both (docs/audit/2026-08-24-mon-wed.md, section 3). `cure=` is looked up from the row, so pinning
      * the row's literal here pins what the log carries and what the doc prints at the same time.
@@ -324,7 +325,7 @@ describe('L2 use cases', () => {
 
     // NOTE: "every row has at least one use case" is NOT asserted here. It is the TYPE — `useCases` is a
     // non-empty tuple, so an empty row does not compile. A runtime assertion standing in for a type that
-    // could express the invariant is the shape CLAUDE.md rejects.
+    // could express the invariant is the shape `.claude/rules/no-backwards-compat.md` rejects.
 
     it('renders every case into the doc, verbatim', () => {
         const doc = renderL2Doc();

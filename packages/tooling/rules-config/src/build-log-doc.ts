@@ -9,7 +9,8 @@
 // propagate; a webpieces PR cannot edit a consumer's CLAUDE.md, and should not.
 //
 // Generated guidance does propagate: this doc rides git-workflow.md's link closure, so every repo
-// receives the corrected wording on its next `wp-*` command. That is the CLAUDE.md corollary applied
+// receives the corrected wording on its next `wp-*` command. That is the corollary in
+// `.claude/rules/no-backwards-compat.md` applied
 // to itself — name the tool, let the tool print the details.
 // ---------------------------------------------------------------------------
 

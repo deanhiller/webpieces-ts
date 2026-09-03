@@ -171,7 +171,8 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
  * worktree"): no allowlist can accept it and no reclassification can model it, so it is asserted on the
  * deny text instead. Row 5's cure is a command, and the property that matters is stronger than "the
  * allowlist accepts it" — applying it must actually stop the row from matching, or the guard prescribes
- * a command that gets the same block again, which is the deadlock shape CLAUDE.md records three times.
+ * a command that gets the same block again, which is the deadlock shape `.claude/rules/*.md`
+ * records three times.
  */
 describe('L1 cures — the runnable ones clear the block they are prescribed for', () => {
     it('row 5: `cd <root> && <original>` moves P from `sub` to `root`, landing on row 6 (→ L2)', () => {

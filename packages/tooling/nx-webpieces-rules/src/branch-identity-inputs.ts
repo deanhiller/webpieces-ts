@@ -15,7 +15,8 @@ import { TargetConfiguration } from '@nx/devkit';
  * unedited config file still hash identically — which is exactly the leak above.
  *
  * DELIBERATELY NOT IN `sharedGlobals`. Putting a branch-varying value there would make EVERY task hash
- * branch-unique and destroy cross-branch cache reuse fleet-wide (CLAUDE.md's measured ~3.2x contention cost
+ * branch-unique and destroy cross-branch cache reuse fleet-wide (`.claude/rules/build-verification.md`'s
+ * measured ~3.2x contention cost
  * is what that buys you). Scoped to the rule-running targets, `build`/`test`/`lint` keep sharing.
  *
  * The two vars are the same pair `getCurrentBranch()` reads, in the same order, so the hash keys off

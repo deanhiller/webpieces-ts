@@ -17,7 +17,8 @@ import * as path from 'path';
  * Nothing failed — the hatch simply did not work, which is the worst possible failure mode for a
  * hatch (you find out by the build blocking you on the day you needed it not to).
  *
- * That is shim shape #1 from CLAUDE.md ("two spellings of one thing"), and its cure is deletion.
+ * That is shim shape #1 from `.claude/rules/no-backwards-compat.md` ("two spellings of one thing"),
+ * and its cure is deletion.
  * A one-time rename is not enough on its own, though: the old spelling can wander back in from a copied
  * snippet, an older doc, or a package published before the rename. So this spec is the ratchet — it
  * greps every tooling package — code, executor schemas AND docs — and fails on either dead spelling.

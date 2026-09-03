@@ -26,8 +26,8 @@ const CRASH_PREFIX = '[ai-hooks] hook crashed unexpectedly — failing closed: '
  *
  * What this replaces: `runMain(mode)`, which read stdin itself and reached `process.stdout.write` /
  * `process.exit` from a dozen frames down. `runMain` is DELETED, not kept alongside — two spellings of
- * one entry point is the shim shape this repo rejects outright (see CLAUDE.md, "NO webpieces surface
- * is released backwards-compatible"). Nothing outside this file names it any more.
+ * one entry point is the shim shape this repo rejects outright (see
+ * `.claude/rules/no-backwards-compat.md`). Nothing outside this file names it any more.
  *
  * The order of observable effects is unchanged from `runMain`: the invocation's audit line is flushed
  * at the emit boundary inside the pipeline, the decision bytes are written next, and the process exits
