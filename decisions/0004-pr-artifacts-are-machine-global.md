@@ -110,7 +110,8 @@ disagree with what was reviewed. Moving the file changed WHERE it is read from a
 
 Two consequences:
 
-- **Hard cut, per CLAUDE.md.** Finish does not also write the old in-repo path, and land does not read
+- **Hard cut, per `.claude/rules/no-backwards-compat.md`.** Finish does not also write the old
+  in-repo path, and land does not read
   it. Two homes for one receipt is two answers to "which bytes land", and the stale one wins in exactly
   the situation that broke — finish and land in different trees. When land finds a body left by the
   previous release it prints a LOUD one-time signpost naming the file, says it is deliberately not read,

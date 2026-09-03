@@ -135,8 +135,8 @@ a PR description in GitHub's textarea and this is the only point between that ed
 ## 3. `--fallback-title-only` is DELETED, not kept
 
 The flag existed for exactly one situation, stated in its own help text: *the gated body is not on this
-machine.* That situation is now unreachable — the body is wherever the PR is — so per CLAUDE.md
-§ "NO webpieces surface is released backwards-compatible" the flag is deleted rather than left as a
+machine.* That situation is now unreachable — the body is wherever the PR is — so per
+`.claude/rules/no-backwards-compat.md` the flag is deleted rather than left as a
 never-taken branch. Gone with it: `LandPrOptions`, `fallbackBody`, `writeFallbackBody`,
 `fallbackNotice`, `notOnThisMachine`, and `legacySignpost`. `LandPrCommand.run()` is nullary and
 `wp-land-pr` declares no flags at all.
@@ -220,7 +220,7 @@ Nothing in this PR touches anyone's home directory.
 |---|---|
 | **Keep the store as a cache, read the PR when it misses** | Two homes for one receipt, which is the shim shape 0004 itself rejected — and now the stale one would be the LOCAL one, winning over the authoritative remote. |
 | **Keep `origin.json` only** | § 4 — the same machine-global directory and sweep for a fact two `rev-parse`s answer better. |
-| **Keep `--fallback-title-only` "just in case"** | § 3 — its only trigger is unreachable. An accepted shape is never migrated (CLAUDE.md). |
+| **Keep `--fallback-title-only` "just in case"** | § 3 — its only trigger is unreachable. An accepted shape is never migrated (`.claude/rules/no-backwards-compat.md`). |
 | **Re-render the body at land time** | Unchanged from 0004: a second authoritative gate whose result nobody reads, free to disagree with what was reviewed. |
 | **Store the body in a PR comment instead of the description** | Adds a surface, and the description is already the thing every landing route copies (`squash_merge_commit_message: PR_BODY`). #611's whole point. |
 | **Reinstate a machine-global root for something else later** | Not forbidden in principle — but it needs its own decision doc arguing the scope, not a revival of this one. `no-machine-global-state.spec.ts` makes the revival loud. |

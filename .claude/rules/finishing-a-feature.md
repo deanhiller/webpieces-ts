@@ -110,8 +110,5 @@ The numbers in a `--delete-*` flag are the numbers printed on the SAME run; a nu
 block stops the run rather than deleting the wrong ref. An explicit flag always beats the terminal sniff
 (`isTTY` was only ever a guess about who was standing there).
 
-**The ONLY reasons to stop before posting the PR:**
-- The human explicitly said "don't open a PR yet."
-- The build or tests are red.
-
-Otherwise, stopping after a green build without posting the PR is a bug — not politeness.
+The ONLY reasons to stop before posting the PR are stated once, in `CLAUDE.md` — the index owns that
+rule, so a second copy here would be free to drift out of step with it.

@@ -655,7 +655,8 @@ moot. Keep `--debug hooks` output per case as an independent second channel — 
 probe log is itself a finding.
 
 **Not a harness question:** "does H1 correctly block a subdirectory cwd" is pure logic in our code and
-belongs in `ai-hook-rules`'s vitest suite, which per CLAUDE.md resolves `@webpieces/*` to local src.
+belongs in `ai-hook-rules`'s vitest suite, which per `.claude/rules/published-vs-local-source.md`
+resolves `@webpieces/*` to local src.
 
 Revert: `rm $SP/ARMED`, `worktree remove --force` both probes, `worktree prune`, delete the probe
 branches, then assert `git diff -- .claude/settings.json` is **empty** and `settings.local.json`'s

@@ -5,8 +5,8 @@
  * - `'deployed'` — anywhere else (staging, prod, CI, a container). `@AuthLocalOnly` endpoints are
  *                  not registered and, if reached anyway, 404.
  *
- * A `boolean` would have made the DANGEROUS half (`true`) unnameable and ungreppable — see CLAUDE.md
- * shim shape #5. `grep -rn "'local'" ` over a repo's startup now lists every place that claims to be a
+ * A `boolean` would have made the DANGEROUS half (`true`) unnameable and ungreppable — see
+ * `.claude/rules/no-backwards-compat.md` shim shape #5. `grep -rn "'local'" ` over a repo's startup now lists every place that claims to be a
  * developer's machine.
  */
 export type Locality = 'local' | 'deployed';

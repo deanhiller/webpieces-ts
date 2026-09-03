@@ -91,7 +91,8 @@ export class SyncMainCommand {
 
     /**
      * A linked worktree has no main to check out — `git checkout main` FATALS there with "main is already
-     * checked out at <primary clone>", which is a footgun CLAUDE.md currently has to warn about in prose.
+     * checked out at <primary clone>", which is a footgun `.claude/rules/finishing-a-feature.md`
+     * currently has to warn about in prose.
      * So the command does the half that IS meaningful here (worktrees accumulate corpses too, if a
      * long-lived one keeps merging main in) and says plainly where the other half lives.
      */

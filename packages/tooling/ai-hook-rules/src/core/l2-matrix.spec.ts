@@ -240,7 +240,8 @@ describe('cure= is looked up from the matrix, not authored twice', () => {
      * ONE SPELLING FOR "make local `main` current", and it is the one CLAUDE.md names.
      *
      * Fleet-wide this rule emitted FOUR refresh-main cures across 238 prescriptions and the sanctioned
-     * one appeared in 6 of them — so the guard prescribed the hand-rolled form CLAUDE.md explicitly
+     * one appeared in 6 of them — so the guard prescribed the hand-rolled form
+     * `.claude/rules/finishing-a-feature.md` explicitly
      * forbids 231 times out of 238, and agents caught between the two authorities improvised hybrids of
      * both (docs/audit/2026-08-24-mon-wed.md, section 3). `cure=` is looked up from the row, so pinning
      * the row's literal here pins what the log carries and what the doc prints at the same time.
