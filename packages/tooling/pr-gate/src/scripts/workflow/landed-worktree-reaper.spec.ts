@@ -35,7 +35,7 @@ vi.mock('child_process', () => ({
     execSync: (): string => '',
 }));
 
-import { WorktreeService } from '@webpieces/rules-config';
+import { Worktree, WorktreeService } from '@webpieces/rules-config';
 
 import { LandedWorktreeReaper, WorktreeReapHandoff } from './landed-worktree-reaper';
 import { ReapOutcomeSignal, REAP_OUTCOME_REFUSED, REAP_OUTCOME_REMOVED } from './reap-outcome';
@@ -43,12 +43,22 @@ import { ReapOutcomeSignal, REAP_OUTCOME_REFUSED, REAP_OUTCOME_REMOVED } from '.
 const PRIMARY = '/Users/dev/webpieces-ts';
 const LINKED = '/Users/dev/webpieces-ts-feature';
 const BRANCH = 'dean/fix-landreexec';
+const LINKED_HEAD = 'bbb';
 const ENTRY = '/pkg/src/scripts/wp-reap-worktree.js';
 
 // Primary clone + one linked worktree holding the branch we are landing.
 function porcelain(): string {
     return `worktree ${PRIMARY}\nHEAD aaa\nbranch refs/heads/main\n\n`
-        + `worktree ${LINKED}\nHEAD bbb\nbranch refs/heads/${BRANCH}\n`;
+        + `worktree ${LINKED}\nHEAD ${LINKED_HEAD}\nbranch refs/heads/${BRANCH}\n`;
+}
+
+/**
+ * The tree LandedTreeResolver picked: it holds the landed branch AT the commit GitHub squashed. `plan`
+ * is TOLD this rather than deriving it from a cwd — see the class doc for why the cwd answer was wrong
+ * both mechanically (pnpm's hoist) and in principle (a coordinator is standing somewhere else).
+ */
+function landedTree(): Worktree {
+    return new Worktree(LINKED, BRANCH, LINKED_HEAD, false, false, false, '');
 }
 
 // The entry point exists (the built case). `reapEntryScript` is a seam precisely because under vitest
@@ -87,7 +97,7 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
     it('re-execs the reap with cwd = the primary clone when the landed branch is held here', () => {
         const reaper = built();
 
-        const handoff = reaper.plan(LINKED, BRANCH);
+        const handoff = reaper.plan(LINKED, landedTree(), LINKED);
 
         expect(handoff).not.toBeNull();
         expect((handoff as WorktreeReapHandoff).canReap).toBe(true);
@@ -98,20 +108,43 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
 
         expect(world.spawns.length).toBe(1);
         expect(world.spawns[0].cwd).toBe(PRIMARY);
-        expect(world.spawns[0].argv).toEqual([process.execPath, ENTRY, LINKED, BRANCH]);
+        expect(world.spawns[0].argv).toEqual([process.execPath, ENTRY, LINKED, BRANCH, LINKED_HEAD]);
+    });
+
+    /**
+     * THE BUG THIS FIX IS ABOUT, at this layer. An agent worktree lives INSIDE the primary clone, so
+     * `pnpm` hoists the bin's cwd out of it and every cwd-derived answer names the primary clone. The
+     * reap target is now the tree the RESOLVER named, so the hoisted cwd cannot change it: the child is
+     * still handed the worktree, its branch and its sha, and still runs from the primary clone.
+     */
+    it('reaps the resolved worktree even when the process cwd was hoisted to the primary clone', () => {
+        const reaper = built();
+
+        const handoff = reaper.plan(PRIMARY, landedTree(), PRIMARY) as WorktreeReapHandoff;
+
+        expect(handoff.canReap).toBe(true);
+        expect(handoff.worktreePath).toBe(LINKED);
+        // …and the operator's own shell was never inside it, so they must NOT be told to move.
+        expect(handoff.standingHere).toBe(false);
+        world.childStdout = new ReapOutcomeSignal().line(REAP_OUTCOME_REMOVED);
+        const out = reaper.handOff(handoff);
+        expect(out).not.toContain('NO LONGER EXISTS');
+        expect(world.spawns[0].argv).toEqual([process.execPath, ENTRY, LINKED, BRANCH, LINKED_HEAD]);
     });
 
     // Landing from the primary clone is the ordinary case and must not grow a special sentence — or a
     // child process. There is no worktree to remove, only a branch, which `pnpm wp-cleanup` handles.
-    it('plans nothing when the landing happened in the primary clone', () => {
-        expect(built().plan(PRIMARY, 'main')).toBeNull();
+    it('plans nothing when no worktree holds the landed commit', () => {
+        expect(built().plan(PRIMARY, null, PRIMARY)).toBeNull();
         expect(world.spawns.length).toBe(0);
     });
 
-    // A worktree that holds some OTHER branch is not a corpse. Landing a branch from a directory that
-    // does not hold it is a real (if odd) situation, and nothing about it authorises a removal.
-    it('plans nothing when this worktree holds a different branch', () => {
-        expect(built().plan(LINKED, 'dean/something-else')).toBeNull();
+    // The primary clone is the thing reaped FROM, never a target — so it is refused here as well as by
+    // the child's own verdicts and by WorktreeReaper's name rail. None of the three is load-bearing alone.
+    it('plans nothing when the resolved tree IS the primary clone', () => {
+        const main = new Worktree(PRIMARY, 'main', 'aaa', true, false, false, '');
+
+        expect(built().plan(PRIMARY, main, PRIMARY)).toBeNull();
         expect(world.spawns.length).toBe(0);
     });
 
@@ -122,7 +155,7 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
     it('keeps the manual notice, and spawns nothing, when the reap entry point is missing', () => {
         const reaper = new UnbuiltReaper(new WorktreeService(), new ReapOutcomeSignal());
 
-        const handoff = reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff;
+        const handoff = reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff;
 
         expect(handoff.canReap).toBe(false);
         expect(handoff.blockedBecause).toContain('not on disk');
@@ -134,12 +167,16 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
         expect(notice).toContain(LINKED);
     });
 
-    // Fail SAFE when git cannot place us in any worktree at all (an unavailable git, a bare repo, a
-    // directory that is not a checkout): no tree identified means no tree removed, and no child.
-    it('plans nothing when git cannot name the tree we are standing in', () => {
+    // Fail SAFE when git cannot name a primary clone (an unavailable git, a bare repo, a directory that
+    // is not a checkout): there is then no directory the child could safely run FROM, so nothing is
+    // spawned and the #512 manual notice stands instead.
+    it('spawns nothing when git cannot name a primary clone to reap from', () => {
         world.porcelain = '';
 
-        expect(built().plan(LINKED, BRANCH)).toBeNull();
+        const handoff = built().plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff;
+
+        expect(handoff.canReap).toBe(false);
+        expect(handoff.blockedBecause).toContain('no safe directory');
         expect(world.spawns.length).toBe(0);
     });
 });
@@ -151,7 +188,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         world.childStdout = `  ✓ removed\n${new ReapOutcomeSignal().line(REAP_OUTCOME_REMOVED)}`;
         const reaper = built();
 
-        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+        const out = reaper.handOff(reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff);
 
         expect(out).toContain('NO LONGER EXISTS');
         expect(out).toContain(`cd '${PRIMARY}'`);   // quoted for the same reason as the manual notice
@@ -170,7 +207,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         world.childStderr = "fatal: '/Users/dev/webpieces-ts-feature' contains modified or untracked files\n";
         const reaper = built();
 
-        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+        const out = reaper.handOff(reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff);
 
         expect(out).toContain('contains modified or untracked files');
         expect(out).toContain('Nothing was forced');
@@ -192,7 +229,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
             + new ReapOutcomeSignal().line(REAP_OUTCOME_REFUSED);
         const reaper = built();
 
-        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+        const out = reaper.handOff(reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff);
 
         expect(out).toContain('not provably dead');           // the child's own words survive
         expect(out).not.toContain('NO LONGER EXISTS');        // …and are not contradicted
@@ -212,7 +249,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         world.childStdout = '  some output that never got to the point\n';
         const reaper = built();
 
-        const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+        const out = reaper.handOff(reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff);
 
         expect(out).not.toContain('NO LONGER EXISTS');
         expect(out).toContain('without reporting an outcome');
@@ -224,7 +261,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
     it('never hands the primary clone to the child as the removal target', () => {
         const reaper = built();
 
-        reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
+        reaper.handOff(reaper.plan(LINKED, landedTree(), LINKED) as WorktreeReapHandoff);
 
         expect(world.spawns[0].argv).not.toContain(PRIMARY);
         expect(world.spawns[0].argv[2]).toBe(LINKED);

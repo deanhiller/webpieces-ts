@@ -99,6 +99,35 @@ describe('WorktreeService', () => {
         expect(trees[1].branch).toBe('dean/feature');
     });
 
+    /**
+     * The `HEAD <sha>` line was already on the wire and the parser dropped it, which left a branch NAME
+     * as the only way to identify a tree. It is not one: a second clone or a stale worktree holds the
+     * same name at a different commit, and `wp-land-pr` needs the pair to pick the tree whose HEAD is
+     * the exact commit GitHub squashed. Reading it costs nothing — no extra git call.
+     */
+    it('carries each record\'s HEAD sha, which a branch name alone cannot identify', () => {
+        git.porcelain = [
+            'worktree /repo',
+            'HEAD aaa',
+            'branch refs/heads/main',
+            '',
+            'worktree /work/feature',
+            'HEAD bbb',
+            'branch refs/heads/dean/feature',
+            '',
+            'worktree /work/detached',
+            'HEAD ccc',
+            'detached',
+            '',
+        ].join('\n');
+
+        const trees = new WorktreeService().listWorktrees('/repo');
+
+        expect(trees.map((tree: Worktree): string => tree.head)).toEqual(['aaa', 'bbb', 'ccc']);
+        // A detached worktree still has a HEAD — it is only the BRANCH that is missing.
+        expect(trees[2].branch).toBe('');
+    });
+
     it('reads detached, prunable and locked records', () => {
         git.porcelain = [
             'worktree /repo',

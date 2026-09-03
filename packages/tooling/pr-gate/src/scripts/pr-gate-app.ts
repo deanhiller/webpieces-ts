@@ -7,7 +7,7 @@ import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
 import { CleanupOptions } from './commands/cleanup-options';
 import { CheckoutCleanMainCommand } from './commands/checkout-clean-main-command';
-import { LandPrCommand } from './commands/land-pr-command';
+import { LandPrCommand, LandPrRequest } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
@@ -129,10 +129,13 @@ export class PrGateApp {
         return this.checkoutCleanMainCommand.run();
     }
 
-    /** `wp-land-pr`: squash-merge this branch's PR into main with the compact commit body. */
-    landPr(): Promise<void> {
+    /**
+     * `wp-land-pr`: squash-merge a PR into main with the compact commit body — this branch's by default,
+     * or the one `--pr <n>` names, which is how a coordinator finishes a gone agent's work.
+     */
+    landPr(request: LandPrRequest): Promise<void> {
         this.assertNoResolveInProgress('wp-land-pr');
-        return this.landPrCommand.run();
+        return this.landPrCommand.run(request);
     }
 
     /**

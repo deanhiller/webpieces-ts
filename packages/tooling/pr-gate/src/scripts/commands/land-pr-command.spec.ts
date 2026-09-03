@@ -5,15 +5,17 @@ import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver, InformAiError, RepoRootFinder, WorktreeService, toError } from '@webpieces/rules-config';
 
-import { LandPrCommand } from './land-pr-command';
+import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { LandedTreeResolver } from '../workflow/landed-tree-resolver';
 import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { MergeInfoIndex } from '../workflow/merge-info-index';
 import { MergeState } from '../workflow/merge-state';
 import { PrMerger } from '../workflow/pr-merger';
+import { ReapOutcomeSignal } from '../workflow/reap-outcome';
 
 /**
  * The READ half of the finish→land contract, end to end through the real PrMerger.
@@ -46,6 +48,7 @@ let savedCwd = '';
 let prBody = PR_DESCRIPTION;
 let prHeadOid = '';
 const savedPath = process.env['PATH'];
+const savedInitCwd = process.env['INIT_CWD'];
 
 function git(cwd: string, ...args: string[]): string {
     return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -124,6 +127,9 @@ function ghPrSays(body: string, headRefOid: string): void {
         url: 'https://github.com/acme/widgets/pull/604',
         body,
         headRefOid,
+        // The other half of the pair that identifies the PR's tree locally. GitHub is the authority on
+        // which branch the PR merges — the command never infers it from the directory it is in.
+        headRefName: BRANCH,
     }));
 }
 
@@ -135,35 +141,40 @@ function ghHasNoPr(): void {
     fs.chmodSync(gh, 0o755);
 }
 
-class FixedRepoRootFinder extends RepoRootFinder {
-    constructor(private readonly root: string) {
-        super();
-    }
-
-    override resolveRepoRoot(): string {
-        return this.root;
+/**
+ * The repo root IS whatever directory the command resolved as its invocation cwd. That makes this
+ * seam the assertion for the whole cwd fix: every temp tree below is a git root, so a repo root that
+ * comes back as the hoisted directory rather than the invoked one is the bug, visibly.
+ */
+class CwdRepoRootFinder extends RepoRootFinder {
+    override resolveRepoRoot(cwd: string): string {
+        return cwd;
     }
 }
 
-// The command with every collaborator REAL. Only the repo root is pinned, because the temp clone has no
-// enclosing workspace to discover.
-function build(treeRoot: string): LandPrCommand {
+// The command with every collaborator REAL. Only repo-root resolution is pinned, because the temp clone
+// has no enclosing workspace to discover.
+function build(): LandPrCommand {
     const naming = new BranchNaming();
     return new LandPrCommand(
-        new FixedRepoRootFinder(treeRoot),
+        new CwdRepoRootFinder(),
         new AiBranchName(naming),
         naming,
         new PrMerger(),
         new BranchArchiver(),
         new MergeInfoIndex(new MergeState()),
-        new LandedWorktreeReaper(new WorktreeService()),
+        new LandedWorktreeReaper(new WorktreeService(), new ReapOutcomeSignal()),
         new MergeBodyTempFile(),
+        new LandedTreeResolver(new WorktreeService()),
     );
 }
 
-// Runs the command from `treeRoot`, capturing stdout. `git branch --show-current` and PrMerger both
-// read process.cwd(), so the tree we claim to be landing from has to really be the cwd.
-async function land(treeRoot: string): Promise<string> {
+/**
+ * Runs the command as `pnpm` really runs it: `INIT_CWD` is the directory the operator typed in, and
+ * `process.cwd()` is wherever pnpm HOISTED the bin to. They are the same for a plain invocation, and
+ * they are emphatically not the same from a nested agent worktree — which is the bug under test.
+ */
+async function landFrom(invocationDir: string, hoistedCwd: string, request: LandPrRequest): Promise<string> {
     let out = '';
     const write = process.stdout.write.bind(process.stdout);
     // webpieces-disable no-any-unknown -- stubbing node's write signature for the duration of one run
@@ -171,8 +182,9 @@ async function land(treeRoot: string): Promise<string> {
         out += chunk;
         return true;
     }) as unknown as typeof process.stdout.write;
-    process.chdir(treeRoot);
-    return build(treeRoot).run().then(
+    process.chdir(hoistedCwd);
+    process.env['INIT_CWD'] = invocationDir;
+    return build().run(request).then(
         (): string => {
             process.stdout.write = write;
             process.chdir(savedCwd);
@@ -183,6 +195,11 @@ async function land(treeRoot: string): Promise<string> {
             process.chdir(savedCwd);
             throw toError(err);
         });
+}
+
+// The ordinary invocation: typed in `treeRoot`, hoisted nowhere, no flags.
+async function land(treeRoot: string): Promise<string> {
+    return landFrom(treeRoot, treeRoot, new LandPrRequest(false, ''));
 }
 
 // The refusal message, asserted without a catch block (catch-error-pattern). It ALSO asserts the call
@@ -215,6 +232,8 @@ afterEach((): void => {
     process.chdir(savedCwd);
     if (savedPath === undefined) delete process.env['PATH'];
     else process.env['PATH'] = savedPath;
+    if (savedInitCwd === undefined) delete process.env['INIT_CWD'];
+    else process.env['INIT_CWD'] = savedInitCwd;
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -301,6 +320,73 @@ describe('wp-land-pr — the bookkeeping half is re-derived from headRefOid', ()
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).not.toContain('SKIPPED');
         expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+    });
+});
+
+describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () => {
+    /**
+     * THE BUG, pinned. A Claude Code agent worktree lives at `<primary>/.claude/worktrees/agent-<id>` —
+     * INSIDE the primary clone — so `pnpm` walks up past the worktree root and executes the bin in the
+     * primary clone. `git branch --show-current` then answered `main`, `gh pr view main` found nothing,
+     * and every `/full-cycle` run was told "No open PR found for this branch" about a PR that was open.
+     *
+     * The nesting is what makes this specific to agent worktrees: a worktree OUTSIDE the clone does not
+     * hoist past its own root, which is why this was never caught.
+     */
+    it('reads the NESTED agent worktree\'s branch, not the primary clone\'s', async (): Promise<void> => {
+        const agent = path.join(primary, '.claude', 'worktrees', 'agent-x');
+        fs.mkdirSync(path.dirname(agent), { recursive: true });
+        git(primary, 'worktree', 'add', '-q', '--detach', agent);
+        git(primary, 'checkout', '-q', 'main');
+        git(agent, 'checkout', '-q', BRANCH);
+        writeConfig(agent);
+
+        // Typed in the agent worktree; pnpm hoisted the process into the primary clone, which is on main.
+        const out = await landFrom(agent, primary, new LandPrRequest(false, ''));
+
+        expect(fs.readFileSync(ghLog, 'utf8')).toContain(`pr view ${BRANCH}`);
+        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr view main');
+        expect(landedBody()).toBe(PR_DESCRIPTION);
+        expect(out).toContain('Landing PR #604');
+        expect(out).not.toContain('SKIPPED');
+        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+    });
+
+    /**
+     * The other half of the ask: an agent that built a branch is often long gone by the time its PR is
+     * landable, and its worktree is a directory nobody is standing in. `--pr <n>` lets a coordinator on
+     * `main` in the primary clone finish the job — and the bookkeeping still resolves to the agent's
+     * tree, because it is found by `(headRefName, headRefOid)` rather than by where anyone is standing.
+     */
+    it('lands --pr <n> from the primary clone and still finds the agent\'s worktree', async (): Promise<void> => {
+        const agent = path.join(primary, '.claude', 'worktrees', 'agent-y');
+        fs.mkdirSync(path.dirname(agent), { recursive: true });
+        git(primary, 'worktree', 'add', '-q', '--detach', agent);
+        git(primary, 'checkout', '-q', 'main');
+        git(agent, 'checkout', '-q', BRANCH);
+        writeConfig(agent);
+
+        const out = await landFrom(primary, primary, new LandPrRequest(true, '604'));
+
+        expect(fs.readFileSync(ghLog, 'utf8')).toContain('pr view 604');
+        expect(landedBody()).toBe(PR_DESCRIPTION);
+        expect(out).not.toContain('SKIPPED');
+        // The reap names the AGENT's directory, not the clone the coordinator is standing in.
+        expect(out).toContain(agent);
+        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+    });
+
+    /** `--pr` with no number must refuse, never silently fall back to this directory's branch. */
+    it('refuses --pr without a number rather than guessing a PR', async (): Promise<void> => {
+        const thrown = await landFrom(primary, primary, new LandPrRequest(true, '')).then(
+            (): Error | null => null,
+            (err: unknown): Error => toError(err));
+
+        expect(thrown).toBeInstanceOf(InformAiError);
+        expect(thrown?.message ?? '').toContain('--pr needs a PR NUMBER');
+        // It refused BEFORE touching gh at all — no PR was looked up, and nothing was merged.
+        expect(fs.existsSync(ghLog)).toBe(false);
+        expect(landedBody()).toBe('');
     });
 });
 
@@ -406,7 +492,12 @@ describe('wp-land-pr — refusals', () => {
         expect(message).not.toContain('WEBPIECES_STATE_HOME');
     });
 
-    it('takes no options at all — `run()` is nullary, so there is nothing left to opt into', (): void => {
-        expect(build(primary).run.length).toBe(0);
+    /**
+     * `--pr <n>` is the ONE knob, and it selects WHICH PR — never anything about the bytes that land.
+     * The moment a second field appears here, somebody has re-opened the question decisions/0005 closed
+     * by making GitHub the holder of the commit body.
+     */
+    it('has exactly one knob, and it selects the PR rather than the commit body', (): void => {
+        expect(Object.keys(new LandPrRequest(true, '604'))).toEqual(['prFlagPresent', 'prNumber']);
     });
 });

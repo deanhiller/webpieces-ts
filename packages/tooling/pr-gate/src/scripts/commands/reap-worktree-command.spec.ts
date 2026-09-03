@@ -65,6 +65,10 @@ import { ReapWorktreeCommand } from './reap-worktree-command';
 import { WorktreeCleanupSection } from './worktree-cleanup';
 
 const BRANCH = 'dean/reap';
+// The HEAD shas git reports for the two trees below. The linked one is what the parent selected the
+// worktree BY, so it is also the third argv value the child re-verifies against.
+const PRIMARY_HEAD = 'aaa';
+const LINKED_HEAD = 'bbb';
 let primary = '';
 let linked = '';
 let verdicts: DeletableWorktree[] = [];
@@ -88,7 +92,8 @@ function build(): ReapWorktreeCommand {
     return new ReapWorktreeCommand(
         new FakeRepoRootFinder(),
         new ScriptedSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService(), new BranchMutationLog()),
-        new ReapOutcomeSignal());
+        new ReapOutcomeSignal(),
+        new WorktreeService());
 }
 
 // The outcome token the parent reads — asserted on every exit path, because it is the ONLY thing that
@@ -150,7 +155,7 @@ describe('ReapWorktreeCommand — the reap wp-land-pr hands off', () => {
      * works (archive before anything is destroyed; remove the directory before git will let the branch go).
      */
     it('archives, removes the worktree, then deletes the branch', async () => {
-        const report = await run([linked, BRANCH]);
+        const report = await run([linked, BRANCH, LINKED_HEAD]);
 
         expect(outcome(report)).toBe(REAP_OUTCOME_REMOVED);
         const ordered = destructiveCalls();
@@ -166,7 +171,7 @@ describe('ReapWorktreeCommand — the reap wp-land-pr hands off', () => {
      * destroyed while reading as complete.
      */
     it('logs REAP_WORKTREE with a recover= line that carries -b <branch>', async () => {
-        await run([linked, BRANCH]);
+        await run([linked, BRANCH, LINKED_HEAD]);
 
         const line = logText();
         expect(line).toContain('wp-land-pr');
@@ -184,7 +189,7 @@ describe('ReapWorktreeCommand — the reap wp-land-pr hands off', () => {
     it('reports a worktree with uncommitted changes as a clean failure and never forces', async () => {
         world.removeFails = { [linked]: `fatal: '${linked}' contains modified or untracked files` };
 
-        const report = await run([linked, BRANCH]);
+        const report = await run([linked, BRANCH, LINKED_HEAD]);
 
         expect(outcome(report)).toBe(REAP_OUTCOME_FAILED);
         expect(report).toContain('contains modified or untracked files');
@@ -201,7 +206,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
      * would refuse it a second time by name if it ever got that far.
      */
     it('removes nothing when asked to reap the primary clone', async () => {
-        const report = await run([primary, 'main']);
+        const report = await run([primary, 'main', PRIMARY_HEAD]);
 
         expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('not a removable worktree');
@@ -214,7 +219,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
         verdicts = [new DeletableWorktree(
             linked, BRANCH, 'never had a PR; holds 3 unique commit(s)', 0, false, CLASSIFICATION_NEVER_PROPOSED)];
 
-        const report = await run([linked, BRANCH]);
+        const report = await run([linked, BRANCH, LINKED_HEAD]);
 
         expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('not provably dead');
@@ -228,7 +233,7 @@ describe('ReapWorktreeCommand — what it refuses', () => {
         verdicts = [new DeletableWorktree(
             linked, 'dean/other', 'PR #1 merged', 1, true, CLASSIFICATION_MERGED_PR)];
 
-        const report = await run([linked, BRANCH]);
+        const report = await run([linked, BRANCH, LINKED_HEAD]);
 
         expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain("now holds 'dean/other'");
@@ -241,17 +246,38 @@ describe('ReapWorktreeCommand — what it refuses', () => {
         verdicts = [new DeletableWorktree(
             primary, 'main', 'PR #999 merged', 999, true, CLASSIFICATION_CURRENT)];
 
-        const report = await run([primary, 'main']);
+        const report = await run([primary, 'main', PRIMARY_HEAD]);
 
         expect(world.calls.join('\n')).not.toContain('worktree remove');
         expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
         expect(report).toContain('Nothing removed');
     });
 
+    /**
+     * THE NAME IS NOT THE IDENTITY. The parent selected this directory because its HEAD was the exact
+     * commit GitHub squashed; here that selection is recomputed from git. A tree still on the right
+     * BRANCH but at a newer commit holds work the archive tag of the squashed tip does not contain, and
+     * a name-only check would have buried it.
+     */
+    it('refuses when the worktree HEAD moved, even though the branch still matches', async () => {
+        world.porcelain = `worktree ${primary}\nHEAD ${PRIMARY_HEAD}\nbranch refs/heads/main\n\n`
+            + `worktree ${linked}\nHEAD ccc-newer\nbranch refs/heads/${BRANCH}\n`;
+
+        const report = await run([linked, BRANCH, LINKED_HEAD]);
+
+        expect(outcome(report)).toBe(REAP_OUTCOME_REFUSED);
+        expect(report).toContain('ccc-newer');
+        expect(report).toContain(LINKED_HEAD);
+        expect(report).toContain('HEAD moved since the PR landed');
+        expect(world.calls.join('\n')).not.toContain('worktree remove');
+    });
+
     // Missing argv is a broken caller, not a landed PR being misreported — it throws rather than
-    // printing, and nothing git-destructive runs first.
-    it('refuses to run without both a path and a branch', async () => {
+    // printing, and nothing git-destructive runs first. The SHA is one of the three: without it the
+    // child would be back to removing a directory on a branch-name match.
+    it('refuses to run without a path, a branch and a head sha', async () => {
         await expect(run([linked])).rejects.toThrow(/missing arguments/);
+        await expect(run([linked, BRANCH])).rejects.toThrow(/missing arguments/);
         expect(world.calls.length).toBe(0);
     });
 });

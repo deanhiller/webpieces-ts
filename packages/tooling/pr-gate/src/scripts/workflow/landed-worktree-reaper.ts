@@ -47,12 +47,27 @@ export class WorktreeReapHandoff {
     /** The linked worktree holding the branch that was just landed. */
     readonly worktreePath: string;
     readonly branch: string;
+    /**
+     * That worktree's HEAD — which is, by construction, the exact commit GitHub squashed (see
+     * LandedTreeResolver). Carried so the child can re-verify the SELECTION rather than take a path on
+     * trust: a branch name is not an identity, and this is the half that makes it one.
+     */
+    readonly head: string;
     /** The primary clone — the child's `cwd`, and the directory a human must `cd` to afterwards. */
     readonly primaryPath: string;
     /** The compiled entry the child runs. '' when it could not be located on disk. */
     readonly entryScript: string;
     /** '' when the hand-off can run; otherwise the reason it cannot, in one human-readable clause. */
     readonly blockedBecause: string;
+    /**
+     * Is the OPERATOR'S OWN shell inside the directory about to be removed?
+     *
+     * True is the `/full-cycle` case (the agent lands its own PR from its own worktree) and it is the
+     * only case where "your cwd no longer exists" is a true sentence worth shouting. False is the
+     * coordinator case — `wp-land-pr --pr <n>` from the primary clone — where saying it would send a
+     * reader chasing a directory move they do not need to make.
+     */
+    readonly standingHere: boolean;
     /** Precomputed (as EffectiveTree does with `redirected`) so no caller re-derives the rule. */
     readonly canReap: boolean;
 
@@ -60,15 +75,19 @@ export class WorktreeReapHandoff {
     constructor(
         worktreePath: string,
         branch: string,
+        head: string,
         primaryPath: string,
         entryScript: string,
         blockedBecause: string,
+        standingHere: boolean,
     ) {
         this.worktreePath = worktreePath;
         this.branch = branch;
+        this.head = head;
         this.primaryPath = primaryPath;
         this.entryScript = entryScript;
         this.blockedBecause = blockedBecause;
+        this.standingHere = standingHere;
         this.canReap = blockedBecause === '';
     }
 }
@@ -83,30 +102,52 @@ export class LandedWorktreeReaper {
     /**
      * Is there a worktree to reap at all, and can the hand-off run?
      *
-     * `null` means "nothing to do here" — we are in the primary clone, or in a worktree that does not
-     * hold the branch that just landed. That is the ordinary `pnpm wp-cleanup` case and needs no
-     * special sentence. A non-null handoff with `canReap === false` means there IS a corpse but the
-     * re-exec is not safely achievable, which is the case that must keep the manual notice.
+     * IT IS TOLD WHICH TREE, AND NO LONGER LOOKS. This used to call `currentWorktree(repoRoot)` and reap
+     * only when the tree it was STANDING IN held the landed branch — which made the whole #512 mechanism
+     * dead code in the one case it was built for, because `pnpm` hoists a bin's cwd out of a nested
+     * `.claude/worktrees/**` worktree and into the primary clone, where `isMain` is true and this
+     * returned null. Worse, "the tree I am in" was never the right question: a coordinator landing a dead
+     * agent's PR is standing somewhere else entirely. LandedTreeResolver answers the right one — which
+     * tree's HEAD is the commit GitHub squashed — and hands the answer here.
+     *
+     * `null` means there is genuinely no worktree to reap: the branch lived only in the primary clone, or
+     * nowhere the sha agrees with. That is the ordinary `pnpm wp-cleanup` case and needs no special
+     * sentence. A non-null handoff with `canReap === false` means there IS a corpse but the re-exec is
+     * not safely achievable, which is the case that must keep the manual notice.
      */
-    plan(repoRoot: string, landedBranch: string): WorktreeReapHandoff | null {
-        const here = this.worktrees.currentWorktree(repoRoot);
-        if (here === null || here.isMain || here.branch !== landedBranch) return null;
+    plan(repoRoot: string, landed: Worktree | null, invocationCwd: string): WorktreeReapHandoff | null {
+        if (landed === null || landed.isMain) return null;
+        const standingHere = this.isInside(invocationCwd, landed.path);
 
         const primary = this.worktrees.listWorktrees(repoRoot)
             .find((tree: Worktree): boolean => tree.isMain);
         if (primary === undefined) {
             return new WorktreeReapHandoff(
-                here.path, landedBranch, '<the primary clone>', '',
-                'git did not report a primary clone, so there is no safe directory to reap from');
+                landed.path, landed.branch, landed.head, '<the primary clone>', '',
+                'git did not report a primary clone, so there is no safe directory to reap from',
+                standingHere);
         }
 
         const entry = this.reapEntryScript();
         if (entry === '') {
             return new WorktreeReapHandoff(
-                here.path, landedBranch, primary.path, '',
-                'the reap entry point is not on disk (this package is running unbuilt)');
+                landed.path, landed.branch, landed.head, primary.path, '',
+                'the reap entry point is not on disk (this package is running unbuilt)', standingHere);
         }
-        return new WorktreeReapHandoff(here.path, landedBranch, primary.path, entry, '');
+        return new WorktreeReapHandoff(
+            landed.path, landed.branch, landed.head, primary.path, entry, '', standingHere);
+    }
+
+    /**
+     * Is `cwd` the worktree itself or somewhere beneath it? A path COMPARISON, not a git question:
+     * the operator may have been in a subdirectory when they ran the command, and that shell is just as
+     * dead once the tree goes. Both sides are resolved first so `.`/`..` and a trailing slash cannot
+     * turn a match into a miss.
+     */
+    private isInside(cwd: string, worktreePath: string): boolean {
+        const from = path.resolve(cwd);
+        const tree = path.resolve(worktreePath);
+        return from === tree || from.startsWith(tree + path.sep);
     }
 
     /**
@@ -123,13 +164,13 @@ export class LandedWorktreeReaper {
      */
     handOff(handoff: WorktreeReapHandoff): string {
         const result = spawnSync(
-            process.execPath, [handoff.entryScript, handoff.worktreePath, handoff.branch],
+            process.execPath, [handoff.entryScript, handoff.worktreePath, handoff.branch, handoff.head],
             { cwd: handoff.primaryPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
         const report = this.signal.read(`${result.stdout ?? ''}${result.stderr ?? ''}`);
         const output = report.text.trimEnd();
-        const head = '\n' + SEP + `🌲 Reaping this worktree from ${handoff.primaryPath}\n` + SEP + '\n'
-            + `   The branch just landed, so this directory is dead. The reap runs in a child process\n`
+        const head = '\n' + SEP + `🌲 Reaping ${handoff.worktreePath} from ${handoff.primaryPath}\n` + SEP + '\n'
+            + `   The branch just landed, so that directory is dead. The reap runs in a child process\n`
             + `   whose cwd is the primary clone — nothing deletes the directory it is standing in.\n\n`;
         const body = head + (output !== '' ? output + '\n' : '');
 
@@ -152,8 +193,8 @@ export class LandedWorktreeReaper {
         const why = report.outcome === REAP_OUTCOME_MISSING
             ? 'the child ended without reporting an outcome'
             : `the child reported '${report.outcome}'`;
-        return `\n   ⚠️  The worktree was NOT removed — ${why}. It is still on disk,\n`
-            + '       and this shell is still standing in it. Nothing was forced.\n';
+        return `\n   ⚠️  The worktree was NOT removed — ${why}. It is still on disk.\n`
+            + '       Nothing was forced.\n';
     }
 
     /**
@@ -162,19 +203,24 @@ export class LandedWorktreeReaper {
      */
     manualNotice(handoff: WorktreeReapHandoff): string {
         const why = handoff.blockedBecause !== '' ? `         (${handoff.blockedBecause})\n` : '';
-        return '   Next: this branch is checked out in THIS worktree, so neither it nor the worktree can\n'
-            + '         be removed from in here. Run cleanup from the primary clone instead:\n'
+        return `   Next: this branch is checked out in ${handoff.worktreePath}, so neither it nor that\n`
+            + '         worktree can be removed from here. Run cleanup from the primary clone instead:\n'
             + `           ${atRoot(handoff.primaryPath, 'pnpm wp-cleanup')}\n`
             + why
             + `         It archives ${handoff.branch} as a tag, removes ${handoff.worktreePath}, then deletes the branch.\n`;
     }
 
     /**
-     * The one thing a human or agent MUST be told after a successful reap: the shell they typed this
-     * into is now sitting in a directory that no longer exists. Every relative path from here on is a
-     * mystery ENOENT unless they move.
+     * The one thing a human or agent MUST be told after a successful reap — but only when it is TRUE of
+     * them. Landing from inside the tree that just went (the `/full-cycle` case) leaves the shell in a
+     * deleted directory and every following relative path is a mystery ENOENT until they move. Landing a
+     * dead agent's PR from the primary clone removes somebody ELSE's directory, and telling that operator
+     * to `cd` somewhere sends them chasing a move they do not need to make.
      */
     private afterReap(handoff: WorktreeReapHandoff): string {
+        if (!handoff.standingHere) {
+            return `\n   ${handoff.worktreePath} is gone. Your own shell was never inside it.\n`;
+        }
         return `\n   ⚠️  ${handoff.worktreePath} NO LONGER EXISTS — your shell is standing in a deleted\n`
             + '       directory, and every following command will fail until you move:\n'
             // Single-quoted for the same reason atRoot() quotes: a primary clone under a path with a
