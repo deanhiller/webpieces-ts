@@ -50,7 +50,8 @@ specific number — never `cat` it.
 Timing: ~3s per repo. `--no-npm` skips the one network call. `--max-sessions N` caps transcript scan.
 
 Subcommands exist individually (`guards`, `isolation`, `transcripts`, `parity`, `skew`, `docdrift`,
-`matrix`, `merges`) when Dean asks about one area only. `builds_ledger.py` is a separate script because its
+`matrix`, `merges`, `retbytes`) when Dean asks about one area only. `retbytes` rides on the SAME
+transcript pass as `transcripts` — asking for both, or for `all`, still opens every session once. `builds_ledger.py` is a separate script because its
 source is the one piece of webpieces state that is NOT per-repo — see Step 2b.
 
 ## Step 2b — the machine-wide build ledger
@@ -136,6 +137,7 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 | Matrix conformance | logged `layer=`/`row=`/`fault=` vs the **normative** table in `webpieces.branch-state-matrix.md` (L2) and `webpieces.guard-matrix.md` (L0): decision disagrees with the row's `act`, row cited that the matrix does not define, undocumented fault code, layer that logs rows with no matrix table, rows never exercised | `.webpieces/instruct-ai/*.md` + guard logs |
 | Build ledger | **killed-and-re-run builds**, **overlapping builds** (max concurrent, overlapped minutes), orphaned STARTs with a dead pid, repeat builds of one repo+branch, duration outliers, ad-hoc vs gate `by=` split | `~/.webpieces/builds.log` (+ rotated `.1`…`.5`) — MACHINE-wide, not per repo |
 | 3-point merges | branches re-merged 3+ times, merges staged in `index.json` but never finalized, CONFLICT with no later FINALIZE, conflict files, orphan `staged/` dirs | `.webpieces/merge-info/index.json`, `logs/branch-mutations.log` |
+| Return-byte cost | what every tool result POURS INTO CONTEXT: `by_tool` chars/calls/avg, `by_emitter` (payload signature with paths, shas, uuids, timestamps and digits MASKED, so one message against two paths is ONE row), `webpieces_authored` and its share, `always_loaded_md` (the fixed per-repo-per-session tax), `worst_sessions`. Every row carries `repeat_chars` — the chars from emissions AFTER the first of an identical payload in the SAME session | the transcripts themselves. They already hold every byte verbatim, so nothing is instrumented, it works RETROACTIVELY, and it sees hook blocks, MCP servers and raw Bash — surfaces a `wp-*`-side length counter could never log, because there `wp-*` never runs |
 | Doc drift | paths quoted in CLAUDE.md / `.webpieces/instruct-ai/*.md` / `.claude/**/*.md` / user skills that **do not exist**, with a dedicated `build.log` path check | filesystem |
 
 ### The two harnesses
@@ -242,6 +244,29 @@ Interpretation that matters:
   chronologically, not per branch. Two 3-point rounds on a long-lived branch is normal — three is churn.
 - A block count with **no** matching transcript stall is usually the guard catching a subagent
   cheaply. Check before calling it MAJOR.
+- **Return bytes: rank by `repeat_chars`, NEVER by raw size.** A 4KB message emitted once is fine —
+  it bought a decision. A 3KB message emitted 24 times in one session is 71KB of 96%-duplicate
+  context, and the second through twenty-fourth copies changed nothing. So:
+
+  - **Repeat suppression is the cheapest fix and the biggest win.** Emit the full message on the
+    first hit, then a ~200-char *verdict + cure + "full explanation as above"* on every repeat. It
+    needs no message rewriting at all, which is why it beats every trimming exercise on effort per
+    byte saved. Recommend it first.
+  - **A message earns its bytes if it changes what the agent does on the NEXT call.** Therefore
+    **the CURE stays inline; the EXPLANATION goes behind a path.** Do not recommend replacing a
+    message with a pointer: "read `webpieces.branch-state-matrix.md` row 6" costs a round trip AND
+    that file is 30KB — bigger than the message it replaced. That is a net LOSS. Inline = the
+    verdict plus the one command that fixes it. Behind a path = the why, the matrix, the other Fix
+    Options.
+  - **`~tokens` is `chars // 4`, an approximation, not a tokenizer.** Say so wherever you quote it;
+    never present it as an exact or billing figure.
+
+  Report the always-loaded `.md` weight SEPARATELY. It is a **fixed per-repo-per-session tax** paid
+  before a single tool runs, and it usually dwarfs any individual message (measured: one repo's
+  CLAUDE.md alone at ~100KB, ~25k tokens, against a top guard message at 1.9KB). Flag it as its own
+  line; do not fold it into a message-size finding, because shrinking CLAUDE.md is a far more
+  delicate edit than shortening a guard message and the two fixes should never be scored together.
+  Rank on `worst_repo`, not the fleet sum — nobody's session ever pays the sum.
 
 ## Step 5 — report
 
@@ -277,7 +302,9 @@ Structure:
    fixing it).
 4. **Numbers table** — active hours, blocked minutes, builds vs redundant builds, block rate per repo.
 5. **Checked and clean** — one line per area with nothing MAJOR, so a clean area is visibly clean
-   rather than silently absent.
+   rather than silently absent. The areas are: guard cycles, stale-main health, wasted time,
+   isolation, version skew, matrix conformance, build ledger, 3-point merges, doc drift, Codex
+   parity, and **return-byte cost**.
 
 Finish by telling Dean the path and the single most expensive finding in one sentence.
 
