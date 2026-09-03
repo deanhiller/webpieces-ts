@@ -45,36 +45,6 @@ describe('WorktreeService.isLinkedWorktree', () => {
     });
 });
 
-describe('WorktreeService.currentWorktree', () => {
-    const PORCELAIN = [
-        'worktree /repo',
-        'HEAD aaa',
-        'branch refs/heads/main',
-        '',
-        'worktree /work/feature',
-        'HEAD bbb',
-        'branch refs/heads/dean/feature',
-        '',
-    ].join('\n');
-
-    it('finds the record whose path is the tree we are standing in', () => {
-        git.porcelain = PORCELAIN;
-        const tree = new WorktreeService().currentWorktree('/work/feature');
-        expect(tree?.branch).toBe('dean/feature');
-        expect(tree?.isMain).toBe(false);
-    });
-
-    it('matches the primary clone too, and normalizes a trailing slash', () => {
-        git.porcelain = PORCELAIN;
-        expect(new WorktreeService().currentWorktree('/repo/')?.isMain).toBe(true);
-    });
-
-    it('returns null when the root is not one of git\'s worktrees', () => {
-        git.porcelain = PORCELAIN;
-        expect(new WorktreeService().currentWorktree('/somewhere/else')).toBeNull();
-    });
-});
-
 describe('WorktreeService', () => {
     it('parses the porcelain records, marking the FIRST as the primary clone', () => {
         git.porcelain = [

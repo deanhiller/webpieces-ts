@@ -164,6 +164,12 @@ export class WorktreeService {
      * Returns FALSE on anything uncertain (no `.git` at all, unreadable, a submodule's `.git` file
      * in a non-worktree checkout). False is the fail-open direction here: callers then print both
      * forms rather than confidently printing the wrong one.
+     *
+     * This answers "am I in a linked worktree", which is a question about MESSAGE WORDING and nothing
+     * else. It is deliberately NOT a way to ask "which worktree am I in" so as to then act on that tree:
+     * a `currentWorktree(root)` used to exist for exactly that and it is deleted, because pnpm hoists a
+     * bin's cwd out of a nested `.claude/worktrees/**` tree and made the answer confidently wrong. Work
+     * that has to NAME a tree resolves it from a commit — see pr-gate's LandedTreeResolver.
      */
     isLinkedWorktree(root: string): boolean {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -201,19 +207,6 @@ export class WorktreeService {
             return new WorktreeWorkInFlight(true, 'has uncommitted or untracked files');
         }
         return new WorktreeWorkInFlight(false, '');
-    }
-
-    /**
-     * The worktree record for the tree rooted at `root`, or null when it is not one of git's
-     * worktrees (or git could not answer). Callers use it to name the exact directory a
-     * `git worktree remove` has to take — a reap instruction with the wrong path is worse than none.
-     */
-    currentWorktree(root: string): Worktree | null {
-        const resolved = path.resolve(root);
-        for (const tree of this.listWorktrees(root)) {
-            if (path.resolve(tree.path) === resolved) return tree;
-        }
-        return null;
     }
 
     /**
