@@ -2,7 +2,9 @@ import { Filter } from '@webpieces/core-util';
 import { WpResponse } from './WpResponse';
 import { MethodMeta } from './MethodMeta';
 import { FilterDefinition } from './WebAppMeta';
-import { minimatch } from 'minimatch';
+// Interop-resolved (issue #747) — NEVER `import { minimatch } from 'minimatch'` here; that named
+// export does not exist on minimatch v3, which is what a hoisted-linker consumer can resolve to.
+import { minimatch } from './MinimatchInterop';
 
 /**
  * Type alias for HTTP filters that work with MethodMeta and ResponseWrapper.
