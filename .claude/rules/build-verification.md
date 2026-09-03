@@ -6,8 +6,9 @@ chain.
 
 ## Build Verification (CRITICAL)
 
-**RULE: verify with `pnpm wp-build`. Never build the whole monorepo, and never hand-compose a verify
-chain of your own.**
+The RULE itself — verify with `pnpm wp-build`, never build the whole monorepo, never hand-compose a
+verify chain — is stated once, in `CLAUDE.md`. The index owns it, so a second copy here would be free to
+drift out of step with it. What follows is the reasoning and the detail behind it.
 
 ```bash
 pnpm wp-build
