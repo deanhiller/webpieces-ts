@@ -9,10 +9,12 @@ measurement to understand and that we will otherwise re-derive (wrongly) every s
 |---|---|---|
 | **`guards/L*.md`** | the DECISION TABLE the engine consults — rows, dimensions, actions, cures | "K=`w` + A=`c` → BLOCK_AI_CURE" |
 | **`decisions/`** | WHY the model is shaped that way — the measurements, the edge cases, the options rejected | "why a nested worktree resolves `node_modules` differently from a sibling one" |
-| **`backlog/`** | one incident or one feature, filed and eventually closed | "bug: feature-branch-guard judges a subagent verdict write against the primary" |
+| **a GitHub issue** | one incident or one feature, filed and eventually closed | [#768](https://github.com/deanhiller/webpieces-ts/issues/768) — "feature-branch-guard judges a subagent verdict write against the primary clone's live branch" |
 
-A `backlog/bug-*.md` describes **one** failure. A `decisions/` doc describes the **axis** several
-failures share, and survives after each of them is fixed.
+A GitHub issue describes **one** failure. A `decisions/` doc describes the **axis** several
+failures share, and survives after each of them is fixed. (Until 2026-09 those issues lived in a
+tracked `backlog/` directory; all 87 were migrated to GitHub issues and the directory deleted, because
+a tracked file cannot be closed, assigned, or referenced from a PR.)
 
 ## Rules
 
@@ -21,7 +23,7 @@ failures share, and survives after each of them is fixed.
    entries here exist *because* a plausible assertion turned out to be false.
 2. **Record what was rejected, and why.** The rejected option is the one that gets re-proposed.
 3. **Date the measurements.** Behaviour changes; a measured table with no date is a liability.
-4. **Cross-link.** Point at the `guards/L*.md` row, the `backlog/` incident, and the source file
+4. **Cross-link.** Point at the `guards/L*.md` row, the GitHub issue for the incident, and the source file
    that implements the decision. Code comments should point back here by path.
 
 ## Index

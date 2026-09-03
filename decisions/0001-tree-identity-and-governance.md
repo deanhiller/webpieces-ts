@@ -2,10 +2,11 @@
 
 **Status:** open — measurements settled, decisions partly taken
 **Measured:** 2026-08-06, macOS (darwin 25.3.0), git 2.x, this repo at `156b23b`
-**Owns the axis behind:** `backlog/bug-feature-branch-guard-judges-a-subagent-verdict-write-against-the-primary-clones-live-branch.md`,
-`backlog/bug-bash-guards-judge-the-shell-cwd-not-the-paths-the-command-touches.md`,
-`backlog/bug-outside-tree-kind-is-never-consumed-so-a-non-git-dir-is-judged-against-the-governed-repo.md`,
-`guards/L1-location.md` § "Not done"
+**Owns the axis behind:** [#768](https://github.com/deanhiller/webpieces-ts/issues/768) (feature-branch-guard
+judges a subagent verdict write against the primary clone's live branch),
+[#759](https://github.com/deanhiller/webpieces-ts/issues/759) (bash guards judge the shell cwd, not the paths
+the command touches), [#786](https://github.com/deanhiller/webpieces-ts/issues/786) (`'outside'` tree kind is
+produced but never consumed), `guards/L1-location.md` § "Not done"
 
 ---
 
@@ -63,7 +64,7 @@ reachable from any hook that fires with `cwd` inside a subdirectory of the prima
   `WP_TREE="${_wp_gd##*/}"` evaluates to the basename of `/…/.git`, i.e. the literal string **`.git`**.
 
 That is the origin of the mystery directory `.webpieces/worktrees/.git/logs/ai-hook-shim.log` reported
-in §7 of the feature-branch-guard backlog bug. It is shim-only, which is why nothing else looked wrong.
+in §7 of the feature-branch-guard bug, [#768](https://github.com/deanhiller/webpieces-ts/issues/768). It is shim-only, which is why nothing else looked wrong.
 
 **Fix shape (verified against all four rows):** resolve to the worktree toplevel first, then ask git
 the pair from there — row 2 becomes `.git`/`.git`, rows 3 and 4 are untouched because both values are
@@ -442,7 +443,7 @@ living in `.git/info/exclude`? Affects consumers, not this repo.
 
 | option | why not |
 |---|---|
-| **Co-locate artifacts inside the agent's git worktree** (option 3 of the backlog bug) | Makes tooling output source-adjacent, needs a `.gitignore` *there*, and deepens the two-directories-called-worktree ambiguity instead of removing it. |
+| **Co-locate artifacts inside the agent's git worktree** (option 3 of the originating issue) | Makes tooling output source-adjacent, needs a `.gitignore` *there*, and deepens the two-directories-called-worktree ambiguity instead of removing it. |
 | **Exempt `.webpieces/**` inside each guard** | Correct and ~30 lines, but it is a carve-out every future file-scoped guard must remember to honour — and the family already has four. D1 makes it structural. Kept in mind as the fallback if D1 stalls. *(2026-08-07, with D1 reversed: still not taken, and no longer wanted. The blocks this was meant to relieve turned out to be correct stale-fork-point verdicts — see the D1 reversal block — so exempting `.webpieces/**` would suppress a true finding rather than a false one.)* |
 | **A symlink `<worktree>/.webpieces` → the real dir** | Already rejected once, for reasons that still hold — see `state-dir.ts:68-76`. `rename(2)` acts on the path, not the link, so atomic writes silently replace the symlink with a real file and diverge. |
 | **Key state by git remote URL** | Merges two clones of the same repo, which have different branches, worktrees and in-flight merges. |

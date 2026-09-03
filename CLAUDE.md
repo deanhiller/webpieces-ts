@@ -12,6 +12,7 @@ about to do; skip the rest.
 | Read this | When |
 |---|---|
 | `.claude/rules/build-verification.md` | you are about to run a build, a build failed and you need the log, a build was REFUSED for contention, or you are tempted to hand-compose a verify chain |
+| `.claude/rules/tickets.md` | you are starting any change (does it have a GitHub issue yet?) or writing the PR body (does it carry `Fixes #NNN`?) |
 | `.claude/rules/finishing-a-feature.md` | the code is written and you are posting the PR, landing one, or cleaning up branches and worktrees afterwards |
 | `.claude/rules/no-backwards-compat.md` | your diff changes ANY surface — a decorator, an `*Api.ts`, a `src/index.ts` barrel, anything under `packages/**`, or a `webpieces.config.json` key |
 | `.claude/rules/experiments.md` | your diff touches an `experimental.*` flag, its read path, its default, or the policy prose about experiments |
