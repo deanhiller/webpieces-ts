@@ -70,7 +70,7 @@ not standing in and could not change; every remedy the block offered was therefo
 
 (Raw logs not committed — ~435 KB of another repo's traffic. The lines above are the whole of what was
 ever cited, reproduced verbatim; the full block text the agent saw is quoted in
-`backlog/bug-feature-branch-guard-judges-a-subagent-verdict-write-against-the-primary-clones-live-branch.md` §2.)
+[#768](https://github.com/deanhiller/webpieces-ts/issues/768) §2.)
 
 Therefore:
 
