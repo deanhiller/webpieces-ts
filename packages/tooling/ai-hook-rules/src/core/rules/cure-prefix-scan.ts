@@ -9,7 +9,7 @@ import { ShellSegmentScan } from './shell-segment-scan';
 // Measured, not guessed. Across three days of fleet guard logs an agent blocked on a stale `main`
 // bundled the cure into the same shell call as the work SIXTEEN times, in two shapes:
 //
-//     pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' …
+//     pnpm wp-sync-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' …
 //     git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n …
 //
 // The FIRST is genuinely unsafe and stays blocked. `;` discards the cure's exit code, so the `sed`
@@ -53,7 +53,7 @@ const NO_CURE_PREFIX = new CurePrefix('none', 'none');
 // The commands that ADVANCE local `main` — the one this repo prescribes, and the raw git verb it
 // wraps. Deliberately NOT every `wp-*` bin: a prefix earns the composition allowance because it makes
 // the tree fresh, and `pnpm wp-cleanup` does not.
-const ADVANCING_BINS: ReadonlySet<string> = new Set(['wp-checkout-clean-main']);
+const ADVANCING_BINS: ReadonlySet<string> = new Set(['wp-sync-main']);
 
 // The refs a pull may name and still be the CURE. `git pull origin some-feature` advances local
 // `main` by merging a feature branch into it — which is a different and worse thing than being stale,
@@ -103,7 +103,7 @@ export class CurePrefixScan {
     }
 
     /**
-     * Does this segment bring local `main` forward — `git pull`, or the `pnpm wp-checkout-clean-main`
+     * Does this segment bring local `main` forward — `git pull`, or the `pnpm wp-sync-main`
      * that wraps it?
      *
      * A `> file` redirect disqualifies it, with `/dev/null` carved out. `>/dev/null 2>&1` on the cure

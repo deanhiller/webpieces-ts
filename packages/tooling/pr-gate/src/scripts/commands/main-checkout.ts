@@ -121,7 +121,7 @@ export class MainCheckout {
         if (!this.isCollision(first, untracked)) throw this.checkoutFailed(first);
 
         const stash = this.captureAndEcho(repoRoot, ['stash', 'push', '-u',
-            '-m', 'wp-checkout-clean-main: untracked files that collided with main']);
+            '-m', 'wp-sync-main: untracked files that collided with main']);
         if (!stash.succeeded()) {
             throw new CliExitError(1, `${SEP}❌ Could not check out main, and could not stash\n${SEP}\n`
                 + 'git refused the checkout because untracked files in this tree sit at paths main\n'

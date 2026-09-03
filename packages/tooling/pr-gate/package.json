@@ -29,7 +29,7 @@
             "wp-start-update": "./src/scripts/wp-start-update.js",
             "wp-finish-update": "./src/scripts/wp-finish-update.js",
             "wp-cleanup": "./src/scripts/wp-cleanup.js",
-            "wp-checkout-clean-main": "./src/scripts/wp-checkout-clean-main.js",
+            "wp-sync-main": "./src/scripts/wp-sync-main.js",
             "wp-land-pr": "./src/scripts/wp-land-pr.js",
             "wp-check-pr": "./src/scripts/wp-check-pr.js",
             "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",

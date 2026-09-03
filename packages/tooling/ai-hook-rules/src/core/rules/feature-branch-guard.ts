@@ -41,7 +41,7 @@ import { TreeRecovery } from './tree-recovery';
  * be reverted as a unit, and is one `git checkout` from being lost — none of which depends on how
  * current `main` is, so nothing about freshness could make this block right or wrong. A READ or a
  * BUILD on a CURRENT `main` harms nothing at all, and denying it strands the agent immediately after
- * `pnpm wp-checkout-clean-main` — the very command this repo prescribes — put it there.
+ * `pnpm wp-sync-main` — the very command this repo prescribes — put it there.
  *
  * So do NOT "restore the symmetry" by gating this on the cache. That would make writes on `main`
  * permitted for the whole first call of every session (the cache is populated for the NEXT call), and

@@ -149,11 +149,11 @@ describe('read-stale-guard — blocking', () => {
         const violations = rule().check(ctx());
         expect(violations.length).toBe(1);
         // ONE spelling of "make local main current", and it is the one CLAUDE.md names —
-        // `pnpm wp-checkout-clean-main`, which pulls `--ff-only` (so it can never start the MERGE
+        // `pnpm wp-sync-main`, which pulls `--ff-only` (so it can never start the MERGE
         // redirect-how-to-merge-main exists to keep an AI away from) and sweeps the corpses too.
         // Four spellings of this cure reached the fleet before it was unified; see
         // docs/audit/2026-08-24-mon-wed.md section 3.
-        expect(violations[0].message).toContain('pnpm wp-checkout-clean-main');
+        expect(violations[0].message).toContain('pnpm wp-sync-main');
         // The retired spellings, gone rather than softened.
         expect(violations[0].message).not.toContain('git pull --ff-only origin main');
         expect(violations[0].message).not.toContain('git pull origin main');
@@ -211,7 +211,7 @@ describe('read-stale-guard — fail-open escape valves', () => {
     it('prints BOTH cures, and says which one survives uncommitted changes', () => {
         state.porcelain = ' M src/a.ts\n';
         const message = rule().check(ctx())[0].message;
-        expect(message).toContain('pnpm wp-checkout-clean-main');
+        expect(message).toContain('pnpm wp-sync-main');
         expect(message).toContain('git checkout -b <new-branch> origin/main');
         expect(message).toContain('CLEAN TREE ONLY');
         expect(message).toContain('UNCOMMITTED CHANGES');

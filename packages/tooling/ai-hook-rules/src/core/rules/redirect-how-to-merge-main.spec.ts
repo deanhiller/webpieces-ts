@@ -183,7 +183,7 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
         expect(message).toContain('bring MAIN itself up to date');
         // The one command that goes to main, pulls it, reaps dead branches/worktrees and sweeps the
         // orphan directories — not the hand-chained pair it used to print (see TreeRecovery).
-        expect(message).toContain('pnpm wp-checkout-clean-main');
+        expect(message).toContain('pnpm wp-sync-main');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -274,7 +274,7 @@ describe('redirect-how-to-merge-main — the pull path', () => {
         expect(preferred.length).toBe(1);
         // The prescribed cure is now the ONE command, extracted from that guard's own hint rather than
         // copied here, so a future edit that drifts away from what THIS guard accepts turns it red.
-        const cure = /pnpm wp-checkout-clean-main/.exec(preferred[0].text);
+        const cure = /pnpm wp-sync-main/.exec(preferred[0].text);
         expect(cure).not.toBeNull();
         expect(rule.check(ctx(cure === null ? '' : cure[0], repo)).length).toBe(0);
         // THE HAND-ROLLED PAIR STAYS ALLOWED HERE, and that is deliberate rather than leftover. The

@@ -44,7 +44,7 @@ import { TreeRecovery } from './tree-recovery';
  * Residual, in both states: if `origin/main` changed the same files you edited, git refuses the switch.
  * `git stash` is on the L2 skip list and is never blocked, so the path out is stash → branch → pop.
  *
- * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `pnpm wp-checkout-clean-main`,
+ * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `pnpm wp-sync-main`,
  * `pnpm install`, any webpieces upgrade — is a Bash command, and this guard never looks at Bash.
  * So there is no command allowlist to maintain and no way to lock the agent out of its own fix.
  * (Every `wp-*` bin is on the L2 skip list, and the pull it wraps is explicitly permitted on main by
@@ -95,9 +95,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         'This branch is stale to read from — reading it would give you pre-merge/out-of-date content.',
         'Get onto current code before reading anything else:',
         [
-            new Option('On main, behind origin/main → pnpm wp-checkout-clean-main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
+            new Option('On main, behind origin/main → pnpm wp-sync-main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
             new Option('If a checkout -b refuses because origin/main changed the same files you edited: git stash (never blocked), redo the checkout, then git stash pop.'),
-            new Option("If pnpm wp-checkout-clean-main dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then run it again."),
+            new Option("If pnpm wp-sync-main dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then run it again."),
             new Option('Still allowed right now: reading webpieces.config.json, and the Bash commands that get you OUT or tell you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs. Everything ELSE through Bash is blocked in this same state (a main that is behind → stale-main-bash-guard; a merged branch → merged-branch-bash-guard), and Write/Edit on main is blocked by feature-branch-guard however current main is. There is no side door: get onto a branch off origin/main.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],

@@ -182,7 +182,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
             // ON main, which is why it is safe from any branch — and it is a no-op checkout when you are
             // already there.
             //
-            // And it is RAW GIT on purpose, where the workflow guards now say `pnpm wp-checkout-clean-main`
+            // And it is RAW GIT on purpose, where the workflow guards now say `pnpm wp-sync-main`
             // instead. The fault being cured here is `node_modules` disagreeing with the pin, so
             // `node_modules` is the untrustworthy thing — and every `pnpm wp-*` bin resolves through it.
             // An L0 cure may never be a command that has to load the package it is repairing. See the

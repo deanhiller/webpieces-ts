@@ -18,7 +18,7 @@ import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * `wp-checkout-clean-main` — go to main, get main, and take out the trash. ONE command, because the three
+ * `wp-sync-main` — go to main, get main, and take out the trash. ONE command, because the three
  * are one intention and splitting them is what let the third never happen.
  *
  * ─── ITS RELATIONSHIP TO `git checkout main && git pull origin main` (READ BEFORE "DELETING" THAT) ────
@@ -40,7 +40,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  *     there; it is the only thing that works when the package manager's output is what is in doubt.
  *   • the WORKFLOW layer (stale-main-bash-guard's preferred cure, merged-branch-message/-bash-guard,
  *     TreeRecovery's cleanupSteps and updateMainSteps, the L2 rows/doc, CLAUDE.md's "Finishing a
- *     Feature") → prescribes `pnpm wp-checkout-clean-main`, and no longer prints the pair.
+ *     Feature") → prescribes `pnpm wp-sync-main`, and no longer prints the pair.
  *
  * The pair remains ALLOWED as a Bash command in both layers — this changed what the guards TEACH, not
  * what they permit. Blocking it would have deleted the L0 escape along with the shim.
@@ -58,7 +58,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * ignore-walk and costs about a second; there is no wall-clock worth buying with that race.
  */
 @injectable(bindingScopeValues.Singleton)
-export class CheckoutCleanMainCommand {
+export class SyncMainCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly cleanupCommand: CleanupCommand,

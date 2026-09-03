@@ -182,16 +182,19 @@ why this was never caught.
 
 ---
 
-# Companion change: rename `wp-checkout-clean-main` → **`wp-sync-main`**
+# ✅ DONE — companion change: renamed `wp-checkout-clean-main` → **`wp-sync-main`**
 
-**Decided by Dean: the new name is `wp-sync-main`.**
+**Decided by Dean: the new name is `wp-sync-main`, and the rename is HARD.** Shipped as a single
+diff — the bin, the command class (`SyncMainCommand`), every guard cure string, every L2 matrix row,
+the shipped `webpieces.branch-state-matrix.md` template, `CLAUDE.md`, and the specs that pin the
+strings all moved together.
 
-This is a separate, smaller change from the cwd bug above, and it should be made **because the name
-is untrue**, not to game a classifier.
+It was a separate, smaller change from the cwd bug above, and it was made **because the name was
+untrue**, not to game a classifier. The rest of this section is kept as the record of why.
 
 ## Why
 
-`wp-checkout-clean-main` pulls main and reaps dead branches. The name says "checkout", "clean" and
+`wp-checkout-clean-main` pulled main and reaps dead branches. The name says "checkout", "clean" and
 "main" in one breath, which reads as *a destructive git operation on the trunk* — something that
 throws away your working tree. It does not do that. The name overstates the blast radius, and it
 misleads **humans** first; the classifier reaction below is a symptom of the same mismatch, not the
@@ -231,7 +234,8 @@ its own merits.
 
 ## ⚠️ Scope: the name is in **133 places across 34 files** — the rename is not the hard part
 
-Measured with `grep -ro "wp-checkout-clean-main"` (excluding `node_modules`/`.git`). **Every prose
+Measured with `grep -ro "wp-checkout-clean-main"` (excluding `node_modules`/`.git`); by the time the
+rename landed it had grown to 146 occurrences across 37 files. **Every prose
 reference, guard cure string, matrix row and generated doc must move with it**, because the guards'
 whole value is that the cure they print can be pasted and run. A stale cure string is worse than no
 cure: it names a command that does not exist, on the one path where the agent is already blocked and
@@ -240,8 +244,9 @@ cannot explore.
 The reference sites, by kind:
 
 **The command itself**
-- `packages/tooling/pr-gate/src/scripts/wp-checkout-clean-main.ts` (file rename)
-- `packages/tooling/pr-gate/src/scripts/commands/checkout-clean-main-command.ts` (file rename)
+- `packages/tooling/pr-gate/src/scripts/wp-sync-main.ts` (file rename)
+- `packages/tooling/pr-gate/src/scripts/commands/sync-main-command.ts` (file rename; the class became
+  `SyncMainCommand`)
 - `packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts`, `working-tree-gate.ts`,
   `pr-gate-app.ts`
 - `packages/tooling/pr-gate/package.json` — the `bin` entry
@@ -255,10 +260,16 @@ moment every other route is closed:
 - `cure-prefix-scan.ts` — **note:** this appears to validate cure prefixes, so it likely needs the
   new name to keep passing rather than merely mentioning the old one.
 
-**The allowlist — miss this and the rename bricks the escape hatch:**
-- `packages/tooling/ai-hook-rules/src/bin/l0-allowlist.ts` — the list of commands still permitted
-  while a guard is blocking. If `wp-sync-main` is not added here, the renamed command is **denied by
-  webpieces' own guard** in exactly the state it exists to cure.
+**The L0 layer — and a correction to what this document originally assumed:**
+- `packages/tooling/ai-hook-rules/src/bin/l0-allowlist.ts` — this document assumed the command was on
+  the L0 allowlist and would be "denied by webpieces' own guard" if the new name were not added.
+  **It was never on that list, and it must not be.** The allowlist names it only in prose, under the
+  heading *"WHY L0 KEEPS THE RAW GIT WHILE THE WORKFLOW LAYER MOVED TO `pnpm wp-sync-main`"*: the
+  fault L0 cures is `node_modules` disagreeing with the pin, so `node_modules` is precisely what
+  cannot be trusted, and **a cure that resolves through `node_modules` is the one class of cure that
+  may not appear on an L0 allowlist.** L0 keeps the raw `git checkout main && git pull origin main`
+  (`CHECKOUT_MAIN_PULL_CMD`) for that reason. The rename therefore changed the prose here and nothing
+  else — adding `wp-sync-main` as an L0 entry would have deleted that invariant, not preserved it.
 - `packages/tooling/ai-hook-rules/src/core/l0-matrix.ts`, `l2-rows.ts`, `l2-doc.ts`
 - `packages/tooling/ai-hook-rules/src/bin/shim-drift-fix.ts`
 
@@ -275,16 +286,24 @@ moment every other route is closed:
 `pr-merge-guard.spec.ts`, `read-stale-guard.spec.ts`, `redirect-how-to-merge-main.spec.ts`,
 `stale-main-bash-guard.spec.ts`, `tree-recovery.spec.ts`.
 
-## Suggested transition
+## ❌ The "deprecated alias for one or two releases" suggestion was REJECTED
 
-Keep `wp-checkout-clean-main` as a deprecated alias for one or two releases that prints
-`use wp-sync-main` and delegates — consuming repos have the old name in their own committed docs and
-agent instructions, and those update on their own timetable. But **every string webpieces itself
-prints must say `wp-sync-main` from day one**, alias or not; the alias is for muscle memory and
-third-party docs, not for the guards.
+This document originally proposed keeping `wp-checkout-clean-main` as a delegating alias that printed
+`use wp-sync-main`, on the grounds that consuming repos have the old name in their own committed docs
+and update on their own timetable.
 
-A grep in CI for the old name outside the alias shim and the `docs/audit/` history would keep it from
-creeping back.
+**Dean rejected it, and the repo's own policy already did.** An alias is shim shape #1 (two spellings
+of one thing) and shape #2 (`@deprecated` in place of deletion) under CLAUDE.md § "NO webpieces
+surface is released backwards-compatible", and `backwards-compat-reviewer` — a REQUIRED checklist —
+blocks it. There is exactly ONE spelling after this change: the old bin, the old file names and the
+old class name are gone. A consuming repo that still says `wp-checkout-clean-main` gets a
+`command not found`, and that error IS the delivery mechanism for the migration, not a cost of it.
+
+The grep-in-CI half of the suggestion DID ship: `no-old-sync-main-name.spec.ts` (ai-hook-rules) walks
+every tracked file and fails if `wp-checkout-clean-main`, `CheckoutCleanMainCommand`,
+`checkoutCleanMainCommand` or `checkout-clean-main-command` appears anywhere outside `docs/audit/**`
+(historical records, deliberately left naming the old command) and this backlog file. That is what
+stops a future agent reintroducing the old name in a new cure string.
 
 ## Related guard-UX defect, same file, worth fixing in the same pass
 

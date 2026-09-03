@@ -153,7 +153,7 @@ export const HOME_EXPERIMENTAL_SECTION = 'experimental';
 // gets unconditionally must not have its shell broken for saying yes early. It falls through to the
 // unknown-key WARNING instead, which says the key had no effect and names what is understood.
 export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
-// The on/off switch for the orphan-directory sweep `wp-checkout-clean-main` runs. Named for the thing
+// The on/off switch for the orphan-directory sweep `wp-sync-main` runs. Named for the thing
 // it switches, exactly as the guard key above is — one name, greppable from either end.
 export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
 /**
@@ -285,7 +285,7 @@ export class HomeConfig {
     wholeRepoBuildGuard: boolean;
 
     /**
-     * EXPERIMENTAL. When true, `wp-checkout-clean-main` ARCHIVES the orphan directories it finds — the
+     * EXPERIMENTAL. When true, `wp-sync-main` ARCHIVES the orphan directories it finds — the
      * package directories left behind on every clone by an `nx g move`, which git cannot remove because
      * an ignored `dist/` or `node_modules/` survives the deletion of every tracked file under them.
      *

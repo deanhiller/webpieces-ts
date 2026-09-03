@@ -68,11 +68,11 @@ describe('pr-merge-guard redirects every hand-rolled merge to wp-land-pr', () =>
         g.check(ctx('gh pr merge --squash'));
         const hint = `${g.fixHint.mainMessage}\n${g.fixHint.options}`;
         expect(hint).toContain('pnpm wp-land-pr');
-        // The cleanup step is `pnpm wp-checkout-clean-main` — checkout, pull, wp-cleanup and the
+        // The cleanup step is `pnpm wp-sync-main` — checkout, pull, wp-cleanup and the
         // orphan-directory sweep in one command. It replaced the hand-chained
         // `git checkout main && git pull origin main && pnpm wp-cleanup`, which is the same intention
         // minus the sweep; see TreeRecovery.cleanupSteps.
-        expect(hint).toContain('pnpm wp-checkout-clean-main');
+        expect(hint).toContain('pnpm wp-sync-main');
     });
 
     /**

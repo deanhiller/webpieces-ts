@@ -169,14 +169,6 @@
                     "level": 2
                 },
                 {
-                    "id": "CheckoutCleanMainCommand",
-                    "className": "CheckoutCleanMainCommand",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/commands/checkout-clean-main-command.ts",
-                    "level": 1
-                },
-                {
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
@@ -713,6 +705,14 @@
                     "level": 3
                 },
                 {
+                    "id": "SyncMainCommand",
+                    "className": "SyncMainCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/sync-main-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "WorkingTreeGate",
                     "className": "WorkingTreeGate",
                     "kind": "class",
@@ -1023,51 +1023,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
-                },
-                {
-                    "from": "CheckoutCleanMainCommand",
-                    "to": "CleanupCommand",
-                    "injection": "type",
-                    "token": "CleanupCommand",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts#CleanupCommand",
-                    "paramName": "cleanupCommand",
-                    "paramType": "CleanupCommand"
-                },
-                {
-                    "from": "CheckoutCleanMainCommand",
-                    "to": "MainCheckout",
-                    "injection": "type",
-                    "token": "MainCheckout",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts#MainCheckout",
-                    "paramName": "mainCheckout",
-                    "paramType": "MainCheckout"
-                },
-                {
-                    "from": "CheckoutCleanMainCommand",
-                    "to": "OrphanDirSweeper",
-                    "injection": "type",
-                    "token": "OrphanDirSweeper",
-                    "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-sweep.ts#OrphanDirSweeper",
-                    "paramName": "orphanDirSweeper",
-                    "paramType": "OrphanDirSweeper"
-                },
-                {
-                    "from": "CheckoutCleanMainCommand",
-                    "to": "RepoRootFinder",
-                    "injection": "type",
-                    "token": "RepoRootFinder",
-                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
-                    "paramName": "repoRootFinder",
-                    "paramType": "RepoRootFinder"
-                },
-                {
-                    "from": "CheckoutCleanMainCommand",
-                    "to": "WorkingTreeGate",
-                    "injection": "type",
-                    "token": "WorkingTreeGate",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/working-tree-gate.ts#WorkingTreeGate",
-                    "paramName": "workingTreeGate",
-                    "paramType": "WorkingTreeGate"
                 },
                 {
                     "from": "CleanTmp",
@@ -1917,15 +1872,6 @@
                 },
                 {
                     "from": "PrGateApp",
-                    "to": "CheckoutCleanMainCommand",
-                    "injection": "type",
-                    "token": "CheckoutCleanMainCommand",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/checkout-clean-main-command.ts#CheckoutCleanMainCommand",
-                    "paramName": "checkoutCleanMainCommand",
-                    "paramType": "CheckoutCleanMainCommand"
-                },
-                {
-                    "from": "PrGateApp",
                     "to": "CleanupCommand",
                     "injection": "type",
                     "token": "CleanupCommand",
@@ -2031,6 +1977,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "SyncMainCommand",
+                    "injection": "type",
+                    "token": "SyncMainCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/sync-main-command.ts#SyncMainCommand",
+                    "paramName": "syncMainCommand",
+                    "paramType": "SyncMainCommand"
                 },
                 {
                     "from": "ProvenanceEnforcer",
@@ -2544,6 +2499,51 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/run-update.ts#RunUpdate",
                     "paramName": "runUpdate",
                     "paramType": "RunUpdate"
+                },
+                {
+                    "from": "SyncMainCommand",
+                    "to": "CleanupCommand",
+                    "injection": "type",
+                    "token": "CleanupCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts#CleanupCommand",
+                    "paramName": "cleanupCommand",
+                    "paramType": "CleanupCommand"
+                },
+                {
+                    "from": "SyncMainCommand",
+                    "to": "MainCheckout",
+                    "injection": "type",
+                    "token": "MainCheckout",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts#MainCheckout",
+                    "paramName": "mainCheckout",
+                    "paramType": "MainCheckout"
+                },
+                {
+                    "from": "SyncMainCommand",
+                    "to": "OrphanDirSweeper",
+                    "injection": "type",
+                    "token": "OrphanDirSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-sweep.ts#OrphanDirSweeper",
+                    "paramName": "orphanDirSweeper",
+                    "paramType": "OrphanDirSweeper"
+                },
+                {
+                    "from": "SyncMainCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "SyncMainCommand",
+                    "to": "WorkingTreeGate",
+                    "injection": "type",
+                    "token": "WorkingTreeGate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/working-tree-gate.ts#WorkingTreeGate",
+                    "paramName": "workingTreeGate",
+                    "paramType": "WorkingTreeGate"
                 },
                 {
                     "from": "WorktreeCleanupSection",
