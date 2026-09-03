@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD } from './shim';
+import {
+    ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, CHECKOUT_MAIN_PULL_CMD,
+    HOOK_PKG, WORKSPACE_MANIFEST,
+} from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -34,16 +37,47 @@ function expectEngineTwins(ere: string, js: RegExp, allow: readonly string[], de
  * is absent) and it must be ACTIONABLE (the command it names has to get past the very guard emitting it).
  */
 describe('fault U — the guard package is not declared anywhere', () => {
-    it('says the package is undeclared and warns that pnpm install is a no-op', () => {
+    it('says the package is undeclared and warns that a bare pnpm install is a no-op', () => {
         const out = kit.runShim(kit.mktmp(), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.isDenied()).toBe(true);
         const reason = out.denyReason();
-        expect(reason).toContain('is NOT declared in package.json anywhere');
-        expect(reason).toContain("Do NOT run 'pnpm install'");
+        expect(reason).toContain("is NOT declared in this tree's root package.json");
         expect(reason).toContain('NO-OP');
         expect(reason).toContain(`run EXACTLY: '${ADD_HOOK_PKG_CMD}`);
         // The X claim must be GONE from this branch — asserting it is what sent the reporter in circles.
         expect(reason).not.toContain('is declared in package.json but is not installed');
+    });
+
+    /**
+     * THE SECOND INCIDENT, and the reason the ordering is now asserted rather than left to taste.
+     *
+     * `pnpm add -D @webpieces/ai-hook-rules` was Fix Option 1, labelled "(preferred)". It is also the
+     * one cure that CANNOT be committed: a direct root dependency on the package violates the umbrella
+     * rule (the root manifest depends on @webpieces/nx-webpieces-rules ALONE), and nothing in the
+     * message said to revert it. So it was followed exactly as written and the workaround landed in a
+     * real package.json, where it then had to be found and removed by hand.
+     *
+     * The package arrives WITH the umbrella, so a tree that is merely BEHIND explains this fault
+     * without anything being mis-declared — and that cure leaves a committable tree. These lock the
+     * order and, more importantly, lock the REVERT to the add, so the escape hatch can never again be
+     * offered without its counterpart.
+     */
+    it('prefers the committable cures, and never offers the add without its revert', () => {
+        const reason = kit.runShim(kit.mktmp(), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
+
+        // The preferred cure is the sync — not the add.
+        expect(reason).toContain(`Fix Option 1: (preferred) ${HOOK_PKG} normally arrives WITH`);
+        expect(reason).toContain(`run EXACTLY: '${CHECKOUT_MAIN_PULL_CMD}'`);
+        expect(reason).not.toContain(`(preferred) declare it directly`);
+
+        // The pin bump, in the file L0 already lets an agent edit while the block is up.
+        expect(reason).toContain(WORKSPACE_MANIFEST);
+
+        // The add is LAST, and carries the removal that keeps it out of a PR.
+        expect(reason).toContain('Fix Option 3: LAST RESORT');
+        expect(reason).toContain(`'pnpm remove ${HOOK_PKG}'`);
+        expect(reason).toContain('umbrella rule');
+        expect(reason.indexOf('Fix Option 1')).toBeLessThan(reason.indexOf(`run EXACTLY: '${ADD_HOOK_PKG_CMD}`));
     });
 
     it('pins the cure to the release the repo is already on, inferred from a sibling @webpieces pin', () => {

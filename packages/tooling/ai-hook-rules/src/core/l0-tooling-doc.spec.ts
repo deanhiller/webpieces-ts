@@ -3,6 +3,7 @@ import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 
 import {
+    ADD_HOOK_PKG_CMD, HOOK_PKG,
     L0AllowEntry, L0_ALLOWLIST, SHIM_LOG_FIELDS, SHIM_LOG_VERDICTS, ShimLogField, ShimLogVerdict,
     isAllowed,
 } from '../bin/shim';
@@ -208,6 +209,38 @@ describe('the hand-written half does not restate the generated tables', () => {
         expect(prose()).not.toMatch(/registered RELATIVE/i);
         expect(prose()).not.toMatch(/sh "\.claude\/webpieces/);
         expect(prose()).not.toMatch(/FOUR managed/i);
+    });
+
+    /**
+     * THE HAND-WRITTEN HALF IS THE HALF THAT DRIFTS, and fault U's cure is the one where drifting is
+     * expensive. Declaring the package directly is a SESSION UNBLOCK: a direct root dependency on it
+     * violates the umbrella rule, so it must be reverted before committing. When the deny said
+     * "(preferred)" and named no revert, it was followed exactly as written and reached a real
+     * package.json — and the row below `<!-- END GENERATED -->` was still teaching that same spelling
+     * after the generated half had been fixed, because `pnpm guards:generate` cannot reach down there.
+     *
+     * So: the prose may mention the add, but never WITHOUT the two things that make it safe to read.
+     * Stated as a conditional rather than a ban because the row legitimately needs to describe the
+     * cure's standing — what it must not do is describe it as a fix.
+     */
+    it('never teaches the fault-U add without its revert and the rule that demotes it', () => {
+        if (!prose().includes(ADD_HOOK_PKG_CMD)) return;
+        expect(prose(), `prose names '${ADD_HOOK_PKG_CMD}' but not its revert`)
+            .toContain(`pnpm remove ${HOOK_PKG}`);
+        expect(prose(), 'prose names the add but not the umbrella rule that makes it uncommittable')
+            .toMatch(/umbrella rule/i);
+    });
+
+    /**
+     * The two fault-U claims that were left FALSE in the hand-written half after the generated half was
+     * corrected — the exact drift `pnpm guards:generate` cannot repair, because this prose sits below
+     * `<!-- END GENERATED -->`. The first quotes a symptom string the shim no longer emits; the second
+     * bans `pnpm install` outright, which now contradicts U's own Option 1 and Option 2 (a BARE install
+     * is the no-op — change something first, then install).
+     */
+    it('never re-asserts the retired fault-U symptom or an unconditional ban on installing', () => {
+        expect(prose()).not.toContain('is NOT declared in package.json anywhere');
+        expect(prose()).not.toMatch(/do NOT run `pnpm install` again/i);
     });
 });
 

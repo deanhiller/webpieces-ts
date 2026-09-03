@@ -46,7 +46,9 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 ### `U` — guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json
 
-- **Option 1 (preferred)**: `pnpm add -D @webpieces/ai-hook-rules`  ← pick this when this fault fires at all — package.json asks for nothing, so pnpm install reports "Lockfile is up to date" and leaves the tree exactly as broken as it found it
+- **Option 1 (preferred)**: `git checkout main && git pull origin main`  ← pick this when @webpieces/ai-hook-rules arrives WITH the umbrella, so a tree that is behind explains this without anything being mis-declared — sync first, then install
+- **Option 2**: `pnpm install`  ← pick this when the sync (or a raised catalog pin in pnpm-workspace.yaml, which is editable while the block is up) gave the installer something new to do — a BARE install with nothing changed reports "Lockfile is up to date" and leaves the tree as broken as it found it
+- **Option 3**: `pnpm add -D @webpieces/ai-hook-rules`  ← pick this when nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/ai-hook-rules' before committing, because a direct root dependency on it violates the umbrella rule
 
 ### `K` — guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)
 
