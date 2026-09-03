@@ -1,0 +1,24 @@
+{
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|apply_patch",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "sh \"$PWD/.claude/webpieces/ai-hook.sh\" wp-ai-guards-hook"
+                    }
+                ]
+            },
+            {
+                "matcher": "apply_patch",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "sh \"$PWD/.claude/webpieces/ai-hook.sh\" wp-ai-rules-hook"
+                    }
+                ]
+            }
+        ]
+    }
+}
