@@ -26,7 +26,7 @@ export class UntrackedFiles {
 }
 
 /**
- * The clean-tree gate for `wp-checkout-clean-main`: refuse when TRACKED work would ride onto main, and
+ * The clean-tree gate for `wp-sync-main`: refuse when TRACKED work would ride onto main, and
  * only then.
  *
  * ─── WHY UNTRACKED FILES ARE NOT A REASON TO REFUSE ───────────────────────────────────────────────────

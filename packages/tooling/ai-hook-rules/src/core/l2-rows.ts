@@ -153,7 +153,7 @@ export class L2Row {
  * `B` AND `E` PART COMPANY ON `main`, and rows 5/6/7 are where. A WRITE on `main` is wrong at any
  * freshness — the work lands somewhere unreviewable and unrevertable — so row 5 is `E` only, judged on
  * the branch alone, above the divider. A READ or a BUILD on a CURRENT `main` is harmless, and blocking
- * it strands the agent right after `pnpm wp-checkout-clean-main` put it there; so `B` joins `R` on the
+ * it strands the agent right after `pnpm wp-sync-main` put it there; so `B` joins `R` on the
  * FRESHNESS-gated pair below the divider (row 6 behind → block, row 7 current → allow), where "cannot
  * tell" fails open at row 11 by construction. `B` and `R` still differ in SHAPE inside row 6: a Read
  * names one file and is judged precisely, a Bash command is opaque and gets default-deny plus row 4.
@@ -173,12 +173,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed — the edit proceeds',
             'config-bypass (feature-branch-guard skipped)'),
     ]),
-    new L2Row(2, ['B'], 'bare `git checkout main`, with no `git pull` chained into the same command', L2_BLOCK, '`pnpm wp-checkout-clean-main`', [
+    new L2Row(2, ['B'], 'bare `git checkout main`, with no `git pull` chained into the same command', L2_BLOCK, '`pnpm wp-sync-main`', [
         new L2UseCase(3,
             '`git checkout main` after a merge, to start the next piece of work',
             'about to land on whatever local `main` you last had — 157 commits behind, in the incident',
             'BLOCK: decided from command TEXT alone, before the checkout, because the only `main` this could measure is the one it is about to leave',
-            '`pnpm wp-checkout-clean-main` — checkout, pull, reap dead branches/worktrees, sweep orphan directories, in one command (hand-rolled, the pull must be in the SAME command as the checkout)',
+            '`pnpm wp-sync-main` — checkout, pull, reap dead branches/worktrees, sweep orphan directories, in one command (hand-rolled, the pull must be in the SAME command as the checkout)',
             'bare checkout of main ('),
         new L2UseCase(4,
             'The same command inside a linked worktree, where `git checkout main` fatals anyway',
@@ -273,15 +273,15 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed',
             'cure-prefixed, && short-circuits the work'),
     ]),
-    new L2Row(13, ['B'], 'on `main`, behind `origin/main`, and the cure is joined to the work by `;` (or `||`, `&`, a newline) — the work runs even if the cure fails', L2_BLOCK, '`pnpm wp-checkout-clean-main && <your command>`', [
+    new L2Row(13, ['B'], 'on `main`, behind `origin/main`, and the cure is joined to the work by `;` (or `||`, `&`, a newline) — the work runs even if the cure fails', L2_BLOCK, '`pnpm wp-sync-main && <your command>`', [
         new L2UseCase(30,
-            '`pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n \'598,612p\' eslint.config.mjs` — and the agent then quotes an eslint rule out of a file 15 commits stale',
+            '`pnpm wp-sync-main >/dev/null 2>&1; git log --oneline -1; sed -n \'598,612p\' eslint.config.mjs` — and the agent then quotes an eslint rule out of a file 15 commits stale',
             'on `main`, behind `origin/main`, cure first, `;` between',
             'BLOCK: `;` discards the cure\'s exit code, so a conflict, a dirty tree or no network leaves the `sed` reading still-stale content — and 7 of the 9 observed cases also silenced the cure with `>/dev/null 2>&1`, so the failure was invisible too. The two-step is safer because the NEXT tool call re-computes `localMain` against `originMain`, so a failed pull re-blocks; an allowed `;` compound never gets that second look',
-            'Swap the `;` for `&&` — `pnpm wp-checkout-clean-main && <your command>` — or run the cure alone and re-issue the command in the next call',
+            'Swap the `;` for `&&` — `pnpm wp-sync-main && <your command>` — or run the cure alone and re-issue the command in the next call',
             'cure-prefixed, work runs anyway'),
     ]),
-    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main`', [
+    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`pnpm wp-sync-main`, or `git checkout -b <new> origin/main`', [
         new L2UseCase(13,
             'The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits',
             'on `main`, behind `origin/main`, dirty tree',
@@ -292,7 +292,7 @@ export const L2_ROWS: readonly L2Row[] = [
             'The Read tool refuses a file that exists, on a `main` 18 commits behind',
             'on `main`, behind `origin/main`, clean tree',
             'BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly',
-            '`pnpm wp-checkout-clean-main`, or `git checkout -b <new> origin/main`',
+            '`pnpm wp-sync-main`, or `git checkout -b <new> origin/main`',
             'on-stale-main'),
         new L2UseCase(16,
             'Read is blocked, so the session reaches for `cat`, `grep` and `ls` instead — and describes a CI workflow set missing a whole workflow that existed upstream',
@@ -315,7 +315,7 @@ export const L2_ROWS: readonly L2Row[] = [
             'None needed',
             'local-main-contains-origin (up to date)'),
         new L2UseCase(24,
-            '`curl`, `gh pr close` or a test run, immediately after `pnpm wp-checkout-clean-main` landed you on a perfectly current `main`',
+            '`curl`, `gh pr close` or a test run, immediately after `pnpm wp-sync-main` landed you on a perfectly current `main`',
             'on `main`, current — no staleness anywhere',
             'ALLOW. This used to BLOCK, from the branch alone: the tool the repo prescribes put the agent here, and the guard whose name says STALE then refused everything off a narrow allowlist for a reason that had nothing to do with staleness. WRITES here are still blocked, by row 5 — that hazard is real at any freshness',
             'None needed',
@@ -485,7 +485,7 @@ export const NOT_DONE: readonly L2NotDone[] = [
     // It held three entries. Row 5's `B` half shipped and then MOVED: on `main`, a write is judged from
     // the branch alone (row 5, above the divider) while Bash is judged on freshness beside the Read tool
     // (rows 6/7), because a build on a CURRENT `main` harms nothing and denying it stranded agents on
-    // the very `main` `pnpm wp-checkout-clean-main` had just handed them. Rows 6 and 8 held DIRTY-TREE
+    // the very `main` `pnpm wp-sync-main` had just handed them. Rows 6 and 8 held DIRTY-TREE
     // valves, and both are now closed — each of
     // those rows cures with `git checkout -b <new> origin/main`, which carries uncommitted changes onto
     // the new branch, so a dirty tree never trapped anybody. The row 6 entry claimed the dirty argument

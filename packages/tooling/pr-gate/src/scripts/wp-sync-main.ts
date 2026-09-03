@@ -10,7 +10,7 @@ runMain(async (): Promise<void> => {
     const container = new Container({ autobind: true });
     // Reject `--help`/bogus flags BEFORE the app touches git — an ignored flag must never start the flow.
     container.get(CliArgs).assertNoArgs(new CliUsage(
-        'wp-checkout-clean-main',
+        'wp-sync-main',
         'Go to main, fast-forward it, reap dead worktrees and branches, and sweep orphan directories.'));
-    await container.get(PrGateApp).checkoutCleanMain();
+    await container.get(PrGateApp).syncMain();
 });

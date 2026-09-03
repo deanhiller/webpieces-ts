@@ -222,8 +222,8 @@ export const FETCH_ALLOW_JS =
 // agent is ALREADY on main the checkout is a harmless no-op, so this one literal covers the on-main case
 // too and needs no second entry.
 //
-// ─── WHY L0 KEEPS THE RAW GIT WHILE THE WORKFLOW LAYER MOVED TO `pnpm wp-checkout-clean-main` ─────────
-// `wp-checkout-clean-main` is this exact pairing with `wp-cleanup` and the orphan-directory sweep welded
+// ─── WHY L0 KEEPS THE RAW GIT WHILE THE WORKFLOW LAYER MOVED TO `pnpm wp-sync-main` ─────────
+// `wp-sync-main` is this exact pairing with `wp-cleanup` and the orphan-directory sweep welded
 // on, and the WORKFLOW guards (stale-main-bash-guard's preferred cure, merged-branch-message,
 // TreeRecovery, the L2 rows) now prescribe it instead of these two git commands — one intention, one
 // spelling, and the sweep actually runs.
@@ -259,7 +259,7 @@ export const CHECKOUT_MAIN_PULL_ALLOW_JS =
 /**
  * The exact bytes every L0 message prescribing the on-main sync must print.
  *
- * L0 ONLY. The workflow guards prescribe `pnpm wp-checkout-clean-main`; this constant is for the faults
+ * L0 ONLY. The workflow guards prescribe `pnpm wp-sync-main`; this constant is for the faults
  * where `node_modules` is the thing under suspicion and no `pnpm` bin can be relied on to run. See the
  * block comment above CHECKOUT_MAIN_PULL_BODY_ERE for the full argument, and do not "unify" the two.
  */

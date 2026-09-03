@@ -740,16 +740,16 @@ check out (`main is already checked out at <primary clone>`), so the two forms a
 
 - in the primary clone:
   ```bash
-  pnpm wp-land-pr && pnpm wp-checkout-clean-main
+  pnpm wp-land-pr && pnpm wp-sync-main
   ```
 - in a linked worktree — land, then run the same cleanup **from the primary clone** (`wp-cleanup`
   deliberately spares the worktree you are standing in, so it cannot reap the one you are inside):
   ```bash
   pnpm wp-land-pr
-  pnpm wp-checkout-clean-main     # from the primary clone
+  pnpm wp-sync-main     # from the primary clone
   ```
 
-`wp-checkout-clean-main` is one command for one intention: fetch, check out `main`, `pull --ff-only`,
+`wp-sync-main` is one command for one intention: fetch, check out `main`, `pull --ff-only`,
 `wp-cleanup`, then sweep the orphan directories an `nx g move` leaves on every clone. Do **not** hand-roll
 `git checkout main && git pull origin main && pnpm wp-cleanup` instead — that is the same command minus
 the sweep, which is exactly how the sweep never ran for anybody. (The raw pair is still legal git, and it

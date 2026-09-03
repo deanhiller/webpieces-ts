@@ -129,7 +129,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
         // it a turn to discover. Steer to the fetch, which is all a worktree needs.
         //
         // Note this rule stays a pure ALLOW for the raw pair and always will: the workflow layer now
-        // PRESCRIBES `pnpm wp-checkout-clean-main` (see TreeRecovery.updateMainSteps, which block()
+        // PRESCRIBES `pnpm wp-sync-main` (see TreeRecovery.updateMainSteps, which block()
         // below renders), but prescribing is not blocking. The pair is plain git, and it is the L0
         // recovery cure — a state in which no `pnpm` bin can be trusted to run — so making it a block
         // here would delete the only escape from a deadlock. What changed is what the guards TEACH.

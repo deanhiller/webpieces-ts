@@ -33,7 +33,7 @@ import { CHECKOUT_MAIN_PULL_CMD, WORKSPACE_MANIFEST, PACKAGE_MANIFEST } from './
 //
 // RAW GIT ON PURPOSE, and this is now the DIFFERENCE from the workflow guards rather than a match with
 // them. stale-main-bash-guard, merged-branch-message, TreeRecovery and the L2 rows all prescribe
-// `pnpm wp-checkout-clean-main` — the same pairing with `wp-cleanup` and the orphan-directory sweep
+// `pnpm wp-sync-main` — the same pairing with `wp-cleanup` and the orphan-directory sweep
 // welded on, so the sweep actually runs. THIS message must NOT follow them: the fault it is reporting IS
 // that `node_modules` disagrees with the pin, which makes `node_modules` the untrustworthy thing, and
 // every `pnpm wp-*` bin resolves through it. An L0 cure may never be a command that has to load the

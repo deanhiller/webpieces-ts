@@ -249,10 +249,10 @@ describe('cure= is looked up from the matrix, not authored twice', () => {
      * branch off `origin/main` are different moves with different tree-state requirements. Row 5's cure
      * (asserted above) is untouched for exactly that reason.
      */
-    it('prescribes `pnpm wp-checkout-clean-main` on every row that refreshes main', () => {
-        expect(cureForMatrix('L2', '2')).toBe('pnpm wp-checkout-clean-main');
-        expect(cureForMatrix('L2', '6')).toBe('pnpm wp-checkout-clean-main, or git checkout -b <new> origin/main');
-        expect(cureForMatrix('L2', '13')).toBe('pnpm wp-checkout-clean-main && <your command>');
+    it('prescribes `pnpm wp-sync-main` on every row that refreshes main', () => {
+        expect(cureForMatrix('L2', '2')).toBe('pnpm wp-sync-main');
+        expect(cureForMatrix('L2', '6')).toBe('pnpm wp-sync-main, or git checkout -b <new> origin/main');
+        expect(cureForMatrix('L2', '13')).toBe('pnpm wp-sync-main && <your command>');
     });
 
     it('emits none of the retired refresh-main spellings, on any row or use case', () => {

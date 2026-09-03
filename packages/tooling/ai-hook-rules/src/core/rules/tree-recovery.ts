@@ -84,7 +84,7 @@ export class TreeRecovery {
         }
         // The primary clone. NO "never `git checkout main`" here: that is a WORKTREE-only truth, and
         // printing it in the primary clone forbids the shortest exit off a merged branch
-        // (`pnpm wp-checkout-clean-main` — the one command form of the git pair a human had to hand an
+        // (`pnpm wp-sync-main` — the one command form of the git pair a human had to hand an
         // agent that had wedged itself following this very message). Branching off origin/main is still
         // what we RECOMMEND, because it works from any tree; it is no longer dressed up as the only
         // legal move.
@@ -105,7 +105,7 @@ export class TreeRecovery {
      * worktrees whose directory is already gone (`git worktree remove` FAILS on those), and the
      * branch delete must come LAST because git refuses to delete a branch a worktree still holds.
      *
-     * The BRANCH form is ONE command, `pnpm wp-checkout-clean-main`, and both halves of that matter.
+     * The BRANCH form is ONE command, `pnpm wp-sync-main`, and both halves of that matter.
      *
      * It does not end in `git branch -d <branch>`, because an agent reads a bare `-d`/`-D` as
      * destructive and stops to ask permission, so the branch survives the turn and local branches pile
@@ -117,7 +117,7 @@ export class TreeRecovery {
      * even though that pair is still perfectly legal to type. The one command is checkout + pull +
      * cleanup + the orphan-directory sweep; the hand-chained form is the same thing minus the sweep, so
      * printing both is two spellings of one intention where one silently does less, and the corpses the
-     * sweep exists to collect simply never got collected. See CheckoutCleanMainCommand's docblock for
+     * sweep exists to collect simply never got collected. See SyncMainCommand's docblock for
      * why going to main is the right moment to sweep.
      *
      * The RAW PAIR IS NOT GONE — it is still the L0 recovery cure (CHECKOUT_MAIN_PULL_CMD in
@@ -130,7 +130,7 @@ export class TreeRecovery {
      * delete ordering is the part that has to be exactly right.
      */
     cleanupSteps(kind: TreeKind, branch: string, worktreePath: string = '<worktree-dir>'): string[] {
-        const branchForm = `  ${this.at('pnpm wp-checkout-clean-main')}`;
+        const branchForm = `  ${this.at('pnpm wp-sync-main')}`;
         const worktreeForm =
             `  git worktree prune && git worktree remove ${worktreePath} && git branch -D ${branch}`;
 
@@ -159,7 +159,7 @@ export class TreeRecovery {
      * the primary clone — so the update is a plain fetch of the remote-tracking ref, which is all
      * you need to then branch off `origin/main`.
      *
-     * The primary-clone form is `pnpm wp-checkout-clean-main`, not the `git checkout main && git pull
+     * The primary-clone form is `pnpm wp-sync-main`, not the `git checkout main && git pull
      * origin main` pair it used to print, for the reason spelled out on cleanupSteps() above: the pair
      * is that command minus the cleanup and the sweep, and an agent handed both types whichever it read
      * last. The pair remains a legal thing to run — it is still the L0 recovery cure, where a `pnpm`
@@ -167,7 +167,7 @@ export class TreeRecovery {
      * the job.
      */
     updateMainSteps(kind: TreeKind): string[] {
-        const branchForm = `  ${this.at('pnpm wp-checkout-clean-main')}`;
+        const branchForm = `  ${this.at('pnpm wp-sync-main')}`;
         const worktreeForm = `  ${this.at('git fetch origin main')}        (then work off origin/main)`;
 
         if (kind === 'worktree') {

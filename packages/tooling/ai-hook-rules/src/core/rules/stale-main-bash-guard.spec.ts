@@ -175,7 +175,7 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
  * ONE SPELLING of "make local `main` current", and it is the one CLAUDE.md names.
  *
  * Fleet-wide this rule handed agents FOUR refresh-main cures across 238 prescriptions, and
- * `pnpm wp-checkout-clean-main` — the command CLAUDE.md names, and the only one that also sweeps the
+ * `pnpm wp-sync-main` — the command CLAUDE.md names, and the only one that also sweeps the
  * orphan directories — appeared in 6 of them. The other 231 prescribed the hand-rolled pair CLAUDE.md
  * explicitly forbids, so agents caught between the guard and the instructions improvised hybrids of
  * both, four distinct spellings observed, one blocked round trip each. A cure is an instruction the AI
@@ -194,7 +194,7 @@ describe('stale-main-bash-guard — one refresh-main cure, and it is the prescri
         const messages = [
             rule().check(ctx('cat src/app.ts'))[0].message,
             rule().check(ctx('git checkout main'))[0].message,
-            rule().check(ctx('pnpm wp-checkout-clean-main; cat src/app.ts'))[0].message,
+            rule().check(ctx('pnpm wp-sync-main; cat src/app.ts'))[0].message,
         ];
         for (const message of messages) {
             for (const spelling of RETIRED) expect(message, spelling).not.toContain(spelling);
@@ -220,7 +220,7 @@ describe('stale-main-bash-guard — one refresh-main cure, and it is the prescri
  */
 describe('stale-main-bash-guard — the cure may be composed with the work, but only with &&', () => {
     it('ALLOWS a cure joined to the work by && — the shell short-circuits', () => {
-        expect(blocked('pnpm wp-checkout-clean-main && cat src/app.ts')).toBe(false);
+        expect(blocked('pnpm wp-sync-main && cat src/app.ts')).toBe(false);
         expect(blocked('git pull --ff-only origin main && cat src/app.ts')).toBe(false);
         expect(blocked('git pull origin main && pnpm run build-all')).toBe(false);
     });
@@ -229,22 +229,22 @@ describe('stale-main-bash-guard — the cure may be composed with the work, but 
     // and a filter a pipe fed cannot touch the tree — so it must not veto the chain.
     it('ALLOWS the piped-and-fetch-led form agents actually type', () => {
         expect(blocked("git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n '30,75p' src/app.ts")).toBe(false);
-        expect(blocked("cd /repo && pnpm wp-checkout-clean-main >/dev/null 2>&1 && sed -n '1,5p' src/app.ts")).toBe(false);
+        expect(blocked("cd /repo && pnpm wp-sync-main >/dev/null 2>&1 && sed -n '1,5p' src/app.ts")).toBe(false);
     });
 
     it('REFUSES the same cure joined by ; — the work runs even if the pull fails', () => {
-        expect(blocked("pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' eslint.config.mjs")).toBe(true);
+        expect(blocked("pnpm wp-sync-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' eslint.config.mjs")).toBe(true);
         expect(blocked('git pull --ff-only origin main 2>&1 | tail -1; cat src/app.ts')).toBe(true);
-        expect(blocked('pnpm wp-checkout-clean-main || cat src/app.ts')).toBe(true);
+        expect(blocked('pnpm wp-sync-main || cat src/app.ts')).toBe(true);
     });
 
     // The fix is a ONE-CHARACTER edit, so the message says which character was typed. An agent told
     // only "use &&" has to diff the two spellings itself to find where.
     it('names the operator that was used, and hands over the && spelling', () => {
-        const message = rule().check(ctx('pnpm wp-checkout-clean-main >/dev/null 2>&1; cat src/app.ts'))[0].message;
+        const message = rule().check(ctx('pnpm wp-sync-main >/dev/null 2>&1; cat src/app.ts'))[0].message;
         expect(message).toContain('Your cure is joined with `;`');
         expect(message).toContain('the work runs even if the pull fails');
-        expect(message).toContain('pnpm wp-checkout-clean-main && <your command>');
+        expect(message).toContain('pnpm wp-sync-main && <your command>');
         expect(message).toContain('Or run the cure alone and re-issue your command in the next call.');
 
         const orMessage = rule().check(ctx('git pull origin main || cat src/app.ts'))[0].message;
@@ -274,7 +274,7 @@ describe('stale-main-bash-guard — the cure may be composed with the work, but 
     // On a CURRENT main nothing here fires at all — composition is judged only inside row 6's state.
     it('is only consulted once main is established BEHIND', () => {
         state.containsExit = 0;
-        expect(blocked("pnpm wp-checkout-clean-main; sed -n '1,5p' src/app.ts")).toBe(false);
+        expect(blocked("pnpm wp-sync-main; sed -n '1,5p' src/app.ts")).toBe(false);
     });
 });
 
@@ -409,7 +409,7 @@ describe('stale-main-bash-guard — fail-open valves', () => {
     });
 
     /*
-     * THE POST-CURE DEAD END, which is why this whole change exists: `pnpm wp-checkout-clean-main`
+     * THE POST-CURE DEAD END, which is why this whole change exists: `pnpm wp-sync-main`
      * leaves you on a perfectly current main, and the guard whose name says STALE then refused
      * everything off a narrow allowlist. WRITES here are still blocked — by feature-branch-guard, which
      * is unconditional on purpose (see its docblock).
@@ -581,10 +581,10 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
         // Both tree kinds, each named, so no reader takes the wrong one silently.
         expect(text).toContain('in the primary clone:');
         expect(text).toContain('in a linked worktree');
-        // The primary-clone form is `pnpm wp-checkout-clean-main` — the raw pair with wp-cleanup and
+        // The primary-clone form is `pnpm wp-sync-main` — the raw pair with wp-cleanup and
         // the orphan-directory sweep welded on. The pair is still legal git and is still the L0
         // recovery cure; the workflow layer simply stops teaching it (see TreeRecovery).
-        expect(text).toContain('pnpm wp-checkout-clean-main');
+        expect(text).toContain('pnpm wp-sync-main');
         expect(text).not.toContain('git checkout main && git pull origin main');
         expect(text).toContain('git fetch origin main');
         // The instruction that is this guard's whole point survives the rewrite — now stated for the

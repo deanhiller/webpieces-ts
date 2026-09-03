@@ -53,7 +53,7 @@ import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
  *   BLOCKED   `git checkout main`, `git switch main` — with or without flags — when no `git pull`
  *             appears anywhere in the SAME command.
  *   ALLOWED   `git checkout main && git pull origin main`, the pairing this forces — and
- *             `pnpm wp-checkout-clean-main`, which IS that pairing with the cleanup and the
+ *             `pnpm wp-sync-main`, which IS that pairing with the cleanup and the
  *             orphan-directory sweep welded on. The message prescribes the one command; the raw pair
  *             stays legal because it is plain git and because it is the L0 recovery cure, where
  *             `node_modules` is the thing in doubt and no `pnpm` bin can be relied on.
@@ -68,7 +68,7 @@ import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
  *
  * WHY, when this guard spent a release judging the branch alone: because the branch alone denies
  * everything off a narrow allowlist on a PERFECTLY CURRENT `main`, and a current `main` is exactly
- * where the prescribed cure leaves you. An agent lands a PR, runs `pnpm wp-checkout-clean-main` — the
+ * where the prescribed cure leaves you. An agent lands a PR, runs `pnpm wp-sync-main` — the
  * command this repo tells it to run — and the next `curl`, `gh pr close` or test run is refused by a
  * guard whose own name says STALE. The tool that got it there could not be the cure for being there,
  * and the refusal had nothing to do with staleness, which is the confusion reported from the field.
@@ -109,7 +109,7 @@ import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
  *
  * ── ROWS 12/13: the cure may be COMPOSED with the work, but only with `&&` ───────────────────────
  *
- * `pnpm wp-checkout-clean-main && cat src/app.ts` is allowed and `pnpm wp-checkout-clean-main ; cat
+ * `pnpm wp-sync-main && cat src/app.ts` is allowed and `pnpm wp-sync-main ; cat
  * src/app.ts` is not, and the difference is the shell's rather than this guard's: `&&` short-circuits,
  * so the work cannot run when the cure failed — the exact property the block is here to guarantee. `;`
  * discards the exit code and runs the work anyway. See cure-prefix-scan.ts for the measured shapes.
@@ -133,7 +133,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     private readonly curePrefix = new CurePrefixScan(this.scanner);
 
     readonly description =
-        'Block a bare `git checkout main` (use `pnpm wp-checkout-clean-main`, or chain the pull into ' +
+        'Block a bare `git checkout main` (use `pnpm wp-sync-main`, or chain the pull into ' +
         'the same command), and — once local main is KNOWN to be behind origin/main — block Bash ' +
         'there, allowlisting only the commands that get you off it. A main that is current, or whose ' +
         'freshness is unknown, is left alone.';
@@ -154,7 +154,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             // hint that cannot look.
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
                 + '\nIf you hand-roll the git instead, the pull must be in the SAME command as the checkout.', true),
-            new Option('Already on main: pnpm wp-checkout-clean-main (then re-run) — it pulls main and takes the trash out in the one command this repo prescribes. You may chain your command onto it with && (pnpm wp-checkout-clean-main && <your command>), which is skipped if the pull fails; a ; instead runs your command anyway and is refused.'),
+            new Option('Already on main: pnpm wp-sync-main (then re-run) — it pulls main and takes the trash out in the one command this repo prescribes. You may chain your command onto it with && (pnpm wp-sync-main && <your command>), which is skipped if the pull fails; a ; instead runs your command anyway and is refused.'),
             new Option('Still allowed: every BASH command, on a main that is current or whose freshness is not known — this guard only closes once local main is known to be BEHIND origin/main. (Write/Edit on main is a different policy and is blocked by feature-branch-guard however current main is.) In that state you keep the Read tool while main is current (read-stale-guard closes it when main falls behind, because stale reads are worthless) plus everything that gets you OUT or tells you where you are: git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
@@ -304,7 +304,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     private compositionMessage(prefix: CurePrefix): string {
         return `Your cure is joined with \`${prefix.operator}\` — the work runs even if the pull fails. `
             + 'Use `&&` so it is skipped:\n'
-            + '\n    pnpm wp-checkout-clean-main && <your command>\n\n'
+            + '\n    pnpm wp-sync-main && <your command>\n\n'
             + 'Or run the cure alone and re-issue your command in the next call.';
     }
 

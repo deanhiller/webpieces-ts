@@ -215,9 +215,9 @@ def top(counter, n=12):
 # guard worked and origin simply moved again. If the SAME pair repeats, the cure did not take, and
 # only THAT is a deadlock.
 STALE_STATE_RE = re.compile(r"localMain=([0-9a-f]+)\s+originMain=([0-9a-f]+)")
-CURE_VERB_RE = re.compile(r"wp-checkout-clean-main|git\s+pull|git\s+fetch")
+CURE_VERB_RE = re.compile(r"wp-sync-main|git\s+pull|git\s+fetch")
 # `<cure> && <work>` vs `<cure>; <work>` is the whole safety question - see _classify_stale_block.
-CURE_PREFIX_AND_RE = re.compile(r"^\s*(?:pnpm\s+)?(?:wp-checkout-clean-main|git\s+(?:pull|fetch))"
+CURE_PREFIX_AND_RE = re.compile(r"^\s*(?:pnpm\s+)?(?:wp-sync-main|git\s+(?:pull|fetch))"
                                 r"[^;&|]*(?:\|[^;&]*)?&&")
 # A path that cannot be stale in any sense the guard cares about: it is not tracked content.
 OFF_REPO_RE = re.compile(r"/private/tmp/|/tmp/|~/\.claude|/Users/[^/]+/\.claude|localhost:|127\.0\.0\.1")

@@ -19,23 +19,23 @@ function operator(command: string): string {
  */
 describe('CurePrefixScan — the operator is the verdict', () => {
     it('reads `&&` as short-circuiting, so the work cannot run on a failed cure', () => {
-        expect(kind('pnpm wp-checkout-clean-main && cat src/app.ts')).toBe('short-circuits');
+        expect(kind('pnpm wp-sync-main && cat src/app.ts')).toBe('short-circuits');
         expect(kind('git pull --ff-only origin main && pnpm run build-all')).toBe('short-circuits');
         expect(kind("git fetch --prune origin main -q && git pull --ff-only origin main 2>&1 | tail -1 && sed -n '30,75p' x.ts"))
             .toBe('short-circuits');
     });
 
     it('reads `;`, `||`, `&` and a newline as running the work regardless', () => {
-        expect(kind("pnpm wp-checkout-clean-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' e.mjs")).toBe('runs-anyway');
+        expect(kind("pnpm wp-sync-main >/dev/null 2>&1; git log --oneline -1; sed -n '598,612p' e.mjs")).toBe('runs-anyway');
         expect(kind('git pull --ff-only origin main 2>&1 | tail -1; git log --oneline -3')).toBe('runs-anyway');
         expect(kind('git pull origin main || cat src/app.ts')).toBe('runs-anyway');
         expect(kind('git pull origin main\ncat src/app.ts')).toBe('runs-anyway');
     });
 
     it('reports the literal operator, because the fix is a one-character edit', () => {
-        expect(operator('pnpm wp-checkout-clean-main; cat x.ts')).toBe(';');
-        expect(operator('pnpm wp-checkout-clean-main || cat x.ts')).toBe('||');
-        expect(operator('pnpm wp-checkout-clean-main && cat x.ts')).toBe('&&');
+        expect(operator('pnpm wp-sync-main; cat x.ts')).toBe(';');
+        expect(operator('pnpm wp-sync-main || cat x.ts')).toBe('||');
+        expect(operator('pnpm wp-sync-main && cat x.ts')).toBe('&&');
     });
 });
 
@@ -43,7 +43,7 @@ describe('CurePrefixScan — what counts as the cure', () => {
     // The prefix may carry inert company. A `cd '<root>' &&` is how every guard renders a remedy that
     // must survive a reset cwd, and an agent bounds output by reflex — neither changes what runs.
     it('lets a leading cd, an echo and a piped filter ride along', () => {
-        expect(kind("cd /repo && pnpm wp-checkout-clean-main >/dev/null 2>&1 && cat src/app.ts")).toBe('short-circuits');
+        expect(kind("cd /repo && pnpm wp-sync-main >/dev/null 2>&1 && cat src/app.ts")).toBe('short-circuits');
         expect(kind('git pull origin main | tail -1 && cat src/app.ts')).toBe('short-circuits');
     });
 
@@ -84,12 +84,12 @@ describe('CurePrefixScan — what counts as the cure', () => {
      * a following command through on the strength of.
      */
     it('accepts a /dev/null redirect on the cure but not a redirect to a real path', () => {
-        expect(kind('pnpm wp-checkout-clean-main >/dev/null 2>&1 && cat src/app.ts')).toBe('short-circuits');
+        expect(kind('pnpm wp-sync-main >/dev/null 2>&1 && cat src/app.ts')).toBe('short-circuits');
         expect(kind('git pull origin main > src/app.ts && cat src/app.ts')).toBe('none');
     });
 
     it('reports `none` for a command that is nothing but cure — the skip list already owns that', () => {
-        expect(kind('pnpm wp-checkout-clean-main')).toBe('none');
+        expect(kind('pnpm wp-sync-main')).toBe('none');
         expect(kind('git fetch origin main && git pull origin main')).toBe('none');
         expect(kind('')).toBe('none');
     });

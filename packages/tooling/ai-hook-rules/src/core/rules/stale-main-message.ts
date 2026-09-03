@@ -14,11 +14,11 @@ import { atRoot } from '@webpieces/rules-config';
  * One source of truth on purpose (same reason as MergedBranchMessage): the cure is an instruction the
  * AI follows literally, so two drifting copies mean two behaviours for one repo state.
  *
- * Cure 1 is `pnpm wp-checkout-clean-main`, the ONE command this repo names for "make local `main`
+ * Cure 1 is `pnpm wp-sync-main`, the ONE command this repo names for "make local `main`
  * current" — and it is now spelled that way here because it was not, which is the defect this file's
  * last change fixed. Fleet-wide, this rule handed agents FOUR different refresh-main cures across 238
  * prescriptions and the sanctioned one appeared in 6 of them; CLAUDE.md meanwhile names
- * `pnpm wp-checkout-clean-main` and explicitly forbids hand-rolling the `git checkout main && git pull`
+ * `pnpm wp-sync-main` and explicitly forbids hand-rolling the `git checkout main && git pull`
  * pair, because that is the same command minus the orphan-directory sweep. Agents caught between the
  * two authorities improvised hybrids — four distinct spellings observed — each costing a blocked round
  * trip. A cure is an instruction the AI follows LITERALLY, so there is exactly one spelling of it.
@@ -60,7 +60,7 @@ export class StaleMainMessage {
      * path, and no state in which the printed cure is unrunnable.
      */
     private common(behindCount: string): string[] {
-        const refresh = 'pnpm wp-checkout-clean-main';
+        const refresh = 'pnpm wp-sync-main';
         const branch = 'git checkout -b <new-branch> origin/main';
         return [
             `You are on main and main is ${behindCount} commit(s) behind origin/main.`,

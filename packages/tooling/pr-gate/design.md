@@ -32,7 +32,6 @@ graph TD
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
     ChecklistScanner["ChecklistScanner"]
-    CheckoutCleanMainCommand["CheckoutCleanMainCommand"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     CodexGuardPresence["CodexGuardPresence"]
@@ -100,6 +99,7 @@ graph TD
     StartUpsertPrCommand["StartUpsertPrCommand"]
     StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
+    SyncMainCommand["SyncMainCommand"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeLockVerdicts["WorktreeLockVerdicts"]
@@ -135,11 +135,6 @@ graph TD
     ChecklistScanner --> DiffScope
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
-    CheckoutCleanMainCommand --> CleanupCommand
-    CheckoutCleanMainCommand --> MainCheckout
-    CheckoutCleanMainCommand --> OrphanDirSweeper
-    CheckoutCleanMainCommand --> RepoRootFinder
-    CheckoutCleanMainCommand --> WorkingTreeGate
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
@@ -234,7 +229,6 @@ graph TD
     PrContextWriter --> ReviewJsonService
     PrGateApp --> BuildCommand
     PrGateApp --> CheckPrCommand
-    PrGateApp --> CheckoutCleanMainCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishPushDevCommand
     PrGateApp --> FinishUpdateCommand
@@ -247,6 +241,7 @@ graph TD
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    PrGateApp --> SyncMainCommand
     ProvenanceEnforcer --> AiBranchName
     ProvenanceEnforcer --> ReviewJsonService
     ProvenanceEnforcer --> ReviewProvenanceService
@@ -304,6 +299,11 @@ graph TD
     StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate
+    SyncMainCommand --> CleanupCommand
+    SyncMainCommand --> MainCheckout
+    SyncMainCommand --> OrphanDirSweeper
+    SyncMainCommand --> RepoRootFinder
+    SyncMainCommand --> WorkingTreeGate
     WorktreeCleanupSection --> BranchMutationLog
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper
