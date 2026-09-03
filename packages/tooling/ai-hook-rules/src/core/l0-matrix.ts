@@ -2,7 +2,8 @@ import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
 import {
     ADD_HOOK_PKG_CMD, CHECKOUT_MAIN_PULL_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call,
-    L0_ALLOWLIST, RECOVERY_CMD, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim,
+    L0_ALLOWLIST, RECOVERY_CMD, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, WORKSPACE_MANIFEST,
+    renderShim,
 } from '../bin/shim';
 import { CODEX_READ_STILL_ALLOWED } from '../bin/l0-codex-read';
 import { ENV_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration } from '../bin/hook-registration';
@@ -197,14 +198,33 @@ export const L0_FAULTS: readonly L0Fault[] = [
             + 'copies no node_modules')],
         renderShim()),
     // U is X with the ONE input that inverts X's cure, which is why it is a separate fault and not a
-    // sentence inside X's message: when nothing declares the package, `pnpm install` is not a weaker fix,
-    // it is a PROVABLE no-op, and an agent that trusts the X text will run it until it gives up. See the
-    // ADD_HOOK_PKG entry in l0-allowlist.ts for the incident.
+    // sentence inside X's message: a BARE `pnpm install` is not a weaker fix here, it is a PROVABLE
+    // no-op, and an agent that trusts the X text will run it until it gives up. See the ADD_HOOK_PKG
+    // entry in l0-allowlist.ts for the incident.
+    //
+    // The ORDER of these three is the correction bought by a second incident. `pnpm add` used to be the
+    // preferred cure, and it is the one cure that CANNOT be committed: a direct root dependency on
+    // HOOK_PKG violates the umbrella rule (the root manifest depends on the umbrella ALONE), and the
+    // message never said to revert it — so it was followed, and the workaround landed in a real
+    // package.json. The package normally arrives WITH the umbrella, so a tree that is merely BEHIND is
+    // the common cause and syncing is the cure that leaves a committable tree. The add stays last,
+    // reachable, and explicitly labelled as a session unblock rather than a fix.
     new L0Fault(L0_FAULT_UNDECLARED, `guard bin missing AND ${HOOK_PKG} is not declared in package.json`,
         'sh, before the bin runs', 'sh',
-        [bashCure(ADD_HOOK_PKG_CMD, true,
-            'this fault fires at all — package.json asks for nothing, so pnpm install reports '
-            + '"Lockfile is up to date" and leaves the tree exactly as broken as it found it')],
+        [
+            bashCure(CHECKOUT_MAIN_PULL_CMD, true,
+                `${HOOK_PKG} arrives WITH the umbrella, so a tree that is behind explains this without `
+                + 'anything being mis-declared — sync first, then install'),
+            bashCure('pnpm install', false,
+                'the sync (or a raised catalog pin in ' + WORKSPACE_MANIFEST + ', which is editable '
+                + 'while the block is up) gave the installer something new to do — a BARE install with '
+                + 'nothing changed reports "Lockfile is up to date" and leaves the tree as broken as it '
+                + 'found it'),
+            bashCure(ADD_HOOK_PKG_CMD, false,
+                'nothing else worked and you need this session back — it is a session unblock, NOT a '
+                + `fix: revert it with 'pnpm remove ${HOOK_PKG}' before committing, because a direct `
+                + 'root dependency on it violates the umbrella rule'),
+        ],
         renderShim()),
     new L0Fault(L0_FAULT_BIN_BROKEN, 'guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)',
         'sh, before the bin runs', 'sh',
