@@ -161,6 +161,59 @@ def retbytes_lines(raw):
     return out
 
 
+def cycletime_lines(raw):
+    """Where the wall clock went, as markdown lines. Empty when the run had no `cycletime`.
+
+    Kept deliberately TIGHT — `digest.md` already runs ~44 KB against a stated 15-25 KB target, so
+    this is three small tables and a verdict, and the per-session and per-phase detail stays in
+    `all.json`.
+
+    The reconciliation verdict is printed FIRST and unconditionally, because it is the only line
+    that says whether the percentages under it may be believed. A FAIL under a table of confident
+    percentages is the failure mode this whole section exists to prevent.
+    """
+    ct = raw.get("cycletime")
+    if not ct:
+        return []
+    rec = ct.get("reconciliation") or {}
+    bad = [k for k, v in (ct.get("sources") or {}).items() if not v.get("available")]
+    thin = [k for k, v in (ct.get("sources") or {}).items()
+            if v.get("available") and (v.get("coverage_fraction") or 1) < 0.99]
+    out = ["", "## cycle time (where the wall clock went)", "",
+           f"RECONCILIATION {rec.get('verdict')} — {rec.get('sessions_sampled')}/"
+           f"{rec.get('sessions_total')} sessions sampled, worst drift "
+           f"{rec.get('worst_abs_drift_seconds')}s ({rec.get('worst_pct_drift')}%), tolerance "
+           f"{rec.get('tolerance')}. {rec.get('what_a_pass_proves')}",
+           "",
+           f"AI is the RESIDUAL: {rec.get('residual_note')}"]
+    if bad:
+        out.append(f"UNAVAILABLE SOURCES: {', '.join(bad)} — those seconds fell into AI and are "
+                   f"NOT measured. Discount the AI share by that much.")
+    if thin:
+        out.append(f"PARTIAL COVERAGE: {', '.join(thin)} — see `sources` in all.json for the "
+                   f"fraction of the window each could see. Silence there is blindness, not quiet.")
+    out += ["", f"{ct.get('sessions')} sessions, "
+                f"{ct.get('wall_hours_summed_over_sessions')} agent-hours "
+                f"({ct.get('wall_note')}):"]
+    for r in ct.get("by_bucket") or []:
+        out.append(f"  {r['hours']:>8.2f}h  {r['pct']:>5.1f}%  {r['bucket']}")
+    out += ["", "phases (wall vs BLOCKING — they differ, and the difference is the point):"]
+    for p in ct.get("phase_table") or []:
+        b = " ".join(f"{k}:{v}" for k, v in list((p.get("buckets_minutes") or {}).items())[:4])
+        out.append(f"  n={p['n']:<3} {p['phase']:<18} wall={p['wall_minutes']:>7.1f}m  "
+                   f"blocking={p['blocking_minutes']:>7.1f}m  {b}")
+    out.append("  " + (ct.get("phase_note") or ""))
+    out += ["", "percentiles (minutes) — n is printed because a percentile without one is a guess:"]
+    for r in ct.get("percentiles") or []:
+        if r.get("p50") is None:
+            out.append(f"  n={r['n']:<3} {r['what']:<38} {r['verdict']}")
+        else:
+            tail = ("" if r.get("p75") is None else
+                    f" p75={r['p75']} p95={r['p95']} p99={r['p99']}")
+            out.append(f"  n={r['n']:<3} {r['what']:<38} p50={r['p50']}{tail}")
+    return out
+
+
 def build(raw):
     out = []
     g = raw.get("guards") or {}
@@ -340,7 +393,8 @@ def main():
     if "--json" in sys.argv:
         json.dump({"repos": raw.get("repos"), "generated": raw.get("generated"),
                    "versions": versions(raw), "harnesses": hc,
-                   "retbytes": raw.get("retbytes"), "major": items},
+                   "retbytes": raw.get("retbytes"), "cycletime": raw.get("cycletime"),
+                   "major": items},
                   sys.stdout, indent=1, default=str)
         print()
         return
@@ -361,6 +415,8 @@ def main():
     if hc.get("parity_verdict"):
         print(f"# codex parity: {hc['parity_verdict']}")
     for line in retbytes_lines(raw):
+        print(line)
+    for line in cycletime_lines(raw):
         print(line)
     if not items:
         print("\nNo MAJOR findings above threshold.")
