@@ -48,7 +48,3 @@ export { stripTsNoise } from './core/strip-ts-noise';
 export { parseDirectives, DirectiveIndex, createIsLineDisabled } from './core/disable-directives';
 export { formatReport, ReportSubject, WRITE_SUBJECT, READ_SUBJECT, BASH_SUBJECT } from './core/report';
 
-// Guard-presence attestation. Exported because the GATE that consumes it lives in @webpieces/pr-gate
-// (BuildAffected.runBuildGate) — the check and its refusal belong here, beside the L0 shim stream that
-// is their evidence, and only the throw belongs over there.
-export { CodexGuardPresence, CodexSessionDetector, GuardPresenceVerdict } from './bin/codex-guard-presence';

@@ -54,10 +54,13 @@ describe('StaleBinSweeper', () => {
      * leaves the predecessor's, dangling. Measured on this repo's own 0.4.728 upgrade, in two separate
      * trees, during the session that wrote this file (PR #743 is the rename).
      *
-     * The fixture uses a MADE-UP predecessor name, not the real one. `no-old-sync-main-name` forbids the
-     * dead spelling in tracked source — correctly, and it blocked an earlier draft of this test — and the
-     * test is better for it anyway: what is being asserted is that a renamed-away link goes and its
-     * replacement stays, which must not depend on any particular retired name.
+     * The fixture uses a MADE-UP predecessor name, not the real one, and it should stay that way. A
+     * fixture must not depend on a real historical name: what is being asserted is that a renamed-away
+     * link goes and its replacement stays, and pinning that on an actual retired command makes the case
+     * start failing the day somebody revives or re-retires it, for a reason unrelated to the behaviour
+     * under test. It also keeps a dead spelling out of tracked source, which is how such a name gets
+     * copied into a cure string and handed to an agent long after the command stopped existing — see the
+     * header comment in stale-bin-sweep.ts. No automated scan enforces that any more; this note does.
      */
     it('takes the renamed-away link and keeps the one that replaced it', () => {
         const root = binDirWith({});

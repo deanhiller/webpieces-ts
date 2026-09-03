@@ -21,11 +21,15 @@ import { toError } from './to-error';
 // argument for the call site below — the sweep has to ride a path that runs ROUTINELY, because the defect
 // is created routinely.
 //
-// The predecessor's NAME is deliberately not written here. `no-old-sync-main-name` forbids the dead
-// spelling in tracked source and blocked an earlier draft of this very comment, which is the rule working:
-// a retired command named in source is exactly how a dead name outlives its tooling — the thing this
-// module exists to clean up, one level out. PR #743 and the issue this shipped under carry the literal
-// name; nothing in the code needs it, because the predicate below is structural.
+// The predecessor's NAME is deliberately not written here, and DO NOT WRITE IT BACK IN. Two reasons, and
+// the second is the one that matters. First, nothing in the code needs it: the predicate below is
+// STRUCTURAL — a `wp-*` entry whose link target does not resolve — so naming one particular retired
+// command would invite a reader to think the sweep is a list of known dead names somebody has to keep up
+// to date. Second, a retired command named in tracked source is exactly how a dead name outlives its
+// tooling: it gets copied into a cure string, and an agent reading that cure at the moment every other
+// route is closed is handed a command that does not exist. That is the very defect this module cleans up
+// one level out, and there is no longer an automated scan standing behind this paragraph — the reader is.
+// PR #743 and the issue this shipped under carry the literal name; nothing in the tree needs to.
 //
 // WHY IT MATTERS MORE THAN TIDINESS. `ls node_modules/.bin` lists them, so a dangling entry ADVERTISES a
 // capability that does not exist — a human and an AI were both misled by that listing before checking the

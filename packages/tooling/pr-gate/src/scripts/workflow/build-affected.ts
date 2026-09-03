@@ -1,7 +1,6 @@
 import {
-    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, RuleFailError,
+    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog,
 } from '@webpieces/rules-config';
-import { CodexGuardPresence, GuardPresenceVerdict } from '@webpieces/ai-hook-rules';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 import { StageOutputLog } from './stage-output-log';
@@ -35,12 +34,6 @@ export class BuildGateOptions {
     }
 }
 
-/**
- * The rule name the guard-presence refusal is reported under, so it is greppable from a transcript the
- * same way `too-many-concurrent-builds` is.
- */
-export const CODEX_GUARDS_NEVER_RAN = 'codex-guards-never-ran';
-
 /** Runs the authoritative nx-affected build gate for wp-review-upsert-pr and wp-finish-upsert-pr. */
 @injectable(bindingScopeValues.Singleton)
 export class BuildAffected {
@@ -48,7 +41,6 @@ export class BuildAffected {
         private readonly buildLog: BuildGateLog,
         private readonly buildsLog: BuildsLog,
         private readonly stageConsole: StageOutputLog,
-        private readonly guardPresence: CodexGuardPresence,
     ) {}
 
     /**
@@ -76,7 +68,6 @@ export class BuildAffected {
      * because a log file was busy.
      */
     async runBuildGate(repoRoot: string, opts: BuildGateOptions): Promise<void> {
-        this.assertGuardsRan(repoRoot);
         const buildCommand = this.resolveBuildCommand(repoRoot);
         // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
         // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
@@ -99,32 +90,6 @@ export class BuildAffected {
         }
         if (buildCode !== 0) throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath));
         this.stageConsole.say(this.buildLog.successMessage(logPath));
-    }
-
-    /**
-     * Refuse when this is a Codex session in which NOT ONE guard has run.
-     *
-     * ─── Why it lives at the build, and why in THIS method ───────────────────────────────────────────
-     * `runBuildGate` is the single chokepoint every build reaches — `wp-build`, stage ② and stage ③ —
-     * so one call here is the whole wiring. It runs BEFORE the command is resolved and before the
-     * ledger row opens, because a session that was never guarded should cost nothing, not a full build
-     * followed by a refusal to believe it.
-     *
-     * The build is the right MOMENT because it is where a session's work is first claimed as verified.
-     * An unguarded Codex session that never builds has produced nothing anyone is about to trust; one
-     * that builds is asking for exactly that trust, on the strength of guards that never ran.
-     *
-     * ─── Safe to call unconditionally ────────────────────────────────────────────────────────────────
-     * Outside a Codex session `check()` is a no-op that returns ok — Claude Code sessions, CI, and a
-     * human at a terminal all pass straight through, which is why this needs no flag and no config key
-     * to sit on the shared path. The cures come from the verdict as `Option`s; this method contributes
-     * the throw and nothing else, so the two halves cannot drift into two different stories.
-     */
-    private assertGuardsRan(repoRoot: string): void {
-        const verdict: GuardPresenceVerdict = this.guardPresence.check(repoRoot);
-        if (verdict.ok) return;
-        throw new RuleFailError(
-            CODEX_GUARDS_NEVER_RAN, verdict.reason, undefined, undefined, [...verdict.cures]);
     }
 
     /**

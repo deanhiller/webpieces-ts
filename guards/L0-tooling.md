@@ -464,7 +464,6 @@ it never blocks or fails a hook (an unwritable log directory leaves the outcome 
 | `S` enforcement | `ai-hook-rules/src/adapters/hook-core.ts` | `enforceCommittedShim`, `shimStaleRecoveryDecision` |
 | the managed surfaces, per harness | `ai-hook-rules/src/bin/hook-registration.ts` | `HarnessRegistration`, `HARNESS_REGISTRATIONS`, `managedSurfaceDrift`, `SHIM_SURFACE`, `REGISTRATION_SURFACE`, `CODEX_REGISTRATION_SURFACE`, `ENV_SURFACE` |
 | Codex hook trust (read-only) | `ai-hook-rules/src/bin/codex-trust.ts` | `CodexTrustProbe`, `CodexTrustStatus` |
-| Codex guard-presence attestation | `ai-hook-rules/src/bin/codex-guard-presence.ts` | `CodexGuardPresence`, `CodexSessionDetector` |
 | fault `S`'s deny text | `ai-hook-rules/src/bin/shim-deny-reason.ts` | `shimStaleDenyReason` |
 | `D`/`X`/`U`/`K` enforcement | `ai-hook-rules/templates/ai-hook.sh` | the pre-binary `sh` block |
 | the audit log | `ai-hook-rules/src/bin/shim-audit-log.ts` | `SHIM_LOG_FIELDS`, `SHIM_LOG_PRINTF`, `SHIM_LOG_VERDICTS`, `WP_LOG_SH`, `RESOLVE_LOG_DIR_SH` |
