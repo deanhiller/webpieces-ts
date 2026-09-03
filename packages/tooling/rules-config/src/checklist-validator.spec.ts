@@ -139,6 +139,7 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
         'backwards-compat-reviewer',
         'error-output-reviewer',
         'experiment-lifecycle-reviewer',
+        'ticket-required-reviewer',
     ])('%s is registered, REQUIRED, and names a doc and an agent file that exist', (subagent: string) => {
         const entry = live.find((c: ChecklistDefinition): boolean => c.subagent === subagent);
         expect(entry, `${subagent} is missing from commands.pr-gate.checklists`).toBeDefined();
@@ -168,5 +169,26 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
         expect(entry, 'experiment-lifecycle-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
         expect((entry as ChecklistDefinition).patterns)
             .toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md', '.claude/rules/**']);
+    });
+
+    /**
+     * `ticket-required-reviewer` is the one checklist scoped to the PR rather than to the diff: EVERY
+     * change is supposed to be traceable to an issue, including a one-line typo fix, so a narrowing of
+     * this list means the diffs least likely to be ticketed by hand are exactly the ones nobody checks.
+     *
+     * The two dot-directory entries are not redundant with `**`, which is the non-obvious part worth
+     * pinning. Checklist patterns run through `isPathExcluded`, which calls minimatch WITHOUT
+     * `{ dot: true }` — its strict sibling `matchesAnyGlob` passes the flag and documents this exact
+     * hazard — so `**` does not match `.claude/rules/tickets.md` or `.github/workflows/*.yml`. A
+     * docs/governance PR touching only dot-directories is precisely the shape least likely to carry a
+     * ticket, so dropping these two would open the hole the universal pattern exists to close. They are
+     * literal-prefixed, so they keep matching whichever way that flag ever goes.
+     */
+    it('ticket-required-reviewer matches EVERY diff, dot-directories included', () => {
+        if (configPath === null) return;
+        const entry = live.find(
+            (c: ChecklistDefinition): boolean => c.subagent === 'ticket-required-reviewer');
+        expect(entry, 'ticket-required-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
+        expect((entry as ChecklistDefinition).patterns).toEqual(['**', '.claude/**', '.github/**']);
     });
 });
