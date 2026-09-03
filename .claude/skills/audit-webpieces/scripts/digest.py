@@ -113,6 +113,54 @@ def harness_compare(raw):
     }
 
 
+RETBYTES_TOOL_ROWS = 10
+RETBYTES_EMITTER_ROWS = 10
+
+
+def retbytes_lines(raw):
+    """The return-byte cost block, as markdown lines. Empty when the run had no `retbytes`.
+
+    Kept OUT of `build()`'s MAJOR list on purpose. This is not a threshold finding — it is a
+    standing cost table that is always worth a glance, and folding it in would make it compete
+    with deadlocks and killed builds for the "three real findings" budget.
+
+    Ranked by `repeat_chars` throughout, because that is the only column that separates "this
+    message is big" from "this message is big AND was pasted into the same window 24 times".
+    Deliberately short — `digest.md` is meant to stay ~15-25 KB, and the full per-emitter list is
+    in `all.json` for anyone who wants it.
+    """
+    rb = raw.get("retbytes")
+    if not rb:
+        return []
+    md = rb.get("always_loaded_md") or {}
+    wp = rb.get("webpieces_authored") or {}
+    out = ["", "## return-byte cost (what tool output pours into context)", "",
+           f"{rb.get('sessions')} sessions · {rb.get('tool_results')} tool results · "
+           f"{rb.get('total_chars', 0):,} chars (~{rb.get('approx_tokens', 0):,} tokens) · "
+           f"{rb.get('repeat_chars', 0):,} chars ({rb.get('repeat_pct')}%) are RE-EMISSIONS of a "
+           f"payload already in that session's window",
+           "",
+           "NOTE: ~tokens is chars // 4 — an approximation, not a tokenizer.",
+           "",
+           "by tool (chars / calls / avg):"]
+    for r in (rb.get("by_tool") or [])[:RETBYTES_TOOL_ROWS]:
+        out.append(f"  {r['chars']:>10,}  {r['calls']:>5}  {r['avg']:>6}  {r['tool']}")
+    out += ["",
+            f"webpieces-authored: {wp.get('calls')} calls, {wp.get('chars', 0):,} chars "
+            f"({wp.get('pct_of_total')}% of all tool output) — ranked by repeat_chars:"]
+    for r in (wp.get("emitters") or [])[:RETBYTES_EMITTER_ROWS]:
+        out.append(f"  {r['repeat_chars']:>9,} repeat  {r['n']:>3} x {r['avg']:>5}  {r['sample'][:96]}")
+    out += ["",
+            f"always-loaded .md — a FIXED tax paid PER REPO PER SESSION, before any tool runs. "
+            f"Worst repo {md.get('worst_repo')}: {md.get('worst_repo_chars', 0):,} chars "
+            f"(~{md.get('worst_repo_approx_tokens', 0):,} tokens). "
+            f"Fleet sum {md.get('fleet_sum_chars', 0):,} chars over {md.get('file_count', 0)} files "
+            f"(nobody pays that sum; it is {len(md.get('per_repo') or {})} separate taxes)."]
+    for r in (md.get("files") or [])[:5]:
+        out.append(f"  {r['chars']:>8,}  {r['repo']}/{r['file']}")
+    return out
+
+
 def build(raw):
     out = []
     g = raw.get("guards") or {}
@@ -291,7 +339,8 @@ def main():
     hc = harness_compare(raw)
     if "--json" in sys.argv:
         json.dump({"repos": raw.get("repos"), "generated": raw.get("generated"),
-                   "versions": versions(raw), "harnesses": hc, "major": items},
+                   "versions": versions(raw), "harnesses": hc,
+                   "retbytes": raw.get("retbytes"), "major": items},
                   sys.stdout, indent=1, default=str)
         print()
         return
@@ -311,6 +360,8 @@ def main():
               f"sessions={r['sessions']} blocked-min={r['blocked_minutes']}{flag}")
     if hc.get("parity_verdict"):
         print(f"# codex parity: {hc['parity_verdict']}")
+    for line in retbytes_lines(raw):
+        print(line)
     if not items:
         print("\nNo MAJOR findings above threshold.")
         return

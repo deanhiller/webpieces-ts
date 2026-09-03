@@ -713,6 +713,221 @@ def _text_of(content):
     return ""
 
 
+# ---------------------------------------------------------------- return-byte cost
+#
+# What every tool result POURS INTO THE MODEL'S CONTEXT, per emitter, weighted by how often an
+# identical payload repeats inside ONE session.
+#
+# The source is the transcripts, deliberately, and not a `retMsg=<len>` field logged by each `wp-*`
+# command. The transcripts already contain every byte of every tool result VERBATIM, so:
+#   * it works RETROACTIVELY over all history, instead of starting to count the day it ships;
+#   * it covers Codex, hook blocks, MCP servers and raw Bash — surfaces `wp-*` can never log,
+#     because in those cases `wp-*` never runs;
+#   * it is ONE source of truth. A hand-written length counter is a second one, free to disagree;
+#   * it adds no bytes to the very output we are trying to shrink.
+#
+# THE COST MODEL IS THE POINT. A tool result is not paid for once: it stays in the window for every
+# remaining turn of the session, so an identical payload emitted N times occupies N x the context
+# while carrying 1 x the information. `repeat_chars` — the chars from emissions AFTER the first of
+# an identical payload in the SAME session — is therefore the number to rank by. Raw size is not:
+# a 4KB message emitted once is fine.
+
+# Volatile substrings, masked before a payload is turned into an emitter signature. Without this the
+# SAME guard message against two different paths reads as two emitters — measured live: one block
+# message appeared twice in the top six purely because one call site quoted the path and the other
+# did not. Order matters: the specific shapes first, bare digits last, or `<n>` eats the rest.
+RB_MASKS = (
+    (re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"),
+     "<uuid>"),
+    (re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?"), "<ts>"),
+    (re.compile(r"\b[0-9a-f]{7,40}\b"), "<sha>"),
+    (re.compile(r"(?:/|~/)[\w.@+-]+(?:/[\w.@+-]+)+"), "<path>"),
+    (re.compile(r"\d+"), "<n>"),
+)
+# Quotes are stripped too, because `cd /Users/...` and `cd '/Users/...'` are the same emitter and
+# masking alone leaves them as `<path>` vs `'<path>'`.
+RB_QUOTES = re.compile(r"[\"'`]")
+RB_SIG_CHARS = 100        # how much of a payload names the emitter
+RB_SAMPLE_CHARS = 120     # readable, UNMASKED excerpt kept so the report can quote it
+RB_REPEAT_PREFIX = 4000   # how much is compared when deciding "same payload again"
+
+# webpieces' own output. Started from the regex verified against real traffic; extend it rather than
+# replacing it, so past reports stay comparable.
+RB_WEBPIECES_RE = re.compile(
+    r"webpieces ai-hooks blocked|Fix Option \d|-guard\]|wp-ai-(?:guards|rules)-hook|Build gate:"
+    r"|FullLog :|YOU CAN USE THE READ/WRITE|InformAiError|RuleFailError|instruct-ai/")
+
+
+def rb_new():
+    """A fresh return-byte accumulator, threaded through the two transcript scanners."""
+    return {
+        "tool_chars": Counter(),
+        "tool_calls": Counter(),
+        "emitters": {},
+        "sessions": {},
+        "seen": {},
+        "chars": 0,
+        "n": 0,
+        "repeat_chars": 0,
+        "wp_chars": 0,
+        "wp_n": 0,
+    }
+
+
+def rb_signature(txt):
+    """A stable name for the EMITTER of this payload, volatile substrings masked out."""
+    flat = " ".join(txt.split())[: RB_SIG_CHARS * 4]
+    flat = RB_QUOTES.sub("", flat)
+    for pat, repl in RB_MASKS:
+        flat = pat.sub(repl, flat)
+    return flat[:RB_SIG_CHARS] or "<empty>"
+
+
+def rb_repeat_key(txt):
+    """Identity for "this exact payload again", tolerant of the volatile parts.
+
+    Masked like the signature but over a much longer prefix, and salted with a coarse length
+    bucket so two genuinely different long outputs that happen to share an opening are not
+    collapsed into one repeat.
+    """
+    head = " ".join(txt[: RB_REPEAT_PREFIX * 2].split())
+    head = RB_QUOTES.sub("", head)
+    for pat, repl in RB_MASKS:
+        head = pat.sub(repl, head)
+    return head[:RB_REPEAT_PREFIX] + "#" + str(len(txt) // 64)
+
+
+def rb_record(acc, repo, session, harness, tool, txt):
+    """Account one tool result. Called from inside the scanners' existing tool_result branch.
+
+    Deliberately NOT a second pass over the transcripts: opening every session a second time to
+    measure the cost of reading things is the failure this whole skill exists to find.
+    """
+    if acc is None or not txt:
+        return
+    n = len(txt)
+    acc["chars"] += n
+    acc["n"] += 1
+    acc["tool_chars"][tool] += n
+    acc["tool_calls"][tool] += 1
+
+    skey = harness + ":" + session
+    sess = acc["sessions"].get(skey)
+    if sess is None:
+        sess = {"repo": repo, "session": session, "harness": harness,
+                "chars": 0, "n": 0, "repeat_chars": 0}
+        acc["sessions"][skey] = sess
+        acc["seen"][skey] = set()
+    sess["chars"] += n
+    sess["n"] += 1
+
+    rkey = rb_repeat_key(txt)
+    is_repeat = rkey in acc["seen"][skey]
+    if is_repeat:
+        sess["repeat_chars"] += n
+        acc["repeat_chars"] += n
+    else:
+        acc["seen"][skey].add(rkey)
+
+    sig = rb_signature(txt)
+    row = acc["emitters"].get(sig)
+    if row is None:
+        row = {"sig": sig, "chars": 0, "n": 0, "repeat_chars": 0, "webpieces": False,
+               "sample": " ".join(txt.split())[:RB_SAMPLE_CHARS], "tools": Counter()}
+        acc["emitters"][sig] = row
+    row["chars"] += n
+    row["n"] += 1
+    row["tools"][tool] += 1
+    if is_repeat:
+        row["repeat_chars"] += n
+
+    if RB_WEBPIECES_RE.search(txt[:1200]):
+        row["webpieces"] = True
+        acc["wp_chars"] += n
+        acc["wp_n"] += 1
+
+
+def rb_always_loaded_md(repos):
+    """The FIXED per-session tax: files loaded into every session before a tool ever runs.
+
+    CLAUDE.md is read into every single session, and `.webpieces/instruct-ai/*.md` is regenerated
+    and re-read on every `wp-*` command. This weight usually dwarfs any individual message, which
+    is why it is reported separately — trimming it is a different, more delicate edit than
+    shortening a guard message, and folding the two together hides that.
+    """
+    rows = []
+    per_repo = {}
+    for repo in repos:
+        files = [repo / "CLAUDE.md"]
+        files += sorted((repo / ".webpieces" / "instruct-ai").glob("*.md"))
+        for f in files:
+            try:
+                size = f.stat().st_size
+            except OSError:
+                continue
+            per_repo.setdefault(repo.name, 0)
+            per_repo[repo.name] += size
+            rows.append({"repo": repo.name, "file": f.name, "chars": size,
+                         "approx_tokens": size // 4})
+    rows.sort(key=lambda r: -r["chars"])
+    # The tax is paid PER REPO PER SESSION — a session in monorepo1 never loads monorepo3's
+    # CLAUDE.md. Summing the fleet would state a number nobody ever pays, so the headline is the
+    # WORST repo and the fleet sum is only reported as what it is.
+    worst = max(per_repo.items(), key=lambda kv: kv[1], default=(None, 0))
+    return {
+        "note": "paid PER REPO PER SESSION, before any tool runs — rank by worst_repo, not the sum",
+        "worst_repo": worst[0],
+        "worst_repo_chars": worst[1],
+        "worst_repo_approx_tokens": worst[1] // 4,
+        "per_repo": dict(sorted(per_repo.items(), key=lambda kv: -kv[1])),
+        "fleet_sum_chars": sum(per_repo.values()),
+        "file_count": len(rows),
+        "files": rows[:25],
+    }
+
+
+def rb_report(acc, repos, hours):
+    """Turn the accumulator into the report, ranked by repeat_chars everywhere it matters."""
+    def emitter_row(r):
+        return {"sig": r["sig"], "sample": r["sample"], "chars": r["chars"], "n": r["n"],
+                "avg": r["chars"] // max(1, r["n"]), "repeat_chars": r["repeat_chars"],
+                "approx_tokens": r["chars"] // 4,
+                "top_tool": (r["tools"].most_common(1) or [("?", 0)])[0][0]}
+
+    rows = [emitter_row(r) for r in acc["emitters"].values()]
+    wp_rows = [emitter_row(r) for r in acc["emitters"].values() if r["webpieces"]]
+    by_tool = [{"tool": t, "chars": c, "calls": acc["tool_calls"][t],
+                "avg": c // max(1, acc["tool_calls"][t]), "approx_tokens": c // 4}
+               for t, c in acc["tool_chars"].most_common(20)]
+    sessions = sorted(acc["sessions"].values(), key=lambda s: -s["repeat_chars"])[:12]
+    total = acc["chars"]
+
+    return {
+        "window_hours": hours,
+        # `chars // 4` is a HEURISTIC, not a tokenizer. Reported alongside chars, never instead of
+        # them, and never as a billing figure.
+        "approx_tokens_note": "approx_tokens = chars // 4, a rough heuristic, NOT a tokenizer",
+        "sessions": len(acc["sessions"]),
+        "tool_results": acc["n"],
+        "total_chars": total,
+        "approx_tokens": total // 4,
+        "repeat_chars": acc["repeat_chars"],
+        "repeat_pct": round(100.0 * acc["repeat_chars"] / total, 1) if total else 0.0,
+        "by_tool": by_tool,
+        "by_emitter": sorted(rows, key=lambda r: -r["repeat_chars"])[:20],
+        "by_emitter_by_size": sorted(rows, key=lambda r: -r["chars"])[:10],
+        "webpieces_authored": {
+            "calls": acc["wp_n"],
+            "chars": acc["wp_chars"],
+            "approx_tokens": acc["wp_chars"] // 4,
+            "pct_of_total": round(100.0 * acc["wp_chars"] / total, 1) if total else 0.0,
+            "emitters": sorted(wp_rows, key=lambda r: -r["repeat_chars"])[:20],
+        },
+        "always_loaded_md": rb_always_loaded_md(repos),
+        "worst_sessions": sessions,
+    }
+
+
 def _codex_rollouts(since):
     """Every Codex rollout touched in the window, paired with the repo cwd it names.
 
@@ -760,7 +975,14 @@ def _codex_repo_of(cwd: Path, repos):
     return best
 
 
-def audit_transcripts(repos, hours, max_sessions=400):
+def audit_transcripts(repos, hours, max_sessions=400, ret=None):
+    """Walk the window's transcripts ONCE.
+
+    `ret` is an optional return-byte accumulator (rb_new()). It rides along on the same pass
+    because the `retbytes` numbers come from the exact tool_result blocks these scanners already
+    flatten — opening every transcript a second time to measure them would double the cost of the
+    audit for no new information.
+    """
     since = cutoff(hours)
     sessions = []
     tool_hist = Counter()
@@ -780,7 +1002,7 @@ def audit_transcripts(repos, hours, max_sessions=400):
     files = files[:max_sessions]
 
     for repo, d, f, _mt in files:
-        s = _scan_session(repo, d, f, since, tool_hist, blocked_rules)
+        s = _scan_session(repo, d, f, since, tool_hist, blocked_rules, ret)
         if s:
             sessions.append(s)
 
@@ -794,7 +1016,7 @@ def audit_transcripts(repos, hours, max_sessions=400):
         codex_seen += 1
         if codex_seen > max_sessions:
             break
-        s = _scan_codex_session(repo, f, since, tool_hist, blocked_rules)
+        s = _scan_codex_session(repo, f, since, tool_hist, blocked_rules, ret)
         if s:
             sessions.append(s)
 
@@ -861,7 +1083,7 @@ def audit_transcripts(repos, hours, max_sessions=400):
     }
 
 
-def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
+def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None):
     first = last = prev = None
     active_seconds = 0.0
     pending = {}            # tool_use_id -> (ts, tool, cmd)
@@ -944,6 +1166,7 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules):
                     dur = max(0.0, min(dur, 3600.0))
                     tool_seconds += dur
                     txt = _text_of(c.get("content"))
+                    rb_record(ret, repo.name, path.stem, AI_CLAUDE, name, txt)
                     errored = bool(c.get("is_error"))
                     # MCP payloads quote arbitrary prose; only a real error counts there.
                     guard_hit = (not name.startswith("mcp__")) and (
@@ -1025,7 +1248,7 @@ def _codex_text(output):
     return ""
 
 
-def _scan_codex_session(repo, path, since, tool_hist, blocked_rules):
+def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None):
     """The Codex twin of _scan_session, producing the identical session dict.
 
     Deliberately the same counters, so `totals_by_harness` is a like-for-like comparison rather
@@ -1118,6 +1341,7 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules):
                 dur = max(0.0, min(dur, 3600.0))
                 tool_seconds += dur
                 txt = _codex_text(payload.get("output"))
+                rb_record(ret, repo.name, session_id, AI_CODEX, name, txt)
                 # Codex has no `is_error` flag on the record, so a failed call is recognised the
                 # same way a human would: the guard markers, or a non-zero exit the exec harness
                 # prints. Anything less specific would count ordinary greps that found nothing.
@@ -1822,7 +2046,7 @@ def resolve_repos(patterns):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "parity", "skew",
-                                    "docdrift", "matrix", "merges", "all"])
+                                    "docdrift", "matrix", "merges", "retbytes", "all"])
     ap.add_argument("--repos", nargs="+", required=True)
     ap.add_argument("--since", default=None,
                     help="window START, ISO-8601 UTC. Overrides --hours. Preferred for reports.")
@@ -1857,8 +2081,15 @@ def main():
         res["guards"] = audit_guards(repos, args.hours)
     if args.cmd in ("isolation", "all"):
         res["isolation"] = audit_isolation(repos, args.hours)
-    if args.cmd in ("transcripts", "all"):
-        res["transcripts"] = audit_transcripts(repos, args.hours, args.max_sessions)
+    # ONE transcript pass serves both `transcripts` and `retbytes`: the byte accounting is fed from
+    # the same tool_result blocks the wasted-time scan already flattens.
+    if args.cmd in ("transcripts", "retbytes", "all"):
+        ret = rb_new() if args.cmd in ("retbytes", "all") else None
+        tr = audit_transcripts(repos, args.hours, args.max_sessions, ret)
+        if args.cmd in ("transcripts", "all"):
+            res["transcripts"] = tr
+        if ret is not None:
+            res["retbytes"] = rb_report(ret, repos, args.hours)
     if args.cmd in ("parity", "all"):
         res["codex_parity"] = audit_parity(repos, args.hours)
     if args.cmd in ("skew", "all"):
