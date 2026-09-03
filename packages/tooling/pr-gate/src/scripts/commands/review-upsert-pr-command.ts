@@ -248,12 +248,18 @@ export class ReviewUpsertPrCommand {
      *
      * NO archive path is passed, deliberately, and this stage moves nothing. Retiring a verdict is finish's
      * act on the refusal it is actually enforcing; doing it here would delete the live verdict of a branch
-     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — "set an override
-     * in review-<id>.json" — is only correct while that file is still there, which here it is.
+     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — "fix it, then
+     * re-run" — is only correct while that verdict file is still there, which here it is.
+     *
+     * The review path IS passed, because the ship-anyway route the refusal prints is a command that writes
+     * `override-<id>.json` beside it. That command is as correct at this stage as at finish: the override
+     * is a separate file with its own writer, so nothing about it depends on the verdict having been moved.
      */
     private refusals(scan: ChecklistScan): RefusedReviewer[] {
         const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results);
         return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(
-            req.id, this.reviewJsonService.refusalError(req, this.reviewJsonService.resolveVerdict(req, scan.results))));
+            req.id,
+            this.reviewJsonService.refusalError(
+                req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.reviewPath)));
     }
 }

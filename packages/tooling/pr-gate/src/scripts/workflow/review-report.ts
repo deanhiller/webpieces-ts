@@ -13,9 +13,10 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * agent obeys that block, the reviewer re-reads unchanged code, refuses again — the loop, one stage earlier.
  *
  * The message is rendered by the COMMAND rather than in here for one reason: stage ② must not archive
- * anything. `refusalError` called with no archive path says "fix it, then re-run; or set an override in
- * review-<id>.json", which is only true while that file is still live — and at stage ② it is. Retiring a
- * verdict is finish's act, on the refusal it is actually acting on.
+ * anything. `refusalError` called with no archive path says "fix it, then re-run", which is only true while
+ * the verdict file is still live — and at stage ② it is. Retiring a verdict is finish's act, on the refusal
+ * it is actually acting on. (The ship-anyway route it prints — the command that writes `override-<id>.json`
+ * — is correct at either stage: that is a different file, with its own writer, and no archive touches it.)
  */
 export class RefusedReviewer {
     checklistId: string;

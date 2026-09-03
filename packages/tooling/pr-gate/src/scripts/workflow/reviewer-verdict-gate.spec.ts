@@ -27,9 +27,9 @@ function reviewPathIn(dir: string): string {
     return path.join(dir, 'review.json');
 }
 
-function writeVerdict(dir: string, id: string, status: string, output: string, override = ''): void {
+function writeVerdict(dir: string, id: string, status: string, output: string): void {
     fs.writeFileSync(svc.checklistResultPath(reviewPathIn(dir), id),
-        JSON.stringify({ id, status, output, override }));
+        JSON.stringify({ id, status, output }));
 }
 
 /**
@@ -100,7 +100,13 @@ describe('a REFUSED checklist reads as a refusal, not as a reviewer that never r
         const msg = refusalOf(dir, [DB]);
         expect(msg).toContain('review again');
         expect(msg).toContain('A FRESH review-db-reviewer.json is now required');
-        expect(msg).toContain('human-authored "override"');
+        // The escape hatch is a SEPARATE file with a named writer, and the command that writes it is printed
+        // ready to run — the whole point of the split. It must survive the trip through the gate, which is
+        // the surface an agent actually reads.
+        expect(msg).toContain('override-db-reviewer.json');
+        expect(msg).toContain('COORDINATING agent');
+        expect(msg).toContain("cat > ");
+        expect(msg).not.toContain('human-authored "override"');
     });
 });
 

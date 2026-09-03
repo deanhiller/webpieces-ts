@@ -6,6 +6,7 @@ import { AtomicFile } from './atomic-file';
 import { InstructAiDocSet } from './instruct-ai-docs';
 import { INSTRUCT_AI_LEAF } from './repo-root';
 import { DotWebpieces, dotWebpieces } from './state-dir';
+import { StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 // Sentinel for "use the resolved LOCAL instruct-ai dir". Kept as the parameter default so the handful
@@ -23,6 +24,9 @@ export class TemplateWriter {
         private readonly dotDir: DotWebpieces = dotWebpieces,
         private readonly atomicFile: AtomicFile = new AtomicFile(),
         private readonly docs: InstructAiDocSet = new InstructAiDocSet(),
+        // The SHARED sweeper instance, never a fresh one: its "already swept this root" memo is per
+        // instance, and that memo is what keeps the report to once per `wp-*` command.
+        private readonly staleBins: StaleBinSweeper = staleBinSweeper,
     ) {}
 
     loadTemplate(name: string): string {
@@ -59,6 +63,10 @@ export class TemplateWriter {
      * overwhelmingly common case (same package version ⇒ identical content) does not write at all.
      */
     writeTemplate(workspaceRoot: string, name: string, instructDir: string = DEFAULT_INSTRUCT_DIR): string {
+        // THE SELF-HEAL. This is the pass every `wp-*` command takes, which makes it the only place a
+        // RELEASED sweep reaches every clone on every developer's machine — see stale-bin-sweep.ts. Silent
+        // when there is nothing to remove, and once per root per process.
+        this.sweepStaleBins(workspaceRoot);
         for (const doc of this.docs.closure(name, (docName: string): string => this.loadTemplate(docName))) {
             const target = this.destination(workspaceRoot, doc.name, instructDir);
             // A doc stamped with live run state is SEEDED, never refreshed: `wp-finish-upsert-pr` runs
@@ -68,6 +76,15 @@ export class TemplateWriter {
             this.atomicFile.writeIfChanged(target, doc.render(this.loadTemplate(doc.name), workspaceRoot));
         }
         return this.destination(workspaceRoot, name, instructDir);
+    }
+
+    /**
+     * Remove this tree's dangling `wp-*` bin symlinks and SAY what went, on stdout beside everything else
+     * a `wp-*` command prints. Nothing removed ⇒ nothing printed, which is the overwhelmingly common case.
+     */
+    private sweepStaleBins(workspaceRoot: string): void {
+        const removed = this.staleBins.sweepOnce(workspaceRoot);
+        for (const line of this.staleBins.report(removed)) process.stdout.write(line + '\n');
     }
 
     // LOCAL `.webpieces/instruct-ai/<name>` by default; an explicitly-passed relative dir is still

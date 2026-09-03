@@ -161,6 +161,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ChecklistOverrideService",
+                    "className": "ChecklistOverrideService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/checklist-override.ts",
+                    "level": 5
+                },
+                {
                     "id": "ChecklistScanner",
                     "className": "ChecklistScanner",
                     "kind": "class",
@@ -2139,6 +2147,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewJsonService",
+                    "to": "ChecklistOverrideService",
+                    "injection": "type",
+                    "token": "ChecklistOverrideService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-override.ts#ChecklistOverrideService",
+                    "paramName": "overrides",
+                    "paramType": "ChecklistOverrideService"
                 },
                 {
                     "from": "ReviewJsonService",

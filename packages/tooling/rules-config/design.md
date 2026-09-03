@@ -14,6 +14,7 @@ appears in each root's tree.
 graph TD
     AtomicFile["AtomicFile"]
     BranchMutationLog["BranchMutationLog"]
+    ChecklistOverrideService["ChecklistOverrideService"]
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
@@ -24,6 +25,7 @@ graph TD
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
+    StaleBinSweeper["StaleBinSweeper"]:::many
     StateDirMigrator["StateDirMigrator"]
     TemplateWriter["TemplateWriter"]
     WorktreeService["WorktreeService"]
@@ -37,6 +39,7 @@ graph TD
     MainSyncStatusService --> MainSyncFileStore
     MainSyncStatusService --> WorktreeService
     RepoRootFinder --> DotWebpieces
+    ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader
@@ -48,6 +51,7 @@ graph TD
     TemplateWriter --> AtomicFile
     TemplateWriter --> DotWebpieces
     TemplateWriter --> InstructAiDocSet
+    TemplateWriter --> StaleBinSweeper
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

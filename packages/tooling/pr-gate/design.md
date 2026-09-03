@@ -31,6 +31,7 @@ graph TD
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
+    ChecklistOverrideService["ChecklistOverrideService"]
     ChecklistScanner["ChecklistScanner"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
@@ -259,6 +260,7 @@ graph TD
     ReapWorktreeCommand --> WorktreeCleanupSection
     ReapWorktreeCommand --> WorktreeService
     RepoRootFinder --> DotWebpieces
+    ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewerInstructionsService

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { DotWebpieces } from './state-dir';
-import { prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
+import { prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistOverride, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
@@ -267,12 +267,6 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
         expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/NOT NULL without backfill/);
     });
 
-    it('passes status:red when a non-empty override justification is given', () => {
-        const file = tmpReviewWith({ migrations: { status: 'red', output: 'locks writes', override: 'behind a flag; ONE-2210' } });
-        const review = new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]);
-        expect(review.results[0].override).toBe('behind a flag; ONE-2210');
-    });
-
     // 'yellow' SHIPS. It exists so a reviewer can pass a change and still flag a concern, instead of failing
     // the PR and overriding its own failure — which reads as a deliberately-accepted defect, not a note.
     it('passes status:yellow — a concern is published, not a blocker', () => {
@@ -337,23 +331,30 @@ describe('loadReviewJson — the removed `success` field', () => {
 
 // The set every message lists. An already-reviewed checklist must NOT reappear: re-instructing it invites a
 // redundant second reviewer run and reads as though the earlier verdict did not count.
+// One authorization, reused: a real ChecklistOverride, never an object literal (CLAUDE.md).
+const OVERRIDE = new ChecklistOverride(
+    'a', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, tracked in JIRA-1');
+// The review.json path every refusalError assertion renders against — it is what the printed heredoc's
+// override path is derived from.
+const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
+
 describe('ReviewJsonService.pendingChecklists', () => {
     const svc2 = new ReviewJsonService();
     const req = (id: string): RequiredChecklist => new RequiredChecklist(id, id, '', ['x.sql'], ['**/*.sql']);
 
     it('drops the ones that passed and keeps the ones with no verdict', () => {
         const required = [req('a'), req('b')];
-        const results = [new ChecklistResult('a', 'green', 'ok', '')];
+        const results = [new ChecklistResult('a', 'green', 'ok', null)];
         expect(svc2.pendingChecklists(required, results).map((r): string => r.id)).toEqual(['b']);
     });
 
     it('keeps an un-overridden FAIL (it still owes a passing verdict)', () => {
-        const results = [new ChecklistResult('a', 'red', 'bad', '')];
+        const results = [new ChecklistResult('a', 'red', 'bad', null)];
         expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 
     it('drops an OVERRIDDEN fail — the ship-anyway decision was stated, so it is resolved', () => {
-        const results = [new ChecklistResult('a', 'red', 'bad', 'accepted, tracked in JIRA-1')];
+        const results = [new ChecklistResult('a', 'red', 'bad', OVERRIDE)];
         expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
     });
 
@@ -361,12 +362,12 @@ describe('ReviewJsonService.pendingChecklists', () => {
     // outstanding set would never empty and wp-finish would refuse the PR forever no matter how many times
     // the reviewer ran.
     it('drops a YELLOW verdict — it passed, with a concern published rather than a blocker raised', () => {
-        const results = [new ChecklistResult('a', 'yellow', 'no rate limit on the new route', '')];
+        const results = [new ChecklistResult('a', 'yellow', 'no rate limit on the new route', null)];
         expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
     });
 
     it('keeps a verdict whose FORMAT could not be read (it never resolved to an outcome)', () => {
-        const results = [new ChecklistResult('a', '', 'ok', '', 'uses the removed "success" field')];
+        const results = [new ChecklistResult('a', '', 'ok', null, 'uses the removed "success" field')];
         expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 });
@@ -398,7 +399,7 @@ describe('ChecklistInstructionsService', () => {
             new RequiredChecklist('b', 'b', '', ['x'], ['**']),
         ];
         const text = inst.render(two, REVIEW, CTX);
-        expect(text.split('"override": ""').length - 1).toBe(1);
+        expect(text.split('"output": "what you checked / found"').length - 1).toBe(1);
     });
 
     // The block must never get quietly SHORTER. It used to omit the diff lines entirely when no base
@@ -513,7 +514,7 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
 describe('archiveChecklistResult', () => {
     const svc = new ReviewJsonService();
     // A real ChecklistResult, not an object literal (CLAUDE.md), serialized by tmpReviewWith.
-    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('migrations', 'red', output, '');
+    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('migrations', 'red', output, null);
 
     it('moves a red verdict to review-<id>.json.old — the live file no longer exists', () => {
         const file = tmpReviewWith({ migrations: redVerdict('NOT NULL without backfill') });
@@ -587,18 +588,18 @@ describe('refusedChecklists / refusalError', () => {
     it('selects exactly the CK_FAIL ones — not MISSING, BAD_FORMAT, WARN, PASS or OVERRIDDEN', () => {
         const required = [req('failed'), req('missing'), req('bad'), req('warn'), req('pass'), req('over')];
         const results = [
-            new ChecklistResult('failed', 'red', 'refused', ''),
-            new ChecklistResult('bad', '', 'ok', '', 'uses the removed "success" field'),
-            new ChecklistResult('warn', 'yellow', 'a concern', ''),
-            new ChecklistResult('pass', 'green', 'ok', ''),
-            new ChecklistResult('over', 'red', 'refused', 'accepted, tracked in JIRA-1'),
+            new ChecklistResult('failed', 'red', 'refused', null),
+            new ChecklistResult('bad', '', 'ok', null, 'uses the removed "success" field'),
+            new ChecklistResult('warn', 'yellow', 'a concern', null),
+            new ChecklistResult('pass', 'green', 'ok', null),
+            new ChecklistResult('over', 'red', 'refused', OVERRIDE),
         ];
         expect(svc.refusedChecklists(required, results).map((r): string => r.id)).toEqual(['failed']);
     });
 
     it('quotes the reviewer\'s own output — the finding is the whole point', () => {
-        const results = [new ChecklistResult('a', 'red', 'gate 1: title names no ticket', '')];
-        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results));
+        const results = [new ChecklistResult('a', 'red', 'gate 1: title names no ticket', null)];
+        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH);
         expect(text).toContain('gate 1: title names no ticket');
         expect(text).toContain('a-reviewer');
         expect(text).toContain('FAILED review');
@@ -609,14 +610,16 @@ describe('refusedChecklists / refusalError', () => {
      * after the move — that file does not exist — so the text has to ask for a FRESH verdict file instead.
      */
     it('names the archive and asks for a FRESH verdict file when the verdict was retired', () => {
-        const results = [new ChecklistResult('a', 'red', 'refused', '')];
+        const results = [new ChecklistResult('a', 'red', 'refused', null)];
         const archived = '/repo/.webpieces/pr-review/feat/review-a.json.old';
-        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), archived);
+        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH, archived);
         expect(text).toContain(archived);
         expect(text).toContain('RETIRED');
         expect(text).toContain('FRESH review-a.json');
-        expect(text).toContain('HUMAN');
-        expect(text).not.toContain(`set a non-empty "override" in review-a.json`);
+        // The AUTHORIZATION is a different file and survives the retirement, so the retired-verdict wording
+        // must still route to override-a.json rather than back into a verdict file.
+        expect(text).toContain('override-a.json');
+        expect(text).not.toContain('human-authored "override"');
     });
 
     // No regression in the review.json validation path: it now renders through refusalError, and must still
@@ -632,7 +635,7 @@ describe('refusedChecklists / refusalError', () => {
             const error = toError(err);
             expect(error.message).toContain('FAILED review (status:"red")');
             expect(error.message).toContain('NOT NULL without backfill');
-            expect(error.message).toContain('set a non-empty "override" in review-migrations.json');
+            expect(error.message).toContain('override-migrations.json');
             expect(error.message).not.toContain('RETIRED');
         }
     });
@@ -681,7 +684,7 @@ describe('loadReviewJson — optional checklists', () => {
     it('still refuses an optional checklist that RAN and went red', () => {
         const file = tmpFile(VALID);
         fs.writeFileSync(svc.checklistResultPath(file, 'ops-reviewer'),
-            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root', override: '' }));
+            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root' }));
         const message = errorFrom(file, [optional()]);
         expect(message).toContain('runs as root');
         expect(message).toContain('FAILED review');
@@ -690,7 +693,7 @@ describe('loadReviewJson — optional checklists', () => {
     it('optionalWithoutVerdict names exactly the optional checklists with no verdict file', () => {
         expect(svc.optionalWithoutVerdict([required(), optional()], []).map((r: RequiredChecklist): string => r.id))
             .toEqual(['ops-reviewer']);
-        const ran = [new ChecklistResult('ops-reviewer', 'green', 'ok', '')];
+        const ran = [new ChecklistResult('ops-reviewer', 'green', 'ok', null)];
         expect(svc.optionalWithoutVerdict([required(), optional()], ran)).toEqual([]);
     });
 });

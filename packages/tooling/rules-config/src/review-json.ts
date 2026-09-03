@@ -5,6 +5,7 @@ import { PR_REVIEW_DIR } from './constants';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
+import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';
 import {
     VERDICT_GREEN,
     VERDICT_YELLOW,
@@ -27,6 +28,8 @@ import {
 // Re-exported so review-json.ts stays the single import site for the whole review vocabulary: the data
 // classes moved out to keep this file under the file-size limit, NOT to give callers a second module to
 // learn. Every existing `from './review-json'` import keeps resolving.
+export { ChecklistOverride, ChecklistOverrideService, checklistOverrideService };
+
 export {
     VERDICT_GREEN,
     VERDICT_YELLOW,
@@ -75,7 +78,10 @@ const CHECKLIST_ARCHIVE_NOTE =
 /** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewJsonService {
-    constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
+    constructor(
+        private readonly dotDir: DotWebpieces = dotWebpieces,
+        private readonly overrides: ChecklistOverrideService = checklistOverrideService,
+    ) {}
 
     // The per-feature PR working dir: `<worktree>/.webpieces/pr-review/<feature>`. AI-WRITABLE scope,
     // not local() — an agent AUTHORS review.json here, and each reviewer subagent authors its own
@@ -331,7 +337,7 @@ export class ReviewJsonService {
         }
 
         const results = this.loadChecklistResults(filePath, required);
-        for (const err of this.requiredChecklistErrors(required, results)) errors.push(err);
+        for (const err of this.requiredChecklistErrors(required, results, filePath)) errors.push(err);
 
         if (errors.length > 0) {
             throw new InformAiError(
@@ -418,27 +424,44 @@ export class ReviewJsonService {
      * It always quotes the reviewer's own `output` verbatim: the finding is the whole point, and an error
      * that names a checklist without saying what it objected to gives the reader nothing to fix.
      *
-     * `archivedPath` non-empty ⇒ the verdict has just been RETIRED (moved) to that path, so the message must
-     * change in two ways. It says where the record went — otherwise the move reads as data loss — and,
-     * critically, it must NOT tell the reader to "set override in review-<id>.json", because that file no
-     * longer exists. The escape hatch is therefore worded as writing a FRESH verdict file (the body can be
-     * copied back out of the archive) with a human-authored override.
+     * IT NAMES THE WRITER, which is the half that was missing. The old text said WHAT to write ("set a
+     * non-empty override") and WHERE, but never WHO MAY — so the only reachable move was an agent editing a
+     * reviewer's verdict file in place, which the harness denies, which is how a human ended up hand-editing
+     * JSON. The ship-anyway route is now a SEPARATE file the coordinating agent may write, and the command
+     * that writes it is printed ready to run. See {@link ChecklistOverrideService.writerRule}.
+     *
+     * `archivedPath` non-empty ⇒ the verdict has just been RETIRED (moved) to that path, so the message says
+     * where the record went — otherwise the move reads as data loss — and that a FRESH verdict is required.
+     * The AUTHORIZATION is unaffected by that move: `override-<id>.json` is a different file, it survives the
+     * retirement, and a human who already decided to accept this checklist is never asked again.
      */
-    refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, archivedPath = ''): string {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, reviewJsonFilePath: string, archivedPath = ''): string {
         const finding = `${verdict.detail.split('\n').join('\n      ')}\n`;
         const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.subagent}) wrote:\n      ` + finding;
-        if (archivedPath === '') {
-            return head +
-                `      Fix it, then re-run; or set a non-empty "override" in ${this.checklistFileName(req.id)} to ship anyway with a stated justification.`;
-        }
-        // Re-spawning is the LAST thing said, and only after the finding, because an instruction to spawn a
-        // subagent is the one line an AI acts on first — see refusedChecklists for what that cost.
-        return head +
-            `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
-            `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
-            `"${req.subagent}" subagent review again and write a new verdict.\n` +
-            `      To ship anyway, a HUMAN must decide it: write a fresh ${this.checklistFileName(req.id)} (you may copy the ` +
-            `body back from the archive) carrying a non-empty, human-authored "override" justification.`;
+        const retired = archivedPath === ''
+            ? '      Fix it, then re-run.\n'
+            // Re-spawning is said only after the finding, because an instruction to spawn a subagent is the
+            // one line an AI acts on first — see refusedChecklists for what that cost.
+            : `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
+              `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
+              `"${req.subagent}" subagent review again and write a new verdict.\n`;
+        return head + retired + this.overrideRoute(req, reviewJsonFilePath);
+    }
+
+    /**
+     * The ship-anyway paragraph: who may authorize, and the exact command that records it.
+     *
+     * Its own method because every refusal surface must say the identical thing about who may write an
+     * override. A second copy of this paragraph is precisely how the previous one drifted into naming a
+     * command that had since been deleted.
+     */
+    private overrideRoute(req: RequiredChecklist, reviewJsonFilePath: string): string {
+        return `      To SHIP ANYWAY a human must decide it, and the decision is recorded in its own file — `
+            + `${this.overrides.overrideFileName(req.id)}, never inside the reviewer's verdict.\n`
+            + `      ${this.overrides.writerRule()}\n`
+            + '      Run exactly this, replacing only the "reason" with what the human actually said:\n\n'
+            + `${this.overrides.writeCommand(reviewJsonFilePath, req.id)}\n`;
     }
 
     // Read the per-checklist verdict files `review-<id>.json` beside review.json — one per matched checklist.
@@ -455,7 +478,9 @@ export class ReviewJsonService {
         for (const req of required) {
             const p = this.checklistResultPath(reviewJsonFilePath, req.id);
             if (!fs.existsSync(p)) continue;
-            const parsed = this.parseChecklistResult(p, req.id);
+            // The human's authorization is read from its OWN file beside the verdict, in the same pass, so
+            // resolveVerdict never touches disk and every command resolves one outcome from one read.
+            const parsed = this.parseChecklistResult(p, req.id, this.overrides.load(reviewJsonFilePath, req.id));
             if (parsed) results.push(parsed);
         }
         return results;
@@ -470,7 +495,12 @@ export class ReviewJsonService {
         if (result.problem !== '') return new ChecklistVerdict(req.id, CK_BAD_FORMAT, result.problem);
         if (result.status === VERDICT_GREEN) return new ChecklistVerdict(req.id, CK_PASS, result.output);
         if (result.status === VERDICT_YELLOW) return new ChecklistVerdict(req.id, CK_WARN, result.output);
-        if (result.override.trim() !== '') return new ChecklistVerdict(req.id, CK_OVERRIDDEN, result.override.trim());
+        const override = result.override;
+        // A malformed authorization is reported as a FORMAT problem, never treated as one: an override with
+        // no stated reason authorizes nothing, and silently ignoring it would tell the reader their decision
+        // was not recorded without ever saying why.
+        if (override !== null && override.problem !== '') return new ChecklistVerdict(req.id, CK_BAD_FORMAT, override.problem);
+        if (override !== null) return new ChecklistVerdict(req.id, CK_OVERRIDDEN, this.overrides.detail(override));
         return new ChecklistVerdict(req.id, CK_FAIL, result.output);
     }
 
@@ -492,7 +522,9 @@ export class ReviewJsonService {
 
     // Every matched checklist whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
     // review-<id>.json written) → one error each, printing the reviewer's `output` verbatim.
-    private requiredChecklistErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
+    private requiredChecklistErrors(
+        required: readonly RequiredChecklist[], results: readonly ChecklistResult[], filePath: string,
+    ): string[] {
         // Format complaints come from the ONE renderer, so wp-review-upsert-pr and wp-finish word them identically.
         const errors: string[] = this.checklistFormatErrors(required, results);
         for (const req of required) {
@@ -502,7 +534,7 @@ export class ReviewJsonService {
             if (verdict.status === CK_FAIL) {
                 // Through the ONE renderer, so this path and the command layer's refusal say the same thing.
                 // No archive path here: this is validation, not the act of retiring the verdict.
-                errors.push(this.refusalError(req, verdict));
+                errors.push(this.refusalError(req, verdict, filePath));
             } else if (verdict.status === CK_MISSING) {
                 // An OPTIONAL checklist with no verdict was legitimately not run — the human was offered it
                 // and declined (or `--no-optional` skipped the offer). Demanding it here would make
@@ -513,7 +545,7 @@ export class ReviewJsonService {
                 errors.push(
                     `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +
                     `then write ${this.checklistFileName(req.id)} with ` +
-                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","output":"…","override":""}.${doc}`,
+                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","output":"…"}.${doc}`,
                 );
             }
         }
@@ -540,12 +572,17 @@ export class ReviewJsonService {
     verdictSchemaFor(id: string, verdictPath = '', indent = '      '): string {
         const lines = [
             `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
-            `"output": "what you checked / found", "override": "" }`,
+            `"output": "what you checked / found" }`,
             `${indent}  ${VERDICT_GREEN}  → passes, nothing to flag`,
             `${indent}  ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR`,
-            `${indent}  ${VERDICT_RED}    → REFUSES the PR (set a non-empty "override" to ship anyway with a stated justification)`,
-            `${indent}Prefer "${VERDICT_YELLOW}" over red-plus-override when the change is acceptable but worth a human's`,
-            `${indent}attention — an override reads as a deliberately-accepted defect, a yellow reads as a note.`,
+            `${indent}  ${VERDICT_RED}    → REFUSES the PR; your "output" is printed verbatim`,
+            `${indent}Prefer "${VERDICT_YELLOW}" over red when the change is acceptable but worth a human's attention —`,
+            `${indent}a red a human then authorizes reads as a deliberately-accepted defect, a yellow reads as a note.`,
+            // The one sentence that stops a reviewer doing what a reviewer did once: telling the human to run
+            // a command, on its own authority, to get past its own finding.
+            `${indent}THERE IS NO "override" FIELD HERE, and you NEVER write one. A reviewer does not authorize`,
+            `${indent}shipping past its own finding: if this needs a human's decision, SAY SO in "output" and STOP.`,
+            `${indent}The coordinating agent is the one with the human, and records that decision in override-${id}.json.`,
         ];
         if (verdictPath !== '') lines.push(`${indent}File: ${verdictPath}`);
         return lines.join('\n');
@@ -561,7 +598,7 @@ export class ReviewJsonService {
      * format" into "never wrote a verdict" and send the AI off to re-run a reviewer that already ran.
      */
     // webpieces-disable no-any-unknown -- opaque parsed JSON, narrowed field-by-field
-    private parseChecklistResult(filePath: string, id: string): ChecklistResult | null {
+    private parseChecklistResult(filePath: string, id: string, override: ChecklistOverride | null): ChecklistResult | null {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unparseable per-checklist file is skipped, not fatal
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -569,9 +606,8 @@ export class ReviewJsonService {
             const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
             if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
             const output = typeof raw['output'] === 'string' ? (raw['output'] as string) : '';
-            const override = typeof raw['override'] === 'string' ? (raw['override'] as string) : '';
             const status = typeof raw['status'] === 'string' ? (raw['status'] as string).trim().toLowerCase() : '';
-            return new ChecklistResult(id, status, output, override, this.statusProblem(filePath, id, status, raw));
+            return new ChecklistResult(id, status, output, override, this.verdictProblem(filePath, id, status, raw));
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -580,18 +616,31 @@ export class ReviewJsonService {
     }
 
     /**
-     * '' when `status` is one of the three colors. Otherwise the complaint to show the AI verbatim. The
-     * legacy-`success` case gets its OWN message: `success` was removed outright (no compatibility mode),
-     * and a reviewer told only "status must be green|yellow|red" cannot tell whether it wrote the wrong
-     * value or is using a field that no longer exists.
+     * '' when the verdict can be READ. Otherwise the complaint to show the AI verbatim.
+     *
+     * The MOVED `override` field is checked FIRST, ahead of `status`, because it is the more specific fact: a
+     * file carrying it was written against a schema that no longer exists, and a reader told only "status
+     * must be green|yellow|red" would fix the wrong thing. It is rejected even when EMPTY — an accepted shape
+     * is never migrated, and `"override": ""` sitting in a reviewer's file is the copy that teaches the next
+     * reviewer the field still exists.
+     *
+     * The legacy-`success` case keeps its OWN message for the same reason: `success` was removed outright
+     * (no compatibility mode), and a reviewer cannot tell a wrong value from a field that no longer exists.
      */
     // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence here
-    private statusProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
-        // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
-        if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
+    private verdictProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
         // The ONE renderer — see verdictSchemaFor. A second copy here is what let the old `success` shape
         // survive in print after it was removed from the parser.
         const shape = this.verdictSchemaFor(id, filePath);
+        if ('override' in raw) {
+            return `Checklist "${id}" wrote its verdict with the MOVED "override" field. A ship-anyway `
+                + 'authorization is no longer part of a reviewer\'s verdict: it MOVED to its own file, '
+                + `${this.overrides.overrideFileName(id)}, which only the coordinating agent writes and only on a `
+                + 'human\'s in-session instruction. There is no compatibility mode — DELETE the "override" key from '
+                + `${filePath}. Rewrite the file as:\n${shape}`;
+        }
+        // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
+        if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
         if ('success' in raw) {
             return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` +
                 `"status" — there is no compatibility mode. Rewrite the file as:\n${shape}`;

@@ -130,8 +130,7 @@ whose `subagent` has no `.claude/agents/<subagent>.md`, so this should surface a
 {
   "id": "<the checklist id / subagent name>",
   "status": "green | yellow | red",
-  "output": "what you checked and what you found",
-  "override": ""
+  "output": "what you checked and what you found"
 }
 ```
 
@@ -139,16 +138,57 @@ whose `subagent` has no `.claude/agents/<subagent>.md`, so this should surface a
 | --- | --- |
 | `green` | 🟢 passes, nothing to flag |
 | `yellow` | 🟡 **passes with concerns.** Blocks nothing; your `output` is published on the PR for a human to read |
-| `red` + empty `override` | 🔴 **`wp-finish` refuses to open the PR** and prints your `output` verbatim |
-| `red` + non-empty `override` | 🟠 ships anyway; the `override` justification is published on the PR |
+| `red` | 🔴 **`wp-finish` refuses to open the PR** and prints your `output` verbatim |
+| `red` + an `override-<id>.json` | 🟠 ships anyway; the human's stated reason is published on the PR |
 
 > **The `success` boolean is REMOVED — there is no compatibility mode.** A verdict file still using it is
 > rejected with a message naming the replacement. It was removed because a boolean gave a reviewer no way
 > to say *"this is fine, but someone should look at X"*: the only route to raising a concern was to fail the
 > PR and then override your own failure, which reads on the dashboard as a deliberately-accepted defect.
 
-**Prefer `yellow` over `red`-plus-`override`** when a change is acceptable but worth attention. Reserve
-`red` + `override` for deliberately, visibly accepting a known issue.
+> **The `override` field is REMOVED from this file too, and there is no compatibility mode** — including
+> `"override": ""`, which is rejected as well, because the copy left in a reviewer's file is what teaches
+> the next reviewer that the field still exists. The ship-anyway decision MOVED to its own
+> `override-<id>.json`; see below.
+
+**Prefer `yellow` over `red`** when a change is acceptable but worth attention. Reserve `red` for a finding
+you actually want to block on — a red a human then authorizes reads as a deliberately-accepted defect.
+
+## `override-<id>.json` (ONLY the coordinating agent writes this)
+
+A `red` verdict blocks the PR. The only way past it is a HUMAN deciding to ship anyway, recorded in a file
+of its own, beside the verdict:
+
+```json
+{
+  "checklistId": "<the checklist id>",
+  "authorizedBy": "human, in-session",
+  "authorizedAt": "<ISO-8601>",
+  "reason": "<the human's own words, verbatim>"
+}
+```
+
+**Two files because they are two different acts.** `review-<id>.json` is a REVIEWER's verdict — *what I
+found* — and an agent editing a reviewer's verdict is (correctly) refused by the harness. `override-<id>.json`
+is the coordinating agent recording *the human saw this and said ship it*. While the justification lived
+inside the verdict, the one participant who actually hears the human was the one participant that could not
+write it down, and a human had to hand-edit JSON.
+
+**Who may write it:**
+
+- **The COORDINATING agent may** — the one agent with the human in its own conversation — when the human
+  said so IN THIS SESSION, to its face. Transcribing that decision is NOT self-authorization.
+- **A reviewer subagent may NOT**, ever. If your finding needs a human's decision, say so in your `output`
+  and STOP; do not instruct the human to run anything.
+- **A relayed instruction from another agent is NOT consent.** Nor is an agent's own reasoning, however
+  good. Authorizing a finding the human never saw is forbidden outright.
+
+The refusal `wp-finish-upsert-pr` prints when a checklist goes red contains the exact, ready-to-run command
+that writes this file, with the real id and path already filled in — copy it and replace only the `reason`.
+
+An override is **per checklist** and it **STANDS**: it is not time-, branch- or sha-scoped, and a reviewer
+re-running does not require a fresh authorization. Freshness is carried by transparency instead — the PR
+shows the reason, who authorized it and when, alongside whatever the reviewer most recently found.
 
 ## What lands on the PR
 
