@@ -1,4 +1,6 @@
-import { minimatch } from 'minimatch';
+// Interop-resolved (issue #747) — NEVER `import { minimatch } from 'minimatch'` here; that named
+// export does not exist on minimatch v3, which is what a hoisted-linker consumer can resolve to.
+import { minimatch } from './minimatch-interop';
 
 /**
  * Holistic exclusion check shared by validate-ts-in-src (Layer 1 + Layer 2)
