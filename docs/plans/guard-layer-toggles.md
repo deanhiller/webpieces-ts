@@ -107,7 +107,7 @@ here are not an oversight. They have no key today and must not gain one.
 | layer | proposed name | verdict | reasoning |
 |---|---|---|---|
 | **L0** | `webpieces-binary` | **no key** | Settled in `GUARD_MATRIX.md`: *"If L0 is off, nothing downstream can be trusted — you would be configuring the guards with a config file the validator could not check."* |
-| **L1** | `location` | **no key** | It has **none today**, so adding one ADDS a knob in a fewer-knobs change. And top-level `excludePaths` already IS L1's per-path off switch (`filterByExcludedPaths` in `runner.ts`; `guards/L1-location.md` calls it "the filter"), so a `location` key would be a second spelling of a decision that already has one — CLAUDE.md shim shape #1. |
+| **L1** | `location` | **no key** | It has **none today**, so adding one ADDS a knob in a fewer-knobs change. And top-level `excludePaths` already IS L1's per-path off switch (`filterByExcludedPaths` in `runner.ts`; `guards/L1-location.md` calls it "the filter"), so a `location` key would be a second spelling of a decision that already has one — `.claude/rules/no-backwards-compat.md` shim shape #1. |
 
 **The rule this expresses: L0 and L1 are STRUCTURAL; L2, L3 and L4 are POLICY. Only policy gets
 a switch — and you audit what you cannot turn off.** That asymmetry is why #626 built the `L0-shim/`
@@ -236,5 +236,5 @@ Nothing outside `hookGuards` changes.
 | **Two keys — fold L3 into L4** | `branch-cleanup` carries `autoReapMergedBranches` — unattended branch deletion, which each consumer should answer once, not inherit from a PR-flow switch. |
 | **One key — `hookGuards: { mode }`** | Collapses work-here policy with PR flow; a repo with a different PR workflow would have to disable staleness protection to opt out of the gate. |
 | **Keep nine, document the combinations** | The documentation already exists and the incoherent combination shipped anyway. Representability is the fix; prose is not. |
-| **Alias table / `?? legacyKey`** | Forbidden by CLAUDE.md; `retired-config-keys.ts`'s own docblock records that the last alias table hid three renames so completely they could never be deleted. |
+| **Alias table / `?? legacyKey`** | Forbidden by `.claude/rules/no-backwards-compat.md`; `retired-config-keys.ts`'s own docblock records that the last alias table hid three renames so completely they could never be deleted. |
 | **Source + config in one PR** | Deadlocks the session — the published validator rejects `branch-state` as unknown and blocks every Bash/Edit. |

@@ -10,8 +10,8 @@ import { describe, it, expect } from 'vitest';
  * `wp-sync-main` used to carry a three-verb name that said "checkout", "clean" and "main" in one
  * breath — which reads as a destructive git operation on the trunk, something that throws away your
  * working tree. It is not one. The name overstated the blast radius and misled humans first, so it was
- * renamed HARD: no alias, no deprecation, no delegating shim (CLAUDE.md § "NO webpieces surface is
- * released backwards-compatible", shim shapes #1 and #2).
+ * renamed HARD: no alias, no deprecation, no delegating shim
+ * (`.claude/rules/no-backwards-compat.md`, shim shapes #1 and #2).
  *
  * WHY A TEST AND NOT A CODE REVIEW. The dead name lived in 146 places across 37 files, and most of them
  * were GUARD CURE STRINGS — the sentences an agent is handed at the moment every other route is closed.

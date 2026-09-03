@@ -66,7 +66,8 @@ function stripDocLinks(line: string): string {
 //
 // READ BOTH FIELDS. Every tooling package now declares its executables in `publishConfig.bin` (pnpm
 // hoists that into `bin` when it packs) so that no `bin` target exists during install and pnpm has
-// nothing to chmod — see CLAUDE.md, "No bin shims". A reader that looked only at `bin` would silently
+// nothing to chmod — see `.claude/rules/packaging-and-bins.md`. A reader that looked only at `bin`
+// would silently
 // see ZERO bins and pass every scan below while protecting nothing.
 // webpieces-disable no-any-unknown -- package.json shape is narrowed by the reads below
 type BinManifest = { bin?: Record<string, string>; publishConfig?: { bin?: Record<string, string> } };

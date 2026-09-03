@@ -154,8 +154,10 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
     /**
      * `experiment-lifecycle-reviewer`'s EXACT pattern list, which the case above can only assert is
      * non-empty. The reviewer's subject is a SETTING an AI must not end, and that decision shows up in
-     * three places: the flags and their read paths under `packages/**`, the config, and the "ships OFF
-     * and stays OFF for two years" policy prose in `CLAUDE.md`. A checklist watching only `packages/**`
+     * the flags and their read paths under `packages/**`, in the config, and in the "ships OFF and
+     * stays OFF for two years" policy prose — which now lives in `.claude/rules/**`, having moved out
+     * of `CLAUDE.md` when that file became a routing index (`CLAUDE.md` stays on the list because it
+     * still carries the rules an agent must obey unprompted). A checklist watching only `packages/**`
      * would miss a diff that ends an experiment by editing the policy sentence — so a narrowing of this
      * list is a silent hole, and this is the case that goes red for it.
      */
@@ -165,6 +167,6 @@ describe("this repo's own pr-gate checklists are wired to files that exist", () 
             (c: ChecklistDefinition): boolean => c.subagent === 'experiment-lifecycle-reviewer');
         expect(entry, 'experiment-lifecycle-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
         expect((entry as ChecklistDefinition).patterns)
-            .toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md']);
+            .toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md', '.claude/rules/**']);
     });
 });

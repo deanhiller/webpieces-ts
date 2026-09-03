@@ -35,7 +35,8 @@ import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/ai-h
  *
  * WHAT THIS DELIBERATELY DOES NOT WRITE: `.claude/webpieces/*.sh`, the copies this repo actually runs.
  * Those must match the INSTALLED PUBLISHED release, not local source (see the one-release lag in
- * CLAUDE.md) — L0 fault S compares them against the published renderShim() on every tool call, so
+ * `.claude/rules/published-vs-local-source.md`) — L0 fault S compares them against the published
+ * renderShim() on every tool call, so
  * committing a locally-rendered copy would hard-block every call in the repo until the next publish.
  * `pnpm exec wp-upgrade-shim` is what writes those, from node_modules, after a release.
  *

@@ -82,7 +82,7 @@ export const L2_FAIL_OPEN = new L2Action('1 allow (fail-open)', 'fail-open');
  * `reason` is REQUIRED, and a case that exercises something which is not an L2 row exit says so with
  * `NO_ROW_EXIT` rather than by omitting the argument. An optional field would make opting OUT of the
  * only real enforcement here the shortest thing to type and impossible to grep — the widening-by-absence
- * shape CLAUDE.md rejects. `grep NO_ROW_EXIT` now lists every unenforced case.
+ * shape `.claude/rules/no-backwards-compat.md` rejects. `grep NO_ROW_EXIT` now lists every unenforced case.
  */
 export class L2UseCase {
     // eslint-disable-next-line @typescript-eslint/max-params -- four verbatim doc cells plus the reason behind them

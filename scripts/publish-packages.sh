@@ -74,8 +74,8 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # the packages this repo GOVERNS ITSELF WITH — the eslint plugin, the nx executors, the PreToolUse
 # guards and every `wp-*` bin. Stranding them is strictly the worst outcome of a partial release: the
 # runtime packages just sit a build behind, but a half-published tooling family desynchronises the
-# umbrella from its children and can wedge an agent session (see CLAUDE.md, "Published vs local
-# source"). Nothing in the family depends on any runtime package — `rules-config` has no @webpieces
+# umbrella from its children and can wedge an agent session (see
+# .claude/rules/published-vs-local-source.md). Nothing in the family depends on any runtime package — `rules-config` has no @webpieces
 # dependency at all, the middle four depend only on `rules-config`, and `nx-webpieces-rules` bundles
 # the other five — so putting them at the front costs nothing and removes them as hostages of a
 # transient failure on an unrelated package like cloudtasks-client (entry 21 of 28, run 585).
@@ -161,7 +161,7 @@ done
 # Source manifests deliberately declare no top-level `bin`: pnpm chmods every bin target while it
 # links a workspace: sibling from its SOURCE dir, where src/**/*.js does not exist until tsc runs, so
 # a top-level bin there means 28 `WARN Failed to create bin ... ENOENT ... chmod` per install. Moving
-# them to publishConfig.bin removes that hazard (see CLAUDE.md, "No bin shims").
+# them to publishConfig.bin removes that hazard (see .claude/rules/packaging-and-bins.md).
 #
 # `pnpm pack` and `pnpm publish` hoist publishConfig.bin into bin automatically, which is what the
 # change was verified against. THIS SCRIPT PUBLISHES WITH `npm publish`, AND NPM DOES NOT — it treats

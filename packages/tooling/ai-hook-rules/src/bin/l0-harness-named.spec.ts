@@ -9,7 +9,8 @@ import { AI_TYPES, AiType } from '../core/agent-event';
  * "EVERY HARNESS" IS A TOKEN, NOT AN ABSENCE — and this file is what keeps it that way.
  *
  * `L0AllowEntry.harness` used to be `AiType | null`, where `null` meant "applies to every harness".
- * That is shim shape #5 from CLAUDE.md: a widening expressed as an ABSENCE. Two things were wrong
+ * That is shim shape #5 from `.claude/rules/no-backwards-compat.md`: a widening expressed as an ABSENCE.
+ * Two things were wrong
  * with it and only one of them was cosmetic:
  *
  *   1. UNGREPPABLE. There is no search that lists the widest entries, because they were identified

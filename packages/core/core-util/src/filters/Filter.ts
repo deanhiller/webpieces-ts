@@ -37,7 +37,7 @@ export interface Service<REQ, RESP> {
  *
  * Declaring the abstraction once, in the package both depend on, is what keeps them ONE concept.
  * A second `Filter`/`Service` pair defined beside the client chain would be two spellings of one
- * thing — the shim shape CLAUDE.md rejects — and the two would drift.
+ * thing — the shim shape `.claude/rules/no-backwards-compat.md` rejects — and the two would drift.
  *
  * core-util is browser-safe and dependency-free, and so is this file: it imports nothing.
  */

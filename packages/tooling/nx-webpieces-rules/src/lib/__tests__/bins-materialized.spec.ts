@@ -35,7 +35,8 @@ import * as path from 'path';
  *
  * WHERE IT LOOKS, and why it walks up. A linked worktree legitimately has no `node_modules` of its own:
  * `git worktree add` copies none, and until something installs there the tree resolves `@webpieces/*`
- * by walking up to the primary clone's install and running the primary's binary (CLAUDE.md, "A linked
+ * by walking up to the primary clone's install and running the primary's binary (`.claude/rules/published-vs-local-source.md`,
+ * "A linked
  * worktree does not get its own RELEASE"). Resolving the same way the RUNTIME does is therefore the
  * faithful check — it asks the question the shim asks. If no `node_modules` exists anywhere up the
  * chain then nothing has ever been installed for this tree, there is no install to judge, and the

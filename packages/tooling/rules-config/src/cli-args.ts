@@ -31,7 +31,7 @@ export class CliFlag {
  *
  * `flags` defaults to [] — the no-argument case stays a two-arg construction, which is what MOST `wp-*`
  * bins are. (Deliberately not a count: the last one written down went stale the next time a bin grew a
- * flag, which is exactly the drift the corollary in CLAUDE.md is about.)
+ * flag, which is exactly the drift the corollary in `.claude/rules/no-backwards-compat.md` is about.)
  *
  * A flag a command does not DECLARE here is still rejected with exit 2: that guard is
  * the reason this class exists (`wp-start-upsert-pr --help` once launched a squash-merge), and making it

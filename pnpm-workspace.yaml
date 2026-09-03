@@ -18,7 +18,7 @@ packages:
 #
 #   RUNNING the tooling   — this repo is validated BY the tooling, and it uses the PREVIOUS published
 #                           release for that (nx executors, the wp-* bins, the hooks, the eslint
-#                           plugin). See CLAUDE.md, "Published vs local source".
+#                           plugin). See .claude/rules/published-vs-local-source.md.
 #
 # Only the second one belongs in a catalog, and only ONE entry is needed: nx-webpieces-rules is the
 # umbrella, so installing it brings ai-hook-rules, code-rules, eslint-rules, pr-gate and rules-config

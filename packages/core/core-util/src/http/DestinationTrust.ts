@@ -21,7 +21,8 @@ import { AuthMode } from './auth-mode';
  * ## Why it is a class with a private constructor and no boolean parameter
  *
  * `buildOutboundHeaders(sendTrusted = true)` would have been three characters of work and exactly the
- * "widening that is an ABSENCE rather than a token" CLAUDE.md rejects — the permissive answer would be
+ * "widening that is an ABSENCE rather than a token" `.claude/rules/no-backwards-compat.md` rejects — the
+ * permissive answer would be
  * what you get by not typing anything. There is no way to build a DestinationTrust except from the
  * destination endpoint's own {@link AuthMode}, so the caller cannot assert a posture the route does
  * not actually have, and `grep -rn DestinationTrust.forAuthMode` lists every place the question is

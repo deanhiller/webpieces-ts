@@ -11,7 +11,7 @@ const DOC = 'webpieces.git-workflow.md';
  * two consumer repos landed every squash commit carrying the full dashboard.
  *
  * Asserted on the TEMPLATE, which is the source of truth; the copy in a consumer's `.webpieces/` is
- * rewritten from it and lags by one release (see CLAUDE.md, "Published vs local source").
+ * rewritten from it and lags by one release (see `.claude/rules/published-vs-local-source.md`).
  */
 describe('webpieces.git-workflow.md — the landing route it teaches', () => {
     it('names wp-land-pr as a first-class step, not just in passing', () => {

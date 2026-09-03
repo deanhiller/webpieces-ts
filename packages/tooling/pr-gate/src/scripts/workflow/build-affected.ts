@@ -70,7 +70,7 @@ export class BuildAffected {
      * A START row goes into `~/.webpieces/builds.log` before the spawn and a DONE row after it, in a
      * `finally` so a throw on the failure path still closes the pair. `opts.stage` — `build` | `review` |
      * `finish` — IS the caller id the row records; there is deliberately no second `caller` field, since
-     * two spellings of one fact is the shim CLAUDE.md rejects.
+     * two spellings of one fact is the shim `.claude/rules/no-backwards-compat.md` rejects.
      *
      * The ledger is best-effort by construction (see BuildsLog): it can never throw, so no build can die
      * because a log file was busy.

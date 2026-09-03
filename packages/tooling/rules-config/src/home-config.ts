@@ -181,7 +181,8 @@ const GUARD_OFF_WHEN_ABSENT = false;
  * The one NON-boolean default, and the one key whose absent value is not `GUARD_OFF_WHEN_ABSENT`.
  *
  * Three, because contention between agents running full sweeps at once was measured at ~3.2x total test
- * time (CLAUDE.md § "What actually makes builds slow"), and a fourth simultaneous build is well past the
+ * time (`.claude/rules/build-verification.md` § "What actually makes builds slow"), and a fourth simultaneous build
+ * is well past the
  * point where anybody gains anything. It is a NUMBER rather than an on/off flag because the useful
  * machine-to-machine difference here is core count, not opinion — which is also why it is the one key in
  * this file with a non-false default: "0 builds allowed" would be a machine that cannot build at all.
@@ -229,8 +230,9 @@ export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
  * the key from the CODE, which has the identical effect from the owner's seat. A rule protecting a
  * FILE does not protect the SETTING it selects.
  *
- * If you believe an experiment should end, SAY SO and leave the flag alone. CLAUDE.md §"ONLY A HUMAN
- * ENDS AN EXPERIMENT" carries the full rule and what a human-ended retirement looks like.
+ * If you believe an experiment should end, SAY SO and leave the flag alone.
+ * `.claude/rules/experiments.md` §"ONLY A HUMAN ENDS AN EXPERIMENT" carries the full rule and what a
+ * human-ended retirement looks like.
  */
 export const ALLOWED_EXPERIMENTAL_BOOLEANS: readonly string[] = [
     HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP,
@@ -315,8 +317,8 @@ export class HomeConfig {
     // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
-    // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per CLAUDE.md § "NO
-    // webpieces surface is released backwards-compatible": the compile errors ARE the migration. The
+    // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per
+    // `.claude/rules/no-backwards-compat.md`: the compile errors ARE the migration. The
     // absent-file state is constructed in exactly one place — load()'s absent-file branch.
     constructor(
         wholeRepoBuildGuard: boolean, orphanDirSweep: boolean, maxConcurrentBuilds: number,

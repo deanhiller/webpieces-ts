@@ -324,7 +324,7 @@ describe('L2 use cases', () => {
 
     // NOTE: "every row has at least one use case" is NOT asserted here. It is the TYPE — `useCases` is a
     // non-empty tuple, so an empty row does not compile. A runtime assertion standing in for a type that
-    // could express the invariant is the shape CLAUDE.md rejects.
+    // could express the invariant is the shape `.claude/rules/no-backwards-compat.md` rejects.
 
     it('renders every case into the doc, verbatim', () => {
         const doc = renderL2Doc();

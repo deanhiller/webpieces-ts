@@ -25,7 +25,8 @@ import { shouldSkipRule } from './skip-rule';
  *
  * BOTH are constructor params with NO default. A `configKey = name` default would make the common
  * case silent and the shared case a thing you have to remember — which is the same "widening that is
- * an ABSENCE rather than a token" CLAUDE.md rejects. Every rule says which key configures it, out loud,
+ * an ABSENCE rather than a token" `.claude/rules/no-backwards-compat.md` rejects. Every rule says which
+ * key configures it, out loud,
  * so `grep "'branch-state-guard'"` lists every class that key governs.
  */
 export abstract class AbstractRule<C extends BaseRuleConfig> {

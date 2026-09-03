@@ -59,7 +59,8 @@ export class ContextCaptureAuthority {
  * There is NO bare form of rows 1 and 2. `copyContext()` hands back a `CapturedContext`, and
  * `runWithContext`/`restoreContext` do not accept one — they take the {@link RestorableContext} that
  * {@link withTrusted} and {@link withoutTrusted} produce. Every call site therefore STATES whether the
- * proven identity travels, and neither intent is shorter to type than the other. That is CLAUDE.md shim
+ * proven identity travels, and neither intent is shorter to type than the other. That is
+ * `.claude/rules/no-backwards-compat.md` shim
  * shape #5 applied here: a bare snapshot silently carrying a user identity is a widening that is an
  * absence rather than a token, and it is ungreppable. Now `grep -rn withTrusted` enumerates every place
  * an identity crosses a scope boundary and `grep -rn withoutTrusted` every deliberate drop.
@@ -182,7 +183,8 @@ export class CapturedContext {
      *
      * A METHOD PAIR, never a `keepTrusted: boolean` on {@link RequestContext.runWithContext}: a
      * parameter makes the two intents equally easy to type and impossible to grep, and a defaulted one
-     * makes the permissive branch the shortest thing to write — CLAUDE.md shim shape #5, "a widening
+     * makes the permissive branch the shortest thing to write — `.claude/rules/no-backwards-compat.md` shim
+     * shape #5, "a widening
      * that is an ABSENCE rather than a token", the same reason `@AuthJwt({allRolesAllowed: true})` says
      * the wide grant out loud. As a transform on the SNAPSHOT rather than a second capture mechanism it
      * composes with BOTH consumers — `runWithContext` and `restoreContext` — for free.

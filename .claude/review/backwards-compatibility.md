@@ -83,8 +83,8 @@ the migration in the error text. `grep -n '@deprecated'` over the diff is the wh
 
 ### 3. A config fallback that accepts the old shape
 
-For `webpieces.config.json` (see the CLAUDE.md section "webpieces.config.json is NEVER released
-backwards-compatible"):
+For `webpieces.config.json` (see the `.claude/rules/no-backwards-compat.md` section
+"webpieces.config.json is NEVER released backwards-compatible"):
 
 - `config.newKey ?? config.oldKey` — 🔴
 - an alias table applied before validation — 🔴
@@ -145,7 +145,7 @@ Check the removal is COMPLETE, because a half-removal is a shim by accident:
 5. a test asserts the NEW error text and asserts the old symbol is not named
 6. the release-ordering rule is respected: for tooling, source and the `webpieces.config.json` entry
    that uses it ship in SEPARATE PRs, because the running validator is a release behind (see the
-   "Published vs local source" section of CLAUDE.md)
+   `.claude/rules/published-vs-local-source.md`)
 
 ## Writing your verdict
 

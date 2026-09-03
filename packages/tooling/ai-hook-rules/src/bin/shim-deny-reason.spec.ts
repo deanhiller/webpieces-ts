@@ -220,7 +220,8 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
  * only invariant is that its @webpieces version EQUALS the main tree's.
  *
  * This assertion exists because the repo answered it BOTH ways at once. The L0 deny and the drift note
- * said "install here, that works"; L1 row 8, the L1 doc and CLAUDE.md said "a worktree needs no install
+ * said "install here, that works"; L1 row 8, the L1 doc and `.claude/rules/published-vs-local-source.md`
+ * said "a worktree needs no install
  * of its own ... a worktree cannot". An agent that follows the first is then blocked by the second and
  * ping-pongs between two cures — the multi-cure straddle these messages exist to end. Measured
  * 2026-08-10: the drift guard told a worktree agent to install locally, it did, and the block lifted,

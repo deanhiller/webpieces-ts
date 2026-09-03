@@ -39,7 +39,7 @@ pnpm nx run <project>:test             # one project
 ```
 
 A bare `pnpm test` runs every spec in the workspace. That is a once-before-the-PR command, not an
-inner-loop one, and it is blocked for AI agents (see CLAUDE.md, "Build Verification").
+inner-loop one, and it is blocked for AI agents (see `.claude/rules/build-verification.md`).
 
 ### Build
 

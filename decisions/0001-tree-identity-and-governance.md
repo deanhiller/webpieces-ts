@@ -343,7 +343,8 @@ blocking path and must never throw.
 **D4 — Hard cut, no compatibility reads.** *(MOOT 2026-08-07 — D4, D2 and D6 exist only to serve D1's
 relocation, and D1 is reversed. Nothing relocates, so there is no destination to signpost, no key to
 flatten and no identity for the shim to derive. The general principle D4 states — one location, never
-a compatibility read — is unaffected and is CLAUDE.md's, not D1's.)* Per CLAUDE.md § "webpieces.config.json is NEVER released
+a compatibility read — is unaffected and is CLAUDE.md's, not D1's.)* Per
+`.claude/rules/no-backwards-compat.md` § "webpieces.config.json is NEVER released
 backwards-compatible", the new location is the only location. **But not silent:** if
 `<primary>/.webpieces/` still exists, fail loudly once naming the destination ("state moved to
 `~/.webpieces/<key>` — move or delete `<primary>/.webpieces/`"). Never read it, never merge it. That is
