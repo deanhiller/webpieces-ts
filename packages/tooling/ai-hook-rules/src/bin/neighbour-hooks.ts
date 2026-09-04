@@ -46,9 +46,11 @@ import type { ClaudeSettings, HookCommand, HookEntry } from './settings-shape';
  * something" rather than "a relative-looking token is present": a token this module declines to anchor
  * never becomes drift, so fault S can never name a surface its own cure cannot repair.
  *
- * This is deliberately NOT a second spelling of the managed registration. webpieces-managed commands
- * are recognised by `isManagedCommand` and skipped here — they are rewritten wholesale by
- * `repairRegistration()`, which is the ONE place their spelling is defined.
+ * This is deliberately NOT a second spelling of the managed registration. Anything under the managed
+ * directory — `MANAGED_DIR`, derived below from `SHIM_MARKER` itself rather than re-spelled — is skipped
+ * here, so every webpieces-owned command is left to `repairRegistration()`, which is the ONE place their
+ * spelling is defined. The test is the DIRECTORY and not `isManagedCommand()`: this module holds no edge
+ * back to hook-registration.ts, precisely so the file-import cycle stays broken.
  */
 
 /**
