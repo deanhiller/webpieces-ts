@@ -247,7 +247,8 @@ export const L0_FAULTS: readonly L0Fault[] = [
             // and prompts for a target twice, which hangs a non-interactive agent.
             bashCure(UPGRADE_SHIM_CMD, true,
                 'this fault fires at all — it is the only cure that repairs EVERY managed surface '
-                + '(ai-hook.sh, each harness hook registration, and the Claude settings env entry), and it also '
+                + '(ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook '
+                + 'commands registered beside ours, and the Claude settings env entry), and it also '
                 + 'deletes the retired guarantee-root.sh and any entry still naming it, and it '
                 + 'touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer'),
             // 2026-07-21: the version gap below caused a real "command not found" deadlock.
@@ -261,7 +262,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
         // is exactly the drift this generated-doc arrangement exists to make impossible.
         shimStaleDenyReason('', '', [
             SHIM_MARKER,
-            ...HARNESS_REGISTRATIONS.map((h: HarnessRegistration): string => h.registrationSurface),
+            ...HARNESS_REGISTRATIONS.flatMap((h: HarnessRegistration): readonly string[] => [h.registrationSurface, h.neighbourSurface]),
             ENV_SURFACE,
         ], false)),
     new L0Fault(L0_FAULT_CONFIG_MISSING, `${CONFIG_FILENAME} missing`,

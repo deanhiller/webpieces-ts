@@ -3,7 +3,8 @@ import * as path from 'path';
 import { homedir } from 'os';
 
 import { toError } from '../core/to-error';
-import { CODEX_REGISTRATION, HookCommand, HookEntry, isManagedCommand, readSettings } from './hook-registration';
+import { CODEX_REGISTRATION, isManagedCommand, readSettings } from './hook-registration';
+import type { HookCommand, HookEntry } from './settings-shape';
 
 /**
  * CODEX HOOK TRUST — read it, report it, NEVER write it.

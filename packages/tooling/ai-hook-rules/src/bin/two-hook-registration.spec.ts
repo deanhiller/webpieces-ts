@@ -5,10 +5,11 @@ import * as path from 'path';
 
 import { applyHook, installTargets, GUARDS_HOOK, RULES_HOOK, InstallTarget } from './setup';
 import {
-    GUARDS_BIN, RULES_BIN, REGISTRATION_SURFACE, ENV_SURFACE, ClaudeSettings, LEGACY_GUARANTEE_ROOT_MARKER,
-    HookEntry, managedSurfaceDrift, readSettings, registrationStale, expectedEntries,
+    GUARDS_BIN, RULES_BIN, REGISTRATION_SURFACE, ENV_SURFACE, LEGACY_GUARANTEE_ROOT_MARKER,
+    managedSurfaceDrift, readSettings, registrationStale, expectedEntries,
     repairRegistration, writeSettings, SHIM_SURFACE, CLAUDE_REGISTRATION,
 } from './hook-registration';
+import type { ClaudeSettings, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { SHIM_MARKER, renderShim, shimPath } from './shim';
 import { runUpgradeShim } from './upgrade-shim';
@@ -27,7 +28,8 @@ import { runUpgradeShim } from './upgrade-shim';
  * pin, in order of how badly it hurts to get wrong:
  *   1. an OLD three-hook settings file MIGRATES — the retired H1 entry is REMOVED, not left behind;
  *   2. the retired FILE is deleted;
- *   3. drift reports THREE surfaces, never the retired fourth.
+ *   3. drift never reports a `guarantee-root` surface — L-1 is retired, not renamed. (There ARE four
+ *      surfaces now; the fourth is neighbour anchoring, which is not L-1 coming back.)
  */
 
 function mktmp(): string {
@@ -152,14 +154,14 @@ describe('the retired hook is never left registered-but-missing', () => {
     });
 });
 
-describe('the managed surface is THREE things, not four', () => {
-    it('names the shim, the registration and the env entry — and never a guarantee-root surface', () => {
+describe('the managed surface names the shim, the registration, the env entry and neighbour anchoring', () => {
+    it('never names a guarantee-root surface — L-1 is retired, not renamed', () => {
         const root = mktmp();
         stageRetiredThreeHookForm(root);
         const drifted = managedSurfaceDrift(root);
         expect(drifted).toContain(REGISTRATION_SURFACE);
         expect(drifted.join()).not.toContain('guarantee-root');
-        expect([SHIM_SURFACE, REGISTRATION_SURFACE, ENV_SURFACE]).toHaveLength(3);
+        expect([SHIM_SURFACE, REGISTRATION_SURFACE, ENV_SURFACE, CLAUDE_REGISTRATION.neighbourSurface]).toHaveLength(4);
     });
 });
 
