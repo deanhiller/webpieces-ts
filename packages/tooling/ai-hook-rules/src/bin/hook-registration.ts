@@ -101,13 +101,13 @@ export class HookRegistrationEntry {
 }
 
 /**
- * THE SETTINGS-FILE SHAPE lives in `./settings-shape`, a LEAF module, and is re-exported here so every
- * existing importer keeps one name for it. It was moved there rather than left inline because
- * `neighbour-hooks.ts` needs the same shape and this module imports the repairs FROM it — even a
- * type-only edge back would close a file-import cycle, which `validate-no-file-import-cycles` fails the
- * build on and which is a real hazard in this deliberately dependency-free bin layer.
+ * THE SETTINGS-FILE SHAPE lives in `./settings-shape`, a LEAF module, and is imported from THERE by
+ * everything that needs it — this module included. It is deliberately NOT re-exported here: a second
+ * import path for one type is the "two spellings of one thing" shim the compatibility policy rejects,
+ * and it would keep advertising `hook-registration` as a source of the shape, which is precisely the
+ * edge that has to stay broken (`neighbour-hooks.ts` needs the shape, this module imports the repairs
+ * FROM it, and `validate-no-file-import-cycles` counts even a type-only edge back as a cycle).
  */
-export type { ClaudeSettings, HookCommand, HookEntry, HookEvents } from './settings-shape';
 
 export const RULES_BIN = 'wp-ai-rules-hook';
 export const GUARDS_BIN = 'wp-ai-guards-hook';

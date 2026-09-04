@@ -134,7 +134,7 @@ describe('wp-upgrade-shim, spawned as a process', () => {
     beforeAll(() => { compiled = compileBin(path.join(PKG_ROOT, 'src', 'bin', 'upgrade-shim.ts')); }, 120_000);
     afterAll(() => { fs.rmSync(OUT_DIR, { recursive: true, force: true }); });
 
-    it('repairs all three managed surfaces, says so on stdout, and exits 0', () => {
+    it('repairs every managed surface, says so on stdout, and exits 0', () => {
         const root = stageDriftedRepo();
         const run = spawnSync(process.execPath, [compiled], { cwd: root, encoding: 'utf8', env: childEnv() });
 

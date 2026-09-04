@@ -4,9 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 
 import {
-    CLAUDE_REGISTRATION, CODEX_REGISTRATION, ClaudeSettings, GUARDS_BIN, RULES_BIN,
+    CLAUDE_REGISTRATION, CODEX_REGISTRATION, GUARDS_BIN, RULES_BIN,
     managedSurfaceDrift, readSettings, repairRegistrationAt, writeSettings,
 } from './hook-registration';
+import type { ClaudeSettings } from './settings-shape';
 import { NeighbourHookAnchor, anchorNeighbourHooks, neighbourHooksStale } from './neighbour-hooks';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { renderShim, shimPath } from './shim';
