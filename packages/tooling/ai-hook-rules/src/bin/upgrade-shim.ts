@@ -21,6 +21,14 @@ import { toError } from '../core/to-error';
 //   3. the .codex/hooks.json registration — the SAME two hooks under Codex's own matchers and its own
 //      $PWD anchor. Repaired only where it already EXISTS: arming a harness is the installer's decision,
 //      this is the cure for one that has drifted
+//   3b. the NEIGHBOUR hook commands in both of those files — the entries a CONSUMER repo registers
+//      beside webpieces' own. A repo-RELATIVE entry path (`node ".claude/hooks/guard-deploy.mjs"`)
+//      resolves against the hook process's cwd, so it dies the moment that cwd is not the repo root,
+//      and per the hooks reference that non-zero exit is a NON-BLOCKING error — a SILENT UNGUARDED
+//      ALLOW. Measured in a consumer repo (issue #852) silently disarming three security guards while
+//      printing nothing but a `node:internal/modules/cjs/loader` fragment with no rule name. They are
+//      anchored to the harness's own prefix, the same reversal webpieces made for its own hook. See
+//      neighbour-hooks.ts
 //   4. the .claude/settings.json `env` entry CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, which pins the
 //      Bash cwd to the project root — and, because settings `env` is inherited, pins it identically for
 //      every subagent, so a verdict never depends on where an earlier `cd` left the shell. Claude-only:
@@ -139,6 +147,12 @@ function reportRepairs(shimFile: string, removedLegacy: boolean, repairs: readon
             console.log(`✅ @webpieces: rewrote the hook registration in ${repair.settingsPath} to the two-hook form`);
             console.log('   (both guard hooks ABSOLUTE via $CLAUDE_PROJECT_DIR, so the MAIN tree governs every tree;');
             console.log('    any retired guarantee-root.sh entry was removed).');
+        }
+        for (const command of repair.anchoredNeighbours) {
+            console.log(`✅ @webpieces: anchored a RELATIVE hook command in ${repair.settingsPath} so it resolves from any cwd`);
+            console.log(`   now: ${command}`);
+            console.log('   (a relative entry path resolves against the hook process cwd; off the repo root it fails to load, and');
+            console.log('    per the hooks reference that non-zero exit is NON-BLOCKING — the guard silently stops guarding.)');
         }
         if (repair.env) {
             console.log(`✅ @webpieces: set env.${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE} in ${repair.settingsPath}`);

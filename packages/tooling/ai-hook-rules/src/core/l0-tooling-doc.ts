@@ -201,7 +201,7 @@ export class L0ToolingDoc {
     private managedSurface(): string[] {
         const surfaces = [
             SHIM_SURFACE,
-            ...HARNESS_REGISTRATIONS.map((h: HarnessRegistration): string => h.registrationSurface),
+            ...HARNESS_REGISTRATIONS.flatMap((h: HarnessRegistration): readonly string[] => [h.registrationSurface, h.neighbourSurface]),
             ENV_SURFACE,
         ];
         const registrations: string[] = [];

@@ -4,6 +4,8 @@ import * as path from 'path';
 import { toError } from '../core/to-error';
 import { AiType } from '../core/agent-event';
 import { SHIM_MARKER, committedShimStale } from './shim';
+import { NEIGHBOUR_SURFACE_SUFFIX, anchorNeighbourHooks, neighbourHooksStale } from './neighbour-hooks';
+import type { ClaudeSettings, HookCommand, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 /**
@@ -55,9 +57,10 @@ import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
  *
  * ─── Why the registration is a DRIFT SURFACE, not just an install step ─────────────────────────────
  * Nothing used to validate `.claude/settings.json` at all, so a settings file left on a superseded form
- * silently changed who governs. The installed surface is THREE things (ai-hook.sh, the registration, and
- * the managed `env` entry — see managed-env.ts), all three are compared against this release, and
- * `wp-upgrade-shim` regenerates all three. A cure that fixes two of three is worse than no cure, because
+ * silently changed who governs. The installed surface is FOUR things (ai-hook.sh, the registration, the
+ * managed `env` entry — see managed-env.ts — and the ANCHORING of the NEIGHBOUR hook commands the
+ * consumer registers beside ours, see neighbour-hooks.ts), all four are compared against this release,
+ * and `wp-upgrade-shim` repairs all four. A cure that fixes three of four is worse than no cure, because
  * it reports success.
  */
 
@@ -97,24 +100,14 @@ export class HookRegistrationEntry {
     }
 }
 
-// webpieces-disable no-any-unknown -- settings.json is opaque consumer JSON
-export interface HookCommand { type: string; command: string; }
-export interface HookEntry { matcher: string; hooks: HookCommand[]; }
 /**
- * One settings file as webpieces reads it. MEASURED: Codex's `.codex/hooks.json` uses the IDENTICAL
- * `hooks.PreToolUse[].hooks[].command` shape, so one reader, one writer and one repair serve both files
- * — the difference between the harnesses is entirely in the VALUES (matcher, shim anchor), which is what
- * `HarnessRegistration` carries. The `env` block below is Claude Code's alone.
+ * THE SETTINGS-FILE SHAPE lives in `./settings-shape`, a LEAF module, and is re-exported here so every
+ * existing importer keeps one name for it. It was moved there rather than left inline because
+ * `neighbour-hooks.ts` needs the same shape and this module imports the repairs FROM it — even a
+ * type-only edge back would close a file-import cycle, which `validate-no-file-import-cycles` fails the
+ * build on and which is a real hazard in this deliberately dependency-free bin layer.
  */
-export interface ClaudeSettings {
-    hooks?: { PreToolUse?: HookEntry[] };
-    // Claude Code's settings `env` block: every key is exported into the environment of the session AND
-    // of every subagent it spawns. That inheritance is precisely why webpieces pins its managed entry
-    // here rather than in a shell profile — see managed-env.ts.
-    env?: Record<string, string>;
-    // webpieces-disable no-any-unknown -- opaque settings bag; arbitrary keys allowed
-    [key: string]: unknown;
-}
+export type { ClaudeSettings, HookCommand, HookEntry, HookEvents } from './settings-shape';
 
 export const RULES_BIN = 'wp-ai-rules-hook';
 export const GUARDS_BIN = 'wp-ai-guards-hook';
@@ -216,6 +209,18 @@ export class HarnessRegistration {
     /** This harness's settings files under one repo root, absolute. */
     settingsPaths(projectRoot: string): readonly string[] {
         return this.settingsFiles.map((file: string): string => path.join(projectRoot, ...file.split('/')));
+    }
+
+    /**
+     * What `managedSurfaceDrift()` calls this harness's NEIGHBOUR hook commands — the entries a CONSUMER
+     * repo registers in the same file — when one of them still carries a repo-RELATIVE entry path.
+     *
+     * DERIVED rather than a constructor field, unlike `registrationSurface` beside it, because there is
+     * nothing here a harness could sensibly disagree about: it is the same file, said a second way. A
+     * constructor param would be a second place to keep in step for no decision.
+     */
+    get neighbourSurface(): string {
+        return `${this.settingsFiles[0]} ${NEIGHBOUR_SURFACE_SUFFIX}`;
     }
 }
 
@@ -458,6 +463,31 @@ export function writeSettings(settingsPath: string, settings: ClaudeSettings): v
 }
 
 /**
+ * True when any settings file ONE HARNESS owns under `root` carries a NEIGHBOUR hook — one the consumer
+ * repo wrote — whose entry path is repo-RELATIVE and would therefore fail to resolve from any cwd but
+ * the root. See neighbour-hooks.ts for the measured failure and why webpieces owns the repair.
+ *
+ * Judged ONLY where the file registers webpieces hooks, exactly like `registrationStaleAt` below: a
+ * settings file with no webpieces hooks in it is not a webpieces install, and webpieces rewriting
+ * somebody's unrelated hook lines there would be editing a file it was never given.
+ */
+// webpieces-disable no-function-outside-class -- module-scope for the same dependency-free reason as HarnessRegistration's siblings
+export function neighbourHooksStaleAt(harness: HarnessRegistration, root: string | null): boolean {
+    if (root === null) return false;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return harness.settingsPaths(root).some((p: string): boolean => {
+            const settings = readSettings(p);
+            return registeredBins(settings).length > 0 && neighbourHooksStale(harness.shimAnchor, settings, root);
+        });
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error; // best-effort: unreadable/invalid settings counts as "not stale" so it never wedges a call
+        return false;
+    }
+}
+
+/**
  * True when any settings file ONE HARNESS owns under `root` carries a stale registration.
  *
  * Per harness, not per repo, so the drift report can NAME which one moved — `.claude/settings.json` and
@@ -513,6 +543,15 @@ export class SettingsRepair {
         readonly settingsPath: string,
         readonly registration: boolean,
         readonly env: boolean,
+        /**
+         * The NEW spelling of every NEIGHBOUR hook command this repair anchored — the consumer's own
+         * entries, which webpieces rewrites but does not author.
+         *
+         * The commands themselves rather than a count or a flag, because this is the one repair that
+         * edits lines webpieces did not write: the cure has to be able to show the consumer exactly what
+         * it changed in their file, or it is a silent edit to somebody else's hooks.
+         */
+        readonly anchoredNeighbours: readonly string[],
     ) {}
 }
 
@@ -532,9 +571,17 @@ export function repairRegistrationAt(root: string): readonly SettingsRepair[] {
             const settings = readSettings(settingsPath);
             const neededRegistration = registrationStale(harness, settings);
             const neededEnv = harness.managesEnv && envStale(settings);
-            if (!repairRegistration(harness, settings)) continue;
+            const changedManaged = repairRegistration(harness, settings);
+            // AFTER the managed repair, never before: repairRegistration() removes the retired
+            // guarantee-root entry and rewrites the two managed commands, so by the time the neighbour
+            // pass runs there is nothing webpieces-owned left for it to look at. Gated on
+            // registeredBins() for the same reason every other judgement here is — a settings file that
+            // registers no webpieces hooks is not a webpieces install, and rewriting somebody's
+            // unrelated hook lines in it would be webpieces editing a file it was never given.
+            const anchored = registeredBins(settings).length === 0 ? [] : anchorNeighbourHooks(harness.shimAnchor, settings, root);
+            if (!changedManaged && anchored.length === 0) continue;
             writeSettings(settingsPath, settings);
-            repairs.push(new SettingsRepair(settingsPath, neededRegistration, neededEnv));
+            repairs.push(new SettingsRepair(settingsPath, neededRegistration, neededEnv, anchored));
         }
     }
     return repairs;
@@ -575,6 +622,12 @@ export function managedSurfaceDrift(root: string | null): readonly string[] {
     if (committedShimStale(root)) drifted.push(SHIM_SURFACE);
     for (const harness of HARNESS_REGISTRATIONS) {
         if (registrationStaleAt(harness, root)) drifted.push(harness.registrationSurface);
+        // A neighbour hook registered with a RELATIVE entry path dies from any cwd but the root, and per
+        // the hooks reference that non-zero exit is a NON-BLOCKING error — a SILENT UNGUARDED ALLOW. It
+        // is a drift surface for exactly the reason the managed registration is one: nothing else in
+        // this repo can see it, and the way it fails looks like a guard that PASSED. See
+        // neighbour-hooks.ts, and issue #852 where it silently disarmed three security guards.
+        if (neighbourHooksStaleAt(harness, root)) drifted.push(harness.neighbourSurface);
     }
     if (envStaleAt(root)) drifted.push(ENV_SURFACE);
     return drifted;

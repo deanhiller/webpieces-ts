@@ -152,14 +152,14 @@ describe('the retired hook is never left registered-but-missing', () => {
     });
 });
 
-describe('the managed surface is THREE things, not four', () => {
-    it('names the shim, the registration and the env entry — and never a guarantee-root surface', () => {
+describe('the managed surface names the shim, the registration, the env entry and neighbour anchoring', () => {
+    it('never names a guarantee-root surface — L-1 is retired, not renamed', () => {
         const root = mktmp();
         stageRetiredThreeHookForm(root);
         const drifted = managedSurfaceDrift(root);
         expect(drifted).toContain(REGISTRATION_SURFACE);
         expect(drifted.join()).not.toContain('guarantee-root');
-        expect([SHIM_SURFACE, REGISTRATION_SURFACE, ENV_SURFACE]).toHaveLength(3);
+        expect([SHIM_SURFACE, REGISTRATION_SURFACE, ENV_SURFACE, CLAUDE_REGISTRATION.neighbourSurface]).toHaveLength(4);
     });
 });
 
