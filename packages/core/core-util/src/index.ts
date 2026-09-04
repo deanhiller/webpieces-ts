@@ -149,10 +149,12 @@ export { ServiceInfo } from './http/ServiceInfo';
 // The ONE input to @AuthLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
 export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
-// Pluggable, bidirectional error translation (app exception <-> wire form). Registered on
+// The ENTIRE HTTP response as pure data — the ONE form both transports (express, fetch) are
+// normalised into, so an ErrorTranslators implementation is written once and serves both.
+export { HttpHeader, HttpResponseStatus, HttpResponseDto } from './http/HttpResponseDto';
+// Pluggable, bidirectional error translation (app exception <-> the WHOLE response). Set on
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
-export { ErrorWireForm } from './http/ErrorTranslation';
-export type { ErrorTranslation } from './http/ErrorTranslation';
+export type { ErrorTranslators } from './http/ErrorTranslators';
 // Pluggable per-client failure classification (is a thrown API-call error a real failure or an
 // expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
 export type { FailureClassifier } from './http/FailureClassifier';
