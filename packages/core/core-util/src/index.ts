@@ -9,7 +9,12 @@
 
 export { toError } from './lib/errorUtils';
 export { ContextKey } from './ContextKey';
-export type { AnyContextKey, AnyTrustedContextKey, AnyUntrustedContextKey, Trust } from './ContextKey';
+export type {
+    AnyContextKey,
+    AnyTrustedContextKey,
+    AnyUntrustedContextKey,
+    Trust,
+} from './ContextKey';
 export { ContextTuple } from './ContextTuple';
 
 // @DocumentDesign — DI-design-root marker. Applies to ANY project kind (server
@@ -25,7 +30,13 @@ export type { LoggerFactory } from './logging/LoggerFactory';
 export { ConsoleLogger } from './logging/ConsoleLogger';
 export { ConsoleLoggerFactory } from './logging/ConsoleLoggerFactory';
 export { LogManager } from './logging/LogManager';
-export { LogChunker, LogChunkerImpl, LogChunkInfo, MAX_GCP_LOG_BYTES, GCP_LOG_BUDGET_BYTES } from './logging/LogChunker';
+export {
+    LogChunker,
+    LogChunkerImpl,
+    LogChunkInfo,
+    MAX_GCP_LOG_BYTES,
+    GCP_LOG_BUDGET_BYTES,
+} from './logging/LogChunker';
 
 // HTTP API contract (merged from former @webpieces/http-api).
 // Shared HTTP API definition consumed by both client and server: REST
@@ -70,7 +81,13 @@ export { RouteMetadata } from './http/RouteMetadata';
 export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
-export type { AuthMode, ApiKeyCredential, ApiKeyCredentials, JwtRoles, JwtRequirement } from './http/auth-mode';
+export type {
+    AuthMode,
+    ApiKeyCredential,
+    ApiKeyCredentials,
+    JwtRoles,
+    JwtRequirement,
+} from './http/auth-mode';
 // API kind (RPC vs PubSub/Cloud Tasks) + queue naming. Split out of decorators.ts for file size only;
 // one-way dependency api-kind -> decorators, and the barrel keeps the surface identical.
 export {
@@ -86,7 +103,13 @@ export {
 export type { ApiKind } from './http/api-kind';
 // WHO calls an `external` endpoint — the caller declaration @Endpoint(..., 'external', {calledBy})
 // requires, and the reader for it.
-export { EXTERNAL_SYSTEM_KINDS, DEFAULT_CALLER_KIND, ExternalCaller, isExternalSystemKind, getEndpointCaller } from './http/external-caller';
+export {
+    EXTERNAL_SYSTEM_KINDS,
+    DEFAULT_CALLER_KIND,
+    ExternalCaller,
+    isExternalSystemKind,
+    getEndpointCaller,
+} from './http/external-caller';
 export type { ExternalSystemKind } from './http/external-caller';
 // Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
 export { Secrets, SECRETS } from './http/Secrets';
@@ -151,8 +174,12 @@ export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
 // Pluggable, bidirectional error translation (app exception <-> wire form). Registered on
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
-export { ErrorWireForm } from './http/ErrorTranslation';
-export type { ErrorTranslation } from './http/ErrorTranslation';
+export { HttpHeader, HttpResponseDto, HttpResponseStatus } from './http/HttpResponseDto';
+export type { ErrorTranslators } from './http/ErrorTranslators';
+export {
+    WebpiecesDefaultErrorTranslators,
+    WEBPIECES_DEFAULT_ERROR_TRANSLATORS,
+} from './http/WebpiecesDefaultErrorTranslators';
 // Pluggable per-client failure classification (is a thrown API-call error a real failure or an
 // expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
 export type { FailureClassifier } from './http/FailureClassifier';
@@ -190,14 +217,22 @@ export type { MaskMode } from './http/LogFieldMask';
 export { ApiCallInfo } from './http/ApiCallInfo';
 export type { ApiType, ApiResult } from './http/ApiCallInfo';
 // Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
-export { ApiCallLogName, ApiCallLogNameImpl, LOG_API_CALL_LOGGER_NAME } from './http/ApiCallLogName';
+export {
+    ApiCallLogName,
+    ApiCallLogNameImpl,
+    LOG_API_CALL_LOGGER_NAME,
+} from './http/ApiCallLogName';
 export { ApiMethodInfo } from './http/ApiMethodInfo';
 export type { ApiSide } from './http/ApiMethodInfo';
 export type { ApiCallContext } from './http/ApiCallContext';
 
 // Test-case recording contract (impl lives in http-server; hooks in http-client)
 export { TestCaseRecorder, RecorderKeys } from './http/recorder/TestCaseRecorder';
-export { RecordedEndpoint, RecordedError, RecordedTestCase } from './http/recorder/RecordedEndpoint';
+export {
+    RecordedEndpoint,
+    RecordedError,
+    RecordedTestCase,
+} from './http/recorder/RecordedEndpoint';
 export { DoNotRecord, getDoNotRecordFields } from './http/recorder/DoNotRecord';
 export { RecordSerializer, SerializedMap, SerializedError } from './http/recorder/RecordSerializer';
 

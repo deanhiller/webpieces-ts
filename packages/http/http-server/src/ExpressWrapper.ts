@@ -6,8 +6,18 @@ import {
     HttpBadRequestError,
     toError,
     LogManager,
+    HttpHeader,
+    HttpResponseDto,
+    HttpResponseStatus,
+    WebpiecesCoreHeaders,
+    WEBPIECES_DEFAULT_ERROR_TRANSLATORS,
 } from '@webpieces/core-util';
-import { RequestContext, HttpRequest, RawRequest, RequestContextHeaders } from '@webpieces/core-context';
+import {
+    RequestContext,
+    HttpRequest,
+    RawRequest,
+    RequestContextHeaders,
+} from '@webpieces/core-context';
 import { HttpErrorWireMapper } from './HttpErrorWireMapper';
 
 // The logging backend prepends this logger name to every line, so messages below carry NO
@@ -72,8 +82,7 @@ export class ExpressWrapper {
          * `createExpressWrapper` rather than reaching around the middleware to construct a wrapper.
          */
         private maxBodyBytes: number = MAX_BODY_BYTES,
-    ) {
-    }
+    ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
         // MOVED: Wrap entire request in RequestContext.run()
@@ -123,13 +132,23 @@ export class ExpressWrapper {
                     // answer 401 to an unauthenticated caller rather than 400, because "your JSON was
                     // bad" tells that caller it got past auth. Everywhere else, fail now as before.
                     if (!this.rawBody) {
-                        throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, error);
+                        throw new HttpBadRequestError(
+                            'Request body is not valid JSON',
+                            undefined,
+                            undefined,
+                            error,
+                        );
                     }
                     parseError = error;
                 }
             }
             if (this.rawBody) {
-                raw = new RawRequest(this.absoluteUrl(req), bodyBytes, req.socket?.remoteAddress, parseError);
+                raw = new RawRequest(
+                    this.absoluteUrl(req),
+                    bodyBytes,
+                    req.socket?.remoteAddress,
+                    parseError,
+                );
             }
         }
 
@@ -148,7 +167,11 @@ export class ExpressWrapper {
 
         // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())
         const responseJson = JSON.stringify(result);
-        res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+        this.sendResponse(
+            res,
+            new HttpResponseDto(new HttpResponseStatus(200, 'OK'), [], result),
+            responseJson,
+        );
     }
 
     /**
@@ -237,9 +260,11 @@ export class ExpressWrapper {
                 if (size > this.maxBodyBytes) {
                     chunks = [];
                     req.destroy();
-                    reject(new HttpBadRequestError(
-                        `Request body exceeds the ${this.maxBodyBytes} byte limit`,
-                    ));
+                    reject(
+                        new HttpBadRequestError(
+                            `Request body exceeds the ${this.maxBodyBytes} byte limit`,
+                        ),
+                    );
                     return;
                 }
                 chunks.push(chunk);
@@ -290,9 +315,7 @@ export class ExpressWrapper {
         if (error instanceof Error) {
             const wire = ClientRegistry.tryTranslateToWire(error);
             if (wire !== undefined) {
-                res.status(wire.statusCode)
-                    .setHeader('Content-Type', 'application/json')
-                    .send(JSON.stringify(wire.protocolError));
+                this.sendResponse(res, wire);
                 return;
             }
         }
@@ -301,10 +324,11 @@ export class ExpressWrapper {
             // The mapper decides what the caller may see AND logs everything it withholds — see
             // HttpErrorWireMapper. Nothing type-specific is decided here any more.
             const protocolError = this.errorWireMapper.toWire(error);
-
-            // Serialize ProtocolError to JSON (SYMMETRIC with client)
-            const responseJson = JSON.stringify(protocolError);
-            res.status(error.code).setHeader('Content-Type', 'application/json').send(responseJson);
+            const defaultResponse = WEBPIECES_DEFAULT_ERROR_TRANSLATORS.toWire(error);
+            this.sendResponse(
+                res,
+                new HttpResponseDto(defaultResponse.status, defaultResponse.headers, protocolError),
+            );
         } else {
             // Unknown error - 500. This branch was ALREADY generic, which is what made the old
             // HttpError branch's verbatim `error.message` so obviously backwards: an unexpected crash
@@ -313,8 +337,42 @@ export class ExpressWrapper {
             const protocolError = new ProtocolError();
             protocolError.message = 'Internal Server Error';
             log.error('Unexpected error:', err);
-            const responseJson = JSON.stringify(protocolError);
-            res.status(500).setHeader('Content-Type', 'application/json').send(responseJson);
+            const defaultResponse = WEBPIECES_DEFAULT_ERROR_TRANSLATORS.toWire(err);
+            this.sendResponse(res, new HttpResponseDto(defaultResponse.status, [], protocolError));
         }
+    }
+
+    private sendResponse(res: Response, response: HttpResponseDto, serializedBody?: string): void {
+        res.statusMessage = response.status.reason;
+        const headers = [...response.headers];
+        const requestId = RequestContext.isActive()
+            ? RequestContext.getUntrusted<string>(WebpiecesCoreHeaders.REQUEST_ID)
+            : undefined;
+        if (requestId !== undefined) {
+            headers.push(new HttpHeader(WebpiecesCoreHeaders.REQUEST_ID.httpHeader!, requestId));
+        }
+
+        const names = new Map<string, string>();
+        const grouped = new Map<string, string[]>();
+        for (const header of headers) {
+            const key = header.name.toLowerCase();
+            const existing = grouped.get(key);
+            if (existing === undefined) {
+                names.set(key, header.name);
+                grouped.set(key, [header.value]);
+            } else {
+                existing.push(header.value);
+            }
+        }
+        if (!grouped.has('content-type')) {
+            names.set('content-type', 'Content-Type');
+            grouped.set('content-type', ['application/json']);
+        }
+        for (const entry of grouped) {
+            const key = entry[0];
+            const values = entry[1];
+            res.setHeader(names.get(key)!, values.length === 1 ? values[0] : values);
+        }
+        res.status(response.status.code).send(serializedBody ?? JSON.stringify(response.body));
     }
 }

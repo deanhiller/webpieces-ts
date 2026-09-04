@@ -1,5 +1,5 @@
-import { ErrorTranslation, ErrorWireForm } from './ErrorTranslation';
-import { ProtocolError } from './errors';
+import { ErrorTranslators } from './ErrorTranslators';
+import { HttpResponseDto } from './HttpResponseDto';
 import { FailureClassifier } from './FailureClassifier';
 import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -62,11 +62,10 @@ export class ClientRegistry {
     /**
      * App-supplied error translations, consulted BEFORE webpieces' built-in error mapping (both
      * directions). Process-global, populated once at startup on the SERVER and in the BROWSER — the
-     * same no-DI pattern as {@link ClientRegistry.mappings} above. Consulted in registration order,
-     * first match wins, so a later-registered app type AND an override of a built-in status both
-     * work. See {@link ErrorTranslation}.
+     * same no-DI pattern as {@link ClientRegistry.mappings} above. The app owns composition and
+     * precedence inside this one object. See {@link ErrorTranslators}.
      */
-    private static readonly errorTranslations: ErrorTranslation[] = [];
+    private static errorTranslators: ErrorTranslators | undefined;
 
     /**
      * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
@@ -126,8 +125,8 @@ export class ClientRegistry {
         if (url === undefined) {
             throw new Error(
                 `No URL registered for service "${svcName}". Register it at startup: ` +
-                `ClientRegistry.addMapping(svcName, port) for a localhost port, or ` +
-                `ClientRegistry.addUrlMapping(svcName, url) for an explicit URL.`,
+                    `ClientRegistry.addMapping(svcName, port) for a localhost port, or ` +
+                    `ClientRegistry.addUrlMapping(svcName, url) for an explicit URL.`,
             );
         }
         return url;
@@ -164,57 +163,44 @@ export class ClientRegistry {
         if (url === undefined) {
             throw new Error(
                 `No URL for service "${svcName}".\n` +
-                `  - localhost/AWS: ClientRegistry.addMapping('${svcName}', 8401)\n` +
-                `                or ClientRegistry.addUrlMapping('${svcName}', 'https://...')\n` +
-                `  - GCP: install a deriver — ClientRegistry.setDeriver(gcpCloudRunDeriver())\n` +
-                `  - deployed name differs from the module name (e.g. a 'tf-' prefix)? Translate it ONCE\n` +
-                `    in the deriver — setDeriver(s => gcpCloudRunDeriver()('tf-' + s)) — so every call\n` +
-                `    site keeps naming the MODULE, which architecture:validate-runtime-architecture checks`,
+                    `  - localhost/AWS: ClientRegistry.addMapping('${svcName}', 8401)\n` +
+                    `                or ClientRegistry.addUrlMapping('${svcName}', 'https://...')\n` +
+                    `  - GCP: install a deriver — ClientRegistry.setDeriver(gcpCloudRunDeriver())\n` +
+                    `  - deployed name differs from the module name (e.g. a 'tf-' prefix)? Translate it ONCE\n` +
+                    `    in the deriver — setDeriver(s => gcpCloudRunDeriver()('tf-' + s)) — so every call\n` +
+                    `    site keeps naming the MODULE, which architecture:validate-runtime-architecture checks`,
             );
         }
         return url;
     }
 
     /**
-     * Register an app error translation. Consulted BEFORE webpieces' built-in mapping, in
-     * registration order (first match wins), so later app types AND overrides of built-ins both
-     * work. Call ONCE at startup — on the server AND in the browser — mirroring
-     * {@link ClientRegistry.addMapping}. See {@link ErrorTranslation}.
+     * Set the app's one error translator object. Consulted BEFORE webpieces' built-in mapping, so it
+     * can add app types and override built-ins. Call ONCE at startup — on the server AND in the browser — mirroring
+     * {@link ClientRegistry.addMapping}. See {@link ErrorTranslators}.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static addErrorTranslation(translation: ErrorTranslation): void {
-        ClientRegistry.errorTranslations.push(translation);
+    static setErrorTranslators(translators: ErrorTranslators): void {
+        ClientRegistry.errorTranslators = translators;
     }
 
     /**
-     * exception → wire (SERVER side). The first registered translation that claims `error` wins;
+     * exception → wire (SERVER side). The app translator gets the first chance to claim `error`;
      * `undefined` if none does — the caller then falls through to the generic webpieces mapping.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateToWire(error: Error): ErrorWireForm | undefined {
-        for (const translation of ClientRegistry.errorTranslations) {
-            const wire = translation.toWire(error);
-            if (wire !== undefined) {
-                return wire;
-            }
-        }
-        return undefined;
+    static tryTranslateToWire(error: Error): HttpResponseDto | undefined {
+        return ClientRegistry.errorTranslators?.toWire(error);
     }
 
     /**
-     * wire → exception (CLIENT side). The first registered translation that claims
-     * `(statusCode, protocolError)` wins; `undefined` if none does — the caller then falls through
+     * wire → exception (CLIENT side). The app translator receives the entire response;
+     * `undefined` if it does not claim it — the caller then falls through
      * to the generic webpieces switch.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateFromWire(statusCode: number, protocolError: ProtocolError): Error | undefined {
-        for (const translation of ClientRegistry.errorTranslations) {
-            const err = translation.fromWire(statusCode, protocolError);
-            if (err !== undefined) {
-                return err;
-            }
-        }
-        return undefined;
+    static tryTranslateFromWire(response: HttpResponseDto): Error | undefined {
+        return ClientRegistry.errorTranslators?.fromWire(response);
     }
 
     /**
@@ -272,7 +258,7 @@ export class ClientRegistry {
     static clear(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.errorTranslations.length = 0;
+        ClientRegistry.errorTranslators = undefined;
         ClientRegistry.appDefaultFailureClassifier = undefined;
         ClientRegistry.failureClassifiersByApiClass.clear();
     }

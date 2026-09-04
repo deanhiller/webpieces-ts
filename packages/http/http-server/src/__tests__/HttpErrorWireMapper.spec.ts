@@ -16,8 +16,9 @@ import {
     HttpGatewayTimeoutError,
     HttpTooManyRequestsError,
     EndpointNotFoundError,
-    ErrorTranslation,
-    ErrorWireForm,
+    ErrorTranslators,
+    HttpResponseDto,
+    HttpResponseStatus,
     HeaderRegistry,
     LogManager,
     LoggerFactory,
@@ -74,18 +75,21 @@ class VendorPortalError extends HttpError {
     }
 }
 
-class VendorPortalTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class VendorPortalTranslators implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof VendorPortalError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(461, pe);
+        return new HttpResponseDto(new HttpResponseStatus(461, 'Vendor Portal Error'), [], pe);
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
-        return statusCode === 461 ? new VendorPortalError(pe.message ?? 'portal') : undefined;
+    fromWire(response: HttpResponseDto): Error | undefined {
+        const pe = response.body as ProtocolError;
+        return response.status.code === 461
+            ? new VendorPortalError(pe.message ?? 'portal')
+            : undefined;
     }
 }
 
@@ -118,7 +122,6 @@ class WireHarness {
     public bodyOf(res: FakeResponse): ProtocolError {
         return JSON.parse(res.body ?? '{}') as ProtocolError;
     }
-
 }
 
 const harness = new WireHarness();
@@ -142,17 +145,72 @@ describe('handleError — only HttpUserError message reaches the wire', () => {
      * the caller must see instead. `secret` is deliberately distinctive so `toContain` is decisive.
      */
     const cases: ReadonlyArray<readonly [string, HttpError, number, string]> = [
-        ['HttpBadRequestError', new HttpBadRequestError('column users.ssn failed CHECK'), 400, 'Bad Request'],
-        ['HttpUnauthorizedError', new HttpUnauthorizedError('jwt kid=internal-signer-7 expired'), 401, 'Unauthorized'],
-        ['HttpForbiddenError', new HttpForbiddenError('role admin-internal required on tenant 4471'), 403, 'Forbidden'],
-        ['HttpNotFoundError', new HttpNotFoundError('no row in pg.stores where id=88213'), 404, 'Not Found'],
-        ['HttpTimeoutError', new HttpTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'), 408, 'Request Timeout'],
-        ['HttpTooManyRequestsError', new HttpTooManyRequestsError('bucket tenant-4471 drained'), 429, 'Too Many Requests'],
-        ['HttpInternalServerError', new HttpInternalServerError('ECONNREFUSED 10.4.0.9:5432'), 500, 'Internal Server Error'],
-        ['HttpBadGatewayError', new HttpBadGatewayError('nginx upstream sidecar-auth refused'), 502, 'Bad Gateway'],
-        ['HttpServiceUnavailableError', new HttpServiceUnavailableError('cloud run revision api-00042-xyz booting'), 503, 'Service Unavailable'],
-        ['HttpGatewayTimeoutError', new HttpGatewayTimeoutError('alb idle timeout on /internal/sync'), 504, 'Gateway Timeout'],
-        ['HttpVendorError', new HttpVendorError('stripe key sk_live_51H... rate limited'), 598, 'Vendor Error'],
+        [
+            'HttpBadRequestError',
+            new HttpBadRequestError('column users.ssn failed CHECK'),
+            400,
+            'Bad Request',
+        ],
+        [
+            'HttpUnauthorizedError',
+            new HttpUnauthorizedError('jwt kid=internal-signer-7 expired'),
+            401,
+            'Unauthorized',
+        ],
+        [
+            'HttpForbiddenError',
+            new HttpForbiddenError('role admin-internal required on tenant 4471'),
+            403,
+            'Forbidden',
+        ],
+        [
+            'HttpNotFoundError',
+            new HttpNotFoundError('no row in pg.stores where id=88213'),
+            404,
+            'Not Found',
+        ],
+        [
+            'HttpTimeoutError',
+            new HttpTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'),
+            408,
+            'Request Timeout',
+        ],
+        [
+            'HttpTooManyRequestsError',
+            new HttpTooManyRequestsError('bucket tenant-4471 drained'),
+            429,
+            'Too Many Requests',
+        ],
+        [
+            'HttpInternalServerError',
+            new HttpInternalServerError('ECONNREFUSED 10.4.0.9:5432'),
+            500,
+            'Internal Server Error',
+        ],
+        [
+            'HttpBadGatewayError',
+            new HttpBadGatewayError('nginx upstream sidecar-auth refused'),
+            502,
+            'Bad Gateway',
+        ],
+        [
+            'HttpServiceUnavailableError',
+            new HttpServiceUnavailableError('cloud run revision api-00042-xyz booting'),
+            503,
+            'Service Unavailable',
+        ],
+        [
+            'HttpGatewayTimeoutError',
+            new HttpGatewayTimeoutError('alb idle timeout on /internal/sync'),
+            504,
+            'Gateway Timeout',
+        ],
+        [
+            'HttpVendorError',
+            new HttpVendorError('stripe key sk_live_51H... rate limited'),
+            598,
+            'Vendor Error',
+        ],
     ];
 
     for (const [name, error, status, generic] of cases) {
@@ -188,7 +246,9 @@ describe('handleError — only HttpUserError message reaches the wire', () => {
     });
 
     it('keeps subType — an app passes it on purpose and the client branches on it', () => {
-        const res = harness.send(new HttpUnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN));
+        const res = harness.send(
+            new HttpUnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN),
+        );
 
         expect(harness.bodyOf(res).subType).toBe(WRONG_LOGIN);
         expect(harness.bodyOf(res).message).toBe('Unauthorized');
@@ -227,13 +287,17 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
         const cause = new HttpNotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
         harness.send(new HttpInternalServerError('downstream call failed', cause));
 
-        expect(capturing.lines.join('\n')).toContain('cause=<pre>Cannot POST /db-stores/fetch-stores</pre>');
+        expect(capturing.lines.join('\n')).toContain(
+            'cause=<pre>Cannot POST /db-stores/fetch-stores</pre>',
+        );
     });
 });
 
 describe('handleError — what still goes out on purpose', () => {
     it('HttpUserError: its message IS the wire, with errorCode', () => {
-        const res = harness.send(new HttpUserError('That email is already registered', 'EMAIL_TAKEN'));
+        const res = harness.send(
+            new HttpUserError('That email is already registered', 'EMAIL_TAKEN'),
+        );
 
         expect(res.statusCode).toBe(266);
         const pe = harness.bodyOf(res);
@@ -244,7 +308,11 @@ describe('handleError — what still goes out on purpose', () => {
 
     it('HttpBadRequestError: guiAlertMessage + field go out, message does not', () => {
         const res = harness.send(
-            new HttpBadRequestError('zod: users.email failed regex at ingest.ts:214', 'email', 'Enter a valid email'),
+            new HttpBadRequestError(
+                'zod: users.email failed regex at ingest.ts:214',
+                'email',
+                'Enter a valid email',
+            ),
         );
 
         const pe = harness.bodyOf(res);
@@ -261,7 +329,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('an app-registered tryTranslateToWire result is passed through untouched', () => {
-        ClientRegistry.addErrorTranslation(new VendorPortalTranslation());
+        ClientRegistry.setErrorTranslators(new VendorPortalTranslators());
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 
@@ -273,7 +341,9 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('a non-HttpError still answers the generic 500 it always did', () => {
-        const res = harness.send(new TypeError('cannot read property id of undefined at Repo.ts:88'));
+        const res = harness.send(
+            new TypeError('cannot read property id of undefined at Repo.ts:88'),
+        );
 
         expect(res.statusCode).toBe(500);
         expect(harness.bodyOf(res).message).toBe('Internal Server Error');
@@ -319,7 +389,9 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
     }
 
     it('266 emits the human-facing message, errorCode and subType', () => {
-        const pe = harness.bodyOf(harness.send(new HttpUserError('Password must be 12+ characters', 'PW_SHORT')));
+        const pe = harness.bodyOf(
+            harness.send(new HttpUserError('Password must be 12+ characters', 'PW_SHORT')),
+        );
 
         expect(pe.message).toBe('Password must be 12+ characters');
         expect(pe.errorCode).toBe('PW_SHORT');
@@ -327,7 +399,9 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
     });
 
     it('401 emits subType, so a caller can still branch on WHY login failed', () => {
-        const pe = harness.bodyOf(harness.send(new HttpUnauthorizedError('bcrypt mismatch', WRONG_LOGIN)));
+        const pe = harness.bodyOf(
+            harness.send(new HttpUnauthorizedError('bcrypt mismatch', WRONG_LOGIN)),
+        );
 
         expect(pe.subType).toBe(WRONG_LOGIN);
         expect(pe.message).toBe('Unauthorized');

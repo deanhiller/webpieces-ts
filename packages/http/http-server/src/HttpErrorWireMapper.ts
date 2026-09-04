@@ -63,7 +63,7 @@ const log = LogManager.getLogger('HttpErrorWireMapper');
  *   the server's internals for zero caller benefit, so it is not sent. It is logged instead.
  *
  * An app that WANTS a different wire shape has an explicit opt-out on both sides:
- * `ClientRegistry.addErrorTranslation()`. `ExpressWrapper.handleError` consults
+ * `ClientRegistry.setErrorTranslators()`. `ExpressWrapper.handleError` consults
  * `tryTranslateToWire()` BEFORE reaching this class, and whatever that returns is sent verbatim —
  * that is the app's own deliberate choice about what it publishes.
  */
