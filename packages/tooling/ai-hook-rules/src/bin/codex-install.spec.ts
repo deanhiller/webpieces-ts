@@ -6,10 +6,11 @@ import * as path from 'path';
 import { applyHook, applyChoice, installTargets, hasHook, RULES_HOOK, GUARDS_HOOK, InstallTarget } from './setup';
 import { SHIM_MARKER } from './shim';
 import {
-    readSettings, writeSettings, HookEntry, SettingsRepair, GUARDS_BIN, RULES_BIN,
+    readSettings, writeSettings, SettingsRepair, GUARDS_BIN, RULES_BIN,
     CLAUDE_REGISTRATION, CODEX_REGISTRATION, CODEX_REGISTRATION_SURFACE, HarnessRegistration,
     HARNESS_REGISTRATIONS, managedSurfaceDrift, registrationStaleAt, repairRegistrationAt,
 } from './hook-registration';
+import type { HookEntry } from './settings-shape';
 import { ShimTestkit } from './shim-testkit';
 
 /**

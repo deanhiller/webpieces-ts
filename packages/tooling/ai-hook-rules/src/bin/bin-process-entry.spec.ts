@@ -15,7 +15,7 @@ import { managedEntries, readSettings, writeSettings } from './hook-registration
  * declarations, and exited 0 with no output and no file touched. Verified against the published
  * artifacts 0.4.576 and 0.4.588 (`node node_modules/@webpieces/ai-hook-rules/src/bin/upgrade-shim.js`
  * → no stdout, status 0). `wp-upgrade-shim` is the cure fault S names as OPTION 1 while it blocks every
- * tool call, so an inert OPTION 1 plus an OPTION 2 that repairs one of three managed surfaces is a hard
+ * tool call, so an inert OPTION 1 plus an OPTION 2 that repairs ONE of the managed surfaces is a hard
  * deadlock in a consumer repo.
  *
  * Every existing spec missed it because they all `import { runUpgradeShim }` and call it as a FUNCTION.
@@ -71,8 +71,8 @@ function stageDriftedRepo(): string {
     const target = shimPath(root);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, '# hand-edited junk\n');
-    // A settings.json on the OLD two-absolute-hook form, so the THIRD managed surface (the
-    // registration) is drifted too and the child has all three to repair.
+    // A settings.json on the OLD two-absolute-hook form, so the registration surface is drifted too and
+    // the child has more than the shim to repair.
     writeSettings(path.join(root, '.claude', 'settings.json'), {
         hooks: {
             PreToolUse: [
@@ -134,7 +134,7 @@ describe('wp-upgrade-shim, spawned as a process', () => {
     beforeAll(() => { compiled = compileBin(path.join(PKG_ROOT, 'src', 'bin', 'upgrade-shim.ts')); }, 120_000);
     afterAll(() => { fs.rmSync(OUT_DIR, { recursive: true, force: true }); });
 
-    it('repairs all three managed surfaces, says so on stdout, and exits 0', () => {
+    it('repairs every managed surface, says so on stdout, and exits 0', () => {
         const root = stageDriftedRepo();
         const run = spawnSync(process.execPath, [compiled], { cwd: root, encoding: 'utf8', env: childEnv() });
 

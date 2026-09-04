@@ -157,10 +157,10 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
 
     // The filter and the L0 allowlist are not rows, so their use cases carry no classification — but
     // they are still L1 use cases and still numbered in the one table.
-    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..20', () => {
+    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..21', () => {
         for (const useCase of L1_UNROWED_USE_CASES) expect(useCase.classification, `use case ${useCase.num}`).toBeNull();
         expect(allL1UseCases().map((u: L1UseCase): number => u.num))
-            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
     });
 });
 
@@ -522,7 +522,12 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
 describe('no surface prescribes cross-tree `git -C` as a cure', () => {
     // The three message-bearing modules. shim-deny-reason.ts is excluded ON PURPOSE — it names
     // `git -C <root>` in order to say it is REFUSED, which is the story being told, not a breach of it.
-    const SITES = ['version-sync.ts', 'runner.ts', 'l1-rows.ts'] as const;
+    // `rules/judged-tree.ts` is here because it is a message-bearing module that renders an AIMED cure
+    // — the one shape this scan exists for — and because its PLACEMENT would otherwise exempt it: the
+    // list is resolved against `core/`, so a new file one directory down is outside the scan by
+    // accident rather than by decision. A path-relative allowlist that silently misses a subdirectory
+    // is the same defect this whole spec is about, one level up.
+    const SITES = ['version-sync.ts', 'runner.ts', 'l1-rows.ts', 'rules/judged-tree.ts'] as const;
 
     const sourceOf = (site: string): string => fs.readFileSync(path.join(__dirname, site), 'utf8');
 

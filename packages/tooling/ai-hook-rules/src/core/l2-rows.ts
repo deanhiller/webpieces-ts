@@ -422,6 +422,15 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // Row 11 — every "could not establish", including the two dirty-tree valves the code still opens
     // (see NOT_DONE) and the unreachable forge.
     'branch-undeterminable': L2_FAIL_OPEN_ROW,
+    // The target tree HAS no branch name (mid-rebase / mid-bisect), so there is no key into the
+    // branch-keyed cache — use case 14, which the row already describes. It used to arrive here as the
+    // literal branch `HEAD`, miss in the cache and log `no-sync-cache`: the right verdict recorded under
+    // a reason that names a different cause, and therefore uncountable.
+    'detached-head': L2_FAIL_OPEN_ROW,
+    // The file being judged lives in a NESTED CLONE (`repositories/**`) — another repo's branch is not
+    // this policy's to judge. The bash path calls the same state ALLOW_EXEMPT at L1; on the file path it
+    // is an abstention, because nothing about the target tree's state was established.
+    'target-tree-foreign': L2_FAIL_OPEN_ROW,
     'no-sync-cache': L2_FAIL_OPEN_ROW,
     'stale-cross-branch-cache': L2_FAIL_OPEN_ROW,
     'origin-main-unknown': L2_FAIL_OPEN_ROW,

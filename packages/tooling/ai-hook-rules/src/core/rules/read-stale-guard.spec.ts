@@ -38,6 +38,14 @@ vi.mock('fs', () => ({
         if (state.gitHead === null) throw new Error('ENOENT');
         return state.gitHead;
     },
+    // TargetTreeResolver's two filesystem questions — "does this directory exist" and "what is it
+    // really". `/tmp/x` is a fictional root here, so the honest answer is NO: the resolver walks up,
+    // finds nothing, and falls back to the governed root, which is the tree every case below judges.
+    // Answering them is not optional now that this guard resolves its tree from the target path
+    // (issue #851) — a mock missing them fails at the first call, which is the mock telling the truth
+    // about a real new dependency.
+    existsSync: (): boolean => false,
+    realpathSync: (p: string): string => p,
 }));
 
 vi.mock('child_process', () => ({
@@ -75,8 +83,19 @@ vi.mock('../decision-log', () => ({
 
 import { ReadStaleGuardRule } from './read-stale-guard';
 
+// `filePath` is REQUIRED here now: this guard resolves WHICH TREE it judges from the target path
+// (issue #851), so a context without one cannot be classified. `/tmp/x` is neither a git repo nor an
+// existing directory, so TargetTreeResolver falls back to the governed root — the tree these cases
+// always judged, which is why every assertion below is unchanged. The worktree case, where the two
+// roots genuinely differ, needs real git and lives in target-tree.spec.ts.
 function ctx(relativePath: string = 'src/a.ts'): FileContext {
-    return { relativePath, workspaceRoot: '/tmp/x', tool: 'Read', options: {} } as FileContext;
+    return {
+        relativePath,
+        filePath: `/tmp/x/${relativePath}`,
+        workspaceRoot: '/tmp/x',
+        tool: 'Read',
+        options: {},
+    } as FileContext;
 }
 
 function rule(): ReadStaleGuardRule {

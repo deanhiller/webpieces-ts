@@ -7,10 +7,11 @@ import { RepoRootFinder, writeTemplate, writeTemplateIfMissing, CONFIG_POLICY_DO
 
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
 import {
-    ClaudeSettings, HookCommand, HookEntry, HookRegistrationEntry, GUARDS_BIN, LEGACY_GUARANTEE_ROOT_MARKER,
+    HookRegistrationEntry, GUARDS_BIN, LEGACY_GUARANTEE_ROOT_MARKER,
     RULES_BIN, addHookEntry, applyManagedEnv, readSettings, writeSettings,
     HarnessRegistration, CLAUDE_REGISTRATION, CODEX_REGISTRATION,
 } from './hook-registration';
+import type { ClaudeSettings, HookCommand, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { CodexTrustProbe } from './codex-trust';
 // The config half of the installer — seeding and migrating webpieces.config.json. Split for size along

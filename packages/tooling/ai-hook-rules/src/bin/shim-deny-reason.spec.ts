@@ -8,7 +8,9 @@ import { renderL1Doc } from '../core/l1-doc';
 import { renderVersionSyncRow8Report } from '../core/version-sync.spec';
 import { shimStaleDenyReason } from './shim-deny-reason';
 import { INSTALL_HOOKS_CMD, NO_CHAINING_RULE, RESTORE_SHIM_CMD, SHIM_MARKER, UPGRADE_SHIM_CMD, renderShim } from './shim';
-import { ENV_SURFACE, REGISTRATION_SURFACE } from './hook-registration';
+import { CLAUDE_REGISTRATION, ENV_SURFACE, REGISTRATION_SURFACE } from './hook-registration';
+
+const NEIGHBOUR_SURFACE = CLAUDE_REGISTRATION.neighbourSurface;
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 
 /**
@@ -106,9 +108,12 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
 
     // The deny must TEACH the surface it is judging, or a blocked agent repairs three of four and
     // reports success — the failure mode upgrade-shim.ts's header exists to prevent.
-    it('names all three managed things, including the env entry and why it exists', () => {
-        expect(reason).toContain('THREE things');
-        expect(reason).not.toContain('FOUR things');
+    it('names all four managed things, including the env entry and why it exists', () => {
+        expect(reason).toContain('FOUR things');
+        expect(reason).not.toContain('THREE things');
+        // The fourth surface's own line is CONDITIONAL — see ShimStaleDeny.neighbourNote — so it is
+        // asserted in its own test below, against a drift list that actually contains it.
+        expect(reason).not.toContain('the guard silently stops guarding');
         expect(reason).toContain(`${BASH_CWD_ENV_KEY}=${BASH_CWD_ENV_VALUE}`);
         expect(reason).toContain('pins the Bash cwd to the project root');
         expect(reason).toContain('inherited');
@@ -186,7 +191,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
      * THE MESSAGE BUDGET, as a build failure rather than a habit. main landed a deliberate L0 message
      * diet (384cdae) and this deny regressed to ELEVEN sections / ~4,000 chars because each new finding
      * argued its case inside it. The budget bounds the WIDEST form of what an agent actually READS —
-     * all three surfaces drifted, a governing root to name, the subagent branch, AND the guard-matrix
+     * all four surfaces drifted, a governing root to name, the subagent branch, AND the guard-matrix
      * pointer hook-core appends (bounding the builder alone would pin a ceiling that is not the real
      * one). If a change needs more room, cut something that ARGUES rather than raising this number.
      *
@@ -197,15 +202,35 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
      * three-way-join line (`layer=`/`fault=`/`row=` plus the matrix citation), which is not argument
      * either — it is the coordinate that makes a transcript debuggable against the log.
      *
-     * So: 3,850, against 3,357 for the old paragraph form and 4,666 before the original trim. It leaves
-     * roughly 100 chars of slack — enough that renaming a surface constant does not fail the build, not
-     * enough to re-admit a paragraph.
+     * IT MOVED A SECOND TIME, FOR A FOURTH SURFACE (#852), NOT FOR A PARAGRAPH. The widest form now
+     * carries one more drifted-surface line plus the ~215-char note that teaches what a relative
+     * neighbour hook does when it cannot load — the only thing in this message a reader cannot infer,
+     * and itself conditional on that surface having drifted. Both halves are subject, not argument.
+     *
+     * So: 4,100, against 3,850 for the three-surface form, 3,357 for the old paragraph form and 4,666
+     * before the original trim. It leaves roughly 100 chars of slack — enough that renaming a surface
+     * constant does not fail the build, not enough to re-admit a paragraph.
      */
     it('stays inside the L0 message budget in its widest form, pointer included', () => {
         const widest = shimStaleDenyReason('0.4.624', '/tmp/wp-root',
-            [SHIM_MARKER, REGISTRATION_SURFACE, ENV_SURFACE], true)
+            [SHIM_MARKER, REGISTRATION_SURFACE, NEIGHBOUR_SURFACE, ENV_SURFACE], true)
             + guardMatrixPointer(`/repo/.webpieces/instruct-ai/${GUARD_MATRIX_DOC}`);
-        expect(widest.length).toBeLessThan(3850);
+        expect(widest.length).toBeLessThan(4100);
+    });
+
+    /**
+     * THE FOURTH SURFACE EARNS ITS LINE ONLY WHEN IT DRIFTED (issue #852). The consumer's own hooks,
+     * registered relative beside webpieces' absolute ones, fail to load off the repo root and exit
+     * non-zero — which the hooks reference defines as NON-BLOCKING, i.e. a silent unguarded allow. A
+     * reader whose neighbour surface drifted cannot infer any of that, and a reader whose has not does
+     * not need it.
+     */
+    it('teaches the neighbour failure mode when, and only when, that surface drifted', () => {
+        const withNeighbour = shimStaleDenyReason('0.4.624', '/tmp/wp-root', [NEIGHBOUR_SURFACE], false);
+        expect(withNeighbour).toContain('the guard silently stops guarding');
+        expect(withNeighbour).toContain('Fix Option 1 anchors each one');
+        expect(shimStaleDenyReason('0.4.624', '/tmp/wp-root', [SHIM_MARKER], false))
+            .not.toContain('the guard silently stops guarding');
     });
 
     // How the deny names the tree it judged (root= / projectDir=) lives in shim-governing-root.spec.ts,

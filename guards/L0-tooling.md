@@ -48,7 +48,7 @@ the guard bin runs — a stale, missing or broken validator cannot be trusted to
 | `U` | 2 | `pnpm install` | the sync (or a raised catalog pin in pnpm-workspace.yaml, which is editable while the block is up) gave the installer something new to do — a BARE install with nothing changed reports "Lockfile is up to date" and leaves the tree as broken as it found it |
 | `U` | 3 | `pnpm add -D @webpieces/ai-hook-rules` | nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/ai-hook-rules' before committing, because a direct root dependency on it violates the umbrella rule |
 | `K` | 1 (preferred) | `rm -rf node_modules && pnpm install` | this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite |
-| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer |
+| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook commands registered beside ours, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer |
 | `S` | 2 | `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` | the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish |
 | `C` | 1 (preferred) | edit `webpieces.config.json` yourself | this fault fires at all — it is the only cure that needs no other tool, and it is never denied |
 | `C` | 2 | `pnpm exec wp-install-ai-hooks` | you are at an INTERACTIVE terminal and can answer its two hook-target prompts |
@@ -104,14 +104,16 @@ below for why the one safe pull spelling is on the list and the bare one is not.
 ONLY through the 3-point fork merge (`pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a
 PR is already open).
 
-### The managed hook surface — what fault `S` compares (4 things, one set)
+### The managed hook surface — what fault `S` compares (6 things, one set)
 
 | # | surface |
 |---|---|
 | 1 | `.claude/webpieces/ai-hook.sh` |
 | 2 | .claude/settings.json hook registration |
-| 3 | .codex/hooks.json hook registration |
-| 4 | .claude/settings.json env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR |
+| 3 | .claude/settings.json relative hook commands |
+| 4 | .codex/hooks.json hook registration |
+| 5 | .codex/hooks.json relative hook commands |
+| 6 | .claude/settings.json env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR |
 
 The registration is TWO PreToolUse entries per harness, and all of them are ABSOLUTE — they
 resolve from any cwd:
@@ -125,7 +127,7 @@ sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
 sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
 ```
 
-`pnpm exec wp-upgrade-shim` repairs all 4. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
+`pnpm exec wp-upgrade-shim` repairs all 6. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
 repairs `.claude/webpieces/ai-hook.sh` and nothing else, so it is the fallback for an installed release too old
 to carry the first.
 

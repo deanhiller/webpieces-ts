@@ -68,18 +68,39 @@ never its own release — governance was always the primary's. Both hooks are ab
 guarantee is structural, `cd` into a subdirectory is simply allowed, and version skew between trees is
 caught where it actually lives: the `trinary-version-skew` L1 row (`core/version-sync.ts`).
 
-### Keeping the three in step
+### Keeping the four in step
 
-The installed surface is three things — `.claude/webpieces/ai-hook.sh`, the `settings.json` entries
-registering the two hooks, and the `settings.json` `env` entry
+The installed surface is four things — `.claude/webpieces/ai-hook.sh`, the `settings.json` entries
+registering the two hooks, the ANCHORING of the hook entries the CONSUMER registers beside them, and
+the `settings.json` `env` entry
 `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` — and they only
-work as a set. The guards binary compares all three against the release it came from and fails closed
-on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** regenerates all three
+work as a set. The guards binary compares all four against the release it came from and fails closed
+on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** repairs all four
 (rewriting an old relative registration to the absolute form rather than adding beside it, and removing
 a leftover `guarantee-root.sh` registration) and is
 allowed through while that block is up. Its NAME is older than its job — it has not been shim-only
 since 2026-08-07 — and it is deliberately not renamed, because a rename with no functional change costs
 every consumer and buys nothing.
+
+#### Why webpieces anchors hooks it did not write
+
+A consumer registers its own guards in the same `.claude/settings.json`, and it is told that file is
+generated and must not be hand-edited — so it cannot fix its own registration without fighting
+`wp-upgrade-shim` on the next bump. Registered RELATIVE (`node ".claude/hooks/guard-deploy.mjs"`) those
+entries resolve against the hook process's cwd, so the moment that cwd is not the repo root node cannot
+load the module and the guard dies before running a line. Per the hooks reference that non-zero exit is
+a NON-BLOCKING error: the tool call runs anyway, with nothing on screen but a
+`node:internal/modules/cjs/loader` fragment carrying no rule name and no verdict. Measured in a consumer
+repo (issue #852) silently disarming a cleartext-credentials blocker, a `gcloud` blocker and a
+raw-deploy blocker — the exact inverse of the fail-closed property those guards are documented to have.
+
+That is the same defect webpieces reversed for its OWN hook, and the reasoning was never extended to the
+entries beside it; the failure is a property of the FILE, not of who wrote the line. So each such entry
+is anchored to the harness's own prefix — `$CLAUDE_PROJECT_DIR/…` for Claude Code, `$PWD/…` for Codex.
+Only a token that is not already anchored, contains a `/`, does not escape the root, and **exists on
+disk under the root** is rewritten; that existence test is what leaves `npm run build/foo` alone and
+what guarantees the cure converges, since a token the repair declines to anchor is never reported as
+drift. See `src/bin/neighbour-hooks.ts`.
 
 #### Why webpieces manages `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`
 
