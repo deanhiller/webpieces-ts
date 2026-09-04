@@ -1,11 +1,13 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isWebpiecesStateDir, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { DeleteScopedRules } from './delete-scoped-rules';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from './effective-tree';
+import { GovernedPath, TargetTreeResolver } from './target-tree';
+import { bashGovernedPath, filterByExcludedPaths } from './excluded-paths';
 import { ExcludedPathEscapeHint } from './excluded-path-escape';
 import { gitFromSubdirBlock } from './force-to-root';
 import { loadRules, loadMatchRules, loadKeylessBashRules, globMatches, GuardHintCommands } from './load-rules';
@@ -40,18 +42,6 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
     if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.configKey));
     return rules.filter((r: Rule): boolean => !isHookGuard(r.configKey));
-}
-
-// Drop every rule excluded for this path (webpieces.config.json → excludePaths). ONE glob list: a path
-// listed there is hands-off for code-style rules and file-scoped guards alike, because webpieces either
-// governs a path or it does not. Per-rule carve-outs live in the rule's own `excludePaths`.
-// This is L1's FILTER (not a table row) — see guards/L1-location.md.
-export function filterByExcludedPaths(rules: readonly Rule[], relativePath: string, ex: ExcludePaths): readonly Rule[] {
-    // webpieces' OWN gitignored state dir is never governed, config or no config. Ahead of the list on
-    // purpose — see isWebpiecesStateDir for why it is code and not a seeded glob.
-    if (isWebpiecesStateDir(relativePath)) return [];
-    if (ex.paths.some((p: string): boolean => globMatches(p, relativePath))) return [];
-    return rules;
 }
 
 // The cwd a command actually runs from, after its own leading `cd`/`pushd` run. Thin delegate kept
@@ -135,8 +125,9 @@ function runInternal(
     // Suppress enforcement for files under this category's excludePaths (e.g. vendored repos under
     // repositories/**). Exclusion is all-or-nothing per category, so an excluded file drops the whole
     // rule set and is fully hands-off — no violations AND no config-sync nag on those files.
-    const relativePath = path.relative(workspaceRoot, input.filePath);
-    const rules = new DeleteScopedRules().narrow(toolKind, filterByExcludedPaths(modeRules, relativePath, loaded.excludePaths));
+    const governed = new TargetTreeResolver().governedPath(input.filePath, workspaceRoot);
+    const relativePath = governed.relativePath;
+    const rules = new DeleteScopedRules().narrow(toolKind, filterByExcludedPaths(modeRules, governed, loaded.excludePaths));
     if (rules.length === 0) return null;
 
     // Config-sync applies only to built-in/custom rules; match-rules have their own validated section
@@ -203,11 +194,12 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
     // clone is out of scope. (No command to parse here, so the shell cwd IS the effective cwd.)
     if (new EffectiveTreeResolver().resolve('', cwd, workspaceRoot).kind === 'foreign') return null;
 
-    const relativePath = path.relative(workspaceRoot, filePath);
+    const governed = new TargetTreeResolver().governedPath(filePath, workspaceRoot);
+    const relativePath = governed.relativePath;
     const all = loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded));
     const rules = filterByExcludedPaths(
         all.filter((r: Rule): boolean => READ_SCOPED_GUARDS.has(r.name)),
-        relativePath,
+        governed,
         loaded.excludePaths,
     );
     if (rules.length === 0) return null;
@@ -421,10 +413,10 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
  * They still honour excludePaths, and they do not run in `rules` mode (code-style-only hook).
  */
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function keylessBashRules(loaded: LoadedConfig, mode: HookMode, relativePath: string): readonly Rule[] {
+function keylessBashRules(loaded: LoadedConfig, mode: HookMode, governed: GovernedPath): readonly Rule[] {
     if (mode === 'rules') return [];
     return filterByExcludedPaths(
-        loadKeylessBashRules(loaded.prGate.buildCommand), relativePath, loaded.excludePaths,
+        loadKeylessBashRules(loaded.prGate.buildCommand), governed, loaded.excludePaths,
     );
 }
 
@@ -461,11 +453,11 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     // cwd sits under an excluded tree (e.g. repositories/**) drops the whole guard set — matching how
     // runInternal/runRead treat file paths. The relative path is '' when there is no `cd` (root), which
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
-    const relativeCwd = path.relative(workspaceRoot, tree.effectiveCwd);
+    const governedCwd = bashGovernedPath(tree, workspaceRoot);
     const rules = filterByExcludedPaths(
-        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode), relativeCwd, loaded.excludePaths,
+        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode), governedCwd, loaded.excludePaths,
     );
-    const keyless = keylessBashRules(loaded, mode, relativeCwd);
+    const keyless = keylessBashRules(loaded, mode, governedCwd);
     if (rules.length === 0 && keyless.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
