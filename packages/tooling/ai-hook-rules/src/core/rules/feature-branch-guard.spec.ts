@@ -11,6 +11,11 @@ const state = vi.hoisted(() => ({ branch: 'dean/x', status: null as MainSyncStat
 
 vi.mock('child_process', () => ({
     execSync: (): string => `${state.branch}\n`,
+    // `/tmp/x` is a fictional root, so the honest git answer for it is "not a repo" — a non-zero exit,
+    // which is exactly how DotWebpieces.revParse spells that. Mocked because the guard now asks git
+    // WHICH TREE owns the target path (issue #851); a mock without it fails at the first call, which is
+    // the mock telling the truth about a real new dependency rather than a gap to paper over.
+    spawnSync: (): { status: number; stdout: string } => ({ status: 1, stdout: '' }),
 }));
 
 vi.mock('@webpieces/rules-config', async (importActual: () => Promise<RulesConfigModule>) => {
@@ -26,8 +31,18 @@ vi.mock('../main-sync-refresh', () => ({ triggerMainSyncRefresh: (): void => und
 
 import { FeatureBranchGuardRule } from './feature-branch-guard';
 
+// `filePath` is REQUIRED here now, not decoration: the guard resolves WHICH TREE it is judging from the
+// target path (issue #851), so a context without one is a context the guard cannot classify. `/tmp/x`
+// does not exist and is not a git repo, so TargetTreeResolver falls back to the governed root — the
+// same tree these cases always judged, which is why every assertion below is unchanged. The worktree
+// case, where the two roots genuinely differ, needs real git and lives in target-tree.spec.ts.
 function ctx(relativePath: string = 'src/a.ts'): FileContext {
-    return { relativePath, workspaceRoot: '/tmp/x', options: {} } as FileContext;
+    return {
+        relativePath,
+        filePath: `/tmp/x/${relativePath}`,
+        workspaceRoot: '/tmp/x',
+        options: {},
+    } as FileContext;
 }
 
 function rule(): FeatureBranchGuardRule {

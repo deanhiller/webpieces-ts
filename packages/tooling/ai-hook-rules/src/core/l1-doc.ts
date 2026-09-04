@@ -171,6 +171,19 @@ function renderFilterSection(): string[] {
         'nothing is a second and WEAKER spelling — the matcher below misses the bare directory that the',
         'predicate matches — and it invites a consumer to delete it and believe the exemption went too.',
         '',
+        // The SUBJECT of this paragraph is which SPELLING of the state dir is exempt, so the two
+        // spellings have to appear literally — computing them from a resolver would print one path and
+        // destroy the contrast that is the whole point. This is exactly the case the rule's own escape
+        // is for, and it is scoped to the three lines below rather than the file.
+        '<!-- webpieces-disable no-state-paths-in-templates -- this paragraph\'s subject IS the two spellings of the state dir; a computed path would print one of them and lose the contrast -->',
+        'The skip is asked about the path relative to the tree that **OWNS** the file, not to the governed',
+        'root, and the two differ in exactly one place: a linked worktree. `<primary>/.webpieces/…` was',
+        'exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces/pr-review/…/review.json` — the same',
+        'kind of file, in a worktree\'s own state dir — was not, because governed-root-relative it begins',
+        '`.claude`. That is the file `wp-review-upsert-pr` REQUIRES before `wp-finish-upsert-pr` will open a',
+        'PR, so the guard could forbid a file the gate demands (issue #851). `GovernedPath` carries both',
+        'spellings together so a caller cannot reach for the wrong one.',
+        '',
         '`excludePaths` is **ONE glob list** (canonical: `"excludePaths": ["repositories/**"]`). The',
         '`{ rules: [...], guards: [...] }` object is **retired and rejected**, with the union it must become',
         'named in the error. `wp-install-ai-hooks` migrates it in place.',

@@ -34,6 +34,11 @@ const log = vi.hoisted(() => ({ reasons: [] as string[] }));
 
 vi.mock('child_process', () => ({
     execSync: (cmd: string): string => (cmd.includes('--abbrev-ref') ? `${state.branch}\n` : ''),
+    // `/tmp/x` is a fictional root, so the honest git answer for it is "not a repo" — a non-zero exit,
+    // which is exactly how DotWebpieces.revParse spells that. Mocked because the guard now asks git
+    // WHICH TREE owns the target path (issue #851); a mock without it fails at the first call, which is
+    // the mock telling the truth about a real new dependency rather than a gap to paper over.
+    spawnSync: (): { status: number; stdout: string } => ({ status: 1, stdout: '' }),
 }));
 
 // readMainSyncStatus goes through the REAL file parse + branch lookup, over a REAL document on disk —
@@ -93,7 +98,12 @@ function editGuardBlocks(branch: string): boolean {
     state.branch = branch;
     const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
-    return new FeatureBranchGuardRule(cfg).check(new FileContext('/tmp/x/src/a.ts', 'src/a.ts', '/tmp/x')).length > 0;
+    // The FULL positional ctor. It used to be called with three arguments, which silently landed
+    // `/tmp/x/src/a.ts` in `tool`, `src/a.ts` in `filePath` and left `workspaceRoot` UNDEFINED — harmless
+    // only for as long as nothing read those fields. The guard now resolves its tree from `filePath`
+    // against `workspaceRoot` (issue #851), so the shorthand stopped being harmless.
+    const ctx = new FileContext('Edit', '/tmp/x/src/a.ts', 'src/a.ts', '/tmp/x', 0, 0, 0, 0);
+    return new FeatureBranchGuardRule(cfg).check(ctx).length > 0;
 }
 
 function armedBashConfig(): BranchStateGuardConfig {

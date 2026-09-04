@@ -14,7 +14,9 @@ import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
 import { writeBranchStateMatrixDoc, branchStateMatrixPointer } from '../l2-matrix-doc';
 import { L0_FAULT_NONE } from '../l0-fault-codes';
+import { TargetTreeResolver } from '../target-tree';
 import { MergedBranchMessage } from './merged-branch-message';
+import { JudgedTree } from './judged-tree';
 import { StaleMainMessage } from './stale-main-message';
 import { MainFreshness } from './main-freshness';
 import { TreeRecovery } from './tree-recovery';
@@ -103,29 +105,48 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         ],
     );
 
+    /**
+     * WHICH TREE is judged — the one that owns the FILE BEING READ, resolved by git through
+     * TargetTreeResolver, never by `ctx.workspaceRoot`. Same fix and same reasoning as
+     * feature-branch-guard's (issue #851): `ctx.workspaceRoot` is the walk-up from the SESSION's cwd, so
+     * a main-session Read of a file inside an agent worktree was judged on the PRIMARY clone's branch —
+     * and a `main` that the primary happened to be sitting on would close reads of another tree's
+     * feature branch.
+     */
     check(ctx: FileContext): readonly Violation[] {
         // Outside the workspace root — no jurisdiction.
         if (ctx.relativePath.startsWith('..')) return [];
 
-        const branch = this.currentBranch(ctx.workspaceRoot);
+        const target = new TargetTreeResolver().resolve(ctx.filePath, ctx.workspaceRoot);
+        // A nested clone under `repositories/**` is out of scope, exactly as it is on the bash path.
+        if (target.kind === 'foreign') return this.failOpen(ctx, null, 'target-tree-foreign');
+
+        const judgedRoot = target.root;
+        const branch = this.currentBranch(judgedRoot);
         if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
+        // Mid-rebase in the target tree: no branch name, so no key into the branch-keyed cache and
+        // nothing to judge. Matrix row 14 — abstain, and say WHY rather than logging a cache miss.
+        if (branch === 'HEAD') return this.failOpen(ctx, branch, 'detached-head');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
-        // BOTH states — the merged-branch signal comes out of that same cache.
-        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
+        // BOTH states — the merged-branch signal comes out of that same cache. Rooted at the JUDGED
+        // tree so the entry refreshed is the one this guard reads.
+        triggerMainSyncRefresh(judgedRoot, hangTimeoutOf(this.config));
 
         // Escape valve 3 — the read half of the config escape hatch. Ahead of BOTH states' blocks so
         // the agent can always read-then-edit the file that turns this guard off.
         if (this.isConfigFile(ctx.relativePath)) return this.allow(ctx, branch, 'webpieces-config-read (escape hatch)');
 
+        const judged = new JudgedTree(target, branch, target.governedRoot);
         return branch === 'main'
-            ? this.checkStaleMain(ctx, branch)
-            : this.checkMergedBranch(ctx, branch);
+            ? this.checkStaleMain(ctx, judged)
+            : this.checkMergedBranch(ctx, judged);
     }
 
     // State A — on main, possibly behind origin/main.
-    private checkStaleMain(ctx: FileContext, branch: string): readonly Violation[] {
-        const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
+    private checkStaleMain(ctx: FileContext, judged: JudgedTree): readonly Violation[] {
+        const branch = judged.branch;
+        const status = readMainSyncStatus(judged.root, 'main');
         if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
@@ -137,7 +158,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         if (status.originMain === '') return this.failOpen(ctx, branch, 'origin-main-unknown', cache);
 
         // Escape valve 2 — ancestry, NOT equality. See the class comment.
-        if (this.freshness.containsOriginMain(ctx.workspaceRoot, status.originMain)) {
+        if (this.freshness.containsOriginMain(judged.root, status.originMain)) {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
@@ -149,7 +170,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         // (StaleMainMessage.forReads), so the cure an agent reads is one it can actually run.
         // Residual, same as row 8: if origin/main touched the files you edited, git refuses the switch
         // — `git stash` is on the skip list and clears it. Two steps worst case, never a dead end.
-        return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
+        return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(judged), cache);
     }
 
     /**
@@ -167,8 +188,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
      * from the documented design, not a decision — this docblock described the strict behaviour for
      * releases while the code failed open.
      */
-    private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
-        const status = readMainSyncStatus(ctx.workspaceRoot, branch);
+    private checkMergedBranch(ctx: FileContext, judged: JudgedTree): readonly Violation[] {
+        const branch = judged.branch;
+        const status = readMainSyncStatus(judged.root, branch);
         if (status === null) return this.failOpen(ctx, branch, 'no-sync-cache', 'cache=none');
 
         const cache = this.cacheSummary(status);
@@ -196,7 +218,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             ctx,
             branch,
             `already-merged PR#${pr}`,
-            this.mergedMessage(ctx.workspaceRoot, branch, status.mergedPr),
+            this.mergedMessage(judged, status.mergedPr),
             cache,
         );
     }
@@ -205,11 +227,16 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     // is told to open a NEW worktree off origin/main and reap this dead one; the primary clone is
     // told to branch off origin/main. Neither is ever told to `git checkout main` (fatal in a
     // worktree). Detection is one statSync — see WorktreeService.isLinkedWorktree.
-    private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
+    private mergedMessage(judged: JudgedTree, mergedPr: string): string {
         const recovery = new TreeRecovery();
-        return new MergedBranchMessage(workspaceRoot).forReads(
-            branch, mergedPr, recovery.kindOf(workspaceRoot), workspaceRoot,
+        const body = new MergedBranchMessage(judged.root).forReads(
+            judged.branch, mergedPr, recovery.kindOf(judged.root), judged.root,
         );
+        return [
+            judged.header(),
+            body,
+            judged.redirectNote([`git -C '${judged.root}' fetch origin main && git -C '${judged.root}' checkout -b <new-branch> origin/main`]),
+        ].join('\n');
     }
 
 
@@ -237,8 +264,12 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     // StaleMainMessage's remaining consumer. It used to be shared with stale-main-bash-guard so the two
     // halves of the State-A block could never prescribe different cures; that guard now blocks on the
     // BRANCH (row 5) rather than on staleness and carries its own message, so this is the only caller.
-    private staleMainMessage(workspaceRoot: string): string {
-        return new StaleMainMessage(workspaceRoot).forReads(this.behindCount(workspaceRoot));
+    private staleMainMessage(judged: JudgedTree): string {
+        return [
+            judged.header(),
+            new StaleMainMessage(judged.root).forReads(this.behindCount(judged.root)),
+            judged.redirectNote([judged.pnpmCure('wp-sync-main')]),
+        ].join('\n');
     }
 
     private cacheSummary(status: MainSyncStatus): string {

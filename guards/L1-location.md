@@ -75,6 +75,15 @@ NO companion `".webpieces/**"` glob seeded into `excludePaths`: a config entry t
 nothing is a second and WEAKER spelling — the matcher below misses the bare directory that the
 predicate matches — and it invites a consumer to delete it and believe the exemption went too.
 
+<!-- webpieces-disable no-state-paths-in-templates -- this paragraph's subject IS the two spellings of the state dir; a computed path would print one of them and lose the contrast -->
+The skip is asked about the path relative to the tree that **OWNS** the file, not to the governed
+root, and the two differ in exactly one place: a linked worktree. `<primary>/.webpieces/…` was
+exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces/pr-review/…/review.json` — the same
+kind of file, in a worktree's own state dir — was not, because governed-root-relative it begins
+`.claude`. That is the file `wp-review-upsert-pr` REQUIRES before `wp-finish-upsert-pr` will open a
+PR, so the guard could forbid a file the gate demands (issue #851). `GovernedPath` carries both
+spellings together so a caller cannot reach for the wrong one.
+
 `excludePaths` is **ONE glob list** (canonical: `"excludePaths": ["repositories/**"]`). The
 `{ rules: [...], guards: [...] }` object is **retired and rejected**, with the union it must become
 named in the error. `wp-install-ai-hooks` migrates it in place.
@@ -190,6 +199,7 @@ section head (neither the shell's cwd nor a `cd`'s persistence can be assumed).
 | 18 | every command from a worktree another agent REAPED mid-session is blocked | `m` — row 7 | BLOCK_AI_CURE | Option 1 (preferred): run the printed `cd <root> && <the work>` line — it does NOT route back through the dead path<br>Do NOT: re-`cd` into the worktree, or `git worktree add` it back expecting your uncommitted work; that work is gone |
 | 19 | the same block for a NON-git command there — `m` does not care about G | `m` — row 7; K alone decides it | BLOCK_AI_CURE | Option 1 (preferred): the same printed line. A vanished cwd is not a git question — nothing at all can run in a directory that does not exist |
 | 20 | Write `.webpieces/worktrees/agent-＊/pr-review/…/review-＊.json` allowed on main, with `excludePaths` empty | filter — `.webpieces/` is HARD-CODED exempt (`isWebpiecesStateDir`), ahead of the config list | ALLOW_EXEMPT | none needed — the dir is gitignored, so no config can put it back under governance |
+| 21 | Write a reviewer verdict into a WORKTREE's own state dir — the `.webpieces` under `.claude/worktrees/agent-＊`, not the primary's | filter — the state-dir skip is asked about the path relative to the tree that OWNS it, not the governed root | ALLOW_EXEMPT | none — it was NOT exempt before (governed-root-relative that path begins `.claude`), and `wp-review-upsert-pr` requires the file before a PR can be opened |
 
 Row 8 is the one that changed. It used to be ALLOWED, because the predicate was
 `shellAtRoot || cdsToRoot` — two variables OR'd, so the same destination got opposite verdicts

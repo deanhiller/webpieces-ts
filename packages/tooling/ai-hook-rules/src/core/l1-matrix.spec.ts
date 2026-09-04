@@ -157,10 +157,10 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
 
     // The filter and the L0 allowlist are not rows, so their use cases carry no classification — but
     // they are still L1 use cases and still numbered in the one table.
-    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..20', () => {
+    it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..21', () => {
         for (const useCase of L1_UNROWED_USE_CASES) expect(useCase.classification, `use case ${useCase.num}`).toBeNull();
         expect(allL1UseCases().map((u: L1UseCase): number => u.num))
-            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
     });
 });
 
