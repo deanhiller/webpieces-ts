@@ -1,3 +1,5 @@
+import { atRoot } from '@webpieces/rules-config';
+
 import { EffectiveTree } from '../effective-tree';
 
 /**
@@ -57,6 +59,20 @@ export class JudgedTree {
      */
     pnpmCure(bin: string): string {
         return this.redirected ? `pnpm --dir='${this.root}' ${bin}` : `pnpm ${bin}`;
+    }
+
+    /**
+     * One NON-pnpm cure, aimed — `cd '<root>' && <command>`, through the shared `atRoot`.
+     *
+     * NEVER `git -C '<root>' …`. That reads as the cure for "you are in the wrong tree" and is exactly
+     * the prescription `l1-matrix.spec.ts` exists to keep out of message-bearing modules: a subagent's
+     * `git -C <another tree>` is REFUSED, so an aimed cure written that way is a command the reader
+     * cannot run, arriving in the one place they have no reason to doubt it. `atRoot` is the ONE
+     * spelling every guard, message builder and pr-gate notice already emits, single quotes included,
+     * so a repo path with a space stays runnable.
+     */
+    cdCure(command: string): string {
+        return this.redirected ? atRoot(this.root, command) : command;
     }
 
     /**

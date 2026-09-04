@@ -265,7 +265,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
             '  git fetch origin main && git checkout -b <new-branch> origin/main',
             `Name <new-branch> by the convention (from webpieces.config.json): ${convention}`,
             'Example: git fetch origin main && git checkout -b ' + convention.replace(/<[^>]+>/g, 'value') + ' origin/main',
-            judged.redirectNote([`git -C '${judged.root}' fetch origin main && git -C '${judged.root}' checkout -b <new-branch> origin/main`]),
+            judged.redirectNote([judged.cdCure('git fetch origin main && git checkout -b <new-branch> origin/main')]),
         ].join('\n');
     }
 
@@ -279,11 +279,12 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         const body = new MergedBranchMessage(judged.root).forEdits(
             judged.branch, mergedPr, new TreeRecovery().kindOf(judged.root), judged.root,
         );
-        return [
-            judged.header(),
-            body,
-            judged.redirectNote([`git -C '${judged.root}' fetch origin main && git -C '${judged.root}' checkout -b <new-branch> origin/main`]),
-        ].join('\n');
+        // NO redirect note here, deliberately. MergedBranchMessage was built with the JUDGED root and
+        // already aims every command it prints through `atRoot` — and it picks the WORKTREE flavour of
+        // the cure (open a NEW worktree off origin/main and reap this dead one) when that is what the
+        // tree is. Appending a generic `checkout -b` would contradict the paragraph directly above it,
+        // in exactly the redirected-and-a-worktree case where the worktree flavour is the right advice.
+        return [judged.header(), body].join('\n');
     }
 
     private conflictMessage(judged: JudgedTree, conflictFiles: readonly string[], openPr: string): string {

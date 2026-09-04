@@ -232,11 +232,10 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         const body = new MergedBranchMessage(judged.root).forReads(
             judged.branch, mergedPr, recovery.kindOf(judged.root), judged.root,
         );
-        return [
-            judged.header(),
-            body,
-            judged.redirectNote([`git -C '${judged.root}' fetch origin main && git -C '${judged.root}' checkout -b <new-branch> origin/main`]),
-        ].join('\n');
+        // NO redirect note here, deliberately — see feature-branch-guard.alreadyMergedMessage for the
+        // argument. MergedBranchMessage already aims its commands at the judged root through `atRoot`
+        // and prints the WORKTREE flavour of the cure when the judged tree is one.
+        return [judged.header(), body].join('\n');
     }
 
 
