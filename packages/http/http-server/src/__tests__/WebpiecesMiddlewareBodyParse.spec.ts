@@ -109,7 +109,21 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
 
         // A urlencoded body posted to a JSON endpoint — the exact Twilio-into-JSON failure.
         await expect(
-            cap.wrapper.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {}),
+            cap.wrapper.executeImpl(
+                fakeRequest('Body=hi&From=whatsapp'),
+                asResponse(res),
+                () => {},
+            ),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
+    });
+
+    it('malformed JSON has no request id because parsing fails before context headers are filled', async () => {
+        const cap = new CapturingWrapper(false);
+        const res = new FakeResponse();
+
+        await cap.wrapper.execute(fakeRequest('{bad json'), asResponse(res), () => {});
+
+        expect(res.statusCode).toBe(400);
+        expect(res.getHeader('x-request-id')).toBeUndefined();
     });
 });

@@ -671,7 +671,7 @@ external consumer. So:
   text as `HttpBadRequestError`'s `guiMessage`, which IS sent (as `guiAlertMessage`).
 - A client must branch on the error TYPE, on `subType`, on `errorCode` or on `guiAlertMessage` — never
   on the prose of `message`. Against a current webpieces server that prose is a constant per status.
-- An app that deliberately wants to publish richer text registers an `ErrorTranslation` with
+- An app that deliberately wants to publish richer text registers `ErrorTranslators` with
   `ClientRegistry`; its `toWire()` result is sent verbatim. That is the explicit, greppable opt-out.
 
 ## How to Request Approval
@@ -756,4 +756,3 @@ and in `/debugLocal/{traceId}` responses.
 5. **Form error handling**: Catch `HttpUserError` for UI display, rethrow all other errors
 
 **Remember**: If you can't handle the error meaningfully, don't catch it. Let it bubble to the global handler where it will be logged with full context and traceId.
-

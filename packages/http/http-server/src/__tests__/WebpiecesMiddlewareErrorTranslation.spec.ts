@@ -4,9 +4,13 @@ import {
     ProtocolError,
     HttpError,
     HttpBadRequestError,
-    ErrorTranslation,
-    ErrorWireForm,
+    ErrorTranslators,
+    HttpHeader,
+    HttpResponseDto,
+    HttpResponseStatus,
+    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 import { ExpressWrapper } from '../ExpressWrapper';
 
 /** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's HttpAiBadRequestError). */
@@ -19,20 +23,25 @@ class AiBadRequestError extends HttpError {
 }
 
 /** Bidirectional translation for {@link AiBadRequestError}: exception <-> wire (statusCode 460). */
-class AiErrorTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class AiErrorTranslators implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(460, pe);
+        return new HttpResponseDto(
+            new HttpResponseStatus(460, 'AI Bad Request'),
+            [new HttpHeader('x-ai-error', 'true')],
+            pe,
+        );
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
-        if (statusCode !== 460) {
+    fromWire(response: HttpResponseDto): Error | undefined {
+        if (response.status.code !== 460) {
             return undefined;
         }
+        const pe = response.body as ProtocolError;
         return new AiBadRequestError(pe.message ?? 'AI bad request');
     }
 }
@@ -42,13 +51,14 @@ class FakeResponse {
     public statusCode?: number;
     public body?: string;
     public headersSent = false;
-    private readonly headers = new Map<string, string>();
+    public statusMessage?: string;
+    private readonly headers = new Map<string, string | readonly string[]>();
 
     status(code: number): this {
         this.statusCode = code;
         return this;
     }
-    setHeader(name: string, value: string): this {
+    setHeader(name: string, value: string | readonly string[]): this {
         this.headers.set(name.toLowerCase(), value);
         return this;
     }
@@ -57,7 +67,7 @@ class FakeResponse {
         this.headersSent = true;
         return this;
     }
-    getHeader(name: string): string | undefined {
+    getHeader(name: string): string | readonly string[] | undefined {
         return this.headers.get(name.toLowerCase());
     }
 }
@@ -73,7 +83,7 @@ function newWrapper(): ExpressWrapper {
         () => Promise.resolve({}),
         '/test',
         // webpieces-disable no-any-unknown -- RequestContextHeaders is unused by handleError
-        {} as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
+        { fillFromRequest() {} } as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
     );
 }
 
@@ -82,7 +92,7 @@ function newWrapper(): ExpressWrapper {
  * instanceof-HttpError ladder, so an app both ADDS custom types and OVERRIDES built-ins — while
  * unregistered errors fall through to the exact same generic mapping as before. SERVER half of the
  * wire symmetry with ClientErrorTranslator (the round-trip itself is proven in core-util's
- * ClientRegistry.spec.ts, using the same AiErrorTranslation both directions).
+ * ClientRegistry.spec.ts, using the same AiErrorTranslators both directions).
  */
 describe('ExpressWrapper.handleError registry integration', () => {
     beforeEach(() => {
@@ -90,12 +100,14 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('serializes a registered custom type (460) the built-in ladder cannot, VERBATIM', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new AiBadRequestError('bad ai input'));
 
         expect(res.statusCode).toBe(460);
+        expect(res.statusMessage).toBe('AI Bad Request');
+        expect(res.getHeader('x-ai-error')).toBe('true');
         expect(res.getHeader('content-type')).toBe('application/json');
         const pe = JSON.parse(res.body ?? '{}') as ProtocolError;
         // The registry is the explicit opt-out from HttpErrorWireMapper's genericization: the app
@@ -105,7 +117,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('an unregistered error still uses the built-in ladder (HttpBadRequestError -> 400)', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation()); // only claims AiBadRequestError
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new HttpBadRequestError('bad field', 'email'));
@@ -118,8 +130,25 @@ describe('ExpressWrapper.handleError registry integration', () => {
         expect(pe.name).toBeUndefined();
     });
 
+    it('preserves repeated response headers', () => {
+        ClientRegistry.setErrorTranslators({
+            toWire: () =>
+                new HttpResponseDto(
+                    new HttpResponseStatus(460, 'Cookies Required'),
+                    [new HttpHeader('Set-Cookie', 'a=1'), new HttpHeader('Set-Cookie', 'b=2')],
+                    new ProtocolError(),
+                ),
+            fromWire: () => undefined,
+        });
+
+        const res = new FakeResponse();
+        newWrapper().handleError(asResponse(res), new AiBadRequestError('cookies'));
+
+        expect(res.getHeader('set-cookie')).toEqual(['a=1', 'b=2']);
+    });
+
     it('does nothing once headers are already sent', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const res = new FakeResponse();
         res.headersSent = true;
@@ -127,5 +156,20 @@ describe('ExpressWrapper.handleError registry integration', () => {
 
         expect(res.statusCode).toBeUndefined();
         expect(res.body).toBeUndefined();
+    });
+
+    it('emits the infrastructure request id on default 200 and 500 responses', async () => {
+        await RequestContext.run(async () => {
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_ID, 'request-862');
+
+            const success = new FakeResponse();
+            const request = { method: 'GET', headers: {} } as import('express').Request;
+            await newWrapper().executeImpl(request, asResponse(success), () => {});
+            expect(success.getHeader('x-request-id')).toBe('request-862');
+
+            const failure = new FakeResponse();
+            newWrapper().handleError(asResponse(failure), new Error('boom'));
+            expect(failure.getHeader('x-request-id')).toBe('request-862');
+        });
     });
 });

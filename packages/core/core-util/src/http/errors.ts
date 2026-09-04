@@ -14,7 +14,7 @@
  * urls, response bodies and internal ids. `name` is not filled by that ladder at all.
  *
  * An app that wants to publish more than that does it deliberately, by registering an
- * {@link ErrorTranslation} with {@link ClientRegistry}, whose `toWire()` result is sent verbatim.
+ * {@link ErrorTranslators} with {@link ClientRegistry}, whose `toWire()` result is sent verbatim.
  */
 export class ProtocolError {
     public message?: string;
@@ -22,7 +22,7 @@ export class ProtocolError {
     public field?: string;
     public waitSeconds?: number;
     /**
-     * Filled only by an app's own `ErrorTranslation.toWire()`. The built-in HttpError ladder does NOT
+     * Filled only by an app's own `ErrorTranslators.toWire()`. The built-in HttpError ladder does NOT
      * send it: nothing on the client reads it, and for a subclass it is an internal class name.
      */
     public name?: string;
@@ -39,12 +39,7 @@ export class HttpError extends Error {
     public subType?: string;
     public readonly httpCause?: Error;
 
-    constructor(
-        message: string,
-        code: number,
-        subType?: string,
-        cause?: Error,
-    ) {
+    constructor(message: string, code: number, subType?: string, cause?: Error) {
         super(message);
         this.code = code;
         this.subType = subType;

@@ -5,7 +5,8 @@ import {
     ClientRegistry,
     DestinationTrust,
     Endpoint,
-    ErrorTranslation,
+    ErrorTranslators,
+    HttpResponseDto,
     HttpBadGatewayError,
     HttpError,
     HttpInternalServerError,
@@ -61,7 +62,9 @@ class StubHeaders {
  */
 class ThrowingAddressResolver extends AddressResolver {
     override resolve(hostname: string): Promise<string[]> {
-        throw new Error(`the SSRF guard must not resolve ${hostname} for a ClientRegistry-resolved url`);
+        throw new Error(
+            `the SSRF guard must not resolve ${hostname} for a ClientRegistry-resolved url`,
+        );
     }
 }
 
@@ -127,7 +130,10 @@ function stubExpressHtml404(): void {
 async function callAndCatch(): Promise<unknown> {
     // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
     return RequestContext.run(() =>
-        client().fetchStores(new FetchStoresRequest(51)).catch((err: unknown) => err));
+        client()
+            .fetchStores(new FetchStoresRequest(51))
+            .catch((err: unknown) => err),
+    );
 }
 
 beforeEach(() => {
@@ -153,7 +159,7 @@ afterEach(() => {
  * for an org with six live storefronts. The failure impersonated valid data instead of paging the one
  * server that actually had the bug.
  */
-describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', () => {
+describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", () => {
     it('a 404 from a dependency is HttpInternalServerError, NOT HttpNotFoundError', async () => {
         stubProtocolError(404, 'no route');
 
@@ -269,16 +275,20 @@ describe('NodeProxyClient passes everything that is not a 4xx through unchanged'
  * A thin proxy or gateway that genuinely wants to relay a downstream status as its own says so in one
  * greppable line, and that decision wins here. There is deliberately NO ClientConfig flag and NO
  * webpieces.config.json key — a flag would make the dangerous choice invisible in the code that
- * suffers from it, whereas `grep -rn addErrorTranslation` lists every app that opted out.
+ * suffers from it, whereas `grep -rn setErrorTranslators` lists every app that opted out.
  */
 describe('an app-registered translation WINS over the node 4xx-to-500 wrap', () => {
     it('a registered 404 translation relays the downstream status as the app chose', async () => {
-        const relay: ErrorTranslation = {
+        const relay: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed 404') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 404
+                    ? new HttpNotFoundError(
+                          (response.body as ProtocolError).message ?? 'relayed 404',
+                      )
+                    : undefined,
         };
-        ClientRegistry.addErrorTranslation(relay);
+        ClientRegistry.setErrorTranslators(relay);
         stubProtocolError(404, 'no such store');
 
         const error = await callAndCatch();
@@ -289,18 +299,24 @@ describe('an app-registered translation WINS over the node 4xx-to-500 wrap', () 
     });
 
     it('a status the registration does NOT claim still gets wrapped', async () => {
-        const relay: ErrorTranslation = {
+        const relay: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed 404') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 404
+                    ? new HttpNotFoundError(
+                          (response.body as ProtocolError).message ?? 'relayed 404',
+                      )
+                    : undefined,
         };
-        ClientRegistry.addErrorTranslation(relay);
+        ClientRegistry.setErrorTranslators(relay);
         stubProtocolError(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();
 
         expect(error).toBeInstanceOf(HttpInternalServerError);
-        expect((error as HttpError).httpCause!.message).toBe('our service account is not on the allow-list');
+        expect((error as HttpError).httpCause!.message).toBe(
+            'our service account is not on the allow-list',
+        );
     });
 });
 
@@ -320,15 +336,18 @@ describe('NodeProxyClient calls from a host that never ran setupRuntime', () => 
         vi.stubGlobal(
             'fetch',
             vi.fn(() =>
-                Promise.resolve(new Response('{"ok":true}', {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/json' },
-                })),
+                Promise.resolve(
+                    new Response('{"ok":true}', {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                    }),
+                ),
             ),
         );
 
         const result = await RequestContext.run(() =>
-            client().fetchStores(new FetchStoresRequest(51)));
+            client().fetchStores(new FetchStoresRequest(51)),
+        );
 
         expect(result).toEqual({ ok: true });
     });

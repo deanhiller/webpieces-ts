@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ClientRegistry } from '../ClientRegistry';
-import { ErrorTranslation, ErrorWireForm } from '../ErrorTranslation';
+import { ErrorTranslators } from '../ErrorTranslators';
+import { HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
 import { FailureClassifier } from '../FailureClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import { ProtocolError, HttpError, HttpNotFoundError, HttpBadRequestError } from '../errors';
@@ -57,21 +58,29 @@ describe('ClientRegistry resolution chain', () => {
 
     it('a mapping WINS over the deriver', async () => {
         ClientRegistry.addMapping('helper-fsdb', 8401);
-        ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.derived.example`));
+        ClientRegistry.setDeriver((svc: string) =>
+            Promise.resolve(`https://${svc}.derived.example`),
+        );
 
         expect(await ClientRegistry.resolve('helper-fsdb')).toBe('http://localhost:8401');
     });
 
     it('derives when there is no mapping', async () => {
-        ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.derived.example`));
+        ClientRegistry.setDeriver((svc: string) =>
+            Promise.resolve(`https://${svc}.derived.example`),
+        );
 
-        expect(await ClientRegistry.resolve('helper-fsdb')).toBe('https://helper-fsdb.derived.example');
+        expect(await ClientRegistry.resolve('helper-fsdb')).toBe(
+            'https://helper-fsdb.derived.example',
+        );
     });
 
     it('an EMPTY-STRING mapping is a legal answer (same-origin) and does NOT fall through to the deriver', async () => {
         // The truthiness bug this guards: `if (override)` would skip '' and derive instead.
         ClientRegistry.addUrlMapping('helper-portal', '');
-        ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.derived.example`));
+        ClientRegistry.setDeriver((svc: string) =>
+            Promise.resolve(`https://${svc}.derived.example`),
+        );
 
         expect(await ClientRegistry.resolve('helper-portal')).toBe('');
         expect(await ClientRegistry.tryResolve('helper-portal')).toBe('');
@@ -97,7 +106,9 @@ describe('ClientRegistry resolution chain', () => {
     });
 
     it('clear() removes the deriver too, so it cannot leak into the next spec', async () => {
-        ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.derived.example`));
+        ClientRegistry.setDeriver((svc: string) =>
+            Promise.resolve(`https://${svc}.derived.example`),
+        );
         ClientRegistry.clear();
 
         expect(await ClientRegistry.tryResolve('helper-fsdb')).toBeUndefined();
@@ -114,20 +125,21 @@ class AiBadRequestError extends HttpError {
 }
 
 /** Bidirectional translation for {@link AiBadRequestError}: exception <-> wire (statusCode 460). */
-class AiErrorTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class AiErrorTranslators implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(460, pe);
+        return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
-        if (statusCode !== 460) {
+    fromWire(response: HttpResponseDto): Error | undefined {
+        if (response.status.code !== 460) {
             return undefined;
         }
+        const pe = response.body as ProtocolError;
         return new AiBadRequestError(pe.message ?? 'AI bad request');
     }
 }
@@ -142,43 +154,36 @@ describe('ClientRegistry error translations', () => {
     });
 
     it('an unregistered status falls through — both directions return undefined', () => {
-        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeUndefined();
+        expect(
+            ClientRegistry.tryTranslateFromWire(
+                new HttpResponseDto(new HttpResponseStatus(460, ''), [], new ProtocolError()),
+            ),
+        ).toBeUndefined();
         expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('nope'))).toBeUndefined();
     });
 
     it('round-trips a custom type: toWire then fromWire reproduces the typed error', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const wire = ClientRegistry.tryTranslateToWire(new AiBadRequestError('bad ai input'));
         expect(wire).toBeDefined();
-        expect(wire?.statusCode).toBe(460);
+        expect(wire?.status.code).toBe(460);
 
-        const rebuilt = ClientRegistry.tryTranslateFromWire(wire!.statusCode, wire!.protocolError);
+        const rebuilt = ClientRegistry.tryTranslateFromWire(wire!);
         expect(rebuilt).toBeInstanceOf(AiBadRequestError);
         expect((rebuilt as HttpError).code).toBe(460);
         expect(rebuilt?.message).toBe('bad ai input');
     });
 
-    it('a translation that does not claim the error/status falls through to the next one', () => {
-        // First translation never claims anything; the AI translation (registered second) does.
-        const noop: ErrorTranslation = {
-            toWire: () => undefined,
-            fromWire: () => undefined,
-        };
-        ClientRegistry.addErrorTranslation(noop);
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
-
-        expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('x'))?.statusCode).toBe(460);
-        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeInstanceOf(
-            AiBadRequestError,
-        );
-    });
-
     it('clear() empties error translations too, so they cannot leak into the next spec', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
         ClientRegistry.clear();
 
-        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeUndefined();
+        expect(
+            ClientRegistry.tryTranslateFromWire(
+                new HttpResponseDto(new HttpResponseStatus(460, ''), [], new ProtocolError()),
+            ),
+        ).toBeUndefined();
     });
 });
 
@@ -188,36 +193,25 @@ describe('ClientRegistry error translations — precedence', () => {
         ClientRegistry.clear();
     });
 
-    it('first match wins — an earlier translation shadows a later one for the same status', () => {
-        const first = new AiErrorTranslation();
-        const second: ErrorTranslation = {
-            toWire: () => undefined,
-            fromWire: (statusCode: number) =>
-                statusCode === 460 ? new Error('SECOND should be shadowed') : undefined,
-        };
-        ClientRegistry.addErrorTranslation(first);
-        ClientRegistry.addErrorTranslation(second);
-
-        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeInstanceOf(
-            AiBadRequestError,
-        );
-    });
-
     it('can OVERRIDE a built-in status (400) — the registry is consulted before webpieces', () => {
-        const override: ErrorTranslation = {
+        const override: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 400 ? new AiBadRequestError(pe.message ?? 'overridden 400') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 400 ? new AiBadRequestError('overridden 400') : undefined,
         };
-        ClientRegistry.addErrorTranslation(override);
+        ClientRegistry.setErrorTranslators(override);
 
-        const rebuilt = ClientRegistry.tryTranslateFromWire(400, new ProtocolError());
+        const rebuilt = ClientRegistry.tryTranslateFromWire(
+            new HttpResponseDto(new HttpResponseStatus(400, ''), [], new ProtocolError()),
+        );
         expect(rebuilt).toBeInstanceOf(AiBadRequestError);
     });
 });
 
-const client = (apiClass: string): ApiMethodInfo => new ApiMethodInfo('client', apiClass, 'someMethod');
-const server = (apiClass: string): ApiMethodInfo => new ApiMethodInfo('server', apiClass, 'someMethod');
+const client = (apiClass: string): ApiMethodInfo =>
+    new ApiMethodInfo('client', apiClass, 'someMethod');
+const server = (apiClass: string): ApiMethodInfo =>
+    new ApiMethodInfo('server', apiClass, 'someMethod');
 
 /**
  * Pluggable failure classification: per-apiClass EXTERNAL-client classifier → app default → webpieces
@@ -230,9 +224,13 @@ describe('ClientRegistry failure classification', () => {
 
     it('with nothing registered, uses the webpieces built-in (server 4xx = non-failure, client = failure)', () => {
         // server rejecting the caller's bad request is a NON-failure...
-        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), server('SaveApi'))).toBe(false);
+        expect(
+            ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), server('SaveApi')),
+        ).toBe(false);
         // ...but a client RECEIVING that same 4xx failed its call.
-        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), client('SaveApi'))).toBe(true);
+        expect(
+            ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), client('SaveApi')),
+        ).toBe(true);
     });
 
     it('a per-apiClass classifier overrides the default for THAT client only', () => {
@@ -243,24 +241,36 @@ describe('ClientRegistry failure classification', () => {
         ClientRegistry.addFailureClassifier('FirestoreAdminClient', firestore);
 
         // A 404 on the firestore client is now a NON-failure...
-        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('FirestoreAdminClient'))).toBe(false);
+        expect(
+            ClientRegistry.classifyFailure(
+                new HttpNotFoundError('miss'),
+                client('FirestoreAdminClient'),
+            ),
+        ).toBe(false);
         // ...but a 404 on a DIFFERENT client still hits the built-in (client → failure).
-        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('SaveApi'))).toBe(true);
+        expect(
+            ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('SaveApi')),
+        ).toBe(true);
         // ...and a non-404 on firestore DEFERS to the built-in (client → failure).
-        expect(ClientRegistry.classifyFailure(new Error('boom'), client('FirestoreAdminClient'))).toBe(true);
+        expect(
+            ClientRegistry.classifyFailure(new Error('boom'), client('FirestoreAdminClient')),
+        ).toBe(true);
     });
 
     it('a per-apiClass classifier that DEFERS falls through to the app default', () => {
         // App default: on the CLIENT side, treat everything as a non-failure (lenient company policy).
         const appDefault: FailureClassifier = {
-            isFailure: (_error: Error, m: ApiMethodInfo) => (m.side === 'client' ? false : undefined),
+            isFailure: (_error: Error, m: ApiMethodInfo) =>
+                m.side === 'client' ? false : undefined,
         };
         ClientRegistry.setDefaultFailureClassifier(appDefault);
         // Per-client classifier that always defers.
         ClientRegistry.addFailureClassifier('FirestoreAdminClient', { isFailure: () => undefined });
 
         // per-client defers → app default claims it (client → non-failure)
-        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(false);
+        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(
+            false,
+        );
         // no per-client entry, app default defers on server → built-in (server non-4xx → failure)
         expect(ClientRegistry.classifyFailure(new Error('x'), server('SaveApi'))).toBe(true);
     });
@@ -275,6 +285,8 @@ describe('ClientRegistry failure classification', () => {
         ClientRegistry.clear();
 
         // Back to the built-in: a client error is a failure again.
-        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(true);
+        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(
+            true,
+        );
     });
 });
