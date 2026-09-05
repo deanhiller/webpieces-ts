@@ -1,3 +1,4 @@
+import { RequestContext } from '@webpieces/core-context';
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
 import { HttpBadRequestError } from '@webpieces/core-util';
@@ -76,7 +77,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(true);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('a=1&b=two'), asResponse(res), () => {});
+        await RequestContext.run(() => cap.wrapper.executeImpl(fakeRequest('a=1&b=two'), asResponse(res), () => {}));
 
         expect(cap.captured).toEqual({ a: '1', b: 'two' });
         expect(res.statusCode).toBe(200);
@@ -86,7 +87,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(true);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('not-a-form-body'), asResponse(res), () => {});
+        await RequestContext.run(() => cap.wrapper.executeImpl(fakeRequest('not-a-form-body'), asResponse(res), () => {}));
 
         // URLSearchParams treats the whole string as a single key with an empty value.
         expect(cap.captured).toEqual({ 'not-a-form-body': '' });
@@ -97,7 +98,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(false);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('{"a":1,"b":"two"}'), asResponse(res), () => {});
+        await RequestContext.run(() => cap.wrapper.executeImpl(fakeRequest('{"a":1,"b":"two"}'), asResponse(res), () => {}));
 
         expect(cap.captured).toEqual({ a: 1, b: 'two' });
         expect(res.statusCode).toBe(200);
@@ -109,7 +110,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
 
         // A urlencoded body posted to a JSON endpoint — the exact Twilio-into-JSON failure.
         await expect(
-            cap.wrapper.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {}),
+            RequestContext.run(() => cap.wrapper.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {})),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
     });
 });

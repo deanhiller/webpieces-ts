@@ -1,7 +1,7 @@
 import {
     LoggerFactory,
     ConsoleLoggerFactory,
-    ErrorTranslation,
+    ErrorTranslators,
     FailureClassifier,
     KeyedFailureClassifier,
     Locality,
@@ -29,16 +29,16 @@ export class CompanySetupOptions {
      * @param appOverrides - Single DI module loaded LAST, so tests can rebind bindings
      *   (e.g. a downstream Api) to a mock/simulator.
      * @param config - Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
-     * @param errorTranslations - App error translations installed on ClientRegistry at startup
-     *   (see {@link ErrorTranslation}). This binds them "only when express is used"; an app may
-     *   instead call ClientRegistry.addErrorTranslation(...) directly at its own startup site (and
+     * @param errorTranslators - App error translations installed on ClientRegistry at startup
+     *   (see {@link ErrorTranslators}). This binds them "only when express is used"; an app may
+     *   instead call ClientRegistry.setErrorTranslators(...) directly at its own startup site (and
      *   MUST do the same on the browser/Angular side, since those translations run client-side).
      * @param defaultFailureClassifier - Optional app/company DEFAULT failure classifier installed on
      *   ClientRegistry at startup (see {@link FailureClassifier}). ONE per app; reads `side`, so it
      *   covers the server router AND all internal clients. Unset ⇒ webpieces' built-in classification.
      * @param failureClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
      *   ('FirestoreAdminClient', ...). Installed on ClientRegistry at startup. Same "only when express
-     *   is used" binding as errorTranslations; the browser side registers its own via ClientRegistry.
+     *   is used" binding as errorTranslators; the browser side registers its own via ClientRegistry.
      * @param svcName - This service's name, forwarded into RuntimeSetupOptions so {@link setupRuntime}
      *   publishes it to ServiceInfo. It names every log line and stamps `requestIdSource` on request-ids
      *   this service mints.
@@ -66,7 +66,7 @@ export class CompanySetupOptions {
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
-        public readonly errorTranslations: ErrorTranslation[] = [],
+        public readonly errorTranslators?: ErrorTranslators,
         public readonly defaultFailureClassifier?: FailureClassifier,
         public readonly failureClassifiers: KeyedFailureClassifier[] = [],
         public readonly svcName: string = 'app-example',

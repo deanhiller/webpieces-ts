@@ -407,3 +407,5 @@ ISC
 ## Credits
 
 Inspired by [WebPieces](https://github.com/deanhiller/webpieces) by Dean Hiller.
+
+Error response customization and breaking migration: [Application error translation](docs/error-translators.md).

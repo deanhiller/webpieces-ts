@@ -4,8 +4,9 @@ import {
     ProtocolError,
     HttpError,
     HttpBadRequestError,
-    ErrorTranslation,
-    ErrorWireForm,
+    ErrorTranslators,
+    HttpResponseDto,
+    HttpResponseStatus,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
 
@@ -19,17 +20,19 @@ class AiBadRequestError extends HttpError {
 }
 
 /** Bidirectional translation for {@link AiBadRequestError}: exception <-> wire (statusCode 460). */
-class AiErrorTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class AiErrorTranslators implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(460, pe);
+        return new HttpResponseDto(new HttpResponseStatus(460, 'Application Error'), [], pe);
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
+    fromWire(response: HttpResponseDto): Error | undefined {
+        const statusCode = response.status.code;
+        const pe = response.body as ProtocolError;
         if (statusCode !== 460) {
             return undefined;
         }
@@ -82,7 +85,7 @@ function newWrapper(): ExpressWrapper {
  * instanceof-HttpError ladder, so an app both ADDS custom types and OVERRIDES built-ins — while
  * unregistered errors fall through to the exact same generic mapping as before. SERVER half of the
  * wire symmetry with ClientErrorTranslator (the round-trip itself is proven in core-util's
- * ClientRegistry.spec.ts, using the same AiErrorTranslation both directions).
+ * ClientRegistry.spec.ts, using the same AiErrorTranslators both directions).
  */
 describe('ExpressWrapper.handleError registry integration', () => {
     beforeEach(() => {
@@ -90,7 +93,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('serializes a registered custom type (460) the built-in ladder cannot, VERBATIM', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new AiBadRequestError('bad ai input'));
@@ -105,7 +108,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('an unregistered error still uses the built-in ladder (HttpBadRequestError -> 400)', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation()); // only claims AiBadRequestError
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new HttpBadRequestError('bad field', 'email'));
@@ -119,7 +122,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('does nothing once headers are already sent', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const res = new FakeResponse();
         res.headersSent = true;

@@ -87,10 +87,9 @@ export class RequestContextHeaders {
      * transferrable header off it into the context (read by wire name, stored under the key's
      * `name`), and mint an `x-request-id` if the caller sent none.
      *
-     * The request is a PARAMETER, not something we fish back out of the context. Publishing and
-     * filling are therefore one atomic step that cannot be half-done or done out of order — the
-     * older `setRequest()` + `fillContext()` pair could silently skip the transfer entirely when a
-     * caller forgot the first half.
+     * The request is a PARAMETER, not something we fish back out of the context. This method publishes the fully built request and fills the context together. Express also
+     * publishes metadata before parsing, so early error translators can inspect the request path;
+     * that earlier publication intentionally does not transfer headers or mint a request id.
      *
      * This is a PRECONDITION of calling into http-routing, and it belongs ABOVE the api boundary.
      * `WebpiecesMiddleware` does it for every HTTP request; a non-webpieces transport (or a test
