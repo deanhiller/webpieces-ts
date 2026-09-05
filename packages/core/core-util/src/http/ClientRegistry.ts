@@ -1,5 +1,5 @@
-import { ErrorTranslators } from './ErrorTranslators';
-import { HttpResponseDto } from './HttpResponseDto';
+import { ErrorTranslation, ErrorWireForm } from './ErrorTranslation';
+import { ProtocolError } from './errors';
 import { FailureClassifier } from './FailureClassifier';
 import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -60,15 +60,13 @@ export class ClientRegistry {
     private static deriver: ServiceUrlDeriver | undefined;
 
     /**
-     * The app's ONE {@link ErrorTranslators}, consulted BEFORE webpieces' built-in error mapping in
-     * BOTH directions. Process-global, set once at startup on the SERVER and in the BROWSER — the
-     * same no-DI pattern as {@link ClientRegistry.mappings} above.
-     *
-     * ONE, not a list, on purpose: an app that has several layers of error policy composes them
-     * INSIDE its own `toWire`, where the precedence is written down, instead of leaving it implicit
-     * in the order two unrelated startup paths happened to register.
+     * App-supplied error translations, consulted BEFORE webpieces' built-in error mapping (both
+     * directions). Process-global, populated once at startup on the SERVER and in the BROWSER — the
+     * same no-DI pattern as {@link ClientRegistry.mappings} above. Consulted in registration order,
+     * first match wins, so a later-registered app type AND an override of a built-in status both
+     * work. See {@link ErrorTranslation}.
      */
-    private static errorTranslators: ErrorTranslators | undefined;
+    private static readonly errorTranslations: ErrorTranslation[] = [];
 
     /**
      * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
@@ -178,36 +176,45 @@ export class ClientRegistry {
     }
 
     /**
-     * Install the app's {@link ErrorTranslators} — the ONE symmetric owner of error translation for
-     * this process, server side AND every client side. Consulted BEFORE webpieces' built-in mapping
-     * in both directions. Call ONCE at startup, on the server AND in the browser, mirroring
-     * {@link ClientRegistry.addMapping}.
-     *
-     * `set`, not `add`: see the field doc above for why a registry LIST is not wanted.
+     * Register an app error translation. Consulted BEFORE webpieces' built-in mapping, in
+     * registration order (first match wins), so later app types AND overrides of built-ins both
+     * work. Call ONCE at startup — on the server AND in the browser — mirroring
+     * {@link ClientRegistry.addMapping}. See {@link ErrorTranslation}.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static setErrorTranslators(translators: ErrorTranslators): void {
-        ClientRegistry.errorTranslators = translators;
+    static addErrorTranslation(translation: ErrorTranslation): void {
+        ClientRegistry.errorTranslations.push(translation);
     }
 
     /**
-     * exception → the WHOLE response (SERVER side), or `undefined` when no translators are installed
-     * or the installed ones do not claim `error` — the caller then falls through to the webpieces
-     * default.
+     * exception → wire (SERVER side). The first registered translation that claims `error` wins;
+     * `undefined` if none does — the caller then falls through to the generic webpieces mapping.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateToWire(error: Error): HttpResponseDto | undefined {
-        return ClientRegistry.errorTranslators?.toWire(error);
+    static tryTranslateToWire(error: Error): ErrorWireForm | undefined {
+        for (const translation of ClientRegistry.errorTranslations) {
+            const wire = translation.toWire(error);
+            if (wire !== undefined) {
+                return wire;
+            }
+        }
+        return undefined;
     }
 
     /**
-     * the WHOLE response → exception (CLIENT side), or `undefined` when no translators are installed
-     * or the installed ones do not claim `response` — the caller then falls through to the built-in
-     * webpieces status-to-type mapping.
+     * wire → exception (CLIENT side). The first registered translation that claims
+     * `(statusCode, protocolError)` wins; `undefined` if none does — the caller then falls through
+     * to the generic webpieces switch.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateFromWire(response: HttpResponseDto): Error | undefined {
-        return ClientRegistry.errorTranslators?.fromWire(response);
+    static tryTranslateFromWire(statusCode: number, protocolError: ProtocolError): Error | undefined {
+        for (const translation of ClientRegistry.errorTranslations) {
+            const err = translation.fromWire(statusCode, protocolError);
+            if (err !== undefined) {
+                return err;
+            }
+        }
+        return undefined;
     }
 
     /**
@@ -258,14 +265,14 @@ export class ClientRegistry {
     }
 
     /**
-     * Reset mappings, the deriver, the error translators, AND failure classifiers. For tests, so
-     * the process-globals do not leak across specs.
+     * Reset mappings, the deriver, error translations, AND failure classifiers. For tests, so the
+     * process-globals do not leak across specs.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static clear(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.errorTranslators = undefined;
+        ClientRegistry.errorTranslations.length = 0;
         ClientRegistry.appDefaultFailureClassifier = undefined;
         ClientRegistry.failureClassifiersByApiClass.clear();
     }

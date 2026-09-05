@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
 import { HttpBadRequestError } from '@webpieces/core-util';
-import { HttpRequest, RequestContext } from '@webpieces/core-context';
+import { HttpRequest } from '@webpieces/core-context';
 import { ExpressWrapper, MAX_BODY_BYTES } from '../ExpressWrapper';
 
 /**
@@ -85,23 +85,6 @@ class CapturingWrapper {
             maxBytes,
         );
     }
-
-    /**
-     * Drive executeImpl the way the real `execute()` does — INSIDE `RequestContext.run(...)`.
-     *
-     * executeImpl now publishes the transport-neutral request before it reads the body (issue #862),
-     * so that an app's ErrorTranslators can tell which request a parse failure belongs to. Publishing
-     * needs the ambient scope, so a spec calling executeImpl bare was never exercising the real
-     * ordering — it only got away with it because the stub `fillFromRequest` no-ops the one call that
-     * used to need a context.
-     */
-    executeImpl(
-        req: import('express').Request,
-        res: import('express').Response,
-        next: import('express').NextFunction,
-    ): Promise<void> {
-        return RequestContext.run(() => this.wrapper.executeImpl(req, res, next));
-    }
 }
 
 describe('{ rawBody: true } retains what the SENDER transmitted', () => {
@@ -109,7 +92,7 @@ describe('{ rawBody: true } retains what the SENDER transmitted', () => {
         const body = '{"title":"café 🚨 crash","rate":1e3}';
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(fakeRequest(body), asResponse(new FakeResponse()), () => {});
+        await cap.wrapper.executeImpl(fakeRequest(body), asResponse(new FakeResponse()), () => {});
 
         expect(cap.published?.raw?.rawBody.equals(Buffer.from(body, 'utf8'))).toBe(true);
         // The controller still gets the ordinary parsed DTO — verification is orthogonal to routing.
@@ -123,7 +106,7 @@ describe('{ rawBody: true } retains what the SENDER transmitted', () => {
         const split = 7; // lands inside the 4-byte emoji
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(
+        await cap.wrapper.executeImpl(
             fakeRequest(body, {}, [body.subarray(0, split), body.subarray(split)]),
             asResponse(new FakeResponse()),
             () => {},
@@ -135,7 +118,7 @@ describe('{ rawBody: true } retains what the SENDER transmitted', () => {
     it('leaves raw ABSENT on an ordinary route — the cost lands only on webhook routes', async () => {
         const cap = new CapturingWrapper(false, false);
 
-        await cap.executeImpl(fakeRequest('{"a":1}'), asResponse(new FakeResponse()), () => {});
+        await cap.wrapper.executeImpl(fakeRequest('{"a":1}'), asResponse(new FakeResponse()), () => {});
 
         expect(cap.published?.raw).toBeUndefined();
     });
@@ -143,7 +126,7 @@ describe('{ rawBody: true } retains what the SENDER transmitted', () => {
     it('gives the hook the bytes AND the controller the flat DTO with formPost — the Twilio case', async () => {
         const cap = new CapturingWrapper(true, true);
 
-        await cap.executeImpl(
+        await cap.wrapper.executeImpl(
             fakeRequest('Body=hi&From=whatsapp'),
             asResponse(new FakeResponse()),
             () => {},
@@ -156,7 +139,7 @@ describe('{ rawBody: true } retains what the SENDER transmitted', () => {
     it('carries the peer address for vendors that also publish IP ranges', async () => {
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(fakeRequest('{}'), asResponse(new FakeResponse()), () => {});
+        await cap.wrapper.executeImpl(fakeRequest('{}'), asResponse(new FakeResponse()), () => {});
 
         expect(cap.published?.raw?.remoteAddr).toBe('1.2.3.4');
     });
@@ -171,7 +154,7 @@ describe('the absolute url is the one the SENDER addressed', () => {
     it('honors x-forwarded-proto / x-forwarded-host — the TLS-terminating proxy case', async () => {
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(
+        await cap.wrapper.executeImpl(
             fakeRequest('{}', {
                 'x-forwarded-proto': 'https',
                 'x-forwarded-host': 'api.example.com',
@@ -187,7 +170,7 @@ describe('the absolute url is the one the SENDER addressed', () => {
     it('takes the FIRST entry when a proxy chain sends a comma-separated list', async () => {
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(
+        await cap.wrapper.executeImpl(
             fakeRequest('{}', {
                 'x-forwarded-proto': 'https, http',
                 'x-forwarded-host': 'api.example.com, internal.run.app',
@@ -203,7 +186,7 @@ describe('the absolute url is the one the SENDER addressed', () => {
     it('falls back to the request protocol + Host header with no proxy in front', async () => {
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(
+        await cap.wrapper.executeImpl(
             fakeRequest('{}', { host: 'localhost:8080' }),
             asResponse(new FakeResponse()),
             () => {},
@@ -221,7 +204,7 @@ describe('a JSON parse failure defers ONLY on a raw-body route', () => {
     it('holds the failure on the raw request and lets the chain run', async () => {
         const cap = new CapturingWrapper(false, true);
 
-        await cap.executeImpl(fakeRequest('not json'), asResponse(new FakeResponse()), () => {});
+        await cap.wrapper.executeImpl(fakeRequest('not json'), asResponse(new FakeResponse()), () => {});
 
         expect(cap.published?.raw?.bodyParseError).toBeInstanceOf(Error);
     });
@@ -230,7 +213,7 @@ describe('a JSON parse failure defers ONLY on a raw-body route', () => {
         const cap = new CapturingWrapper(false, false);
 
         await expect(
-            cap.executeImpl(fakeRequest('not json'), asResponse(new FakeResponse()), () => {}),
+            cap.wrapper.executeImpl(fakeRequest('not json'), asResponse(new FakeResponse()), () => {}),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
     });
 });
@@ -244,7 +227,7 @@ describe('the body cap', () => {
         const cap = new CapturingWrapper(false, true, /*maxBytes*/ 16);
 
         await expect(
-            cap.executeImpl(fakeRequest('x'.repeat(64)), asResponse(new FakeResponse()), () => {}),
+            cap.wrapper.executeImpl(fakeRequest('x'.repeat(64)), asResponse(new FakeResponse()), () => {}),
         ).rejects.toThrow(/exceeds the 16 byte limit/);
         expect(cap.published).toBeUndefined(); // nothing was published, nothing was retained
     });
@@ -252,7 +235,7 @@ describe('the body cap', () => {
     it('lets a body at the limit through', async () => {
         const cap = new CapturingWrapper(false, true, /*maxBytes*/ 16);
 
-        await cap.executeImpl(fakeRequest('{"a":"123456"}'), asResponse(new FakeResponse()), () => {});
+        await cap.wrapper.executeImpl(fakeRequest('{"a":"123456"}'), asResponse(new FakeResponse()), () => {});
 
         expect(cap.published?.raw?.rawBody.length).toBe(14);
     });

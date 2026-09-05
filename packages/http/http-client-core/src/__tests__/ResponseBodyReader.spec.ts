@@ -5,15 +5,9 @@ import {
     HttpServiceUnavailableError,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
-import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
 import { ResponseBodyReader } from '../ResponseBodyReader';
 
 const reader = new ResponseBodyReader();
-/**
- * The real transport boundary, not a stand-in: these specs read a real fetch `Response`, so they
- * normalise it the way `ProxyClient` does before handing the DTO to the translator.
- */
-const dtoFactory = new HttpResponseDtoFactory();
 
 /** The Google Frontend page a scale-to-zero backend answers a cold start with. */
 const GFE_HTML = '\n<html><head><title>502 Bad Gateway</title></head>\n<body>error</body></html>\n';
@@ -54,9 +48,7 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
     it('502 HTML → HttpBadGatewayError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
         const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
-        const translated = ClientErrorTranslator.translateError(
-            dtoFactory.fromFetch(response, protocolError),
-        ).error;
+        const translated = ClientErrorTranslator.translateError(response, protocolError).error;
 
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect((translated as HttpBadGatewayError).code).toBe(502);
@@ -71,16 +63,12 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
     it('503 (cold start) → HttpServiceUnavailableError, 504 → HttpGatewayTimeoutError', async () => {
         const unavailable = htmlResponse(503);
         expect(
-            ClientErrorTranslator.translateError(
-                dtoFactory.fromFetch(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
-            ).error,
+            ClientErrorTranslator.translateError(unavailable, await reader.readErrorBody(unavailable, 'A.b')).error,
         ).toBeInstanceOf(HttpServiceUnavailableError);
 
         const timeout = htmlResponse(504);
         expect(
-            ClientErrorTranslator.translateError(
-                dtoFactory.fromFetch(timeout, await reader.readErrorBody(timeout, 'A.b')),
-            ).error,
+            ClientErrorTranslator.translateError(timeout, await reader.readErrorBody(timeout, 'A.b')).error,
         ).toBeInstanceOf(HttpGatewayTimeoutError);
     });
 
@@ -105,7 +93,8 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
     it('parses a real ProtocolError body into its typed error', async () => {
         const response = jsonResponse(502, JSON.stringify({ message: 'upstream refused' }));
         const translated = ClientErrorTranslator.translateError(
-            dtoFactory.fromFetch(response, await reader.readErrorBody(response, 'A.b')),
+            response,
+            await reader.readErrorBody(response, 'A.b'),
         ).error;
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect(translated.message).toBe('upstream refused');

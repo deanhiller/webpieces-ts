@@ -16,10 +16,8 @@ import {
     HttpGatewayTimeoutError,
     HttpTooManyRequestsError,
     EndpointNotFoundError,
-    ErrorTranslators,
-    HttpHeader,
-    HttpResponseDto,
-    HttpResponseStatus,
+    ErrorTranslation,
+    ErrorWireForm,
     HeaderRegistry,
     LogManager,
     LoggerFactory,
@@ -50,22 +48,14 @@ class CapturingLoggerFactory implements LoggerFactory {
 /** Captures what handleError writes: status code and the serialized body. */
 class FakeResponse {
     public statusCode?: number;
-    public statusMessage?: string;
     public body?: string;
     public headersSent = false;
-    /** Every header written, in order and WITH repeats — the point of the DTO's header list. */
-    public readonly headers: Array<[string, string]> = [];
 
     status(code: number): this {
         this.statusCode = code;
         return this;
     }
-    setHeader(name: string, value: string): this {
-        this.headers.push([name, value]);
-        return this;
-    }
-    append(name: string, value: string): this {
-        this.headers.push([name, value]);
+    setHeader(_name: string, _value: string): this {
         return this;
     }
     send(payload: string): this {
@@ -84,29 +74,18 @@ class VendorPortalError extends HttpError {
     }
 }
 
-class VendorPortalTranslators implements ErrorTranslators {
-    toWire(error: Error): HttpResponseDto | undefined {
+class VendorPortalTranslation implements ErrorTranslation {
+    toWire(error: Error): ErrorWireForm | undefined {
         if (!(error instanceof VendorPortalError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new HttpResponseDto(
-            new HttpResponseStatus(461, 'Vendor Portal Suspended'),
-            [
-                new HttpHeader('retry-after', '600'),
-                new HttpHeader('set-cookie', 'portal=a; Path=/'),
-                new HttpHeader('set-cookie', 'portalSid=b; Path=/'),
-            ],
-            pe,
-        );
+        return new ErrorWireForm(461, pe);
     }
-    fromWire(response: HttpResponseDto): Error | undefined {
-        if (response.status.code !== 461) {
-            return undefined;
-        }
-        return new VendorPortalError((response.body as ProtocolError).message ?? 'portal');
+    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
+        return statusCode === 461 ? new VendorPortalError(pe.message ?? 'portal') : undefined;
     }
 }
 
@@ -281,30 +260,16 @@ describe('handleError — what still goes out on purpose', () => {
         expect(harness.bodyOf(res).waitSeconds).toBe(45);
     });
 
-    it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {
-        ClientRegistry.setErrorTranslators(new VendorPortalTranslators());
+    it('an app-registered tryTranslateToWire result is passed through untouched', () => {
+        ClientRegistry.addErrorTranslation(new VendorPortalTranslation());
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 
         expect(res.statusCode).toBe(461);
-        // The reason phrase is the app's, not node's blank default for an unregistered code.
-        expect(res.statusMessage).toBe('Vendor Portal Suspended');
         const pe = harness.bodyOf(res);
         // The app chose to publish this text. The framework does not second-guess it.
         expect(pe.message).toBe('portal says: contract 8812 is suspended');
         expect(pe.name).toBe('VendorPortalError');
-    });
-
-    it('the app owns HEADERS too — and repeats survive, which a Map would have dropped', () => {
-        ClientRegistry.setErrorTranslators(new VendorPortalTranslators());
-
-        const res = harness.send(new VendorPortalError('suspended'));
-
-        expect(res.headers).toContainEqual(['retry-after', '600']);
-        expect(res.headers.filter(([name]: [string, string]) => name === 'set-cookie')).toEqual([
-            ['set-cookie', 'portal=a; Path=/'],
-            ['set-cookie', 'portalSid=b; Path=/'],
-        ]);
     });
 
     it('a non-HttpError still answers the generic 500 it always did', () => {

@@ -19,7 +19,6 @@ import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
 import { ClientRequest } from './ClientRequest';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
-import { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 import { RequestOutcome } from './RequestOutcome';
 import { ResponseBodyReader } from './ResponseBodyReader';
 import { TranslatedFailure } from './TranslatedFailure';
@@ -70,13 +69,6 @@ export abstract class ProxyClient {
 
     // Same shape and same reason: stateless, so it is constructed here rather than injected.
     private readonly bodyReader = new ResponseBodyReader();
-
-    /**
-     * fetch `Response` -> the transport-neutral {@link HttpResponseDto} an app's `ErrorTranslators`
-     * sees. Normalising HERE is what makes `fromWire` receive the identical shape in node and in the
-     * browser: both environments share this class, and this is the only place either builds a DTO.
-     */
-    private readonly responseDtoFactory = new HttpResponseDtoFactory();
 
     /**
      * @param logApiCall - built by the SUBCLASS's package around that environment's ApiCallContext
@@ -499,9 +491,7 @@ export abstract class ProxyClient {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const protocolError = await this.bodyReader.readErrorBody(response, callId);
-            translated = ClientErrorTranslator.translateError(
-                this.responseDtoFactory.fromFetch(response, protocolError),
-            );
+            translated = ClientErrorTranslator.translateError(response, protocolError);
         } catch (err: unknown) {
             const error = toError(err);
             // The response CLAIMED JSON and was not parseable — report that failure as the outcome.

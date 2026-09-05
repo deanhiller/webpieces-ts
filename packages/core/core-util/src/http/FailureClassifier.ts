@@ -10,7 +10,7 @@ import { ApiMethodInfo } from './ApiMethodInfo';
  * rather than a bare function — so "find usages" in an IDE lands on every implementation.
  *
  * Registered on {@link ClientRegistry} at startup — the same browser-safe, no-DI, populated-once
- * singleton that owns URL mappings and {@link ErrorTranslators}. TWO tiers, resolved most-specific
+ * singleton that owns URL mappings and {@link ErrorTranslation}. TWO tiers, resolved most-specific
  * first (see {@link ClientRegistry.classifyFailure}):
  *
  * 1. `ClientRegistry.setDefaultFailureClassifier(c)` — ONE per app/company. It reads

@@ -1,7 +1,6 @@
 import { injectable, bindingScopeValues } from 'inversify';
 import { DocumentDesign } from '@webpieces/http-routing';
 import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '@webpieces/client-server-api';
-import { OrderNotFoundError } from '../OrderErrors';
 
 /**
  * PublicController - Implements PublicApi.
@@ -14,13 +13,6 @@ import { OrderNotFoundError } from '../OrderErrors';
 export class PublicController extends PublicApi {
 
     override async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
-        // The app's OWN error type, thrown from ordinary controller code. `OrderErrorTranslators`
-        // turns it into the app's own 460 envelope on the way out, and turns it
-        // back into this exact type inside a calling client — see ErrorTranslationSymmetry.spec.ts.
-        if (request.name === 'missing-order') {
-            throw new OrderNotFoundError('order-4471');
-        }
-
         return {
             greeting: `Hello, ${request.name ?? 'World'}!`,
             serverTime: new Date().toISOString(),
