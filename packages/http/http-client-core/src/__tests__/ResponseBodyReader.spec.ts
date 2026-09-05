@@ -47,8 +47,8 @@ describe('ResponseBodyReader.isJson decides from the DECLARED content-type', () 
 describe('a non-JSON error body becomes a STATUS-typed HttpError, never a SyntaxError', () => {
     it('502 HTML → HttpBadGatewayError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
-        const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
-        const translated = ClientErrorTranslator.translateError(response, protocolError).error;
+        const protocolError = await reader.readErrorBody(response);
+        const translated = ClientErrorTranslator.translateError(response, protocolError, 'WarmupApi.ping').error;
 
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect((translated as HttpBadGatewayError).code).toBe(502);
@@ -63,12 +63,12 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
     it('503 (cold start) → HttpServiceUnavailableError, 504 → HttpGatewayTimeoutError', async () => {
         const unavailable = htmlResponse(503);
         expect(
-            ClientErrorTranslator.translateError(unavailable, await reader.readErrorBody(unavailable, 'A.b')).error,
+            ClientErrorTranslator.translateError(unavailable, await reader.readErrorBody(unavailable), 'A.b').error,
         ).toBeInstanceOf(HttpServiceUnavailableError);
 
         const timeout = htmlResponse(504);
         expect(
-            ClientErrorTranslator.translateError(timeout, await reader.readErrorBody(timeout, 'A.b')).error,
+            ClientErrorTranslator.translateError(timeout, await reader.readErrorBody(timeout), 'A.b').error,
         ).toBeInstanceOf(HttpGatewayTimeoutError);
     });
 
@@ -77,7 +77,8 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
             status: 502,
             headers: { 'Content-Type': 'text/html' },
         });
-        const protocolError = await reader.readErrorBody(huge, 'A.b');
+        const body = await reader.readErrorBody(huge);
+        const protocolError = ClientErrorTranslator.translateError(huge, body, 'A.b').error;
         expect(protocolError.message!).not.toContain('\n');
         expect(protocolError.message!.length).toBeLessThan(600);
         expect(protocolError.message!).toContain('…');
@@ -94,7 +95,7 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
         const response = jsonResponse(502, JSON.stringify({ message: 'upstream refused' }));
         const translated = ClientErrorTranslator.translateError(
             response,
-            await reader.readErrorBody(response, 'A.b'),
+            await reader.readErrorBody(response), 'A.b',
         ).error;
         expect(translated).toBeInstanceOf(HttpBadGatewayError);
         expect(translated.message).toBe('upstream refused');
@@ -102,6 +103,6 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
 
     it('a malformed application/json body still rejects — that one IS a real defect', async () => {
         const response = jsonResponse(500, '{ this is not json');
-        await expect(reader.readErrorBody(response, 'A.b')).rejects.toBeInstanceOf(SyntaxError);
+        await expect(reader.readErrorBody(response)).rejects.toBeInstanceOf(SyntaxError);
     });
 });

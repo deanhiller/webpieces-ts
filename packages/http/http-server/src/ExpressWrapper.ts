@@ -1,19 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import {
-    ProtocolError,
+    HttpResponseDto,
+    WEBPIECES_DEFAULT_ERROR_TRANSLATORS,
+    WebpiecesCoreHeaders,
     ClientRegistry,
-    HttpError,
     HttpBadRequestError,
     toError,
-    LogManager,
 } from '@webpieces/core-util';
 import { RequestContext, HttpRequest, RawRequest, RequestContextHeaders } from '@webpieces/core-context';
-import { HttpErrorWireMapper } from './HttpErrorWireMapper';
-
-// The logging backend prepends this logger name to every line, so messages below carry NO
-// "[ExpressWrapper]" literal of their own — that would print the name twice.
-const log = LogManager.getLogger('ExpressWrapper');
-
 /**
  * The cap on an inbound body, in bytes. Reading stops and the request is refused the moment a body
  * crosses it — the bytes already read are dropped, nothing further is buffered.
@@ -35,13 +29,6 @@ const log = LogManager.getLogger('ExpressWrapper');
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 export class ExpressWrapper {
-    /**
-     * Decides what an outside caller is allowed to see of a thrown {@link HttpError}. Stateless —
-     * one instance per wrapper is fine, and the class doc there is where the "only HttpUserError's
-     * message goes on the wire" rule is stated.
-     */
-    private readonly errorWireMapper = new HttpErrorWireMapper();
-
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         private clientMethod: (requestDto: unknown) => Promise<unknown>,
@@ -95,6 +82,9 @@ export class ExpressWrapper {
     }
 
     public async executeImpl(req: Request, res: Response, next: NextFunction): Promise<void> {
+        // Error translators need request metadata even when parsing fails.
+        // Transfer headers and mint the id only after parsing (the accepted known limitation).
+        RequestContext.setRequest(this.toWebpiecesRequest(req));
         // 1. Parse the request body. The PARSER is chosen by the @Endpoint annotation (this.formPost),
         //    NOT the request Content-Type header — the annotation is the single source of truth.
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
@@ -148,6 +138,7 @@ export class ExpressWrapper {
 
         // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())
         const responseJson = JSON.stringify(result);
+        this.writeRequestId(res);
         res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
     }
 
@@ -253,68 +244,39 @@ export class ExpressWrapper {
         });
     }
 
-    /**
-     * Handle errors - translate to JSON ProtocolError (SYMMETRIC with ClientErrorTranslator).
-     * PUBLIC so wrapExpress can call it for symmetric error handling.
-     * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
-     *
-     * Maps all HttpError types (must match ClientErrorTranslator's built-in status mapping):
-     * - HttpUserError → 266 (message + subType + errorCode)
-     * - HttpBadRequestError → 400 (generic message + field, guiAlertMessage)
-     * - HttpUnauthorizedError → 401 (generic message + subType)
-     * - HttpForbiddenError → 403 (generic message)
-     * - HttpNotFoundError → 404 (generic message)
-     * - HttpTimeoutError → 408 (generic message)
-     * - HttpTooManyRequestsError → 429 (generic message)
-     * - HttpInternalServerError → 500 (generic message)
-     * - HttpBadGatewayError → 502 (generic message)
-     * - HttpServiceUnavailableError → 503 (generic message)
-     * - HttpGatewayTimeoutError → 504 (generic message)
-     * - HttpVendorError → 598 (generic message + waitSeconds)
-     *
-     * "generic message" is the point of {@link HttpErrorWireMapper}: ONLY `HttpUserError`'s message
-     * was written for a human to read, so only it is copied to the response body. Every other type
-     * sends the standard reason phrase for its status and logs the real message. Read that class's
-     * doc for the full rule, including why `subType` is kept and `name` is not.
-     */
-    // webpieces-disable no-any-unknown -- a thrown error is genuinely unknown until narrowed below
+    /** Translate to the app's entire response, falling back to the shared default. */
+    // webpieces-disable no-any-unknown -- a thrown value is unknown until normalized
     public handleError(res: Response, error: unknown): void {
-        if (res.headersSent) {
-            return;
+        if (res.headersSent) return;
+        const err = toError(error);
+        const wire = ClientRegistry.tryTranslateToWire(err) ?? WEBPIECES_DEFAULT_ERROR_TRANSLATORS.toWire(err);
+        this.writeErrorResponse(res, wire);
+    }
+    private writeErrorResponse(res: Response, wire: HttpResponseDto): void {
+        res.status(wire.status.code);
+        res.statusMessage = wire.status.reason;
+        res.setHeader('Content-Type', 'application/json');
+        const grouped = new Map<string, string[]>();
+        for (const header of wire.headers) {
+            const name = header.name.toLowerCase();
+            const values = grouped.get(name) ?? [];
+            values.push(header.value);
+            grouped.set(name, values);
         }
-
-        // App-registered translations win, so an app can serialize its OWN error types (e.g. a
-        // custom 460) AND override built-ins. `undefined` means "not mine" — fall through to the
-        // built-in instanceof-HttpError ladder below, which stays the generic default. Symmetric
-        // with the client's ClientErrorTranslator, which consults tryTranslateFromWire() first.
-        if (error instanceof Error) {
-            const wire = ClientRegistry.tryTranslateToWire(error);
-            if (wire !== undefined) {
-                res.status(wire.statusCode)
-                    .setHeader('Content-Type', 'application/json')
-                    .send(JSON.stringify(wire.protocolError));
-                return;
-            }
+        for (const entry of grouped) {
+            const values = entry[1];
+            res.setHeader(entry[0], values.length === 1 ? values[0] : values);
         }
-
-        if (error instanceof HttpError) {
-            // The mapper decides what the caller may see AND logs everything it withholds — see
-            // HttpErrorWireMapper. Nothing type-specific is decided here any more.
-            const protocolError = this.errorWireMapper.toWire(error);
-
-            // Serialize ProtocolError to JSON (SYMMETRIC with client)
-            const responseJson = JSON.stringify(protocolError);
-            res.status(error.code).setHeader('Content-Type', 'application/json').send(responseJson);
-        } else {
-            // Unknown error - 500. This branch was ALREADY generic, which is what made the old
-            // HttpError branch's verbatim `error.message` so obviously backwards: an unexpected crash
-            // leaked nothing while a deliberate HttpInternalServerError leaked everything.
-            const err = toError(error);
-            const protocolError = new ProtocolError();
-            protocolError.message = 'Internal Server Error';
-            log.error('Unexpected error:', err);
-            const responseJson = JSON.stringify(protocolError);
-            res.status(500).setHeader('Content-Type', 'application/json').send(responseJson);
-        }
+        this.writeRequestId(res);
+        const contentType = grouped.get('content-type')?.[0] ?? 'application/json';
+        const payload = typeof wire.body === 'string' && !/\bjson\b/i.test(contentType)
+            ? wire.body : JSON.stringify(wire.body);
+        res.send(payload);
+    }
+    /** Trace infrastructure applies even when an app replaces the error envelope. */
+    private writeRequestId(res: Response): void {
+        if (!RequestContext.isActive()) return;
+        const id = RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID);
+        if (id) res.setHeader(WebpiecesCoreHeaders.REQUEST_ID.httpHeader!, id);
     }
 }

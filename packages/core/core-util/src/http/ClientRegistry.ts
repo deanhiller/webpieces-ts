@@ -1,5 +1,5 @@
-import { ErrorTranslation, ErrorWireForm } from './ErrorTranslation';
-import { ProtocolError } from './errors';
+import { ErrorTranslators } from './ErrorTranslators';
+import { HttpResponseDto } from './HttpResponseDto';
 import { FailureClassifier } from './FailureClassifier';
 import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -59,14 +59,8 @@ export class ClientRegistry {
     /** The fallback for svcNames with no mapping. Undefined = no derivation in this environment. */
     private static deriver: ServiceUrlDeriver | undefined;
 
-    /**
-     * App-supplied error translations, consulted BEFORE webpieces' built-in error mapping (both
-     * directions). Process-global, populated once at startup on the SERVER and in the BROWSER — the
-     * same no-DI pattern as {@link ClientRegistry.mappings} above. Consulted in registration order,
-     * first match wins, so a later-registered app type AND an override of a built-in status both
-     * work. See {@link ErrorTranslation}.
-     */
-    private static readonly errorTranslations: ErrorTranslation[] = [];
+    /** One app-owned strategy; each set replaces both directions. */
+    private static errorTranslators: ErrorTranslators | undefined;
 
     /**
      * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
@@ -175,46 +169,20 @@ export class ClientRegistry {
         return url;
     }
 
-    /**
-     * Register an app error translation. Consulted BEFORE webpieces' built-in mapping, in
-     * registration order (first match wins), so later app types AND overrides of built-ins both
-     * work. Call ONCE at startup — on the server AND in the browser — mirroring
-     * {@link ClientRegistry.addMapping}. See {@link ErrorTranslation}.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static addErrorTranslation(translation: ErrorTranslation): void {
-        ClientRegistry.errorTranslations.push(translation);
+    /** Set both translation directions at application startup. */
+    // webpieces-disable no-function-outside-class -- process-global startup registry
+    static setErrorTranslators(translators: ErrorTranslators): void {
+        ClientRegistry.errorTranslators = translators;
     }
-
-    /**
-     * exception → wire (SERVER side). The first registered translation that claims `error` wins;
-     * `undefined` if none does — the caller then falls through to the generic webpieces mapping.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateToWire(error: Error): ErrorWireForm | undefined {
-        for (const translation of ClientRegistry.errorTranslations) {
-            const wire = translation.toWire(error);
-            if (wire !== undefined) {
-                return wire;
-            }
-        }
-        return undefined;
+    /** Server override, or undefined to use the default. */
+    // webpieces-disable no-function-outside-class -- process-global registry lookup
+    static tryTranslateToWire(error: Error): HttpResponseDto | undefined {
+        return ClientRegistry.errorTranslators?.toWire(error);
     }
-
-    /**
-     * wire → exception (CLIENT side). The first registered translation that claims
-     * `(statusCode, protocolError)` wins; `undefined` if none does — the caller then falls through
-     * to the generic webpieces switch.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateFromWire(statusCode: number, protocolError: ProtocolError): Error | undefined {
-        for (const translation of ClientRegistry.errorTranslations) {
-            const err = translation.fromWire(statusCode, protocolError);
-            if (err !== undefined) {
-                return err;
-            }
-        }
-        return undefined;
+    /** Client override, or undefined to use the default. */
+    // webpieces-disable no-function-outside-class -- process-global registry lookup
+    static tryTranslateFromWire(response: HttpResponseDto): Error | undefined {
+        return ClientRegistry.errorTranslators?.fromWire(response);
     }
 
     /**
@@ -272,7 +240,7 @@ export class ClientRegistry {
     static clear(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.errorTranslations.length = 0;
+        ClientRegistry.errorTranslators = undefined;
         ClientRegistry.appDefaultFailureClassifier = undefined;
         ClientRegistry.failureClassifiersByApiClass.clear();
     }

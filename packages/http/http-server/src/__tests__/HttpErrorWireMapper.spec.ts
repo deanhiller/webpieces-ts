@@ -16,8 +16,9 @@ import {
     HttpGatewayTimeoutError,
     HttpTooManyRequestsError,
     EndpointNotFoundError,
-    ErrorTranslation,
-    ErrorWireForm,
+    ErrorTranslators,
+    HttpResponseDto,
+    HttpResponseStatus,
     HeaderRegistry,
     LogManager,
     LoggerFactory,
@@ -31,7 +32,7 @@ import { ExpressWrapper } from '../ExpressWrapper';
  * {@link ExpressWrapper.handleError} — not the mapper in isolation — because the leak was a property
  * of the response BODY, so the assertion has to be made on the bytes that are actually sent.
  *
- * Companion: `WebpiecesMiddlewareErrorTranslation.spec.ts` covers the registry-override path.
+ * Companion: `WebpiecesMiddlewareErrorTranslators.spec.ts` covers the registry-override path.
  */
 
 /** Records every line any logger emits, so a spec can assert what was WITHHELD is still recorded. */
@@ -74,17 +75,19 @@ class VendorPortalError extends HttpError {
     }
 }
 
-class VendorPortalTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class VendorPortalTranslation implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof VendorPortalError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(461, pe);
+        return new HttpResponseDto(new HttpResponseStatus(461, 'Application Error'), [], pe);
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
+    fromWire(response: HttpResponseDto): Error | undefined {
+        const statusCode = response.status.code;
+        const pe = response.body as ProtocolError;
         return statusCode === 461 ? new VendorPortalError(pe.message ?? 'portal') : undefined;
     }
 }
@@ -261,7 +264,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('an app-registered tryTranslateToWire result is passed through untouched', () => {
-        ClientRegistry.addErrorTranslation(new VendorPortalTranslation());
+        ClientRegistry.setErrorTranslators(new VendorPortalTranslation());
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 

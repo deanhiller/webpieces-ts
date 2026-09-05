@@ -1,4 +1,3 @@
-import { ProtocolError } from '@webpieces/core-util';
 
 /**
  * `application/json`, plus every `+json` structured suffix (`application/problem+json`,
@@ -38,25 +37,10 @@ export class ResponseBodyReader {
         return JSON_CONTENT_TYPE.test(contentType.trim());
     }
 
-    /**
-     * Read a NON-2xx body as a {@link ProtocolError}, whatever it turns out to be.
-     *
-     * - Declared JSON → parse it. A malformed one still throws `SyntaxError`, on purpose: the server
-     *   promised JSON and broke the promise, which is a genuine defect worth surfacing as one.
-     * - Anything else → synthesize a ProtocolError describing what actually arrived, so the caller
-     *   gets the STATUS-derived typed error instead of a parse failure.
-     *
-     * @param response - the fetch Response, already known to be non-ok
-     * @param callId   - `ApiName.methodName`, so the message names the call that failed
-     */
-    async readErrorBody(response: Response, callId: string): Promise<ProtocolError> {
-        if (this.isJson(response)) {
-            return (await response.json()) as ProtocolError;
-        }
-
-        const protocolError = new ProtocolError();
-        protocolError.message = this.describeForeignBody(response, callId, await response.text());
-        return protocolError;
+    /** Preserve the original body for the app; default translation supplies infrastructure diagnostics. */
+    // webpieces-disable no-any-unknown -- response JSON/text is narrowed by the translator
+    async readErrorBody(response: Response): Promise<unknown> {
+        return this.isJson(response) ? response.json() : response.text();
     }
 
     /**

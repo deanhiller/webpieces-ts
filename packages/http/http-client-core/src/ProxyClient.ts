@@ -490,8 +490,8 @@ export abstract class ProxyClient {
         // webpieces-disable no-unmanaged-exceptions -- a malformed JSON error body must still report the END marker
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const protocolError = await this.bodyReader.readErrorBody(response, callId);
-            translated = ClientErrorTranslator.translateError(response, protocolError);
+            const protocolError = await this.bodyReader.readErrorBody(response);
+            translated = ClientErrorTranslator.translateError(response, protocolError, callId);
         } catch (err: unknown) {
             const error = toError(err);
             // The response CLAIMED JSON and was not parseable — report that failure as the outcome.

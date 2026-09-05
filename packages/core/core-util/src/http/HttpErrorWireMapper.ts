@@ -11,8 +11,8 @@ import {
     HttpInternalServerError,
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
-    LogManager,
-} from '@webpieces/core-util';
+} from './errors';
+import { LogManager } from '../logging/LogManager';
 
 // The logging backend prepends this logger name to every line, so messages below carry NO
 // "[HttpErrorWireMapper]" literal of their own — that would print the name twice.
@@ -63,7 +63,7 @@ const log = LogManager.getLogger('HttpErrorWireMapper');
  *   the server's internals for zero caller benefit, so it is not sent. It is logged instead.
  *
  * An app that WANTS a different wire shape has an explicit opt-out on both sides:
- * `ClientRegistry.addErrorTranslation()`. `ExpressWrapper.handleError` consults
+ * `ClientRegistry.setErrorTranslators()`. `ExpressWrapper.handleError` consults
  * `tryTranslateToWire()` BEFORE reaching this class, and whatever that returns is sent verbatim —
  * that is the app's own deliberate choice about what it publishes.
  */
@@ -112,7 +112,7 @@ export class HttpErrorWireMapper {
     }
 
     /** The generic text for a status, or a code-free fallback for an app's own custom status. */
-    private genericMessage(code: number): string {
+    public genericMessage(code: number): string {
         return this.genericMessages.get(code) ?? 'Request Failed';
     }
 

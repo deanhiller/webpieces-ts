@@ -151,8 +151,9 @@ export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
 // Pluggable, bidirectional error translation (app exception <-> wire form). Registered on
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
-export { ErrorWireForm } from './http/ErrorTranslation';
-export type { ErrorTranslation } from './http/ErrorTranslation';
+export { HttpHeader, HttpResponseStatus, HttpResponseDto } from './http/HttpResponseDto';
+export type { ErrorTranslators } from './http/ErrorTranslators';
+export { WEBPIECES_DEFAULT_ERROR_TRANSLATORS } from './http/WebpiecesDefaultErrorTranslators';
 // Pluggable per-client failure classification (is a thrown API-call error a real failure or an
 // expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
 export type { FailureClassifier } from './http/FailureClassifier';

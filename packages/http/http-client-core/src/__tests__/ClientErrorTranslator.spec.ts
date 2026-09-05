@@ -15,8 +15,10 @@ import {
     HttpServiceUnavailableError,
     HttpGatewayTimeoutError,
     HttpVendorError,
-    ErrorTranslation,
-    ErrorWireForm,
+    ErrorTranslators,
+    HttpHeader,
+    HttpResponseDto,
+    HttpResponseStatus,
     WRONG_LOGIN,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
@@ -31,17 +33,19 @@ class AiBadRequestError extends HttpError {
 }
 
 /** Bidirectional translation for {@link AiBadRequestError}: exception <-> wire (statusCode 460). */
-class AiErrorTranslation implements ErrorTranslation {
-    toWire(error: Error): ErrorWireForm | undefined {
+class AiErrorTranslators implements ErrorTranslators {
+    toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
         const pe = new ProtocolError();
         pe.message = error.message;
         pe.name = error.name;
-        return new ErrorWireForm(460, pe);
+        return new HttpResponseDto(new HttpResponseStatus(460, 'Application Error'), [], pe);
     }
-    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
+    fromWire(response: HttpResponseDto): Error | undefined {
+        const statusCode = response.status.code;
+        const pe = response.body as ProtocolError;
         if (statusCode !== 460) {
             return undefined;
         }
@@ -52,12 +56,12 @@ class AiErrorTranslation implements ErrorTranslation {
 /** Minimal fetch-Response stand-in — translateError only reads status + statusText. */
 function fakeResponse(status: number, statusText = ''): Response {
     // webpieces-disable no-any-unknown -- test double: translateError only touches status/statusText
-    return { status, statusText } as unknown as Response;
+    return new Response(null, { status, statusText, headers: { 'content-type': 'application/json' } });
 }
 
 /** The error half of the translation, for the assertions that only care about the type. */
 function translate(status: number, pe: ProtocolError = new ProtocolError(), statusText = ''): Error {
-    return ClientErrorTranslator.translateError(fakeResponse(status, statusText), pe).error;
+    return ClientErrorTranslator.translateError(fakeResponse(status, statusText), pe, 'Test.call').error;
 }
 
 /**
@@ -76,7 +80,7 @@ describe('ClientErrorTranslator registry integration', () => {
         expect(generic).not.toBeInstanceOf(AiBadRequestError);
         expect(generic).toBeInstanceOf(HttpError);
 
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
         const pe = new ProtocolError();
         pe.message = 'bad ai input';
@@ -86,7 +90,7 @@ describe('ClientErrorTranslator registry integration', () => {
     });
 
     it('an unregistered status still uses the built-in mapping (400 -> HttpBadRequestError)', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation()); // only claims 460
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims 460
 
         const pe = new ProtocolError();
         pe.message = 'bad field';
@@ -96,12 +100,12 @@ describe('ClientErrorTranslator registry integration', () => {
     });
 
     it('a registered translation OVERRIDES a built-in status (400 -> custom type wins)', () => {
-        const override: ErrorTranslation = {
+        const override: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 400 ? new AiBadRequestError(pe.message ?? 'overridden 400') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 400 ? new AiBadRequestError((response.body as ProtocolError).message ?? 'overridden 400') : undefined,
         };
-        ClientRegistry.addErrorTranslation(override);
+        ClientRegistry.setErrorTranslators(override);
 
         const err = translate(400);
         expect(err).toBeInstanceOf(AiBadRequestError);
@@ -127,7 +131,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
     });
 
     it('a BUILT-IN mapping reports appRegistered=false and the downstream status', () => {
-        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError());
+        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError(), 'Test.call');
 
         expect(failure.appRegistered).toBe(false);
         expect(failure.statusCode).toBe(404);
@@ -135,9 +139,9 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
     });
 
     it('an APP-registered translation reports appRegistered=true — the deliberate, greppable choice', () => {
-        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
-        const failure = ClientErrorTranslator.translateError(fakeResponse(460), new ProtocolError());
+        const failure = ClientErrorTranslator.translateError(fakeResponse(460), new ProtocolError(), 'Test.call');
 
         expect(failure.appRegistered).toBe(true);
         expect(failure.statusCode).toBe(460);
@@ -146,14 +150,14 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
 
     it('statusCode is the DOWNSTREAM status, not the registered error\'s own code (relay case)', () => {
         // A gateway app deliberately relays a 404 as its own — its translation claims 404.
-        const relay: ErrorTranslation = {
+        const relay: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 404 ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed') : undefined,
         };
-        ClientRegistry.addErrorTranslation(relay);
+        ClientRegistry.setErrorTranslators(relay);
 
-        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError());
+        const failure = ClientErrorTranslator.translateError(fakeResponse(404), new ProtocolError(), 'Test.call');
 
         expect(failure.appRegistered).toBe(true);
         expect(failure.statusCode).toBe(404);
@@ -249,5 +253,40 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
         const err = translate(598, pe);
 
         expect((err as HttpVendorError).waitSeconds).toBe(45);
+    });
+});
+
+
+describe('application translators receive the original body', () => {
+    it.each([null, 'text payload', ['a', 'b'], 17])('preserves JSON value %j', (body) => {
+        let received: HttpResponseDto | undefined;
+        ClientRegistry.setErrorTranslators({
+            toWire: () => undefined,
+            fromWire: (response: HttpResponseDto): Error => {
+                received = response;
+                return new AiBadRequestError('claimed');
+            },
+        });
+        const response = new Response(JSON.stringify(body), {
+            status: 460, statusText: 'App Reason', headers: { 'content-type': 'application/json', 'x-app': 'owned' },
+        });
+        expect(ClientErrorTranslator.translateError(response, body, 'Test.call').error).toBeInstanceOf(AiBadRequestError);
+        expect(received?.body).toEqual(body);
+        expect(received?.status).toEqual(new HttpResponseStatus(460, 'App Reason'));
+        expect(received?.headers).toContainEqual(new HttpHeader('x-app', 'owned'));
+    });
+
+    it('passes text verbatim before synthesizing default infrastructure diagnostics', () => {
+        let received: HttpResponseDto | undefined;
+        ClientRegistry.setErrorTranslators({
+            toWire: () => undefined,
+            fromWire: (response: HttpResponseDto): Error => {
+                received = response;
+                return new AiBadRequestError('claimed');
+            },
+        });
+        const response = new Response('retry later', { status: 503 });
+        ClientErrorTranslator.translateError(response, 'retry later', 'Test.call');
+        expect(received?.body).toBe('retry later');
     });
 });
