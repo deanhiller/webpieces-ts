@@ -4,9 +4,7 @@ import express from 'express';
 import { Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import {
-    ApiPath,
     ClientRegistry,
-    Endpoint,
     ErrorTranslators,
     HeaderRegistry,
     HttpBadRequestError,
@@ -14,33 +12,17 @@ import {
     HttpResponseDto,
     HttpResponseStatus,
     ProtocolError,
-    Public,
-    Rpc,
     WEBPIECES_DEFAULT_ERROR_TRANSLATORS,
 } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ExpressWrapper } from '../ExpressWrapper';
 
 class OrderNotFoundError extends Error {}
-class OrderRequest {
-    constructor(public readonly id: string) {}
-}
 class OrderEnvelope {
     constructor(public readonly orderId: string) {}
 }
-@Rpc()
-@ApiPath('/orders')
-abstract class OrdersApi {
-    @Endpoint('/find', 'rpc')
-    @Public()
-    find(_request: OrderRequest): Promise<void> {
-        throw new Error('contract only');
-    }
-}
-
 /** One application class owns both directions, with no registration during the RPC. */
 class OrderErrorTranslators implements ErrorTranslators {
-    readonly received: HttpResponseDto[] = [];
     toWire(error: Error): HttpResponseDto | undefined {
         if (!(error instanceof OrderNotFoundError)) return undefined;
         return new HttpResponseDto(
@@ -54,7 +36,6 @@ class OrderErrorTranslators implements ErrorTranslators {
         );
     }
     fromWire(response: HttpResponseDto): Error | undefined {
-        this.received.push(response);
         if (response.status.code !== 460) return undefined;
         return new OrderNotFoundError((response.body as OrderEnvelope).orderId);
     }
@@ -120,6 +101,27 @@ describe('whole error responses over HTTP', () => {
         ]);
         expect(response.headers.get('x-request-id')).toBe('caller-tx');
         expect(await response.json()).toEqual(new OrderEnvelope('order-17'));
+    });
+
+    it('honors an application text content type and body without JSON quoting', async () => {
+        ClientRegistry.setErrorTranslators({
+            toWire: () =>
+                new HttpResponseDto(
+                    new HttpResponseStatus(503, 'Try Later'),
+                    [
+                        new HttpHeader('Content-Type', 'text/plain'),
+                        new HttpHeader('Retry-After', '30'),
+                    ],
+                    'retry later',
+                ),
+            fromWire: () => undefined,
+        });
+        const response = await post('/default/error');
+        expect(response.status).toBe(503);
+        expect(response.statusText).toBe('Try Later');
+        expect(response.headers.get('content-type')).toContain('text/plain');
+        expect(response.headers.get('retry-after')).toBe('30');
+        expect(await response.text()).toBe('retry later');
     });
 
     it.each(['/default/ok', '/default/error'])(

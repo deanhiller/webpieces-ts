@@ -163,7 +163,7 @@ describe('ClientRegistry error translations', () => {
     });
 
     it('a second set replaces the previous translator', () => {
-        // First translation never claims anything; the AI translation (registered second) does.
+        // The second set replaces the no-op in both directions.
         const noop: ErrorTranslators = {
             toWire: () => undefined,
             fromWire: () => undefined,
@@ -185,7 +185,7 @@ describe('ClientRegistry error translations', () => {
     });
 });
 
-/** First-match-wins ordering + overriding a built-in status. */
+/** Replacement semantics and overriding a built-in status. */
 describe('ClientRegistry error translations — precedence', () => {
     beforeEach(() => {
         ClientRegistry.clear();
