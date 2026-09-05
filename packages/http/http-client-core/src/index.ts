@@ -30,9 +30,6 @@ export { RequestOutcome } from './RequestOutcome';
 export type { ApiPrototype } from './ApiPrototype';
 export { buildClientProxy } from './buildClientProxy';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
-// The CLIENT-side transport boundary: a fetch Response becomes the ONE HttpResponseDto an app's
-// ErrorTranslators sees, so node and browser hand `fromWire` the identical shape.
-export { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 export { TranslatedFailure } from './TranslatedFailure';
 export { ResponseBodyReader } from './ResponseBodyReader';
 // The OUTBOUND filter chain: the mutable request a filter edits, and one registration of a filter
