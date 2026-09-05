@@ -1,6 +1,7 @@
 import {
     ProtocolError,
     ClientRegistry,
+    HttpResponseDto,
     HttpError,
     HttpBadRequestError,
     HttpUserError,
@@ -24,8 +25,12 @@ import { TranslatedFailure } from './TranslatedFailure';
  * It reconstructs typed HttpError exceptions from ProtocolError JSON responses.
  *
  * Architecture:
- * - Server: HttpError → ExpressWrapper.handleError() → ProtocolError JSON
- * - Client: ProtocolError JSON → ClientErrorTranslator.translateError() → TranslatedFailure
+ * - Server: HttpError → ExpressWrapper.handleError() → an {@link HttpResponseDto} on the wire
+ * - Client: that response → ClientErrorTranslator.translateError() → TranslatedFailure
+ *
+ * Both sides speak {@link HttpResponseDto}, which is what makes an app's `ErrorTranslators` one
+ * object with two halves that can be read against each other: `toWire` produces exactly the shape
+ * `fromWire` consumes, whether the reader was `http-client-node` or `http-client-browser`.
  *
  * This achieves symmetric error handling - server throws typed exceptions,
  * client receives typed exceptions.
@@ -44,26 +49,26 @@ export class ClientErrorTranslator {
     /**
      * Parse an error response and decide which error the caller should see, and who decided it.
      *
-     * App-registered translations win, so an app can reconstruct its OWN error types (e.g. a custom
-     * 460) AND override built-ins. `undefined` means "not mine" — fall through to
+     * The app's `ErrorTranslators` wins, so an app can reconstruct its OWN error types (e.g. a
+     * custom 460) AND override built-ins. `undefined` means "not mine" — fall through to
      * {@link builtInError}, which stays the generic default. Symmetric with the server's
      * ExpressWrapper.handleError(), which consults ClientRegistry.tryTranslateToWire() first.
      *
-     * @param response - Fetch Response object
-     * @param protocolError - Parsed ProtocolError from response body
+     * @param response - the WHOLE response, normalised out of the transport by
+     *   `HttpResponseDtoFactory` — status code, reason phrase, header list and parsed body
      * @returns the chosen error plus its provenance and the downstream status
      */
     // webpieces-disable no-function-outside-class -- pure, stateless status-to-type mapping with nothing to inject, called from a BROWSER bundle where no DI container exists; static is the established idiom of this class
-    static translateError(response: Response, protocolError: ProtocolError): TranslatedFailure {
-        const statusCode = response.status;
+    static translateError(response: HttpResponseDto): TranslatedFailure {
+        const statusCode = response.status.code;
 
-        const custom = ClientRegistry.tryTranslateFromWire(statusCode, protocolError);
+        const custom = ClientRegistry.tryTranslateFromWire(response);
         if (custom !== undefined) {
             return new TranslatedFailure(custom, true, statusCode);
         }
 
         return new TranslatedFailure(
-            ClientErrorTranslator.builtInError(response, protocolError),
+            ClientErrorTranslator.builtInError(response),
             false,
             statusCode,
         );
@@ -100,12 +105,17 @@ export class ClientErrorTranslator {
      * server's logs, correlated by request id.
      *
      * (An app that publishes richer text on purpose does it through
-     * `ClientRegistry.addErrorTranslation()`, which is consulted before this mapping on both sides.)
+     * `ClientRegistry.setErrorTranslators()`, which is consulted before this mapping on both sides.)
+     *
+     * PUBLIC, and the client-side twin of `HttpErrorWireMapper.toResponse` being public on the
+     * server: the webpieces DEFAULT is delegable, so an app whose `fromWire` claims one status can
+     * hand every other status straight back here instead of copying this ladder.
      */
-    // webpieces-disable no-function-outside-class -- private helper of the static above; same reason
-    private static builtInError(response: Response, protocolError: ProtocolError): Error {
-        const statusCode = response.status;
-        const message = protocolError.message || response.statusText || 'Unknown error';
+    // webpieces-disable no-function-outside-class -- public delegable default alongside the static above; same reason
+    public static builtInError(response: HttpResponseDto): Error {
+        const statusCode = response.status.code;
+        const protocolError = ClientErrorTranslator.asProtocolError(response.body);
+        const message = protocolError.message || response.status.reason || 'Unknown error';
         const subType = protocolError.subType;
 
         switch (statusCode) {
@@ -164,5 +174,28 @@ export class ClientErrorTranslator {
                     subType,
                 );
         }
+    }
+
+    /**
+     * The response body as the {@link ProtocolError} this built-in ladder reads.
+     *
+     * {@link HttpResponseDto.body} is `unknown` because an APP owns the body shape when it installs
+     * its own translators. This default does not: a webpieces server always writes a ProtocolError
+     * here, and `ResponseBodyReader` has already parsed one. A body that is not an object at all
+     * (a bare string from something that is not a webpieces server) degrades to an EMPTY
+     * ProtocolError, so the status-to-type mapping below still answers — it never throws on the
+     * error path, which is the one path that must not fail.
+     */
+    // webpieces-disable no-any-unknown -- HttpResponseDto.body is app-owned; this narrows it back to the shape the BUILT-IN ladder reads
+    // webpieces-disable no-function-outside-class -- private helper of the statics above; same reason
+    private static asProtocolError(body: unknown): ProtocolError {
+        if (body instanceof ProtocolError) {
+            return body;
+        }
+        const parsed = new ProtocolError();
+        if (typeof body === 'object' && body !== null) {
+            Object.assign(parsed, body);
+        }
+        return parsed;
     }
 }
