@@ -5,7 +5,6 @@ import {
     toError,
     LogManager,
     ClientRegistry,
-    ErrorTranslation,
     KeyedFailureClassifier,
 } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
@@ -25,10 +24,13 @@ export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
-    // Install the app's error translations at the same point we install the logger/registry config,
-    // so exception<->wire translation is part of the express-server wiring "only when express is
-    // used." Consulted before the built-in webpieces mapping on BOTH sides (see ErrorTranslation).
-    options.errorTranslations.forEach((t: ErrorTranslation) => ClientRegistry.addErrorTranslation(t));
+    // Install the app's ONE ErrorTranslators at the same point we install the logger/registry
+    // config, so exception<->response translation is part of the express-server wiring "only when
+    // express is used." Consulted before the built-in webpieces mapping on BOTH sides (see
+    // ErrorTranslators).
+    if (options.errorTranslators !== undefined) {
+        ClientRegistry.setErrorTranslators(options.errorTranslators);
+    }
 
     // Same "only when express is used" install point for failure classification: the app default
     // (server + internal clients) and any per-external-client classifiers (keyed by apiClass). The

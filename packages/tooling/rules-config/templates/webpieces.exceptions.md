@@ -671,8 +671,9 @@ external consumer. So:
   text as `HttpBadRequestError`'s `guiMessage`, which IS sent (as `guiAlertMessage`).
 - A client must branch on the error TYPE, on `subType`, on `errorCode` or on `guiAlertMessage` — never
   on the prose of `message`. Against a current webpieces server that prose is a constant per status.
-- An app that deliberately wants to publish richer text registers an `ErrorTranslation` with
-  `ClientRegistry`; its `toWire()` result is sent verbatim. That is the explicit, greppable opt-out.
+- An app that deliberately wants to publish richer text installs an `ErrorTranslators` on
+  `ClientRegistry` (`setErrorTranslators`); its `toWire()` response — status, reason phrase, headers
+  and body — is sent verbatim. That is the explicit, greppable opt-out.
 
 ## How to Request Approval
 

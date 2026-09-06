@@ -1,18 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import {
-    ProtocolError,
     ClientRegistry,
-    HttpError,
     HttpBadRequestError,
+    HttpHeader,
+    HttpResponseDto,
     toError,
-    LogManager,
+    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { RequestContext, HttpRequest, RawRequest, RequestContextHeaders } from '@webpieces/core-context';
 import { HttpErrorWireMapper } from './HttpErrorWireMapper';
-
-// The logging backend prepends this logger name to every line, so messages below carry NO
-// "[ExpressWrapper]" literal of their own — that would print the name twice.
-const log = LogManager.getLogger('ExpressWrapper');
 
 /**
  * The cap on an inbound body, in bytes. Reading stops and the request is refused the moment a body
@@ -33,6 +29,22 @@ const log = LogManager.getLogger('ExpressWrapper');
  * decide where an app declares it (per-route, most likely, since that is the granularity the need has).
  */
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
+
+/**
+ * What {@link ExpressWrapper.parseBody} produced: the DTO the controller receives, the verbatim
+ * {@link RawRequest} when the route asked for one, and the held parse failure on a raw-body route.
+ *
+ * Data-only, so a class rather than an inline object literal, per the webpieces guidelines.
+ */
+class ParsedBody {
+    constructor(
+        // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
+        public readonly requestDto: unknown,
+        public readonly raw: RawRequest | undefined,
+        /** Set only on a raw-body route, where the failure is HELD for AuthFilter instead of thrown. */
+        public readonly parseError?: Error,
+    ) {}
+}
 
 export class ExpressWrapper {
     /**
@@ -95,48 +107,37 @@ export class ExpressWrapper {
     }
 
     public async executeImpl(req: Request, res: Response, next: NextFunction): Promise<void> {
-        // 1. Parse the request body. The PARSER is chosen by the @Endpoint annotation (this.formPost),
-        //    NOT the request Content-Type header — the annotation is the single source of truth.
-        // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
-        let requestDto: unknown = {};
-        let raw: RawRequest | undefined;
-        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-            // Read BYTES, not text. Concatenating per-chunk toString() corrupted any multi-byte
-            // character that straddled a chunk boundary — invisible on small bodies, and fatal for a
-            // signature computed over the bytes.
-            const bodyBytes = await this.readRequestBody(req);
-            const bodyText = bodyBytes.toString('utf8');
-            let parseError: Error | undefined;
-            if (this.formPost) {
-                // application/x-www-form-urlencoded → flat key→value. URLSearchParams is lenient
-                // (never throws) — right for EXTERNAL webhooks (e.g. Twilio) that post form-encoded.
-                requestDto = Object.fromEntries(new URLSearchParams(bodyText));
-            } else {
-                // JSON (default, SYMMETRIC with the client's JSON.stringify). A non-JSON body is a
-                // CLIENT error → 400, not the raw 500 an unguarded JSON.parse would throw.
-                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- translate parse failure to a 400 HttpError
-                try {
-                    requestDto = bodyText ? JSON.parse(bodyText) : {};
-                } catch (err: unknown) {
-                    const error = toError(err);
-                    // On a raw-body (webhook) route the failure is HELD, not thrown: AuthFilter must
-                    // answer 401 to an unauthenticated caller rather than 400, because "your JSON was
-                    // bad" tells that caller it got past auth. Everywhere else, fail now as before.
-                    if (!this.rawBody) {
-                        throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, error);
-                    }
-                    parseError = error;
-                }
-            }
-            if (this.rawBody) {
-                raw = new RawRequest(this.absoluteUrl(req), bodyBytes, req.socket?.remoteAddress, parseError);
-            }
-        }
+        // 0. PUBLISH the transport-neutral request BEFORE anything that can throw.
+        //
+        //    This is the ordering bug issue #862 was filed for. An app's ErrorTranslators.toWire has
+        //    to be able to tell WHICH request it is answering for — the surface, the route, the
+        //    method — and the only place that lives is RequestContext.getRequest(). Publishing it at
+        //    step 3 (below) meant a body that failed to parse at step 1 reached handleError with an
+        //    EMPTY scope, so a translator asked "is this my surface?" could only answer "I don't
+        //    know" and step aside. The translator was never too late; the context it needs was.
+        //
+        //    No `raw` yet — the bytes have not been read. Step 3 republishes WITH them, below the
+        //    same request scope and still above the filter chain, so @AuthWebhook signature
+        //    verification sees exactly what it saw before.
+        //
+        //    KNOWN ISSUE, ACCEPTED AND NOT FIXED (issue #862): this publishes the request but does
+        //    NOT mint the transaction id — that is `fillFromRequest`'s job and it stays at step 3,
+        //    below the body read. So a caller whose body is malformed or oversize, and who sent no
+        //    x-request-id of its own, gets an error response with NO transaction id to quote at
+        //    support. Moving the whole fill up here would drag the raw-body republish into every
+        //    route, which is the complexity this change deliberately declines. Pinned by a test so a
+        //    future change to it is a decision rather than an accident.
+        RequestContext.setRequest(this.toWebpiecesRequest(req));
 
-        // 2. Translate express's request into the transport-neutral HttpRequest webpieces speaks.
-        const httpRequest = this.toWebpiecesRequest(req, raw);
+        // 1. Parse the request body (see parseBody: the PARSER is chosen by the @Endpoint
+        //    annotation, never by the request Content-Type header).
+        const parsed = await this.parseBody(req);
 
-        // 3. Publish the transport-neutral HttpRequest, then move its headers into the context and
+        // 2. Translate express's request into the transport-neutral HttpRequest webpieces speaks —
+        //    now WITH the raw bytes, when the route asked for them.
+        const httpRequest = this.toWebpiecesRequest(req, parsed.raw);
+
+        // 3. Re-publish the transport-neutral HttpRequest, then move its headers into the context and
         //    mint a request id if the caller sent none. BOTH happen above the api boundary, because
         //    http-routing requires an already-established, already-filled request scope — it never
         //    builds one for you. This is the "translation layer" every transport must provide.
@@ -144,11 +145,69 @@ export class ExpressWrapper {
 
         // 4. Invoke the api CLIENT method — the SAME proxy tests use. Its filter chain + controller
         //    run here, reading the context filled above; the chain never touches express `req`.
-        const result = await this.clientMethod(requestDto);
+        const result = await this.clientMethod(parsed.requestDto);
 
         // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())
         const responseJson = JSON.stringify(result);
+        this.stampTransactionId(res);
         res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+    }
+
+    /**
+     * Read and parse the request body: the DTO the controller receives, plus the verbatim
+     * {@link RawRequest} when the route asked for one.
+     *
+     * The PARSER is chosen by the `@Endpoint` annotation (`this.formPost`), NOT by the request
+     * Content-Type header — the annotation is the single source of truth.
+     */
+    private async parseBody(req: Request): Promise<ParsedBody> {
+        if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            return new ParsedBody({}, undefined);
+        }
+
+        // Read BYTES, not text. Concatenating per-chunk toString() corrupted any multi-byte
+        // character that straddled a chunk boundary — invisible on small bodies, and fatal for a
+        // signature computed over the bytes.
+        const bodyBytes = await this.readRequestBody(req);
+        const bodyText = bodyBytes.toString('utf8');
+        // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
+        let requestDto: unknown;
+        let parseError: Error | undefined;
+        if (this.formPost) {
+            // application/x-www-form-urlencoded → flat key→value. URLSearchParams is lenient
+            // (never throws) — right for EXTERNAL webhooks (e.g. Twilio) that post form-encoded.
+            requestDto = Object.fromEntries(new URLSearchParams(bodyText));
+        } else {
+            const json = this.parseJson(bodyText);
+            requestDto = json.requestDto;
+            parseError = json.parseError;
+        }
+
+        const raw = this.rawBody
+            ? new RawRequest(this.absoluteUrl(req), bodyBytes, req.socket?.remoteAddress, parseError)
+            : undefined;
+        return new ParsedBody(requestDto, raw);
+    }
+
+    /**
+     * JSON (the default, SYMMETRIC with the client's JSON.stringify). A non-JSON body is a CLIENT
+     * error → 400, not the raw 500 an unguarded JSON.parse would throw.
+     *
+     * On a raw-body (webhook) route the failure is HELD, not thrown: AuthFilter must answer 401 to an
+     * unauthenticated caller rather than 400, because "your JSON was bad" tells that caller it got
+     * past auth. Everywhere else, fail now.
+     */
+    private parseJson(bodyText: string): ParsedBody {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- translate parse failure to a 400 HttpError
+        try {
+            return new ParsedBody(bodyText ? JSON.parse(bodyText) : {}, undefined);
+        } catch (err: unknown) {
+            const error = toError(err);
+            if (!this.rawBody) {
+                throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, error);
+            }
+            return new ParsedBody({}, undefined, error);
+        }
     }
 
     /**
@@ -254,28 +313,22 @@ export class ExpressWrapper {
     }
 
     /**
-     * Handle errors - translate to JSON ProtocolError (SYMMETRIC with ClientErrorTranslator).
+     * Turn a thrown value into the response the caller sees — the SERVER half of webpieces' symmetric
+     * error handling (the CLIENT half is `ClientErrorTranslator.translateError`, and the two speak the
+     * same {@link HttpResponseDto}).
+     *
      * PUBLIC so wrapExpress can call it for symmetric error handling.
-     * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
      *
-     * Maps all HttpError types (must match ClientErrorTranslator's built-in status mapping):
-     * - HttpUserError → 266 (message + subType + errorCode)
-     * - HttpBadRequestError → 400 (generic message + field, guiAlertMessage)
-     * - HttpUnauthorizedError → 401 (generic message + subType)
-     * - HttpForbiddenError → 403 (generic message)
-     * - HttpNotFoundError → 404 (generic message)
-     * - HttpTimeoutError → 408 (generic message)
-     * - HttpTooManyRequestsError → 429 (generic message)
-     * - HttpInternalServerError → 500 (generic message)
-     * - HttpBadGatewayError → 502 (generic message)
-     * - HttpServiceUnavailableError → 503 (generic message)
-     * - HttpGatewayTimeoutError → 504 (generic message)
-     * - HttpVendorError → 598 (generic message + waitSeconds)
+     * Two sources, in this order:
+     *   1. the app's {@link ErrorTranslators}, if it claims the error — it owns the ENTIRE response;
+     *   2. else {@link HttpErrorWireMapper.toResponse}, the webpieces default, which maps every
+     *      `HttpError` subclass to its status and a CALLER-SAFE body (only `HttpUserError`'s message
+     *      is written for a human, so only it goes out verbatim; everything else sends the generic
+     *      reason phrase and logs the real one) and turns anything else into a generic 500.
      *
-     * "generic message" is the point of {@link HttpErrorWireMapper}: ONLY `HttpUserError`'s message
-     * was written for a human to read, so only it is copied to the response body. Every other type
-     * sends the standard reason phrase for its status and logs the real message. Read that class's
-     * doc for the full rule, including why `subType` is kept and `name` is not.
+     * Nothing status-specific is decided here any more — read `HttpErrorWireMapper` for the full rule
+     * and the list of statuses, which must stay in step with `ClientErrorTranslator`'s built-in
+     * mapping.
      */
     // webpieces-disable no-any-unknown -- a thrown error is genuinely unknown until narrowed below
     public handleError(res: Response, error: unknown): void {
@@ -283,38 +336,67 @@ export class ExpressWrapper {
             return;
         }
 
-        // App-registered translations win, so an app can serialize its OWN error types (e.g. a
-        // custom 460) AND override built-ins. `undefined` means "not mine" — fall through to the
-        // built-in instanceof-HttpError ladder below, which stays the generic default. Symmetric
-        // with the client's ClientErrorTranslator, which consults tryTranslateFromWire() first.
-        if (error instanceof Error) {
-            const wire = ClientRegistry.tryTranslateToWire(error);
-            if (wire !== undefined) {
-                res.status(wire.statusCode)
-                    .setHeader('Content-Type', 'application/json')
-                    .send(JSON.stringify(wire.protocolError));
-                return;
-            }
+        // The app's ErrorTranslators own the WHOLE response — status code, reason phrase, headers
+        // and body — so an app can publish its own envelope AND its own `Retry-After` /
+        // `WWW-Authenticate` / trace header / cookie, which the old (statusCode, protocolError) pair
+        // could not express at all. `undefined` means "not mine": webpieces' default answers
+        // instead. Symmetric with the client's ClientErrorTranslator, which consults
+        // tryTranslateFromWire() first, over the identical HttpResponseDto shape.
+        const appResponse = error instanceof Error
+            ? ClientRegistry.tryTranslateToWire(error)
+            : undefined;
+
+        this.send(res, appResponse ?? this.errorWireMapper.toResponse(error));
+    }
+
+    /**
+     * Write an {@link HttpResponseDto} to express — the ONE place a response DTO becomes bytes, used
+     * by the app's translators and by webpieces' own default alike.
+     *
+     * `append`, not `setHeader`, because the DTO's headers are a LIST: HTTP permits repeats
+     * (`Set-Cookie` is the everyday one) and `setHeader` would keep only the last of them. That list
+     * shape is the whole reason the DTO does not use a Map.
+     *
+     * `Content-Type: application/json` is INFRASTRUCTURE here, not app policy: webpieces is the one
+     * doing the `JSON.stringify`, so it states what it wrote. Express would otherwise default a
+     * string body to `text/html`, which is wrong for every response this framework sends. A
+     * translator that genuinely wants another type says so in its own header list and wins.
+     */
+    private send(res: Response, response: HttpResponseDto): void {
+        this.stampTransactionId(res);
+        const declaresContentType = response.headers.some(
+            (header: HttpHeader) => header.name.toLowerCase() === 'content-type',
+        );
+        if (!declaresContentType) {
+            res.setHeader('Content-Type', 'application/json');
         }
+        for (const header of response.headers) {
+            res.append(header.name, header.value);
+        }
+        // express writes the reason phrase from `statusMessage`, so a translator that says
+        // `new HttpResponseStatus(460, 'Order Not Found')` gets 'Order Not Found' on the status line
+        // rather than node's blank default for an unregistered code.
+        res.statusMessage = response.status.reason;
+        res.status(response.status.code).send(JSON.stringify(response.body));
+    }
 
-        if (error instanceof HttpError) {
-            // The mapper decides what the caller may see AND logs everything it withholds — see
-            // HttpErrorWireMapper. Nothing type-specific is decided here any more.
-            const protocolError = this.errorWireMapper.toWire(error);
-
-            // Serialize ProtocolError to JSON (SYMMETRIC with client)
-            const responseJson = JSON.stringify(protocolError);
-            res.status(error.code).setHeader('Content-Type', 'application/json').send(responseJson);
-        } else {
-            // Unknown error - 500. This branch was ALREADY generic, which is what made the old
-            // HttpError branch's verbatim `error.message` so obviously backwards: an unexpected crash
-            // leaked nothing while a deliberate HttpInternalServerError leaked everything.
-            const err = toError(error);
-            const protocolError = new ProtocolError();
-            protocolError.message = 'Internal Server Error';
-            log.error('Unexpected error:', err);
-            const responseJson = JSON.stringify(protocolError);
-            res.status(500).setHeader('Content-Type', 'application/json').send(responseJson);
+    /**
+     * Put the transaction id on EVERY response — success and error, webpieces' default body and an
+     * app's own. It is INFRASTRUCTURE, not app policy: an app that overrides what an error looks like
+     * must not thereby lose the header its support desk quotes back. That is why this lives here and
+     * not in {@link HttpErrorWireMapper.toResponse} or in an app's translators.
+     *
+     * Silently absent when there is no id to send, which is exactly the accepted known issue recorded
+     * at step 0 of {@link executeImpl}: a malformed or oversize body fails before `fillFromRequest`
+     * mints one.
+     */
+    private stampTransactionId(res: Response): void {
+        if (!RequestContext.isActive()) {
+            return;
+        }
+        const txId = RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID);
+        if (txId) {
+            res.setHeader(WebpiecesCoreHeaders.REQUEST_ID.httpHeader!, txId);
         }
     }
 }
