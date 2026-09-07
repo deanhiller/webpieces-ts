@@ -23,3 +23,8 @@ store.set(CompanyHeaders.TENANT_ID, tenantId);
 
 A browser cannot hold service credentials, so a contract with an `@AuthOidc` endpoint fails fast at
 `createRpcClient`. The server twin is [@webpieces/http-client-node](../http-client-node).
+
+Calls have a **30-second default timeout**, including reading the response body. Configure
+`CallRegistry` from `@webpieces/core-util` for ALL, API or API-method overrides and explicit retry
+strategies. Any strategy replaces the entire timeout ladder; there is no default retry because
+POSTs may not be idempotent. See [client timeouts and testing](../../../docs/client-timeouts.md).

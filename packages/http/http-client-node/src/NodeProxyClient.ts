@@ -154,6 +154,10 @@ export class NodeProxyClient extends ProxyClient {
         method: () => Promise<unknown>,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
+        // Preserve the context precondition before logging, which also requires an active scope.
+        if (!RequestContext.isActive()) {
+            throw new Error('No active RequestContext. Run the client call inside RequestContext.run(...).');
+        }
         const recorder = this.headers.findRecorder();
         if (!recorder) {
             return super.execute(route, requestDto, method);

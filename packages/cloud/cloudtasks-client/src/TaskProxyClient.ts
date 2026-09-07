@@ -14,6 +14,9 @@ import {
     LogManager,
     LogApiCallImpl,
     ApiMethodInfo,
+    CallRegistry,
+    CallDeadline,
+    CallContext,
 } from '@webpieces/core-util';
 import {
     RequestContextApiCallContext,
@@ -67,6 +70,7 @@ export class TaskProxyClient {
     // Assigned by init(), which the factory calls immediately after construction.
     private plans!: Map<string, EndpointPlan>;
     private apiName!: string;
+    private apiClass!: ApiPrototype<object>;
     private config!: TaskClientConfig;
 
     /**
@@ -86,12 +90,15 @@ export class TaskProxyClient {
     /** Bind this client to one @PubSub contract + target. */
     init(apiClass: ApiPrototype<object>, config: TaskClientConfig): void {
         if (!isApiPath(apiClass)) {
-            throw new Error(`Class ${apiClass.name || 'Unknown'} must be decorated with @ApiPath()`);
+            throw new Error(
+                `Class ${apiClass.name || 'Unknown'} must be decorated with @ApiPath()`,
+            );
         }
         assertPubSubConventions(apiClass);
         assertEveryEndpointHasAuthMode(apiClass);
 
         this.config = config;
+        this.apiClass = apiClass;
         this.apiName = apiClass.name || 'UnknownApi';
         this.plans = this.buildPlans(apiClass);
     }
@@ -117,7 +124,7 @@ export class TaskProxyClient {
         if (!frame) {
             throw new Error(
                 'Cloud task enqueue must run inside a CloudTaskScheduler lambda, e.g. ' +
-                'scheduler.addToQueue(() => taskClient.method(req), { dedupName }).',
+                    'scheduler.addToQueue(() => taskClient.method(req), { dedupName }).',
             );
         }
 
@@ -128,24 +135,41 @@ export class TaskProxyClient {
         // uniformly, without touching either invoker impl.
         const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
         await this.logApiCall.execute(info, requestDto, async () => {
-            // Resolved lazily (not at client construction) so building a client stays synchronous.
-            // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
-            // enqueue in the process pays a lookup.
-            const targetUrl = await this.config.resolveUrl();
+            const jobRef = await CallRegistry.execute(
+                this.apiClass,
+                methodName,
+                (timeoutMs: number) =>
+                    CallDeadline.run(
+                        timeoutMs,
+                        new CallContext(this.apiName, methodName),
+                        async (signal: AbortSignal) => {
+                            // Resolved lazily (not at client construction) so building a client stays synchronous.
+                            // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
+                            // enqueue in the process pays a lookup.
+                            const targetUrl = await this.config.resolveUrl();
+                            signal.throwIfAborted();
 
-            const request = new TaskRequest(
-                targetUrl,
-                plan.path,
-                plan.queueName,
-                requestDto,
-                this.buildContextHeaders(plan.authMode),
-                plan.authMode,
-                frame.info ?? new ScheduleInfo(),
+                            const request = new TaskRequest(
+                                targetUrl,
+                                plan.path,
+                                plan.queueName,
+                                requestDto,
+                                this.buildContextHeaders(plan.authMode),
+                                plan.authMode,
+                                frame.info ?? new ScheduleInfo(),
+                            );
+
+                            // svcName, not the URL, is the stable name across demo/qa/prod.
+                            log.debug(
+                                `enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`,
+                            );
+                            return this.invoker.enqueue(request);
+                        },
+                    ),
+                30_000,
             );
-
-            // svcName, not the URL, is the stable name across demo/qa/prod.
-            log.debug(`enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`);
-            frame.jobRef = await this.invoker.enqueue(request);
+            // Only the winning attempt may publish the reference. A late enqueue cannot overwrite it.
+            frame.jobRef = jobRef;
 
             // Fire-and-forget: the enqueue ack is not a meaningful response. Return a non-null value so
             // LogApiCall's null-response guard passes; a recorded test asserts the enqueued REQUEST
