@@ -122,7 +122,7 @@ export class LogApiCallImpl {
             // Duration comes off the SAME start as the success path, so a slow failure (a timeout, a
             // hung dependency) reports its real cost rather than nothing.
             this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
-            throw error;
+            throw err;
         }
     }
 

@@ -8,7 +8,7 @@ import { RequestOutcome } from '@webpieces/http-client-core';
  * each call.
  *
  * Replaces the older header-only ResponseHeadersListener. `onRequestEnd`'s `outcome.headers` carries
- * the same Response Headers (still before the body is read, on both ok and error), and it adds the
+ * the same Response Headers (after settlement, on both ok and error), and it adds the
  * two signals the header-only seam could not give: a START marker, and success-or-error.
  *
  * The driver is a browser app that must drive ONE progress bar across N requests per user action,

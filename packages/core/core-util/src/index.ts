@@ -140,6 +140,11 @@ export {
 // Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
+export { CallRegistry } from './http/CallRegistry';
+export { CallDeadline } from './http/CallDeadline';
+export { CallContext } from './http/CallStrategy';
+export type { Attempt, CallStrategy } from './http/CallStrategy';
+export { TimeoutError } from './http/TimeoutError';
 export type { ServiceUrlDeriver } from './http/ClientRegistry';
 
 // "What service am I" — set once at startup, read by the logging backends and by

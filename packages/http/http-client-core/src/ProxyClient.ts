@@ -14,6 +14,9 @@ import {
     toError,
     NetworkRejectClassifier,
     FilterChain,
+    CallRegistry,
+    CallDeadline,
+    CallContext,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -48,6 +51,7 @@ export abstract class ProxyClient {
     // Assigned by initRoutes(), which every subclass's init() calls immediately after construction.
     private routeMap!: Map<string, RouteMetadata>;
     private apiName!: string;
+    private apiClass!: ApiPrototype<object>;
 
     /**
      * The OUTBOUND filter chain, built once at bind time from {@link clientFilters} and reused for
@@ -179,7 +183,7 @@ export abstract class ProxyClient {
     protected abstract adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error;
 
     /**
-     * Fires immediately BEFORE `fetch`, once per RPC — the progress "start marker". Symmetric with
+     * Fires before the logical call's attempts, once per RPC — the progress "start marker". Symmetric with
      * {@link onRequestEnd}: every start is followed by exactly one end, on every path, so a listener
      * can drive a counter (bar on / bar off) without leaking a permanently-spinning bar.
      *
@@ -193,7 +197,7 @@ export abstract class ProxyClient {
      *
      * Subsumes the older header-only hook: this is the ONLY place the `fetch` Response — and thus its
      * `Headers` — exists, so an app that needs to read a response header (e.g. a server-version stamp
-     * for client↔server version matching) reads `outcome.headers`, still BEFORE the body is consumed
+     * for client↔server version matching) reads `outcome.headers` after settlement
      * and on both the ok and error paths. `outcome.ok`/`outcome.error` add the success-or-error
      * signal the header-only seam could not give.
      *
@@ -215,6 +219,7 @@ export abstract class ProxyClient {
      */
     protected initRoutes(apiPrototype: ApiPrototype<object>, appFilters: ClientFilterDefinition[]): void {
         this.appFilters = appFilters;
+        this.apiClass = apiPrototype;
         if (!isApiPath(apiPrototype)) {
             const className = apiPrototype.name || 'Unknown';
             throw new Error(`Class ${className} must be decorated with @ApiPath()`);
@@ -320,90 +325,52 @@ export abstract class ProxyClient {
         // mirror of the inbound WebhookAuthCallback that verifies one.
     }
 
-    /**
-     * Make an HTTP request based on route metadata and arguments.
-     *
-     * All endpoints are POST-only. The request body is the first argument.
-     */
-    // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
-    async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
+    /** One logical call: one lifecycle pair and log entry across all strategy attempts. */
+    // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
+    async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.refuseEndpointNoClientCanCall(route);
-        // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
-        const baseUrl = await this.resolveBaseUrl();
-
-        const httpHeaders = new Map<string, string>([['Content-Type', 'application/json']]);
-
-        // Transferred context, request-id chained. The server impl throws here when there is no
-        // active RequestContext — an outbound call with no trace is a bug, not a default. The
-        // destination's own auth mode decides whether trusted keys are part of that set.
-        const contextHeaders = this.outboundContextHeaders(DestinationTrust.forAuthMode(route.authMeta?.mode));
-        for (const entry of contextHeaders.entries()) {
-            httpHeaders.set(entry[0], entry[1]);
-        }
-
-        // NOTHING mints a credential here. The endpoint's outbound auth is a FILTER, sitting at the
-        // very bottom of the chain, because the URL at this point is only where the call STARTS: an
-        // app filter above may re-point it, and an OIDC token whose audience is the pre-filter URL
-        // is a token for the wrong peer. The minter has to run last, against the settled
-        // destination — see the environment's `clientFilters()`.
-        //
-        // POST body is the first argument as JSON. Serialized HERE, before the filter chain, so a
-        // filter that signs the request signs the exact bytes {@link sendOnce} will transmit.
-        // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
-        let requestDto: unknown;
-        let body: string | undefined;
-        if (args.length > 0) {
-            requestDto = args[0];
-            body = JSON.stringify(requestDto);
-        }
-
-        const request = new ClientRequest(route, this.apiName, baseUrl, httpHeaders, body, requestDto);
-
-        // Wrap the send in a method for LogApiCall.execute
-        // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
-        const method = async (): Promise<unknown> => {
-            return this.executeFetch(request);
-        };
-
-        return await this.execute(route, requestDto, method);
+        const requestDto = args[0];
+        return this.execute(route, requestDto, () => this.executeCall(route, requestDto));
     }
 
-    /**
-     * Execute the fetch request and handle response.
-     *
-     * Brackets the call with the lifecycle seam: {@link onRequestStart} once before `fetch`, then
-     * {@link onRequestEnd} exactly once on each of the three ways a call can settle. The end hook
-     * fires BEFORE the throw on both failure paths, so a listener always sees the stop marker even
-     * though the caller sees an exception.
-     */
-    // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
-    private async executeFetch(request: ClientRequest): Promise<unknown> {
-        const route = request.route;
+    // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
+    private async executeCall(route: RouteMetadata, requestDto: unknown): Promise<unknown> {
         this.onRequestStart(route);
-
-        // The START marker fires ONCE per RPC even though a filter may send more than once (the SSRF
-        // guard re-invokes the chain to follow a validated redirect) — start and end still pair up
-        // exactly, which is what lets a listener drive a progress counter.
-        let response: Response;
-        // webpieces-disable no-unmanaged-exceptions -- translate a send failure into a lifecycle END, then rethrow
+        let response: Response | undefined;
+        // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
+        let result: unknown;
+        // webpieces-disable no-unmanaged-exceptions -- report one logical END, preserving the original thrown value
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            response = await this.chain.execute(request, () => this.sendOnce(request));
+            result = await CallRegistry.execute(this.apiClass, route.methodName, (timeoutMs: number) => {
+                response = undefined;
+                return CallDeadline.run(timeoutMs, new CallContext(this.apiName, route.methodName),
+                    async (signal: AbortSignal) => {
+                        const request = await this.prepareRequest(route, requestDto);
+                        signal.throwIfAborted();
+                        const received = await this.chain.execute(request, () => this.sendOnce(request, signal));
+                        signal.throwIfAborted();
+                        response = received;
+                        return this.readResponse(received, route);
+                    });
+            }, 30_000);
         } catch (err: unknown) {
-            // No Response ever existed — a network reject already classified by sendOnce, or a filter
-            // that refused to send at all (an SSRF policy rejecting a partner's URL). Either way there
-            // is no status and no headers to report, only status 0 and the failure itself, and the
-            // lifecycle listener must see the SAME error the caller is about to.
             const error = toError(err);
-            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, error));
-            throw error;
+            this.onRequestEnd(route, new RequestOutcome(false, response?.status ?? 0, response?.headers, error));
+            throw err;
         }
+        this.onRequestEnd(route, new RequestOutcome(true, response?.status ?? 0, response?.headers));
+        return result;
+    }
 
-        const callId = `${this.apiName}.${route.methodName}`;
-        if (response.ok) {
-            return this.readSuccessBody(response, route, callId);
-        }
-        throw await this.endWithTypedFailure(response, route, callId);
+    /** Fresh mutable request for every attempt, including URL, headers, auth and body. */
+    // webpieces-disable no-any-unknown -- request DTO is erased at the proxy boundary
+    private async prepareRequest(route: RouteMetadata, requestDto: unknown): Promise<ClientRequest> {
+        const baseUrl = await this.resolveBaseUrl();
+        const headers = new Map<string, string>([['Content-Type', 'application/json']]);
+        const context = this.outboundContextHeaders(DestinationTrust.forAuthMode(route.authMeta?.mode));
+        for (const entry of context.entries()) headers.set(entry[0], entry[1]);
+        return new ClientRequest(route, this.apiName, baseUrl, headers, JSON.stringify(requestDto), requestDto);
     }
 
     /**
@@ -417,9 +384,11 @@ export abstract class ProxyClient {
      * genuine bug passes through untouched) so that filters above see the same typed error the caller
      * will, rather than a raw platform reject.
      */
-    private async sendOnce(request: ClientRequest): Promise<Response> {
+    private async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
+        signal.throwIfAborted();
         const options: RequestInit = {
             method: request.route.httpMethod,
+            signal,
             headers: request.headersAsRecord(),
             redirect: request.followRedirects ? 'follow' : 'manual',
         };
@@ -437,82 +406,20 @@ export abstract class ProxyClient {
         }
     }
 
-    /**
-     * Read a 2xx body, reporting the END marker on both outcomes.
-     *
-     * The content-type gate is the same one the error path uses: a 2xx that is not JSON (a proxy's
-     * captive-portal page, an SPA index.html served by a misrouted CDN) is reported for WHAT ARRIVED,
-     * instead of `SyntaxError: Unexpected token '<'`, which names nothing a reader can act on.
-     */
-    // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
-    private async readSuccessBody(response: Response, route: RouteMetadata, callId: string): Promise<unknown> {
-        // webpieces-disable no-unmanaged-exceptions -- a malformed 2xx body must still report the END marker
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
+    /** Body consumption is inside the attempt deadline, including non-JSON error bodies. */
+    // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
+    private async readResponse(response: Response, route: RouteMetadata): Promise<unknown> {
+        const callId = `${this.apiName}.${route.methodName}`;
+        if (response.ok) {
             if (!this.bodyReader.isJson(response)) {
                 throw new Error(this.bodyReader.describeForeignBody(response, callId, await response.text()));
             }
-            const body = await response.json();
-            this.onRequestEnd(route, new RequestOutcome(true, response.status, response.headers));
-            return body;
-        } catch (err: unknown) {
-            const error = toError(err);
-            this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
-            throw error;
+            return response.json();
         }
-    }
-
-    /**
-     * Turn a non-2xx response into the error the caller will see, firing the END marker first — so a
-     * listener always gets its stop marker even though the caller sees an exception. RETURNS the
-     * error rather than throwing it, which keeps the one `throw` visible at the call site.
-     *
-     * The headers still reach the seam here, so a version (or any future) header is observed even on
-     * error responses.
-     *
-     * The body is read through {@link ResponseBodyReader}, which parses ONLY a body whose
-     * content-type says it is JSON. An infra 502/503/504 (load balancer, proxy, cold start on a
-     * scale-to-zero backend) serves HTML, and parsing that used to throw `SyntaxError: Unexpected
-     * token '<'` — discarding the status, so the caller could not tell a booting server from a broken
-     * client. It now becomes a synthesized ProtocolError translated BY STATUS, i.e. a real
-     * `HttpBadGatewayError` / `HttpServiceUnavailableError` / `HttpGatewayTimeoutError`.
-     *
-     * The try/catch stays, for a NARROWER job than before: a body that DECLARED json and was
-     * malformed still throws (that one is a genuine server bug), and the END marker must fire for it
-     * too — an unreported end leaves the app's progress bar spinning forever.
-     *
-     * `translated` is what ClientErrorTranslator picked, and translateError RETURNS a
-     * {@link TranslatedFailure} — so nothing in this seam is ever `unknown`.
-     *
-     * The translated failure then goes through {@link adaptDownstreamFailure}, which is where the two
-     * environments part company (browser rethrows it, node turns a downstream 4xx into its own 500).
-     *
-     * The RequestOutcome reported to {@link onRequestEnd} carries the POST-adapt error, deliberately:
-     * a lifecycle listener must see the SAME error the caller sees, or a progress bar / error toast
-     * says 404 while the thrown exception says 500. That is the identical rule the network-reject path
-     * already follows (it classifies BEFORE onRequestEnd for exactly this reason). The pre-adapt error
-     * is not lost — it is the adapted error's `httpCause`.
-     */
-    private async endWithTypedFailure(response: Response, route: RouteMetadata, callId: string): Promise<Error> {
-        let translated: TranslatedFailure;
-        // webpieces-disable no-unmanaged-exceptions -- a malformed JSON error body must still report the END marker
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const protocolError = await this.bodyReader.readErrorBody(response, callId);
-            translated = ClientErrorTranslator.translateError(
-                this.responseDtoFactory.fromFetch(response, protocolError),
-            );
-        } catch (err: unknown) {
-            const error = toError(err);
-            // The response CLAIMED JSON and was not parseable — report that failure as the outcome.
-            // It never reaches adaptDownstreamFailure: there is no translated status to adapt, and a
-            // body that broke its own content-type promise is already a defect, not a status answer.
-            this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
-            return error;
-        }
-
-        const adapted = this.adaptDownstreamFailure(translated, callId);
-        this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, adapted));
-        return adapted;
+        const protocolError = await this.bodyReader.readErrorBody(response, callId);
+        const translated = ClientErrorTranslator.translateError(
+            this.responseDtoFactory.fromFetch(response, protocolError),
+        );
+        throw this.adaptDownstreamFailure(translated, callId);
     }
 }

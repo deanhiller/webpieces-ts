@@ -2,7 +2,7 @@
  * How one RPC call SETTLED — the payload of {@link ProxyClient.onRequestEnd}.
  *
  * DATA ONLY (no behavior), so it is a class with an explicit constructor rather than an interface:
- * each of the three settle paths in `ProxyClient.executeFetch` constructs it by name, and a reader
+ * `ProxyClient.executeCall` constructs it by name on settlement, and a reader
  * can see at the call site which path produced which shape.
  *
  * The three shapes, one per path:
@@ -10,18 +10,17 @@
  * - HTTP error     `new RequestOutcome(false, status, headers, error)`  — the translated HttpError
  * - network reject `new RequestOutcome(false, 0, undefined, error)`     — no Response ever existed
  *
- * A fourth path exists but is not a fourth SHAPE: a body that fails to parse (an infra 502 serving
- * HTML) settles as an HTTP error carrying the parse failure.
+ * A timeout or body parse failure uses the failure shape, with headers/status if they arrived.
  */
 export class RequestOutcome {
     constructor(
-        /** `response.ok` — true only on a 2xx. */
+        /** True when the logical call succeeded, including a strategy recovering from an error. */
         public readonly ok: boolean,
-        /** The HTTP status; 0 when `fetch` itself rejected (network / offline), where there is no status. */
+        /** The last attempt's HTTP status, or 0 when no response arrived. */
         public readonly status: number,
         /**
          * The Response headers, present whenever an HTTP Response existed (ok OR error) and absent
-         * only on a network reject. Read BEFORE the body is consumed, which is what lets an app pull
+         * when no response arrived. Available after settlement, which lets an app pull
          * a server-version stamp off an error response.
          */
         public readonly headers?: Headers,

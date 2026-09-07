@@ -137,3 +137,8 @@ Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your 
 the contract. With **no** `WebhookSignerCallback` bound, every outbound `@AuthWebhook` call THROWS
 rather than delivering unsigned — the mirror of an unbound `WebhookAuthCallback` 401ing every inbound
 one.
+
+Calls have a **30-second default timeout**, including URL resolution, filters/auth, fetch and body
+reading. `CallRegistry` from `@webpieces/core-util` shares ALL, API and API-method overrides with the
+browser and Cloud Tasks clients. Any strategy replaces the entire timeout ladder; there is no
+default retry because POSTs may not be idempotent. See [client timeouts](../../../docs/client-timeouts.md).

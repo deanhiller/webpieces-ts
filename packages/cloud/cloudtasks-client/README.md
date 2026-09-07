@@ -34,3 +34,9 @@ await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName: req.id 
   - `GcpTaskInvoker` — real `@google-cloud/tasks` delivery (OIDC / shared-secret)
   - `InMemoryTaskInvoker` — dispatches through the real server filter chain in-process
     (tests + local dev, no GCP, production parity)
+
+Enqueue calls have a **30-second default timeout**. `CallRegistry` from `@webpieces/core-util` shares
+ALL, API and API-method timeout/strategy overrides with the HTTP clients. Any strategy replaces the
+entire timeout ladder; there is no default retry. These are **enqueue** retries, separate from queue
+delivery retries and task execution deadlines. A timed-out enqueue may still complete remotely;
+retry only with application-owned idempotency/deduplication. See [client timeouts](../../../docs/client-timeouts.md).
