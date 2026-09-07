@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
 import { HttpBadRequestError } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 import { ExpressWrapper } from '../ExpressWrapper';
 
 /** Captures the response status + serialized body written by executeImpl on the success path. */
@@ -69,6 +70,23 @@ class CapturingWrapper {
             formPost,
         );
     }
+
+    /**
+     * Drive executeImpl the way the real `execute()` does — INSIDE `RequestContext.run(...)`.
+     *
+     * executeImpl now publishes the transport-neutral request before it reads the body (issue #862),
+     * so that an app's ErrorTranslators can tell which request a parse failure belongs to. Publishing
+     * needs the ambient scope, so a spec calling executeImpl bare was never exercising the real
+     * ordering — it only got away with it because the stub `fillFromRequest` no-ops the one call that
+     * used to need a context.
+     */
+    executeImpl(
+        req: import('express').Request,
+        res: import('express').Response,
+        next: import('express').NextFunction,
+    ): Promise<void> {
+        return RequestContext.run(() => this.wrapper.executeImpl(req, res, next));
+    }
 }
 
 describe('ExpressWrapper body parse (annotation-driven)', () => {
@@ -76,7 +94,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(true);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('a=1&b=two'), asResponse(res), () => {});
+        await cap.executeImpl(fakeRequest('a=1&b=two'), asResponse(res), () => {});
 
         expect(cap.captured).toEqual({ a: '1', b: 'two' });
         expect(res.statusCode).toBe(200);
@@ -86,7 +104,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(true);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('not-a-form-body'), asResponse(res), () => {});
+        await cap.executeImpl(fakeRequest('not-a-form-body'), asResponse(res), () => {});
 
         // URLSearchParams treats the whole string as a single key with an empty value.
         expect(cap.captured).toEqual({ 'not-a-form-body': '' });
@@ -97,7 +115,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         const cap = new CapturingWrapper(false);
         const res = new FakeResponse();
 
-        await cap.wrapper.executeImpl(fakeRequest('{"a":1,"b":"two"}'), asResponse(res), () => {});
+        await cap.executeImpl(fakeRequest('{"a":1,"b":"two"}'), asResponse(res), () => {});
 
         expect(cap.captured).toEqual({ a: 1, b: 'two' });
         expect(res.statusCode).toBe(200);
@@ -109,7 +127,7 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
 
         // A urlencoded body posted to a JSON endpoint — the exact Twilio-into-JSON failure.
         await expect(
-            cap.wrapper.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {}),
+            cap.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {}),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
     });
 });

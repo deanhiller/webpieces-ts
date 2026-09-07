@@ -13,8 +13,8 @@
  * other type, because `Error.message` is an operator-facing field that routinely quotes downstream
  * urls, response bodies and internal ids. `name` is not filled by that ladder at all.
  *
- * An app that wants to publish more than that does it deliberately, by registering an
- * {@link ErrorTranslation} with {@link ClientRegistry}, whose `toWire()` result is sent verbatim.
+ * An app that wants to publish more than that does it deliberately, by installing an
+ * {@link ErrorTranslators} on {@link ClientRegistry}, whose `toWire()` response is sent verbatim.
  */
 export class ProtocolError {
     public message?: string;
@@ -22,7 +22,7 @@ export class ProtocolError {
     public field?: string;
     public waitSeconds?: number;
     /**
-     * Filled only by an app's own `ErrorTranslation.toWire()`. The built-in HttpError ladder does NOT
+     * Filled only by an app's own `ErrorTranslators.toWire()`. The built-in HttpError ladder does NOT
      * send it: nothing on the client reads it, and for a subclass it is an internal class name.
      */
     public name?: string;

@@ -5,7 +5,8 @@ import {
     ClientRegistry,
     DestinationTrust,
     Endpoint,
-    ErrorTranslation,
+    ErrorTranslators,
+    HttpResponseDto,
     HttpBadGatewayError,
     HttpError,
     HttpInternalServerError,
@@ -265,20 +266,22 @@ describe('NodeProxyClient passes everything that is not a 4xx through unchanged'
 });
 
 /**
- * THE OPT-OUT, and there is only one: a `ClientRegistry` error translation registered at startup.
- * A thin proxy or gateway that genuinely wants to relay a downstream status as its own says so in one
- * greppable line, and that decision wins here. There is deliberately NO ClientConfig flag and NO
- * webpieces.config.json key — a flag would make the dangerous choice invisible in the code that
- * suffers from it, whereas `grep -rn addErrorTranslation` lists every app that opted out.
+ * THE OPT-OUT, and there is only one: the app's `ErrorTranslators`, installed on `ClientRegistry` at
+ * startup. A thin proxy or gateway that genuinely wants to relay a downstream status as its own says
+ * so in one greppable line, and that decision wins here. There is deliberately NO ClientConfig flag
+ * and NO webpieces.config.json key — a flag would make the dangerous choice invisible in the code
+ * that suffers from it, whereas `grep -rn setErrorTranslators` lists every app that opted out.
  */
-describe('an app-registered translation WINS over the node 4xx-to-500 wrap', () => {
-    it('a registered 404 translation relays the downstream status as the app chose', async () => {
-        const relay: ErrorTranslation = {
+describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
+    it('a 404 the app claims relays the downstream status as the app chose', async () => {
+        const relay: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed 404') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 404
+                    ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    : undefined,
         };
-        ClientRegistry.addErrorTranslation(relay);
+        ClientRegistry.setErrorTranslators(relay);
         stubProtocolError(404, 'no such store');
 
         const error = await callAndCatch();
@@ -288,13 +291,15 @@ describe('an app-registered translation WINS over the node 4xx-to-500 wrap', () 
         expect((error as Error).message).toBe('no such store');
     });
 
-    it('a status the registration does NOT claim still gets wrapped', async () => {
-        const relay: ErrorTranslation = {
+    it('a status the translators do NOT claim still gets wrapped', async () => {
+        const relay: ErrorTranslators = {
             toWire: () => undefined,
-            fromWire: (statusCode: number, pe: ProtocolError) =>
-                statusCode === 404 ? new HttpNotFoundError(pe.message ?? 'relayed 404') : undefined,
+            fromWire: (response: HttpResponseDto) =>
+                response.status.code === 404
+                    ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    : undefined,
         };
-        ClientRegistry.addErrorTranslation(relay);
+        ClientRegistry.setErrorTranslators(relay);
         stubProtocolError(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();
