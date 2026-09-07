@@ -33,7 +33,7 @@ const GATE_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origi
 // HomeConfig(wholeRepoBuildGuard, orphanDirSweep, maxConcurrentBuilds).
 function pinHomeConfig(wholeRepoBuildGuard: boolean): void {
     vi.spyOn(HomeConfigService.prototype, 'load')
-        .mockReturnValue(new HomeConfig(wholeRepoBuildGuard, false, DEFAULT_MAX_CONCURRENT_BUILDS));
+        .mockReturnValue(new HomeConfig(wholeRepoBuildGuard, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
 }
 
 // Most of this suite is about WHICH commands the guard refuses, which is only observable on a machine

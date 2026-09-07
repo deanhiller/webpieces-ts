@@ -1,5 +1,8 @@
 import { injectable, bindingScopeValues } from 'inversify';
-import { reviewJsonSchemaHint, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService } from '@webpieces/rules-config';
+import {
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, reviewJsonSchemaHint,
+    RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService,
+} from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -49,6 +52,23 @@ export class ReviewReportInput {
      * a REQUIRED reviewer, and it is not a gate — nothing about what blocks the PR changes.
      */
     skipOptional: boolean;
+    /**
+     * `experimental.turnOffAllReviewers` is TRUE in `~/.webpieces/config.json`, so NO reviewer ran and
+     * none will — the REQUIRED ones included. Nothing else in this class may be read as evidence of that:
+     * `applicableCount` is 0 under suppression exactly as it is on a docs-only PR that matched nothing,
+     * and those two must never print the same thing.
+     *
+     * When true this stage prints a LOUD banner naming the flag, the file and every suppressed checklist,
+     * and prints NO spawn block. Reviewers cannot be spawned — there are no briefings and no instructions
+     * files — so a block telling an agent to spawn them would be an instruction it cannot obey.
+     */
+    reviewersSuppressed: boolean;
+    /**
+     * The checklists that WOULD have applied, had they not been suppressed. Empty unless
+     * `reviewersSuppressed`. Named, not counted, because the one thing a human must be able to see is
+     * WHICH required reviewer was killed.
+     */
+    suppressed: RequiredChecklist[];
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {
         this.repoRoot = repoRoot;
@@ -61,6 +81,8 @@ export class ReviewReportInput {
         this.briefings = [];
         this.refused = [];
         this.skipOptional = false;
+        this.reviewersSuppressed = false;
+        this.suppressed = [];
     }
 }
 
@@ -110,6 +132,10 @@ export class ReviewReport {
      * single line most likely to make it do exactly that.
      */
     private header(input: ReviewReportInput): string {
+        // FIRST, and unconditional: with the kill switch on there is nothing to spawn and nothing to
+        // offer, so every heading below would be true-but-misleading. The one thing a reader must take
+        // from the first line of this block is that no reviewer looked at this branch.
+        if (input.reviewersSuppressed) return '② ⚫ ALL REVIEWERS SUPPRESSED — review, then finish\n';
         if (this.requiredOwed(input).length > 0) return '② Review, spawn subagent reviewers, then finish\n';
         if (this.offerableOwed(input).length > 0) return '② Review, offer the optional reviewers, then finish\n';
         return '② Review, then finish\n';
@@ -121,6 +147,10 @@ export class ReviewReport {
      * mistaken for the next action.
      */
     private scanVerdict(input: ReviewReportInput): string {
+        // BEFORE the zero-applicable notice, which would otherwise say "nothing matched this diff" — the
+        // single most misleading sentence available here, because plenty matched and every one of them was
+        // switched off.
+        if (input.reviewersSuppressed) return '\n' + this.suppressionBanner(input);
         if (input.applicableCount === 0) return '\n' + this.checklistNotice.build(input.definedCount);
         const lines: string[] = [];
         // The prohibition rides on the REUSE line itself, not only in the all-clear below, because the
@@ -137,6 +167,45 @@ export class ReviewReport {
         if (this.actionableOwed(input).length === 0) lines.push('', this.allClear(input));
         if (lines.length === 0) return '';
         return '\n' + lines.join('\n') + '\n';
+    }
+
+    /**
+     * THE LOUD BANNER. The one output in this whole flow that says an unreviewed PR is about to be posted.
+     *
+     * Everything in it is there because a reader has to be able to act on it or audit it: the FLAG name and
+     * the FILE it was read from (the only actionable thing — nothing in any repo turns this off), the COUNT
+     * split by required/optional, and every suppressed checklist BY NAME with REQUIRED marked. A count
+     * alone would leave "which required reviewer did I just skip?" unanswerable at the one moment it is
+     * being answered.
+     *
+     * It deliberately does NOT name `wp-finish-upsert-pr` — the closing step already does, exactly once,
+     * and that "exactly once" is an invariant this class's docstring records having been bought with a bug.
+     */
+    private suppressionBanner(input: ReviewReportInput): string {
+        const required = input.suppressed.filter((r: RequiredChecklist): boolean => r.required);
+        const lines: string[] = [
+            '⚫ ALL REVIEWER SUBAGENTS ARE SWITCHED OFF ON THIS MACHINE. Nothing reviewed this branch.',
+            '',
+            `   ${input.suppressed.length} checklist(s) matched this diff and were SUPPRESSED — `
+            + `${required.length} of them REQUIRED:`,
+        ];
+        for (const r of input.suppressed) {
+            lines.push(`     • ${r.subagent}${r.required ? '  (REQUIRED — suppressed anyway)' : '  (optional)'}`);
+        }
+        lines.push(
+            '',
+            `   Switched off by:  experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true`,
+            `   Read from:        ~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}  (machine-local; no repo config can set this)`,
+            '',
+            '   There is NOTHING to spawn — no reviewer was briefed and no instructions file was written,',
+            '   so any attempt to spawn one has nothing to read. Do NOT hand-write a verdict file in their',
+            '   place: a fabricated verdict is worse than the absent one this flag deliberately produces.',
+            '',
+            '   The dashboard is the whole review product for this PR, and the suppression is carried into',
+            '   the PR body — which is the squash-merge commit body — so main\'s history records it.',
+            '   To get the reviewers back, set that key to false (or delete it) and re-run this command.',
+        );
+        return lines.join('\n') + '\n';
     }
 
     /**

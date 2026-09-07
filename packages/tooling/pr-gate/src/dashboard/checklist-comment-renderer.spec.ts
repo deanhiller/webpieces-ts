@@ -8,7 +8,9 @@ const renderChecklistComment = (
     rows: ChecklistCommentRow[],
     verified: boolean,
     based = true,
-): string => renderer.render(rows, verified, based);
+    // 0 = the reviewer kill switch is off, which is what every pre-existing test here asserts about.
+    suppressedCount = 0,
+): string => renderer.render(rows, verified, based, suppressedCount);
 
 // The four files every fixture roster was matched against, so "x of 4" is always honest.
 const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
@@ -220,5 +222,60 @@ describe('ChecklistCommentRenderer.render — optional checklists', () => {
         const md = renderChecklistComment([optionalRanRow('fe-reviewer', CK_FAIL, 'unbounded list render')], true);
         expect(md).toContain('- [x] 🔴 **fe-reviewer** _(optional)_ — FAILED review');
         expect(md).toContain('unbounded list render');
+    });
+});
+
+/**
+ * ══ turnOffAllReviewers on the 2nd comment ══════════════════════════════════════════════════════════
+ *
+ * Three sentences in the ordinary comment become FALSE under suppression, and none of them is fixable by
+ * adding a line: the roll-up counts matched checklists as "skipped ✅", the provenance line attests that
+ * each reviewer ran as its own verified subagent, and the closing note says every checklist was evaluated
+ * and none applied. So the body is REPLACED.
+ *
+ * The checkbox is the sharpest of the three. `reviewerRan` is true for any REQUIRED checklist that
+ * applied, so the ordinary roster would tick every required reviewer's box on a PR none of them opened.
+ */
+describe('turnOffAllReviewers — the comment says nobody looked', () => {
+    const suppressed = (): string =>
+        renderChecklistComment([ranRow('db-reviewer', CK_MISSING), skippedRow('a11y-reviewer')], true, true, 1);
+
+    it('headlines the suppression with the counts', () => {
+        expect(suppressed()).toContain('⚫ ALL SUPPRESSED (1 of 2 would have run)');
+    });
+
+    it('names the flag and the machine-local file, and says it is not an all-clear', () => {
+        const md = suppressed();
+        expect(md).toContain('turnOffAllReviewers');
+        expect(md).toContain('~/.webpieces/config.json');
+        expect(md).toContain('not an all-clear');
+        expect(md).toContain('1 of the suppressed checklist(s) were REQUIRED');
+    });
+
+    // THE inversion this exists to prevent.
+    it('never TICKS a box — no reviewer ran, required ones included', () => {
+        const md = suppressed();
+        expect(md).not.toContain('- [x]');
+        expect(md).toContain('- [ ] **db-reviewer** — ⚫ SUPPRESSED (REQUIRED) — no reviewer ran');
+    });
+
+    it('makes no provenance claim, because there is nothing to attest to', () => {
+        expect(suppressed()).not.toContain('verified from the Claude Code harness');
+    });
+
+    // The other false sentence: plenty applied here, and the ordinary note says none did.
+    it('never prints the "none of them applied" all-clear', () => {
+        expect(suppressed()).not.toContain('every configured checklist was evaluated and none of them applied');
+    });
+
+    // A checklist that genuinely did not match still reads as the good news it is — the two are kept apart.
+    it('still distinguishes a checklist that did not apply from one that was suppressed', () => {
+        expect(suppressed()).toContain('- [ ] **a11y-reviewer** — ⚪ did not apply to this diff');
+    });
+
+    it('renders the ordinary comment, unchanged, when the flag is off', () => {
+        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok')], true);
+        expect(md).not.toContain('SUPPRESSED');
+        expect(md).toContain('- [x]');
     });
 });

@@ -8,6 +8,9 @@ import {
     CK_OVERRIDDEN,
     CK_FAIL,
     CK_MISSING,
+    HOME_CONFIG_DIR,
+    HOME_CONFIG_FILE,
+    HOME_KEY_TURN_OFF_ALL_REVIEWERS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -127,6 +130,19 @@ export class DashboardInput {
      * repo that genuinely has no build command, but only when someone writes it down.
      */
     buildCommand: string;
+    /**
+     * How many checklists WOULD have run but were killed by `experimental.turnOffAllReviewers` in
+     * `~/.webpieces/config.json` — required ones included. `0` means the flag is off and every reviewer
+     * ran normally; it is NOT a way of saying "no checklist matched", which `checklists.length === 0`
+     * already says.
+     *
+     * The two states are byte-identical in `checklists` (both empty) and that is precisely the defect this
+     * field closes: without it, a PR whose four REQUIRED reviewers were switched off is indistinguishable
+     * in `main`'s history from a docs-only typo fix that legitimately matched nothing. REQUIRED with no
+     * default, for the reason `buildCommand` is: a defaulted `0` would let every existing construction
+     * keep compiling while asserting, silently, that nothing was suppressed.
+     */
+    suppressedChecklistCount: number;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -140,6 +156,7 @@ export class DashboardInput {
         review: ReviewJson,
         checklists: ChecklistRow[],
         buildCommand: string,
+        suppressedChecklistCount: number,
     ) {
         this.title = title;
         this.gateResults = gateResults;
@@ -151,6 +168,7 @@ export class DashboardInput {
         this.review = review;
         this.checklists = checklists;
         this.buildCommand = buildCommand;
+        this.suppressedChecklistCount = suppressedChecklistCount;
     }
 }
 
@@ -223,7 +241,7 @@ export class Dashboard {
         // checklist COMMENT, per reviewer, in full. ALWAYS emitted, including the zero case: "no reviewer
         // looked at this PR" is a fact a reader must be told, and an absent row silently reads as a green
         // all-clear (see checklistRollupLine).
-        lines.push(this.checklistRollupLine(input.checklists));
+        lines.push(this.checklistRollupLine(input.checklists, input.suppressedChecklistCount));
         lines.push('');
         if (input.review.summary.trim() !== '') {
             lines.push('### Summary');
@@ -366,6 +384,17 @@ export class Dashboard {
         if (input.disables.eslintCount > 0)
             flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
         // A triggered checklist is noteworthy in main's history — carry each into the commit body.
+        //
+        // SUPPRESSED replaces those N bullets with exactly ONE, whatever N is. Not because the per-reviewer
+        // bullets would lie — `checklistStatusText` was already hardened against a false "passed" — but
+        // because with the kill switch on there are NO rows at all, and a body with no `Checklist — `
+        // bullets is byte-identical to a PR that legitimately matched zero checklists (a docs-only typo
+        // fix). Without this line, "four REQUIRED reviewers were killed by a flag" and "nothing applied
+        // here" are indistinguishable in main's history forever. One compact bullet, in the existing
+        // style — the loud version belongs in stage ②'s output and the 1st comment, not in `git log`.
+        if (input.suppressedChecklistCount > 0) {
+            flags.push(`Checklists — ${this.suppressedTail(input.suppressedChecklistCount)}`);
+        }
         for (const row of input.checklists) {
             flags.push(`Checklist — ${row.title}: ${this.checklistStatusText(row)}`);
         }
@@ -465,7 +494,11 @@ export class Dashboard {
      * shape as its neighbours (`**Build (nx affected):** 🟢 Passed`). Counts and names only — never a line
      * of reviewer output or override justification, which is the whole reason this row exists.
      */
-    private checklistRollupLine(rows: readonly ChecklistRow[]): string {
+    private checklistRollupLine(rows: readonly ChecklistRow[], suppressedCount: number): string {
+        // FIRST, and ahead of the zero-ran case below, which would say "no review checklist matched this
+        // PR" — false here, and the one sentence that would turn a kill switch into an all-clear. ⚫ is a
+        // colour no verdict uses, so it cannot be mistaken for a pass, a warning or a refusal.
+        if (suppressedCount > 0) return this.suppressedChecklistLine(suppressedCount);
         const buckets = this.rollupBuckets(rows);
         const filled = buckets.filter((b: RollupBucket): boolean => b.titles.length > 0);
         // NO reviewer ran ⇒ the SKIPPED icon, never green. Green claims something was checked and came back
@@ -490,6 +523,32 @@ export class Dashboard {
      * added later all land there, matching review.json's own "not pass|warn|overridden ⇒ refuse" rule
      * rather than a second list that could silently drift green.
      */
+    /**
+     * The full-dashboard row for a suppressed PR. Verbose is FINE here — this lands in the PR's 1st
+     * comment, not in `git log`.
+     */
+    private suppressedChecklistLine(suppressedCount: number): string {
+        return `**Checklists:** ${this.suppressedTail(suppressedCount)}`
+            + ' · NO reviewer subagent ran on this PR — set that key to false (or delete it) to get them back';
+    }
+
+    /**
+     * The ONE sentence both the dashboard row and the commit-body bullet are built from, so the two can
+     * never disagree about what was switched off or by what.
+     *
+     * Every part of it earns its place in `main`'s permanent history:
+     *   • the COUNT, because "suppressed 4" and "0 applicable" are different facts and both must be
+     *     tellable apart forever — an absent bullet says the second while meaning the first;
+     *   • "required included", because otherwise it reads as an optional-only skip, which it is not;
+     *   • the FLAG and the FILE, because they are the only actionable thing a reader of `git log` has.
+     * ⚫ is deliberately outside the verdict palette (🟢🟡🔴🟠⚪ are all taken by checklistStatusText), so
+     * nothing here can be mistaken for a verdict a reviewer actually returned.
+     */
+    private suppressedTail(suppressedCount: number): string {
+        return `⚫ ALL ${suppressedCount} SUPPRESSED (required included) by `
+            + `${HOME_KEY_TURN_OFF_ALL_REVIEWERS} in ~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}`;
+    }
+
     private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {
         const blocking = new RollupBucket('blocking', '🔴', true);
         const overridden = new RollupBucket('overridden', '🟠', true);

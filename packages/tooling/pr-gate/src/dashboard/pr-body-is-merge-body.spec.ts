@@ -21,6 +21,7 @@ function input(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
         review,
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
 }
 

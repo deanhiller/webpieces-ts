@@ -157,6 +157,43 @@ export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
 // it switches, exactly as the guard key above is — one name, greppable from either end.
 export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
 /**
+ * ─── THE KILL SWITCH FOR EVERY PR-GATE REVIEWER. READ THIS BEFORE YOU TOUCH THE KEY. ──────────────────
+ *
+ * When a machine writes `{"experimental": {"turnOffAllReviewers": true}}` into
+ * `~/.webpieces/config.json`, `ChecklistScanner.scan` returns NO applicable checklists, so
+ * `wp-review-upsert-pr` briefs and names no reviewer subagent and `wp-finish-upsert-pr` has nothing
+ * outstanding to block on. The review product becomes the dashboard, and nothing else.
+ *
+ * 1. IT LIVES ONLY HERE. There is deliberately NO `webpieces.config.json` entry for it, and there must
+ *    never be one. Do not "make it configurable per repo"; that request is the defect, not the feature.
+ *
+ * 2. IT IS A KILL SWITCH, NOT A FILTER. It suppresses ALL reviewers — the REQUIRED checklists included.
+ *    That is the whole point: the required set is most of the token cost, so a half-measure that spared
+ *    them would save nothing and would still have to be explained. It does not narrow, re-order or
+ *    re-scope anything; it is on or it is off.
+ *
+ * 3. WHY A TRACKED REPO KEY IS UNACCEPTABLE. `webpieces.config.json` is TRACKED, so a key there rides in
+ *    a BRANCH — and a branch that can switch off its own required reviewers is a branch that reviews
+ *    itself. The required checklists exist precisely to be the one thing a diff cannot talk its way past;
+ *    putting their off-switch inside the diff's own repo hands every future PR the ability to disable the
+ *    gate that judges it. That is not a config preference, it is a hole in the gate. This file is
+ *    machine-local, untracked, hand-authored and outside every repo, so a value here is ONE person's
+ *    decision about their OWN machine and it cannot travel in a pull request.
+ *    The precedent is `whole-repo-build-guard`, retired as a repo key one release after it shipped (see
+ *    `RETIRED_CONFIG_KEYS`) and living only here since. This key is the same shape with a sharper edge,
+ *    because what it disables IS the review gate rather than a build convenience.
+ *
+ * 4. IT IS AN `experimental.*` FLAG, so `.claude/rules/experiments.md` applies in full: an AI may never
+ *    DELETE it, RENAME it, NARROW what it controls, flip its default to ON, or make EITHER branch
+ *    unconditional. Only a human ends an experiment, and your own reasoning is never that human. If it
+ *    looks finished, say so and leave the key alone.
+ *
+ * 5. IT IS NEVER QUIET. An unreviewed PR must not read as a reviewed one, so the suppression is stated in
+ *    stage ②'s output, on the dashboard, and in the PR body — which is the squash-merge commit body, and
+ *    therefore the only record that outlives the branch. Do not remove those, either.
+ */
+export const HOME_KEY_TURN_OFF_ALL_REVIEWERS = 'turnOffAllReviewers';
+/**
  * How many builds may be live on this machine before `pnpm wp-build` refuses to start another. The FIRST
  * NUMERIC key in this file — see `readOptionalPositiveInteger` for why "known key, wrong type → REJECT"
  * applies to it exactly as it applies to the booleans.
@@ -235,7 +272,7 @@ export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
  * human-ended retirement looks like.
  */
 export const ALLOWED_EXPERIMENTAL_BOOLEANS: readonly string[] = [
-    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP,
+    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
 ];
 export const ALLOWED_EXPERIMENTAL_NUMBERS: readonly string[] = [HOME_KEY_MAX_CONCURRENT_BUILDS];
 export const ALLOWED_EXPERIMENTAL: readonly string[] = [
@@ -314,18 +351,40 @@ export class HomeConfig {
      */
     maxConcurrentBuilds: number;
 
-    // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    /**
+     * EXPERIMENTAL, and OFF unless this machine opts IN with an explicit `true`. When true, the PR gate
+     * spawns NO reviewer subagents AT ALL — the REQUIRED checklists included — and the dashboard becomes
+     * the entire review product. False, absent, and no file at all are byte-for-byte today's behaviour.
+     *
+     * THE FULL CONTRACT, AND THE REASONS IT MAY NOT MOVE, ARE ON
+     * {@link HOME_KEY_TURN_OFF_ALL_REVIEWERS}. Read that docblock before you delete, rename, narrow or
+     * re-home this field. The four things it says, in one line each:
+     *   • ONLY `~/.webpieces/config.json` — never a `webpieces.config.json` key, in any release;
+     *   • a KILL SWITCH, not a filter — required reviewers are suppressed too, deliberately;
+     *   • a tracked repo key would let a BRANCH switch off the reviewers judging that branch;
+     *   • it is an `experimental.*` flag, so only a HUMAN ever ends it.
+     *
+     * The suppression is never silent: stage ②'s output, the dashboard and the PR body (which is the
+     * squash-merge commit body) all name this flag, so a `git log` reader can tell that a commit's
+     * reviewers were switched off and by what.
+     */
+    turnOffAllReviewers: boolean;
+
+    // ALL FOUR required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
-    // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per
+    // class had before `turnOffAllReviewers` is DELETED rather than overloaded, per
     // `.claude/rules/no-backwards-compat.md`: the compile errors ARE the migration. The
     // absent-file state is constructed in exactly one place — load()'s absent-file branch.
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         wholeRepoBuildGuard: boolean, orphanDirSweep: boolean, maxConcurrentBuilds: number,
+        turnOffAllReviewers: boolean,
     ) {
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
         this.orphanDirSweep = orphanDirSweep;
         this.maxConcurrentBuilds = maxConcurrentBuilds;
+        this.turnOffAllReviewers = turnOffAllReviewers;
     }
 }
 
@@ -362,7 +421,8 @@ export class HomeConfigService {
         // on why a defaulted parameter is a shim.
         if (raw === null) {
             return new HomeConfig(
-                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS);
+                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS,
+                GUARD_OFF_WHEN_ABSENT);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -456,6 +516,7 @@ export class HomeConfigService {
             this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalPositiveInteger(
                 experimental, HOME_KEY_MAX_CONCURRENT_BUILDS, file, DEFAULT_MAX_CONCURRENT_BUILDS),
+            this.readOptionalBoolean(experimental, HOME_KEY_TURN_OFF_ALL_REVIEWERS, file, GUARD_OFF_WHEN_ABSENT),
         );
     }
 

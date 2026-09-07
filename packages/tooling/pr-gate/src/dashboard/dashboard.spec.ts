@@ -30,7 +30,8 @@ const renderChecklistComment = (
     rows: ChecklistCommentRow[],
     verified: boolean,
     based = true,
-): string => checklistRenderer.render(rows, verified, based);
+    suppressedCount = 0,
+): string => checklistRenderer.render(rows, verified, based, suppressedCount);
 
 // A minimal all-green input, so a test about ONE property of the PR body does not restate ten
 // positional constructor arguments to get at it. `buildCommand` is a parameter rather than a fixed
@@ -39,6 +40,9 @@ const renderChecklistComment = (
 function baseInput(
     reviewOverrides: Partial<ReviewJson> = {},
     buildCommand = 'pnpm nx affected --target=ci',
+    // 0 = the kill switch is off and reviewers ran normally, which is what every pre-existing test here
+    // asserts about. A test that cares about `experimental.turnOffAllReviewers` passes a real count.
+    suppressedChecklistCount = 0,
 ): DashboardInput {
     return new DashboardInput(
         'My PR',
@@ -51,6 +55,7 @@ function baseInput(
         review(reviewOverrides),
         [],
         buildCommand,
+        suppressedChecklistCount,
     );
 }
 
@@ -161,6 +166,7 @@ describe('renderDetailComment', () => {
             review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const md = renderDetailComment(input);
 
@@ -196,6 +202,7 @@ describe('renderDetailComment', () => {
             }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const md = renderDetailComment(input);
 
@@ -246,6 +253,7 @@ describe('renderPrBody', () => {
             }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
 
@@ -347,6 +355,7 @@ describe('renderPrBody', () => {
             review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const body = renderPrBody(input, '');
 
@@ -373,6 +382,7 @@ describe('renderPrBody', () => {
             review({ summary: 'S1. S2. S3. S4. S5. S6.' }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const body = renderPrBody(input, '');
 
@@ -395,6 +405,7 @@ describe('renderPrBody', () => {
             }),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const body = renderPrBody(input, '');
 
@@ -442,6 +453,7 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
             review(),
         [],
         'pnpm nx affected --target=ci',
+        0,
     );
         const md = renderDetailComment(input);
         expect(md).toContain(
@@ -567,6 +579,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
             review(),
             rows,
         'pnpm nx affected --target=ci',
+        0,
     );
         const body = renderPrBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
@@ -582,3 +595,67 @@ describe('renderDetailComment checklists — the detail still lives in the comme
  * "no verdict" state as a review that was never relevant, and rendering the two identically would let a PR
  * that skipped every optional review read as fully covered.
  */
+
+/**
+ * ══ turnOffAllReviewers in the COMMIT BODY ══════════════════════════════════════════════════════════
+ *
+ * The PR description IS the squash-merge commit body, so this is the only record of the suppression that
+ * outlives the branch. The defect being pinned is AMBIGUITY, not a false pass: with the reviewers killed
+ * there are no `checklists` rows, so the per-reviewer bullets vanish and the body becomes byte-identical
+ * to a docs-only PR that legitimately matched nothing. "Four REQUIRED reviewers were switched off" and
+ * "nothing applied here" would then be indistinguishable in main's history forever.
+ *
+ * ONE bullet, in the existing style, whatever the count. The verbose version belongs to stage ②'s output
+ * and to the 1st comment.
+ */
+describe('turnOffAllReviewers — one compact bullet in the commit body', () => {
+    const suppressedInput = (n = 4): DashboardInput => baseInput({}, 'pnpm nx affected --target=ci', n);
+
+    it('renders exactly ONE suppression bullet, whatever the count', () => {
+        for (const n of [1, 4, 12]) {
+            const body = renderPrBody(suppressedInput(n), '');
+            expect(body.split('Checklists — ').length - 1).toBe(1);
+            expect(body).toContain(`ALL ${n} SUPPRESSED`);
+        }
+    });
+
+    it('states required-included, and names both the flag and the file', () => {
+        const body = renderPrBody(suppressedInput(), '');
+        expect(body).toContain('(required included)');
+        expect(body).toContain('turnOffAllReviewers');
+        expect(body).toContain('~/.webpieces/config.json');
+    });
+
+    // ⚫ is outside the verdict palette (🟢🟡🔴🟠⚪), so it cannot read as a verdict a reviewer returned.
+    it('uses an emoji no verdict state uses', () => {
+        const body = renderPrBody(suppressedInput(), '');
+        expect(body).toContain('⚫');
+        for (const taken of ['🟢', '🟡', '🔴', '🟠', '⚪']) {
+            expect(body.split('Checklists — ')[1].split('\n')[0]).not.toContain(taken);
+        }
+    });
+
+    it('emits no per-reviewer `Checklist — ` bullets, because no reviewer ran', () => {
+        expect(renderPrBody(suppressedInput(), '')).not.toContain('Checklist — ');
+    });
+
+    // THE ambiguity, asserted directly: the two bodies must not be the same string.
+    it('is DISTINGUISHABLE from a PR that legitimately matched zero checklists', () => {
+        const zeroApplicable = renderPrBody(baseInput(), '');
+        expect(zeroApplicable).not.toContain('SUPPRESSED');
+        expect(renderPrBody(suppressedInput(), '')).not.toBe(zeroApplicable);
+    });
+
+    // The full dashboard (1st comment) must not report ⚪ "no review checklist matched this PR" either —
+    // plenty matched, and every one of them was killed.
+    it('replaces the dashboard "0 ran — no checklist matched" row with the suppression row', () => {
+        const md = renderDetailComment(suppressedInput());
+        expect(md).toContain('**Checklists:** ⚫ ALL 4 SUPPRESSED');
+        expect(md).not.toContain('no review checklist matched this PR');
+    });
+
+    it('leaves both surfaces untouched when the flag is off', () => {
+        expect(renderPrBody(baseInput(), '')).not.toContain('SUPPRESSED');
+        expect(renderDetailComment(baseInput())).not.toContain('SUPPRESSED');
+    });
+});

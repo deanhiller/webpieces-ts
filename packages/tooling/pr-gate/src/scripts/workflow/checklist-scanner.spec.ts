@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ChecklistDefinition, ChecklistOverride, checklistOverrideService, DiffScope, RequiredChecklist, ReviewJsonService, toChecklist } from '@webpieces/rules-config';
+import { ChecklistDefinition, ChecklistOverride, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, RequiredChecklist, ReviewJsonService, toChecklist } from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
@@ -57,7 +57,21 @@ function newForkPoint(): ForkPoint {
     return new ForkPoint(null as never, null as never, null as never);
 }
 
-function scannerFor(): ChecklistScanner {
+/**
+ * A HomeConfigService that answers from THIS argument and never opens a file.
+ *
+ * The real one reads `~/.webpieces/config.json`, and the machine running these tests may well have
+ * `turnOffAllReviewers: true` in it — which would empty every expectation below for a reason that has
+ * nothing to do with the code under test. Every construction states the flag out loud instead.
+ */
+function homeConfigWith(turnOffAllReviewers: boolean): HomeConfigService {
+    const service = new HomeConfigService();
+    vi.spyOn(service, 'load').mockReturnValue(
+        new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, turnOffAllReviewers));
+    return service;
+}
+
+function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
     const diffScope = new DiffScope();
     const reviewJson = new ReviewJsonService();
     // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
@@ -66,6 +80,7 @@ function scannerFor(): ChecklistScanner {
         newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
         new DiffBasisResolver(newForkPoint(), new GitStatusParser()),
         new PrContextWriter(diffScope, reviewJson), reviewJson,
+        homeConfigWith(turnOffAllReviewers),
     );
 }
 
@@ -459,5 +474,79 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
     it('keeps the ChecklistDefinition contract the scanner relies on (id == subagent)', () => {
         const def = new ChecklistDefinition('r', 'r', '.claude/review/r.md', ['**/*.sql'], true);
         expect(def.id).toBe(def.subagent);
+    });
+});
+
+/**
+ * ══ experimental.turnOffAllReviewers — the ONE choke point ══════════════════════════════════════════
+ *
+ * The flag is read HERE and nowhere else, which is what keeps `wp-review-upsert-pr` (which lists) and
+ * `wp-finish-upsert-pr` (which blocks) in agreement by construction. Both call this scan, so a scan that
+ * owes nothing is a PR that is neither told to spawn nor refused for not having.
+ *
+ * REQUIRED checklists are suppressed too, deliberately — see HOME_KEY_TURN_OFF_ALL_REVIEWERS. That is
+ * the assertion below that would be tempting to soften and must not be.
+ */
+describe('ChecklistScanner — turnOffAllReviewers', () => {
+    const TWO_REQUIRED = defs([
+        { subagent: 'db-reviewer', patterns: ['**/*.sql'], required: true },
+        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'], required: true },
+    ]);
+
+    function repoWithBoth(): string {
+        const dir = repoOnBranch();
+        fs.mkdirSync(path.join(dir, 'db'));
+        fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'x\n');
+        fs.writeFileSync(path.join(dir, 'Dockerfile'), 'FROM node\n');
+        return dir;
+    }
+
+    it('OFF (the default): the two REQUIRED checklists apply and are outstanding — unchanged behaviour', () => {
+        const scan = scannerFor(false).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        expect(scan.applicable.map((r: RequiredChecklist): string => r.id).sort())
+            .toEqual(['db-reviewer', 'ops-reviewer']);
+        expect(scan.outstanding).toHaveLength(2);
+        expect(scan.reviewersDisabled).toBe(false);
+        expect(scan.suppressed).toEqual([]);
+    });
+
+    it('ON: applicable and outstanding are EMPTY even though both REQUIRED checklists match', () => {
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        expect(scan.applicable).toEqual([]);
+        expect(scan.outstanding).toEqual([]);
+        expect(scan.reviewed).toEqual([]);
+        expect(scan.results).toEqual([]);
+        expect(scan.optionalNotRun).toEqual([]);
+        expect(scan.formatErrors).toEqual([]);
+    });
+
+    // The whole point of carrying `suppressed`: an empty `applicable` is ambiguous on its own, and the
+    // count + names are what stage ②, the dashboard and main's commit history all report from.
+    it('ON: records WHAT was suppressed, by name, with `required` intact', () => {
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        expect(scan.reviewersDisabled).toBe(true);
+        expect(scan.suppressed.map((r: RequiredChecklist): string => r.id).sort())
+            .toEqual(['db-reviewer', 'ops-reviewer']);
+        expect(scan.suppressed.every((r: RequiredChecklist): boolean => r.required)).toBe(true);
+    });
+
+    // `defined`, `roster`, `changedFiles` and `basis` must survive: without them nothing downstream can
+    // say WHAT was switched off, and the suppression becomes exactly the silent skip this must never be.
+    it('ON: keeps defined, the roster and the changed-file set intact', () => {
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        expect(scan.defined).toHaveLength(2);
+        expect(scan.roster.entries).toHaveLength(2);
+        expect(scan.changedFiles).toContain('db/001.sql');
+        expect(scan.basis.base).not.toEqual('');
+    });
+
+    // Suppressing must not resurrect the ambiguity in the other direction either: a repo where nothing
+    // matched reports 0 suppressed, so "0 applicable" and "4 killed" stay tellable apart.
+    it('ON: a diff that matches NOTHING reports zero suppressed, not a phantom count', () => {
+        const dir = repoOnBranch();
+        fs.writeFileSync(path.join(dir, 'notes.md'), 'hi\n');
+        const scan = scannerFor(true).scan(dir, TWO_REQUIRED, new ChecklistScanOptions(true));
+        expect(scan.reviewersDisabled).toBe(true);
+        expect(scan.suppressed).toEqual([]);
     });
 });

@@ -9,6 +9,7 @@ import {
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
     HOME_KEY_ORPHAN_DIR_SWEEP,
     HOME_KEY_MAX_CONCURRENT_BUILDS,
+    HOME_KEY_TURN_OFF_ALL_REVIEWERS,
     ALLOWED_EXPERIMENTAL, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_TOP_LEVEL,
     HOME_KEY_DOC, HOME_KEY_AI_DOC, DOCUMENTATION_KEYS,
 } from './home-config';
@@ -135,8 +136,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS).wholeRepoBuildGuard).toBe(false);
-        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS).orphanDirSweep).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false).orphanDirSweep).toBe(false);
     });
 
     /**
@@ -186,6 +187,77 @@ describe('PRESENT ~/.webpieces/config.json — accepted shapes', () => {
             // file stays optional and defaults OFF.
             expect(loaded.orphanDirSweep).toBe(false);
         }
+    });
+});
+
+/**
+ * ══ turnOffAllReviewers — the PR-gate reviewer KILL SWITCH ══════════════════════════════════════════
+ *
+ * The whole contract is on {@link HOME_KEY_TURN_OFF_ALL_REVIEWERS}; what is pinned here is the half a
+ * test can see. It defaults OFF in all four flavours of "this machine did not opt in" — no file, no
+ * `experimental` section, no key, and an explicit `false` — because those four are one state, and a
+ * machine that never created this file must post PRs exactly as it did before this key existed.
+ *
+ * It is also covered, for free, by the two cross-version invariants above: both walk
+ * `ALLOWED_EXPERIMENTAL` itself rather than a hand-written list, so this key is omittable-independently
+ * and readable-beside-an-unknown-key without either test naming it. That is asserted below rather than
+ * assumed, because "a new key is covered automatically" is exactly the kind of claim that quietly stops
+ * being true.
+ */
+describe('experimental.turnOffAllReviewers', () => {
+    it('is one of the keys the cross-version invariants ENUMERATE — not a special case they miss', () => {
+        expect(ALLOWED_EXPERIMENTAL).toContain(HOME_KEY_TURN_OFF_ALL_REVIEWERS);
+    });
+
+    it('is OFF when there is no file at all', () => {
+        expect(new HomeConfigService().load(fakeHome()).turnOffAllReviewers).toBe(false);
+    });
+
+    it('is OFF when the file has no experimental section', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({}));
+        expect(new HomeConfigService().load(home).turnOffAllReviewers).toBe(false);
+    });
+
+    it('is OFF when the experimental section does not name the key', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_ORPHAN_DIR_SWEEP]: true } }));
+        expect(new HomeConfigService().load(home).turnOffAllReviewers).toBe(false);
+    });
+
+    it('is OFF for an explicit false — declining is not an error', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_TURN_OFF_ALL_REVIEWERS]: false } }));
+        expect(new HomeConfigService().load(home).turnOffAllReviewers).toBe(false);
+    });
+
+    it('is ON only for an explicit true', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_TURN_OFF_ALL_REVIEWERS]: true } }));
+        expect(new HomeConfigService().load(home).turnOffAllReviewers).toBe(true);
+    });
+
+    it('does not switch any OTHER flag on — one key, one feature', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_TURN_OFF_ALL_REVIEWERS]: true } }));
+        const loaded = new HomeConfigService().load(home);
+        expect(loaded.wholeRepoBuildGuard).toBe(false);
+        expect(loaded.orphanDirSweep).toBe(false);
+        expect(loaded.maxConcurrentBuilds).toBe(DEFAULT_MAX_CONCURRENT_BUILDS);
+    });
+
+    /**
+     * A KNOWN key of the wrong type REJECTS, and that line does not move for this key. `"true"` is
+     * somebody who wrote the file wrongly, not somebody writing for a different release — no release of
+     * webpieces has ever given this key a string meaning — and guessing would silently leave every
+     * reviewer running while its author believed they had turned them off.
+     */
+    it('REJECTS a present-but-wrong-type value, naming the key and the fix', () => {
+        const home = fakeHome();
+        writeConfig(home, JSON.stringify({ experimental: { [HOME_KEY_TURN_OFF_ALL_REVIEWERS]: 'true' } }));
+        const message = loadError(home).message;
+        expect(message).toContain(`${HOME_EXPERIMENTAL_SECTION}.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}`);
+        expect(message).toContain('must be the boolean');
     });
 });
 
