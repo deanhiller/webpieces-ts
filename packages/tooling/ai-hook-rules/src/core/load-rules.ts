@@ -33,6 +33,7 @@ import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
 import { BuildOutputPipeGuardRule } from './rules/build-output-pipe-guard';
+import { WaitSpinGuardRule } from './rules/wait-spin-guard';
 import { PrMergeGuardRule } from './rules/pr-merge-guard';
 import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
@@ -141,6 +142,10 @@ export function loadRules(
  *    `wp-review-upsert-pr` / `wp-finish-upsert-pr` withholds their heartbeat until they exit and gets
  *    the build killed by the 600s watchdog; the cure is the SAME command with less typing, available
  *    for every input, and it cannot itself match the guard.
+ *  - `wait-spin-guard` acts unconditionally, on the same test again. An `echo .` keep-alive spends a
+ *    whole turn (~557k tokens) to do nothing, and its cure — `pnpm wp-await-reviews` /
+ *    `pnpm wp-await-checks` for a worktree subagent, a Monitor plus ending the turn for a main agent —
+ *    is available for every input and can never itself match the guard.
  *
  * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
  * repo's gate actually runs.
@@ -151,6 +156,7 @@ export function loadKeylessBashRules(affectedBuildCommand: string): Rule[] {
         new WholeRepoBuildGuardRule(affectedBuildCommand),
         new CommitMessageSubstitutionGuardRule(),
         new BuildOutputPipeGuardRule(),
+        new WaitSpinGuardRule(),
     ];
 }
 

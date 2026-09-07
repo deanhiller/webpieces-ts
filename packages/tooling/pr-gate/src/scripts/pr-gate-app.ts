@@ -12,6 +12,8 @@ import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
+import { AwaitReviewsCommand } from './commands/await-reviews-command';
+import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { PushDevStateStore } from './workflow/push-dev-state';
@@ -38,6 +40,8 @@ export class PrGateApp {
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
         private readonly reapWorktreeCommand: ReapWorktreeCommand,
         private readonly buildCommand: BuildCommand,
+        private readonly awaitReviewsCommand: AwaitReviewsCommand,
+        private readonly awaitChecksCommand: AwaitChecksCommand,
         private readonly pushDevCommand: PushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
         private readonly pushDevStateStore: PushDevStateStore,
@@ -83,6 +87,22 @@ export class PrGateApp {
      */
     build(opts: BuildOptions): Promise<void> {
         return this.buildCommand.run(opts);
+    }
+
+    /**
+     * `wp-await-reviews`: BLOCK until every reviewer verdict this branch owes has landed, then print
+     * them. Not blocked during a `wp-push-dev --resolve`: it reads verdict files and mutates nothing.
+     */
+    awaitReviews(): Promise<void> {
+        return this.awaitReviewsCommand.run();
+    }
+
+    /**
+     * `wp-await-checks --pr <n>`: BLOCK until that PR's checks stop running, then print where they
+     * landed. Read-only against GitHub, so it too is allowed during a resolve.
+     */
+    awaitChecks(opts: AwaitChecksOptions): Promise<void> {
+        return this.awaitChecksCommand.run(opts);
     }
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */

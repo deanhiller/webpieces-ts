@@ -34,7 +34,9 @@
             "wp-check-pr": "./src/scripts/wp-check-pr.js",
             "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
             "wp-push-dev": "./src/scripts/wp-push-dev.js",
-            "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js"
+            "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js",
+            "wp-await-reviews": "./src/scripts/wp-await-reviews.js",
+            "wp-await-checks": "./src/scripts/wp-await-checks.js"
         },
         "access": "public"
     }

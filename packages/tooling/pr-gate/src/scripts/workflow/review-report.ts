@@ -290,8 +290,11 @@ export class ReviewReport {
         // review.json, then a spawn step only if anything must run, then an offer step only if anything may.
         let step = 1;
         const write = this.writeReviewStep(input.reviewPath, step++);
-        const spawn = required.length === 0 ? '' : this.spawnStep(input, required, step++);
-        const offer = offerable.length === 0 ? '' : this.offerStep(input, offerable, step++);
+        // The wait block goes under the LAST reviewer-listing step, and only there. Printed under both
+        // it would be two "what to do next" instructions in one output, which is the defect this
+        // method's docstring describes — an agent reading top to bottom obeys the first one it meets.
+        const spawn = required.length === 0 ? '' : this.spawnStep(input, required, step++, offerable.length === 0);
+        const offer = offerable.length === 0 ? '' : this.offerStep(input, offerable, step++, true);
         return '\n' + SEP
             + `▶ NEXT — ${step} steps, in this order. Step 1 is NOT optional:\n` + SEP + '\n'
             + write + spawn + offer + this.finishStep(step, required.length + offerable.length > 0);
@@ -318,7 +321,7 @@ export class ReviewReport {
      * the repo saying the decision was already made; putting them to the human again would re-open a question
      * the config exists to settle.
      */
-    private spawnStep(input: ReviewReportInput, owed: readonly ReviewerBriefing[], step: number): string {
+    private spawnStep(input: ReviewReportInput, owed: readonly ReviewerBriefing[], step: number, withAwait: boolean): string {
         const lines: string[] = [
             `STEP ${step} — only once that file is written, spawn these ${owed.length} REQUIRED reviewer subagent(s) — a`,
             '         SEPARATE one each. They block the PR, so do NOT ask whether to run them. You may NOT',
@@ -327,8 +330,34 @@ export class ReviewReport {
         ];
         lines.push(...this.refusedWarning(input, owed));
         for (const b of owed) lines.push(...this.oneSpawnBlock(input, b));
+        if (withAwait) lines.push(...this.awaitLines());
         lines.push('');
         return lines.join('\n');
+    }
+
+    /**
+     * How to WAIT once the spawn list has been spawned — printed after the blocks, because it is the
+     * next thing to do and nothing before it can be mistaken for it.
+     *
+     * It is here because the alternative is measured and expensive. A subagent that has spawned four
+     * reviewers cannot end its turn — ending it ends the run — and `Monitor` does not block, so the
+     * fallback is `echo .` every three seconds at ~557,000 tokens a turn: 18.3% of every token the fleet
+     * spent in the 24h to 2026-09-07 (issue #874). One blocking command replaces all of it.
+     *
+     * It names no other stage. `finishStep` below is the ONE place this whole block names
+     * `wp-finish-upsert-pr`, and a second mention here would be a second "what to do next" instruction
+     * for an agent reading top to bottom — the exact defect the class docstring above describes.
+     */
+    private awaitLines(): string[] {
+        return [
+            '         Then WAIT for them with one plain, blocking command — do NOT poll, and do NOT run',
+            '         `echo` to keep your turn alive (a turn costs your whole context, ~557k tokens):',
+            '',
+            '             pnpm wp-await-reviews',
+            '',
+            '         It heartbeats while it waits, returns as soon as the last verdict lands, and prints',
+            '         what each reviewer said. If the wait is long it exits asking to be run again.',
+        ];
     }
 
     /**
@@ -347,7 +376,7 @@ export class ReviewReport {
      * governs whether a reviewer must RUN, not whether its answer counts. Choosing to run one and then
      * shrugging off a red verdict would make the whole exercise theater.
      */
-    private offerStep(input: ReviewReportInput, offerable: readonly ReviewerBriefing[], step: number): string {
+    private offerStep(input: ReviewReportInput, offerable: readonly ReviewerBriefing[], step: number, withAwait: boolean): string {
         const lines: string[] = [
             `STEP ${step} — these ${offerable.length} OPTIONAL review checklist(s) matched this diff. They do NOT block the`,
             '         PR, and you may NOT decide for the human whether to run them.',
@@ -366,6 +395,7 @@ export class ReviewReport {
         ];
         lines.push(...this.refusedWarning(input, offerable));
         for (const b of offerable) lines.push(...this.oneSpawnBlock(input, b));
+        if (withAwait) lines.push(...this.awaitLines());
         lines.push('');
         return lines.join('\n');
     }
