@@ -207,7 +207,7 @@ export class FinishUpsertPrCommand {
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
-        const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted);
+        const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted, scan);
         const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance));
         this.archiveConsumedReview(repoRoot, featureName, result);
 
@@ -373,7 +373,7 @@ export class FinishUpsertPrCommand {
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string, required: readonly RequiredChecklist[]): DashboardInput {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -388,9 +388,12 @@ export class FinishUpsertPrCommand {
         // buildCommand travels into the dashboard so the PR-body footer can NAME the command that vouched
         // for this commit. The footer used to assert "build ran via nx affected" on every repo, which was
         // simply false wherever buildCommand is not nx.
+        // `scan.suppressed.length`, never `scan.reviewersDisabled` alone: the dashboard and the commit
+        // body have to state HOW MANY reviewers were killed, because a suppressed 4 and an applicable 0
+        // are different facts that both render as an empty `rows`. See DashboardInput.
         return new DashboardInput(
             title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows,
-            config.buildCommand);
+            config.buildCommand, scan.suppressed.length);
     }
 
     /**
@@ -477,7 +480,8 @@ export class FinishUpsertPrCommand {
         request.prNumber = prNumber;
         request.marker = CHECKLIST_COMMENT_MARKER;
         request.body = this.checklistComment.render(
-            this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved);
+            this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved,
+            scan.suppressed.length);
         request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         request.payloadName = 'checklist-comment.json';
         request.label = 'checklist review comment';

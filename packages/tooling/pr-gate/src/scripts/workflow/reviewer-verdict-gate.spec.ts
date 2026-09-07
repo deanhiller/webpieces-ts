@@ -51,6 +51,7 @@ function scanOver(dir: string, applicable: RequiredChecklist[]): ChecklistScan {
         [], applicable, [], outstanding,
         new ChecklistReviewContext(), reviewPath, 'abc1234',
         new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
+        false, [],
         undefined, [], results, optionalNotRun,
     );
 }
@@ -243,5 +244,45 @@ describe('optional checklists — declined is fine, refused is not', () => {
 
     it('says nothing about skipped optional reviews when there are none', () => {
         expect(refusalOf(reviewDir(), [DB])).not.toContain('Not blocking');
+    });
+});
+
+/**
+ * ══ turnOffAllReviewers reaches THIS gate through the scan, and nowhere else ════════════════════════
+ *
+ * `wp-finish-upsert-pr` blocks on `scan.outstanding`, and ChecklistScanner is the ONE place the kill
+ * switch is read — so a suppressed scan arrives here already owing nothing and this gate has no
+ * flag-awareness of its own. That is the design being pinned: a second check in here would be a second
+ * answer to "does this branch owe review?", free to disagree with the one stage ② printed.
+ *
+ * The fixture therefore builds the scan the SCANNER would build under suppression — every verdict-bearing
+ * list empty, `reviewersDisabled` true — rather than mocking the home config, because what finish
+ * actually sees is a ChecklistScan and nothing else.
+ */
+describe('a SUPPRESSED scan owes nothing, so finish does not block', () => {
+    function suppressedScan(dir: string, suppressed: RequiredChecklist[]): ChecklistScan {
+        return new ChecklistScan(
+            [], [], [], [],
+            new ChecklistReviewContext(), reviewPathIn(dir), 'abc1234',
+            new ChecklistRoster([], 1, true), [],
+            true, suppressed,
+            undefined, [], [], [],
+        );
+    }
+
+    it('lets the PR through even though a REQUIRED checklist matched and has no verdict', () => {
+        const dir = reviewDir();
+        expect((): void => gate.assertEveryReviewerRan(suppressedScan(dir, [DB]))).not.toThrow();
+    });
+
+    it('does not print the spawn imperative for reviewers that were switched off', () => {
+        const dir = reviewDir();
+        expect((): void => gate.assertEveryReviewerRan(suppressedScan(dir, [DB, OPS]))).not.toThrow();
+    });
+
+    // The control: the SAME checklist, not suppressed, still blocks. Suppression is the only difference,
+    // so a green above can never be mistaken for the gate having stopped working.
+    it('still blocks the identical checklist when it was NOT suppressed', () => {
+        expect(refusalOf(reviewDir(), [DB])).toContain('db-reviewer');
     });
 });

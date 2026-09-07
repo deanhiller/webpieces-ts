@@ -9,6 +9,11 @@ import { DOCUMENTATION_KEYS, HOME_KEY_DOC, HOME_KEY_AI_DOC, HomeDocKeys } from '
 import {
     RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, EndedExperiment, ENDED_EXPERIMENTS,
 } from './home-config-retired-keys';
+import {
+    ALLOWED_EXPERIMENTAL, ALLOWED_TOP_LEVEL, DEFAULT_MAX_CONCURRENT_BUILDS, GUARD_OFF_WHEN_ABSENT,
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_MAX_CONCURRENT_BUILDS,
+    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+} from './home-config-keys';
 
 export { DOCUMENTATION_KEYS, HOME_KEY_DOC, HOME_KEY_AI_DOC, HomeDocKeys };
 export { RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, EndedExperiment, ENDED_EXPERIMENTS };
@@ -134,113 +139,20 @@ export { RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, EndedExperiment, ENDED_
  * defaults ON is not an experiment — it is a shipped behaviour that skipped its soak period, and it
  * changes what every agent on every machine can do the moment they upgrade. Low uptake of an opt-in
  * experiment is information ABOUT the experiment; it is not a licence to force it on everybody.
- */
-export const HOME_CONFIG_DIR = '.webpieces';
-export const HOME_CONFIG_FILE = 'config.json';
-
-// The `experimental` section and its keys. Named as constants because both the validator and its error
-// text must spell them identically — a validator whose message names a different key than the one it
-// checks is worse than no message.
-export const HOME_EXPERIMENTAL_SECTION = 'experimental';
-// The on/off switch for `whole-repo-build-guard`. Spelled with the GUARD's own name, hyphens and all,
-// so `grep -rn whole-repo-build-guard` finds the switch beside the guard — and so nobody has to learn a
-// second name for one thing.
-//
-// `buildGateLogCapture` used to sit beside it and is GONE: capturing the build's output to a file is now
-// what the gate always does (see BuildAffected.runBuildGate), so the flag had nothing left to switch. It
-// is deliberately NOT in RETIRED_HOME_CONFIG_KEYS — a retired key here is a HARD FAILURE on exact match,
-// and this file is machine-global and hand-authored, so a machine that opted INTO a behaviour it now
-// gets unconditionally must not have its shell broken for saying yes early. It falls through to the
-// unknown-key WARNING instead, which says the key had no effect and names what is understood.
-export const HOME_KEY_WHOLE_REPO_BUILD_GUARD = 'whole-repo-build-guard';
-// The on/off switch for the orphan-directory sweep `wp-sync-main` runs. Named for the thing
-// it switches, exactly as the guard key above is — one name, greppable from either end.
-export const HOME_KEY_ORPHAN_DIR_SWEEP = 'orphan-dir-sweep';
-/**
- * How many builds may be live on this machine before `pnpm wp-build` refuses to start another. The FIRST
- * NUMERIC key in this file — see `readOptionalPositiveInteger` for why "known key, wrong type → REJECT"
- * applies to it exactly as it applies to the booleans.
- */
-export const HOME_KEY_MAX_CONCURRENT_BUILDS = 'maxConcurrentBuilds';
-
-/**
- * EVERY key's value when it is not named — including on the machine with no such file at all, which is
- * essentially every machine. False, for all of them, with no exceptions and no per-key table.
  *
- * That uniformity is the policy, not a coincidence: every `experimental.*` flag ships OFF and stays OFF
- * for two years, so "this machine never opted in" is byte-for-byte the behaviour of having no file. ON
- * requires an explicit `true`; absent, and an explicit `false`, are the same state.
- *
- * Named rather than written as a bare `false` at each call site so the reason travels with the value —
- * and there is deliberately exactly ONE such constant, because a second one would be a second place a
- * default is stated, free to disagree with this one.
+ * ─── WHERE THE KEY NAMES LIVE ─────────────────────────────────────────────────────────────────────────
+ * The key constants, the allow-lists and the declared defaults are in `home-config-keys.ts` — split out
+ * when this file hit its line limit, exactly as `home-config-doc-keys.ts` and
+ * `home-config-retired-keys.ts` were before it. They are RE-EXPORTED below, so `./home-config` remains
+ * the one import path and nothing outside this module names the split. The per-key documentation moved
+ * WITH the keys; read it there.
  */
-const GUARD_OFF_WHEN_ABSENT = false;
-
-/**
- * The one NON-boolean default, and the one key whose absent value is not `GUARD_OFF_WHEN_ABSENT`.
- *
- * Three, because contention between agents running full sweeps at once was measured at ~3.2x total test
- * time (`.claude/rules/build-verification.md` § "What actually makes builds slow"), and a fourth simultaneous build
- * is well past the
- * point where anybody gains anything. It is a NUMBER rather than an on/off flag because the useful
- * machine-to-machine difference here is core count, not opinion — which is also why it is the one key in
- * this file with a non-false default: "0 builds allowed" would be a machine that cannot build at all.
- */
-export const DEFAULT_MAX_CONCURRENT_BUILDS = 3;
-
-/**
- * The complete UNDERSTOOD shape. A key not on these lists is ignored with a warning rather than
- * rejected (see the class docblock: this document is machine-global and older releases must survive
- * meeting a newer release's key), so adding a key still means adding it here — a key absent from these
- * lists is never read at all, and the flag it was meant to set keeps the default above.
- *
- * EXPORTED so `home-config.spec.ts` can ENUMERATE them rather than restate them. The cross-version
- * invariant ("every key is independently omittable") is only as good as the list the test walks, and a
- * hand-written copy of that list means a NEW key silently escapes the invariant on the day it is added —
- * which is the one failure mode nobody would notice until an older release started rejecting files.
- * Walking the real constant makes the test cover a new key the moment it appears here.
- */
-
-/**
- * The SETTINGS only. Documentation keys are deliberately NOT here: these lists are walked to build
- * sample documents and to assert cross-version invariants, and every entry is assumed to be a setting
- * with a typed value. `warnUnknownKeys` accepts the documentation keys separately, everywhere.
- */
-export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
-/**
- * The understood `experimental.*` keys, SPLIT BY VALUE TYPE — because the spec walks these lists to build
- * a sample document, and a sample that wrote `false` into a numeric key would be rejected by the very
- * loader it is testing. Splitting them means a key added to either list is covered by the cross-version
- * invariants automatically, with the right sample value, which is the whole reason the lists are exported.
- *
- * `ALLOWED_EXPERIMENTAL` stays the ONE list the validator warns against — derived from the two, never
- * hand-maintained beside them, so it cannot fall out of step.
- */
-/**
- * ─── ONLY A HUMAN ENDS AN EXPERIMENT ──────────────────────────────────────────────────────────────
- *
- * An AI agent may ADD a flag to these lists. It may NEVER DELETE one, and may never make a flagged
- * behaviour unconditional — however settled it looks, however old the flag is, however good the
- * reasoning. Ending an experiment judges evidence that lives on someone else's machine.
- *
- * From a live incident: PR #711 deleted `buildGateLogCapture` and made capture unconditional. Its
- * owner's config said `true`, and after that release the opt-in silently meant nothing. Note the
- * shape — that file says "AI: DO NOT EDIT this file!!", and the agent never touched it; it deleted
- * the key from the CODE, which has the identical effect from the owner's seat. A rule protecting a
- * FILE does not protect the SETTING it selects.
- *
- * If you believe an experiment should end, SAY SO and leave the flag alone.
- * `.claude/rules/experiments.md` §"ONLY A HUMAN ENDS AN EXPERIMENT" carries the full rule and what a
- * human-ended retirement looks like.
- */
-export const ALLOWED_EXPERIMENTAL_BOOLEANS: readonly string[] = [
-    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP,
-];
-export const ALLOWED_EXPERIMENTAL_NUMBERS: readonly string[] = [HOME_KEY_MAX_CONCURRENT_BUILDS];
-export const ALLOWED_EXPERIMENTAL: readonly string[] = [
-    ...ALLOWED_EXPERIMENTAL_BOOLEANS, ...ALLOWED_EXPERIMENTAL_NUMBERS,
-];
+export {
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION,
+    HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
+    HOME_KEY_MAX_CONCURRENT_BUILDS, DEFAULT_MAX_CONCURRENT_BUILDS,
+    ALLOWED_TOP_LEVEL, ALLOWED_EXPERIMENTAL_BOOLEANS, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_EXPERIMENTAL,
+} from './home-config-keys';
 
 /**
  * ─── EVERY KEY IS OPTIONAL, AND THAT IS A HARD REQUIREMENT OF WHERE THIS FILE LIVES ───────────────────
@@ -314,18 +226,40 @@ export class HomeConfig {
      */
     maxConcurrentBuilds: number;
 
-    // ALL THREE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    /**
+     * EXPERIMENTAL, and OFF unless this machine opts IN with an explicit `true`. When true, the PR gate
+     * spawns NO reviewer subagents AT ALL — the REQUIRED checklists included — and the dashboard becomes
+     * the entire review product. False, absent, and no file at all are byte-for-byte today's behaviour.
+     *
+     * THE FULL CONTRACT, AND THE REASONS IT MAY NOT MOVE, ARE ON
+     * {@link HOME_KEY_TURN_OFF_ALL_REVIEWERS}. Read that docblock before you delete, rename, narrow or
+     * re-home this field. The four things it says, in one line each:
+     *   • ONLY `~/.webpieces/config.json` — never a `webpieces.config.json` key, in any release;
+     *   • a KILL SWITCH, not a filter — required reviewers are suppressed too, deliberately;
+     *   • a tracked repo key would let a BRANCH switch off the reviewers judging that branch;
+     *   • it is an `experimental.*` flag, so only a HUMAN ever ends it.
+     *
+     * The suppression is never silent: stage ②'s output, the dashboard and the PR body (which is the
+     * squash-merge commit body) all name this flag, so a `git log` reader can tell that a commit's
+     * reviewers were switched off and by what.
+     */
+    turnOffAllReviewers: boolean;
+
+    // ALL FOUR required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
-    // class had before `maxConcurrentBuilds` is DELETED rather than overloaded, per
+    // class had before `turnOffAllReviewers` is DELETED rather than overloaded, per
     // `.claude/rules/no-backwards-compat.md`: the compile errors ARE the migration. The
     // absent-file state is constructed in exactly one place — load()'s absent-file branch.
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         wholeRepoBuildGuard: boolean, orphanDirSweep: boolean, maxConcurrentBuilds: number,
+        turnOffAllReviewers: boolean,
     ) {
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
         this.orphanDirSweep = orphanDirSweep;
         this.maxConcurrentBuilds = maxConcurrentBuilds;
+        this.turnOffAllReviewers = turnOffAllReviewers;
     }
 }
 
@@ -362,7 +296,8 @@ export class HomeConfigService {
         // on why a defaulted parameter is a shim.
         if (raw === null) {
             return new HomeConfig(
-                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS);
+                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS,
+                GUARD_OFF_WHEN_ABSENT);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -456,6 +391,7 @@ export class HomeConfigService {
             this.readOptionalBoolean(experimental, HOME_KEY_ORPHAN_DIR_SWEEP, file, GUARD_OFF_WHEN_ABSENT),
             this.readOptionalPositiveInteger(
                 experimental, HOME_KEY_MAX_CONCURRENT_BUILDS, file, DEFAULT_MAX_CONCURRENT_BUILDS),
+            this.readOptionalBoolean(experimental, HOME_KEY_TURN_OFF_ALL_REVIEWERS, file, GUARD_OFF_WHEN_ABSENT),
         );
     }
 

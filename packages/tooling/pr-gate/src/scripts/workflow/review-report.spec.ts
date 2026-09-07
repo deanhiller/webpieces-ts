@@ -372,3 +372,74 @@ describe('the once-per-branch rule is stated, not left to be inferred', () => {
         expect(report.render(input)).toContain('ONCE PER BRANCH');
     });
 });
+
+/**
+ * ══ turnOffAllReviewers — the ONE output that must never be quiet ═══════════════════════════════════
+ *
+ * With the kill switch on, this stage prints the only local warning that an UNREVIEWED PR is about to be
+ * posted. Two failure modes are pinned here, and they pull in opposite directions:
+ *
+ *   • too quiet — a suppressed run renders as the ordinary "nothing matched this diff" all-clear, which
+ *     is the exact sentence a docs-only typo fix gets, and the suppression becomes invisible;
+ *   • too loud in the wrong way — a spawn block for reviewers that were never briefed, i.e. an
+ *     instruction naming an instructions file that does not exist. An agent obeys it and loops.
+ */
+describe('turnOffAllReviewers — the suppression is stated, and nothing is offered to spawn', () => {
+    const suppressedInput = (): ReviewReportInput => {
+        const input = inputWith(3, 0); // applicable is 0 BY DECREE — the scanner emptied it
+        input.reviewersSuppressed = true;
+        input.suppressed = [
+            new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', ['db/1.sql'], ['**/*.sql'], true),
+            new RequiredChecklist('frontend-reviewer', 'frontend-reviewer', '', ['a.css'], ['**/*.css'], false),
+        ];
+        return input;
+    };
+
+    const suppressed = (): string => report.render(suppressedInput());
+
+    it('says ALL reviewers were suppressed, in the heading and in the body', () => {
+        const text = suppressed();
+        expect(text).toContain('ALL REVIEWERS SUPPRESSED');
+        expect(text).toContain('ALL REVIEWER SUBAGENTS ARE SWITCHED OFF');
+    });
+
+    it('names the FLAG and the FILE it came from — the only actionable thing here', () => {
+        const text = suppressed();
+        expect(text).toContain('turnOffAllReviewers');
+        expect(text).toContain('~/.webpieces/config.json');
+    });
+
+    it('lists every suppressed checklist and marks the REQUIRED ones as suppressed anyway', () => {
+        const text = suppressed();
+        expect(text).toContain('db-migration-reviewer');
+        expect(text).toContain('frontend-reviewer');
+        expect(text).toContain('1 of them REQUIRED');
+        expect(text).toContain('(REQUIRED — suppressed anyway)');
+    });
+
+    // THE failure this must not have: the zero-applicable notice would say nothing matched, when in fact
+    // two checklists matched and both were killed.
+    it('does NOT print the ordinary "no checklist applies" notice', () => {
+        expect(suppressed()).not.toContain('Every checklist that applies is already reviewed');
+    });
+
+    it('prints NO spawn block — there is no briefing and no instructions file to point at', () => {
+        const text = suppressed();
+        expect(text).not.toContain('subagent_type:');
+        expect(text).not.toContain('REQUIRED reviewer subagent(s)');
+    });
+
+    // The stage's own contract, unchanged under suppression: write review.json, THEN finish, and finish
+    // named exactly once.
+    it('still sends the agent to review.json first and names wp-finish-upsert-pr exactly once', () => {
+        const text = suppressed();
+        expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
+        expect(text.indexOf(REVIEW_PATH)).toBeLessThan(text.indexOf('pnpm wp-finish-upsert-pr'));
+    });
+
+    // OFF is byte-for-byte today's output — the flag adds nothing to a machine that never set it.
+    it('changes NOTHING when the flag is off', () => {
+        expect(report.render(inputWith(3, 0))).toBe(nothingMatched());
+        expect(report.render(withOneOwedReviewer())).not.toContain('SUPPRESSED');
+    });
+});

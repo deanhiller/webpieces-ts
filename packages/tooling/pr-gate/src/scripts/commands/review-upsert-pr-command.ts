@@ -231,6 +231,12 @@ export class ReviewUpsertPrCommand {
         input.briefings = briefings.slice();
         input.refused = this.refusals(scan);
         input.skipOptional = opts.skipOptional;
+        // Straight off the SCAN — the one place `experimental.turnOffAllReviewers` is read. This command
+        // deliberately does NOT consult the home config itself: a second read is a second answer, and the
+        // command that lists and the command that blocks would be free to disagree about whether a branch
+        // was reviewed. See ChecklistScanner.
+        input.reviewersSuppressed = scan.reviewersDisabled;
+        input.suppressed = scan.suppressed.slice();
         // `say`: this block IS the next action — which reviewers to spawn, where review.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and
         // no instruction, which is the one thing this stage may never do.

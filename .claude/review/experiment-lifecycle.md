@@ -126,7 +126,7 @@ Then, for **every** `experimental.*` key in `ALLOWED_EXPERIMENTAL`, confirm it s
 reader after the diff:
 
 ```bash
-for k in whole-repo-build-guard orphan-dir-sweep maxConcurrentBuilds; do
+for k in whole-repo-build-guard orphan-dir-sweep maxConcurrentBuilds turnOffAllReviewers; do
   echo "== $k"; grep -rn "$k" packages --include='*.ts' | grep -v '\.spec\.ts' | head
 done
 ```
@@ -184,7 +184,7 @@ instalments.
 **Grep the diff:** compare the call-site count for each flag across the diff.
 
 ```bash
-git stash list >/dev/null; for k in whole-repo-build-guard orphan-dir-sweep; do
+git stash list >/dev/null; for k in whole-repo-build-guard orphan-dir-sweep turnOffAllReviewers; do
   echo "== $k"; git grep -c "$k" <base> -- packages || true; git grep -c "$k" HEAD -- packages || true
 done
 ```

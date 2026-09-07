@@ -1,5 +1,6 @@
 import {
     formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistCommentRow } from './checklist-comment-row';
@@ -57,7 +58,14 @@ export class ChecklistCommentRenderer {
         rows: readonly ChecklistCommentRow[],
         provenanceVerified: boolean,
         baseResolved: boolean,
+        // How many checklists `experimental.turnOffAllReviewers` killed. REQUIRED, no default: this comment
+        // renders a roster of checkboxes and a provenance ATTESTATION, and under suppression both are
+        // false-by-omission — the boxes are unchecked because nothing ran, and "each reviewer ran as its own
+        // independent subagent, verified" would be an outright untrue sentence under a PR nobody reviewed.
+        // A defaulted 0 would let every existing caller keep printing it. See HOME_KEY_TURN_OFF_ALL_REVIEWERS.
+        suppressedCount: number,
     ): string {
+        if (suppressedCount > 0) return this.suppressedComment(rows, suppressedCount);
         const ran = this.ranOrdered(rows);
         const prov = provenanceVerified
             ? '_Each reviewer ran as its own independent subagent, verified from the Claude Code harness._'
@@ -77,6 +85,51 @@ export class ChecklistCommentRenderer {
             `${header}\n\n### Reviews that ran`,
             ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)),
         );
+    }
+
+    /**
+     * The whole comment when `experimental.turnOffAllReviewers` killed every reviewer.
+     *
+     * It REPLACES the ordinary body rather than adding a line to it, because three things in there would
+     * each be false here and none of them is fixable in place: the roll-up would count matched checklists
+     * as "skipped ✅", the provenance line would attest that each reviewer ran as its own verified
+     * subagent, and the closing note would say every checklist was evaluated and none applied. Under
+     * suppression they DID apply, nobody looked, and this comment is one of only three places that says so.
+     *
+     * It keeps the full roster — every checklist unchecked, with which ones were REQUIRED — because the
+     * count alone cannot answer "which required reviewer did this PR skip?".
+     */
+    private suppressedComment(rows: readonly ChecklistCommentRow[], suppressedCount: number): string {
+        const required = rows.filter((r: ChecklistCommentRow): boolean => r.required && r.ran);
+        const lines: string[] = [
+            CHECKLIST_COMMENT_MARKER,
+            `## 🔍 Company review checklists — ⚫ ALL SUPPRESSED (${suppressedCount} of ${rows.length} would have run)`,
+            `_No reviewer subagent ran on this PR. Switched off by \`experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true\` `
+            + `in the machine-local \`~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}\` — a MACHINE setting, not a repo one, so `
+            + `nothing in this branch could have caused it. **This is not an all-clear**, and `
+            + `${required.length} of the suppressed checklist(s) were REQUIRED._`,
+            '',
+            `### Checklists (all ${rows.length})`,
+        ];
+        for (const row of rows) lines.push(this.suppressedBullet(row));
+        return lines.join('\n');
+    }
+
+    /**
+     * One roster line under suppression. ALWAYS an unchecked box — never `rosterBullet`, whose box is
+     * `reviewerRan(row)`, which is true for any REQUIRED checklist that applied. Under suppression that
+     * would tick every required reviewer's box on a PR none of them looked at, which is the precise
+     * inversion this whole feature has to avoid.
+     *
+     * `row.ran` here means "this checklist APPLIED", so it is what separates a SUPPRESSED entry from one
+     * that genuinely did not match. Both stay listed: the second is the good news the roster exists to
+     * deliver, and dropping either would make the reader recompute the diff to tell them apart.
+     */
+    private suppressedBullet(row: ChecklistCommentRow): string {
+        const state = row.ran
+            ? `⚫ SUPPRESSED${row.required ? ' (REQUIRED)' : ' (optional)'} — no reviewer ran`
+            : '⚪ did not apply to this diff';
+        return `- [ ] **${row.subagent}** — ${state}\n  - ${this.whyLine(row)}`;
     }
 
     /**

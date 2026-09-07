@@ -1,6 +1,6 @@
 import {
     ChangedFilesOptions, ChecklistDefinition, ChecklistResult, ChecklistReviewContext, DiffScope,
-    RequiredChecklist, ReviewJsonService, reviewJsonPath,
+    HomeConfigService, RequiredChecklist, ReviewJsonService, reviewJsonPath,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
@@ -88,6 +88,33 @@ export class ChecklistScan {
      * passed. An optional checklist that ran and went RED is absent from here and stays in `outstanding`.
      */
     optionalNotRun: RequiredChecklist[];
+    /**
+     * TRUE when this machine's `~/.webpieces/config.json` carries
+     * `experimental.turnOffAllReviewers: true`, and therefore when `applicable`, `reviewed`,
+     * `outstanding`, `results`, `optionalNotRun` and `formatErrors` above are ALL EMPTY BY DECREE rather
+     * than because nothing matched. Those two states are indistinguishable from the empty lists alone,
+     * and telling them apart is the entire reason this field exists: an unreviewed PR must never render
+     * as a reviewed one.
+     *
+     * `defined`, `roster`, `basis`, `changedFiles` and `context` are deliberately left INTACT under
+     * suppression, so every reader can still say WHAT was switched off — including which REQUIRED
+     * checklists would otherwise have run.
+     *
+     * See `HOME_KEY_TURN_OFF_ALL_REVIEWERS` in rules-config for the flag's contract; it is an
+     * `experimental.*` flag, so only a human ever ends it.
+     */
+    reviewersDisabled: boolean;
+    /**
+     * The checklists that WOULD have been `applicable` had the reviewers not been suppressed — required
+     * ones included. EMPTY on every ordinary run, and empty is not ambiguous there because
+     * `reviewersDisabled` is false.
+     *
+     * Carried by NAME and not as a count because every reader needs a different slice of it: stage ②
+     * prints them so a human can see exactly which required reviewer was killed, the dashboard names them
+     * in the 1st comment, and the compact PR body needs only `.length`. Recomputing any of that
+     * downstream would mean a second changed-file computation that can disagree with this one.
+     */
+    suppressed: RequiredChecklist[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -100,6 +127,12 @@ export class ChecklistScan {
         forkPoint: string,
         roster: ChecklistRoster,
         formatErrors: string[],
+        // REQUIRED, and placed BEFORE the defaulted tail deliberately. A defaulted `reviewersDisabled =
+        // false` would let every existing construction keep compiling while asserting, silently, that no
+        // reviewer was switched off — the widening-by-omission `.claude/rules/no-backwards-compat.md`
+        // rejects, and on the one field whose whole job is to stop an unreviewed PR reading as reviewed.
+        reviewersDisabled: boolean,
+        suppressed: RequiredChecklist[],
         basis: DiffBasis = new DiffBasis(),
         changedFiles: string[] = [],
         // Defaulted so a caller that only cares about the X/N/Z counts (and every existing test construction)
@@ -116,6 +149,8 @@ export class ChecklistScan {
         this.forkPoint = forkPoint;
         this.roster = roster;
         this.formatErrors = formatErrors;
+        this.reviewersDisabled = reviewersDisabled;
+        this.suppressed = suppressed;
         this.basis = basis;
         this.changedFiles = changedFiles;
         this.results = results;
@@ -153,6 +188,9 @@ export class ChecklistScanner {
         private readonly diffBasisResolver: DiffBasisResolver,
         private readonly prContextWriter: PrContextWriter,
         private readonly reviewJsonService: ReviewJsonService,
+        // Injected BY TYPE (no Symbol token, per CLAUDE.md) so the ONE reviewer kill switch is read in the
+        // ONE place that computes what a branch owes — see the suppression note on `scan`.
+        private readonly homeConfig: HomeConfigService,
     ) {}
 
     /**
@@ -174,7 +212,23 @@ export class ChecklistScanner {
         const changedFiles = this.changedFiles(repoRoot, base);
         const roster = new ChecklistRoster(
             this.checklistDetector.roster(defined, changedFiles), changedFiles.length, base !== '');
-        const applicable = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
+        const matched = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
+        // THE ONE CHOKE POINT for `experimental.turnOffAllReviewers`. Suppressing HERE — rather than in
+        // `wp-review-upsert-pr` and again in `wp-finish-upsert-pr` — is what keeps the command that LISTS
+        // and the command that BLOCKS in agreement by construction, which is this class's whole reason for
+        // existing. A second check in either command would be a second answer to one question.
+        const context = opts.contextStage === ''
+            ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
+            : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles);
+        if (this.homeConfig.load().turnOffAllReviewers) {
+            // EMPTY: applicable, reviewed, outstanding, formatErrors, results, optionalNotRun. INTACT:
+            // defined, roster, basis, changedFiles, context — so every downstream reader can still say
+            // WHAT was suppressed, which is the difference between an honest record and a silent one.
+            return new ChecklistScan(
+                defined, [], [], [], context, reviewPath, base, roster, [], true, matched, basis,
+                changedFiles, [], []);
+        }
+        const applicable = matched;
         const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -188,13 +242,13 @@ export class ChecklistScanner {
             applicable,
             reviewed,
             opts.filterAlreadyReviewed ? this.blocking(stillOwed, optionalNotRun) : applicable,
-            opts.contextStage === ''
-                ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
-                : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles),
+            context,
             reviewPath,
             base,
             roster,
             this.reviewJsonService.checklistFormatErrors(applicable, results),
+            false,
+            [],
             basis,
             changedFiles,
             results,

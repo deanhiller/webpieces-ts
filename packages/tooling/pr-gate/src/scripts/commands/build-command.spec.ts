@@ -52,7 +52,7 @@ function harness(alreadyRunning = 0): Harness {
     const buildsLog = { running: (): RunningBuild[] => liveBuilds(alreadyRunning) } as unknown as BuildsLog;
     // webpieces-disable no-any-unknown -- ditto
     const homeConfig = {
-        load: (): HomeConfig => new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS),
+        load: (): HomeConfig => new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false),
     } as unknown as HomeConfigService;
     return new Harness(new BuildCommand(gate, roots, buildsLog, homeConfig), gate, calls);
 }

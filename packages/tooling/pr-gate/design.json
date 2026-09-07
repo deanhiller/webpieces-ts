@@ -991,6 +991,15 @@
                 },
                 {
                     "from": "ChecklistScanner",
+                    "to": "HomeConfigService",
+                    "injection": "type",
+                    "token": "HomeConfigService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/home-config.ts#HomeConfigService",
+                    "paramName": "homeConfig",
+                    "paramType": "HomeConfigService"
+                },
+                {
+                    "from": "ChecklistScanner",
                     "to": "PrContextWriter",
                     "injection": "type",
                     "token": "PrContextWriter",
