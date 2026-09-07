@@ -182,10 +182,12 @@ export class FinishBanner {
     // reading a queued PR does not go hunting for work that is not owed.
     private doneNote(merge: MergeOutcome): string {
         if (merge.result === MERGE_RESULT_AUTO_QUEUED) {
-            return '   Nothing else is owed: GitHub lands it when the checks go green. You can stop here.\n';
+            return '   Nothing else is owed: GitHub lands it when the checks go green. You can stop here.\n' +
+                this.watchOffer();
         }
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
             return '   Nothing else is owed by the tooling — a person merges it. You can stop here.\n' +
+                this.watchOffer() +
                 '\n' +
                 '   ℹ️  Clicking Merge in the GitHub UI is CORRECT here and produces the right history. The\n' +
                 '       PR description IS the commit body this flow rendered — compact, non-green flags\n' +
@@ -196,6 +198,22 @@ export class FinishBanner {
                 '       pre-squash tip and reaps the worktree. Either route is fine.)\n';
         }
         return '';
+    }
+
+    /**
+     * The one OPTIONAL line about watching CI — offered, never instructed.
+     *
+     * "You can stop here" above stays the DEFAULT and is deliberately printed first: landing is the
+     * developer's call, and several of this repo's workflows stop at a green PR on purpose. This exists
+     * for the caller who has ALREADY decided to see it land, because the alternative they otherwise
+     * reach for is `gh pr checks --watch` in a loop or an `echo .` keep-alive — measured at 18.3% of
+     * every token the fleet spent in the 24h to 2026-09-07 (issue #874). Naming the blocking command is
+     * cheaper than the wait somebody was going to do anyway; it is not a reason to wait.
+     */
+    private watchOffer(): string {
+        return '   (Optional — only if you have decided to watch it land, which nothing here asks you to\n' +
+            '    do: `pnpm wp-await-checks --pr <n>` BLOCKS in one call until the checks stop running.\n' +
+            '    Do not poll, and never `echo` to keep a turn alive — a turn costs your whole context.)\n';
     }
 
     /**

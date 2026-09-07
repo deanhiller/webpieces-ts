@@ -8,6 +8,7 @@ import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-str
 import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-codes';
 import { toError } from './to-error';
 import { logStream } from './log-stream';
+import { logTarget } from './log-target';
 import { aiTypeContext } from './ai-type-context';
 import { l2RowForReason } from './l2-rows';
 import { cureForMatrix } from './matrix-cures';
@@ -18,8 +19,7 @@ import { cureForMatrix } from './matrix-cures';
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
 // traceable to a stale or missing async write. Writes to `.webpieces/logs/L2-decisions/<writer>.log` —
 // the LAYER is the directory, the WRITER is the file (see log-streams.ts and LogStream).
-const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
-const MAX_TARGET_LEN = 160;
+const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rotation in rejection-log)
 
 /**
  * THE ACTION CODEBOOK, as a type. These are the five actions GUARD_MATRIX.md numbers 1-5, and they
@@ -398,10 +398,13 @@ export function branchForLog(root: string): string {
     }
 }
 
-// Collapse newlines/tabs and cap length so one decision is always one log line.
+// Collapse newlines/tabs and cap length so one decision is always one log line. The collapse itself
+// lives in LogTarget, because SessionCallHistory READS this format back and the two must agree byte
+// for byte — a second private copy of the cap is a silent way for a long command to stop matching
+// itself.
+// webpieces-disable no-function-outside-class -- the module's own leaf helper, beside branchForLog/rotateLogFile
 function oneLine(value: string): string {
-    const flat = value.replace(/[\t\r\n]+/g, ' ').trim();
-    return flat.length <= MAX_TARGET_LEN ? flat : flat.slice(0, MAX_TARGET_LEN) + '…';
+    return logTarget.oneLine(value);
 }
 
 function rotateLogFile(logPath: string, prevPath: string): void {

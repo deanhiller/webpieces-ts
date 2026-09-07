@@ -17,6 +17,9 @@ graph TD
     AgentWorktreeLockReader["AgentWorktreeLockReader"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
+    AwaitChecksCommand["AwaitChecksCommand"]
+    AwaitLoop["AwaitLoop"]
+    AwaitReviewsCommand["AwaitReviewsCommand"]
     BranchArchiver["BranchArchiver"]
     BranchMutationLog["BranchMutationLog"]
     BranchNaming["BranchNaming"]
@@ -106,6 +109,14 @@ graph TD
     WorktreeService["WorktreeService"]
     ActiveHatchReport --> ConfigFile
     AiBranchName --> BranchNaming
+    AwaitChecksCommand --> AwaitLoop
+    AwaitChecksCommand --> StageOutputLog
+    AwaitLoop --> StageOutputLog
+    AwaitReviewsCommand --> AwaitLoop
+    AwaitReviewsCommand --> ChecklistScanner
+    AwaitReviewsCommand --> RepoRootFinder
+    AwaitReviewsCommand --> ReviewJsonService
+    AwaitReviewsCommand --> StageOutputLog
     BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
@@ -225,6 +236,8 @@ graph TD
     OrphanDirSweeper --> OrphanDirScanner
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
+    PrGateApp --> AwaitChecksCommand
+    PrGateApp --> AwaitReviewsCommand
     PrGateApp --> BuildCommand
     PrGateApp --> CheckPrCommand
     PrGateApp --> CleanupCommand

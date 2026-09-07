@@ -49,6 +49,30 @@
                     "level": 5
                 },
                 {
+                    "id": "AwaitChecksCommand",
+                    "className": "AwaitChecksCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/await-checks-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "AwaitLoop",
+                    "className": "AwaitLoop",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/await-loop.ts",
+                    "level": 2
+                },
+                {
+                    "id": "AwaitReviewsCommand",
+                    "className": "AwaitReviewsCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/await-reviews-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "BranchArchiver",
                     "className": "BranchArchiver",
                     "kind": "class",
@@ -763,6 +787,78 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "AwaitChecksCommand",
+                    "to": "AwaitLoop",
+                    "injection": "type",
+                    "token": "AwaitLoop",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/await-loop.ts#AwaitLoop",
+                    "paramName": "awaitLoop",
+                    "paramType": "AwaitLoop"
+                },
+                {
+                    "from": "AwaitChecksCommand",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
+                },
+                {
+                    "from": "AwaitLoop",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "AwaitLoop",
+                    "injection": "type",
+                    "token": "AwaitLoop",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/await-loop.ts#AwaitLoop",
+                    "paramName": "awaitLoop",
+                    "paramType": "AwaitLoop"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "ChecklistScanner",
+                    "injection": "type",
+                    "token": "ChecklistScanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
+                    "paramName": "checklistScanner",
+                    "paramType": "ChecklistScanner"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "StageOutputLog",
+                    "injection": "type",
+                    "token": "StageOutputLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts#StageOutputLog",
+                    "paramName": "stageConsole",
+                    "paramType": "StageOutputLog"
                 },
                 {
                     "from": "BranchMutationLog",
@@ -1834,6 +1930,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "AwaitChecksCommand",
+                    "injection": "type",
+                    "token": "AwaitChecksCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/await-checks-command.ts#AwaitChecksCommand",
+                    "paramName": "awaitChecksCommand",
+                    "paramType": "AwaitChecksCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "AwaitReviewsCommand",
+                    "injection": "type",
+                    "token": "AwaitReviewsCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/await-reviews-command.ts#AwaitReviewsCommand",
+                    "paramName": "awaitReviewsCommand",
+                    "paramType": "AwaitReviewsCommand"
                 },
                 {
                     "from": "PrGateApp",
