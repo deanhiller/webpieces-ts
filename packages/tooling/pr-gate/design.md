@@ -131,6 +131,7 @@ graph TD
     ChecklistScanner --> ChecklistDetector
     ChecklistScanner --> DiffBasisResolver
     ChecklistScanner --> DiffScope
+    ChecklistScanner --> HomeConfigService
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
     CleanTmp --> AgedTreeSweeper
