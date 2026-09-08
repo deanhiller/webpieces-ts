@@ -214,6 +214,54 @@ def cycletime_lines(raw):
     return out
 
 
+def token_lines(raw):
+    """EXACT token spend, split main / reviewer-subagent / other-subagent.
+
+    This is the section `retbytes` cannot produce. `retbytes` measures what tool OUTPUT pours into
+    context, approximated at `chars // 4`; this measures what the API actually billed, including
+    the system prompt and the cached prefix, and it includes subagent runs — which is where most
+    of the fleet's tokens are spent and where the collector used to be blind.
+    """
+    t = (raw.get("transcripts") or {}).get("tokens") or {}
+    sub = (raw.get("transcripts") or {}).get("subagents") or {}
+    if not t:
+        return []
+    L = ["", "## token spend (EXACT, from message.usage — not the chars//4 estimate)", ""]
+    L.append("%s tokens (~$%s est. at Opus list price) · %s%% is cache_read"
+             % (f"{t.get('total_tokens', 0):,}", f"{t.get('total_est_cost', 0):,.0f}",
+                t.get("cache_read_pct", 0)))
+    L.append("est_cost is a RELATIVE WEIGHTING DEVICE, not a bill.")
+    L.append("")
+    L.append("  %-20s %16s %10s %8s %10s" % ("bucket", "tokens", "est $", "pct", "api calls"))
+    for b in t.get("by_bucket", []):
+        L.append("  %-20s %16s %10s %7s%% %10d"
+                 % (b["bucket"], f"{b['tokens']:,}", f"{b['est_cost']:,.0f}",
+                    b["pct_of_tokens"], b["api_calls"]))
+    if t.get("by_agent_type"):
+        L.append("")
+        L.append("  by agent type (subagent runs only):")
+        for r in t["by_agent_type"][:10]:
+            L.append("    %-36s %16s  est $%s"
+                     % (r["agent_type"], f"{r['tokens']:,}", f"{r['est_cost']:,.0f}"))
+    if sub:
+        L.append("")
+        L.append("  subagent runs %d (of which reviewers %d) across %d worktrees"
+                 % (sub.get("subagent_runs", 0), sub.get("reviewer_runs", 0),
+                    sub.get("worktrees_seen", 0)))
+        L.append("  REPEAT reviewer runs %d/%d (%s%%) — same reviewer, same parent session, "
+                 "est $%s"
+                 % (sub.get("repeat_reviewer_runs", 0), sub.get("reviewer_runs", 0),
+                    sub.get("repeat_pct", 0), f"{sub.get('repeat_est_cost', 0):,.0f}"))
+        L.append("  A repeat cannot see a new diff. Before calling it waste, check the verdicts in")
+        L.append("  .webpieces/pr-review/<branch>/review-*.json — no RED anywhere means the "
+                 "re-runs were")
+        L.append("  the gate re-briefing on every amend, NOT a reject/fix loop.")
+        for r in sub.get("worst_repeats", [])[:6]:
+            L.append("    %-38s x%-3d session %s"
+                     % (r["reviewer"], r["runs"], r["parent_session"][:8]))
+    return L
+
+
 def build(raw):
     out = []
     g = raw.get("guards") or {}
@@ -414,6 +462,8 @@ def main():
               f"sessions={r['sessions']} blocked-min={r['blocked_minutes']}{flag}")
     if hc.get("parity_verdict"):
         print(f"# codex parity: {hc['parity_verdict']}")
+    for line in token_lines(raw):
+        print(line)
     for line in retbytes_lines(raw):
         print(line)
     for line in cycletime_lines(raw):

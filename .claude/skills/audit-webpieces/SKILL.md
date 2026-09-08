@@ -50,7 +50,7 @@ specific number — never `cat` it.
 Timing: ~3s per repo. `--no-npm` skips the one network call. `--max-sessions N` caps transcript scan.
 
 Subcommands exist individually (`guards`, `isolation`, `transcripts`, `parity`, `skew`, `docdrift`,
-`matrix`, `merges`, `retbytes`, `cycletime`) when Dean asks about one area only. `retbytes` and
+`matrix`, `merges`, `retbytes`, `cycletime`, `waits`) when Dean asks about one area only. `retbytes` and
 `cycletime` ride on the SAME
 transcript pass as `transcripts` — asking for all four, or for `all`, still opens every session
 once. **`cycletime` additionally shells out to `pmset -g log` and to `gh` (one `pr list` per repo,
@@ -132,7 +132,8 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 
 | Area | Signal | Where it comes from |
 |---|---|---|
-| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | Claude transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl`; Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
+| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | Claude transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl` **plus every subagent transcript at `<sanitized-repo>/<sessionId>/subagents/agent-*.jsonl`**; Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
+| Token spend | **EXACT** counts from `message.usage` (Claude) and `token_usage_record` (Codex), split `main-agent` / `subagent-reviewer` / `subagent-other`, plus `by_agent_type`, the cache_read share, and an Opus-list-price `est_cost` weighting. Alongside it, `subagents`: runs, reviewer runs, **repeat reviewer runs** (same reviewer, same parent session) and their cost | the same transcripts — the counts are already recorded, so this needs no instrumentation and is strictly better than `retbytes`'s `chars // 4` |
 | Codex parity | per-surface `claude_hits` vs `codex_hits` across all five streams, and the whole-harness verdict. **A rule with Claude traffic and ZERO Codex traffic is a coverage hole** — the detector for a tool-name mapping we got wrong | all five guard streams' `ai=` field |
 | Guard cycles | block rate, **consecutive blocks on one rule in one session**, **same cure prescribed ≥4×**, non-`-` fault codes | `<repo>/.webpieces/logs/L2-decisions/`, `rejections/` |
 | Stale-main health | `stale_main_health` — per session: did `localMain=` ADVANCE (the block worked) or repeat (the cure is not taking), plus `kinds` splitting the blocks into prevented-a-stale-read / cure-bundled-with-`&&` / cure-bundled-with-`;` / off-repo, and `blocks_that_bought_nothing` | `L2-decisions/` `localMain=`/`originMain=` |
@@ -143,7 +144,57 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 | 3-point merges | branches re-merged 3+ times, merges staged in `index.json` but never finalized, CONFLICT with no later FINALIZE, conflict files, orphan `staged/` dirs | `.webpieces/merge-info/index.json`, `logs/branch-mutations.log` |
 | Return-byte cost | what every tool result POURS INTO CONTEXT: `by_tool` chars/calls/avg, `by_emitter` (payload signature with paths, shas, uuids, timestamps and digits MASKED, so one message against two paths is ONE row), `webpieces_authored` and its share, `always_loaded_md` (the fixed per-repo-per-session tax), `worst_sessions`. Every row carries `repeat_chars` — the chars from emissions AFTER the first of an identical payload in the SAME session | the transcripts themselves. They already hold every byte verbatim, so nothing is instrumented, it works RETROACTIVELY, and it sees hook blocks, MCP servers and raw Bash — surfaces a `wp-*`-side length counter could never log, because there `wp-*` never runs |
 | Cycle time | **where the WALL CLOCK went**: every second of every session attributed to exactly one of `HUMAN` / `MACHINE_ASLEEP` / `CI` / `LOCAL_BUILD` / `REVIEWER` / `WEBPIECES_TOOLING` / `CLAUDE_OUTAGE`, with **`AI` as the residual**. Plus the phase timeline (branch → `wp-start-upsert-pr` → `wp-review-upsert-pr` → `wp-finish-upsert-pr` → `wp-land-pr`) in **wall-clock AND blocking** time with per-phase bucket attribution, p50/p75/p95/p99 with `n`, and a `reconciliation` verdict asserting `sum(buckets) == wall_clock` | the transcripts' assistant→user boundaries and tool_use/tool_result pairs; `pmset -g log` (Sleep→Wake, a rolling buffer of days-to-weeks, so **report the coverage fraction**); `gh pr checks` `startedAt`/`completedAt`; `~/.webpieces/builds.log` via `builds_ledger.py` |
+| Waiting cost | `noop_turns` / `poll_turns` and their token share, plus **`wp_await_calls`** — the ADOPTION counter. A run that waits should show `await_calls > 0` and `noop_turns == 0`; the reverse is the defect. Run the same window before and after a fix; the ratio is the answer. Baseline to compare against: **18.3% of fleet tokens in the 24h to 2026-09-07**, and **1.44% in the 24h to 2026-09-08T09:00Z** | the transcripts' Bash commands |
 | Doc drift | paths quoted in CLAUDE.md / `.webpieces/instruct-ai/*.md` / `.claude/**/*.md` / user skills that **do not exist**, with a dedicated `build.log` path check | filesystem |
+
+### Subagent transcripts — where most of the tokens are
+
+**A subagent does not write into the session transcript.** It gets its own file:
+
+```
+~/.claude/projects/<sanitized-repo>/<sessionId>.jsonl              <- the main agent
+~/.claude/projects/<sanitized-repo>/<sessionId>/subagents/
+        agent-<id>.jsonl        <- one subagent's whole run: its usage, its tools, its output
+        agent-<id>.meta.json    <- agentType, model, description, toolUseId, spawnDepth,
+                                   worktreePath, worktreeBranch
+~/.claude/projects/<sanitized-repo>/<sessionId>/tool-results/*.txt <- spilled large tool results
+```
+
+The `Agent`/`Task` `tool_use` in the parent is only the SPAWN CALL — a few hundred bytes of prompt.
+Reading just `<sessionId>.jsonl` therefore misses every reviewer and every `/full-cycle` worker.
+On the 4-day window that prompted this section that was **72% of the fleet's tokens**, invisible
+while `cycletime`'s REVIEWER bucket read 0.37h and `retbytes` attributed 328 KB to "the Agent tool".
+
+`subagent_files_for()` walks them and `_scan_session` scans them with the SAME scanner, so a
+subagent run is just a session that carries an `agent` block. Consequences to hold on to:
+
+- **`sessions_scanned` now counts subagent runs too.** Anything that means "how many times did a
+  human sit down" must filter `agent is None`.
+- **`meta.worktreePath` is the join to that agent's own guard rows** at
+  `<repo>/.webpieces/worktrees/<agent>/logs/<L0|L1|L2>/` — the directories `guard_log_dirs()`
+  already reads. That is how "this agent was blocked 9 times" becomes "…and here is the 3.2M
+  tokens it then spent". Note the agent's git worktree is `<repo>/.claude/worktrees/<agent>/`
+  while its guard logs are under `<repo>/.webpieces/worktrees/<agent>/` — two different trees,
+  same agent id, and only the second one has logs.
+- A subagent whose `.meta.json` is missing is still reported, with `agent_type: null`. The tokens
+  were spent either way; dropping the run would understate the total.
+
+**Reviewer repeats are the metric to look at, and they are NOT self-evidently waste.** A repeat is
+the same reviewer running twice in one parent session. It cannot see a new diff, so it is either
+(a) the gate re-briefing the whole checklist after an amend, or (b) a genuine reject/fix/re-review
+loop. Those cost the same and mean opposite things, so **check the verdicts before you call it**:
+`.webpieces/pr-review/<branch>/review-*.json` carries `status` per reviewer (`green` / `yellow` /
+`red`; a `reviewers` array with `status: null` is offered-but-not-yet-run, not a verdict). No RED
+anywhere in the window means (a), and the re-runs bought nothing.
+
+### Counting `wp-*` invocations: use `wp_invocations()`, never a substring search
+
+A transcript is full of `grep wp-review-upsert-pr`, `ps | rg wp-review-upsert-pr`, hook text and
+prose naming the command, and Codex wraps the real thing as `{"cmd":"pnpm wp-review-upsert-pr"}`.
+Counting bare substrings inflated one audit's Codex figure **from 7 to 92** — an order of
+magnitude, in the direction that made the headline better. `wp_invocations()` requires the bin at a
+COMMAND position (preceded by `pnpm`/`npx`, or at the start of the string) and is exercised by
+`scripts/test_wp_invocations.py`. Every session row carries `wp_calls`.
 
 ### The two harnesses
 
@@ -271,6 +322,21 @@ Interpretation that matters:
   chronologically, not per branch. Two 3-point rounds on a long-lived branch is normal — three is churn.
 - A block count with **no** matching transcript stall is usually the guard catching a subagent
   cheaply. Check before calling it MAJOR.
+- **Quote token spend from `transcripts.tokens`, not from `retbytes`.** They answer different
+  questions and only one is exact. `retbytes` measures what tool OUTPUT pours into context at
+  `chars // 4`; `tokens` is what the API actually billed, system prompt and cached prefix
+  included, subagents included. Always report the **cache_read share** beside the total: a
+  98%-cache_read workload is enormous in tokens and modest in cost, and quoting either number
+  alone misleads in opposite directions. `est_cost` is Opus list price applied to exact usage — a
+  relative weighting device, never a bill, and say so wherever you quote it.
+- **A reviewer fan-out finding needs THREE numbers, not one.** The run count, the repeat share,
+  and the verdict distribution. 380 reviewer runs is not a finding; 380 runs of which 272 are
+  repeats and 0 produced a red verdict is. Get verdicts from
+  `.webpieces/pr-review/<branch>/review-*.json`, not from the reviewer's prose.
+- **Rank agent types before blaming the gate.** `tokens.by_agent_type` routinely shows
+  `general-purpose` (the `/full-cycle` workers) an order of magnitude above every reviewer
+  combined. A fix aimed at the reviewers when the workers are the sink is a fix aimed at the wrong
+  5%. Say what share the thing you are proposing to fix actually is.
 - **Return bytes: rank by `repeat_chars`, NEVER by raw size.** A 4KB message emitted once is fine —
   it bought a decision. A 3KB message emitted 24 times in one session is 71KB of 96%-duplicate
   context, and the second through twenty-fourth copies changed nothing. So:
@@ -331,8 +397,10 @@ Structure:
 5. **Checked and clean** — one line per area with nothing MAJOR, so a clean area is visibly clean
    rather than silently absent. The areas are: guard cycles, stale-main health, wasted time,
    isolation, version skew, matrix conformance, build ledger, 3-point merges, doc drift, Codex
-   parity, **return-byte cost**, and **cycle time** (name its reconciliation verdict here even when
-   it is clean — a `PASS` is what licenses every other number in the report).
+   parity, **return-byte cost**, **token spend** (total, cache_read share, and the
+   main / reviewer-subagent / other-subagent split), and **cycle time** (name its
+   reconciliation verdict here even when it is clean — a `PASS` is what licenses every
+   other number in the report).
 
 Finish by telling Dean the path and the single most expensive finding in one sentence.
 
