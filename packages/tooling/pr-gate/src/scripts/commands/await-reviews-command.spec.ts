@@ -30,9 +30,13 @@ function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = 
 /**
  * ══ WHY THIS COMMAND EXISTS ════════════════════════════════════════════════════════════════════════
  *
- * A worktree-isolated subagent that has spawned four reviewers cannot end its turn — ending it ends the
- * run — and `Monitor` does not block, so the measured fallback is `echo .` every three seconds at
- * ~557k tokens a turn (issue #874). A blocking Bash call is the only wait primitive it has.
+ * `Monitor` does not block and the harness refuses one carrying a polling loop, so the measured fallback
+ * is `echo .` every three seconds at ~557k tokens a turn (issue #874). A blocking Bash call is the only
+ * wait an isolated subagent can express when NOTHING pending would wake it.
+ *
+ * When something IS pending, ending the turn is cheaper and this command is the second choice: a
+ * subagent that has spawned reviewers is re-invoked when they finish — 449 measured resumptions, 288 of
+ * them on exactly this wait (issue #878).
  */
 describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
     it('is not done while a verdict is missing', () => {

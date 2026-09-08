@@ -206,13 +206,20 @@ export class FinishBanner {
      * "You can stop here" above stays the DEFAULT and is deliberately printed first: landing is the
      * developer's call, and several of this repo's workflows stop at a green PR on purpose. This exists
      * for the caller who has ALREADY decided to see it land, because the alternative they otherwise
-     * reach for is `gh pr checks --watch` in a loop or an `echo .` keep-alive — measured at 18.3% of
-     * every token the fleet spent in the 24h to 2026-09-07 (issue #874). Naming the blocking command is
-     * cheaper than the wait somebody was going to do anyway; it is not a reason to wait.
+     * reach for is an `echo .` keep-alive — measured at 18.3% of every token the fleet spent in the 24h
+     * to 2026-09-07 (issue #874). Naming a blocking command is cheaper than the wait somebody was going
+     * to do anyway; it is not a reason to wait.
+     *
+     * It names ENDING THE TURN first (issue #878): if a backgrounded command or a spawned subagent is
+     * still pending, the harness re-invokes the caller for free — 449 measured times. `--watch` is named
+     * too, because it exists, it blocks, and it is never refused; what it lacks is a bounded exit, so
+     * the harness kills it at 600s having printed nothing.
      */
     private watchOffer(): string {
-        return '   (Optional — only if you have decided to watch it land, which nothing here asks you to\n' +
-            '    do: `pnpm wp-await-checks --pr <n>` BLOCKS in one call until the checks stop running.\n' +
+        return '   (Optional — only if you have decided to watch it land, which nothing here asks you to do.\n' +
+            '    Cheapest: END YOUR TURN — anything still pending re-invokes you for free. Otherwise\n' +
+            '    `pnpm wp-await-checks --pr <n>` BLOCKS in one call and returns at 540s asking to be run\n' +
+            '    again; `gh pr checks <n> --watch` also blocks but is killed at the 600s silence ceiling.\n' +
             '    Do not poll, and never `echo` to keep a turn alive — a turn costs your whole context.)\n';
     }
 

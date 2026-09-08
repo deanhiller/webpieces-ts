@@ -22,30 +22,45 @@ import { WaitSpinScan, WaitSpinHit, SPIN_POLL } from './wait-spin-scan';
  * arithmetic is not subtle — every turn resends the whole conversation, measured at ~557,000 tokens per
  * turn, so a three-second `echo .` costs more than most of the work around it.
  *
- * ─── WHY agents do it, which is the part that decides the cure ─────────────────────────────────────
- * Not laziness, and not a missing instruction. A causal chain with no slack in it:
+ * ─── WHY agents do it — CORRECTED, and the correction changed the cure (issue #878) ────────────────
+ * The first cut of this guard shipped a causal chain whose first link was FALSE. It said a subagent
+ * that stops making tool calls is finished, so it cannot end its turn and be woken up. Measured over
+ * every subagent transcript on this machine, that is not what happens:
  *
- *   1. A subagent that stops making tool calls is FINISHED — its run returns to its parent. It cannot
- *      end its turn and be woken up later; ending the turn IS the end of the agent.
- *   2. `Monitor` does not block. Its own result text says "Keep working — do not poll or sleep", which
- *      is precisely what an agent with nothing left to do cannot act on.
- *   3. A `Monitor` with a real polling loop is refused by the HARNESS — 178 of 553 subagent Monitor
- *      calls — because a `while`/`until` with a redirect cannot be statically proven to stay inside the
- *      worktree. That refusal is Claude Code's, not webpieces'; it is not ours to relax and this guard
- *      does not try.
- *   4. So `echo .` every three seconds is the only remaining way to stay alive.
+ *   2,605 subagent turns ended with `stop_reason: end_turn`. 2,017 were genuinely the run's last turn.
+ *   588 were followed by MORE turns — the agent was RESUMED — and 449 of those were resumed by a
+ *   `[SYSTEM NOTIFICATION] … background-task event`. Broken down by what was pending when the turn
+ *   ended: 170 after spawning Agents, 118 after spawning Agents AND a backgrounded Bash, 109 after a
+ *   backgrounded Bash alone. So 288 of them are exactly the reviewer-wait this feature was built for.
  *
- * A BLOCKING BASH COMMAND is therefore the only wait primitive a worktree-isolated subagent has, which
- * is why `pnpm wp-await-reviews` and `pnpm wp-await-checks` exist and why this guard can afford to
- * refuse: for the first time there is something to refuse INTO.
+ * The root cause is therefore NOT "a subagent has no way to pause". It is "a subagent does not know it
+ * will be woken up" — a knowledge problem — and a cure asserting the opposite steers an agent away
+ * from the one wait that is FREE toward one that costs a turn per 540 seconds.
  *
- * ─── THE CURE DIFFERS BY AGENT KIND, and prescribing the wrong one DESTROYS WORK ───────────────────
- * A main agent can end its turn and be re-invoked by a backgrounded command; that is the cheapest wait
- * there is, and telling it to block a Bash call for ten minutes would be worse advice. A
- * worktree-isolated subagent cannot: "end your turn" kills it mid-wait and loses everything it has
- * done. One cure per kind, and the kind is read the same way the decision log stamps it —
- * `dotWebpieces.worktreeName(root)`, git's own worktree name, empty for the primary clone. Same call,
- * so a `tree=` column and this verdict cannot disagree.
+ * What survives the correction unchanged: `Monitor` still does not block (its own result text says
+ * "Keep working — do not poll or sleep"), and a `Monitor` carrying a real polling loop is still refused
+ * by the HARNESS — 178 of 553 subagent Monitor calls — because a `while`/`until` with a redirect cannot
+ * be statically proven to stay inside the worktree. That refusal is Claude Code's, not webpieces'; it
+ * is not ours to relax and this guard does not try. So when NOTHING pending would wake the agent, a
+ * blocking Bash call is still the only wait it can express, and that is what `pnpm wp-await-reviews`
+ * and `pnpm wp-await-checks` are for. They are the SECOND answer now, not the first.
+ *
+ * ─── THE CURE STILL DIFFERS BY AGENT KIND ──────────────────────────────────────────────────────────
+ * A main agent has `Monitor` and `run_in_background` genuinely available and its own cure names them;
+ * it is unchanged by #878 and was always correct. A subagent's differs in what it can REACH — Monitor
+ * is effectively closed to it — not in whether it may end its turn. The kind is read the same way the
+ * decision log stamps it: `dotWebpieces.worktreeName(root)`, git's own worktree name, empty for the
+ * primary clone. Same call, so a `tree=` column and this verdict cannot disagree.
+ *
+ * ─── WHY THE SUBAGENT CURE NAMES WHAT IS PENDING CONDITIONALLY ─────────────────────────────────────
+ * The cure would ideally say "you have 4 reviewers running, they will wake you". It cannot, and the
+ * reason is structural rather than an omission: this hook is registered on `Write|Edit|MultiEdit|Bash|
+ * Read`, so an Agent spawn NEVER reaches it and no count of live children exists to read. A
+ * backgrounded Bash is no better — `run_in_background` is not carried on the normalized payload, and
+ * even if it were, a background command's EXIT is unobservable from a PreToolUse hook, so a remembered
+ * spawn could not be distinguished from one that finished an hour ago. Asserting a wake-up that may not
+ * be coming is the same class of defect as asserting one cannot come, so the cure asks the agent — who
+ * can see its own pending work — instead of guessing on its behalf.
  *
  * ─── It acts UNCONDITIONALLY, and has NO config key ────────────────────────────────────────────────
  * Like `commit-message-substitution-guard` and `build-output-pipe-guard`, and on the same two tests. A
@@ -66,16 +81,17 @@ export class WaitSpinGuardRule extends BashRuleBase<EmptyRuleConfig> {
 
     readonly description =
         'Block a Bash call whose whole purpose is to stay alive — a bare echo/true/date keep-alive, or ' +
-        'the same gh pr checks/view asked a third time — and name the ONE blocking wait command the ' +
-        'calling agent kind can use: pnpm wp-await-reviews / pnpm wp-await-checks for a worktree ' +
-        'subagent, a Monitor plus ending the turn for a main agent.';
+        'the same gh pr checks/view asked a third time (a trailing | head/tail/cat/wc -l included) — ' +
+        'and name the cheapest wait the calling agent kind has: end the turn and be re-invoked by ' +
+        'pending work, or pnpm wp-await-reviews / pnpm wp-await-checks when nothing pending would wake ' +
+        'it. gh pr checks --watch already blocks and is never refused.';
 
     get fixHint(): FixHint {
         return new FixHint(
             'This command does nothing except keep your turn alive, and a turn costs your whole context — '
             + '~557,000 tokens measured, whatever the command was.',
-            'Wait by BLOCKING on one command instead of by taking turns. The line above names the one '
-            + 'that fits the agent you are; it is the only one to run.',
+            'Stop waiting by taking turns. The lines above name what the agent you are should do '
+            + 'instead, cheapest first; they are the only moves to make.',
             [],
         );
     }
@@ -168,17 +184,21 @@ export class WaitSpinGuardRule extends BashRuleBase<EmptyRuleConfig> {
 export const REPEATS_BEFORE_REFUSAL = 2;
 
 /**
- * The subagent cure. It opens by saying what the agent must NOT do, because "end your turn" is the
- * advice a subagent is most likely to reach for and the one that destroys it.
+ * The subagent cure. The FREE option is first because it is free: ending the turn costs nothing at all,
+ * where a blocking command costs one turn per 540 seconds. An earlier cut led with "you CANNOT end your
+ * turn", which is false and was the most harmful line in the guard — see the class docstring's measured
+ * correction, and the paragraph there on why the pending work is named conditionally.
  */
 export const SUBAGENT_CURE =
-    'You are a worktree-isolated subagent, so you CANNOT end your turn and be woken up — ending it ends\n'
-    + 'your run and loses this work. Block on one command instead. It heartbeats while it waits and\n'
-    + 'returns as soon as there is something to do:\n\n'
-    + '    pnpm wp-await-reviews          # waiting on reviewer subagents you spawned\n'
+    'END YOUR TURN. If ANYTHING of yours is still pending — subagents you spawned, or a command you\n'
+    + 'started with run_in_background — the harness re-invokes you when it finishes. Measured 449 times\n'
+    + "across this machine's subagent transcripts, 288 of them waiting on spawned reviewers exactly like\n"
+    + 'this. It is not the end of your run, and it costs nothing at all.\n\n'
+    + 'ONLY if nothing pending would wake you, block in ONE call instead:\n\n'
+    + '    pnpm wp-await-reviews          # waiting on reviewer verdicts\n'
     + '    pnpm wp-await-checks --pr <n>  # waiting on CI for a PR\n\n'
-    + 'Either one exits before the harness ceiling and tells you to run it again if the wait is longer,\n'
-    + 'so a long wait costs about ten calls rather than several hundred.';
+    + 'Either one heartbeats, exits before the harness ceiling and tells you to run it again if the wait\n'
+    + 'is longer, so a long wait costs about ten calls rather than several hundred.';
 
 /**
  * The main-agent cure. A main agent has the cheaper option — cost nothing while waiting — and telling

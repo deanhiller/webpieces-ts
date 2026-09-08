@@ -339,10 +339,12 @@ export class ReviewReport {
      * How to WAIT once the spawn list has been spawned — printed after the blocks, because it is the
      * next thing to do and nothing before it can be mistaken for it.
      *
-     * It is here because the alternative is measured and expensive. A subagent that has spawned four
-     * reviewers cannot end its turn — ending it ends the run — and `Monitor` does not block, so the
-     * fallback is `echo .` every three seconds at ~557,000 tokens a turn: 18.3% of every token the fleet
-     * spent in the 24h to 2026-09-07 (issue #874). One blocking command replaces all of it.
+     * It is here because the alternative is measured and expensive: `echo .` every three seconds at
+     * ~557,000 tokens a turn, 18.3% of every token the fleet spent in the 24h to 2026-09-07 (#874).
+     *
+     * It is the SECOND option, and says so out loud (#878). A subagent that has spawned reviewers CAN
+     * end its turn and be re-invoked when they finish — 449 measured resumptions, 288 of them on exactly
+     * this wait — and that costs nothing at all, where this command costs one turn per 540 seconds.
      *
      * It names no other stage. `finishStep` below is the ONE place this whole block names
      * `wp-finish-upsert-pr`, and a second mention here would be a second "what to do next" instruction
@@ -350,8 +352,13 @@ export class ReviewReport {
      */
     private awaitLines(): string[] {
         return [
-            '         Then WAIT for them with one plain, blocking command — do NOT poll, and do NOT run',
-            '         `echo` to keep your turn alive (a turn costs your whole context, ~557k tokens):',
+            '         Then WAIT. Do NOT poll, and do NOT run `echo` to keep your turn alive — a turn costs',
+            '         your whole context, ~557k tokens. Cheapest first:',
+            '',
+            '           END YOUR TURN. Spawned subagents re-invoke you when they finish (measured 449',
+            '           times), and waiting that way costs nothing at all.',
+            '',
+            '           ONLY if nothing pending would wake you, block in one call:',
             '',
             '             pnpm wp-await-reviews',
             '',
