@@ -37,6 +37,87 @@ PROJECTS = Path.home() / ".claude" / "projects"
 # rollout in the window instead of globbing a sanitized path the way the Claude reader can.
 CODEX_SESSIONS = Path.home() / ".codex" / "sessions"
 
+# A SUBAGENT does not write into the session transcript. It gets its OWN file at
+# `~/.claude/projects/<repo>/<sessionId>/subagents/agent-<id>.jsonl`, beside an
+# `agent-<id>.meta.json` carrying `agentType`, `model`, `description` and `worktreePath`. Reading
+# only `<sessionId>.jsonl` therefore misses every reviewer and every `/full-cycle` worker — which
+# on one measured 4-day window was 72% of the fleet's tokens, invisible while the `cycletime`
+# REVIEWER bucket read 0.37h. The `Agent` tool_use in the parent is the SPAWN CALL, a few hundred
+# bytes; the agent's actual work is only here.
+SUBAGENT_DIR = "subagents"
+
+# List price per Mtok for the Opus class, so a token count can be weighted the way a bill is:
+# a cache READ is a tenth of fresh input, and output is five times it. Reporting raw token sums
+# without this makes a 98%-cache_read workload look like a catastrophe and an output-heavy one
+# look free. It is a RELATIVE WEIGHTING DEVICE, not a bill — say so wherever it is quoted.
+TOKEN_PRICE_PER_MTOK = {"input": 15.0, "cache_write": 18.75, "cache_read": 1.50, "output": 75.0}
+
+
+def tok_new():
+    return {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0, "api_calls": 0}
+
+
+def tok_add(acc, usage):
+    """Accumulate one `message.usage` block.
+
+    These are EXACT counts the harness already recorded, and they are strictly better than the
+    `chars // 4` approximation `retbytes` uses: they include the system prompt and the cached
+    prefix, neither of which appears in any tool result.
+    """
+    if not usage:
+        return
+    acc["input"] += usage.get("input_tokens", 0) or 0
+    acc["output"] += usage.get("output_tokens", 0) or 0
+    acc["cache_write"] += usage.get("cache_creation_input_tokens", 0) or 0
+    acc["cache_read"] += usage.get("cache_read_input_tokens", 0) or 0
+    acc["api_calls"] += 1
+
+
+def tok_merge(acc, other):
+    for k in acc:
+        acc[k] += other.get(k, 0)
+
+
+def tok_total(acc):
+    return acc["input"] + acc["cache_write"] + acc["cache_read"] + acc["output"]
+
+
+def tok_cost(acc):
+    return round(sum(acc[k] / 1e6 * TOKEN_PRICE_PER_MTOK[k] for k in TOKEN_PRICE_PER_MTOK), 2)
+
+
+# The gate bins, and what counts as INVOKING one. Deliberately NOT a bare substring search: a
+# transcript is full of `grep wp-review-upsert-pr`, `ps | rg wp-review-upsert-pr` and prose that
+# names the command, and counting those inflated one audit's Codex figure from 7 to 92 — an order
+# of magnitude, in the direction that flattered the conclusion. An invocation is the bin at a
+# COMMAND position: preceded by `pnpm`/`npx` (with only whitespace or quotes between, because
+# Codex wraps it as `{"cmd":"pnpm wp-..."}`), or at the very start of the string.
+WP_BINS = ("wp-start-upsert-pr", "wp-review-upsert-pr", "wp-finish-upsert-pr",
+           "wp-land-pr", "wp-build", "wp-sync-main", "wp-cleanup")
+WP_INVOKE_RE = {b: re.compile(r'(?:(?:pnpm|npx)[\s"\']+|\A)' + re.escape(b)) for b in WP_BINS}
+
+
+def wp_invocations(text):
+    """Count real invocations of each `wp-*` bin in a command string."""
+    out = Counter()
+    if not isinstance(text, str) or "wp-" not in text:
+        return out
+    for b, rx in WP_INVOKE_RE.items():
+        n = len(rx.findall(text))
+        if n:
+            out[b] += n
+    return out
+
+
+def is_reviewer(agent_type):
+    """A checklist reviewer, as opposed to a worker agent.
+
+    `commands.pr-gate.checklists` names them, but this reader must work on repos whose config it
+    has not loaded, so it goes by the naming convention every checklist in the fleet follows.
+    """
+    t = agent_type or ""
+    return t.endswith("-reviewer") or t.startswith("morpheus-wrapper")
+
 # ---------------------------------------------------------------- harness
 
 
@@ -110,6 +191,22 @@ def in_window(ts):
     return ts is not None and (WINDOW_END is None or ts <= WINDOW_END)
 
 
+def in_token_window(ts):
+    """Stricter than `in_window`: gates the window START too.
+
+    `in_window` deliberately does NOT, because a session that began before the window is still one
+    session and its wall/active seconds only mean anything measured whole. Token spend is the
+    opposite: it is a SUM over API calls, so counting calls from before the window inflates the
+    total by however long that session had already been running. One measured window came out 69%
+    high that way (6.8B vs 4.0B) purely from sessions that straddled the boundary.
+    """
+    if ts is None:
+        return True
+    if WINDOW_START is not None and ts < WINDOW_START:
+        return False
+    return WINDOW_END is None or ts <= WINDOW_END
+
+
 def sanitized(repo: Path) -> str:
     return str(repo).replace("/", "-")
 
@@ -126,6 +223,34 @@ def transcript_dirs_for(repo: Path):
         if d.name == base or d.name.startswith(base + "--"):
             out.append(d)
     return out
+
+
+def subagent_files_for(repo: Path, since):
+    """Every subagent transcript this repo's sessions spawned in the window.
+
+    Yields `(parent_session_id, agent_id, meta, path)`. `meta` is the sidecar `.meta.json` — its
+    `agentType` is what makes a reviewer distinguishable from a `/full-cycle` worker, and its
+    `worktreePath` is the join back to `.webpieces/worktrees/<agent>/logs/`, where that agent's
+    OWN guard rows live (see `guard_log_dirs`). A missing or unreadable sidecar is not a reason to
+    drop the transcript: the tokens were still spent, so it is reported with `agentType: null`.
+    """
+    for d in transcript_dirs_for(repo):
+        for sub in d.glob("*/" + SUBAGENT_DIR + "/agent-*.jsonl"):
+            try:
+                if datetime.fromtimestamp(sub.stat().st_mtime, timezone.utc) < since:
+                    continue
+            except OSError:
+                continue
+            meta = {}
+            try:
+                meta = json.loads(sub.with_suffix("").with_suffix(".meta.json").read_text())
+            except Exception:
+                try:
+                    meta = json.loads(
+                        sub.parent.joinpath(sub.stem + ".meta.json").read_text())
+                except Exception:
+                    meta = {}
+            yield sub.parent.parent.name, sub.stem, meta, sub
 
 
 def tsv(line):
@@ -1684,6 +1809,30 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None, ct=None):
         if s:
             sessions.append(s)
 
+    # The SUBAGENT half. Same scanner, same session dict — a subagent run IS a session, it just
+    # has a parent. Rows carry `agent`, so every downstream aggregate can either fold them in
+    # (fleet token totals) or hold them out (per-human-session counts) explicitly, instead of the
+    # old behaviour where the choice was made for it by the files simply not being read.
+    subagents = []
+    for repo in repos:
+        for parent_sid, agent_id, meta, path in subagent_files_for(repo, since):
+            atype = meta.get("agentType")
+            agent = {
+                "parent_session": parent_sid,
+                "agent_id": agent_id,
+                "agent_type": atype,
+                "is_reviewer": is_reviewer(atype),
+                "model": meta.get("model"),
+                "description": (meta.get("description") or "")[:80],
+                "worktree": meta.get("worktreePath"),
+                "spawn_depth": meta.get("spawnDepth"),
+            }
+            sub = _scan_session(repo, path.parent, path, since, tool_hist, blocked_rules,
+                                ret, ct, agent=agent)
+            if sub:
+                subagents.append(sub)
+    sessions.extend(subagents)
+
     # The Codex half. Same session shape, same counters, so every downstream aggregate works
     # unchanged and the harness is just another column.
     codex_seen = 0
@@ -1753,6 +1902,8 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None, ct=None):
             "repeated_cmd_calls": sum(s["repeated_cmd_calls"] for s in sessions),
             "output_tokens": sum(s["output_tokens"] for s in sessions),
         },
+        "subagents": _subagent_report(subagents),
+        "tokens": _token_report(sessions),
         "tool_histogram": top(tool_hist, 18),
         "blocked_markers": top(blocked_rules, 15),
         "worst_redundant_builds": worst_builds,
@@ -1761,7 +1912,100 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None, ct=None):
     }
 
 
-def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=None):
+def _token_report(sessions):
+    """EXACT token spend for the window, split by where it was spent.
+
+    Sessions here include subagent runs (they carry `agent`), so `subagent_*` is not an estimate
+    reconstructed from spawn calls — it is the agents' own recorded usage. Report the cache_read
+    share alongside the total: a 98%-cache_read workload is enormous in tokens and modest in cost,
+    and quoting either number alone misleads in opposite directions.
+    """
+    main = tok_new()
+    reviewer = tok_new()
+    other = tok_new()
+    per_type = defaultdict(tok_new)
+    for s in sessions:
+        t = s.get("tokens") or tok_new()
+        a = s.get("agent")
+        if a is None:
+            tok_merge(main, t)
+        else:
+            per_type[a.get("agent_type") or "?"] = per_type[a.get("agent_type") or "?"]
+            tok_merge(per_type[a.get("agent_type") or "?"], t)
+            tok_merge(reviewer if a.get("is_reviewer") else other, t)
+    total = tok_new()
+    for b in (main, reviewer, other):
+        tok_merge(total, b)
+
+    def blk(name, acc):
+        tt = tok_total(acc)
+        return {"bucket": name, "tokens": tt, "est_cost": tok_cost(acc),
+                "pct_of_tokens": round(100.0 * tt / tok_total(total), 1) if tok_total(total) else 0.0,
+                "api_calls": acc["api_calls"]}
+
+    return {
+        "price_note": "est_cost applies Opus LIST price (%s per Mtok) to exact recorded usage. "
+                      "It is a relative weighting device, NOT a bill." % TOKEN_PRICE_PER_MTOK,
+        "total_tokens": tok_total(total),
+        "total_est_cost": tok_cost(total),
+        "cache_read_pct": round(100.0 * total["cache_read"] / tok_total(total), 1)
+                          if tok_total(total) else 0.0,
+        "by_bucket": [blk("main-agent", main), blk("subagent-reviewer", reviewer),
+                      blk("subagent-other", other)],
+        "by_agent_type": sorted(
+            [{"agent_type": k, "tokens": tok_total(v), "est_cost": tok_cost(v),
+              "api_calls": v["api_calls"]} for k, v in per_type.items()],
+            key=lambda r: -r["tokens"])[:15],
+    }
+
+
+def _subagent_report(subagents):
+    """Reviewer fan-out, and the part of it that is REPEAT work.
+
+    A reviewer run is a repeat when the SAME reviewer already ran in the SAME parent session. It
+    cannot see a new diff, so a rising repeat share is the gate re-briefing the whole checklist on
+    every amend rather than the reviewers finding anything. Cross-check against the verdicts in
+    `.webpieces/pr-review/<branch>/review-*.json`: repeats with no RED verdict anywhere are pure
+    re-run cost, not a fix loop.
+    """
+    by_type = Counter()
+    cost_by_type = defaultdict(float)
+    runs = Counter()          # (parent_session, agent_type) -> n
+    cost_of = defaultdict(list)
+    reviewer_runs = 0
+    for s in subagents:
+        a = s["agent"]
+        t = a.get("agent_type") or "?"
+        by_type[t] += 1
+        cost_by_type[t] += s.get("est_cost", 0.0)
+        if a.get("is_reviewer"):
+            reviewer_runs += 1
+            key = (a.get("parent_session"), t)
+            runs[key] += 1
+            cost_of[key].append(s.get("est_cost", 0.0))
+    repeats = sum(n - 1 for n in runs.values() if n > 1)
+    repeat_cost = round(sum(sum(v) - max(v) for v in cost_of.values() if len(v) > 1), 2)
+    worst = sorted(({"parent_session": k[0], "reviewer": k[1], "runs": v}
+                    for k, v in runs.items() if v > 1), key=lambda r: -r["runs"])[:10]
+    return {
+        "subagent_runs": len(subagents),
+        "reviewer_runs": reviewer_runs,
+        "distinct_session_reviewer_pairs": len(runs),
+        "repeat_reviewer_runs": repeats,
+        "repeat_pct": round(100.0 * repeats / reviewer_runs, 1) if reviewer_runs else 0.0,
+        "repeat_est_cost": repeat_cost,
+        "worst_repeats": worst,
+        "by_agent_type": sorted(
+            [{"agent_type": k, "runs": v, "est_cost": round(cost_by_type[k], 2),
+              "est_cost_per_run": round(cost_by_type[k] / v, 2)} for k, v in by_type.items()],
+            key=lambda r: -r["est_cost"])[:15],
+        "worktrees_seen": len({s["agent"].get("worktree") for s in subagents
+                               if s["agent"].get("worktree")}),
+    }
+
+
+def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=None,
+                  agent=None):
     first = last = prev = None
     # Cycle-time state. `prev_type` and `prior` exist only so a gap can be ATTRIBUTED to the pair
     # of rows that bracket it — which is the whole difference between this and the 300s cap above,
@@ -1775,6 +2019,8 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=N
     builds = redundant_builds = blocked_calls = log_read_calls = error_calls = 0
     error_seconds = 0.0
     out_tokens = 0
+    tokens = tok_new()
+    wp_calls = Counter()
     dirty = True            # has a file changed since the last build?
     cmd_counts = Counter()
     build_cmds = Counter()
@@ -1818,6 +2064,8 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=N
             if typ == "assistant":
                 u = msg.get("usage") or {}
                 out_tokens += u.get("output_tokens", 0) or 0
+                if in_token_window(ts):
+                    tok_add(tokens, u)
                 for c in msg.get("content") or []:
                     if not isinstance(c, dict) or c.get("type") != "tool_use":
                         continue
@@ -1835,6 +2083,8 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=N
                             ct_marks.append({"ts": ts.timestamp(), "stage": st,
                                              "session": path.stem})
 
+                    if name == "Bash" and isinstance(cmd, str):
+                        wp_calls.update(wp_invocations(cmd))
                     if name in MUTATE_TOOLS:
                         dirty = True
                     elif name == "Bash" and isinstance(cmd, str):
@@ -1927,6 +2177,11 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=N
         "repeated_cmd_calls": repeated,
         "top_repeated_cmds": [{"cmd": k, "n": v} for k, v in cmd_counts.most_common(4) if v > 1],
         "output_tokens": out_tokens,
+        "tokens": tokens,
+        "tokens_total": tok_total(tokens),
+        "est_cost": tok_cost(tokens),
+        "wp_calls": dict(wp_calls),
+        "agent": agent,
         "block_samples": block_samples,
     }
 
@@ -1975,6 +2230,8 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None, c
     log_files = Counter()
     block_samples = []
     session_id = path.stem
+    tokens = tok_new()
+    wp_calls = Counter()
     # Codex has no Agent tool and no `isApiErrorMessage`, so REVIEWER and CLAUDE_OUTAGE are
     # structurally unmeasurable here and stay empty rather than being guessed at from prose. Its
     # HUMAN boundary is a `message`/`role=user` payload, the same fact in a different wire format.
@@ -2011,6 +2268,20 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None, c
                 prev = ts
 
             payload = row.get("payload") or {}
+            # Codex records exact usage on its own `token_usage_record` rows, not on assistant
+            # turns. Field names differ from Claude's and the mapping matters: `input_tokens` is
+            # the TOTAL including the cached prefix, so the fresh-input figure is the difference.
+            if row.get("type") == "token_usage_record" and isinstance(payload, dict):
+                if not in_token_window(ts):
+                    continue
+                u = payload.get("usage") or {}
+                cached = u.get("cached_input_tokens", 0) or 0
+                tokens["input"] += max(0, (u.get("input_tokens", 0) or 0) - cached)
+                tokens["cache_read"] += cached
+                tokens["cache_write"] += u.get("cache_write_input_tokens", 0) or 0
+                tokens["output"] += u.get("output_tokens", 0) or 0
+                tokens["api_calls"] += 1
+                continue
             if row.get("type") != "response_item" or not isinstance(payload, dict):
                 continue
             kind = payload.get("type")
@@ -2029,6 +2300,7 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None, c
                 else:
                     cmd = payload.get("arguments") or ""
                 cmd_counts[cmd.strip()[:200]] += 1
+                wp_calls.update(wp_invocations(cmd))
                 pending[payload.get("call_id")] = (ts, name, cmd)
 
                 if ct is not None and ts:
@@ -2107,10 +2379,222 @@ def _scan_codex_session(repo, path, since, tool_hist, blocked_rules, ret=None, c
         "top_build_cmds": top(build_cmds, 4),
         "repeated_cmd_calls": repeated,
         "top_repeated_cmds": [{"cmd": k, "n": v} for k, v in cmd_counts.most_common(4) if v > 1],
-        # Codex rollouts carry token counts on `event_msg`/`token_count` records rather than on
-        # each assistant turn. Reported as 0 rather than guessed at — see SKILL.md.
-        "output_tokens": 0,
+        # Codex rollouts carry token counts on `token_usage_record` rows rather than on each
+        # assistant turn — read above, so this is EXACT and comparable to the Claude column.
+        "output_tokens": tokens["output"],
+        "tokens": tokens,
+        "tokens_total": tok_total(tokens),
+        "est_cost": tok_cost(tokens),
+        "wp_calls": dict(wp_calls),
+        "agent": None,
         "block_samples": block_samples,
+    }
+
+
+# ---------------------------------------------------------------- waits
+
+# A turn whose WHOLE command is one of these bought nothing: it exists to keep the agent alive.
+# Named rather than inferred from length — `echo hi` and `echo "<a sentence>"` are real commands.
+WAIT_NOOP_RE = re.compile(
+    r'^\s*(?:echo\s+(?:\.{1,3}|(?:idle|ok|okay|waiting|wait|standby|still|alive|ping|pong|tick'
+    r'|noop|nop|heartbeat|zzz)[a-z0-9_-]*)?|true|:|date(?:\s+-u)?(?:\s+\+[%\w:]+)?)\s*$', re.I)
+
+# A status read. ONE is a legitimate snapshot; the 3rd identical one in a session is a spin.
+WAIT_POLL_RE = re.compile(r'^\s*gh\s+(?:pr|run)\s+(?:checks|view|list)\b')
+
+# The cure: the loop lives inside ONE call. Counting adoption is the whole point of this subcommand,
+# and counting it by SUBSTRING is worthless — measured, a naive `wp-await` match over one 24h window
+# returned 19 "adoptions" of which ZERO were uses: eleven were the agents BUILDING the command
+# (greps, `vitest run await-reviews-command.spec.ts`, commit messages naming it) and the rest were
+# setup. An adoption is the bin at a COMMAND POSITION, nowhere else.
+WAIT_AWAIT_RE = re.compile(
+    r'^(?:(?:pnpm|npx|bash|sh|exec)\s+)?'                       # optional runner, then the bin ITSELF
+    r'(?:[\w./~$-]*/)?wp-await(?:\.sh|-reviews|-checks)?\b')
+
+# Commands that merely NAME the bin. A segment whose first word is one of these is never a use, even
+# when the bin appears at what looks like a command position inside its arguments.
+WAIT_AWAIT_NOT_A_USE = re.compile(
+    r'^\s*(?:grep|rg|ag|ack|find|cat|head|tail|sed|awk|less|ls|git|echo|printf|python3?|node'
+    r'|vitest|jest|chmod|cp|mv|rm|diff|wc)\b')
+
+
+def counts_as_await_use(cmd):
+    """Is this command an INVOCATION of a wait command, rather than a mention of one?
+
+    Deliberately STRICT: the command, once a leading `cd <dir> &&` is stripped, must BEGIN with the
+    wait bin (optionally via pnpm/npx/bash/sh). Anything looser has been tried and failed twice on
+    real data — a substring match scored 19/19 false positives, and splitting on newlines then
+    scored 7/9, because a heredoc body and a multi-line script both look like a command sequence.
+    Text after a heredoc marker is therefore cut off before matching, and newlines are never treated
+    as command separators.
+    """
+    if not isinstance(cmd, str) or 'wp-await' not in cmd:
+        return False
+    head = re.split(r'<<-?\s*[\'"]?\w+', cmd, maxsplit=1)[0]   # drop heredoc bodies
+    head = head.split('\n', 1)[0]                              # only the first physical line runs
+    for seg in re.split(r'&&|\|\||[;|]', head):
+        probe = seg.strip()
+        probe = re.sub(r'^(?:\w+=\S+\s+)*', '', probe)          # leading VAR=... assignments
+        if re.match(r'^cd\s+\S+$', probe):
+            continue                                           # a bare `cd` prefix is not the command
+        if not probe:
+            continue
+        if WAIT_AWAIT_RE.match(probe):
+            return True
+    return False
+
+
+WAIT_POLL_REPEAT_THRESHOLD = 3
+
+
+class WaitRow:
+    """One session's waiting profile. Data-only (CLAUDE.md: classes, not dict literals)."""
+
+    def __init__(self, repo, session, harness, agent_type):
+        self.repo = repo
+        self.session = session
+        self.harness = harness
+        self.agent_type = agent_type
+        self.noop_turns = 0
+        self.poll_turns = 0
+        self.await_calls = 0
+        self.noop_tokens = 0
+        self.poll_tokens = 0
+        self.total_tokens = 0
+        self.commands = Counter()
+
+    def as_dict(self):
+        return {"repo": self.repo, "session": self.session, "harness": self.harness,
+                "agent_type": self.agent_type, "noop_turns": self.noop_turns,
+                "poll_turns": self.poll_turns, "await_calls": self.await_calls,
+                "noop_tokens": self.noop_tokens, "poll_tokens": self.poll_tokens,
+                "total_tokens": self.total_tokens,
+                "top_commands": top(self.commands, 5)}
+
+
+def audit_waits(repos, hours):
+    """How much did WAITING cost, and is the cure being adopted?
+
+    This is the follow-up metric for the `echo .` finding: 18.3% of all fleet tokens in the 24h to
+    2026-09-07 went to turns whose only act was to keep the agent alive while it waited for CI or
+    for its own subagents. Every such turn is a separate API call resending the whole conversation
+    (~557k tokens measured), which is why a no-op turn costs the same as a real one.
+
+    `await_calls` is the adoption counter. A run that waits SHOULD show await_calls > 0 and
+    noop_turns == 0; the reverse is the defect. Compare windows before and after the fix landed —
+    the ratio is the number that says whether it worked.
+    """
+    since = cutoff(hours)
+    rows = {}
+    poll_seen = Counter()
+
+    def row_for(repo, session, harness, agent_type):
+        key = (repo, session)
+        if key not in rows:
+            rows[key] = WaitRow(repo, session, harness, agent_type)
+        return rows[key]
+
+    for repo in repos:
+        for d in transcript_dirs_for(repo):
+            files = [(f, None) for f in d.glob("*.jsonl")]
+            files += [(f, meta) for _sid, _aid, meta, f in subagent_files_for(repo, since)]
+            for path, meta in files:
+                try:
+                    if datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < since:
+                        continue
+                except OSError:
+                    continue
+                agent_type = (meta or {}).get("agentType")
+                row = row_for(repo.name, path.stem, AI_CLAUDE, agent_type)
+                try:
+                    fh = path.open(errors="replace")
+                except OSError:
+                    continue
+                with fh:
+                    for line in fh:
+                        if not line.startswith("{"):
+                            continue
+                        try:
+                            o = json.loads(line)
+                        except Exception:
+                            continue
+                        ts = parse_ts(o.get("timestamp"))
+                        if not in_token_window(ts):
+                            continue
+                        msg = o.get("message") or {}
+                        u = msg.get("usage") or {}
+                        if not u:
+                            continue
+                        tks = (u.get("input_tokens", 0) or 0) \
+                            + (u.get("cache_creation_input_tokens", 0) or 0) \
+                            + (u.get("cache_read_input_tokens", 0) or 0) \
+                            + (u.get("output_tokens", 0) or 0)
+                        row.total_tokens += tks
+                        cmds = []
+                        names = []
+                        content = msg.get("content")
+                        if isinstance(content, list):
+                            for b in content:
+                                if isinstance(b, dict) and b.get("type") == "tool_use":
+                                    names.append(b.get("name"))
+                                    cmds.append(str((b.get("input") or {}).get("command", "")))
+                        if not cmds:
+                            continue
+                        for c in cmds:
+                            if counts_as_await_use(c):
+                                row.await_calls += 1
+                        if names != ["Bash"] * len(names) or not names:
+                            continue
+                        one = cmds[0] if len(cmds) == 1 else ""
+                        if one and WAIT_NOOP_RE.match(one):
+                            row.noop_turns += 1
+                            row.noop_tokens += tks
+                            row.commands[one.strip()[:40]] += 1
+                        elif one and WAIT_POLL_RE.match(one):
+                            key = (path.stem, " ".join(one.split())[:80])
+                            poll_seen[key] += 1
+                            if poll_seen[key] >= WAIT_POLL_REPEAT_THRESHOLD:
+                                row.poll_turns += 1
+                                row.poll_tokens += tks
+                                row.commands[one.strip()[:40]] += 1
+
+    live = [r for r in rows.values() if r.total_tokens]
+    fleet = sum(r.total_tokens for r in live) or 1
+    noop = sum(r.noop_tokens for r in live)
+    poll = sum(r.poll_tokens for r in live)
+    waiting = noop + poll
+    awaits = sum(r.await_calls for r in live)
+    spinners = [r for r in live if r.noop_turns or r.poll_turns]
+    adopters = [r for r in live if r.await_calls]
+
+    cmds = Counter()
+    for r in live:
+        cmds.update(r.commands)
+
+    return {
+        "window_hours": hours,
+        "law": "polling is fine; ONE API CALL PER POLL is not. A no-op turn costs the same as a "
+               "real one (~557k tokens measured) because every call resends the conversation.",
+        "sessions_scanned": len(live),
+        "fleet_tokens": fleet,
+        "noop_tokens": noop,
+        "poll_tokens": poll,
+        "waiting_tokens": waiting,
+        "waiting_pct_of_tokens": round(100.0 * waiting / fleet, 2),
+        "noop_pct_of_tokens": round(100.0 * noop / fleet, 2),
+        "noop_turns": sum(r.noop_turns for r in live),
+        "poll_turns": sum(r.poll_turns for r in live),
+        "wp_await_calls": awaits,
+        "runs_that_spun": len(spinners),
+        "runs_that_used_wp_await": len(adopters),
+        "adoption": "%d of %d waiting runs used wp-await" % (
+            len(adopters), len(adopters) + len(spinners)) if (adopters or spinners)
+            else "no run waited in this window",
+        "verdict_note": "A waiting run SHOULD show await_calls > 0 and noop_turns == 0. Compare "
+                        "this window against one before the fix landed; the ratio is the answer.",
+        "top_wait_commands": top(cmds, 12),
+        "worst_runs": sorted((r.as_dict() for r in spinners),
+                             key=lambda r: -(r["noop_tokens"] + r["poll_tokens"]))[:12],
     }
 
 
@@ -2762,7 +3246,7 @@ def resolve_repos(patterns):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "parity", "skew",
+    ap.add_argument("cmd", choices=["guards", "isolation", "transcripts", "parity", "skew", "waits",
                                     "docdrift", "matrix", "merges", "retbytes", "cycletime",
                                     "all"])
     ap.add_argument("--repos", nargs="+", required=True)
@@ -2819,6 +3303,8 @@ def main():
         res["docdrift"] = audit_docdrift(repos)
     if args.cmd in ("matrix", "all"):
         res["matrix"] = audit_matrix(repos, args.hours)
+    if args.cmd in ("waits", "all"):
+        res["waits"] = audit_waits(repos, args.hours)
     if args.cmd in ("merges", "all"):
         res["merges"] = audit_merges(repos, args.hours)
     json.dump(res, sys.stdout, indent=1, default=str)
