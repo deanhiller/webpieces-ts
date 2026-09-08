@@ -3,19 +3,25 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { StageOutputLog } from './stage-output-log';
 
 /**
- * THE BLOCKING WAIT, and why webpieces has to own one (issue #874).
+ * THE BLOCKING WAIT, and why webpieces owns one (issue #874, scoped by #878).
  *
- * A worktree-isolated subagent has exactly one way to pause: a Bash call, which blocks until its
- * command exits. It cannot end its turn — a subagent that stops making tool calls is FINISHED, and its
- * run returns to its parent. `Monitor` does not block; its own result says "Keep working — do not poll
- * or sleep". And a `Monitor` carrying a real polling loop is refused by the HARNESS, because a
+ * ─── IT IS THE SECOND-CHEAPEST WAIT, NOT THE CHEAPEST (issue #878) ─────────────────────────────────
+ * #874 justified this class by asserting a worktree-isolated subagent cannot end its turn. That is
+ * FALSE and was corrected: measured over every subagent transcript on this machine, 588 of 2,605
+ * `end_turn` turns were followed by more turns, 449 of them resumed by a background-task notification,
+ * and 288 of those were waiting on spawned subagents. So ENDING THE TURN is the cheapest wait a
+ * subagent has — it costs nothing — and `wait-spin-guard`'s cure now names it first.
+ *
+ * What this class is for is the case where nothing pending would wake the agent. There, a Bash call is
+ * the only pause it can express: `Monitor` does not block (its own result says "Keep working — do not
+ * poll or sleep"), and a `Monitor` carrying a real polling loop is refused by the HARNESS, because a
  * `while`/`until` with a redirect cannot be statically proven to stay inside the worktree (178 of 553
  * measured subagent Monitor calls). That refusal is Claude Code's and is not ours to relax.
  *
- * So the agent falls back to `echo .` every three seconds — measured at 920M tokens, 18.3% of every
- * token the fleet spent in the 24h to 2026-09-07, because every turn resends the whole conversation at
- * ~557,000 tokens. This class is the thing that makes that unnecessary, and `wait-spin-guard` is the
- * thing that makes it unused.
+ * Without either, the agent falls back to `echo .` every three seconds — measured at 920M tokens, 18.3%
+ * of every token the fleet spent in the 24h to 2026-09-07, because every turn resends the whole
+ * conversation at ~557,000 tokens. This class is the thing that makes that unnecessary, and
+ * `wait-spin-guard` is the thing that makes it unused.
  *
  * ─── THREE CONSTRAINTS, all of them the harness's, none of them negotiable ─────────────────────────
  *

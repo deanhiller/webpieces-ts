@@ -46,11 +46,28 @@ function message(command: string): string {
 }
 
 /**
+ * The refusal a WORKTREE-ISOLATED subagent sees. The kind is git's answer about the tree, so it is
+ * stubbed at that one call rather than by building a real worktree — see target-tree.spec.ts for the
+ * fixture-based form.
+ */
+function subagentMessage(): string {
+    const isolated = new WaitSpinGuardRule();
+    vi.spyOn(
+        isolated as unknown as { isWorktreeIsolated: (c: BashContext) => boolean },
+        'isWorktreeIsolated').mockReturnValue(true);
+    return isolated.check(new BashContext('echo .', '/repo/.claude/worktrees/agent-abc'))[0].message ?? '';
+}
+
+/**
  * ══ WHAT THIS GUARD IS FOR ═════════════════════════════════════════════════════════════════════════
  *
- * A subagent that stops making tool calls is finished, `Monitor` says "keep working", and the harness
- * refuses a Monitor with a real polling loop. So agents `echo .` every three seconds to stay alive, at
- * ~557,000 tokens a turn — measured at 18.3% of all fleet tokens in the 24h to 2026-09-07 (issue #874).
+ * `Monitor` says "keep working" and the harness refuses a Monitor with a real polling loop, so agents
+ * `echo .` every three seconds to stay alive, at ~557,000 tokens a turn — measured at 18.3% of all fleet
+ * tokens in the 24h to 2026-09-07 (issue #874).
+ *
+ * What #878 corrected: a subagent CAN end its turn and be re-invoked — 449 measured resumptions, 288 of
+ * them while waiting on spawned reviewers. The guard's first cut told it the opposite, which steered it
+ * off the only free wait, so the cure now leads with ENDING THE TURN and offers `wp-await-*` second.
  */
 describe('wait-spin-guard blocks a command whose only purpose is staying alive', () => {
     it('blocks the keep-alive tokens the measured runs actually used', () => {
@@ -149,13 +166,64 @@ describe('wait-spin-guard blocks a REPEATED status poll and nothing less', () =>
         expect(check('gh issue view 874 --comments')).toEqual([]);
         expect(check('gh pr checks 874 | grep fail')).toEqual([]);
     });
+
+    /**
+     * The single-segment rule hid the MAJORITY form. These three are real commands off this machine —
+     * 173, 81 and 72 occurrences over 30 days — and a trailing pager does not change the question the
+     * poll asks, so it must not change the verdict either (issue #878).
+     */
+    it('counts a poll wearing a trailing pager, using the real missed commands', () => {
+        priorCalls = REPEATS_BEFORE_REFUSAL;
+        expect(blocked('gh pr checks 1058 2>&1 | head')).toBe(true);
+        expect(blocked('gh pr checks 464 2>&1 | head')).toBe(true);
+        expect(blocked('gh pr checks 428 2>&1 | head -10')).toBe(true);
+        expect(blocked('gh pr checks 428 | head -n 10')).toBe(true);
+        expect(blocked('gh pr view 874 --json state | cat')).toBe(true);
+        expect(blocked('gh pr checks 428 | wc -l')).toBe(true);
+        expect(blocked('gh pr checks 428 | tail')).toBe(true);
+    });
+
+    it('still allows the first and second of the piped form — the count is what decides', () => {
+        priorCalls = 0;
+        expect(check('gh pr checks 1058 2>&1 | head')).toEqual([]);
+    });
+
+    /**
+     * The pager normalisation is POLL-ONLY. Relaxing the single-segment rule for the NO-OP shape would
+     * break `echo "=== IN-SCOPE DIFF ===" && git diff …` and friends, which is the carve-out that keeps
+     * this guard usable at all.
+     */
+    it('never lets the pager path reach the NO-OP shape', () => {
+        priorCalls = 40;
+        expect(check('echo . | head')).toEqual([]);
+        expect(check('date | cat')).toEqual([]);
+        expect(check('gh pr checks 428 | head -c 200')).toEqual([]);
+        expect(check('gh pr checks 428 | head file.txt')).toEqual([]);
+        expect(check('gh pr checks 428 | head | tail')).toEqual([]);
+    });
+});
+
+/**
+ * ══ `gh pr checks --watch` IS THE CURE, NOT THE SPIN ═══════════════════════════════════════════════
+ *
+ * It BLOCKS in one call — 224 subagent and 84 main-agent uses in the measured window — which is the
+ * exact behaviour this guard pushes agents toward. Refusing it however often it appears would refuse
+ * the cure (issue #878).
+ */
+describe('wait-spin-guard never denies a blocking --watch', () => {
+    it('allows it however many identical calls precede it', () => {
+        priorCalls = 999;
+        expect(check('gh pr checks 874 --watch')).toEqual([]);
+        expect(check('gh pr checks 874 --watch --interval 10')).toEqual([]);
+        expect(check('gh pr checks 874 --watch | head')).toEqual([]);
+    });
 });
 
 /**
  * ══ THE CURE MUST MATCH THE AGENT KIND ═════════════════════════════════════════════════════════════
  *
- * Prescribing "end your turn" to a worktree-isolated subagent destroys it mid-wait; prescribing a
- * ten-minute blocking command to a main agent wastes ten minutes. Never both, never the wrong one.
+ * A main agent has `Monitor` and `run_in_background` genuinely available; a subagent effectively does
+ * not, so it is offered the blocking commands as its second option. Never both, never the wrong one.
  */
 describe('wait-spin-guard prescribes one cure per agent kind', () => {
     it('tells a PRIMARY-clone agent to start a Monitor and end its turn', () => {
@@ -165,20 +233,33 @@ describe('wait-spin-guard prescribes one cure per agent kind', () => {
         expect(text).not.toContain('wp-await-reviews');
     });
 
-    it('tells a WORKTREE-isolated subagent to block, and never to end its turn', () => {
-        const worktree = '/repo/.claude/worktrees/agent-abc';
-        const isolated = new WaitSpinGuardRule();
-        // The kind is git's answer about the tree, so it is stubbed at that one call rather than by
-        // building a real worktree — see target-tree.spec.ts for the fixture-based form.
-        const spy = vi.spyOn(
-            isolated as unknown as { isWorktreeIsolated: (c: BashContext) => boolean },
-            'isWorktreeIsolated').mockReturnValue(true);
-        const text = isolated.check(new BashContext('echo .', worktree))[0].message ?? '';
+    it('tells a WORKTREE-isolated subagent to END ITS TURN FIRST, and offers blocking second', () => {
+        const text = subagentMessage();
+        expect(text).toContain('END YOUR TURN');
         expect(text).toContain('pnpm wp-await-reviews');
         expect(text).toContain('pnpm wp-await-checks --pr <n>');
-        expect(text).toContain('CANNOT end your turn');
-        expect(text).not.toContain('END YOUR TURN');
-        spy.mockRestore();
+        expect(text.indexOf('END YOUR TURN')).toBeLessThan(text.indexOf('pnpm wp-await-reviews'));
+    });
+
+    /**
+     * The regression #878 exists to delete. Telling a subagent it cannot end its turn is FALSE — 449
+     * measured re-invocations say so — and it steers the agent off the only wait that costs nothing.
+     */
+    it('never tells a subagent it cannot end its turn', () => {
+        const text = subagentMessage();
+        expect(text).not.toContain('CANNOT end your turn');
+        expect(text).not.toContain('cannot end your turn');
+    });
+
+    // The wake-up is stated CONDITIONALLY: this hook is registered on Write|Edit|MultiEdit|Bash|Read,
+    // so an Agent spawn never reaches it and the guard cannot count live children. Asserting a wake-up
+    // that may not be coming is the same defect as asserting one cannot come.
+    it('names what would wake it conditionally, never as an unverified fact', () => {
+        const text = subagentMessage();
+        expect(text).toContain('If ANYTHING of yours is still pending');
+        expect(text).toContain('subagents you spawned');
+        expect(text).toContain('run_in_background');
+        expect(text).toContain('449');
     });
 
     it('states the reason in one clause on both cures — a turn costs your whole context', () => {

@@ -29,9 +29,22 @@ export class AwaitChecksOptions {
  * developer's call, not the tooling's. Nothing here or in the finish banner tells an agent to wait —
  * the banner names this command as an option and says out loud that stopping is still correct.
  *
- * What it replaces is not "stopping"; it is `gh pr checks --watch` in a loop, or the `echo .` keep-alive
- * an agent falls back to when it has decided to see the PR land. See {@link AwaitLoop} for why a
- * blocking command is the only wait a worktree-isolated subagent can express.
+ * What it replaces is the `echo .` keep-alive an agent falls back to when it has decided to see the PR
+ * land. See {@link AwaitLoop} for when a blocking command is the right wait at all — ending the turn is
+ * cheaper whenever something pending would re-invoke you (issue #878).
+ *
+ * ─── `gh pr checks <n> --watch` EXISTS, AND WHEN TO REACH FOR EACH ─────────────────────────────────
+ * It is a real blocking wait, not a spin, and `wait-spin-guard` never denies it — 224 subagent and 84
+ * main-agent uses in the measured window. So this command does not pretend it is absent, and it is not
+ * a replacement for it. The difference is one property and it decides the choice:
+ *
+ *   `gh pr checks <n> --watch`  has NO BOUNDED EXIT. On a CI run longer than the harness's 600s
+ *                               silence ceiling it is KILLED having printed nothing, and the wait is
+ *                               simply lost. Right for a short, known-fast run you are watching.
+ *   `pnpm wp-await-checks`      heartbeats throughout and RETURNS CLEANLY at 540s saying "run me
+ *                               again", so a 100-minute wait costs ~11 calls instead of a killed
+ *                               command and a restart. Right for any wait that might outlast the
+ *                               ceiling, which is any wait you cannot bound in advance.
  *
  * ─── It reports, it does not judge ─────────────────────────────────────────────────────────────────
  * A red check is an ANSWER, so the wait ends and the state is printed. Deciding what a failure means is

@@ -43,6 +43,32 @@ describe('auto-merge enabled (the BLOCKED-on-checks case)', () => {
     });
 });
 
+/**
+ * ══ THE OPTIONAL WATCH OFFER (issue #878) ══════════════════════════════════════════════════════════
+ *
+ * A subagent CAN end its turn and be re-invoked — 449 measured resumptions — so that is the cheapest
+ * wait and the offer must name it first. `gh pr checks --watch` also blocks and is never refused by
+ * `wait-spin-guard`; pretending it does not exist is what sent agents to `echo .` instead.
+ */
+describe('the optional watch offer names the cheap wait first, and both blocking ones', () => {
+    it('offers ending the turn before either blocking command', () => {
+        const out = render(QUEUED);
+        expect(out).toContain('END YOUR TURN');
+        expect(out.indexOf('END YOUR TURN')).toBeLessThan(out.indexOf('pnpm wp-await-checks'));
+    });
+
+    it('names --watch and says what separates it from wp-await-checks', () => {
+        const out = render(QUEUED);
+        expect(out).toContain('gh pr checks <n> --watch');
+        expect(out).toContain('540s');
+        expect(out).toContain('600s');
+    });
+
+    it('still refuses to teach polling or an echo keep-alive', () => {
+        expect(render(QUEUED)).toContain('never `echo` to keep a turn alive');
+    });
+});
+
 describe('mergeMode NONE — a human merges', () => {
     it('reads as success: the tooling owed only the PR', () => {
         const out = render(HUMAN);
