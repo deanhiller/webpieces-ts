@@ -110,7 +110,15 @@
         "framework-tag": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
+            "turnOffRuleWhileOnBranch": null,
+            "knownTypes": [
+                "browser",
+                "react",
+                "angular",
+                "node",
+                "express",
+                "react-native"
+            ]
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
@@ -248,7 +256,7 @@
         "pr-gate": {
             "mode": "ON",
             "buildCommandWhy": "--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work. The $(...) resolves because the gate runs with shell:true.",
-            "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
+            "buildCommand": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/react-native-compat.ts --validate-targets && pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
             "mergeModeWhy": "NONE while the L2 guard changes are under human review — the repo owner asked for merge to be OFF so these PRs can be rejected rather than landing themselves. Stage 3 still repairs squash_merge_commit_title=PR_TITLE / squash_merge_commit_message=PR_BODY (SquashSettingsEnforcer), so a human clicking Merge on GitHub now writes the SAME bytes the tooling would have: the PR title plus the compact risk/flags body. That is what makes NONE safe here, and it is why the previous AUTO rationale (a UI merge would land raw branch commit messages) no longer holds. Flip back to AUTO to let wp-finish-upsert-pr land PRs again.",
             "mergeMode": "NONE",
             "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b",
@@ -388,7 +396,7 @@
             "mergeInProgress": "pnpm wp-finish-upsert-pr"
         }
     },
-    "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike \u2014 see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling \u2014 `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
+    "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling — `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
     "excludePaths": [
         "repositories/**"
     ],

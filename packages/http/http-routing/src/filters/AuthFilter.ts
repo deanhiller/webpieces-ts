@@ -1,7 +1,7 @@
 import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, HttpRequest, PendingWireTrust, PendingTrustedValue, RawHttpRequest, RequestContext } from '@webpieces/core-context';
-import { AuthMode, EndpointNotFoundError, HttpBadRequestError, HttpUnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
+import { AuthMode, EndpointNotFoundError, BadRequestError, UnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
@@ -150,7 +150,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookAuthCallback is bound. ` +
                 `Bind one (options.bind(WEBHOOK_AUTH_CALLBACK).to(YourWebhookAuthCallback)) to enable webhook verification.`,
             );
-            throw new HttpUnauthorizedError('Webhook auth is not enabled on this server');
+            throw new UnauthorizedError('Webhook auth is not enabled on this server');
         }
         const request = RequestContext.getRequest();
         if (!this.hasRawBytes(request)) {
@@ -159,9 +159,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 `no raw bytes. Declare @Endpoint(path, 'external', { calledBy: '${name}', rawBody: true }); a ` +
                 `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
             );
-            throw new HttpUnauthorizedError('Webhook signature cannot be verified: no raw request was retained');
+            throw new UnauthorizedError('Webhook signature cannot be verified: no raw request was retained');
         }
-        // Throws HttpUnauthorizedError to deny. On success the vendor account the signature proved is
+        // Throws UnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
         const caller = await this.webhookAuthCallback.verifyWebhook(name, request);
         this.applyAuthenticatedCaller(caller);
@@ -199,7 +199,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 `Refusing @AuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
                 `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
             );
-            throw new HttpUnauthorizedError('API-key auth is not enabled on this server');
+            throw new UnauthorizedError('API-key auth is not enabled on this server');
         }
         const request = RequestContext.getRequest();
         if (!request) {
@@ -208,9 +208,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 `in scope, so the hook has no headers to read. A spec driving this route in-process must ` +
                 `publish an HttpRequest carrying the api-key headers.`,
             );
-            throw new HttpUnauthorizedError('API key cannot be verified: no inbound request was published');
+            throw new UnauthorizedError('API key cannot be verified: no inbound request was published');
         }
-        // Throws HttpUnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
+        // Throws UnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
         // the key against a second header (the organization the customer is acting for).
         const caller = await this.apiKeyHook.verifyApiKey(regime, request);
         this.applyAuthenticatedCaller(caller);
@@ -231,7 +231,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private rethrowDeferredBodyError(): void {
         const parseError = RequestContext.getRequest()?.raw?.bodyParseError;
         if (parseError) {
-            throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, parseError);
+            throw new BadRequestError('Request body is not valid JSON', undefined, undefined, parseError);
         }
     }
 
@@ -337,7 +337,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             `not authenticate its caller, and the credential ` +
             (vouched === undefined ? 'vouched for no such value' : 'derived a different value') + '.',
         );
-        throw new HttpUnauthorizedError(
+        throw new UnauthorizedError(
             `Header '${item.key.httpHeader}' cannot be supplied by the caller on this endpoint`,
         );
     }
@@ -376,20 +376,20 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private async enforceJwt(header: string | undefined, requirement: JwtRequirement): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
-            throw new HttpUnauthorizedError('Authentication required');
+            throw new UnauthorizedError('Authentication required');
         }
         if (!this.jwtHook) {
-            throw new HttpUnauthorizedError('User-JWT auth is not enabled on this server');
+            throw new UnauthorizedError('User-JWT auth is not enabled on this server');
         }
-        const caller = await this.jwtHook.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
+        const caller = await this.jwtHook.parseJwt(token); // AUTHENTICATE — throws UnauthorizedError if invalid
         this.applyAuthenticatedCaller(caller);
-        await this.jwtHook.authorizeJwt(caller, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
+        await this.jwtHook.authorizeJwt(caller, requirement); // AUTHORIZE — app policy; throws ForbiddenError to deny
     }
 
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
-            throw new HttpUnauthorizedError('Missing OIDC bearer token for @AuthOidc endpoint');
+            throw new UnauthorizedError('Missing OIDC bearer token for @AuthOidc endpoint');
         }
         // App-bound OidcHook overrides the caller policy; otherwise the framework default runs directly.
         if (this.oidcHook) {
@@ -403,7 +403,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
         const accepted = this.authConfig?.sharedSecrets[secretKey];
         if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
-            throw new HttpUnauthorizedError('Invalid shared secret for @AuthSharedSecret endpoint');
+            throw new UnauthorizedError('Invalid shared secret for @AuthSharedSecret endpoint');
         }
     }
 

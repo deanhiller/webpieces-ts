@@ -25,7 +25,7 @@ import { MethodMeta } from '../MethodMeta';
  * - [API-server-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
  * - [API-server-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
  *
- * User errors (HttpUnauthorizedError, HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
+ * User errors (UnauthorizedError, BadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective. LogApiCall re-throws the
  * error unchanged; the transport (express adapter, or another framework's adapter) maps
  * HttpError subclasses → HTTP status, so in-process and HTTP paths log identically.

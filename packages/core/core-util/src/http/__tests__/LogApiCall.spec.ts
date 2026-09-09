@@ -6,7 +6,7 @@ import { ApiCallContext } from '../ApiCallContext';
 import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
-import { HttpBadRequestError, HttpUserError, HttpNotFoundError } from '../errors';
+import { BadRequestError, UserError, NotFoundError } from '../errors';
 import { MaskSpec } from '../LogFieldMask';
 import { LogManager } from '../../logging/LogManager';
 import { HeaderRegistry } from '../HeaderRegistry';
@@ -98,9 +98,9 @@ describe('LogApiCall.execute — error result mapping', () => {
 
         await expect(
             ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => {
-                throw new HttpBadRequestError('bad input');
+                throw new BadRequestError('bad input');
             }),
-        ).rejects.toBeInstanceOf(HttpBadRequestError);
+        ).rejects.toBeInstanceOf(BadRequestError);
 
         expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'success' });
     });
@@ -110,21 +110,21 @@ describe('LogApiCall.execute — error result mapping', () => {
 
         await expect(
             ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
-                throw new HttpBadRequestError('server said no');
+                throw new BadRequestError('server said no');
             }),
-        ).rejects.toBeInstanceOf(HttpBadRequestError);
+        ).rejects.toBeInstanceOf(BadRequestError);
 
         expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
     });
 
-    it('HttpUserError (266) → response:success on BOTH sides', async () => {
+    it('UserError (266) → response:success on BOTH sides', async () => {
         for (const side of ['server', 'client'] as const) {
             const ctx = new RecordingApiCallContext();
             await expect(
                 ctx.logApiCall.execute(info(side), { q: 'x' }, async () => {
-                    throw new HttpUserError('special');
+                    throw new UserError('special');
                 }),
-            ).rejects.toBeInstanceOf(HttpUserError);
+            ).rejects.toBeInstanceOf(UserError);
             expect(ctx.values().at(-1)?.result).toBe('success');
         }
     });
@@ -152,16 +152,16 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
         ClientRegistry.addFailureClassifier('SaveApi', {
-            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+            isFailure: (error: Error) => (error instanceof NotFoundError ? false : undefined),
         });
 
         const ctx = new RecordingApiCallContext();
 
         await expect(
             ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
-                throw new HttpNotFoundError('doc missing');
+                throw new NotFoundError('doc missing');
             }),
-        ).rejects.toBeInstanceOf(HttpNotFoundError);
+        ).rejects.toBeInstanceOf(NotFoundError);
 
         // Without the classifier this client 4xx would be 'failure'; the classifier makes it 'success'.
         expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'success' });
@@ -169,16 +169,16 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
         ClientRegistry.addFailureClassifier('SaveApi', {
-            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+            isFailure: (error: Error) => (error instanceof NotFoundError ? false : undefined),
         });
 
         const ctx = new RecordingApiCallContext();
 
         await expect(
             ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
-                throw new HttpBadRequestError('server said no');
+                throw new BadRequestError('server said no');
             }),
-        ).rejects.toBeInstanceOf(HttpBadRequestError);
+        ).rejects.toBeInstanceOf(BadRequestError);
 
         expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
     });
@@ -335,13 +335,13 @@ describe('LogApiCall.isUserError (side-dependent)', () => {
     // isUserError never touches the context; any instance answers identically.
     const LogApiCall = new LogApiCallImpl(new RecordingApiCallContext());
 
-    it('HttpUserError is a non-failure on both sides', () => {
-        expect(LogApiCall.isUserError(new HttpUserError('x'), /*server*/ true)).toBe(true);
-        expect(LogApiCall.isUserError(new HttpUserError('x'), /*server*/ false)).toBe(true);
+    it('UserError is a non-failure on both sides', () => {
+        expect(LogApiCall.isUserError(new UserError('x'), /*server*/ true)).toBe(true);
+        expect(LogApiCall.isUserError(new UserError('x'), /*server*/ false)).toBe(true);
     });
     it('a 4xx is a non-failure for the SERVER but a failure for the CLIENT', () => {
-        expect(LogApiCall.isUserError(new HttpBadRequestError('x'), /*server*/ true)).toBe(true);
-        expect(LogApiCall.isUserError(new HttpBadRequestError('x'), /*server*/ false)).toBe(false);
+        expect(LogApiCall.isUserError(new BadRequestError('x'), /*server*/ true)).toBe(true);
+        expect(LogApiCall.isUserError(new BadRequestError('x'), /*server*/ false)).toBe(false);
     });
     it('a plain server error is a failure on both sides', () => {
         expect(LogApiCall.isUserError(new Error('x'), true)).toBe(false);

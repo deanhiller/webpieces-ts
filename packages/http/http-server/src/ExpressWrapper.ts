@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import {
     ClientRegistry,
-    HttpBadRequestError,
+    BadRequestError,
     HttpHeader,
     HttpResponseDto,
     toError,
@@ -49,7 +49,7 @@ class ParsedBody {
 export class ExpressWrapper {
     /**
      * Decides what an outside caller is allowed to see of a thrown {@link HttpError}. Stateless —
-     * one instance per wrapper is fine, and the class doc there is where the "only HttpUserError's
+     * one instance per wrapper is fine, and the class doc there is where the "only UserError's
      * message goes on the wire" rule is stated.
      */
     private readonly errorWireMapper = new HttpErrorWireMapper();
@@ -204,7 +204,7 @@ export class ExpressWrapper {
         } catch (err: unknown) {
             const error = toError(err);
             if (!this.rawBody) {
-                throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, error);
+                throw new BadRequestError('Request body is not valid JSON', undefined, undefined, error);
             }
             return new ParsedBody({}, undefined, error);
         }
@@ -296,7 +296,7 @@ export class ExpressWrapper {
                 if (size > this.maxBodyBytes) {
                     chunks = [];
                     req.destroy();
-                    reject(new HttpBadRequestError(
+                    reject(new BadRequestError(
                         `Request body exceeds the ${this.maxBodyBytes} byte limit`,
                     ));
                     return;
@@ -322,7 +322,7 @@ export class ExpressWrapper {
      * Two sources, in this order:
      *   1. the app's {@link ErrorTranslators}, if it claims the error — it owns the ENTIRE response;
      *   2. else {@link HttpErrorWireMapper.toResponse}, the webpieces default, which maps every
-     *      `HttpError` subclass to its status and a CALLER-SAFE body (only `HttpUserError`'s message
+     *      `HttpError` subclass to its status and a CALLER-SAFE body (only `UserError`'s message
      *      is written for a human, so only it goes out verbatim; everything else sends the generic
      *      reason phrase and logs the real one) and turns anything else into a generic 500.
      *

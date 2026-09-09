@@ -41,6 +41,10 @@ export default defineConfig({
         alias: {
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),
             '@webpieces/core-mock': path.resolve(__dirname, 'packages/core/core-mock/src/index.ts'),
+            '@webpieces/core-util/errors': path.resolve(__dirname, 'packages/core/core-util/src/errors/index.ts'),
+            '@webpieces/core-util/ipc': path.resolve(__dirname, 'packages/core/core-util/src/ipc/index.ts'),
+            '@webpieces/ipc-client': path.resolve(__dirname, 'packages/core/ipc-client/src/index.ts'),
+            '@webpieces/ipc-server': path.resolve(__dirname, 'packages/core/ipc-server/src/index.ts'),
             '@webpieces/core-util': path.resolve(__dirname, 'packages/core/core-util/src/index.ts'),
             '@webpieces/wp-logging': path.resolve(__dirname, 'packages/core/core-util/src/index.ts'),
             '@webpieces/http-api': path.resolve(__dirname, 'packages/core/core-util/src/index.ts'),

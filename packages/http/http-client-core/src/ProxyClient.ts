@@ -410,7 +410,8 @@ export abstract class ProxyClient {
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
     private async readResponse(response: Response, route: RouteMetadata): Promise<unknown> {
         const callId = `${this.apiName}.${route.methodName}`;
-        if (response.ok) {
+        // 266 is protocol success, but its body represents an expected user exception.
+        if (response.ok && response.status !== 266) {
             if (!this.bodyReader.isJson(response)) {
                 throw new Error(this.bodyReader.describeForeignBody(response, callId, await response.text()));
             }

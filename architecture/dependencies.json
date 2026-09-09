@@ -259,7 +259,7 @@
         },
         "core-util": {
             "level": 0,
-            "framework": ["browser","node"],
+            "framework": ["browser","node","react-native"],
             "role": "lib",
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
@@ -338,6 +338,26 @@
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "dependsOn": [
                 "http-routing"
+            ]
+        },
+        "ipc-client": {
+            "level": 2,
+            "framework": ["browser","node","react-native"],
+            "role": "lib",
+            "shortDescription": "Creates portable typed IPC clients from shared API metadata. It validates request and reply DTOs, reconstructs canonical failures, and preserves per-call logging and correlation across browser, React Native, and Node.",
+            "responsibilitiesFile": "packages/core/ipc-client/responsibilities.md",
+            "dependsOn": [
+                "ipc-server"
+            ]
+        },
+        "ipc-server": {
+            "level": 1,
+            "framework": ["browser","node","react-native"],
+            "role": "lib",
+            "shortDescription": "Hosts typed IPC receiver implementations behind one shared connection dispatcher. It validates DTOs, invokes registered methods with scoped context, logs outcomes, and encodes canonical failure replies for generated clients.",
+            "responsibilitiesFile": "packages/core/ipc-server/responsibilities.md",
+            "dependsOn": [
+                "core-util"
             ]
         },
         "legacy-server": {

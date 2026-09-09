@@ -22,8 +22,8 @@ const SNIPPET_CHARS = 200;
  *
  * The rule, and the whole of it: **only parse a body that CLAIMS to be JSON.** Then
  * - a non-JSON error body becomes a synthesized {@link ProtocolError} that `ClientErrorTranslator`
- *   maps by STATUS — 502 → `HttpBadGatewayError`, 503 → `HttpServiceUnavailableError`, 504 →
- *   `HttpGatewayTimeoutError` — so a caller can decide "the server is waking, retry";
+ *   maps by STATUS — 502 → `BadGatewayError`, 503 → `ServiceUnavailableError`, 504 →
+ *   `GatewayTimeoutError` — so a caller can decide "the server is waking, retry";
  * - a `SyntaxError` from `JSON.parse` goes back to meaning what it should: a response that SAID it
  *   was JSON and was malformed. That is a real bug, and it is exactly the signal the old
  *   parse-everything path destroyed.

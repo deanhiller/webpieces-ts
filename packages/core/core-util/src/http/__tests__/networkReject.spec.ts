@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NetworkRejectClassifier } from '../networkReject';
-import { OfflineError, HttpError, HttpInternalServerError } from '../errors';
+import { OfflineError, HttpError, InternalError } from '../errors';
 
 const classifier = new NetworkRejectClassifier();
 const isNetworkRejectError = (error: Error): boolean => classifier.isNetworkRejectError(error);
@@ -99,7 +99,7 @@ describe('toNetworkError', () => {
     });
 
     it('passes a genuine bug through by identity (type/stack preserved)', () => {
-        const bug = new HttpInternalServerError('boom');
+        const bug = new InternalError('boom');
         expect(toNetworkError(bug, 'https://x/y')).toBe(bug);
     });
 });

@@ -3,18 +3,18 @@ import {
     ClientRegistry,
     HttpResponseDto,
     HttpError,
-    HttpBadRequestError,
-    HttpUserError,
-    HttpVendorError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpNotFoundError,
-    HttpTimeoutError,
-    HttpInternalServerError,
-    HttpBadGatewayError,
-    HttpServiceUnavailableError,
-    HttpGatewayTimeoutError,
-    HttpTooManyRequestsError,
+    BadRequestError,
+    UserError,
+    VendorError,
+    UnauthorizedError,
+    ForbiddenError,
+    NotFoundError,
+    RequestTimeoutError,
+    InternalError,
+    BadGatewayError,
+    ServiceUnavailableError,
+    GatewayTimeoutError,
+    TooManyRequestsError,
 } from '@webpieces/core-util';
 import { TranslatedFailure } from './TranslatedFailure';
 
@@ -36,7 +36,7 @@ import { TranslatedFailure } from './TranslatedFailure';
  * client receives typed exceptions.
  *
  * The symmetry is in the TYPE and the structured fields, NOT in the prose: the server sends the real
- * `Error.message` for `HttpUserError` alone and a generic reason phrase for everything else. See
+ * `Error.message` for `UserError` alone and a generic reason phrase for everything else. See
  * {@link builtInError} and, on the server, `HttpErrorWireMapper`.
  *
  * It returns a {@link TranslatedFailure} rather than a bare `Error` because the mapping is only HALF
@@ -76,18 +76,18 @@ export class ClientErrorTranslator {
 
     /**
      * The built-in status → error mapping (symmetric with the server's ExpressWrapper.handleError()):
-     * - 400 → HttpBadRequestError (with field, guiAlertMessage)
-     * - 266 → HttpUserError (with errorCode) - 2xx code for user validation
-     * - 401 → HttpUnauthorizedError (with subType)
-     * - 403 → HttpForbiddenError
-     * - 404 → HttpNotFoundError
-     * - 408 → HttpTimeoutError
-     * - 429 → HttpTooManyRequestsError
-     * - 500 → HttpInternalServerError
-     * - 502 → HttpBadGatewayError
-     * - 503 → HttpServiceUnavailableError
-     * - 504 → HttpGatewayTimeoutError
-     * - 598 → HttpVendorError (with waitSeconds) - custom status code
+     * - 400 → BadRequestError (with field, guiAlertMessage)
+     * - 266 → UserError (with errorCode) - 2xx code for user validation
+     * - 401 → UnauthorizedError (with subType)
+     * - 403 → ForbiddenError
+     * - 404 → NotFoundError
+     * - 408 → RequestTimeoutError
+     * - 429 → TooManyRequestsError
+     * - 500 → InternalError
+     * - 502 → BadGatewayError
+     * - 503 → ServiceUnavailableError
+     * - 504 → GatewayTimeoutError
+     * - 598 → VendorError (with waitSeconds) - custom status code
      * - other → generic HttpError
      *
      * # What `message` means on THIS side of the wire
@@ -96,7 +96,7 @@ export class ClientErrorTranslator {
      * **266** a webpieces server deliberately sends only the GENERIC reason phrase — 'Not Found',
      * 'Internal Server Error', … See `HttpErrorWireMapper` (http-server) for why: `Error.message` is
      * an operator-facing field that routinely quotes internal detail, so it stays in the server's log
-     * and never reaches a caller. `HttpUserError` (266) is the one type whose message was WRITTEN for
+     * and never reaches a caller. `UserError` (266) is the one type whose message was WRITTEN for
      * a human to read, and it arrives verbatim.
      *
      * So: branch on the TYPE, on `subType`, on `errorCode`, or on `guiAlertMessage` — never on the
@@ -120,26 +120,26 @@ export class ClientErrorTranslator {
 
         switch (statusCode) {
             case 400:
-                return new HttpBadRequestError(
+                return new BadRequestError(
                     message,
                     protocolError.field,
                     protocolError.guiAlertMessage,
                 );
 
-            case 266: // HttpUserError - 2xx code for user validation errors
-                return new HttpUserError(message, protocolError.errorCode);
+            case 266: // UserError - 2xx code for user validation errors
+                return new UserError(message, protocolError.errorCode);
 
             case 401:
-                return new HttpUnauthorizedError(message, subType);
+                return new UnauthorizedError(message, subType);
 
             case 403:
-                return new HttpForbiddenError(message);
+                return new ForbiddenError(message);
 
             case 404:
-                return new HttpNotFoundError(message);
+                return new NotFoundError(message);
 
             case 408:
-                return new HttpTimeoutError(message);
+                return new RequestTimeoutError(message);
 
             case 429:
                 // The server has always been able to throw this (HttpErrorWireMapper sends
@@ -148,22 +148,22 @@ export class ClientErrorTranslator {
                 // this ladder exists to replace. That gap bites harder now that `message` is a
                 // constant per status: branching on the TYPE is the only thing left, so every status
                 // the server can emit needs one.
-                return new HttpTooManyRequestsError(message);
+                return new TooManyRequestsError(message);
 
             case 500:
-                return new HttpInternalServerError(message);
+                return new InternalError(message);
 
             case 502:
-                return new HttpBadGatewayError(message);
+                return new BadGatewayError(message);
 
             case 503:
-                return new HttpServiceUnavailableError(message);
+                return new ServiceUnavailableError(message);
 
             case 504:
-                return new HttpGatewayTimeoutError(message);
+                return new GatewayTimeoutError(message);
 
-            case 598: // HttpVendorError - custom status code for vendor/external service errors
-                return new HttpVendorError(message, protocolError.waitSeconds);
+            case 598: // VendorError - custom status code for vendor/external service errors
+                return new VendorError(message, protocolError.waitSeconds);
 
             default:
                 // Unknown status code and no app translation claimed it: still a real HttpError (so
@@ -189,12 +189,14 @@ export class ClientErrorTranslator {
     // webpieces-disable no-any-unknown -- HttpResponseDto.body is app-owned; this narrows it back to the shape the BUILT-IN ladder reads
     // webpieces-disable no-function-outside-class -- private helper of the statics above; same reason
     private static asProtocolError(body: unknown): ProtocolError {
-        if (body instanceof ProtocolError) {
-            return body;
-        }
         const parsed = new ProtocolError();
         if (typeof body === 'object' && body !== null) {
-            Object.assign(parsed, body);
+            for (const key of ['message', 'subType', 'field', 'guiAlertMessage', 'errorCode'] as const) {
+                const value = Object.getOwnPropertyDescriptor(body, key)?.value;
+                if (typeof value === 'string') parsed[key] = value.slice(0, 4096);
+            }
+            const wait = Object.getOwnPropertyDescriptor(body, 'waitSeconds')?.value;
+            if (typeof wait === 'number' && Number.isFinite(wait) && wait >= 0) parsed.waitSeconds = Math.min(wait, 86400);
         }
         return parsed;
     }

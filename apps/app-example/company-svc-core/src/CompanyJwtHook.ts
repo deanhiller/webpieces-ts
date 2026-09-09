@@ -1,7 +1,7 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
 import { JwtHook, AuthenticatedCaller } from '@webpieces/http-routing';
-import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement, toError, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { ContextTuple, UnauthorizedError, ForbiddenError, JwtRequirement, toError, WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
  * CompanyJwtHook - the company's user-JWT mechanism, bound to the framework {@link JwtHook} so every
@@ -25,7 +25,7 @@ export class CompanyJwtHook extends JwtHook {
         const claims = this.decode(token);
         const subject = claims['sub'] ?? claims['userId'];
         if (subject === undefined || subject === null || subject === '') {
-            throw new HttpUnauthorizedError('JWT has no subject (sub/userId) claim');
+            throw new UnauthorizedError('JWT has no subject (sub/userId) claim');
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
@@ -41,7 +41,7 @@ export class CompanyJwtHook extends JwtHook {
     override async authorizeJwt(values: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
         await super.authorizeJwt(values, requirement); // roles any-of
         if (requirement['inOrg'] === true && !values.claims['orgId']) {
-            throw new HttpForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');
+            throw new ForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');
         }
     }
 
@@ -57,7 +57,7 @@ export class CompanyJwtHook extends JwtHook {
             return {};
         } catch (err: unknown) {
             const error = toError(err);
-            throw new HttpUnauthorizedError('Invalid JWT token', undefined, error);
+            throw new UnauthorizedError('Invalid JWT token', undefined, error);
         }
     }
 }

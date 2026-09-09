@@ -29,19 +29,22 @@ update_package() {
   # Update version
   jq --arg ver "$FULL_VERSION" '.version=$ver' "$pkg_file" > "$tmp_file"
 
-  # Update @webpieces/* dependencies to match (handles both "workspace:*" and version strings)
+  # Source and dist manifests keep devDependencies too. npm publish does not translate
+  # workspace: specifiers, so stamp BOTH sections without touching third-party versions.
   jq --arg ver "$FULL_VERSION" '
-    if .dependencies then
-      .dependencies |= with_entries(
-        if .key | startswith("@webpieces/") then
-          .value = $ver
-        else
-          .
-        end
-      )
-    else
-      .
-    end
+    reduce ["dependencies", "devDependencies"][] as $section (. ;
+      if .[$section] then
+        .[$section] |= with_entries(
+          if .key | startswith("@webpieces/") then
+            .value = $ver
+          else
+            .
+          end
+        )
+      else
+        .
+      end
+    )
   ' "$tmp_file" > "$tmp_file.2"
 
   # Move back

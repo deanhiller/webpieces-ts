@@ -1,0 +1,30 @@
+{
+    "name": "@webpieces/ipc-client",
+    "version": "0.0.0-dev",
+    "description": "Portable typed IPC client for browser, React Native and Node",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        }
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/core/ipc-client"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*"
+    },
+    "devDependencies": {
+        "@webpieces/ipc-server": "workspace:*"
+    }
+}

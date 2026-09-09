@@ -1,16 +1,17 @@
 import {
     ProtocolError,
-    HttpError,
-    HttpBadRequestError,
-    HttpVendorError,
-    HttpUserError,
-    HttpNotFoundError,
-    HttpTimeoutError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpInternalServerError,
-    HttpBadGatewayError,
-    HttpGatewayTimeoutError,
+    ApiError,
+    HttpErrorStatus,
+    BadRequestError,
+    VendorError,
+    UserError,
+    NotFoundError,
+    RequestTimeoutError,
+    UnauthorizedError,
+    ForbiddenError,
+    InternalError,
+    BadGatewayError,
+    GatewayTimeoutError,
     HttpResponseDto,
     HttpResponseStatus,
     LogManager,
@@ -25,37 +26,37 @@ const log = LogManager.getLogger('HttpErrorWireMapper');
  * Turns a thrown {@link HttpError} into the {@link ProtocolError} that goes on the wire — and, just
  * as importantly, decides what does NOT go on the wire.
  *
- * # The rule: only {@link HttpUserError}'s `message` is caller-facing
+ * # The rule: only {@link UserError}'s `message` is caller-facing
  *
  * `Error.message` is an OPERATOR-facing field everywhere else in this framework. It is written for
  * whoever reads the logs, and it routinely quotes internal detail: a downstream service url, an HTTP
  * method and content-type, a body snippet, a table name, an internal id. `http-client-node` builds
  * exactly such a message when a downstream dependency answers a 4xx — `ResponseBodyReader`'s
  * foreign-body description names the url it called and embeds the html it got back — and that error
- * arrives here as an `HttpInternalServerError`. Copying `error.message` onto the response body handed
+ * arrives here as an `InternalError`. Copying `error.message` onto the response body handed
  * every one of those strings to an external, possibly partner-facing consumer.
  *
- * {@link HttpUserError} is the ONE type whose message was written for a human to read. That is what
+ * {@link UserError} is the ONE type whose message was written for a human to read. That is what
  * it is FOR: it is deliberately a 266 (a 2xx code, so it is not lumped in with failures), it carries
  * an `errorCode` the caller branches on, and an app throws it on purpose to say something like
  * "Email already exists". Its message goes out verbatim.
  *
  * Every other subclass sends a GENERIC, status-appropriate message (see {@link genericMessage}); the
  * real message goes to the LOG only. The behaviour used to be exactly backwards — an unexpected crash
- * was safely generic while a DELIBERATE `HttpInternalServerError` shipped its full message outward.
+ * was safely generic while a DELIBERATE `InternalError` shipped its full message outward.
  *
  * # What still goes out, and why
  *
- * - `errorCode` ({@link HttpUserError}) and `waitSeconds` ({@link HttpVendorError}) are structured
+ * - `errorCode` ({@link UserError}) and `waitSeconds` ({@link VendorError}) are structured
  *   CONTRACT data the client is meant to branch on, not prose. They carry no internal detail.
- * - `field` and `guiAlertMessage` ({@link HttpBadRequestError}) stay. `guiMessage` exists precisely
+ * - `field` and `guiAlertMessage` ({@link BadRequestError}) stay. `guiMessage` exists precisely
  *   to be the human-safe half of a bad request — its existence is the admission that `message` is the
  *   operator-facing half — and a form field name is not internal detail. The `message` itself is
  *   genericised like every other non-user error.
  * - `subType` stays. It is NOT derived from a class name: it is an explicit constructor argument an
  *   app passes on purpose (`WRONG_LOGIN`, `NOT_APPROVED`, `EMAIL_NOT_CONFIRMED`, … from
  *   `core-util/src/http/errors.ts`), which makes it structured contract data of the same kind as
- *   `errorCode`. `ClientErrorTranslator` reads it back when reconstructing `HttpUnauthorizedError`
+ *   `errorCode`. `ClientErrorTranslator` reads it back when reconstructing `UnauthorizedError`
  *   and the generic `HttpError`, so dropping it would break that reconstruction for the one case —
  *   login failure reasons — where the caller genuinely has to branch on WHY.
  * - `name` is GONE from this ladder. Nothing in `ClientErrorTranslator` ever read it, so it is not
@@ -114,11 +115,11 @@ export class HttpErrorWireMapper {
      * decision, and the caller who picked it would then hand-wrap a status and headers around the
      * body, re-implementing exactly what `toResponse` exists to hand them.
      */
-    private toWire(error: HttpError): ProtocolError {
+    private toWire(error: ApiError): ProtocolError {
         const protocolError = new ProtocolError();
 
         // The ONE type whose message was written for a human to read — see the class doc.
-        if (error instanceof HttpUserError) {
+        if (error instanceof UserError) {
             log.info(`User Error: ${this.operatorDetail(error)}`);
             protocolError.message = error.message;
             protocolError.subType = error.subType;
@@ -126,7 +127,7 @@ export class HttpErrorWireMapper {
             return protocolError;
         }
 
-        protocolError.message = this.genericMessage(error.code);
+        protocolError.message = this.genericMessage(HttpErrorStatus.code(error));
         protocolError.subType = error.subType;
         this.logOperatorDetail(error);
         this.addContractFields(error, protocolError);
@@ -151,9 +152,9 @@ export class HttpErrorWireMapper {
      */
     // webpieces-disable no-any-unknown -- a thrown value is genuinely unknown until narrowed below
     public toResponse(error: unknown): HttpResponseDto {
-        if (error instanceof HttpError) {
+        if (error instanceof ApiError) {
             return new HttpResponseDto(
-                new HttpResponseStatus(error.code, this.genericMessage(error.code)),
+                new HttpResponseStatus(HttpErrorStatus.code(error), this.genericMessage(HttpErrorStatus.code(error))),
                 [],
                 this.toWire(error),
             );
@@ -184,8 +185,8 @@ export class HttpErrorWireMapper {
      * visible ONLY on the wire — removing it from the body without adding it to the log would lose it
      * entirely.
      */
-    private operatorDetail(error: HttpError): string {
-        const cause = error.httpCause === undefined ? '' : ` cause=${error.httpCause.message}`;
+    private operatorDetail(error: ApiError): string {
+        const cause = error.cause instanceof Error ? ` cause=${error.cause.message}` : '';
         return `[name=${error.name} subType=${error.subType ?? 'none'}] ${error.message}${cause}`;
     }
 
@@ -193,25 +194,25 @@ export class HttpErrorWireMapper {
      * Log at the level that matches who is at fault: `info` where the CALLER made a mistake (a 4xx is
      * the server behaving correctly), `error` where the server or a dependency is broken.
      */
-    private logOperatorDetail(error: HttpError): void {
+    private logOperatorDetail(error: ApiError): void {
         const detail = this.operatorDetail(error);
-        if (error instanceof HttpBadRequestError) {
+        if (error instanceof BadRequestError) {
             log.info(`Bad Request: ${detail}`);
-        } else if (error instanceof HttpNotFoundError) {
+        } else if (error instanceof NotFoundError) {
             log.info(`Not Found: ${detail}`);
-        } else if (error instanceof HttpTimeoutError) {
+        } else if (error instanceof RequestTimeoutError) {
             log.error(`Timeout Error: ${detail}`);
-        } else if (error instanceof HttpVendorError) {
+        } else if (error instanceof VendorError) {
             log.error(`Vendor Error: ${detail}`);
-        } else if (error instanceof HttpUnauthorizedError) {
+        } else if (error instanceof UnauthorizedError) {
             log.info(`Unauthorized: ${detail}`);
-        } else if (error instanceof HttpForbiddenError) {
+        } else if (error instanceof ForbiddenError) {
             log.info(`Forbidden: ${detail}`);
-        } else if (error instanceof HttpInternalServerError) {
+        } else if (error instanceof InternalError) {
             log.error(`Internal Server Error: ${detail}`);
-        } else if (error instanceof HttpBadGatewayError) {
+        } else if (error instanceof BadGatewayError) {
             log.error(`Bad Gateway: ${detail}`);
-        } else if (error instanceof HttpGatewayTimeoutError) {
+        } else if (error instanceof GatewayTimeoutError) {
             log.error(`Gateway Timeout: ${detail}`);
         } else {
             log.info(`Generic HttpError: ${detail}`);
@@ -222,13 +223,13 @@ export class HttpErrorWireMapper {
      * The structured, caller-facing fields — the ones a client BRANCHES on rather than displays as
      * server prose. MUST match ClientErrorTranslator's built-in status mapping.
      */
-    private addContractFields(error: HttpError, protocolError: ProtocolError): void {
-        if (error instanceof HttpBadRequestError) {
+    private addContractFields(error: ApiError, protocolError: ProtocolError): void {
+        if (error instanceof BadRequestError) {
             protocolError.field = error.field;
             // The human-safe half of a bad request. `error.message` is the operator half and is NOT
             // sent — the generic 'Bad Request' went out above instead.
             protocolError.guiAlertMessage = error.guiMessage;
-        } else if (error instanceof HttpVendorError) {
+        } else if (error instanceof VendorError) {
             protocolError.waitSeconds = error.waitSeconds;
         }
     }

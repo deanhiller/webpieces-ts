@@ -98,6 +98,8 @@ ORDER=(
     # because npm never enforces the order, it just leaves a window where core-context resolves a
     # core-util that is not on the registry yet.
     packages/core/core-util
+    packages/core/ipc-client
+    packages/core/ipc-server
     packages/core/core-context
     # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm
     # trusted publishing (OIDC + --provenance) cannot CREATE a brand-new scoped package — only

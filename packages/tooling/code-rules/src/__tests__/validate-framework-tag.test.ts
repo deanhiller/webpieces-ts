@@ -11,7 +11,7 @@ import { findUntaggedProjects } from '../validate-framework-tag';
 import { findProjectsWithInvalidTagValues } from '../tag-rule';
 
 /** The atomic env values the framework-tag rule allows (mirrors DEFAULT_KNOWN_TYPES). */
-const KNOWN_FRAMEWORKS = ['browser', 'react', 'angular', 'node', 'express'];
+const KNOWN_FRAMEWORKS = ['browser', 'react', 'angular', 'node', 'express', 'react-native'];
 
 let root: string;
 
