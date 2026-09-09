@@ -415,7 +415,7 @@ export function AuthApiKey(regime: string, credentials: ApiKeyCredentials): Clas
  *
  * WHY IT IS AN AUTH MODE AND NOT A ROUTE-MODULE `if`. Apps hand-rolled this in TWO places kept in
  * sync by a comment: a route module that registered the route only locally, PLUS a
- * `if (env !== 'local') throw new HttpForbiddenError(...)` at the top of the handler. Neither half
+ * `if (env !== 'local') throw new ForbiddenError(...)` at the top of the handler. Neither half
  * was visible on the CONTRACT, so nothing reading the api — a human, a generated client, or an
  * agent — could tell this endpoint from a `@Public` one. Both halves are the framework's job now,
  * driven by this ONE declaration on the contract, which is where every other "who may call this"

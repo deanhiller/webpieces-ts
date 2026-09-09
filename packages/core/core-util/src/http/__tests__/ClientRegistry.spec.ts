@@ -4,7 +4,7 @@ import { ErrorTranslators } from '../ErrorTranslators';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
 import { FailureClassifier } from '../FailureClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
-import { ProtocolError, HttpError, HttpNotFoundError, HttpBadRequestError } from '../errors';
+import { ProtocolError, HttpError, NotFoundError, BadRequestError } from '../errors';
 
 describe('ClientRegistry', () => {
     beforeEach(() => {
@@ -226,22 +226,22 @@ describe('ClientRegistry failure classification', () => {
 
     it('with nothing registered, uses the webpieces built-in (server 4xx = non-failure, client = failure)', () => {
         // server rejecting the caller's bad request is a NON-failure...
-        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), server('SaveApi'))).toBe(false);
+        expect(ClientRegistry.classifyFailure(new BadRequestError('bad'), server('SaveApi'))).toBe(false);
         // ...but a client RECEIVING that same 4xx failed its call.
-        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), client('SaveApi'))).toBe(true);
+        expect(ClientRegistry.classifyFailure(new BadRequestError('bad'), client('SaveApi'))).toBe(true);
     });
 
     it('a per-apiClass classifier overrides the default for THAT client only', () => {
         // Firestore: a not-found miss is EXPECTED (non-failure); other errors defer to the default.
         const firestore: FailureClassifier = {
-            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+            isFailure: (error: Error) => (error instanceof NotFoundError ? false : undefined),
         };
         ClientRegistry.addFailureClassifier('FirestoreAdminClient', firestore);
 
         // A 404 on the firestore client is now a NON-failure...
-        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('FirestoreAdminClient'))).toBe(false);
+        expect(ClientRegistry.classifyFailure(new NotFoundError('miss'), client('FirestoreAdminClient'))).toBe(false);
         // ...but a 404 on a DIFFERENT client still hits the built-in (client → failure).
-        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('SaveApi'))).toBe(true);
+        expect(ClientRegistry.classifyFailure(new NotFoundError('miss'), client('SaveApi'))).toBe(true);
         // ...and a non-404 on firestore DEFERS to the built-in (client → failure).
         expect(ClientRegistry.classifyFailure(new Error('boom'), client('FirestoreAdminClient'))).toBe(true);
     });

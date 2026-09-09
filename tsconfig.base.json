@@ -11,7 +11,9 @@
         "importHelpers": true,
         "target": "ES2022",
         "module": "commonjs",
-        "lib": ["ES2022"],
+        "lib": [
+            "ES2022"
+        ],
         "skipLibCheck": true,
         "skipDefaultLibCheck": true,
         "strict": true,
@@ -19,26 +21,79 @@
         "resolveJsonModule": true,
         "baseUrl": ".",
         "paths": {
-            "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
-            "@webpieces/core-mock": ["packages/core/core-mock/src/index.ts"],
-            "@webpieces/core-util": ["packages/core/core-util/src/index.ts"],
-            "@webpieces/http-routing": ["packages/http/http-routing/src/index.ts"],
-            "@webpieces/http-server": ["packages/http/http-server/src/index.ts"],
-            "@webpieces/http-client-core": ["packages/http/http-client-core/src/index.ts"],
-            "@webpieces/http-client-browser": ["packages/http/http-client-browser/src/index.ts"],
-            "@webpieces/http-client-node": ["packages/http/http-client-node/src/index.ts"],
-            "@webpieces/gcp-identity": ["packages/cloud/gcp-identity/src/index.ts"],
-            "@webpieces/cloudtasks-client": ["packages/cloud/cloudtasks-client/src/index.ts"],
-            "@webpieces/rules-config": ["packages/tooling/rules-config/src/index.ts"],
-            "@webpieces/ai-hook-rules": ["packages/tooling/ai-hook-rules/src/index.ts"],
-            "@webpieces/eslint-rules": ["packages/tooling/eslint-rules/src/index.ts"],
-            "@webpieces/code-rules": ["packages/tooling/code-rules/src/index.ts"],
-            "@webpieces/nx-webpieces-rules": ["packages/tooling/nx-webpieces-rules/src/index.ts"],
-            "@webpieces/client-server-api": ["apps/app-example/client-server-api/src/index.ts"],
-            "@webpieces/server2-api": ["apps/app-example/server2-api/src/index.ts"],
-            "@webpieces/company-core": ["apps/app-example/company-core/src/index.ts"],
-            "@webpieces/company-svc-core": ["apps/app-example/company-svc-core/src/index.ts"]
+            "@webpieces/core-context": [
+                "packages/core/core-context/src/index.ts"
+            ],
+            "@webpieces/core-mock": [
+                "packages/core/core-mock/src/index.ts"
+            ],
+            "@webpieces/core-util": [
+                "packages/core/core-util/src/index.ts"
+            ],
+            "@webpieces/http-routing": [
+                "packages/http/http-routing/src/index.ts"
+            ],
+            "@webpieces/http-server": [
+                "packages/http/http-server/src/index.ts"
+            ],
+            "@webpieces/http-client-core": [
+                "packages/http/http-client-core/src/index.ts"
+            ],
+            "@webpieces/http-client-browser": [
+                "packages/http/http-client-browser/src/index.ts"
+            ],
+            "@webpieces/http-client-node": [
+                "packages/http/http-client-node/src/index.ts"
+            ],
+            "@webpieces/gcp-identity": [
+                "packages/cloud/gcp-identity/src/index.ts"
+            ],
+            "@webpieces/cloudtasks-client": [
+                "packages/cloud/cloudtasks-client/src/index.ts"
+            ],
+            "@webpieces/rules-config": [
+                "packages/tooling/rules-config/src/index.ts"
+            ],
+            "@webpieces/ai-hook-rules": [
+                "packages/tooling/ai-hook-rules/src/index.ts"
+            ],
+            "@webpieces/eslint-rules": [
+                "packages/tooling/eslint-rules/src/index.ts"
+            ],
+            "@webpieces/code-rules": [
+                "packages/tooling/code-rules/src/index.ts"
+            ],
+            "@webpieces/nx-webpieces-rules": [
+                "packages/tooling/nx-webpieces-rules/src/index.ts"
+            ],
+            "@webpieces/client-server-api": [
+                "apps/app-example/client-server-api/src/index.ts"
+            ],
+            "@webpieces/server2-api": [
+                "apps/app-example/server2-api/src/index.ts"
+            ],
+            "@webpieces/company-core": [
+                "apps/app-example/company-core/src/index.ts"
+            ],
+            "@webpieces/company-svc-core": [
+                "apps/app-example/company-svc-core/src/index.ts"
+            ],
+            "@webpieces/ipc-client": [
+                "packages/core/ipc-client/src/index.ts"
+            ],
+            "@webpieces/ipc-server": [
+                "packages/core/ipc-server/src/index.ts"
+            ],
+            "@webpieces/core-util/errors": [
+                "packages/core/core-util/src/errors/index.ts"
+            ],
+            "@webpieces/core-util/ipc": [
+                "packages/core/core-util/src/ipc/index.ts"
+            ]
         }
     },
-    "exclude": ["node_modules", "tmp"]
+    "exclude": [
+        "node_modules",
+        "tmp"
+    ]
 }

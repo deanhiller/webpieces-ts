@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-    HttpBadGatewayError,
-    HttpGatewayTimeoutError,
-    HttpServiceUnavailableError,
+    BadGatewayError,
+    GatewayTimeoutError,
+    ServiceUnavailableError,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
@@ -51,15 +51,15 @@ describe('ResponseBodyReader.isJson decides from the DECLARED content-type', () 
  * and "the server is booting" indistinguishable from "the code is broken".
  */
 describe('a non-JSON error body becomes a STATUS-typed HttpError, never a SyntaxError', () => {
-    it('502 HTML → HttpBadGatewayError carrying the status and a message naming the cause', async () => {
+    it('502 HTML → BadGatewayError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
         const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
         const translated = ClientErrorTranslator.translateError(
             dtoFactory.fromFetch(response, protocolError),
         ).error;
 
-        expect(translated).toBeInstanceOf(HttpBadGatewayError);
-        expect((translated as HttpBadGatewayError).code).toBe(502);
+        expect(translated).toBeInstanceOf(BadGatewayError);
+        expect(translated).not.toHaveProperty('code');
         expect(translated).not.toBeInstanceOf(SyntaxError);
         expect(translated.message).toContain('WarmupApi.ping');
         expect(translated.message).toContain('502');
@@ -68,20 +68,20 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
         expect(translated.message).toContain('<html><head><title>502 Bad Gateway');
     });
 
-    it('503 (cold start) → HttpServiceUnavailableError, 504 → HttpGatewayTimeoutError', async () => {
+    it('503 (cold start) → ServiceUnavailableError, 504 → GatewayTimeoutError', async () => {
         const unavailable = htmlResponse(503);
         expect(
             ClientErrorTranslator.translateError(
                 dtoFactory.fromFetch(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
             ).error,
-        ).toBeInstanceOf(HttpServiceUnavailableError);
+        ).toBeInstanceOf(ServiceUnavailableError);
 
         const timeout = htmlResponse(504);
         expect(
             ClientErrorTranslator.translateError(
                 dtoFactory.fromFetch(timeout, await reader.readErrorBody(timeout, 'A.b')),
             ).error,
-        ).toBeInstanceOf(HttpGatewayTimeoutError);
+        ).toBeInstanceOf(GatewayTimeoutError);
     });
 
     it('quotes only the first 200 chars, on ONE line, so a huge HTML page is not dumped', async () => {
@@ -107,7 +107,7 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
         const translated = ClientErrorTranslator.translateError(
             dtoFactory.fromFetch(response, await reader.readErrorBody(response, 'A.b')),
         ).error;
-        expect(translated).toBeInstanceOf(HttpBadGatewayError);
+        expect(translated).toBeInstanceOf(BadGatewayError);
         expect(translated.message).toBe('upstream refused');
     });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
-import { HttpBadRequestError } from '@webpieces/core-util';
+import { BadRequestError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { ExpressWrapper } from '../ExpressWrapper';
 
@@ -128,6 +128,6 @@ describe('ExpressWrapper body parse (annotation-driven)', () => {
         // A urlencoded body posted to a JSON endpoint — the exact Twilio-into-JSON failure.
         await expect(
             cap.executeImpl(fakeRequest('Body=hi&From=whatsapp'), asResponse(res), () => {}),
-        ).rejects.toBeInstanceOf(HttpBadRequestError);
+        ).rejects.toBeInstanceOf(BadRequestError);
     });
 });

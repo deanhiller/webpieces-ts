@@ -1,0 +1,62 @@
+{
+    "name": "ipc-client",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/core/ipc-client/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/core/ipc-client/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/core/ipc-client",
+                "main": "packages/core/ipc-client/src/index.ts",
+                "tsConfig": "packages/core/ipc-client/tsconfig.lib.json",
+                "assets": [
+                    "packages/core/ipc-client/package.json",
+                    "packages/core/ipc-client/README.md"
+                ]
+            }
+        },
+        "react-native-compat": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "build",
+                "^build"
+            ],
+            "cache": true,
+            "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/scripts/react-native-compat.ts",
+                "{workspaceRoot}/packages/tooling/code-rules/src/react-native-compatibility.ts",
+                "{workspaceRoot}/pnpm-lock.yaml"
+            ],
+            "options": {
+                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/react-native-compat.ts ipc-client"
+            }
+        },
+        "ci": {
+            "dependsOn": [
+                "lint",
+                "build",
+                "test",
+                "react-native-compat",
+                "architecture:validate-complete"
+            ]
+        }
+    },
+    "tags": [
+        "framework:browser",
+        "framework:node",
+        "role:lib",
+        "framework:react-native"
+    ]
+}

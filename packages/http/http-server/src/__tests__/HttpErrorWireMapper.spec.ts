@@ -3,18 +3,18 @@ import {
     ClientRegistry,
     ProtocolError,
     HttpError,
-    HttpBadRequestError,
-    HttpUserError,
-    HttpVendorError,
-    HttpNotFoundError,
-    HttpTimeoutError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpInternalServerError,
-    HttpBadGatewayError,
-    HttpServiceUnavailableError,
-    HttpGatewayTimeoutError,
-    HttpTooManyRequestsError,
+    BadRequestError,
+    UserError,
+    VendorError,
+    NotFoundError,
+    RequestTimeoutError,
+    UnauthorizedError,
+    ForbiddenError,
+    InternalError,
+    BadGatewayError,
+    ServiceUnavailableError,
+    GatewayTimeoutError,
+    TooManyRequestsError,
     EndpointNotFoundError,
     ErrorTranslators,
     HttpHeader,
@@ -157,23 +157,23 @@ beforeEach(() => {
     capturing.lines.length = 0;
 });
 
-describe('handleError — only HttpUserError message reaches the wire', () => {
+describe('handleError — only UserError message reaches the wire', () => {
     /**
      * One row per non-user subclass: the operator message it was thrown with, and the generic text
      * the caller must see instead. `secret` is deliberately distinctive so `toContain` is decisive.
      */
     const cases: ReadonlyArray<readonly [string, HttpError, number, string]> = [
-        ['HttpBadRequestError', new HttpBadRequestError('column users.ssn failed CHECK'), 400, 'Bad Request'],
-        ['HttpUnauthorizedError', new HttpUnauthorizedError('jwt kid=internal-signer-7 expired'), 401, 'Unauthorized'],
-        ['HttpForbiddenError', new HttpForbiddenError('role admin-internal required on tenant 4471'), 403, 'Forbidden'],
-        ['HttpNotFoundError', new HttpNotFoundError('no row in pg.stores where id=88213'), 404, 'Not Found'],
-        ['HttpTimeoutError', new HttpTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'), 408, 'Request Timeout'],
-        ['HttpTooManyRequestsError', new HttpTooManyRequestsError('bucket tenant-4471 drained'), 429, 'Too Many Requests'],
-        ['HttpInternalServerError', new HttpInternalServerError('ECONNREFUSED 10.4.0.9:5432'), 500, 'Internal Server Error'],
-        ['HttpBadGatewayError', new HttpBadGatewayError('nginx upstream sidecar-auth refused'), 502, 'Bad Gateway'],
-        ['HttpServiceUnavailableError', new HttpServiceUnavailableError('cloud run revision api-00042-xyz booting'), 503, 'Service Unavailable'],
-        ['HttpGatewayTimeoutError', new HttpGatewayTimeoutError('alb idle timeout on /internal/sync'), 504, 'Gateway Timeout'],
-        ['HttpVendorError', new HttpVendorError('stripe key sk_live_51H... rate limited'), 598, 'Vendor Error'],
+        ['BadRequestError', new BadRequestError('column users.ssn failed CHECK'), 400, 'Bad Request'],
+        ['UnauthorizedError', new UnauthorizedError('jwt kid=internal-signer-7 expired'), 401, 'Unauthorized'],
+        ['ForbiddenError', new ForbiddenError('role admin-internal required on tenant 4471'), 403, 'Forbidden'],
+        ['NotFoundError', new NotFoundError('no row in pg.stores where id=88213'), 404, 'Not Found'],
+        ['RequestTimeoutError', new RequestTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'), 408, 'Request Timeout'],
+        ['TooManyRequestsError', new TooManyRequestsError('bucket tenant-4471 drained'), 429, 'Too Many Requests'],
+        ['InternalError', new InternalError('ECONNREFUSED 10.4.0.9:5432'), 500, 'Internal Server Error'],
+        ['BadGatewayError', new BadGatewayError('nginx upstream sidecar-auth refused'), 502, 'Bad Gateway'],
+        ['ServiceUnavailableError', new ServiceUnavailableError('cloud run revision api-00042-xyz booting'), 503, 'Service Unavailable'],
+        ['GatewayTimeoutError', new GatewayTimeoutError('alb idle timeout on /internal/sync'), 504, 'Gateway Timeout'],
+        ['VendorError', new VendorError('stripe key sk_live_51H... rate limited'), 598, 'Vendor Error'],
     ];
 
     for (const [name, error, status, generic] of cases) {
@@ -209,7 +209,7 @@ describe('handleError — only HttpUserError message reaches the wire', () => {
     });
 
     it('keeps subType — an app passes it on purpose and the client branches on it', () => {
-        const res = harness.send(new HttpUnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN));
+        const res = harness.send(new UnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN));
 
         expect(harness.bodyOf(res).subType).toBe(WRONG_LOGIN);
         expect(harness.bodyOf(res).message).toBe('Unauthorized');
@@ -228,7 +228,7 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
         'from the webpieces server. body="<pre>Cannot POST /db-stores/fetch-stores</pre>"';
 
     it('sends none of it to the caller, and all of it to the log', () => {
-        const res = harness.send(new HttpInternalServerError(diagnostic));
+        const res = harness.send(new InternalError(diagnostic));
 
         expect(res.statusCode).toBe(500);
         expect(harness.bodyOf(res).message).toBe('Internal Server Error');
@@ -245,16 +245,16 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
     });
 
     it('logs the cause chain too, since only the log carries it now', () => {
-        const cause = new HttpNotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
-        harness.send(new HttpInternalServerError('downstream call failed', cause));
+        const cause = new NotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
+        harness.send(new InternalError('downstream call failed', cause));
 
         expect(capturing.lines.join('\n')).toContain('cause=<pre>Cannot POST /db-stores/fetch-stores</pre>');
     });
 });
 
 describe('handleError — what still goes out on purpose', () => {
-    it('HttpUserError: its message IS the wire, with errorCode', () => {
-        const res = harness.send(new HttpUserError('That email is already registered', 'EMAIL_TAKEN'));
+    it('UserError: its message IS the wire, with errorCode', () => {
+        const res = harness.send(new UserError('That email is already registered', 'EMAIL_TAKEN'));
 
         expect(res.statusCode).toBe(266);
         const pe = harness.bodyOf(res);
@@ -263,9 +263,9 @@ describe('handleError — what still goes out on purpose', () => {
         expect(pe.subType).toBe('USER_ERROR');
     });
 
-    it('HttpBadRequestError: guiAlertMessage + field go out, message does not', () => {
+    it('BadRequestError: guiAlertMessage + field go out, message does not', () => {
         const res = harness.send(
-            new HttpBadRequestError('zod: users.email failed regex at ingest.ts:214', 'email', 'Enter a valid email'),
+            new BadRequestError('zod: users.email failed regex at ingest.ts:214', 'email', 'Enter a valid email'),
         );
 
         const pe = harness.bodyOf(res);
@@ -275,8 +275,8 @@ describe('handleError — what still goes out on purpose', () => {
         expect(res.body).not.toContain('ingest.ts');
     });
 
-    it('HttpVendorError: waitSeconds goes out', () => {
-        const res = harness.send(new HttpVendorError('stripe 429 on acct_1Hxx', 45));
+    it('VendorError: waitSeconds goes out', () => {
+        const res = harness.send(new VendorError('stripe 429 on acct_1Hxx', 45));
 
         expect(harness.bodyOf(res).waitSeconds).toBe(45);
     });
@@ -328,17 +328,17 @@ describe('handleError — what still goes out on purpose', () => {
  */
 describe('the exact wire bytes, so the client half can be pinned against them', () => {
     const emitted: ReadonlyArray<readonly [string, HttpError, number, string]> = [
-        ['400', new HttpBadRequestError('internal detail'), 400, 'Bad Request'],
-        ['401', new HttpUnauthorizedError('internal detail'), 401, 'Unauthorized'],
-        ['403', new HttpForbiddenError('internal detail'), 403, 'Forbidden'],
-        ['404', new HttpNotFoundError('internal detail'), 404, 'Not Found'],
-        ['408', new HttpTimeoutError('internal detail'), 408, 'Request Timeout'],
-        ['429', new HttpTooManyRequestsError('internal detail'), 429, 'Too Many Requests'],
-        ['500', new HttpInternalServerError('internal detail'), 500, 'Internal Server Error'],
-        ['502', new HttpBadGatewayError('internal detail'), 502, 'Bad Gateway'],
-        ['503', new HttpServiceUnavailableError('internal detail'), 503, 'Service Unavailable'],
-        ['504', new HttpGatewayTimeoutError('internal detail'), 504, 'Gateway Timeout'],
-        ['598', new HttpVendorError('internal detail'), 598, 'Vendor Error'],
+        ['400', new BadRequestError('internal detail'), 400, 'Bad Request'],
+        ['401', new UnauthorizedError('internal detail'), 401, 'Unauthorized'],
+        ['403', new ForbiddenError('internal detail'), 403, 'Forbidden'],
+        ['404', new NotFoundError('internal detail'), 404, 'Not Found'],
+        ['408', new RequestTimeoutError('internal detail'), 408, 'Request Timeout'],
+        ['429', new TooManyRequestsError('internal detail'), 429, 'Too Many Requests'],
+        ['500', new InternalError('internal detail'), 500, 'Internal Server Error'],
+        ['502', new BadGatewayError('internal detail'), 502, 'Bad Gateway'],
+        ['503', new ServiceUnavailableError('internal detail'), 503, 'Service Unavailable'],
+        ['504', new GatewayTimeoutError('internal detail'), 504, 'Gateway Timeout'],
+        ['598', new VendorError('internal detail'), 598, 'Vendor Error'],
     ];
 
     for (const [label, thrown, status, generic] of emitted) {
@@ -354,7 +354,7 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
     }
 
     it('266 emits the human-facing message, errorCode and subType', () => {
-        const pe = harness.bodyOf(harness.send(new HttpUserError('Password must be 12+ characters', 'PW_SHORT')));
+        const pe = harness.bodyOf(harness.send(new UserError('Password must be 12+ characters', 'PW_SHORT')));
 
         expect(pe.message).toBe('Password must be 12+ characters');
         expect(pe.errorCode).toBe('PW_SHORT');
@@ -362,7 +362,7 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
     });
 
     it('401 emits subType, so a caller can still branch on WHY login failed', () => {
-        const pe = harness.bodyOf(harness.send(new HttpUnauthorizedError('bcrypt mismatch', WRONG_LOGIN)));
+        const pe = harness.bodyOf(harness.send(new UnauthorizedError('bcrypt mismatch', WRONG_LOGIN)));
 
         expect(pe.subType).toBe(WRONG_LOGIN);
         expect(pe.message).toBe('Unauthorized');

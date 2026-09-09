@@ -7,12 +7,13 @@ import {
     Endpoint,
     ErrorTranslators,
     HttpResponseDto,
-    HttpBadGatewayError,
+    BadGatewayError,
     HttpError,
-    HttpInternalServerError,
-    HttpNotFoundError,
-    HttpServiceUnavailableError,
-    HttpVendorError,
+    UserError,
+    InternalError,
+    NotFoundError,
+    ServiceUnavailableError,
+    VendorError,
     ProtocolError,
     Public,
     Rpc,
@@ -149,20 +150,20 @@ afterEach(() => {
  *   for a route that does not exist is broken, and must say so as a 500.
  *
  * The prod incident this fixes: a partner-facing Management API called a dependency that had not been
- * promoted yet. Express served its default HTML 404, the client turned it into `HttpNotFoundError`,
+ * promoted yet. Express served its default HTML 404, the client turned it into `NotFoundError`,
  * and the partner-facing response carried no `stores` key at all — so `jq '.stores | length'` read 0
  * for an org with six live storefronts. The failure impersonated valid data instead of paging the one
  * server that actually had the bug.
  */
 describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', () => {
-    it('a 404 from a dependency is HttpInternalServerError, NOT HttpNotFoundError', async () => {
+    it('a 404 from a dependency is InternalError, NOT NotFoundError', async () => {
         stubProtocolError(404, 'no route');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpInternalServerError);
-        expect(error).not.toBeInstanceOf(HttpNotFoundError);
-        expect((error as HttpError).code).toBe(500);
+        expect(error).toBeInstanceOf(InternalError);
+        expect(error).not.toBeInstanceOf(NotFoundError);
+        expect(error).not.toHaveProperty('code');
     });
 
     it('THE INCIDENT: an HTML 404 from an undeployed dependency, with the diagnostic kept as the cause', async () => {
@@ -170,8 +171,8 @@ describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', (
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpInternalServerError);
-        expect((error as HttpError).code).toBe(500);
+        expect(error).toBeInstanceOf(InternalError);
+        expect(error).not.toHaveProperty('code');
 
         // The 500's own message names the call and the status it is answering FOR.
         expect((error as Error).message).toContain('DbStoresApi.fetchStores');
@@ -179,8 +180,8 @@ describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', (
 
         // The original client-side diagnostic — the text that made this findable in one read — is
         // reachable as the cause, and quoted in the message too.
-        const cause = (error as HttpError).httpCause!;
-        expect(cause).toBeInstanceOf(HttpNotFoundError);
+        const cause = (error as Error).cause as Error;
+        expect(cause).toBeInstanceOf(NotFoundError);
         expect(cause.message).toContain('DbStoresApi.fetchStores');
         expect(cause.message).toContain('text/html');
         expect(cause.message).toContain('did not come from the webpieces server');
@@ -194,10 +195,10 @@ describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', (
 
             const error = await callAndCatch();
 
-            expect((error as HttpError).code).toBe(500);
-            expect(error).toBeInstanceOf(HttpInternalServerError);
+            expect(error).not.toHaveProperty('code');
+            expect(error).toBeInstanceOf(InternalError);
             expect((error as Error).message).toContain(`HTTP ${status}`);
-            expect((error as HttpError).httpCause!.message).toBe(`downstream said ${status}`);
+            expect(((error as Error).cause as Error).message).toBe(`downstream said ${status}`);
         }
     });
 
@@ -212,23 +213,23 @@ describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', (
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpInternalServerError);
-        expect((error as HttpError).httpCause!.message).toBe('store 1234 does not exist');
+        expect(error).toBeInstanceOf(InternalError);
+        expect(((error as Error).cause as Error).message).toBe('store 1234 does not exist');
     });
 });
 
 /**
  * The scope line. 5xx already means "the dependency is unavailable" — honest and useful outward —
- * and 500 is already a 500. 266 (HttpUserError, a 2xx code carrying user validation) and 598
- * (HttpVendorError) are not statuses about our request at all. None of them is rewritten.
+ * and 500 is already a 500. 266 (UserError, a 2xx code carrying user validation) and 598
+ * (VendorError) are not statuses about our request at all. None of them is rewritten.
  */
 describe('NodeProxyClient passes everything that is not a 4xx through unchanged', () => {
     it('502 / 503 keep their type — "the dependency is waking / unavailable" is the right signal', async () => {
         stubProtocolError(502, 'upstream refused');
-        expect(await callAndCatch()).toBeInstanceOf(HttpBadGatewayError);
+        expect(await callAndCatch()).toBeInstanceOf(BadGatewayError);
 
         stubProtocolError(503, 'cold start');
-        expect(await callAndCatch()).toBeInstanceOf(HttpServiceUnavailableError);
+        expect(await callAndCatch()).toBeInstanceOf(ServiceUnavailableError);
     });
 
     it('a downstream 500 stays a 500 (and is NOT double-wrapped)', async () => {
@@ -236,32 +237,32 @@ describe('NodeProxyClient passes everything that is not a 4xx through unchanged'
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpInternalServerError);
+        expect(error).toBeInstanceOf(InternalError);
         expect((error as Error).message).toBe('dependency blew up');
-        expect((error as HttpError).httpCause).toBeUndefined();
+        expect((error as Error).cause).toBeUndefined();
     });
 
-    it('598 HttpVendorError is untouched — it is not a status about OUR request', async () => {
+    it('598 VendorError is untouched — it is not a status about OUR request', async () => {
         stubProtocolError(598, 'vendor is rate limiting us');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpVendorError);
+        expect(error).toBeInstanceOf(VendorError);
         expect((error as Error).message).toBe('vendor is rate limiting us');
     });
 
     /**
-     * 266 (HttpUserError) cannot reach this seam AT ALL, and that is worth pinning: it is a 2xx, so
+     * 266 (UserError) cannot reach this seam AT ALL, and that is worth pinning: it is a 2xx, so
      * `response.ok` is true and the body goes down the SUCCESS path. The wrap could never have
      * touched it even if it wanted to.
      */
-    it('266 never reaches the failure seam — it is a 2xx, so it is read as a success body', async () => {
+    it('266 reconstructs UserError while retaining successful protocol monitoring', async () => {
         stubProtocolError(266, 'that email is already taken');
 
         const result = await callAndCatch();
 
-        expect(result).not.toBeInstanceOf(Error);
-        expect(result).toEqual({ message: 'that email is already taken' });
+        expect(result).toBeInstanceOf(UserError);
+        expect((result as Error).message).toBe('that email is already taken');
     });
 });
 
@@ -278,7 +279,7 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
@@ -286,8 +287,8 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpNotFoundError);
-        expect(error).not.toBeInstanceOf(HttpInternalServerError);
+        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).not.toBeInstanceOf(InternalError);
         expect((error as Error).message).toBe('no such store');
     });
 
@@ -296,7 +297,7 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
@@ -304,8 +305,8 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(HttpInternalServerError);
-        expect((error as HttpError).httpCause!.message).toBe('our service account is not on the allow-list');
+        expect(error).toBeInstanceOf(InternalError);
+        expect(((error as Error).cause as Error).message).toBe('our service account is not on the allow-list');
     });
 });
 

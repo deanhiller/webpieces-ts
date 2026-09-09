@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { sign } from 'jsonwebtoken';
-import { HttpForbiddenError, HttpUnauthorizedError } from '@webpieces/core-util';
+import { ForbiddenError, UnauthorizedError } from '@webpieces/core-util';
 import { DefaultJwtHook } from '../DefaultJwtHook';
 
 const SECRET = 'test-secret-value';
@@ -36,19 +36,19 @@ describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
     it('rejects a token signed with the wrong secret (401)', async () => {
         const hook = new DefaultJwtHook(SECRET);
         const token = sign({ sub: 'u1' }, 'a-different-secret');
-        await expect(hook.parseJwt(token)).rejects.toThrow(HttpUnauthorizedError);
+        await expect(hook.parseJwt(token)).rejects.toThrow(UnauthorizedError);
     });
 
     it('rejects an expired token (401)', async () => {
         const hook = new DefaultJwtHook(SECRET);
         const token = sign({ sub: 'u1' }, SECRET, { expiresIn: '-1s' });
-        await expect(hook.parseJwt(token)).rejects.toThrow(HttpUnauthorizedError);
+        await expect(hook.parseJwt(token)).rejects.toThrow(UnauthorizedError);
     });
 
     it('rejects a token missing the sub claim (401)', async () => {
         const hook = new DefaultJwtHook(SECRET);
         const token = sign({ roles: ['admin'] }, SECRET);
-        await expect(hook.parseJwt(token)).rejects.toThrow(HttpUnauthorizedError);
+        await expect(hook.parseJwt(token)).rejects.toThrow(UnauthorizedError);
     });
 
     /**
@@ -66,7 +66,7 @@ describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
         await expect(hook.authorizeJwt(values, { allRolesAllowed: true })).resolves.toBeUndefined();
         await expect(hook.authorizeJwt(values, { roles: ['editor'] })).resolves.toBeUndefined();
         await expect(hook.authorizeJwt(values, { roles: ['editor', 'admin'] })).resolves.toBeUndefined();
-        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(HttpForbiddenError);
+        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(ForbiddenError);
     });
 
     /**
@@ -78,6 +78,6 @@ describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
         const values = await hook.parseJwt(sign({ sub: 'u1' }, SECRET));
 
         await expect(hook.authorizeJwt(values, { allRolesAllowed: true })).resolves.toBeUndefined();
-        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(HttpForbiddenError);
+        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(ForbiddenError);
     });
 });

@@ -8,8 +8,9 @@ import {
     ContextKey,
     Endpoint,
     EndpointNotFoundError,
+    HttpErrorStatus,
     HeaderRegistry,
-    HttpUnauthorizedError,
+    UnauthorizedError,
     Public,
     RouteMetadata,
     RuntimeLocality,
@@ -151,7 +152,7 @@ describe('AuthFilter enforces @AuthLocalOnly', () => {
 
         await expect(runFilter(next)).rejects.toThrow(EndpointNotFoundError);
         // 404 on the wire — the SAME answer an unregistered route gives, which is the whole point.
-        await expect(runFilter(next)).rejects.toMatchObject({ code: 404 });
+        await expect(runFilter(next).catch((err: EndpointNotFoundError) => HttpErrorStatus.code(err))).resolves.toBe(404);
         expect(next.invoked).toBe(false);
     });
 
@@ -193,7 +194,7 @@ describe('AuthFilter treats @AuthLocalOnly as NOT caller-verifying on the inboun
         const next = new RecordingNext();
         const headers = new Map<string, string[]>([['x-user-id', ['attacker-supplied']]]);
 
-        await expect(inboundThenFilter(headers, next)).rejects.toThrow(HttpUnauthorizedError);
+        await expect(inboundThenFilter(headers, next)).rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 

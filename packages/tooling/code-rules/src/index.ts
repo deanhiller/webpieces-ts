@@ -23,3 +23,5 @@ export { RoleTagValidator } from './validate-role-tag';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';
 export { default as validateCode } from './validate-code';
+
+export { ReactNativeCompatibility } from './react-native-compatibility';

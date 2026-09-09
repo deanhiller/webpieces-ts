@@ -4,7 +4,7 @@ import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
-import { HttpUnauthorizedError } from '@webpieces/core-util';
+import { UnauthorizedError } from '@webpieces/core-util';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
@@ -110,10 +110,10 @@ describe('SaveApi with mocked Server2Api', () => {
         expect(response2.matches![0].description).toContain('VALUE_TWO');
     });
 
-    it('should throw HttpUnauthorizedError when no auth header on authenticated route', async () => {
+    it('should throw UnauthorizedError when no auth header on authenticated route', async () => {
         mockServer2Api.mock.addValueToReturn('fetchValue', createMockFetchResponse('MOCKED: should not reach'));
         await expect(RequestContext.run(() => saveApi.save({ query: 'test' })))
-            .rejects.toThrow(HttpUnauthorizedError);
+            .rejects.toThrow(UnauthorizedError);
     });
 });
 

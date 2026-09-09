@@ -185,7 +185,7 @@ export class LogApiCallImpl {
     }
 
     /**
-     * UTF-8 byte size of an already-serialized body. TextEncoder, not Buffer: LogApiCall runs in the
+     * UTF-8 byte size without platform-specific encoding globals: LogApiCall runs in the
      * browser bundle. Undefined in, undefined out — a `Promise<void>` method has no body to measure,
      * and a 0 there would be a lie (JSON.stringify(undefined) returns undefined, not '').
      */
@@ -193,7 +193,12 @@ export class LogApiCallImpl {
         if (serialized === undefined) {
             return undefined;
         }
-        return new TextEncoder().encode(serialized).length;
+        let bytes = 0;
+        for (const character of serialized) {
+            const code = character.codePointAt(0)!;
+            bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+        }
+        return bytes;
     }
 
     /**

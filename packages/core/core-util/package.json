@@ -9,6 +9,14 @@
         ".": {
             "types": "./src/index.d.ts",
             "default": "./src/index.js"
+        },
+        "./errors": {
+            "types": "./src/errors/index.d.ts",
+            "default": "./src/errors/index.js"
+        },
+        "./ipc": {
+            "types": "./src/ipc/index.d.ts",
+            "default": "./src/ipc/index.js"
         }
     },
     "keywords": [

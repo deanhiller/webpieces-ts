@@ -9,8 +9,8 @@ import {
     ContextKey,
     ContextTuple,
     Endpoint,
-    HttpBadRequestError,
-    HttpUnauthorizedError,
+    BadRequestError,
+    UnauthorizedError,
     RouteMetadata,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
@@ -118,7 +118,7 @@ class TestWebhookAuthCallback extends WebhookAuthCallback {
         this.seenUrl = request.raw.absoluteUrl;
         this.seenSignature = request.getHeader('sentry-hook-signature');
         if (!this.allow) {
-            throw new HttpUnauthorizedError('signature mismatch');
+            throw new UnauthorizedError('signature mismatch');
         }
         // Proving the signature proved WHICH vendor account this payload is for — a hook that could
         // only return void had no way to say so, and the controller had to re-derive it.
@@ -194,7 +194,7 @@ describe('AuthFilter enforces @AuthWebhook', () => {
         const next = new RecordingNext();
 
         await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
-            .rejects.toThrow(HttpUnauthorizedError);
+            .rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -266,7 +266,7 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
         const next = new RecordingNext();
 
         await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
-            .rejects.toThrow(HttpUnauthorizedError);
+            .rejects.toThrow(UnauthorizedError);
         expect(next.accountSeenByController).toBeUndefined();
     });
 });
@@ -310,7 +310,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const parseError = new Error('Unexpected token');
 
         await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('not json', parseError)))
-            .rejects.toThrow(HttpUnauthorizedError);
+            .rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -319,7 +319,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const parseError = new Error('Unexpected token');
 
         await expect(runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('not json', parseError)))
-            .rejects.toThrow(HttpBadRequestError);
+            .rejects.toThrow(BadRequestError);
         expect(next.invoked).toBe(false);
     });
 });

@@ -6,7 +6,7 @@
  * exactly like {@link RequestOutcome}.
  *
  * WHY IT CARRIES `appRegistered` AT ALL: the translated error alone is not enough for an environment
- * hook to act on. `HttpNotFoundError` produced by the BUILT-IN 404 branch and `HttpNotFoundError`
+ * hook to act on. `NotFoundError` produced by the BUILT-IN 404 branch and `NotFoundError`
  * produced by an app's own `ErrorTranslators` are indistinguishable as values, yet they mean opposite
  * things — the first is the framework's generic default, the second is the app saying out loud, at
  * startup and greppably, "relay this status as my own". `ProxyClient.adaptDownstreamFailure` must

@@ -3,7 +3,7 @@ import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversi
 import { ApiFactory, AUTH_CONFIG, JWT_HOOK, FilterDefinition, MethodMeta, WpResponse } from '@webpieces/http-routing';
 import { Filter, Service } from '@webpieces/core-util';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
-import { HttpUnauthorizedError } from '@webpieces/core-util';
+import { UnauthorizedError } from '@webpieces/core-util';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
@@ -115,10 +115,10 @@ describe('legacy-server: api contract via createApiClient — filter chain, prio
         expect(recorder.executed).toEqual(['global']);
     });
 
-    it('auth: a save with no auth header is rejected by the chain (HttpUnauthorizedError)', async () => {
+    it('auth: a save with no auth header is rejected by the chain (UnauthorizedError)', async () => {
         const saveApi = apiFactory.createApiClient<SaveApi>(SaveApi);
         await expect(RequestContext.run(() => saveApi.save({ query: 'no-auth' })))
-            .rejects.toThrow(HttpUnauthorizedError);
+            .rejects.toThrow(UnauthorizedError);
     });
 
     it('createApiClient() gives in-process access through the same filter chain', async () => {

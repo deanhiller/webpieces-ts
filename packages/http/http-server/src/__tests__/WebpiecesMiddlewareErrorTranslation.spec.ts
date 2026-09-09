@@ -3,7 +3,7 @@ import {
     ClientRegistry,
     ProtocolError,
     HttpError,
-    HttpBadRequestError,
+    BadRequestError,
     ErrorTranslators,
     HttpHeader,
     HttpResponseDto,
@@ -109,11 +109,11 @@ describe('ExpressWrapper.handleError registry integration', () => {
         expect(pe.name).toBe('AiBadRequest');
     });
 
-    it('an unclaimed error still uses the built-in ladder (HttpBadRequestError -> 400)', () => {
+    it('an unclaimed error still uses the built-in ladder (BadRequestError -> 400)', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
 
         const res = new FakeResponse();
-        newWrapper().handleError(asResponse(res), new HttpBadRequestError('bad field', 'email'));
+        newWrapper().handleError(asResponse(res), new BadRequestError('bad field', 'email'));
 
         expect(res.statusCode).toBe(400);
         const pe = JSON.parse(res.body ?? '{}') as ProtocolError;

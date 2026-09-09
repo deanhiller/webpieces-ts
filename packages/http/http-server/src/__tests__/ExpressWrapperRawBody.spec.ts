@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
-import { HttpBadRequestError } from '@webpieces/core-util';
+import { BadRequestError } from '@webpieces/core-util';
 import { HttpRequest, RequestContext } from '@webpieces/core-context';
 import { ExpressWrapper, MAX_BODY_BYTES } from '../ExpressWrapper';
 
@@ -231,7 +231,7 @@ describe('a JSON parse failure defers ONLY on a raw-body route', () => {
 
         await expect(
             cap.executeImpl(fakeRequest('not json'), asResponse(new FakeResponse()), () => {}),
-        ).rejects.toBeInstanceOf(HttpBadRequestError);
+        ).rejects.toBeInstanceOf(BadRequestError);
     });
 });
 

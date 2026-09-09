@@ -1,5 +1,5 @@
 import { verify, JwtPayload } from 'jsonwebtoken';
-import { HttpUnauthorizedError, toError } from '@webpieces/core-util';
+import { UnauthorizedError, toError } from '@webpieces/core-util';
 import { JwtHook } from './AuthHooks';
 import { AuthenticatedCaller } from './AuthConfig';
 
@@ -30,7 +30,7 @@ export class DefaultJwtHook extends JwtHook {
         const payload = this.verifyToken(token);
         const userId = payload.sub;
         if (!userId) {
-            throw new HttpUnauthorizedError('JWT is missing the required "sub" (subject) claim');
+            throw new UnauthorizedError('JWT is missing the required "sub" (subject) claim');
         }
         return new AuthenticatedCaller(userId, this.extractRoles(payload), [], payload);
     }
@@ -41,15 +41,15 @@ export class DefaultJwtHook extends JwtHook {
         try {
             const decoded = verify(token, this.secret, { algorithms: ['HS256'] });
             if (typeof decoded === 'string') {
-                throw new HttpUnauthorizedError('JWT payload must be a JSON object, not a string');
+                throw new UnauthorizedError('JWT payload must be a JSON object, not a string');
             }
             return decoded;
         } catch (err: unknown) {
             const error = toError(err);
-            if (error instanceof HttpUnauthorizedError) {
+            if (error instanceof UnauthorizedError) {
                 throw error;
             }
-            throw new HttpUnauthorizedError('JWT verification failed', undefined, error);
+            throw new UnauthorizedError('JWT verification failed', undefined, error);
         }
     }
 

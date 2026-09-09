@@ -3,18 +3,18 @@ import {
     ClientRegistry,
     ProtocolError,
     HttpError,
-    HttpBadRequestError,
-    HttpNotFoundError,
-    HttpUserError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpTimeoutError,
-    HttpTooManyRequestsError,
-    HttpInternalServerError,
-    HttpBadGatewayError,
-    HttpServiceUnavailableError,
-    HttpGatewayTimeoutError,
-    HttpVendorError,
+    BadRequestError,
+    NotFoundError,
+    UserError,
+    UnauthorizedError,
+    ForbiddenError,
+    RequestTimeoutError,
+    TooManyRequestsError,
+    InternalError,
+    BadGatewayError,
+    ServiceUnavailableError,
+    GatewayTimeoutError,
+    VendorError,
     ErrorTranslators,
     HttpResponseDto,
     HttpResponseStatus,
@@ -85,14 +85,14 @@ describe('ClientErrorTranslator registry integration', () => {
         expect(err.message).toBe('bad ai input');
     });
 
-    it('an unclaimed status still uses the built-in mapping (400 -> HttpBadRequestError)', () => {
+    it('an unclaimed status still uses the built-in mapping (400 -> BadRequestError)', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims 460
 
         const pe = new ProtocolError();
         pe.message = 'bad field';
         pe.field = 'email';
         const err = translate(400, pe);
-        expect(err).toBeInstanceOf(HttpBadRequestError);
+        expect(err).toBeInstanceOf(BadRequestError);
     });
 
     it('installed translators OVERRIDE a built-in status (400 -> custom type wins)', () => {
@@ -120,7 +120,7 @@ describe('ClientErrorTranslator registry integration', () => {
  * translateError returns a {@link TranslatedFailure}, not a bare Error, because the mapping is only
  * HALF the decision — the same isomorphic mapping runs in a browser and in a server, and only the
  * PROVENANCE tells `ProxyClient.adaptDownstreamFailure` whether the app chose this error type
- * deliberately or the framework's built-in default did. Two `HttpNotFoundError`s are identical as
+ * deliberately or the framework's built-in default did. Two `NotFoundError`s are identical as
  * values; they are not identical as decisions.
  */
 describe('TranslatedFailure carries the provenance the environment hook needs', () => {
@@ -133,7 +133,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
 
         expect(failure.appRegistered).toBe(false);
         expect(failure.statusCode).toBe(404);
-        expect(failure.error).toBeInstanceOf(HttpNotFoundError);
+        expect(failure.error).toBeInstanceOf(NotFoundError);
     });
 
     it('an APP translator reports appRegistered=true — the deliberate, greppable choice', () => {
@@ -152,7 +152,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new HttpNotFoundError((response.body as ProtocolError).message ?? 'relayed')
+                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed')
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
@@ -183,17 +183,17 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
 
     /** [status, the generic message the server sends, the class the caller must receive] */
     const wire: ReadonlyArray<readonly [number, string, new (...args: never[]) => Error]> = [
-        [400, 'Bad Request', HttpBadRequestError],
-        [401, 'Unauthorized', HttpUnauthorizedError],
-        [403, 'Forbidden', HttpForbiddenError],
-        [404, 'Not Found', HttpNotFoundError],
-        [408, 'Request Timeout', HttpTimeoutError],
-        [429, 'Too Many Requests', HttpTooManyRequestsError],
-        [500, 'Internal Server Error', HttpInternalServerError],
-        [502, 'Bad Gateway', HttpBadGatewayError],
-        [503, 'Service Unavailable', HttpServiceUnavailableError],
-        [504, 'Gateway Timeout', HttpGatewayTimeoutError],
-        [598, 'Vendor Error', HttpVendorError],
+        [400, 'Bad Request', BadRequestError],
+        [401, 'Unauthorized', UnauthorizedError],
+        [403, 'Forbidden', ForbiddenError],
+        [404, 'Not Found', NotFoundError],
+        [408, 'Request Timeout', RequestTimeoutError],
+        [429, 'Too Many Requests', TooManyRequestsError],
+        [500, 'Internal Server Error', InternalError],
+        [502, 'Bad Gateway', BadGatewayError],
+        [503, 'Service Unavailable', ServiceUnavailableError],
+        [504, 'Gateway Timeout', GatewayTimeoutError],
+        [598, 'Vendor Error', VendorError],
     ];
 
     for (const [status, generic, expectedClass] of wire) {
@@ -208,7 +208,7 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
         });
     }
 
-    it('266 -> HttpUserError with the human-facing message and errorCode intact', () => {
+    it('266 -> UserError with the human-facing message and errorCode intact', () => {
         const pe = new ProtocolError();
         pe.message = 'Password must be 12+ characters';
         pe.errorCode = 'PW_SHORT';
@@ -216,9 +216,9 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
 
         const err = translate(266, pe);
 
-        expect(err).toBeInstanceOf(HttpUserError);
+        expect(err).toBeInstanceOf(UserError);
         expect(err.message).toBe('Password must be 12+ characters');
-        expect((err as HttpUserError).errorCode).toBe('PW_SHORT');
+        expect((err as UserError).errorCode).toBe('PW_SHORT');
     });
 
     it('401 keeps subType, so a caller can still branch on WHY login failed', () => {
@@ -228,8 +228,8 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
 
         const err = translate(401, pe);
 
-        expect(err).toBeInstanceOf(HttpUnauthorizedError);
-        expect((err as HttpUnauthorizedError).subType).toBe(WRONG_LOGIN);
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect((err as UnauthorizedError).subType).toBe(WRONG_LOGIN);
     });
 
     it('400 keeps guiAlertMessage and field — the human-safe half of a bad request', () => {
@@ -240,9 +240,9 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
 
         const err = translate(400, pe);
 
-        expect(err).toBeInstanceOf(HttpBadRequestError);
-        expect((err as HttpBadRequestError).field).toBe('email');
-        expect((err as HttpBadRequestError).guiMessage).toBe('Enter a valid email');
+        expect(err).toBeInstanceOf(BadRequestError);
+        expect((err as BadRequestError).field).toBe('email');
+        expect((err as BadRequestError).guiMessage).toBe('Enter a valid email');
     });
 
     it('598 keeps waitSeconds', () => {
@@ -252,6 +252,6 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
 
         const err = translate(598, pe);
 
-        expect((err as HttpVendorError).waitSeconds).toBe(45);
+        expect((err as VendorError).waitSeconds).toBe(45);
     });
 });

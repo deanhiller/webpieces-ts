@@ -130,6 +130,8 @@ jobs:
                       ## Packages Published:
                       - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/ipc-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ipc-client/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/ipc-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ipc-server/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/gcp-identity@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/gcp-identity/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/winston@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/winston/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/bunyan@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/bunyan/v/${{ steps.version.outputs.full_version }})

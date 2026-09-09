@@ -9,13 +9,13 @@ import {
     ContextKey,
     Endpoint,
     HeaderRegistry,
-    HttpBadGatewayError,
-    HttpBadRequestError,
+    BadGatewayError,
+    BadRequestError,
     HttpError,
-    HttpForbiddenError,
-    HttpNotFoundError,
-    HttpServiceUnavailableError,
-    HttpUnauthorizedError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnauthorizedError,
     LogManager,
     OfflineError,
     Public,
@@ -357,28 +357,28 @@ describe('BrowserProxyClient ends the lifecycle even when no usable body ever ar
  * and the app's global handler classified booting infrastructure as a "Client Bug".
  */
 describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra HTML body', () => {
-    it('a 502 HTML page rejects with HttpBadGatewayError, not SyntaxError', async () => {
+    it('a 502 HTML page rejects with BadGatewayError, not SyntaxError', async () => {
         stubFetchNonJsonBody(502);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(HttpBadGatewayError);
+        expect(error).toBeInstanceOf(BadGatewayError);
         expect(error).not.toBeInstanceOf(SyntaxError);
-        expect((error as HttpBadGatewayError).code).toBe(502);
+        expect(error).not.toHaveProperty('code');
         // Names the call and what actually arrived, so the log line says which endpoint and why.
         expect((error as Error).message).toContain('PublicApi.save');
         expect((error as Error).message).toContain('text/html');
     });
 
-    it('a 503 cold start rejects with HttpServiceUnavailableError — the "retry, it is waking" signal', async () => {
+    it('a 503 cold start rejects with ServiceUnavailableError — the "retry, it is waking" signal', async () => {
         stubFetchNonJsonBody(503);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(HttpServiceUnavailableError);
-        expect((error as HttpServiceUnavailableError).code).toBe(503);
+        expect(error).toBeInstanceOf(ServiceUnavailableError);
+        expect(error).not.toHaveProperty('code');
     });
 
     it('a 2xx that is not JSON reports WHAT arrived instead of "Unexpected token \'<\'"', async () => {
@@ -407,14 +407,14 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
  * its 4xx describes the caller's own broken request. See NodeProxyClient's spec.
  */
 describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', () => {
-    it('404 stays HttpNotFoundError — the resource genuinely does not exist for this user', async () => {
+    it('404 stays NotFoundError — the resource genuinely does not exist for this user', async () => {
         stubFetchProtocolError(404, 'no such order');
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(HttpNotFoundError);
-        expect((error as HttpError).code).toBe(404);
+        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).not.toHaveProperty('code');
         expect((error as Error).message).toBe('no such order');
     });
 
@@ -422,20 +422,20 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         stubFetchProtocolError(400, 'email is required');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const badRequest = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
-        expect(badRequest).toBeInstanceOf(HttpBadRequestError);
-        expect((badRequest as HttpError).code).toBe(400);
+        expect(badRequest).toBeInstanceOf(BadRequestError);
+        expect(badRequest).not.toHaveProperty('code');
 
         stubFetchProtocolError(401, 'token expired');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const unauthorized = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
-        expect(unauthorized).toBeInstanceOf(HttpUnauthorizedError);
-        expect((unauthorized as HttpError).code).toBe(401);
+        expect(unauthorized).toBeInstanceOf(UnauthorizedError);
+        expect(unauthorized).not.toHaveProperty('code');
 
         stubFetchProtocolError(403, 'not your org');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const forbidden = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
-        expect(forbidden).toBeInstanceOf(HttpForbiddenError);
-        expect((forbidden as HttpError).code).toBe(403);
+        expect(forbidden).toBeInstanceOf(ForbiddenError);
+        expect(forbidden).not.toHaveProperty('code');
     });
 
     it('an HTML 404 from misrouted infra also arrives unchanged — a browser has no caller to protect', async () => {
@@ -444,7 +444,7 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(HttpNotFoundError);
+        expect(error).toBeInstanceOf(NotFoundError);
         expect((error as Error).message).toContain('PublicApi.save');
         expect((error as Error).message).toContain('text/html');
     });
@@ -521,5 +521,15 @@ describe('BrowserProxyClient stamps the api tag with no factory install and no b
         // 4 lines from 2 different BrowserApiCallContext instances — none of them silently blank.
         expect(capturing.seen.length).toBe(4);
         expect(capturing.seen.every(tag => tag !== undefined)).toBe(true);
+    });
+});
+
+it('a real Fetch 266 response remains protocol-ok but throws the user message from a generated browser client', async () => {
+    const response = new Response(JSON.stringify({ message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH' }),
+        { status: 266, headers: { 'content-type': 'application/json' } });
+    expect(response.ok).toBe(true);
+    vi.stubGlobal('fetch', vi.fn(async () => response));
+    await expect(client().save(new SaveRequest('password'))).rejects.toMatchObject({
+        name: 'UserError', message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH',
     });
 });

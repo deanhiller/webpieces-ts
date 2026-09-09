@@ -1,6 +1,6 @@
 import { inject } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
-import { HttpUnauthorizedError } from '@webpieces/core-util';
+import { UnauthorizedError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 
 /**
@@ -31,7 +31,7 @@ export class DefaultOidcVerifier {
         // would reject a legitimate cross-SA caller the edge already admitted.
         const result = await this.gcpOidc.verifyFromCallers(token, callers);
         if (!result.ok) {
-            throw new HttpUnauthorizedError(`OIDC rejected: ${result.reason ?? 'not an allowed caller'}`);
+            throw new UnauthorizedError(`OIDC rejected: ${result.reason ?? 'not an allowed caller'}`);
         }
     }
 }

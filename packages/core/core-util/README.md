@@ -2,6 +2,12 @@
 
 Utility functions for WebPieces applications. Works in both browser and Node.js environments.
 
+## Portable API errors and IPC
+
+React Native consumers use `@webpieces/core-util/errors` for canonical semantic errors (`UserError`, `NotFoundError`, and the other API categories) and `@webpieces/core-util/ipc` for shared contracts and connection types. These two subpaths are checked with public declaration fixtures, Metro Android/iOS bundles, and Hermes compilation; the broad root barrel is not certified for React Native.
+
+Use `@webpieces/ipc-client` and `@webpieces/ipc-server` for generated clients and typed receivers. HTTP preserves status 266 for `UserError`: monitoring succeeds, while generated clients throw it for GUI display. Old Http-prefixed names are deprecated aliases; neutral errors use standard `cause` and have no HTTP `.code`. See [the migration and verification guide](https://github.com/deanhiller/webpieces-ts/blob/main/docs/portable-ipc-and-errors.md).
+
 ## Installation
 
 ```bash

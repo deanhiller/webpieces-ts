@@ -1,4 +1,4 @@
-import { JwtRequirement, rolesRequired, HttpForbiddenError } from '@webpieces/core-util';
+import { JwtRequirement, rolesRequired, ForbiddenError } from '@webpieces/core-util';
 import { HttpRequest, RawHttpRequest } from '@webpieces/core-context';
 import { AuthenticatedCaller } from './AuthConfig';
 
@@ -43,7 +43,7 @@ export abstract class JwtHook {
 
     /**
      * DEFAULT authorization: enforce the endpoint's roles (any-of). Override to enforce app-defined
-     * requirements. Throw HttpForbiddenError to deny; return to allow. ASYNC so an app-defined
+     * requirements. Throw ForbiddenError to deny; return to allow. ASYNC so an app-defined
      * requirement can be answered from a datastore; see the class doc.
      */
     async authorizeJwt(caller: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
@@ -51,7 +51,7 @@ export abstract class JwtHook {
         // `allRolesAllowed: true`, never "the field was missing" — that state no longer compiles.
         const roles = rolesRequired(requirement);
         if (roles.length > 0 && !roles.some((role: string) => caller.roles.includes(role))) {
-            throw new HttpForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
+            throw new ForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
         }
     }
 }
@@ -111,7 +111,7 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
 export abstract class WebhookAuthCallback {
     /**
      * Verify ONE inbound request. Return the {@link AuthenticatedCaller} the vendor's signature
-     * proved; throw {@link HttpUnauthorizedError} to deny.
+     * proved; throw {@link UnauthorizedError} to deny.
      *
      * IT RETURNS A CALLER, not `void`, for the same reason {@link ApiKeyHook.verifyApiKey} does: once
      * the signature checks out, the payload's vendor account is a PROVEN fact, and a hook that could
@@ -176,7 +176,7 @@ export abstract class ApiKeyHook {
     /**
      * AUTHENTICATE one inbound request. Return who the caller is plus the {@link AuthenticatedCaller.entries}
      * the framework seeds into `RequestContext` via `putTrusted`, or throw
-     * {@link HttpUnauthorizedError} to deny.
+     * {@link UnauthorizedError} to deny.
      *
      * NOTE the seeded entries are TRUSTED context keys, so return only what THIS hook proved from the
      * credential it just verified. Anything the caller merely asserted on the wire is not admitted by
