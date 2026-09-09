@@ -11,6 +11,8 @@
  * reads them.
  */
 export class ChecklistCommentRow {
+    agent: string;
+    model: string;
     subagent: string; // the reviewer / checklist id
     status: string; // CK_* verdict; '' when it did not run
     detail: string; // verbatim reviewer output
@@ -42,7 +44,7 @@ export class ChecklistCommentRow {
     required: boolean = true;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
+    constructor(agent: string, model: string,
         subagent: string,
         status: string,
         detail: string,
@@ -52,6 +54,8 @@ export class ChecklistCommentRow {
         matchedFiles: string[],
         changedFileCount: number,
     ) {
+        this.agent = agent;
+        this.model = model;
         this.subagent = subagent;
         this.status = status;
         this.detail = detail;

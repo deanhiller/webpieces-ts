@@ -1,3 +1,4 @@
+import { ReviewIdentityRenderer } from './review-identity-renderer';
 import {
     GateDefinition,
     WEBPIECES_DISABLE,
@@ -590,6 +591,7 @@ export class Dashboard {
         const violationLine = violations === 0 ? '🟢 No' : `🟡 Yes (${violations} violation(s))`;
         return [
             `**Risk Score:** ${this.riskBar(review.riskScore)} **${review.riskScore}/100** ${review.riskEmoji}`,
+            new ReviewIdentityRenderer().render(review.agent, review.model, 'Review agent'),
             `**Risk Level:** ${review.riskEmoji} **${review.riskLevel}**`,
             `**Pattern Violations:** ${violationLine}`,
         ];

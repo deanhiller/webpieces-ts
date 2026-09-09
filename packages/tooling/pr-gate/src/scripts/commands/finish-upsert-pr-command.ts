@@ -444,7 +444,8 @@ export class FinishUpsertPrCommand {
             const verdict = ran
                 ? this.reviewJsonService.resolveVerdict(req, review.results)
                 : new ChecklistVerdict(entry.def.id, '', '');
-            const row = new ChecklistCommentRow(
+            const identity = review.results.find((result): boolean => result.id === entry.def.id);
+            const row = new ChecklistCommentRow(identity?.agent ?? 'unknown', identity?.model ?? 'unknown',
                 entry.def.subagent, verdict.status, verdict.detail, ran,
                 entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
             row.required = entry.def.required;

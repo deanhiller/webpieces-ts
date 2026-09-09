@@ -76,7 +76,7 @@ describe('reviewJsonPath in a LINKED worktree', () => {
 describe('archiveReviewJson', () => {
     const svc = new ReviewJsonService();
     const aReview = (title: string): string => JSON.stringify({
-        title, riskScore: 10, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
+        title, agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
     });
 
     it('moves review.json to old-review.json — the original no longer exists', () => {
@@ -162,7 +162,7 @@ describe('archiveReviewJson', () => {
 describe('loadReviewJson', () => {
     it('loads a valid review and derives the emoji from riskLevel', () => {
         const file = tmpFile(JSON.stringify({
-            title: 'Fix the thing', riskScore: 42, riskLevel: 'yellow', summary: 'ok',
+            title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 42, riskLevel: 'yellow', summary: 'ok',
             violations: ['a'], risks: [], filesToReview: ['x.ts'],
         }));
         const review = new ReviewJsonService().loadReviewJson(file);
@@ -174,11 +174,11 @@ describe('loadReviewJson', () => {
     });
 
     it('reads a trimmed title and REQUIRES it (hard-reject when absent or blank)', () => {
-        const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', riskScore: 10, riskLevel: 'green' }));
+        const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
         expect(new ReviewJsonService().loadReviewJson(withTitle).title).toBe('Fix the thing');
-        const without = tmpFile(JSON.stringify({ riskScore: 10, riskLevel: 'green' }));
+        const without = tmpFile(JSON.stringify({ agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
         expect(() => new ReviewJsonService().loadReviewJson(without)).toThrowError(/"title" must be a non-empty/);
-        const blank = tmpFile(JSON.stringify({ title: '   ', riskScore: 10, riskLevel: 'green' }));
+        const blank = tmpFile(JSON.stringify({ title: '   ', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
         expect(() => new ReviewJsonService().loadReviewJson(blank)).toThrowError(/"title" must be a non-empty/);
     });
 
@@ -193,14 +193,14 @@ describe('loadReviewJson', () => {
     });
 
     it('throws on an out-of-range riskScore and a bad riskLevel', () => {
-        const file = tmpFile(JSON.stringify({ riskScore: 200, riskLevel: 'orange' }));
+        const file = tmpFile(JSON.stringify({ agent: 'codex', model: 'unknown', riskScore: 200, riskLevel: 'orange' }));
         expect(() => new ReviewJsonService().loadReviewJson(file)).toThrowError(/riskScore.*0–100/);
     });
 });
 
 function validReview(overrides: Record<string, unknown> = {}): string {
     return JSON.stringify({
-        title: 'Fix the thing', riskScore: 10, riskLevel: 'green', summary: 'ok',
+        title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 'ok',
         violations: [], risks: [], filesToReview: [], ...overrides,
     });
 }
@@ -214,7 +214,7 @@ function tmpReviewWith(results: Record<string, unknown>): string {
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, validReview());
     for (const [id, body] of Object.entries(results)) {
-        fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify(body));
+        fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(body as object) }));
     }
     return file;
 }
@@ -344,17 +344,17 @@ describe('ReviewJsonService.pendingChecklists', () => {
 
     it('drops the ones that passed and keeps the ones with no verdict', () => {
         const required = [req('a'), req('b')];
-        const results = [new ChecklistResult('a', 'green', 'ok', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'green', 'ok', null)];
         expect(svc2.pendingChecklists(required, results).map((r): string => r.id)).toEqual(['b']);
     });
 
     it('keeps an un-overridden FAIL (it still owes a passing verdict)', () => {
-        const results = [new ChecklistResult('a', 'red', 'bad', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'red', 'bad', null)];
         expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 
     it('drops an OVERRIDDEN fail — the ship-anyway decision was stated, so it is resolved', () => {
-        const results = [new ChecklistResult('a', 'red', 'bad', OVERRIDE)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'red', 'bad', OVERRIDE)];
         expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
     });
 
@@ -362,12 +362,12 @@ describe('ReviewJsonService.pendingChecklists', () => {
     // outstanding set would never empty and wp-finish would refuse the PR forever no matter how many times
     // the reviewer ran.
     it('drops a YELLOW verdict — it passed, with a concern published rather than a blocker raised', () => {
-        const results = [new ChecklistResult('a', 'yellow', 'no rate limit on the new route', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'yellow', 'no rate limit on the new route', null)];
         expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
     });
 
     it('keeps a verdict whose FORMAT could not be read (it never resolved to an outcome)', () => {
-        const results = [new ChecklistResult('a', '', 'ok', null, 'uses the removed "success" field')];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', '', 'ok', null, 'uses the removed "success" field')];
         expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 });
@@ -514,7 +514,7 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
 describe('archiveChecklistResult', () => {
     const svc = new ReviewJsonService();
     // A real ChecklistResult, not an object literal (CLAUDE.md), serialized by tmpReviewWith.
-    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('migrations', 'red', output, null);
+    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('unknown', 'unknown', 'migrations', 'red', output, null);
 
     it('moves a red verdict to review-<id>.json.old — the live file no longer exists', () => {
         const file = tmpReviewWith({ migrations: redVerdict('NOT NULL without backfill') });
@@ -588,17 +588,17 @@ describe('refusedChecklists / refusalError', () => {
     it('selects exactly the CK_FAIL ones — not MISSING, BAD_FORMAT, WARN, PASS or OVERRIDDEN', () => {
         const required = [req('failed'), req('missing'), req('bad'), req('warn'), req('pass'), req('over')];
         const results = [
-            new ChecklistResult('failed', 'red', 'refused', null),
-            new ChecklistResult('bad', '', 'ok', null, 'uses the removed "success" field'),
-            new ChecklistResult('warn', 'yellow', 'a concern', null),
-            new ChecklistResult('pass', 'green', 'ok', null),
-            new ChecklistResult('over', 'red', 'refused', OVERRIDE),
+            new ChecklistResult('unknown', 'unknown', 'failed', 'red', 'refused', null),
+            new ChecklistResult('unknown', 'unknown', 'bad', '', 'ok', null, 'uses the removed "success" field'),
+            new ChecklistResult('unknown', 'unknown', 'warn', 'yellow', 'a concern', null),
+            new ChecklistResult('unknown', 'unknown', 'pass', 'green', 'ok', null),
+            new ChecklistResult('unknown', 'unknown', 'over', 'red', 'refused', OVERRIDE),
         ];
         expect(svc.refusedChecklists(required, results).map((r): string => r.id)).toEqual(['failed']);
     });
 
     it('quotes the reviewer\'s own output — the finding is the whole point', () => {
-        const results = [new ChecklistResult('a', 'red', 'gate 1: title names no ticket', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'red', 'gate 1: title names no ticket', null)];
         const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH);
         expect(text).toContain('gate 1: title names no ticket');
         expect(text).toContain('a-reviewer');
@@ -610,7 +610,7 @@ describe('refusedChecklists / refusalError', () => {
      * after the move — that file does not exist — so the text has to ask for a FRESH verdict file instead.
      */
     it('names the archive and asks for a FRESH verdict file when the verdict was retired', () => {
-        const results = [new ChecklistResult('a', 'red', 'refused', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', 'a', 'red', 'refused', null)];
         const archived = '/repo/.webpieces/pr-review/feat/review-a.json.old';
         const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH, archived);
         expect(text).toContain(archived);
@@ -651,7 +651,7 @@ describe('refusedChecklists / refusalError', () => {
  */
 describe('loadReviewJson — optional checklists', () => {
     const VALID = JSON.stringify({
-        title: 'x', riskScore: 1, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
+        title: 'x', agent: 'codex', model: 'unknown', riskScore: 1, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
     });
     const svc = new ReviewJsonService();
     const optional = (): RequiredChecklist =>
@@ -684,7 +684,7 @@ describe('loadReviewJson — optional checklists', () => {
     it('still refuses an optional checklist that RAN and went red', () => {
         const file = tmpFile(VALID);
         fs.writeFileSync(svc.checklistResultPath(file, 'ops-reviewer'),
-            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'ops-reviewer', status: 'red', output: 'runs as root' }));
         const message = errorFrom(file, [optional()]);
         expect(message).toContain('runs as root');
         expect(message).toContain('FAILED review');
@@ -693,7 +693,7 @@ describe('loadReviewJson — optional checklists', () => {
     it('optionalWithoutVerdict names exactly the optional checklists with no verdict file', () => {
         expect(svc.optionalWithoutVerdict([required(), optional()], []).map((r: RequiredChecklist): string => r.id))
             .toEqual(['ops-reviewer']);
-        const ran = [new ChecklistResult('ops-reviewer', 'green', 'ok', null)];
+        const ran = [new ChecklistResult('unknown', 'unknown', 'ops-reviewer', 'green', 'ok', null)];
         expect(svc.optionalWithoutVerdict([required(), optional()], ran)).toEqual([]);
     });
 });

@@ -7,7 +7,7 @@ const URL = 'https://github.com/o/r/pull/42';
 
 function input(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
     const review = Object.assign(
-        new ReviewJson('A short title', 20, 'green', '🟢', 'S1. S2. S3. S4. S5.', [], [], []),
+        new ReviewJson('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'S1. S2. S3. S4. S5.', [], [], []),
         reviewOverrides,
     );
     return new DashboardInput(

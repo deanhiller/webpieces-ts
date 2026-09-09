@@ -29,7 +29,7 @@ function reviewPathIn(dir: string): string {
 
 function writeVerdict(dir: string, id: string, status: string, output: string): void {
     fs.writeFileSync(svc.checklistResultPath(reviewPathIn(dir), id),
-        JSON.stringify({ id, status, output }));
+        JSON.stringify({ agent: 'claude', model: 'opus', id, status, output }));
 }
 
 /**

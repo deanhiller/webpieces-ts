@@ -178,7 +178,7 @@ describe('ChecklistScanner — X / N / Z', () => {
         const reviewPath = svc.reviewJsonPath(dir, newAiBranchName().getFeatureName());
         fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
         fs.writeFileSync(svc.checklistResultPath(reviewPath, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'green', output: 'ok' }));
         const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
         expect(scan.applicable).toHaveLength(2);                                                         // N
         expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
@@ -194,9 +194,9 @@ describe('ChecklistScanner — X / N / Z', () => {
         const reviewPath = svc.reviewJsonPath(dir, newAiBranchName().getFeatureName());
         fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
         fs.writeFileSync(svc.checklistResultPath(reviewPath, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'red', output: 'bad' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'red', output: 'bad' }));
         fs.writeFileSync(svc.checklistResultPath(reviewPath, 'ops-reviewer'),
-            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'bad' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'ops-reviewer', status: 'red', output: 'bad' }));
         fs.writeFileSync(checklistOverrideService.overridePath(reviewPath, 'ops-reviewer'), JSON.stringify(
             new ChecklistOverride('ops-reviewer', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, JIRA-1')));
         const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
@@ -396,7 +396,7 @@ describe('ChecklistScanner — optional checklists', () => {
     it('does NOT owe a verdict for an optional checklist nobody ran — that is the whole point', () => {
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'green', output: 'ok' }));
         const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
         expect(scan.outstanding).toEqual([]);
         // Reported as NOT RUN — never folded into `reviewed`, which would put a ✓ on a review that never happened.
@@ -407,9 +407,9 @@ describe('ChecklistScanner — optional checklists', () => {
     it('STILL owes it once that optional reviewer has run and gone red — running one is not ignoring one', () => {
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'green', output: 'ok' }));
         fs.writeFileSync(verdictPath(dir, 'ops-reviewer'),
-            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'ops-reviewer', status: 'red', output: 'runs as root' }));
         const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
         expect(scan.optionalNotRun).toEqual([]);
@@ -425,7 +425,7 @@ describe('ChecklistScanner — optional checklists', () => {
     it('does not exempt an optional checklist whose verdict file is UNREADABLE', () => {
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'green', output: 'ok' }));
         fs.writeFileSync(verdictPath(dir, 'ops-reviewer'),
             JSON.stringify({ id: 'ops-reviewer', success: true, output: 'ok' }));
         const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
@@ -452,7 +452,7 @@ describe('ChecklistScanner — verdict file formats', () => {
     it('has no format errors when every verdict uses the tri-state status', () => {
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', status: 'yellow', output: 'no CONCURRENTLY' }));
+            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'yellow', output: 'no CONCURRENTLY' }));
         const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(true));
         expect(scan.formatErrors).toEqual([]);
         // yellow SHIPS — it must not be listed as still owing a verdict.
