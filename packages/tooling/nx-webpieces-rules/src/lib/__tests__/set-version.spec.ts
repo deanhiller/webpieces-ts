@@ -11,19 +11,19 @@ describe('release version stamping', () => {
         try {
             fs.writeFileSync(path.join(scratch, 'VERSION'), '0.4\n');
             const manifests = [
-                'packages/core/ipc-client/package.json',
-                'dist/packages/core/ipc-client/package.json',
+                'packages/core/ipc-bridge/package.json',
+                'dist/packages/core/ipc-bridge/package.json',
             ];
             for (const file of manifests) {
                 fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true });
                 fs.writeFileSync(
                     path.join(scratch, file),
                     JSON.stringify({
-                        name: '@webpieces/ipc-client',
+                        name: '@webpieces/ipc-bridge',
                         version: '0.0.0-dev',
                         dependencies: { '@webpieces/core-util': 'workspace:*', tslib: '2.8.1' },
                         devDependencies: {
-                            '@webpieces/ipc-server': 'workspace:*',
+                            '@webpieces/core-mock': 'workspace:*',
                             vitest: '^4.1.10',
                         },
                     }),
@@ -51,7 +51,7 @@ describe('release version stamping', () => {
                     tslib: '2.8.1',
                 });
                 expect(manifest.devDependencies).toEqual({
-                    '@webpieces/ipc-server': '0.4.777',
+                    '@webpieces/core-mock': '0.4.777',
                     vitest: '^4.1.10',
                 });
                 expect(JSON.stringify(manifest)).not.toContain('workspace:');

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { IpcClientFactory } from './index';
-import { IpcServerFactory } from '@webpieces/ipc-server';
+import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
 import {
     ApiError,
     ServiceUnavailableError,

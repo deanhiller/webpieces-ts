@@ -9,7 +9,7 @@ import { ReactNativeCompatibility } from '../packages/tooling/code-rules/src/rea
 class ReactNativeGate {
     private readonly root = process.cwd();
     private readonly checker = new ReactNativeCompatibility();
-    private readonly projects = ['core-util', 'ipc-client', 'ipc-server'];
+    private readonly projects = ['core-util', 'ipc-bridge'];
 
     async run(): Promise<void> {
         this.validateProjects();
@@ -155,10 +155,10 @@ class ReactNativeGate {
                 errors +
                 `import { IpcCallContext } from '@webpieces/core-util/ipc';\nif (typeof IpcCallContext !== 'function') throw new Error('IPC context missing');\n`
             );
-        const factory = name === 'ipc-client' ? 'IpcClientFactory' : 'IpcServerFactory';
         return (
             errors +
-            `import { ${factory} } from '@webpieces/${name}';\nif (typeof ${factory} !== 'function') throw new Error('IPC factory missing');\n`
+            `import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';\n` +
+            `if (typeof IpcClientFactory !== 'function' || typeof IpcServerFactory !== 'function') throw new Error('Duplex IPC factories missing');\n`
         );
     }
 

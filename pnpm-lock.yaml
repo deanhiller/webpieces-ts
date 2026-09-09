@@ -269,17 +269,7 @@ importers:
 
   packages/core/core-util: {}
 
-  packages/core/ipc-client:
-    dependencies:
-      '@webpieces/core-util':
-        specifier: workspace:*
-        version: link:../core-util
-    devDependencies:
-      '@webpieces/ipc-server':
-        specifier: workspace:*
-        version: link:../ipc-server
-
-  packages/core/ipc-server:
+  packages/core/ipc-bridge:
     dependencies:
       '@webpieces/core-util':
         specifier: workspace:*

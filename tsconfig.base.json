@@ -78,11 +78,8 @@
             "@webpieces/company-svc-core": [
                 "apps/app-example/company-svc-core/src/index.ts"
             ],
-            "@webpieces/ipc-client": [
-                "packages/core/ipc-client/src/index.ts"
-            ],
-            "@webpieces/ipc-server": [
-                "packages/core/ipc-server/src/index.ts"
+            "@webpieces/ipc-bridge": [
+                "packages/core/ipc-bridge/src/index.ts"
             ],
             "@webpieces/core-util/errors": [
                 "packages/core/core-util/src/errors/index.ts"

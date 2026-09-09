@@ -9,8 +9,7 @@ import { chromium } from '@playwright/test';
 const packages = [
     '@webpieces/core-context',
     '@webpieces/core-util',
-    '@webpieces/ipc-client',
-    '@webpieces/ipc-server',
+    '@webpieces/ipc-bridge',
     '@webpieces/gcp-identity',
     '@webpieces/winston',
     '@webpieces/bunyan',
