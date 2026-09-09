@@ -1,7 +1,7 @@
 {
-    "name": "@webpieces/ipc-client",
+    "name": "@webpieces/ipc-bridge",
     "version": "0.0.0-dev",
-    "description": "Portable typed IPC client for browser, React Native and Node",
+    "description": "Portable typed duplex IPC client and server factories for browser, React Native and Node",
     "type": "commonjs",
     "main": "./src/index.js",
     "types": "./src/index.d.ts",
@@ -16,15 +16,12 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/deanhiller/webpieces-ts.git",
-        "directory": "packages/core/ipc-client"
+        "directory": "packages/core/ipc-bridge"
     },
     "publishConfig": {
         "access": "public"
     },
     "dependencies": {
         "@webpieces/core-util": "workspace:*"
-    },
-    "devDependencies": {
-        "@webpieces/ipc-server": "workspace:*"
     }
 }

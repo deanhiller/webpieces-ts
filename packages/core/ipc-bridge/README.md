@@ -1,6 +1,10 @@
-# Portable IPC client
+# Portable IPC bridge
 
-`@webpieces/ipc-client` creates typed API proxies for browser, React Native and Node. The host supplies one trusted JSON transport connection. `@webpieces/ipc-server` dispatches the other side. Either side can be both client and server.
+`@webpieces/ipc-bridge` exports both `IpcClientFactory` and `IpcServerFactory` for browser, React Native and Node. Install one package on each side of a trusted JSON transport connection. Either side can create client proxies and register server implementations.
+
+```typescript
+import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
+```
 
 Declare a shared abstract API and an `IpcContract` from `@webpieces/core-util/ipc` beside it. Its `IpcMethods<Api>` mapping requires one `IpcMethod` per API member. Each method declares an explicit stable wire ID, request schema, response schema, masking spec and request/notification kind. Schemas implement `parse(unknown)` and validate/reconstruct a DTO. Methods accept exactly one non-null DTO and return a Promise. Use `IpcVoidSchema` for acknowledged void. Notifications also acknowledge failures; they never silently swallow them.
 
@@ -30,3 +34,20 @@ Timeout rejects with the existing `TimeoutError`. Send/close/disposal rejects wi
 Host responsibilities: validate WebView origins/navigation/session identity and expose only authorized APIs. Suspension/resume, coalescing native state, durable usage journals and installed shell protocol minimums are application policies. Generic IPC cannot make suspended website JavaScript execute. Android/iOS lifecycle and locked-screen tests remain downstream integration work.
 
 The required compatibility build checks published declarations without Node/DOM ambient types, scans transitive runtime dependencies, bundles Android/iOS with Metro and compiles Hermes bytecode. Hermes/device execution is a separate verification claim and must only be made when actually run.
+
+## Receiver registration
+
+`IpcServerFactory` registers explicit shared contracts and already-constructed implementations. It does not create a bus or import an HTTP server, DI container, React Native runtime or Node request context.
+
+```typescript
+const server = new IpcServerFactory(logging);
+server.create(playbackContract, new NativePlaybackController(player));
+server.create(navigationContract, new NavigationController(router));
+connection.setHandler(server.handle); // exactly once, before sending any calls
+```
+
+One connection has one dispatcher containing multiple APIs. Duplicate registrations fail. Unknown API/method IDs return canonical `EndpointNotFoundError`, distinct from a missing domain entity. Schemas validate both request and reply; successful void is encoded explicitly as null. Receiver exceptions are logged then encoded with the same `ApiErrorCodec` used by the sender to reconstruct canonical errors.
+
+`createScoped(contract, scope)` accepts an `IpcControllerScope<T>` whose `create(context)` supplies the implementation for that invocation. Inject a `clients.withContext(context)` proxy into this controller when it calls back or invokes another API. Concurrent calls have separate context objects and do not overwrite a global async context.
+
+A host may register receivers and create client proxies on both ends of the same connection. `IpcConnection` owns transport parse/send failures and disposal; see the connection and logging contracts above for the transport and logging contracts, error ownership, security responsibilities and downstream native lifecycle tests.
