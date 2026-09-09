@@ -233,6 +233,8 @@ export class ReviewJsonService {
             `with this exact JSON shape (riskEmoji optional — derived from riskLevel):\n\n` +
             `{\n` +
             `  "title": "concise PR title describing the change (imperative, no branch names)",\n` +
+            `  "agent": "claude | codex | unknown",\n` +
+            `  "model": "opus | sonnet | actual readable model name | unknown",\n` +
             `  "riskScore": 0,                       // integer 0–100 (higher = riskier)\n` +
             `  "riskLevel": "green | yellow | red",\n` +
             `  "summary": "5–10 sentence review summary",\n` +
@@ -320,6 +322,11 @@ export class ReviewJsonService {
         }
 
         const errors: string[] = [];
+        for (const field of ['agent', 'model']) {
+            if (typeof raw[field] !== 'string' || raw[field].trim() === '') {
+                errors.push(`"${field}" must be a non-empty string; use "unknown" when unavailable.`);
+            }
+        }
 
         const riskScore = raw['riskScore'];
         if (typeof riskScore !== 'number' || !Number.isFinite(riskScore) || riskScore < 0 || riskScore > 100) {
@@ -353,7 +360,7 @@ export class ReviewJsonService {
             : (EMOJI_FOR_LEVEL[level] ?? '🟡');
         const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
 
-        return new ReviewJson(
+        return new ReviewJson((raw['agent'] as string).trim(), (raw['model'] as string).trim(),
             title,
             riskScore as number,
             level,
@@ -545,7 +552,7 @@ export class ReviewJsonService {
                 errors.push(
                     `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +
                     `then write ${this.checklistFileName(req.id)} with ` +
-                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","output":"…"}.${doc}`,
+                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","agent":"unknown","model":"unknown","output":"…"}.${doc}`,
                 );
             }
         }
@@ -567,12 +574,14 @@ export class ReviewJsonService {
      * work around it. Every printed copy — the stage-② roster, the generated per-reviewer instructions
      * file, and the complaint raised against a malformed verdict — now comes from here.
      *
-     * `verdictPath` may be '' when the caller is describing the shape rather than a specific file.
      */
     verdictSchemaFor(id: string, verdictPath = '', indent = '      '): string {
         const lines = [
             `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
+            `"agent": "claude | codex | unknown", "model": "opus | sonnet | actual readable model name | unknown", ` +
             `"output": "what you checked / found" }`,
+            `${indent}Identity fields are REQUIRED non-empty strings. Use your own harness and model, never the parent's.`,
+            `${indent}Use the literal "unknown" when unavailable; never guess. These are self-reported, not provenance.`,
             `${indent}  ${VERDICT_GREEN}  → passes, nothing to flag`,
             `${indent}  ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR`,
             `${indent}  ${VERDICT_RED}    → REFUSES the PR; your "output" is printed verbatim`,
@@ -588,15 +597,7 @@ export class ReviewJsonService {
         return lines.join('\n');
     }
 
-    /**
-     * Parse one review-<id>.json into a ChecklistResult. `null` ONLY when the bytes do not parse as a JSON
-     * object at all — that tolerance is why a half-written file never wedges a branch, and it degrades to
-     * the same "no verdict yet" message as an absent file, which is honest (nothing readable is there).
-     *
-     * A file that DOES parse always yields a result, even when its verdict is unreadable, carrying the
-     * complaint in `problem`. Returning `null` for those instead would collapse "wrote a verdict in the old
-     * format" into "never wrote a verdict" and send the AI off to re-run a reviewer that already ran.
-     */
+    // Unreadable objects retain their format complaint; absent/unparseable verdicts return null.
     // webpieces-disable no-any-unknown -- opaque parsed JSON, narrowed field-by-field
     private parseChecklistResult(filePath: string, id: string, override: ChecklistOverride | null): ChecklistResult | null {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unparseable per-checklist file is skipped, not fatal
@@ -607,7 +608,12 @@ export class ReviewJsonService {
             if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
             const output = typeof raw['output'] === 'string' ? (raw['output'] as string) : '';
             const status = typeof raw['status'] === 'string' ? (raw['status'] as string).trim().toLowerCase() : '';
-            return new ChecklistResult(id, status, output, override, this.verdictProblem(filePath, id, status, raw));
+            const agent = typeof raw['agent'] === 'string' ? raw['agent'].trim() : '';
+            const model = typeof raw['model'] === 'string' ? raw['model'].trim() : '';
+            const identityProblem = agent === '' || model === ''
+                ? 'Both "agent" and "model" must be non-empty strings; use "unknown" when unavailable.' : '';
+            return new ChecklistResult(agent, model, id, status, output, override,
+                this.verdictProblem(filePath, id, status, raw) || identityProblem);
         } catch (err: unknown) {
             const error = toError(err);
             void error;

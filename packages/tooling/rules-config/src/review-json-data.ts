@@ -33,6 +33,8 @@ export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as 
 // ChecklistOverride. A verdict file still carrying an `override` key is reported through `problem` with the
 // destination named, exactly as the removed `success` field is. Data-only (per CLAUDE.md).
 export class ChecklistResult {
+    agent: string;
+    model: string;
     id: string;
     status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
     output: string;    // what the reviewer found; printed verbatim when the checklist fails
@@ -47,7 +49,9 @@ export class ChecklistResult {
     problem: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, status: string, output: string, override: ChecklistOverride | null, problem = '') {
+    constructor(agent: string, model: string, id: string, status: string, output: string, override: ChecklistOverride | null, problem = '') {
+        this.agent = agent;
+        this.model = model;
         this.id = id;
         this.status = status;
         this.output = output;
@@ -128,6 +132,8 @@ export class ChecklistReviewContext {
 // prints the schema) and `wp-finish-upsert-pr` (which reads it); reviewer subagents write the per-checklist
 // review-<id>.json files. Data-only (per CLAUDE.md).
 export class ReviewJson {
+    agent: string;
+    model: string;
     title: string; // human PR title describing the change; used as the `gh pr` title (empty → caller falls back)
     riskScore: number; // 0–100, drives the risk bar
     riskLevel: string; // 'green' | 'yellow' | 'red'
@@ -139,7 +145,7 @@ export class ReviewJson {
     results: ChecklistResult[]; // resolved per-checklist verdicts (from review-<id>.json); [] when none
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
+    constructor(agent: string, model: string,
         title: string,
         riskScore: number,
         riskLevel: string,
@@ -150,6 +156,8 @@ export class ReviewJson {
         filesToReview: string[],
         results: ChecklistResult[] = [],
     ) {
+        this.agent = agent;
+        this.model = model;
         this.title = title;
         this.riskScore = riskScore;
         this.riskLevel = riskLevel;

@@ -246,3 +246,11 @@ Every path in the file is derived by the tooling from Claude Code's own artifact
 > (default 30). `transcriptsExpireOn` records when the first link goes dead. The counters recorded
 > alongside (`readDiff`, `readDoc`, `toolCallCount`, `offRepoSearches`) stay accurate forever, so an
 > expired transcript costs you the raw conversation, not the finding.
+
+### Review identity
+
+New `review.json` and `review-<id>.json` files require non-empty string fields `agent` and `model`.
+Use your harness (`claude` or `codex`) and readable model name (for example `opus` or `sonnet`).
+Use the literal `unknown` when a value is unavailable; never guess or inherit the parent reviewer’s model.
+These self-reported labels appear in the PR dashboard and each checklist review comment; they do not
+replace independent harness provenance. Existing published reviews are not backfilled.

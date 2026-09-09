@@ -1,3 +1,4 @@
+import { ReviewIdentityRenderer } from './review-identity-renderer';
 import {
     formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
@@ -316,7 +317,7 @@ export class ChecklistCommentRenderer {
         const heading = `#### ${this.verdictEmoji(row)} ${row.subagent} — ${this.verdictWords(row)}`;
         const body =
             row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
-        return new CommentSection(heading, body);
+        return new CommentSection(heading + '\n\n' + new ReviewIdentityRenderer().render(row.agent, row.model), body);
     }
 
     // Keep the comment under GitHub's size cap by shrinking the LONGEST section body first (so a short

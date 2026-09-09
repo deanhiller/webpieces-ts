@@ -19,7 +19,7 @@ const renderDetailComment = (i: DashboardInput): string => dash.renderDetailComm
 const renderPrBody = (i: DashboardInput, url: string): string => dash.renderPrBody(i, url);
 
 function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
-    const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
+    const base = new ReviewJson('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
     return Object.assign(base, overrides);
 }
 
@@ -64,7 +64,7 @@ const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
 
 // A reviewer that RAN because one of its two configured globs hit one of the 4 changed files.
 function ranRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent,
         status,
         detail,
@@ -78,7 +78,7 @@ function ranRow(subagent: string, status: string, detail = ''): ChecklistComment
 
 // A checklist that WAS evaluated and did not apply — its globs hit none of the 4 changed files.
 function skippedRow(subagent: string): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent,
         '',
         '',
@@ -93,7 +93,7 @@ function skippedRow(subagent: string): ChecklistCommentRow {
 // A PATTERNLESS checklist: always runs, whole diff in scope. Note it also has NO fired patterns — the same
 // empty list a skipped checklist has, which is why the renderer must key off the configured list instead.
 function alwaysRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent,
         status,
         detail,
@@ -541,7 +541,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
     // reviewer's verbatim output, which is exactly why the PR body no longer needs to.
     it('leaves the comment carrying the full override prose the dashboard dropped', () => {
         const rows = [
-            new ChecklistCommentRow(
+            new ChecklistCommentRow('unknown', 'unknown',
                 'checklist-envvars',
                 CK_OVERRIDDEN,
                 OVERRIDE_PROSE,

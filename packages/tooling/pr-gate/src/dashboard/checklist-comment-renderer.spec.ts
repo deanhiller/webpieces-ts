@@ -17,7 +17,7 @@ const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
 
 // A reviewer that RAN because one of its two configured globs hit one of the 4 changed files.
 function ranRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent, status, detail, true,
         ['db/**', '**/*.sql'], ['**/*.sql'], ['db/003.sql'], FOUR_FILES.length,
     );
@@ -25,7 +25,7 @@ function ranRow(subagent: string, status: string, detail = ''): ChecklistComment
 
 // A checklist that WAS evaluated and did not apply — its globs hit none of the 4 changed files.
 function skippedRow(subagent: string): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent, '', '', false,
         ['apps/web/**', '**/*.tsx'], [], [], FOUR_FILES.length,
     );
@@ -34,7 +34,7 @@ function skippedRow(subagent: string): ChecklistCommentRow {
 // A PATTERNLESS checklist: always runs, whole diff in scope. Note it also has NO fired patterns — the same
 // empty list a skipped checklist has, which is why the renderer must key off the configured list instead.
 function alwaysRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow(
+    return new ChecklistCommentRow('unknown', 'unknown',
         subagent, status, detail, true, [], [], FOUR_FILES, FOUR_FILES.length,
     );
 }

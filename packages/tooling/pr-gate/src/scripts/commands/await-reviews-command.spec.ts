@@ -20,7 +20,7 @@ function checklist(id: string, required = true): RequiredChecklist {
 }
 
 function writeVerdict(id: string, status: string, output: string): void {
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ id, status, output }));
+    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', id, status, output }));
 }
 
 function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = waitedOn): ReviewerWaitProbe {

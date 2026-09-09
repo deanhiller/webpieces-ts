@@ -18,7 +18,7 @@ const REQ = (id: string): RequiredChecklist =>
     new RequiredChecklist(id, `${id}-reviewer`, `.claude/review/${id}.md`, ['x.sql']);
 
 const VALID_REVIEW = JSON.stringify({
-    title: 'Fix the thing', riskScore: 10, riskLevel: 'green', summary: 'ok',
+    title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 'ok',
     violations: [], risks: [], filesToReview: [],
 });
 
@@ -28,7 +28,7 @@ function tmpDirWith(id: string, verdict: unknown, override: unknown = null): str
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-override-res-'));
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, VALID_REVIEW);
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify(verdict));
+    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(verdict as object) }));
     if (override !== null) fs.writeFileSync(path.join(dir, `override-${id}.json`), JSON.stringify(override));
     return file;
 }
@@ -89,7 +89,7 @@ describe('refusalError prints the override route', () => {
     const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
     const req = (id: string): RequiredChecklist => new RequiredChecklist(id, `${id}-reviewer`, '', ['x.sql'], ['**/*.sql']);
     const refusalFor = (id: string): string => {
-        const results = [new ChecklistResult(id, 'red', 'refused', null)];
+        const results = [new ChecklistResult('unknown', 'unknown', id, 'red', 'refused', null)];
         return svc.refusalError(req(id), svc.resolveVerdict(req(id), results), REVIEW_PATH);
     };
 
