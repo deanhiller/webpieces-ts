@@ -42,16 +42,29 @@ export class IpcConnectionOptions {
         readonly scheduler: IpcScheduler,
         readonly errors: IpcErrorOwner,
         readonly maxMessageCharacters = 1_000_000,
+        readonly settlementHistoryLimit = 100,
+        readonly connectionId = 'unspecified',
     ) {
         if (
             !Number.isFinite(timeoutMs) ||
             timeoutMs <= 0 ||
             !Number.isSafeInteger(maxMessageCharacters) ||
-            maxMessageCharacters < 1
+            maxMessageCharacters < 1 ||
+            !Number.isSafeInteger(settlementHistoryLimit) ||
+            settlementHistoryLimit < 1
         ) {
             throw new InternalError('IPC timeout and message limit must be positive');
         }
     }
+}
+
+type SettlementReason = 'resolved' | 'expired' | 'rejected';
+class SettlementRecord {
+    constructor(
+        readonly context: IpcCallContext,
+        readonly reason: SettlementReason,
+        readonly settledAt: number,
+    ) {}
 }
 
 class PendingCall {
@@ -66,6 +79,7 @@ class PendingCall {
 /** One connection owns both directions, one dispatcher, and all pending-call lifetimes. */
 export class IpcConnection {
     private readonly pending = new Map<string, PendingCall>();
+    private readonly settlements = new Map<string, SettlementRecord>();
     private readonly activeRequests = new Set<string>();
     private readonly usedIds = new Set<string>();
     private handler?: (request: IpcRequest) => Promise<IpcReply>;
@@ -112,6 +126,7 @@ export class IpcConnection {
                         this.options.timeoutMs,
                         new CallContext(request.apiId, request.methodId),
                     ),
+                    'expired',
                 );
             }, this.options.timeoutMs);
             // This owner observes every async send rejection; a send failure is never a timeout.
@@ -119,6 +134,7 @@ export class IpcConnection {
                 this.settle(
                     request.context.callId,
                     new IpcTransportError('IPC send failed', IpcErrors.normalize(error)),
+                    'rejected',
                 );
             });
         });
@@ -155,13 +171,14 @@ export class IpcConnection {
             const pending = this.pending.get(message.context.callId);
             // Late or unsolicited replies are reported, never resolve a different call or replay work.
             if (!pending) {
-                this.options.errors.report(new InternalError('Late or unknown IPC reply'));
+                this.options.errors.report(this.lateReplyError(message));
                 return;
             }
             if (!IpcProtocol.sameContext(pending.context, message.context))
-                throw new InternalError('IPC reply correlation mismatch');
+                throw this.correlationError(message, pending.context);
             this.pending.delete(message.context.callId);
             pending.cancelTimer();
+            this.remember(pending.context, 'resolved');
             pending.resolve(message);
         } catch (err: unknown) {
             const error = toError(err);
@@ -186,18 +203,62 @@ export class IpcConnection {
         await this.send(reply);
     }
 
-    private settle(id: string, error: Error): void {
+    private settle(id: string, error: Error, reason: SettlementReason): void {
         const pending = this.pending.get(id);
         if (!pending) return;
         this.pending.delete(id);
         pending.cancelTimer();
+        this.remember(pending.context, reason);
         pending.reject(error);
+    }
+
+    private remember(context: IpcCallContext, reason: SettlementReason): void {
+        this.settlements.delete(context.callId);
+        this.settlements.set(context.callId, new SettlementRecord(context, reason, Date.now()));
+        while (this.settlements.size > this.options.settlementHistoryLimit) {
+            const oldest = this.settlements.keys().next().value;
+            if (typeof oldest !== 'string') return;
+            this.settlements.delete(oldest);
+        }
+    }
+
+    private lateReplyError(reply: IpcReply): InternalError {
+        const previous = this.settlements.get(reply.context.callId);
+        let classification = 'unknown';
+        if (previous) {
+            classification = IpcProtocol.sameContext(previous.context, reply.context)
+                ? previous.reason === 'expired'
+                    ? 'expired'
+                    : 'duplicate-settled'
+                : 'correlation-mismatched';
+        }
+        const settlement = previous
+            ? ` terminal=${previous.reason} ageMs=${String(Math.max(0, Date.now() - previous.settledAt))}`
+            : '';
+        return new InternalError(
+            `Late or unknown IPC reply classification=${classification}${settlement} ${this.correlationFields(reply.context)}`,
+        );
+    }
+
+    private correlationError(reply: IpcReply, expected: IpcCallContext): InternalError {
+        return new InternalError(
+            `IPC reply correlation mismatch classification=correlation-mismatched ` +
+                `${this.correlationFields(reply.context)} expectedTxId=${JSON.stringify(expected.txId)}`,
+        );
+    }
+
+    private correlationFields(context: IpcCallContext): string {
+        return (
+            `callId=${JSON.stringify(context.callId)} txId=${JSON.stringify(context.txId)} ` +
+            `parentCallId=${JSON.stringify(context.parentCallId ?? null)} ` +
+            `connectionId=${JSON.stringify(this.options.connectionId)}`
+        );
     }
 
     private fail(error: Error): void {
         if (this.closed) return;
         this.closed = error;
-        for (const id of this.pending.keys()) this.settle(id, error);
+        for (const id of this.pending.keys()) this.settle(id, error, 'rejected');
         this.options.errors.report(error);
     }
 }

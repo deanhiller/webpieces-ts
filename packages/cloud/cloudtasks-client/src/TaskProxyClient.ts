@@ -147,7 +147,7 @@ export class TaskProxyClient {
                             // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
                             // enqueue in the process pays a lookup.
                             const targetUrl = await this.config.resolveUrl();
-                            signal.throwIfAborted();
+                            CallDeadline.throwIfAborted(signal);
 
                             const request = new TaskRequest(
                                 targetUrl,

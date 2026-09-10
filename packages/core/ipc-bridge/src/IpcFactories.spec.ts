@@ -115,7 +115,7 @@ class Pair {
     readonly reverse: IpcServerFactory;
     readonly clients: IpcClientFactory;
     private serial = 0;
-    constructor(controller: TestApi = new EchoController()) {
+    constructor(controller: TestApi = new EchoController(), settlementHistoryLimit = 100) {
         this.a.peer = this.b;
         this.b.peer = this.a;
         const options = new IpcConnectionOptions(
@@ -127,7 +127,10 @@ class Pair {
                     return () => clearTimeout(timer);
                 },
             },
-            { report: (error) => this.errors.push(error) },
+            { report: (error: Error) => this.errors.push(error) },
+            1_000_000,
+            settlementHistoryLimit,
+            'document-generation-7',
         );
         this.left = new IpcConnection(this.a, options);
         this.right = new IpcConnection(this.b, options);
@@ -250,7 +253,12 @@ describe('portable IPC JSON boundary', () => {
                 body: new Value('late'),
             }),
         );
-        expect(pair.errors.at(-1)?.message).toContain('Late');
+        expect(pair.errors.at(-1)?.message).toContain('classification=expired');
+        expect(pair.errors.at(-1)?.message).toContain('terminal=expired');
+        expect(pair.errors.at(-1)?.message).toContain('ageMs=1');
+        expect(pair.errors.at(-1)?.message).toContain('callId="call-1"');
+        expect(pair.errors.at(-1)?.message).toContain('txId="call-1"');
+        expect(pair.errors.at(-1)?.message).toContain('connectionId="document-generation-7"');
         pair.a.drop = false;
         pair.a.sendError = new Error('send broke');
         await expect(
@@ -266,6 +274,30 @@ describe('portable IPC JSON boundary', () => {
         const outstanding = malformed.clients.createClient(contract).echo(new Value('x'));
         malformed.a.listener?.('not json');
         await expect(outstanding).rejects.toBeInstanceOf(Error);
+    });
+    it('classifies duplicate, mismatched and unknown replies with bounded payload-free history', async () => {
+        const pair = new Pair(new EchoController(), 2);
+        const client = pair.clients.createClient(contract);
+        await client.echo(new Value('credential-one'));
+        await client.echo(new Value('credential-two'));
+        await client.echo(new Value('credential-three'));
+        const replies = pair.b.sends.map((json: string): object => JSON.parse(json));
+
+        pair.a.listener?.(JSON.stringify(replies[2]));
+        expect(pair.errors.at(-1)?.message).toContain('classification=duplicate-settled');
+        expect(pair.errors.at(-1)?.message).toContain('terminal=resolved');
+
+        const mismatched = JSON.parse(pair.b.sends[2]!);
+        mismatched.context.txId = 'other-transaction';
+        pair.a.listener?.(JSON.stringify(mismatched));
+        expect(pair.errors.at(-1)?.message).toContain('classification=correlation-mismatched');
+
+        // call-1 fell out of the two-entry history, so its otherwise valid reply is genuinely unknown.
+        pair.a.listener?.(JSON.stringify(replies[0]));
+        expect(pair.errors.at(-1)?.message).toContain('classification=unknown');
+        expect(pair.errors.map((error: Error): string => error.message).join('\n')).not.toContain(
+            'credential-',
+        );
     });
     it('isolates out-of-order concurrent calls and propagates parent identity explicitly', async () => {
         class Delayed extends EchoController {

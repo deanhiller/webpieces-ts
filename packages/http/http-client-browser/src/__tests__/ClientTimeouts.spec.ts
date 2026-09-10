@@ -17,6 +17,7 @@ import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
 import { MutableContextStore } from '../MutableContextStore';
 import { RequestLifecycleListener } from '../RequestLifecycleListener';
 import { RequestOutcome } from '@webpieces/http-client-core';
+import { AbortController as ReactNativeAbortController } from 'abort-controller';
 class Payload {
     constructor(public readonly value = 'hello') {}
 }
@@ -112,6 +113,70 @@ afterEach(() => {
 });
 
 describe('browser generated client deadlines', () => {
+    it('runs successfully with the exact React Native abort-controller surface', async () => {
+        vi.stubGlobal('AbortController', ReactNativeAbortController);
+        const signal = new ReactNativeAbortController().signal as unknown as Record<
+            string,
+            unknown
+        >;
+        expect(signal.throwIfAborted).toBeUndefined();
+        expect(signal.reason).toBeUndefined();
+        const h = new Harness();
+        h.transport.work = () => Promise.resolve();
+        await expect(h.invoke()).resolves.toEqual(new Payload());
+        expect(h.transport.calls).toBe(1);
+    });
+
+    it('preserves the typed deadline and performs zero sends after React Native preparation expiry', async () => {
+        vi.stubGlobal('AbortController', ReactNativeAbortController);
+        const h = new Harness();
+        ClientRegistry.clear();
+        let resolveUrl!: (url: string) => void;
+        ClientRegistry.setDeriver(
+            () =>
+                new Promise<string>((resolve: (url: string) => void) => {
+                    resolveUrl = resolve;
+                }),
+        );
+        const pending = h.invoke();
+        const timeout = expect(pending).rejects.toEqual(
+            new TimeoutError(30_000, new CallContext(h.api.name, 'work')),
+        );
+        await vi.advanceTimersByTimeAsync(30_000);
+        await timeout;
+        resolveUrl('https://late.example');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.transport.calls).toBe(0);
+    });
+
+    it('does not decode a stale response after React Native transport cancellation', async () => {
+        vi.stubGlobal('AbortController', ReactNativeAbortController);
+        const h = new Harness();
+        let finishTransport!: () => void;
+        let decoded = 0;
+        h.transport.work = () =>
+            new Promise<void>((resolve: () => void) => {
+                finishTransport = resolve;
+            });
+        h.transport.response = () =>
+            ({
+                ok: true,
+                status: 200,
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+                json: (): Promise<Payload> => {
+                    decoded++;
+                    return Promise.resolve(new Payload());
+                },
+            }) as Response;
+        const pending = h.invoke();
+        const timeout = expect(pending).rejects.toBeInstanceOf(TimeoutError);
+        await vi.advanceTimersByTimeAsync(30_000);
+        await timeout;
+        finishTransport();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(decoded).toBe(0);
+    });
+
     it('rejects at exactly 30 seconds without configuration or automatic retries', async () => {
         const h = new Harness();
         await h.expectTimeout(30_000);

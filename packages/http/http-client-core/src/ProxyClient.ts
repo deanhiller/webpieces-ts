@@ -128,7 +128,13 @@ export abstract class ProxyClient {
     ): Promise<unknown> {
         // apiClass = the CONTRACT name (this.apiName, e.g. 'SaveApi') so this client log line MATCHES
         // the server's for the same call. A client has no impl class, so controllerName is omitted.
-        const info = new ApiMethodInfo('client', this.apiName, route.methodName, undefined, route.mask);
+        const info = new ApiMethodInfo(
+            'client',
+            this.apiName,
+            route.methodName,
+            undefined,
+            route.mask,
+        );
         return this.logApiCall.execute(info, requestDto, method);
     }
 
@@ -217,7 +223,10 @@ export abstract class ProxyClient {
      * @throws Error if the prototype lacks @ApiPath, or declares an endpoint this environment
      *         cannot satisfy (see {@link assertEndpointSupported}).
      */
-    protected initRoutes(apiPrototype: ApiPrototype<object>, appFilters: ClientFilterDefinition[]): void {
+    protected initRoutes(
+        apiPrototype: ApiPrototype<object>,
+        appFilters: ClientFilterDefinition[],
+    ): void {
         this.appFilters = appFilters;
         this.apiClass = apiPrototype;
         if (!isApiPath(apiPrototype)) {
@@ -242,8 +251,15 @@ export abstract class ProxyClient {
             this.routeMap.set(
                 methodName,
                 new RouteMetadata(
-                    'POST', fullPath, methodName, this.apiName, authMeta, undefined, formPost,
-                    getMaskSpec(apiPrototype, methodName), isRawBody(apiPrototype, methodName),
+                    'POST',
+                    fullPath,
+                    methodName,
+                    this.apiName,
+                    authMeta,
+                    undefined,
+                    formPost,
+                    getMaskSpec(apiPrototype, methodName),
+                    isRawBody(apiPrototype, methodName),
                 ),
             );
         }
@@ -259,7 +275,10 @@ export abstract class ProxyClient {
         // not on the filter.
         const byPriority = (a: ClientFilterDefinition, b: ClientFilterDefinition): number =>
             b.priority - a.priority;
-        const ordered = [...[...this.appFilters].sort(byPriority), ...[...this.clientFilters()].sort(byPriority)];
+        const ordered = [
+            ...[...this.appFilters].sort(byPriority),
+            ...[...this.clientFilters()].sort(byPriority),
+        ];
         this.chain = new FilterChain<ClientRequest, Response>(
             ordered.map((definition: ClientFilterDefinition) => definition.filter),
         );
@@ -303,9 +322,9 @@ export abstract class ProxyClient {
         if (route.formPost) {
             throw new Error(
                 `${this.apiName}.${route.methodName} is @Endpoint(..., { formPost: true }) — the ` +
-                `webpieces client does not support calling form-encoded endpoints yet. formPost is ` +
-                `for EXTERNAL inbound webhooks (e.g. Twilio) only. If this endpoint needs a ` +
-                `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
+                    `webpieces client does not support calling form-encoded endpoints yet. formPost is ` +
+                    `for EXTERNAL inbound webhooks (e.g. Twilio) only. If this endpoint needs a ` +
+                    `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
             );
         }
         const authMode = route.authMeta?.mode;
@@ -314,8 +333,8 @@ export abstract class ProxyClient {
         if (authMode?.kind === 'apikey') {
             throw new Error(
                 `${this.apiName}.${route.methodName} is @AuthApiKey('${authMode.regime}') — only the partner ` +
-                `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
-                `so a webpieces client has no credential to send.`,
+                    `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
+                    `so a webpieces client has no credential to send.`,
             );
         }
         // @AuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
@@ -342,35 +361,63 @@ export abstract class ProxyClient {
         // webpieces-disable no-unmanaged-exceptions -- report one logical END, preserving the original thrown value
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            result = await CallRegistry.execute(this.apiClass, route.methodName, (timeoutMs: number) => {
-                response = undefined;
-                return CallDeadline.run(timeoutMs, new CallContext(this.apiName, route.methodName),
-                    async (signal: AbortSignal) => {
-                        const request = await this.prepareRequest(route, requestDto);
-                        signal.throwIfAborted();
-                        const received = await this.chain.execute(request, () => this.sendOnce(request, signal));
-                        signal.throwIfAborted();
-                        response = received;
-                        return this.readResponse(received, route);
-                    });
-            }, 30_000);
+            result = await CallRegistry.execute(
+                this.apiClass,
+                route.methodName,
+                (timeoutMs: number) => {
+                    response = undefined;
+                    return CallDeadline.run(
+                        timeoutMs,
+                        new CallContext(this.apiName, route.methodName),
+                        async (signal: AbortSignal) => {
+                            const request = await this.prepareRequest(route, requestDto);
+                            CallDeadline.throwIfAborted(signal);
+                            const received = await this.chain.execute(request, () =>
+                                this.sendOnce(request, signal),
+                            );
+                            CallDeadline.throwIfAborted(signal);
+                            response = received;
+                            return this.readResponse(received, route);
+                        },
+                    );
+                },
+                30_000,
+            );
         } catch (err: unknown) {
             const error = toError(err);
-            this.onRequestEnd(route, new RequestOutcome(false, response?.status ?? 0, response?.headers, error));
+            this.onRequestEnd(
+                route,
+                new RequestOutcome(false, response?.status ?? 0, response?.headers, error),
+            );
             throw err;
         }
-        this.onRequestEnd(route, new RequestOutcome(true, response?.status ?? 0, response?.headers));
+        this.onRequestEnd(
+            route,
+            new RequestOutcome(true, response?.status ?? 0, response?.headers),
+        );
         return result;
     }
 
     /** Fresh mutable request for every attempt, including URL, headers, auth and body. */
     // webpieces-disable no-any-unknown -- request DTO is erased at the proxy boundary
-    private async prepareRequest(route: RouteMetadata, requestDto: unknown): Promise<ClientRequest> {
+    private async prepareRequest(
+        route: RouteMetadata,
+        requestDto: unknown,
+    ): Promise<ClientRequest> {
         const baseUrl = await this.resolveBaseUrl();
         const headers = new Map<string, string>([['Content-Type', 'application/json']]);
-        const context = this.outboundContextHeaders(DestinationTrust.forAuthMode(route.authMeta?.mode));
+        const context = this.outboundContextHeaders(
+            DestinationTrust.forAuthMode(route.authMeta?.mode),
+        );
         for (const entry of context.entries()) headers.set(entry[0], entry[1]);
-        return new ClientRequest(route, this.apiName, baseUrl, headers, JSON.stringify(requestDto), requestDto);
+        return new ClientRequest(
+            route,
+            this.apiName,
+            baseUrl,
+            headers,
+            JSON.stringify(requestDto),
+            requestDto,
+        );
     }
 
     /**
@@ -385,7 +432,7 @@ export abstract class ProxyClient {
      * will, rather than a raw platform reject.
      */
     private async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
-        signal.throwIfAborted();
+        CallDeadline.throwIfAborted(signal);
         const options: RequestInit = {
             method: request.route.httpMethod,
             signal,
@@ -413,7 +460,9 @@ export abstract class ProxyClient {
         // 266 is protocol success, but its body represents an expected user exception.
         if (response.ok && response.status !== 266) {
             if (!this.bodyReader.isJson(response)) {
-                throw new Error(this.bodyReader.describeForeignBody(response, callId, await response.text()));
+                throw new Error(
+                    this.bodyReader.describeForeignBody(response, callId, await response.text()),
+                );
             }
             return response.json();
         }

@@ -19,8 +19,8 @@
  * only applied to Google-generated audit logs, never to user-written entries. We mirror its field
  * shape ({@link LogChunkInfo}) but must do the work ourselves.
  *
- * BROWSER-SAFE: lives in core-util, which ships in the browser bundle — so `TextEncoder`, never
- * `Buffer`.
+ * PORTABLE: lives in core-util, which ships in browser and React Native bundles — so byte counts
+ * are calculated directly without relying on either `TextEncoder` or Node's `Buffer`.
  *
  * Singleton, mirroring `RequestContext`: use the exported {@link LogChunker}, not `new`.
  */
@@ -90,14 +90,14 @@ export class ChunkBudgets {
 }
 
 export class LogChunkerImpl {
-    private readonly encoder = new TextEncoder();
-
     /**
      * Plain UTF-8 byte length — for measuring text that is ALREADY in its final serialized form
      * (e.g. winston's fully-rendered JSON line), where no further escaping will happen.
      */
     byteLength(text: string): number {
-        return this.encoder.encode(text).length;
+        let bytes = 0;
+        for (const char of text) bytes += this.utf8Cost(char.codePointAt(0)!);
+        return bytes;
     }
 
     /**
@@ -180,7 +180,12 @@ export class LogChunkerImpl {
      * @param renderedBytes - size of the fully-serialized record as it stands today
      * @param budgetBytes   - the per-record ceiling (typically {@link GCP_LOG_BUDGET_BYTES})
      */
-    chunkBudgets(renderedBytes: number, budgetBytes: number, first: string, second: string): ChunkBudgets {
+    chunkBudgets(
+        renderedBytes: number,
+        budgetBytes: number,
+        first: string,
+        second: string,
+    ): ChunkBudgets {
         const firstBytes = this.escapedByteLength(first);
         const secondBytes = this.escapedByteLength(second);
         const envelopeBytes = renderedBytes - firstBytes - secondBytes;
@@ -194,9 +199,15 @@ export class LogChunkerImpl {
         // A field that fits in one piece is given exactly its own size (never 0 — chunk() rejects
         // that), and the oversized field gets everything left over.
         if (secondBytes <= half) {
-            return new ChunkBudgets(Math.max(available - secondBytes, MIN_FIELD_BYTES), Math.max(secondBytes, 1));
+            return new ChunkBudgets(
+                Math.max(available - secondBytes, MIN_FIELD_BYTES),
+                Math.max(secondBytes, 1),
+            );
         }
-        return new ChunkBudgets(Math.max(firstBytes, 1), Math.max(available - firstBytes, MIN_FIELD_BYTES));
+        return new ChunkBudgets(
+            Math.max(firstBytes, 1),
+            Math.max(available - firstBytes, MIN_FIELD_BYTES),
+        );
     }
 
     /**
@@ -229,15 +240,13 @@ export class LogChunkerImpl {
             return 6;
         }
         // Otherwise the character is emitted as-is, costing its UTF-8 length.
-        if (codePoint < 0x80) {
-            return 1;
-        }
-        if (codePoint < 0x800) {
-            return 2;
-        }
-        if (codePoint < 0x10000) {
-            return 3;
-        }
+        return this.utf8Cost(codePoint);
+    }
+
+    private utf8Cost(codePoint: number): number {
+        if (codePoint < 0x80) return 1;
+        if (codePoint < 0x800) return 2;
+        if (codePoint < 0x10000) return 3;
         return 4;
     }
 }

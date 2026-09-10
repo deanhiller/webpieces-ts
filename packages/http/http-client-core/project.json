@@ -12,9 +12,7 @@
         },
         "build": {
             "executor": "@nx/js:tsc",
-            "outputs": [
-                "{options.outputPath}"
-            ],
+            "outputs": ["{options.outputPath}"],
             "options": {
                 "outputPath": "dist/packages/http/http-client-core",
                 "main": "packages/http/http-client-core/src/index.ts",
@@ -24,11 +22,31 @@
                     "packages/http/http-client-core/README.md"
                 ]
             }
+        },
+        "react-native-compat": {
+            "executor": "nx:run-commands",
+            "dependsOn": ["build", "^build"],
+            "cache": true,
+            "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/scripts/react-native-compat.ts",
+                "{workspaceRoot}/packages/tooling/code-rules/src/react-native-compatibility.ts",
+                "{workspaceRoot}/pnpm-lock.yaml"
+            ],
+            "options": {
+                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/react-native-compat.ts http-client-core"
+            }
+        },
+        "ci": {
+            "dependsOn": [
+                "lint",
+                "build",
+                "test",
+                "react-native-compat",
+                "architecture:validate-complete"
+            ]
         }
     },
-    "tags": [
-        "framework:browser",
-        "framework:node",
-        "role:lib"
-    ]
+    "tags": ["framework:browser", "framework:node", "framework:react-native", "role:lib"]
 }

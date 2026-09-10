@@ -68,6 +68,8 @@ export class ReactNativeCompatibility {
                         `${absolute}: unsupported React Native global ${node.text}; use a portable implementation or an explicit platform adapter`,
                     );
                 }
+                const abortProblem = this.abortSignalProblem(absolute, node);
+                if (abortProblem) problems.push(abortProblem);
                 ts.forEachChild(node, walk);
             };
             walk(source);
@@ -100,6 +102,45 @@ export class ReactNativeCompatibility {
         };
         entrypoints.forEach(visitFile);
         return [...new Set(problems)];
+    }
+
+    private abortSignalProblem(absolute: string, node: ts.Node): string | undefined {
+        if (!ts.isPropertyAccessExpression(node) || !this.isNonPortableAbortSignalExtension(node))
+            return undefined;
+        return `${absolute}: AbortSignal.${node.name.text} is not React Native compatible; use CallDeadline.throwIfAborted(signal)`;
+    }
+
+    /** React Native's abort-controller 3 surface has aborted/addEventListener, but not these DOM additions. */
+    private isNonPortableAbortSignalExtension(node: ts.PropertyAccessExpression): boolean {
+        if (!['throwIfAborted', 'reason'].includes(node.name.text)) return false;
+        return this.isSignalExpression(node.expression);
+    }
+
+    private isSignalExpression(expression: ts.Expression): boolean {
+        if (ts.isIdentifier(expression)) {
+            if (/signal$/i.test(expression.text)) return true;
+            return this.hasAbortSignalDeclaration(expression);
+        }
+        return ts.isPropertyAccessExpression(expression) && expression.name.text === 'signal';
+    }
+
+    private hasAbortSignalDeclaration(identifier: ts.Identifier): boolean {
+        let found = false;
+        const inspect = (node: ts.Node): void => {
+            if (found) return;
+            if (
+                (ts.isParameter(node) || ts.isVariableDeclaration(node)) &&
+                ts.isIdentifier(node.name) &&
+                node.name.text === identifier.text &&
+                node.type?.getText() === 'AbortSignal'
+            ) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(node, inspect);
+        };
+        inspect(identifier.getSourceFile());
+        return found;
     }
 
     /** A property named process is not a process-global access. globalThis.process IS. */
