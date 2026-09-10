@@ -9,25 +9,35 @@ import { ReactNativeCompatibility } from '../packages/tooling/code-rules/src/rea
 class ReactNativeGate {
     private readonly root = process.cwd();
     private readonly checker = new ReactNativeCompatibility();
-    private readonly projects = ['core-util', 'ipc-bridge'];
+    /** Canonical list of packages whose public runtime surface promises React Native support. */
+    private readonly projects: PortableProject[] = [
+        new PortableProject('core-util', 'packages/core/core-util', [
+            'src/errors/index.ts',
+            'src/ipc/index.ts',
+        ]),
+        new PortableProject('ipc-bridge', 'packages/core/ipc-bridge', ['src/index.ts']),
+        new PortableProject('http-client-core', 'packages/http/http-client-core', ['src/index.ts']),
+        new PortableProject('http-client-browser', 'packages/http/http-client-browser', [
+            'src/index.ts',
+        ]),
+    ];
 
     async run(): Promise<void> {
         this.validateProjects();
         if (process.argv.includes('--validate-targets')) return;
         const name = process.argv[2];
-        if (!this.projects.includes(name))
-            throw new Error(`Unknown RN compatibility project: ${name}`);
-        const projectRoot = `packages/core/${name}`;
+        const project = this.projects.find(
+            (candidate: PortableProject): boolean => candidate.name === name,
+        );
+        if (!project) throw new Error(`Unknown RN compatibility project: ${name}`);
         const config = ts.readConfigFile(
             path.join(this.root, 'tsconfig.base.json'),
             ts.sys.readFile,
         );
         const options = ts.parseJsonConfigFileContent(config.config, ts.sys, this.root).options;
-        const entries =
-            name === 'core-util' ? ['src/errors/index.ts', 'src/ipc/index.ts'] : ['src/index.ts'];
         this.refuse(
             this.checker.inspect(
-                entries.map((entry) => path.join(this.root, projectRoot, entry)),
+                project.entries.map((entry: string) => path.join(this.root, project.root, entry)),
                 options,
             ),
         );
@@ -46,17 +56,15 @@ class ReactNativeGate {
         fs.writeFileSync(path.join(fixture, 'consumer.js'), js);
         // Metro exposes a JavaScript API; loaded only for this Node build tool, never in portable packages.
         const metro = require('metro');
+        const installedModules = path.dirname(path.dirname(require.resolve('metro/package.json')));
         const base = await metro.loadConfig(
             { cwd: this.root },
             {
                 projectRoot: fixture,
-                watchFolders: [path.join(this.root, 'dist'), path.join(this.root, 'node_modules')],
+                watchFolders: [path.join(this.root, 'dist'), installedModules],
                 maxWorkers: 1,
                 resolver: {
-                    nodeModulesPaths: [
-                        path.join(fixture, 'node_modules'),
-                        path.join(this.root, 'node_modules'),
-                    ],
+                    nodeModulesPaths: [path.join(fixture, 'node_modules'), installedModules],
                     useWatchman: false,
                 },
             },
@@ -105,15 +113,15 @@ class ReactNativeGate {
     private stagePackages(fixture: string): void {
         const scope = path.join(fixture, 'node_modules', '@webpieces');
         fs.mkdirSync(scope, { recursive: true });
-        for (const name of this.projects) {
-            const target = path.join(this.root, 'dist', 'packages', 'core', name);
+        for (const project of this.projects) {
+            const target = path.join(this.root, 'dist', project.root);
             const manifest = path.join(target, 'package.json');
             if (!fs.existsSync(manifest)) {
-                if (name === path.basename(fixture) || name === 'core-util')
+                if (project.name === path.basename(fixture) || project.name === 'core-util')
                     throw new Error(`Build output missing: ${manifest}`);
                 continue;
             }
-            const link = path.join(scope, name);
+            const link = path.join(scope, project.name);
             if (!fs.existsSync(link)) fs.symlinkSync(target, link, 'dir');
         }
     }
@@ -145,6 +153,7 @@ class ReactNativeGate {
 
     private consumer(name: string): string {
         const errors =
+            this.reactNativeRuntimeTypes() +
             this.contractFixture() +
             `import { UserError, ApiErrorCodec } from '@webpieces/core-util/errors';\n` +
             `const original = new UserError('passwords do not match');\n` +
@@ -155,10 +164,33 @@ class ReactNativeGate {
                 errors +
                 `import { IpcCallContext } from '@webpieces/core-util/ipc';\nif (typeof IpcCallContext !== 'function') throw new Error('IPC context missing');\n`
             );
+        if (name === 'ipc-bridge')
+            return (
+                errors +
+                `import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';\n` +
+                `if (typeof IpcClientFactory !== 'function' || typeof IpcServerFactory !== 'function') throw new Error('Duplex IPC factories missing');\n`
+            );
+        if (name === 'http-client-core')
+            return (
+                errors +
+                `import { ProxyClient } from '@webpieces/http-client-core';\n` +
+                `if (typeof ProxyClient !== 'function') throw new Error('Portable HTTP client core missing');\n`
+            );
         return (
             errors +
-            `import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';\n` +
-            `if (typeof IpcClientFactory !== 'function' || typeof IpcServerFactory !== 'function') throw new Error('Duplex IPC factories missing');\n`
+            `import { ClientHttpBrowserFactory } from '@webpieces/http-client-browser';\n` +
+            `if (typeof ClientHttpBrowserFactory !== 'function') throw new Error('Portable HTTP client factory missing');\n`
+        );
+    }
+
+    /** Minimal globals React Native supplies at runtime; deliberately excludes DOM-only extensions. */
+    private reactNativeRuntimeTypes(): string {
+        return (
+            `declare global {\n` +
+            `interface AbortSignal { readonly aborted: boolean; addEventListener(type: 'abort', listener: () => void): void; }\n` +
+            `interface Headers { entries(): IterableIterator<[string, string]>; }\n` +
+            `interface Response { readonly ok: boolean; readonly status: number; readonly headers: Headers; text(): Promise<string>; json(): Promise<unknown>; }\n` +
+            `}\n`
         );
     }
 
@@ -193,6 +225,14 @@ class ReactNativeGate {
         if (problems.length)
             throw new Error(`React Native compatibility failed:\n${problems.join('\n')}`);
     }
+}
+
+class PortableProject {
+    constructor(
+        readonly name: string,
+        readonly root: string,
+        readonly entries: string[],
+    ) {}
 }
 
 // webpieces-disable no-any-unknown -- rejected promises may carry any thrown value

@@ -66,6 +66,18 @@ describe('React Native compatibility import closure', () => {
             inspect(fixture('export const x = (name: string) => import(name);')).join('\n'),
         ).toContain('dynamic module loading');
     });
+    it('rejects AbortSignal extensions missing from React Native without rejecting unrelated reasons', () => {
+        const problems = inspect(
+            fixture(
+                'export function wait(cancellation: AbortSignal) { cancellation.throwIfAborted(); return cancellation.reason; }',
+            ),
+        ).join('\n');
+        expect(problems).toContain('AbortSignal.throwIfAborted');
+        expect(problems).toContain('AbortSignal.reason');
+        expect(inspect(fixture('export const response = { status: { reason: "OK" } };'))).toEqual(
+            [],
+        );
+    });
     it('rejects a tag with no required compatibility target', () => {
         const root = fixture('export {};');
         const file = join(root, 'project.json');

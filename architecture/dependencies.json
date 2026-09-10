@@ -287,7 +287,7 @@
         },
         "http-client-browser": {
             "level": 2,
-            "framework": ["browser"],
+            "framework": ["browser","react-native"],
             "role": "designed-lib",
             "shortDescription": "The browser-side HTTP client: generates type-safe clients from the SAME API contract the server implements. Deliberately DI-free, because it may be bundled by React just as easily as by Angular, so it ships no `inversify` and no node-only `core-context`.",
             "responsibilitiesFile": "packages/http/http-client-browser/responsibilities.md",
@@ -298,7 +298,7 @@
         },
         "http-client-core": {
             "level": 1,
-            "framework": ["browser","node"],
+            "framework": ["browser","node","react-native"],
             "role": "lib",
             "shortDescription": "The isomorphic engine of the webpieces HTTP client: reads an API contract's decorators and turns each method call into an HTTP request. It takes no position on where the magic context comes from or whether a DI container exists, so `http-client-node` and `http-client-browser` both build on it.",
             "responsibilitiesFile": "packages/http/http-client-core/responsibilities.md",
