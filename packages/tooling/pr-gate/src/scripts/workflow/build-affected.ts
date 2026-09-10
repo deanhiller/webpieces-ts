@@ -1,5 +1,5 @@
 import {
-    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog,
+    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, BuildTermination,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
@@ -79,16 +79,19 @@ export class BuildAffected {
         this.stageConsole.say(`\n${opts.label}: ${buildCommand}\n`);
         const logPath = this.buildLog.pathFor(repoRoot, opts.stage);
         const ticket = this.buildsLog.start(opts.stage, repoRoot);
-        let buildCode = 1;
+        let termination = new BuildTermination(1, null);
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the DONE row must be written whether the
         // build passed, failed, or the spawn itself blew up; the throw is re-raised untouched below
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            buildCode = await this.buildLog.run(repoRoot, buildCommand, logPath);
+            termination = await this.buildLog.run(repoRoot, buildCommand, logPath);
         } finally {
-            this.buildsLog.finish(ticket, buildCode);
+            this.buildsLog.finish(ticket, termination);
         }
-        if (buildCode !== 0) throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath));
+        const buildCode = termination.code === null || termination.signal !== null ? 1 : termination.code;
+        if (buildCode !== 0) {
+            throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath, termination));
+        }
         this.stageConsole.say(this.buildLog.successMessage(logPath));
     }
 
@@ -100,9 +103,11 @@ export class BuildAffected {
      * and the un-captured branch's advice was "run the build again yourself", which is the single most
      * expensive thing an agent can be told. Reading a FILE is now the only answer this gate gives.
      */
-    private failureText(opts: BuildGateOptions, buildCommand: string, logPath: string): string {
+    private failureText(
+        opts: BuildGateOptions, buildCommand: string, logPath: string, termination: BuildTermination,
+    ): string {
         return `\n❌ ${opts.failureHeadline}\n` +
-            this.buildLog.failureMessage(buildCommand, logPath) +
+            this.buildLog.failureMessage(buildCommand, logPath, termination) +
             `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`;
     }
 }

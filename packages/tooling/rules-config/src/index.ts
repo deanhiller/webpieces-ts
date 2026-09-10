@@ -90,7 +90,7 @@ export {
 // remote owns, and cannot be answered from a per-repo file because every linked worktree has its own
 // `.webpieces/` and would be blind to the sibling it is contending with. See builds-log.ts.
 export {
-    BuildsLog, BuildTicket, RunningBuild,
+    BuildsLog, BuildTicket, BuildTermination, RunningBuild,
     BUILDS_LOG_FILE, BUILDS_LOCK_FILE, BUILD_START, BUILD_DONE_SUCCESS, BUILD_DONE_FAIL,
     MAX_BUILDS_LOG_BYTES, BUILDS_LOG_GENERATIONS, MAX_ROW_BYTES,
 } from './builds-log';

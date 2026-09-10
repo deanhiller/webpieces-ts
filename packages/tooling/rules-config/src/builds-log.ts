@@ -81,6 +81,21 @@ export class BuildTicket {
 }
 
 /**
+ * How the build process ended. Node reports a null code when a signal ended the process, so collapsing
+ * this to a number would discard the only useful explanation for an otherwise silent build failure.
+ * Data-only: the PR gate decides which CLI exit code to return, while the ledger records these raw facts.
+ */
+export class BuildTermination {
+    code: number | null;
+    signal: string | null;
+
+    constructor(code: number | null, signal: string | null) {
+        this.code = code;
+        this.signal = signal;
+    }
+}
+
+/**
  * One build that is STILL RUNNING — a START row with no matching `DONE-`, whose pid is still alive.
  * Data-only. This is what the refusal message renders, so it carries the three things a reader needs to
  * recognise the build in question: where it is, which tree, and how old it is.
@@ -157,11 +172,12 @@ export class BuildsLog {
     }
 
     /**
-     * Record that the build behind `ticket` has ended. `exitCode` 0 writes `DONE-SUCCESS`; anything else
-     * writes `DONE-FAIL` carrying the code, so `grep DONE-FAIL` lists every red build on the machine.
+     * Record that the build behind `ticket` has ended. Only code 0 with no signal writes `DONE-SUCCESS`;
+     * anything else writes `DONE-FAIL` carrying the raw code and signal, so a killed build does not become
+     * an unexplained generic exit 1 in the machine record.
      */
-    finish(ticket: BuildTicket, exitCode: number, homeDir: string = os.homedir()): void {
-        this.append(this.doneRow(ticket, exitCode), homeDir);
+    finish(ticket: BuildTicket, termination: BuildTermination, homeDir: string = os.homedir()): void {
+        this.append(this.doneRow(ticket, termination), homeDir);
     }
 
     /**
@@ -248,10 +264,11 @@ export class BuildsLog {
         ].join('\t');
     }
 
-    private doneRow(ticket: BuildTicket, exitCode: number): string {
+    private doneRow(ticket: BuildTicket, termination: BuildTermination): string {
         const now = Date.now();
+        const success = termination.code === 0 && termination.signal === null;
         const fields = [
-            exitCode === 0 ? BUILD_DONE_SUCCESS : BUILD_DONE_FAIL,
+            success ? BUILD_DONE_SUCCESS : BUILD_DONE_FAIL,
             `id=${ticket.id}`,
             `t=${new Date(now).toISOString()}`,
             `ms=${String(now)}`,
@@ -259,7 +276,8 @@ export class BuildsLog {
             `repo=${this.clip(ticket.repo)}`,
             `took=${String(now - ticket.startedMs)}`,
         ];
-        if (exitCode !== 0) fields.push(`exit=${String(exitCode)}`);
+        if (!success) fields.push(`exit=${termination.code === null ? 'null' : String(termination.code)}`);
+        if (termination.signal !== null) fields.push(`signal=${this.clip(termination.signal)}`);
         fields.push(`pid=${String(process.pid)}`);
         return fields.join('\t');
     }

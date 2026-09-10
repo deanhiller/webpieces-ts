@@ -1,5 +1,6 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import { BuildTermination } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { GateLogFile } from './gate-log-file';
@@ -126,10 +127,10 @@ export class BuildGateLog {
 
     /**
      * Run `buildCommand` with its stdout AND stderr redirected in full to `logPath`, printing a heartbeat
-     * every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's exit code. Nothing is
-     * truncated and nothing is streamed.
+     * every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's raw termination facts.
+     * Nothing is truncated and nothing is streamed.
      */
-    async run(repoRoot: string, buildCommand: string, logPath: string): Promise<number> {
+    async run(repoRoot: string, buildCommand: string, logPath: string): Promise<BuildTermination> {
         this.files.rotate(logPath);
         const fd = fs.openSync(logPath, 'w');
         const heartbeat = new BuildLogHeartbeat(this.files, logPath, this.files.displayPath(repoRoot, logPath));
@@ -162,25 +163,42 @@ export class BuildGateLog {
      * (a runner that died without printing, a truncated redirect), and the worst possible response is an
      * agent guessing or rebuilding — so it is told to surface the contradiction to the human and stop.
      */
-    failureMessage(buildCommand: string, logPath: string): string {
+    failureMessage(buildCommand: string, logPath: string, termination: BuildTermination): string {
         return `\nBuild Failed: ${buildCommand}\n${this.files.pointer(logPath)}\n` +
+            `${this.terminationRecord(termination)}\n` +
             `Last ${FAILURE_TAIL_LINES} lines of that log:\n${this.files.tail(logPath, FAILURE_TAIL_LINES)}\n` +
             `Read that FILE for the failures. Do NOT re-run the build to see them.\n` +
             `If you do not see failures in that log, report that to the user and stop.\n`;
     }
 
-    // Resolve, and wait for, the child's exit code. A spawn that never starts (a shell that is missing, a
-    // cwd that vanished) fails CLOSED to 1 — calling a build that never ran green is the one outcome that
-    // must be impossible — and the reason is APPENDED TO THE LOG, so the failure message's pointer still
-    // leads to it rather than to an empty file.
-    private awaitExit(child: ChildProcess, fd: number): Promise<number> {
-        return new Promise<number>((resolve: (code: number) => void): void => {
+    // Resolve, and wait for, the child's close code AND signal. A spawn that never starts (a shell that is
+    // missing, a cwd that vanished) fails CLOSED to 1 — calling a build that never ran green is the one
+    // outcome that must be impossible — and the reason is APPENDED TO THE LOG, so the failure message's
+    // pointer still leads to it rather than to an empty file.
+    private awaitExit(child: ChildProcess, fd: number): Promise<BuildTermination> {
+        return new Promise<BuildTermination>((resolve: (termination: BuildTermination) => void): void => {
+            let settled = false;
             child.on('error', (err: Error): void => {
+                if (settled) return;
+                settled = true;
                 fs.writeSync(fd, `\nThe build command could not be started: ${err.message}\n`);
-                resolve(1);
+                resolve(new BuildTermination(1, null));
             });
-            child.on('close', (code: number | null): void => { resolve(code ?? 1); });
+            child.on('close', (code: number | null, signal: NodeJS.Signals | null): void => {
+                if (settled) return;
+                settled = true;
+                const termination = new BuildTermination(code, signal);
+                if (code === null || signal !== null) fs.writeSync(fd, `\n${this.terminationRecord(termination)}\n`);
+                resolve(termination);
+            });
         });
+    }
+
+    /** One stable, human-readable spelling shared by the FullLog and the immediate failure output. */
+    private terminationRecord(termination: BuildTermination): string {
+        const code = termination.code === null ? 'null' : String(termination.code);
+        const signal = termination.signal === null ? 'none' : termination.signal;
+        return `Build process termination: exit code ${code}; signal ${signal}.`;
     }
 
     private resolvePath(repoRoot: string, stage: string): string {

@@ -3,7 +3,9 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { BuildsLog, BuildTicket, CliExitError, DotWebpieces, toError } from '@webpieces/rules-config';
+import {
+    BuildsLog, BuildTicket, BuildTermination, CliExitError, DotWebpieces, toError,
+} from '@webpieces/rules-config';
 import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -68,8 +70,8 @@ class TempHomeBuildsLog extends BuildsLog {
         return super.start(by, startDir, this.home);
     }
 
-    override finish(ticket: BuildTicket, exitCode: number): void {
-        super.finish(ticket, exitCode, this.home);
+    override finish(ticket: BuildTicket, termination: BuildTermination): void {
+        super.finish(ticket, termination, this.home);
     }
 }
 
@@ -159,6 +161,15 @@ describe('the build gate always captures, whatever is on the machine', () => {
         const dir = repoWithBuild('exit 4');
         const err = await runExpectingFailure(gate(), dir);
         expect(err.message).toContain('re-run pnpm wp-review-upsert-pr');
+    });
+
+    it('keeps a termination signal in the failure output instead of only reporting generic exit 1', async () => {
+        const dir = repoWithBuild('kill -TERM $$');
+        const err = await runExpectingFailure(gate(), dir);
+        expect(err.exitCode).toBe(1);
+        expect(err.message).toContain('Build process termination: exit code null; signal SIGTERM.');
+        expect(fs.readFileSync(buildLog().existingLogFor(dir, REVIEW_STAGE), 'utf8'))
+            .toContain('Build process termination: exit code null; signal SIGTERM.');
     });
 
     it('on SUCCESS says so and names the log, rather than reprinting the build', async () => {
