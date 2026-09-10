@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    BuildsLog, BuildTicket, BUILDS_LOG_GENERATIONS, BUILD_START, MAX_BUILDS_LOG_BYTES, MAX_ROW_BYTES,
+    BuildsLog, BuildTicket, BuildTermination, BUILDS_LOG_GENERATIONS, BUILD_START,
+    MAX_BUILDS_LOG_BYTES, MAX_ROW_BYTES,
 } from './builds-log';
 import { DotWebpieces } from './state-dir';
 
@@ -63,7 +64,7 @@ describe('BuildsLog — START/DONE pairing by uuid', () => {
         const log = ledger();
         const ticket = log.start('build', process.cwd(), home);
         expect(log.running(home).map((b: { id: string }): string => b.id)).toEqual([ticket.id]);
-        log.finish(ticket, 0, home);
+        log.finish(ticket, new BuildTermination(0, null), home);
         expect(log.running(home)).toEqual([]);
     });
 
@@ -73,7 +74,7 @@ describe('BuildsLog — START/DONE pairing by uuid', () => {
         const first = log.start('build', process.cwd(), home);
         const second = log.start('review', process.cwd(), home);
         const third = log.start('finish', process.cwd(), home);
-        log.finish(second, 0, home);
+        log.finish(second, new BuildTermination(0, null), home);
         const ids = log.running(home).map((b: { id: string }): string => b.id).sort();
         expect(ids).toEqual([first.id, third.id].sort());
     });
@@ -82,12 +83,22 @@ describe('BuildsLog — START/DONE pairing by uuid', () => {
         const home = fakeHome();
         const log = ledger();
         const ticket = log.start('build', process.cwd(), home);
-        log.finish(ticket, 7, home);
+        log.finish(ticket, new BuildTermination(7, null), home);
         expect(log.running(home)).toEqual([]);
         const done = readLog(home).filter((line: string): boolean => line.startsWith('DONE-FAIL\t'));
         expect(done).toHaveLength(1);
         expect(done[0]).toContain('exit=7');
         expect(done[0]).toContain(`id=${ticket.id}`);
+    });
+
+    it('records a signalled build with its null code and signal', () => {
+        const home = fakeHome();
+        const log = ledger();
+        const ticket = log.start('build', process.cwd(), home);
+        log.finish(ticket, new BuildTermination(null, 'SIGTERM'), home);
+        const done = readLog(home).find((line: string): boolean => line.startsWith('DONE-FAIL\t'));
+        expect(done).toContain('exit=null');
+        expect(done).toContain('signal=SIGTERM');
     });
 
     /**
@@ -100,7 +111,7 @@ describe('BuildsLog — START/DONE pairing by uuid', () => {
         const deep = path.join(home, ...Array.from({ length: 8 }, (): string => 'a-very-long-directory-name'));
         fs.mkdirSync(deep, { recursive: true });
         const log = ledger();
-        log.finish(log.start('build', deep, home), 0, home);
+        log.finish(log.start('build', deep, home), new BuildTermination(0, null), home);
         for (const line of readLog(home)) {
             expect(Buffer.from(`${line}\n`, 'utf8').length).toBeLessThanOrEqual(MAX_ROW_BYTES);
         }
@@ -150,7 +161,7 @@ describe('BuildsLog — rotation at 1 MB keeps exactly five generations', () => 
         }
         fs.writeFileSync(file, 'x'.repeat(MAX_BUILDS_LOG_BYTES + 1));
 
-        log.finish(log.start('build', process.cwd(), home), 0, home);
+        log.finish(log.start('build', process.cwd(), home), new BuildTermination(0, null), home);
 
         // The current log was rotated to .1 and a fresh one holds only this build's two rows.
         expect(fs.statSync(log.rotatedPath(1, home)).size).toBeGreaterThan(MAX_BUILDS_LOG_BYTES);
@@ -165,7 +176,7 @@ describe('BuildsLog — rotation at 1 MB keeps exactly five generations', () => 
     it('does NOT rotate a log that is still under the limit', () => {
         const home = fakeHome();
         const log = ledger();
-        log.finish(log.start('build', process.cwd(), home), 0, home);
+        log.finish(log.start('build', process.cwd(), home), new BuildTermination(0, null), home);
         expect(fs.existsSync(log.rotatedPath(1, home))).toBe(false);
         expect(readLog(home)).toHaveLength(2);
     });
@@ -226,7 +237,7 @@ describe('BuildsLog — concurrency', () => {
         fs.writeFileSync(path.join(home, '.webpieces'), 'not a directory\n');
         const log = ledger();
         const ticket = log.start('build', process.cwd(), home);
-        expect((): void => { log.finish(ticket, 0, home); }).not.toThrow();
+        expect((): void => { log.finish(ticket, new BuildTermination(0, null), home); }).not.toThrow();
         expect(log.running(home)).toEqual([]);
     });
 });

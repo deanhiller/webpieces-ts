@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { BuildTermination } from '@webpieces/rules-config';
 import {
     BuildGateLog, BuildLogHeartbeat, BUILD_STAGE, FINISH_STAGE, REVIEW_STAGE, HEARTBEAT_MS, FAILURE_TAIL_LINES,
 } from './build-gate-log';
@@ -117,8 +118,8 @@ describe('BuildGateLog capture', () => {
         const dir = repo('dean/x');
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
-        const code = await log.run(dir, 'echo out-line; echo err-line 1>&2', p);
-        expect(code).toBe(0);
+        const termination = await log.run(dir, 'echo out-line; echo err-line 1>&2', p);
+        expect(termination).toEqual(new BuildTermination(0, null));
         const body = fs.readFileSync(p, 'utf8');
         expect(body).toContain('out-line');
         expect(body).toContain('err-line');
@@ -133,7 +134,7 @@ describe('BuildGateLog capture', () => {
         const dir = repo('dean/x');
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
-        expect(await log.run(dir, 'echo boom 1>&2; exit 7', p)).toBe(7);
+        expect(await log.run(dir, 'echo boom 1>&2; exit 7', p)).toEqual(new BuildTermination(7, null));
         expect(fs.readFileSync(p, 'utf8')).toContain('boom');
     });
 
@@ -142,7 +143,7 @@ describe('BuildGateLog capture', () => {
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         // A command the shell cannot find exits non-zero rather than never starting; either way, not 0.
-        expect(await log.run(dir, 'no-such-binary-anywhere', p)).not.toBe(0);
+        expect((await log.run(dir, 'no-such-binary-anywhere', p)).code).not.toBe(0);
     });
 
     // Nothing may be dropped: the whole promise is "the failures ARE in that file".
@@ -160,8 +161,17 @@ describe('BuildGateLog capture', () => {
         const dir = repo('dean/x');
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
-        expect(await log.run(dir, 'echo kept # a trailing comment', p)).toBe(0);
+        expect(await log.run(dir, 'echo kept # a trailing comment', p)).toEqual(new BuildTermination(0, null));
         expect(fs.readFileSync(p, 'utf8')).toContain('kept');
+    });
+
+    it('records the signal in the FullLog when the build process is terminated', async () => {
+        const dir = repo('dean/x');
+        const log = newLog();
+        const p = log.pathFor(dir, BUILD_STAGE);
+        const termination = await log.run(dir, 'kill -TERM $$', p);
+        expect(termination).toEqual(new BuildTermination(null, 'SIGTERM'));
+        expect(fs.readFileSync(p, 'utf8')).toContain('Build process termination: exit code null; signal SIGTERM.');
     });
 
     it('leaves no side files beside the log', async () => {
@@ -247,7 +257,8 @@ describe('BuildGateLog messages', () => {
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         fs.writeFileSync(p, Array.from({ length: 200 }, (_v: unknown, i: number): string => `line-${i}`).join('\n') + '\n');
-        const msg = log.failureMessage('pnpm nx affected --target=ci', p);
+        const msg = log.failureMessage(
+            'pnpm nx affected --target=ci', p, new BuildTermination(7, null));
         expect(msg).toContain('Build Failed: pnpm nx affected --target=ci');
         expect(msg).toContain(`FullLog : ${p}`);
         expect(msg).toContain('line-199');
@@ -265,18 +276,19 @@ describe('BuildGateLog messages', () => {
         const log = newLog();
         const p = log.pathFor(dir, BUILD_STAGE);
         fs.mkdirSync(p);  // exists, but readFileSync cannot read a directory
-        const msg = log.failureMessage('pnpm build', p);
+        const msg = log.failureMessage('pnpm build', p, new BuildTermination(1, null));
         expect(msg).toContain(`could not read ${p}`);
         expect(msg).toContain(`FullLog : ${p}`);
     });
 
     it('says so rather than showing an empty tail when there is no log to read', () => {
-        expect(newLog().failureMessage('pnpm build', '/abs/nope.log')).toContain('(no log file at /abs/nope.log)');
+        expect(newLog().failureMessage('pnpm build', '/abs/nope.log', new BuildTermination(1, null)))
+            .toContain('(no log file at /abs/nope.log)');
     });
 
     // It must NOT teach the thing it exists to prevent.
     it('never tells the AI to re-run the build to see the errors', () => {
-        const msg = newLog().failureMessage('pnpm build', '/abs/b.log');
+        const msg = newLog().failureMessage('pnpm build', '/abs/b.log', new BuildTermination(1, null));
         expect(msg).not.toContain('Run THIS exact command to reproduce');
         expect(msg).toContain('Do NOT re-run the build to see them.');
     });
