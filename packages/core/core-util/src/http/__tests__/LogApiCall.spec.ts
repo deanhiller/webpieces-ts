@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach, beforeAll } from 'vitest';
+import { describe, expect, it, afterEach, afterAll, beforeAll } from 'vitest';
 import { LogApiCallImpl } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
@@ -37,25 +37,36 @@ class RecordingApiCallContext implements ApiCallContext {
         this.removes.push(key);
     }
     values(): ApiCallInfo[] {
-        return this.sets.map(s => s.value as ApiCallInfo);
+        return this.sets.map((s) => s.value as ApiCallInfo);
     }
 }
 
 /** The call identity per side: apiClass 'SaveApi' matches client+server; controllerName is server impl. */
-const info = (side: ApiSide): ApiMethodInfo => new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
+const info = (side: ApiSide): ApiMethodInfo =>
+    new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
 describe('LogApiCall.execute — success + active guard', () => {
     it('stamps API_CALL_INFO: request then response:success around a successful call', async () => {
         const ctx = new RecordingApiCallContext();
-        const res = await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
+        const res = await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({
+            ok: true,
+        }));
 
         expect(res).toEqual({ ok: true });
-        expect(ctx.sets.map(s => s.key)).toEqual([API, API]); // both stamps target API_CALL_INFO
+        expect(ctx.sets.map((s) => s.key)).toEqual([API, API]); // both stamps target API_CALL_INFO
         // Field-wise rather than a deep-equal on the whole tag: durationMs is wall-clock, so it can
         // never be asserted by construction. It gets its own tests below.
-        expect(ctx.values()[0]).toMatchObject({ method: info('client'), type: 'request', result: undefined });
-        expect(ctx.values()[1]).toMatchObject({ method: info('client'), type: 'response', result: 'success' });
+        expect(ctx.values()[0]).toMatchObject({
+            method: info('client'),
+            type: 'request',
+            result: undefined,
+        });
+        expect(ctx.values()[1]).toMatchObject({
+            method: info('client'),
+            type: 'response',
+            result: 'success',
+        });
         // set → log → remove: every stamp is cleared, so nothing is ever held across the await.
         expect(ctx.removes).toEqual([API, API]);
     });
@@ -66,7 +77,9 @@ describe('LogApiCall.execute — success + active guard', () => {
         await ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
 
         const tag = ctx.values()[0];
-        expect(tag.method).toEqual(new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'));
+        expect(tag.method).toEqual(
+            new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
+        );
         expect(tag.method.apiClass).toBe('SaveApi');
         expect(tag.type).toBe('request');
     });
@@ -102,7 +115,11 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toBeInstanceOf(BadRequestError);
 
-        expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'success' });
+        expect(ctx.values().at(-1)).toMatchObject({
+            method: info('server'),
+            type: 'response',
+            result: 'success',
+        });
     });
 
     it('CLIENT receiving a 4xx → response:failure — the outbound call failed', async () => {
@@ -114,7 +131,11 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toBeInstanceOf(BadRequestError);
 
-        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
+        expect(ctx.values().at(-1)).toMatchObject({
+            method: info('client'),
+            type: 'response',
+            result: 'failure',
+        });
     });
 
     it('UserError (266) → response:success on BOTH sides', async () => {
@@ -138,7 +159,11 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toThrow('boom');
 
-        expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'failure' });
+        expect(ctx.values().at(-1)).toMatchObject({
+            method: info('server'),
+            type: 'response',
+            result: 'failure',
+        });
     });
 });
 
@@ -164,7 +189,11 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
         ).rejects.toBeInstanceOf(NotFoundError);
 
         // Without the classifier this client 4xx would be 'failure'; the classifier makes it 'success'.
-        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'success' });
+        expect(ctx.values().at(-1)).toMatchObject({
+            method: info('client'),
+            type: 'response',
+            result: 'success',
+        });
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
@@ -180,7 +209,11 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
             }),
         ).rejects.toBeInstanceOf(BadRequestError);
 
-        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
+        expect(ctx.values().at(-1)).toMatchObject({
+            method: info('client'),
+            type: 'response',
+            result: 'failure',
+        });
     });
 });
 
@@ -189,7 +222,7 @@ describe('LogApiCall.execute — durationMs', () => {
         const ctx = new RecordingApiCallContext();
 
         await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
-            await new Promise(resolve => setTimeout(resolve, 25));
+            await new Promise((resolve) => setTimeout(resolve, 25));
             return { ok: true };
         });
 
@@ -205,7 +238,7 @@ describe('LogApiCall.execute — durationMs', () => {
 
         await expect(
             ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => {
-                await new Promise(resolve => setTimeout(resolve, 25));
+                await new Promise((resolve) => setTimeout(resolve, 25));
                 throw new Error('slow boom');
             }),
         ).rejects.toThrow('slow boom');
@@ -223,7 +256,8 @@ describe('LogApiCall.execute — body sizes', () => {
         const response = { ok: true, note: 'hello' };
         await ctx.logApiCall.execute(info('client'), request, async () => response);
 
-        const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+        const bytes = (value: unknown): number =>
+            new TextEncoder().encode(JSON.stringify(value)).length;
         expect(ctx.values()[0].requestSize).toBe(bytes(request));
         expect(ctx.values()[1].requestSize).toBe(bytes(request)); // repeated, so one record shows both
         expect(ctx.values()[1].responseSize).toBe(bytes(response));
@@ -241,7 +275,7 @@ describe('LogApiCall.execute — body sizes', () => {
         expect(ctx.values()[0].requestSize).toBeGreaterThan(serialized.length);
     });
 
-    it('reports the TOTAL body size, not a chunked/truncated size (chunking is the backend\'s job)', async () => {
+    it("reports the TOTAL body size, not a chunked/truncated size (chunking is the backend's job)", async () => {
         const ctx = new RecordingApiCallContext();
 
         const big = { blob: 'a'.repeat(500_000) };
@@ -259,6 +293,128 @@ describe('LogApiCall.execute — body sizes', () => {
         for (const tag of ctx.values()) {
             expect(tag).not.toHaveProperty('statusCode');
         }
+    });
+});
+
+describe('LogApiCall.execute — responseCount', () => {
+    it('adds a supplied logical-item count to the successful response tag', async () => {
+        const ctx = new RecordingApiCallContext();
+        const response = { documents: [{ id: 'a' }, { id: 'b' }] };
+
+        const result = await ctx.logApiCall.execute(
+            info('client'),
+            { query: 'all' },
+            async () => response,
+            (value) => value.documents.length,
+        );
+
+        expect(result).toBe(response);
+        expect(ctx.values()[0].responseCount).toBeUndefined();
+        expect(ctx.values()[1].responseCount).toBe(2);
+    });
+
+    it('preserves zero as a real count', async () => {
+        const ctx = new RecordingApiCallContext();
+
+        await ctx.logApiCall.execute(
+            info('client'),
+            { query: 'none' },
+            async () => ({ documents: [] as string[] }),
+            (value) => value.documents.length,
+        );
+
+        expect(ctx.values().at(-1)?.responseCount).toBe(0);
+    });
+
+    it('keeps the existing log shape when no selector is supplied', async () => {
+        const ctx = new RecordingApiCallContext();
+
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
+
+        expect(JSON.stringify(ctx.values().at(-1))).not.toContain('responseCount');
+    });
+
+    it.each<[string, number]>([
+        ['negative', -1],
+        ['fractional', 1.5],
+        ['infinite', Number.POSITIVE_INFINITY],
+        ['NaN', Number.NaN],
+    ])(
+        'omits a %s selector result without changing the successful response',
+        async (_label: string, invalid: number) => {
+            const ctx = new RecordingApiCallContext();
+            const response = { ok: true };
+
+            const result = await ctx.logApiCall.execute(
+                info('client'),
+                { q: 'x' },
+                async () => response,
+                () => invalid,
+            );
+
+            expect(result).toBe(response);
+            expect(ctx.values().at(-1)?.responseCount).toBeUndefined();
+            expect(ctx.values().at(-1)?.result).toBe('success');
+        },
+    );
+
+    it('omits a throwing selector without changing the successful response', async () => {
+        const ctx = new RecordingApiCallContext();
+        const response = { ok: true };
+
+        const result = await ctx.logApiCall.execute(
+            info('client'),
+            { q: 'x' },
+            async () => response,
+            () => {
+                throw new Error('selector saw private response contents');
+            },
+        );
+
+        expect(result).toBe(response);
+        expect(ctx.values().at(-1)?.responseCount).toBeUndefined();
+        expect(ctx.values().at(-1)?.result).toBe('success');
+    });
+});
+
+class ThrowingResponseLoggerFactory implements LoggerFactory {
+    infoCalls = 0;
+    getLogger(_name: string): Logger {
+        const info = (): void => {
+            this.infoCalls++;
+            if (this.infoCalls === 2) {
+                throw new Error('logger exploded');
+            }
+        };
+        const noOp = (): void => undefined;
+        return { trace: noOp, debug: noOp, info, warn: noOp, error: noOp };
+    }
+}
+
+describe('LogApiCall.execute — context cleanup', () => {
+    const previousFactory = LogManager.getFactory();
+    const throwingFactory = new ThrowingResponseLoggerFactory();
+
+    beforeAll(() => {
+        if (!HeaderRegistry.isConfigured()) {
+            HeaderRegistry.configure([API], /*platformHeaders*/ false);
+        }
+        LogManager.setFactory(throwingFactory);
+    });
+
+    afterAll(() => {
+        LogManager.setFactory(previousFactory);
+    });
+
+    it('removes API_CALL_INFO in finally when response logging throws', async () => {
+        const ctx = new RecordingApiCallContext();
+
+        await expect(
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true })),
+        ).rejects.toThrow('logger exploded');
+
+        expect(ctx.removes).toHaveLength(ctx.sets.length);
+        expect(ctx.removes.every((key) => key === API)).toBe(true);
     });
 });
 
@@ -289,8 +445,13 @@ describe('LogApiCall.execute — opt-in field masking', () => {
 
     // The mask spec that would have stopped the real production leak (response.account.refreshToken).
     const masked = (side: ApiSide): ApiMethodInfo =>
-        new ApiMethodInfo(side, 'HelperFsdbApi', 'getEmailAccount', undefined,
-            new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }));
+        new ApiMethodInfo(
+            side,
+            'HelperFsdbApi',
+            'getEmailAccount',
+            undefined,
+            new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }),
+        );
 
     it('masks the secret in BOTH the request and response log lines, yet sends the real value on the wire', async () => {
         capturing.lines.length = 0;
@@ -299,9 +460,11 @@ describe('LogApiCall.execute — opt-in field masking', () => {
         const realRefresh = '1//04hg2kWy8UcIvCgYIARAAGAQSNwF-L9Irok';
         const request = { account: { refreshToken: realRefresh } };
         let seenByWire: string | undefined;
-        const response = { account: { emailAddress: 'user@example.com', refreshToken: realRefresh } };
+        const response = {
+            account: { emailAddress: 'user@example.com', refreshToken: realRefresh },
+        };
 
-        await ctx.logApiCall.execute(masked('client'), request, async dto => {
+        await ctx.logApiCall.execute(masked('client'), request, async (dto) => {
             // What the transport would put ON THE WIRE is the ORIGINAL, unmasked value (acceptance #4).
             seenByWire = (dto as typeof request).account.refreshToken;
             return response;
@@ -309,8 +472,8 @@ describe('LogApiCall.execute — opt-in field masking', () => {
 
         expect(seenByWire).toBe(realRefresh);
 
-        const reqLine = capturing.lines.find(l => l.includes('[API-client-req]'));
-        const respLine = capturing.lines.find(l => l.includes('[API-client-resp-SUCCESS]'));
+        const reqLine = capturing.lines.find((l) => l.includes('[API-client-req]'));
+        const respLine = capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]'));
         expect(reqLine).toContain('"refreshToken":"*****"');
         expect(reqLine).not.toContain(realRefresh);
         expect(respLine).toContain('"refreshToken":"*****"');
@@ -326,8 +489,35 @@ describe('LogApiCall.execute — opt-in field masking', () => {
         const response = { account: { refreshToken: 'still-cleartext-when-unmasked' } };
         await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => response);
 
-        const respLine = capturing.lines.find(l => l.includes('[API-client-resp-SUCCESS]'));
+        const respLine = capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]'));
         expect(respLine).toContain(`response=${JSON.stringify(response)}`);
+    });
+
+    it('emits body-free warnings for invalid and throwing response-count selectors', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+        const response = { secretBody: 'must-not-appear-in-warning' };
+
+        await ctx.logApiCall.execute(
+            info('client'),
+            { q: 'x' },
+            async () => response,
+            () => -1,
+        );
+        await ctx.logApiCall.execute(
+            info('client'),
+            { q: 'x' },
+            async () => response,
+            () => {
+                throw new Error('must-not-appear-in-warning');
+            },
+        );
+
+        const warnings = capturing.lines.filter((line) => line.includes('resp-COUNT-WARN'));
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0]).toContain('returned an invalid value');
+        expect(warnings[1]).toContain('selector threw');
+        expect(warnings.join('\n')).not.toContain('must-not-appear-in-warning');
     });
 });
 

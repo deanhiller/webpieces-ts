@@ -1,12 +1,12 @@
-import {toError} from "../lib/errorUtils";
-import {LogManager} from "../logging/LogManager";
-import {ApiCallInfo} from "./ApiCallInfo";
-import {ApiMethodInfo} from "./ApiMethodInfo";
-import {ApiCallContext} from "./ApiCallContext";
-import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
-import {LOG_API_CALL_LOGGER_NAME} from "./ApiCallLogName";
-import {ClientRegistry} from "./ClientRegistry";
-import {WEBPIECES_DEFAULT_FAILURE_CLASSIFIER} from "./WebpiecesDefaultFailureClassifier";
+import { toError } from '../lib/errorUtils';
+import { LogManager } from '../logging/LogManager';
+import { ApiCallInfo } from './ApiCallInfo';
+import { ApiMethodInfo } from './ApiMethodInfo';
+import { ApiCallContext } from './ApiCallContext';
+import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
+import { LOG_API_CALL_LOGGER_NAME } from './ApiCallLogName';
+import { ClientRegistry } from './ClientRegistry';
+import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
 
 // The console backends special-case THIS logger name into a self-describing [API.{side}.{phase}]
 // bracket (see ApiCallLogName) — so the name here and the name they match are the one constant.
@@ -44,7 +44,6 @@ const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
  * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (server errors)
  */
 export class LogApiCallImpl {
-
     /**
      * @param ctx - the environment's {@link ApiCallContext}. REQUIRED, with no default: that is what
      *   turns "nobody bootstrapped the context" into a compile error instead of a throw on the first
@@ -67,14 +66,12 @@ export class LogApiCallImpl {
      * it. Cost: only the `[API-*]` req/resp lines carry `api`, not lines emitted mid-call — which is
      * exactly what the GCP filters (`jsonPayload.api.*`) want.
      */
-    public async execute(
+    public async execute<Q, R>(
         methodInfo: ApiMethodInfo,
-        // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary (matches ProxyClient)
-        requestDto: any,
-        // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
-        method: (dto: any) => Promise<any>,
-        // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
-    ): Promise<any> {
+        requestDto: Q,
+        method: (dto: Q) => Promise<R>,
+        responseCount?: (response: R) => number | undefined,
+    ): Promise<R> {
         const ctx = this.activeContext();
         const key = WebpiecesCoreHeaders.API_CALL_INFO;
         const side = methodInfo.side;
@@ -83,8 +80,12 @@ export class LogApiCallImpl {
         // never across an await, so a single browser global slot can never be clobbered by a concurrent call.
         const stamp = (info: ApiCallInfo, emit: () => void): void => {
             ctx.set(key, info);
-            emit();
-            ctx.remove(key);
+            // webpieces-disable no-unmanaged-exceptions -- cleanup must run when a logging backend throws
+            try {
+                emit();
+            } finally {
+                ctx.remove(key);
+            }
         };
 
         // Stringify ONCE and reuse for both the log text and the size — a second JSON.stringify of a
@@ -100,21 +101,29 @@ export class LogApiCallImpl {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
             stamp(new ApiCallInfo(methodInfo, 'request', undefined, undefined, requestSize), () =>
-                log.info(`[API-${side}-req] ${id} request=${requestBody}`));
+                log.info(`[API-${side}-req] ${id} request=${requestBody}`),
+            );
 
-            if(!requestDto)
-                throw new Error(`Request cannot be null and was from ${id}`);
+            if (!requestDto) throw new Error(`Request cannot be null and was from ${id}`);
 
             startMs = Date.now();
             const response = await method(requestDto);
             const durationMs = Date.now() - startMs;
 
             const responseBody = this.serialize(response, methodInfo);
+            const count = this.selectResponseCount(response, responseCount, side, id);
             stamp(
                 new ApiCallInfo(
-                    methodInfo, 'response', 'success', durationMs, requestSize, this.byteSize(responseBody),
+                    methodInfo,
+                    'response',
+                    'success',
+                    durationMs,
+                    requestSize,
+                    this.byteSize(responseBody),
+                    count,
                 ),
-                () => log.info(`[API-${side}-resp-SUCCESS] ${id} response=${responseBody}`));
+                () => log.info(`[API-${side}-resp-SUCCESS] ${id} response=${responseBody}`),
+            );
 
             return response;
         } catch (err: unknown) {
@@ -123,6 +132,51 @@ export class LogApiCallImpl {
             // hung dependency) reports its real cost rather than nothing.
             this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
             throw err;
+        }
+    }
+
+    /**
+     * Evaluate an opt-in logical-item count without allowing observability code to affect the call.
+     * Warnings deliberately contain neither request nor response bodies (nor the invalid value).
+     */
+    private selectResponseCount<R>(
+        response: R,
+        selector: ((response: R) => number | undefined) | undefined,
+        side: string,
+        id: string,
+    ): number | undefined {
+        if (!selector) {
+            return undefined;
+        }
+
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an observability callback must not fail the API call
+        try {
+            const count = selector(response);
+            if (
+                count === undefined ||
+                (Number.isFinite(count) && Number.isInteger(count) && count >= 0)
+            ) {
+                return count;
+            }
+            this.warnInvalidResponseCount(side, id, 'returned an invalid value');
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            this.warnInvalidResponseCount(side, id, 'threw');
+        }
+        return undefined;
+    }
+
+    private warnInvalidResponseCount(side: string, id: string, reason: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a warning backend must not replace a successful API response
+        try {
+            log.warn(
+                `[API-${side}-resp-COUNT-WARN] ${id} responseCount selector ${reason}; omitting responseCount`,
+            );
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            // The API response is authoritative; observability failures are intentionally ignored here.
         }
     }
 
@@ -150,9 +204,9 @@ export class LogApiCallImpl {
         if (!ctx.isActive()) {
             throw new Error(
                 'LogApiCall requires an ACTIVE ApiCallContext. On a Node server, run inside a ' +
-                'RequestContext.run(...) scope — a server filter opens one per request, and a ' +
-                'non-webpieces host must open one around the work that calls a webpieces client. ' +
-                '(A BrowserApiCallContext is always active, so this can only be the Node side.)',
+                    'RequestContext.run(...) scope — a server filter opens one per request, and a ' +
+                    'non-webpieces host must open one around the work that calls a webpieces client. ' +
+                    '(A BrowserApiCallContext is always active, so this can only be the Node side.)',
             );
         }
         return ctx;
@@ -178,10 +232,20 @@ export class LogApiCallImpl {
         const isUser = !ClientRegistry.classifyFailure(error, methodInfo);
 
         stamp(
-            new ApiCallInfo(methodInfo, 'response', isUser ? 'success' : 'failure', durationMs, requestSize),
-            () => isUser
-                ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
-                : log.error(`[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${error.message}`));
+            new ApiCallInfo(
+                methodInfo,
+                'response',
+                isUser ? 'success' : 'failure',
+                durationMs,
+                requestSize,
+            ),
+            () =>
+                isUser
+                    ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
+                    : log.error(
+                          `[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${error.message}`,
+                      ),
+        );
     }
 
     /**

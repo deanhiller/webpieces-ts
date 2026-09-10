@@ -14,6 +14,7 @@ import { ApiMethodInfo } from './ApiMethodInfo';
  * - `jsonPayload.api.result="failure"`          — failed exchanges only
  * - `jsonPayload.api.durationMs>1000`           — slow calls, either side
  * - `jsonPayload.api.responseSize>100000`       — the fat responses (the ones that get chunked)
+ * - `jsonPayload.api.responseCount>100`         — responses containing many logical items
  * - `jsonPayload.api:*`                          — "API traffic only" (tracing + the recorder)
  *
  * IMPORTANT: the field names here (and on the nested {@link ApiMethodInfo}) ARE the GCP field names —
@@ -76,5 +77,7 @@ export class ApiCallInfo {
         /** Bytes of the serialized response. RESPONSE tag only, and only when the call succeeded —
          *  a thrown error produced no response body to measure. Total size, pre-chunking. */
         readonly responseSize?: number,
+        /** Number of logical items in a successful response. RESPONSE tag only, opt-in per call. */
+        readonly responseCount?: number,
     ) {}
 }
