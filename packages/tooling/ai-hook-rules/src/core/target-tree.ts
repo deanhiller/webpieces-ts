@@ -68,6 +68,7 @@ export class TargetTreeResolver {
         return new GovernedPath(
             path.relative(tree.governedRoot, absolute),
             path.relative(tree.root, absolute),
+            tree.root,
         );
     }
 
@@ -134,9 +135,12 @@ export class TargetTreeResolver {
 export class GovernedPath {
     readonly relativePath: string;
     readonly treeRelativePath: string;
+    /** The git tree that owns the target path; policy still belongs to the separately loaded governed root. */
+    readonly treeRoot: string;
 
-    constructor(relativePath: string, treeRelativePath: string) {
+    constructor(relativePath: string, treeRelativePath: string, treeRoot: string) {
         this.relativePath = relativePath;
         this.treeRelativePath = treeRelativePath;
+        this.treeRoot = treeRoot;
     }
 }

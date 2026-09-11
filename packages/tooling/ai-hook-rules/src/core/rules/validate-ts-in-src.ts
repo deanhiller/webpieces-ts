@@ -48,27 +48,27 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
         const allowedRootFiles = this.config.allowedRootFiles ?? DEFAULT_ALLOWED_ROOT_FILES;
 
         // Holistic exclusion (Layer 1 + Layer 2): bare dir names + globs.
-        if (isPathExcluded(ctx.relativePath, excludePaths)) return [];
+        if (isPathExcluded(ctx.targetRelativePath, excludePaths)) return [];
 
-        const relParts = ctx.relativePath.split(path.sep);
+        const relParts = ctx.targetRelativePath.split(path.sep);
         if (relParts.length === 1 && allowedRootFiles.indexOf(relParts[0] ?? '') >= 0) return [];
 
-        const projectRoot = findProjectRoot(ctx.filePath, ctx.workspaceRoot);
+        const projectRoot = findProjectRoot(ctx.filePath, ctx.targetRoot);
 
         if (!projectRoot) {
             return [new V(
                 1,
-                ctx.relativePath,
+                ctx.targetRelativePath,
                 'File is not inside any Nx project. Move it into a project\'s src/ directory.',
             )];
         }
 
         const relToProject = path.relative(projectRoot, ctx.filePath);
         if (!relToProject.startsWith('src' + path.sep) && relToProject !== 'src') {
-            const projectName = path.relative(ctx.workspaceRoot, projectRoot);
+            const projectName = path.relative(ctx.targetRoot, projectRoot);
             return [new V(
                 1,
-                ctx.relativePath,
+                ctx.targetRelativePath,
                 `File is inside project \`${projectName}\` but outside its src/ directory. Move it into src/.`,
             )];
         }
