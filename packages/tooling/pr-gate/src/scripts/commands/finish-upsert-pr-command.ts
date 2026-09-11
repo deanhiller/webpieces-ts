@@ -32,6 +32,7 @@ import {
     ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER,
 } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
+import { AuthorIdentityResolver } from '../../dashboard/author-identity';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -124,6 +125,7 @@ export class FinishUpsertPrCommand {
         private readonly prMerger: PrMerger,
         private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
+        private readonly authorIdentity: AuthorIdentityResolver,
         // The 2nd PR comment. Its own class because it is its own surface — see ChecklistCommentRenderer.
         private readonly checklistComment: ChecklistCommentRenderer,
         private readonly checklistScanner: ChecklistScanner,
@@ -393,7 +395,7 @@ export class FinishUpsertPrCommand {
         // are different facts that both render as an empty `rows`. See DashboardInput.
         return new DashboardInput(
             title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows,
-            config.buildCommand, scan.suppressed.length);
+            config.buildCommand, scan.suppressed.length, this.authorIdentity.resolve(review.model));
     }
 
     /**

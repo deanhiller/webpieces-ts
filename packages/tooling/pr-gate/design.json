@@ -49,6 +49,14 @@
                     "level": 5
                 },
                 {
+                    "id": "AuthorIdentityResolver",
+                    "className": "AuthorIdentityResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/dashboard/author-identity.ts",
+                    "level": 2
+                },
+                {
                     "id": "AwaitChecksCommand",
                     "className": "AwaitChecksCommand",
                     "kind": "class",
@@ -1336,6 +1344,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
                     "paramName": "aiBranchName",
                     "paramType": "AiBranchName"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "AuthorIdentityResolver",
+                    "injection": "type",
+                    "token": "AuthorIdentityResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/dashboard/author-identity.ts#AuthorIdentityResolver",
+                    "paramName": "authorIdentity",
+                    "paramType": "AuthorIdentityResolver"
                 },
                 {
                     "from": "FinishUpsertPrCommand",

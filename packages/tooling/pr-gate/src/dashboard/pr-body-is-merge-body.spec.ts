@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ReviewJson } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput } from './dashboard';
+import { AuthorIdentity } from './author-identity';
 
 const dash = new Dashboard();
 const URL = 'https://github.com/o/r/pull/42';
@@ -22,6 +23,7 @@ function input(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
         [],
         'pnpm nx affected --target=ci',
         0,
+        new AuthorIdentity('codex', 'gpt-5.6-sol'),
     );
 }
 

@@ -7,6 +7,7 @@ import { RequiredChecklist, ReviewJsonService } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, DisableCounts } from './dashboard';
 import { ChecklistCommentRow } from './checklist-comment-row';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
+import { AuthorIdentity } from './author-identity';
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
@@ -42,6 +43,7 @@ describe('review identity from JSON to PR comments', () => {
         expect([verdict.agent, verdict.model]).toEqual(['claude', 'opus']);
         const dashboard = new Dashboard().renderDetailComment(new DashboardInput(
             review.title, [], new DisableCounts(0, 0, []), true, 'base', 'head', 'merge', review, [], 'pnpm wp-build', 0,
+            new AuthorIdentity('codex', 'gpt-5.6-sol'),
         ));
         expect(dashboard).toContain('**Review agent:** codex · **Model:** unknown (self-reported)');
         const row = new ChecklistCommentRow(verdict.agent, verdict.model, verdict.id, 'PASS', verdict.output,

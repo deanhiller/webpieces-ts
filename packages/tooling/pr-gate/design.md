@@ -17,6 +17,7 @@ graph TD
     AgentWorktreeLockReader["AgentWorktreeLockReader"]
     AiBranchName["AiBranchName"]
     AtomicFile["AtomicFile"]
+    AuthorIdentityResolver["AuthorIdentityResolver"]
     AwaitChecksCommand["AwaitChecksCommand"]
     AwaitLoop["AwaitLoop"]
     AwaitReviewsCommand["AwaitReviewsCommand"]
@@ -170,6 +171,7 @@ graph TD
     FinishUpdateCommand --> MergeState
     FinishUpdateCommand --> RepoRootFinder
     FinishUpsertPrCommand --> AiBranchName
+    FinishUpsertPrCommand --> AuthorIdentityResolver
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> BuildGateLog

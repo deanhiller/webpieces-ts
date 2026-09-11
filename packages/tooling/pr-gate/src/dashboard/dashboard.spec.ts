@@ -10,8 +10,10 @@ import {
 import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
 import { ChecklistCommentRow } from './checklist-comment-row';
+import { AuthorIdentity } from './author-identity';
 
 const dash = new Dashboard();
+const AUTHOR = new AuthorIdentity('codex', 'gpt-5.6-sol');
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] =>
     dash.computeGateResults(g, f);
 const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables(p);
@@ -56,6 +58,7 @@ function baseInput(
         [],
         buildCommand,
         suppressedChecklistCount,
+        AUTHOR,
     );
 }
 
@@ -167,6 +170,7 @@ describe('renderDetailComment', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const md = renderDetailComment(input);
 
@@ -203,6 +207,7 @@ describe('renderDetailComment', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const md = renderDetailComment(input);
 
@@ -254,6 +259,7 @@ describe('renderPrBody', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
 
@@ -356,6 +362,7 @@ describe('renderPrBody', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const body = renderPrBody(input, '');
 
@@ -383,6 +390,7 @@ describe('renderPrBody', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const body = renderPrBody(input, '');
 
@@ -406,6 +414,7 @@ describe('renderPrBody', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const body = renderPrBody(input, '');
 
@@ -434,6 +443,8 @@ function dashboardWith(rows: ChecklistRow[]): string {
         review(),
         rows,
     'pnpm nx affected --target=ci',
+    0,
+    AUTHOR,
 );
     return renderDetailComment(input);
 }
@@ -454,6 +465,7 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
         [],
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const md = renderDetailComment(input);
         expect(md).toContain(
@@ -580,6 +592,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
             rows,
         'pnpm nx affected --target=ci',
         0,
+        AUTHOR,
     );
         const body = renderPrBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
