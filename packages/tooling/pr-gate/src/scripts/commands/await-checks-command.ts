@@ -30,8 +30,8 @@ export class AwaitChecksOptions {
  * the banner names this command as an option and says out loud that stopping is still correct.
  *
  * What it replaces is the `echo .` keep-alive an agent falls back to when it has decided to see the PR
- * land. See {@link AwaitLoop} for when a blocking command is the right wait at all — ending the turn is
- * cheaper whenever something pending would re-invoke you (issue #878).
+ * land. See {@link AwaitLoop} for when a blocking command is the right wait at all — this is offered as
+ * the efficient alternative to polling, and nothing here rules on turn-level behaviour (issue #902).
  *
  * ─── `gh pr checks <n> --watch` EXISTS, AND WHEN TO REACH FOR EACH ─────────────────────────────────
  * It is a real blocking wait, not a spin, and `wait-spin-guard` never denies it — 224 subagent and 84

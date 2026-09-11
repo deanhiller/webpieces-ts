@@ -98,8 +98,8 @@ export class WaitSpinGuardRule extends BashRuleBase<EmptyRuleConfig> {
         'the same gh pr checks/view asked a third time (a trailing | head/tail/cat/wc -l included) — ' +
         'and name the wait its kind of agent can actually use: a worktree subagent blocks in the ' +
         'FOREGROUND with pnpm wp-await-reviews / pnpm wp-await-checks and re-runs it while it is still ' +
-        'waiting, a main agent starts a Monitor and ends its turn. gh pr checks --watch already blocks ' +
-        'and is never refused.';
+        'waiting, a main agent starts a Monitor or backgrounds the command. gh pr checks --watch already ' +
+        'blocks and is never refused.';
 
     get fixHint(): FixHint {
         return new FixHint(
@@ -223,10 +223,13 @@ export const SUBAGENT_CURE =
     + 'made zero further progress until a human poked it.';
 
 /**
- * The main-agent cure. A main agent has the cheaper option — cost nothing while waiting — and telling
- * it to sit inside a blocking command instead would be worse advice than the spin it just wrote.
+ * The main-agent cure. A main agent has `Monitor` and `run_in_background` genuinely available, so the
+ * efficient wait is named and the wasteful poll is refused — and nothing further is said. Telling it to
+ * sit inside a blocking command instead would be worse advice than the spin it just wrote; telling it
+ * when to end its turn would be webpieces ruling on a judgement it cannot see (issue #902).
  */
 export const MAIN_AGENT_CURE =
-    'You are the main agent, so you have the cheapest wait there is: start a `Monitor` (or run the\n'
-    + 'command you are waiting on with run_in_background) and then END YOUR TURN. A backgrounded command\n'
-    + 're-invokes you when it exits, and you burn nothing at all in the meantime.';
+    'You are the main agent, so the efficient wait is available to you: start a `Monitor`, or run the\n'
+    + 'command you are waiting on with run_in_background. Be efficient with tokens — a backgrounded\n'
+    + 'command costs nothing while it runs, where a status check every few seconds costs a whole turn\n'
+    + '(~557k tokens) each time.';

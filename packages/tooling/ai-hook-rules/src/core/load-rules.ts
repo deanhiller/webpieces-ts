@@ -144,8 +144,8 @@ export function loadRules(
  *    for every input, and it cannot itself match the guard.
  *  - `wait-spin-guard` acts unconditionally, on the same test again. An `echo .` keep-alive spends a
  *    whole turn (~557k tokens) to do nothing, and its cure — `pnpm wp-await-reviews` /
- *    `pnpm wp-await-checks` for a worktree subagent, a Monitor plus ending the turn for a main agent —
- *    is available for every input and can never itself match the guard.
+ *    `pnpm wp-await-checks` for a worktree subagent, a Monitor or the backgrounded command itself for a
+ *    main agent — is available for every input and can never itself match the guard.
  *
  * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
  * repo's gate actually runs.

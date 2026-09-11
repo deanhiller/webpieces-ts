@@ -210,17 +210,18 @@ export class FinishBanner {
      * to 2026-09-07 (issue #874). Naming a blocking command is cheaper than the wait somebody was going
      * to do anyway; it is not a reason to wait.
      *
-     * It names ENDING THE TURN first (issue #878): if a backgrounded command or a spawned subagent is
-     * still pending, the harness re-invokes the caller for free — 449 measured times. `--watch` is named
-     * too, because it exists, it blocks, and it is never refused; what it lacks is a bounded exit, so
-     * the harness kills it at 600s having printed nothing.
+     * It names the EFFICIENT WAIT and the wasteful one, and says nothing about when to end a turn
+     * (issue #902). An earlier cut led with "END YOUR TURN"; that is a turn-level judgement the caller is
+     * better placed to make than this string is, and it contradicted `SUBAGENT_CURE` shipped in the same
+     * release. `--watch` is named because it exists, it blocks, and it is never refused; what it lacks is
+     * a bounded exit, so the harness kills it at 600s having printed nothing.
      */
     private watchOffer(): string {
         return '   (Optional — only if you have decided to watch it land, which nothing here asks you to do.\n' +
-            '    Cheapest: END YOUR TURN — anything still pending re-invokes you for free. Otherwise\n' +
-            '    `pnpm wp-await-checks --pr <n>` BLOCKS in one call and returns at 540s asking to be run\n' +
-            '    again; `gh pr checks <n> --watch` also blocks but is killed at the 600s silence ceiling.\n' +
-            '    Do not poll, and never `echo` to keep a turn alive — a turn costs your whole context.)\n';
+            '    Be efficient with tokens: `pnpm wp-await-checks --pr <n>` BLOCKS in one call and returns\n' +
+            '    at 540s asking to be run again; `gh pr checks <n> --watch` also blocks but is killed at\n' +
+            '    the 600s silence ceiling. Do not send status checks every few seconds, and\n' +
+            '    never `echo` to keep a turn alive — a turn costs your whole context.)\n';
     }
 
     /**

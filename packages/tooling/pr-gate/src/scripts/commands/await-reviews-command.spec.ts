@@ -34,9 +34,9 @@ function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = 
  * is `echo .` every three seconds at ~557k tokens a turn (issue #874). A blocking Bash call is the only
  * wait an isolated subagent can express when NOTHING pending would wake it.
  *
- * When something IS pending, ending the turn is cheaper and this command is the second choice: a
- * subagent that has spawned reviewers is re-invoked when they finish — 449 measured resumptions, 288 of
- * them on exactly this wait (issue #878).
+ * It is OFFERED as the efficient alternative to polling, alongside simply waiting on the subagents you
+ * spawned. It does not tell the agent when to end its turn — webpieces names the efficient option and
+ * blocks the wasteful one, and leaves the turn-level judgement where it belongs (issue #902).
  */
 describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
     it('is not done while a verdict is missing', () => {
