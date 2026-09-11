@@ -65,9 +65,12 @@ function subagentMessage(): string {
  * `echo .` every three seconds to stay alive, at ~557,000 tokens a turn — measured at 18.3% of all fleet
  * tokens in the 24h to 2026-09-07 (issue #874).
  *
- * What #878 corrected: a subagent CAN end its turn and be re-invoked — 449 measured resumptions, 288 of
- * them while waiting on spawned reviewers. The guard's first cut told it the opposite, which steered it
- * off the only free wait, so the cure now leads with ENDING THE TURN and offers `wp-await-*` second.
+ * #878 corrected the first cut's claim that a subagent cannot end its turn at all — 449 measured
+ * resumptions say it can — and the cure then led with ENDING THE TURN. #900 measured the part that
+ * actually mattered and it does not hold: for a worktree subagent whose only pending work is one
+ * `run_in_background` wait, the re-invocation does NOT fire. Three stalls, two subagents, one session,
+ * every notification reading "no live background children of its own". So the subagent cure is now the
+ * FOREGROUND block, re-run while it is still waiting, and the tests below pin that text.
  */
 describe('wait-spin-guard blocks a command whose only purpose is staying alive', () => {
     it('blocks the keep-alive tokens the measured runs actually used', () => {
@@ -222,8 +225,9 @@ describe('wait-spin-guard never denies a blocking --watch', () => {
 /**
  * ══ THE CURE MUST MATCH THE AGENT KIND ═════════════════════════════════════════════════════════════
  *
- * A main agent has `Monitor` and `run_in_background` genuinely available; a subagent effectively does
- * not, so it is offered the blocking commands as its second option. Never both, never the wrong one.
+ * A main agent has `Monitor` and `run_in_background` genuinely available and is told to end its turn.
+ * A worktree subagent is told to BLOCK IN THE FOREGROUND, because #900 measured that the background
+ * re-invocation it would otherwise rely on does not fire. Never both, never the wrong one.
  */
 describe('wait-spin-guard prescribes one cure per agent kind', () => {
     it('tells a PRIMARY-clone agent to start a Monitor and end its turn', () => {
@@ -233,33 +237,50 @@ describe('wait-spin-guard prescribes one cure per agent kind', () => {
         expect(text).not.toContain('wp-await-reviews');
     });
 
-    it('tells a WORKTREE-isolated subagent to END ITS TURN FIRST, and offers blocking second', () => {
+    it('tells a WORKTREE-isolated subagent to BLOCK IN ONE FOREGROUND CALL', () => {
         const text = subagentMessage();
-        expect(text).toContain('END YOUR TURN');
+        expect(text).toContain('BLOCK IN ONE FOREGROUND CALL');
         expect(text).toContain('pnpm wp-await-reviews');
         expect(text).toContain('pnpm wp-await-checks --pr <n>');
-        expect(text.indexOf('END YOUR TURN')).toBeLessThan(text.indexOf('pnpm wp-await-reviews'));
+        expect(text.indexOf('BLOCK IN ONE FOREGROUND CALL'))
+            .toBeLessThan(text.indexOf('pnpm wp-await-reviews'));
     });
 
     /**
-     * The regression #878 exists to delete. Telling a subagent it cannot end its turn is FALSE — 449
-     * measured re-invocations say so — and it steers the agent off the only wait that costs nothing.
+     * The regression #900 exists to delete. The previous cure told a subagent to END ITS TURN and be
+     * re-invoked when its backgrounded wait exited; measured three times in one session, it was not,
+     * and the run stalled. So the subagent cure must not prescribe either half of that mechanism.
      */
-    it('never tells a subagent it cannot end its turn', () => {
+    it('never tells a subagent to end its turn or to background its wait', () => {
         const text = subagentMessage();
-        expect(text).not.toContain('CANNOT end your turn');
-        expect(text).not.toContain('cannot end your turn');
+        expect(text).not.toContain('END YOUR TURN');
+        expect(text).toContain('do NOT pass\nrun_in_background');
+        expect(text).toContain('Do NOT end your turn expecting a backgrounded wait to re-invoke you');
     });
 
-    // The wake-up is stated CONDITIONALLY: this hook is registered on Write|Edit|MultiEdit|Bash|Read,
-    // so an Agent spawn never reaches it and the guard cannot count live children. Asserting a wake-up
-    // that may not be coming is the same defect as asserting one cannot come.
-    it('names what would wake it conditionally, never as an unverified fact', () => {
+    /**
+     * The 540s return is the whole reason the foreground wait is affordable: the harness demotes a
+     * foreground call to the background at 600s and the result is lost, so the command must come back
+     * first and the agent must know that coming back is not a failure.
+     */
+    it('names the bounded return and tells the agent to re-run the identical command', () => {
         const text = subagentMessage();
-        expect(text).toContain('If ANYTHING of yours is still pending');
-        expect(text).toContain('subagents you spawned');
-        expect(text).toContain('run_in_background');
-        expect(text).toContain('449');
+        expect(text).toContain('540s');
+        expect(text).toContain('run the IDENTICAL command again');
+        expect(text).toContain('#900');
+    });
+
+    /**
+     * The full-cycle skill's `wp-await.sh` is now TRACKED in this repo and carries the identical
+     * contract — foreground, `--timeout 545` under the same 600s ceiling, re-run on exit 2. The guard
+     * and the skill disagreeing about how to wait is the exact defect #900 is about, so the cure names
+     * the script's numbers too rather than leaving an agent to reconcile two documents.
+     */
+    it('agrees with the tracked wp-await.sh contract — foreground, --timeout 545, re-run on exit 2', () => {
+        const text = subagentMessage();
+        expect(text).toContain('wp-await.sh');
+        expect(text).toContain('--timeout 545');
+        expect(text).toContain('exit 2');
     });
 
     it('states the reason in one clause on both cures — a turn costs your whole context', () => {
