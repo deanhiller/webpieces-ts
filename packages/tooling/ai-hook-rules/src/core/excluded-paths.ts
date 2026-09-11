@@ -52,5 +52,6 @@ export function bashGovernedPath(tree: EffectiveTree, workspaceRoot: string): Go
     return new GovernedPath(
         path.relative(workspaceRoot, tree.effectiveCwd),
         path.relative(tree.root, tree.effectiveCwd),
+        tree.root,
     );
 }

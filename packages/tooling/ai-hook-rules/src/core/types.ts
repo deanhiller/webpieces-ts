@@ -201,6 +201,10 @@ export class FileContext {
     readonly filePath: string;
     readonly relativePath: string;
     readonly workspaceRoot: string;
+    /** The git tree that owns filePath. workspaceRoot remains the root that owns policy/config. */
+    readonly targetRoot: string;
+    /** filePath relative to targetRoot, independent of its governed-root spelling. */
+    readonly targetRelativePath: string;
     readonly currentFileLines: number;
     readonly linesAdded: number;
     readonly linesRemoved: number;
@@ -216,11 +220,15 @@ export class FileContext {
         linesAdded: number,
         linesRemoved: number,
         projectedFileLines: number,
+        targetRoot: string = workspaceRoot,
+        targetRelativePath: string = relativePath,
     ) {
         this.tool = tool;
         this.filePath = filePath;
         this.relativePath = relativePath;
         this.workspaceRoot = workspaceRoot;
+        this.targetRoot = targetRoot;
+        this.targetRelativePath = targetRelativePath;
         this.currentFileLines = currentFileLines;
         this.linesAdded = linesAdded;
         this.linesRemoved = linesRemoved;
@@ -300,4 +308,3 @@ export class BlockedResult {
         this.fault = fault;
     }
 }
-

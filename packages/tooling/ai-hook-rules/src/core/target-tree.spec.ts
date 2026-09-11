@@ -219,7 +219,7 @@ describe('the .webpieces/ state-dir exemption follows the tree that owns the fil
     // governed-root spelling of this path does NOT match the predicate, and never did.
     it('is NOT exempt when the path is judged by its governed-root spelling', () => {
         const review = reviewJson();
-        const asGovernedRootRelative = new GovernedPath(path.relative(primary, review), path.relative(primary, review));
+        const asGovernedRootRelative = new GovernedPath(path.relative(primary, review), path.relative(primary, review), primary);
         expect(filterByExcludedPaths(rules, asGovernedRootRelative, new ExcludePaths([]))).toEqual(rules);
     });
 

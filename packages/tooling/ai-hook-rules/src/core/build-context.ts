@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as path from 'path';
 
 import { EffectiveTree } from './effective-tree';
+import { GovernedPath } from './target-tree';
 import { stripTsNoise } from './strip-ts-noise';
 import { createIsLineDisabled } from './disable-directives';
 import {
@@ -23,9 +23,10 @@ export function buildContexts(
     toolKind: ToolKind,
     input: NormalizedToolInput,
     workspaceRoot: string,
+    governed: GovernedPath,
 ): BuiltContexts {
     const filePath = input.filePath;
-    const relativePath = path.relative(workspaceRoot, filePath);
+    const relativePath = governed.relativePath;
     const edits = input.edits;
 
     const currentFileLines = readCurrentFileLines(filePath);
@@ -50,6 +51,8 @@ export function buildContexts(
         linesAdded,
         linesRemoved,
         projectedFileLines,
+        governed.treeRoot,
+        governed.treeRelativePath,
     );
 
     const editContexts = edits.map((e, idx) => {

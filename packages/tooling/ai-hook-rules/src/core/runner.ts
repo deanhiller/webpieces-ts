@@ -135,7 +135,7 @@ function runInternal(
     const outOfSync = checkConfigSync(rules.filter((r: Rule) => !(r instanceof MatchRule)), loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
-    const contexts = buildContexts(toolKind, input, workspaceRoot);
+    const contexts = buildContexts(toolKind, input, workspaceRoot, governed);
 
     const editGroups = runEditRules(rules, contexts.editContexts);
     const fileGroups = runFileRules(rules, contexts.fileContext);

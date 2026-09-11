@@ -31,7 +31,7 @@ function names(rules: readonly Rule[]): string[] {
 // the worktree shape, where they DIFFER, is pinned in target-tree.spec.ts against real git worktrees,
 // because it is only interesting when git says the two roots are not the same tree.
 function samePath(relative: string): GovernedPath {
-    return new GovernedPath(relative, relative);
+    return new GovernedPath(relative, relative, '/repo');
 }
 
 describe('filterByExcludedPaths', () => {
