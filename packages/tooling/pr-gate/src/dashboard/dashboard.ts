@@ -14,6 +14,7 @@ import {
     HOME_KEY_TURN_OFF_ALL_REVIEWERS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+import { AuthorIdentity } from './author-identity';
 
 /**
  * Hidden marker on the FULL-DASHBOARD comment — the "1st comment" the PR description points at — so
@@ -144,6 +145,7 @@ export class DashboardInput {
      * keep compiling while asserting, silently, that nothing was suppressed.
      */
     suppressedChecklistCount: number;
+    author: AuthorIdentity;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -158,6 +160,7 @@ export class DashboardInput {
         checklists: ChecklistRow[],
         buildCommand: string,
         suppressedChecklistCount: number,
+        author: AuthorIdentity,
     ) {
         this.title = title;
         this.gateResults = gateResults;
@@ -170,6 +173,7 @@ export class DashboardInput {
         this.checklists = checklists;
         this.buildCommand = buildCommand;
         this.suppressedChecklistCount = suppressedChecklistCount;
+        this.author = author;
     }
 }
 
@@ -229,6 +233,7 @@ export class Dashboard {
         lines.push('## 🚦 PR Gate Dashboard');
         lines.push('');
         for (const line of this.riskLines(input.review)) lines.push(line);
+        lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model));
         lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
         for (const result of input.gateResults) lines.push(this.gateLine(result));
         lines.push(this.disableLine(input.disables));
@@ -300,6 +305,7 @@ export class Dashboard {
         lines.push(
             `Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`,
         );
+        lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model, false));
         lines.push('');
         const flags = this.nonGreenFlags(input);
         lines.push(flags.length === 0
