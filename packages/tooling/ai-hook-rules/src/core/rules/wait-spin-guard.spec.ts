@@ -225,16 +225,26 @@ describe('wait-spin-guard never denies a blocking --watch', () => {
 /**
  * ══ THE CURE MUST MATCH THE AGENT KIND ═════════════════════════════════════════════════════════════
  *
- * A main agent has `Monitor` and `run_in_background` genuinely available and is told to end its turn.
+ * A main agent has `Monitor` and `run_in_background` genuinely available and is pointed at them.
  * A worktree subagent is told to BLOCK IN THE FOREGROUND, because #900 measured that the background
  * re-invocation it would otherwise rely on does not fire. Never both, never the wrong one.
+ *
+ * NEITHER cure tells the agent to end its turn (issue #902): webpieces names the efficient wait and
+ * refuses the wasteful poll, and the turn-level decision is the agent's.
  */
 describe('wait-spin-guard prescribes one cure per agent kind', () => {
-    it('tells a PRIMARY-clone agent to start a Monitor and end its turn', () => {
+    it('tells a PRIMARY-clone agent to start a Monitor or background the command', () => {
         priorCalls = 0;
         const text = message('echo .');
-        expect(text).toContain('END YOUR TURN');
+        expect(text).toContain('start a `Monitor`');
+        expect(text).toContain('run_in_background');
         expect(text).not.toContain('wp-await-reviews');
+    });
+
+    it('never tells the MAIN agent to end its turn either', () => {
+        priorCalls = 0;
+        const text = message('echo .');
+        expect(text).not.toContain('END YOUR TURN');
     });
 
     it('tells a WORKTREE-isolated subagent to BLOCK IN ONE FOREGROUND CALL', () => {

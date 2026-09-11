@@ -5,14 +5,15 @@ import { StageOutputLog } from './stage-output-log';
 /**
  * THE BLOCKING WAIT, and why webpieces owns one (issue #874, scoped by #878).
  *
- * ─── IT IS THE SECOND-CHEAPEST WAIT, NOT THE CHEAPEST (issue #878) ─────────────────────────────────
- * #874 justified this class by asserting a worktree-isolated subagent cannot end its turn. That is
- * FALSE and was corrected: measured over every subagent transcript on this machine, 588 of 2,605
- * `end_turn` turns were followed by more turns, 449 of them resumed by a background-task notification,
- * and 288 of those were waiting on spawned subagents. So ENDING THE TURN is the cheapest wait a
- * subagent has — it costs nothing — and `wait-spin-guard`'s cure now names it first.
+ * ─── IT IS ONE EFFICIENT WAIT, OFFERED — NEVER A TURN-LEVEL INSTRUCTION (issue #902) ───────────────
+ * #874 justified this class by asserting a worktree-isolated subagent cannot end its turn, #878
+ * corrected that, and #900 measured that the background re-invocation the correction relied on does not
+ * reliably fire. #902 settles the shape of the advice: webpieces names the efficient wait and blocks the
+ * wasteful poll, and says NOTHING about when an agent should end its turn. An agent already waits on the
+ * subagents it spawns, routinely, without being told; a fixed rule in a string cannot see the situation
+ * it is ruling on.
  *
- * What this class is for is the case where nothing pending would wake the agent. There, a Bash call is
+ * What this class is for is the case where an agent has decided to block. There, a Bash call is
  * the only pause it can express: `Monitor` does not block (its own result says "Keep working — do not
  * poll or sleep"), and a `Monitor` carrying a real polling loop is refused by the HARNESS, because a
  * `while`/`until` with a redirect cannot be statically proven to stay inside the worktree (178 of 553

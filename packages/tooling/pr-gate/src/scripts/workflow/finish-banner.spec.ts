@@ -44,17 +44,24 @@ describe('auto-merge enabled (the BLOCKED-on-checks case)', () => {
 });
 
 /**
- * ══ THE OPTIONAL WATCH OFFER (issue #878) ══════════════════════════════════════════════════════════
+ * ══ THE OPTIONAL WATCH OFFER (issues #878, #902) ═══════════════════════════════════════════════════
  *
- * A subagent CAN end its turn and be re-invoked — 449 measured resumptions — so that is the cheapest
- * wait and the offer must name it first. `gh pr checks --watch` also blocks and is never refused by
- * `wait-spin-guard`; pretending it does not exist is what sent agents to `echo .` instead.
+ * The offer names the EFFICIENT wait and the wasteful one, and stops talking. It must NOT prescribe
+ * ending the turn: that is a judgement the caller can make and this string cannot (#902). `gh pr checks
+ * --watch` also blocks and is never refused by `wait-spin-guard`; pretending it does not exist is what
+ * sent agents to `echo .` instead.
  */
-describe('the optional watch offer names the cheap wait first, and both blocking ones', () => {
-    it('offers ending the turn before either blocking command', () => {
+describe('the optional watch offer names the efficient wait, and both blocking ones', () => {
+    it('leads with the token-efficiency framing and the blocking command', () => {
         const out = render(QUEUED);
-        expect(out).toContain('END YOUR TURN');
-        expect(out.indexOf('END YOUR TURN')).toBeLessThan(out.indexOf('pnpm wp-await-checks'));
+        expect(out).toContain('Be efficient with tokens');
+        expect(out).toContain('pnpm wp-await-checks --pr <n>');
+    });
+
+    it('never tells the caller to end its turn', () => {
+        const out = render(QUEUED);
+        expect(out).not.toContain('END YOUR TURN');
+        expect(out).not.toContain('end your turn');
     });
 
     it('names --watch and says what separates it from wp-await-checks', () => {
