@@ -98,7 +98,7 @@ export {
     WpMcpToolMetadata,
     getWpMcpTools,
 } from './mcp/McpMetadata';
-export type { WpMcpToolOptions } from './mcp/McpMetadata';
+export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
 export {
     WpDto,
     WpDtoField,

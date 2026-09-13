@@ -33,6 +33,20 @@ type MutatingToolOptions = CommonToolOptions & {
 /** Compiler-enforced exposure: a read-only tool cannot also claim to be destructive. */
 export type WpMcpToolOptions = ReadOnlyToolOptions | MutatingToolOptions;
 
+type AsyncObjectMethod = (...args: never[]) => Promise<object>;
+type ExactOneParameter<TMethod extends AsyncObjectMethod> = Parameters<TMethod>['length'] extends 1
+    ? object
+    : never;
+type ExactOneMethodDescriptor<TMethod extends AsyncObjectMethod> = TypedPropertyDescriptor<TMethod> &
+    ExactOneParameter<TMethod>;
+
+/** Method decorator restricted to one request DTO and one async response DTO. */
+export type WpMcpMethodDecorator = <TMethod extends AsyncObjectMethod>(
+    target: object,
+    propertyKey: string | symbol,
+    descriptor: ExactOneMethodDescriptor<TMethod>,
+) => void;
+
 /** Runtime metadata for one explicitly exposed endpoint. */
 export class WpMcpToolMetadata {
     constructor(
@@ -51,12 +65,16 @@ export class WpMcpToolMetadata {
  * the sole runtime authorization policy.
  */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpMcpTool(options: WpMcpToolOptions): MethodDecorator {
+export function WpMcpTool(options: WpMcpToolOptions): WpMcpMethodDecorator {
     if (options.name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
     if (options.description.trim() === '') {
         throw new Error('@WpMcpTool requires non-empty tool documentation.');
     }
-    return (target: object, propertyKey: string | symbol): void => {
+    return <TMethod extends AsyncObjectMethod>(
+        target: object,
+        propertyKey: string | symbol,
+        _descriptor: ExactOneMethodDescriptor<TMethod>,
+    ): void => {
         const apiClass = target.constructor;
         const tools: Record<string, WpMcpToolMetadata> =
             Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};

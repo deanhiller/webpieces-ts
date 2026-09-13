@@ -27,5 +27,32 @@ abstract class InvalidMcpContract {
     }
 }
 
+abstract class InvalidMcpArities {
+    // @ts-expect-error MCP tools require exactly one request DTO
+    @WpMcpTool({
+        name: 'zero-arity',
+        description: 'This declaration must never compile.',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+    })
+    zero(): Promise<object> {
+        throw new Error('contract only');
+    }
+
+    // @ts-expect-error MCP tools require exactly one request DTO
+    @WpMcpTool({
+        name: 'multi-arity',
+        description: 'This declaration must never compile.',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+    })
+    multi(_first: object, _second: object): Promise<object> {
+        throw new Error('contract only');
+    }
+}
+
 void InvalidMcpContract;
+void InvalidMcpArities;
 void invalidEmptyEnum;
