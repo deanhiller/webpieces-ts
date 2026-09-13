@@ -5,12 +5,12 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import {
     ApiPath,
-    BadRequestError,
+    ApiBadRequestError,
+    ApiEndUserError,
     ContextKey,
     ContextTuple,
     Endpoint,
     HeaderRegistry,
-    UserError,
     WpAuthJwt,
     WpDto,
     WpDtoField,
@@ -94,9 +94,11 @@ class SearchController extends SearchApi {
     override async search(request: SearchRequest): Promise<SearchResponse> {
         if (request.query === 'internal') throw new Error('database password appeared here');
         if (request.query === 'bad') {
-            throw new BadRequestError('SQL table secret', 'query', 'Choose a different query');
+            throw new ApiBadRequestError('SQL table secret', 'query', 'Choose a different query');
         }
-        if (request.query === 'human') throw new UserError('Those two values do not match', 'MISMATCH');
+        if (request.query === 'human') {
+            throw new ApiEndUserError('Those two values do not match', 'MISMATCH');
+        }
         const response = new SearchResponse();
         response.userId = RequestContext.getTrusted(USER_ID) ?? 'missing';
         response.result = request.query;
@@ -296,7 +298,10 @@ describe('WpMcpServer secure API bridge', () => {
 
         expect(JSON.stringify(bad)).not.toContain('SQL table secret');
         expect(JSON.stringify(internal)).not.toContain('database password');
-        expect(internal.structuredContent).toMatchObject({ kind: 'internal', message: 'Internal Error' });
+        expect(internal.structuredContent).toMatchObject({
+            kind: 'implementation',
+            message: 'Internal Error',
+        });
         expect(internal.structuredContent?.['requestId']).toMatch(/^svrGenReqId-/);
     });
 
@@ -306,7 +311,7 @@ describe('WpMcpServer secure API bridge', () => {
         await client.close();
 
         expect(result.structuredContent).toMatchObject({
-            kind: 'user',
+            kind: 'end-user',
             message: 'Those two values do not match',
             errorCode: 'MISMATCH',
         });

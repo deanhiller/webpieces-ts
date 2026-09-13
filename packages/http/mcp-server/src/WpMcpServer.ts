@@ -24,7 +24,7 @@ export class ModelVisibleToolError {
         public readonly field?: string,
         public readonly callerMessage?: string,
         public readonly errorCode?: string,
-        public readonly waitSeconds?: number,
+        public readonly retryAfterSeconds?: number,
     ) {}
 }
 
@@ -150,17 +150,15 @@ export class WpMcpServer {
     }
 
     private apiError(payload: ApiErrorPayload, requestId: string): CallToolResult {
-        const descriptor = Object.getOwnPropertyDescriptor(payload, 'callerMessage');
-        const callerMessage = typeof descriptor?.value === 'string' ? descriptor.value : undefined;
         return this.errorResult(
             new ModelVisibleToolError(
                 payload.kind,
                 payload.message,
                 requestId,
                 payload.field,
-                callerMessage,
+                payload.callerMessage,
                 payload.errorCode,
-                payload.waitSeconds,
+                payload.retryAfterSeconds,
             ),
         );
     }
