@@ -1,6 +1,8 @@
 import {
+    ApiBadRequestError,
     ApiErrorCodec,
     ApiErrorPayload,
+    DtoSchemaBuilder,
     DtoValue,
     toError,
     WebpiecesCoreHeaders,
@@ -23,6 +25,8 @@ export type McpDispatchResult = McpDispatchSuccess | McpDispatchFailure;
 
 /** Executes one tool through the same ApiFactory proxy/filter/controller path as HTTP. */
 export class McpApiDispatcher {
+    private readonly schemaBuilder = new DtoSchemaBuilder();
+
     constructor(private readonly apiFactory: ApiFactory) {}
 
     async call(
@@ -37,6 +41,19 @@ export class McpApiDispatcher {
             new RequestContextHeaders().fillFromRequest(request);
             const requestId =
                 RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
+            const inputFailure = this.schemaBuilder.validate(tool.requestClass, requestDto);
+            if (inputFailure) {
+                return new McpDispatchFailure(
+                    ApiErrorCodec.encode(
+                        new ApiBadRequestError(
+                            'MCP request DTO did not match its declared schema.',
+                            undefined,
+                            inputFailure.message,
+                        ),
+                    ),
+                    requestId,
+                );
+            }
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes endpoint throws
             try {
                 const client = this.apiFactory.createApiClient<ApiClientProxy>(tool.apiClass as never);

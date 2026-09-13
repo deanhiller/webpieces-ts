@@ -123,6 +123,10 @@ ORDER=(
 
 # Publishable in package.json, but deliberately never released. Each needs a reason.
 SKIP=(
+    # npm trusted publishing cannot create a brand-new scoped package. First publish the
+    # framework dependencies from this release, then bootstrap this package manually and
+    # configure its trusted publisher. A follow-up release moves it into ORDER.
+    packages/http/mcp-server
 )
 
 contains() {
