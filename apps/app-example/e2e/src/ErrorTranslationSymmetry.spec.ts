@@ -2,7 +2,12 @@ import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { ClientRegistry, ProtocolError, Secrets, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import {
+    ClientRegistry,
+    ApiErrorPayload,
+    Secrets,
+    WebpiecesCoreHeaders,
+} from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
@@ -16,6 +21,7 @@ import { setupCompanyRuntime } from '@webpieces/company-svc-core';
 import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
 import {
     ORDER_SURFACE_HEADER,
+    OrderErrorPayload,
     OrderNotFoundError,
     installOrderErrorTranslators,
 } from '../../client-server/src/OrderErrors';
@@ -36,14 +42,18 @@ const url = (path: string): string => `http://localhost:${PORT}${path}`;
 /** A REAL node client for PublicApi, built the way SharedSecretClient.spec builds one. */
 const publicApiClient = (): PublicApi => {
     const provider = new Provider(
-        () => new NodeProxyClient(
-            new RequestContextHeaders(),
-            new GcpOidc(),
-            new DnsAddressResolver(),
-            new Secrets({}),
-        ),
+        () =>
+            new NodeProxyClient(
+                new RequestContextHeaders(),
+                new GcpOidc(),
+                new DnsAddressResolver(),
+                new Secrets({}),
+            ),
     );
-    return new ClientHttpFactory(provider).createRpcClient(PublicApi, new ClientConfig('client-server'));
+    return new ClientHttpFactory(provider).createRpcClient(
+        PublicApi,
+        new ClientConfig('client-server'),
+    );
 };
 
 /** POST a body express will hand straight to the wrapper, with no client in the way. */
@@ -82,7 +92,7 @@ describe('the app owns the WHOLE response: status, reason, headers and body', ()
         expect(res.statusText).toBe('Order Not Found');
         // A header on an error response — flatly impossible under the old (statusCode, body) pair.
         expect(res.headers.get(ORDER_SURFACE_HEADER)).toBe('/public/info');
-        const body = (await res.json()) as ProtocolError;
+        const body = (await res.json()) as OrderErrorPayload;
         expect(body.errorCode).toBe('ORDER_NOT_FOUND');
         expect(body.message).toBe('no order order-4471');
     });
@@ -90,10 +100,10 @@ describe('the app owns the WHOLE response: status, reason, headers and body', ()
     it('with NO translators installed, the webpieces default still answers', async () => {
         const res = await post('/public/info', JSON.stringify({ name: 'missing-order' }));
 
-        expect(res.status).toBe(460);
+        expect(res.status).toBe(500);
         expect(res.headers.get(ORDER_SURFACE_HEADER)).toBeNull();
-        // The built-in ladder genericizes an app status it has no phrase for.
-        expect(((await res.json()) as ProtocolError).message).toBe('Request Failed');
+        // An unclaimed application error is normalized at the owning server boundary.
+        expect(((await res.json()) as ApiErrorPayload).message).toBe('Internal Error');
     });
 });
 
@@ -120,7 +130,9 @@ describe('server throws X -> client catches X', () => {
         installOrderErrorTranslators();
 
         await RequestContext.run(async () => {
-            expect((await publicApiClient().getInfo({ name: 'Dean' })).greeting).toBe('Hello, Dean!');
+            expect((await publicApiClient().getInfo({ name: 'Dean' })).greeting).toBe(
+                'Hello, Dean!',
+            );
         });
     });
 });
@@ -141,7 +153,7 @@ describe('a malformed body reaches the translator WITH its request context', () 
         // that verdict are only reachable if the translator could read the path.
         expect(res.status).toBe(461);
         expect(res.headers.get(ORDER_SURFACE_HEADER)).toBe('/public/info');
-        expect(((await res.json()) as ProtocolError).errorCode).toBe('ORDER_SURFACE_ERROR');
+        expect(((await res.json()) as OrderErrorPayload).errorCode).toBe('ORDER_SURFACE_ERROR');
     });
 });
 
@@ -166,7 +178,7 @@ describe('the txId response header', () => {
             body: JSON.stringify({ name: 'missing-order' }),
         });
 
-        expect(res.status).toBe(460);
+        expect(res.status).toBe(500);
         expect(res.headers.get(txHeader)).toBe('caller-req-42');
     });
 

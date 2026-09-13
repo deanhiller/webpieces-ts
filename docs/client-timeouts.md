@@ -1,6 +1,6 @@
 # Client timeouts and strategies
 
-Browser RPC, node RPC, and Cloud Tasks enqueue calls time out after **30 seconds** by default. A timeout rejects with `TimeoutError` from `@webpieces/core-util`; it never silently resolves.
+Browser RPC, node RPC, and Cloud Tasks enqueue calls time out after **30 seconds** by default. A timeout rejects with `ApiCallTimeoutError` from `@webpieces/core-util`; it never silently resolves.
 
 Configure the shared, browser-safe `CallRegistry` at application startup (separately in each browser/server process). Keys use the actual API class identity, not its name. Existing clients read the policy on every call.
 
@@ -24,13 +24,13 @@ Timeouts are milliseconds, positive and finite, at most 2,147,483,647 (the platf
 ## Explicit retry strategy
 
 ```ts
-import { Attempt, CallStrategy, CallRegistry, TimeoutError } from '@webpieces/core-util';
+import { Attempt, CallStrategy, CallRegistry, ApiCallTimeoutError } from '@webpieces/core-util';
 
 const patientRetry: CallStrategy<unknown> = async (call, ctx) => {
     try {
         return await call(30_000);
     } catch (err) {
-        if (!(err instanceof TimeoutError)) throw err;
+        if (!(err instanceof ApiCallTimeoutError)) throw err;
         console.warn(`${ctx.apiName}.${ctx.methodName} timed out; waiting 60s`);
         await new Promise<void>(resolve => setTimeout(resolve, 60_000));
         return call(20_000);
@@ -43,7 +43,7 @@ CallRegistry.setStrategy(patientRetry, CatalogApi, 'upload');
 
 `Attempt<T>` is `(timeoutMs: number) => Promise<T>`.
 `CallStrategy<T>` is `(call: Attempt<T>, ctx: CallContext) => Promise<T>`.
-Context has readonly `apiName` and `methodName`. `TimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
+Context has readonly `apiName` and `methodName`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
 
 There is deliberately **no default strategy or retry**: retrying a non-idempotent POST can duplicate writes. A timeout only says the client stopped waiting, not that the server stopped executing. Idempotency and deduplication belong to the strategy author.
 

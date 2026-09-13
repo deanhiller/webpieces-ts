@@ -40,7 +40,7 @@ export {
 
 // HTTP API contract (merged from former @webpieces/http-api).
 // Shared HTTP API definition consumed by both client and server: REST
-// decorators, the HttpError hierarchy, datetime DTOs, platform-header
+// decorators, the API error taxonomy, datetime DTOs, platform-header
 // registry/readers, ValidateImplementation, and the test-case recorder
 // contract. Pure definitions — express-free, browser + Node safe.
 
@@ -130,25 +130,8 @@ export { Secrets, SECRETS } from './http/Secrets';
 // Type validators
 export { ValidateImplementation } from './http/validators';
 
-// HTTP wire DTO, legacy aliases and subtype constants.
+// Authentication subtype constants.
 export {
-    ProtocolError,
-    HttpError,
-    HttpNotFoundError,
-    EndpointNotFoundError,
-    HttpBadRequestError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpTimeoutError,
-    HttpBadGatewayError,
-    HttpServiceUnavailableError,
-    HttpGatewayTimeoutError,
-    HttpInternalServerError,
-    HttpTooManyRequestsError,
-    HttpVendorError,
-    HttpUserError,
-    OfflineError,
-    // Error subtype constants
     ENTITY_NOT_FOUND,
     WRONG_LOGIN_TYPE,
     WRONG_LOGIN,
@@ -157,7 +140,7 @@ export {
     WRONG_DOMAIN,
     WRONG_COMPANY,
     NO_REG_CODE,
-} from './http/errors';
+} from './errors';
 
 export { NetworkRejectClassifier } from './http/networkReject';
 
@@ -180,7 +163,7 @@ export { CallRegistry } from './http/CallRegistry';
 export { CallDeadline } from './http/CallDeadline';
 export { CallContext } from './http/CallStrategy';
 export type { Attempt, CallStrategy } from './http/CallStrategy';
-export { TimeoutError } from './http/TimeoutError';
+export { ApiCallTimeoutError } from './http/ApiCallTimeoutError';
 export type { ServiceUrlDeriver } from './http/ClientRegistry';
 
 // "What service am I" — set once at startup, read by the logging backends and by
@@ -263,19 +246,22 @@ export { FilterChain } from './filters/FilterChain';
 
 export {
     ApiError,
-    NotFoundError,
-    BadGatewayError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    InternalError,
-    TooManyRequestsError,
-    ForbiddenError,
-    RequestTimeoutError,
-    UserError,
-    BadRequestError,
-    UnauthorizedError,
-    VendorError,
+    ApiNotFoundError,
+    ApiDependencyError,
+    ApiUnavailableError,
+    ApiDependencyTimeoutError,
+    ApiImplementationError,
+    ApiRateLimitedError,
+    ApiForbiddenError,
+    ApiRequestTimeoutError,
+    ApiEndUserError,
+    ApiBadRequestError,
+    ApiUnauthorizedError,
+    ApiDependencyBackoffError,
+    ApiConnectionError,
+    ApiEndpointNotFoundError,
     ApiErrorCodec,
     ApiErrorPayload,
 } from './errors';
-export { HttpErrorStatus } from './http/HttpErrorStatus';
+export type { ApiErrorKind } from './errors';
+export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';

@@ -1,4 +1,4 @@
-import { ApiErrorPayload, InternalError } from '../errors';
+import { ApiErrorPayload, ApiImplementationError } from '../errors';
 import { IpcIdentity } from './IpcIdentity';
 
 export class IpcCallContext {
@@ -48,7 +48,7 @@ export class IpcProtocol {
     // webpieces-disable no-function-outside-class -- portable stateless IPC primitive; no platform DI container exists on this boundary; webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
     static record(value: unknown): Record<string, unknown> {
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-            throw new InternalError('Malformed IPC envelope');
+            throw new ApiImplementationError('Malformed IPC envelope');
         }
         // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
         return value as Record<string, unknown>;
@@ -57,7 +57,8 @@ export class IpcProtocol {
     // webpieces-disable no-function-outside-class -- portable stateless IPC primitive; no platform DI container exists on this boundary
     static parse(json: string): IpcMessage {
         const value = IpcProtocol.record(JSON.parse(json));
-        if (value['version'] !== 1) throw new InternalError('Unsupported IPC protocol version');
+        if (value['version'] !== 1)
+            throw new ApiImplementationError('Unsupported IPC protocol version');
         const raw = IpcProtocol.record(value['context']);
         const context = new IpcCallContext(
             raw['txId'] as string,
@@ -69,11 +70,11 @@ export class IpcProtocol {
                 IpcIdentity.assert(value['apiId'], 'API');
                 IpcIdentity.assert(value['methodId'], 'method');
                 if (!Object.prototype.hasOwnProperty.call(value, 'body'))
-                    throw new InternalError('Missing IPC request body');
+                    throw new ApiImplementationError('Missing IPC request body');
                 return new IpcRequest(value['apiId'], value['methodId'], context, value['body']);
             case 'success':
                 if (!Object.prototype.hasOwnProperty.call(value, 'body'))
-                    throw new InternalError('Missing IPC success body');
+                    throw new ApiImplementationError('Missing IPC success body');
                 return new IpcSuccess(context, value['body']);
             case 'failure':
                 return new IpcFailure(
@@ -82,7 +83,7 @@ export class IpcProtocol {
                     IpcProtocol.record(value['error']) as unknown as ApiErrorPayload,
                 );
             default:
-                throw new InternalError('Invalid IPC message discriminator');
+                throw new ApiImplementationError('Invalid IPC message discriminator');
         }
     }
 

@@ -3,34 +3,38 @@
 Use the same semantic exception constructors in browser, Node and React Native code:
 
 ```typescript
-import { UserError, NotFoundError } from '@webpieces/core-util/errors';
-throw new UserError('Passwords do not match', 'password-mismatch');
+import { ApiEndUserError, ApiNotFoundError } from '@webpieces/core-util/errors';
+throw new ApiEndUserError('Passwords do not match', 'password-mismatch');
 ```
 
-An error is a business/API outcome; a transport adapter decides how to represent it. HTTP keeps status **266** for `UserError`: the HTTP request and health monitoring succeed, but the generated client decodes and throws `UserError` so a GUI can catch it and show its safe message. The shared browser/Node response path now explicitly translates 266 before ordinary Fetch `ok` handling. Generated-client regression tests cover that path and custom translator precedence. IPC carries the semantic kind in a JSON reply and throws the same canonical constructor on the client. Neither transport returns an error payload as successful API data.
+An error is a business/API outcome; a transport adapter decides how to represent it. HTTP keeps status **266** for `ApiEndUserError`: the HTTP request and health monitoring succeed, but the generated client decodes and throws `ApiEndUserError` so a GUI can catch it and show its safe message. The shared browser/Node response path now explicitly translates 266 before ordinary Fetch `ok` handling. Generated-client regression tests cover that path and custom translator precedence. IPC carries the semantic kind in a JSON reply and throws the same canonical constructor on the client. Neither transport returns an error payload as successful API data.
 
-## Migration
+## Taxonomy and HTTP adapter defaults
 
-The old HTTP leaf names are explicitly deprecated aliases of these constructors, preserving `instanceof` identity while consumers migrate imports. Canonical errors have a semantic `kind` and standard `cause`, with **no HTTP status field**. Code that reads an old leaf's `.code` must move status decisions into its HTTP adapter. The custom legacy `HttpError(message, code, subtype, cause)` remains an HTTP adapter with deprecation guidance; its `httpCause` accessor points to standard `cause`.
+`ApiError` is an abstract category and has no status mapping. An API boundary normalizes every
+unclassified throw to the concrete `ApiImplementationError`; that type maps to 500. The remaining
+defaults are `ApiEndUserError` 266, `ApiBadRequestError` 400, `ApiUnauthorizedError` 401,
+`ApiForbiddenError` 403, `ApiNotFoundError`/`ApiEndpointNotFoundError` 404,
+`ApiRequestTimeoutError` 408, `ApiRateLimitedError` 429, `ApiDependencyError` 502,
+`ApiUnavailableError`/`ApiDependencyBackoffError` 503, and `ApiDependencyTimeoutError` 504.
+The backoff form also emits `Retry-After`.
 
-| Deprecated name | Canonical name |
-|---|---|
-| HttpUserError | UserError |
-| HttpNotFoundError | NotFoundError |
-| HttpBadRequestError | BadRequestError |
-| HttpUnauthorizedError | UnauthorizedError |
-| HttpForbiddenError | ForbiddenError |
-| HttpInternalServerError | InternalError |
-| HttpTimeoutError | RequestTimeoutError |
-| HttpTooManyRequestsError | TooManyRequestsError |
-| HttpBadGatewayError | BadGatewayError |
-| HttpServiceUnavailableError | ServiceUnavailableError |
-| HttpGatewayTimeoutError | GatewayTimeoutError |
-| HttpVendorError | VendorError |
+There are no HTTP-prefixed aliases and no arbitrary-status base exception. Applications that own
+a custom status use `ErrorTranslators`; an unclaimed unknown response becomes the HTTP-client-local
+`UnexpectedApiResponseError`.
 
-`EndpointNotFoundError` remains distinct from domain `NotFoundError`. Existing local `TimeoutError(timeoutMs, CallContext)` remains distinct from a remote request timeout. `OfflineError` remains available for actual offline classification; IPC disconnection uses the local `IpcTransportError`, distinct from a remote implementation throwing `ServiceUnavailableError`.
+`ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`. Existing local `ApiCallTimeoutError(timeoutMs, CallContext)` remains distinct from a remote request timeout. `ApiConnectionError` remains available for actual offline classification; IPC disconnection uses the local `IpcTransportError`, distinct from a remote implementation throwing `ApiUnavailableError`.
 
-`ApiErrorCodec` uses a fixed allowlist of semantic kinds, not a remote JavaScript class name. User messages and explicitly safe validation fields are bounded; internal messages become generic. Semantic causes cross the boundary up to three levels deep using the same safe field policy; cycles are bounded. Stack traces and arbitrary error object properties never cross the boundary. Logging is separate from Sentry: the application supplies the transport error owner and owns reporting policy.
+`ApiErrorCodec` uses a fixed allowlist of semantic kinds, not a remote JavaScript class name. End-user messages and explicitly safe `callerMessage` validation text are bounded; implementation messages become generic. Semantic causes cross the boundary up to three levels deep using the same safe field policy; cycles are bounded. Stack traces and arbitrary error object properties never cross the boundary. A locally constructed `ApiImplementationError` has `serverError === false`; a remote decoder sets it to `true`. Browser and native global reporters can therefore distinguish server failures from local website/mobile code failures without trusting a wire flag.
+
+```typescript
+if (error instanceof ApiImplementationError) {
+    const category = error.serverError
+        ? 'Server Error'
+        : runtime === 'native' ? 'Mobile App Code Error' : 'Website Code Error';
+    report(category, error);
+}
+```
 
 ## Factories and connection ownership
 
@@ -40,7 +44,7 @@ See the package READMEs for typed contract, client, receiver, logging and lifecy
 
 One `@webpieces/ipc-bridge` package exports both `IpcClientFactory` and `IpcServerFactory`, using one shared JSON connection. Install it on both sides; each side can call and receive APIs. The application supplies its WebView/bus adapter, scheduler, unique ID generator, and reporting owner. There is one incoming dispatcher per connection, hosting multiple registered APIs. No vendor Node types, DI framework or platform runtime is part of the public factories. The shared API class declares its stable wire identity with class-level `@WpInternal('api-id')`, and every method declares its stable wire identity with `@WpIpcEndpoint('method-id')`. Pass that annotated API class directly to `createClient(Api)` and `create(Api, Controller)`; consumers do not construct a separate contract or request/response schemas.
 
-Every call is acknowledged, including void and notification methods. Client logging surrounds reply decoding; server logging surrounds dispatch and invocation before failure encoding. IPC payloads remain parsed JSON with compile-time DTO typing rather than runtime schema validation or DTO reconstruction. `UserError` is rethrown while retaining success/OTHER monitoring semantics. Nested calls use explicit scoped context; concurrent calls do not share mutable async state. The application must observe OS-callback promises and handle failures at its chosen reporting boundary. No timeout triggers automatic retries or proves that the remote side effect did not happen.
+Every call is acknowledged, including void and notification methods. Client logging surrounds reply decoding; server logging surrounds dispatch and invocation before failure encoding. IPC payloads remain parsed JSON with compile-time DTO typing rather than runtime schema validation or DTO reconstruction. `ApiEndUserError` is rethrown while retaining success/OTHER monitoring semantics. Nested calls use explicit scoped context; concurrent calls do not share mutable async state. The application must observe OS-callback promises and handle failures at its chosen reporting boundary. No timeout triggers automatic retries or proves that the remote side effect did not happen.
 
 ## React Native support and verification
 

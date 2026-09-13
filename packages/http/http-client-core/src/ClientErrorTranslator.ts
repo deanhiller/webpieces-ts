@@ -1,203 +1,87 @@
 import {
-    ProtocolError,
+    ApiBadRequestError,
+    ApiDependencyError,
+    ApiDependencyTimeoutError,
+    ApiEndUserError,
+    ApiErrorCodec,
+    ApiForbiddenError,
+    ApiImplementationError,
+    ApiNotFoundError,
+    ApiRateLimitedError,
+    ApiRequestTimeoutError,
+    ApiUnauthorizedError,
+    ApiUnavailableError,
     ClientRegistry,
+    ApiErrorHttpStatus,
     HttpResponseDto,
-    HttpError,
-    BadRequestError,
-    UserError,
-    VendorError,
-    UnauthorizedError,
-    ForbiddenError,
-    NotFoundError,
-    RequestTimeoutError,
-    InternalError,
-    BadGatewayError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    TooManyRequestsError,
 } from '@webpieces/core-util';
 import { TranslatedFailure } from './TranslatedFailure';
+import { UnexpectedApiResponseError } from './UnexpectedApiResponseError';
 
-/**
- * ClientErrorTranslator - Translates HTTP error responses to HttpError exceptions.
- *
- * This is the CLIENT-SIDE reverse of ExpressWrapper.handleError() on the server.
- * It reconstructs typed HttpError exceptions from ProtocolError JSON responses.
- *
- * Architecture:
- * - Server: HttpError → ExpressWrapper.handleError() → an {@link HttpResponseDto} on the wire
- * - Client: that response → ClientErrorTranslator.translateError() → TranslatedFailure
- *
- * Both sides speak {@link HttpResponseDto}, which is what makes an app's `ErrorTranslators` one
- * object with two halves that can be read against each other: `toWire` produces exactly the shape
- * `fromWire` consumes, whether the reader was `http-client-node` or `http-client-browser`.
- *
- * This achieves symmetric error handling - server throws typed exceptions,
- * client receives typed exceptions.
- *
- * The symmetry is in the TYPE and the structured fields, NOT in the prose: the server sends the real
- * `Error.message` for `UserError` alone and a generic reason phrase for everything else. See
- * {@link builtInError} and, on the server, `HttpErrorWireMapper`.
- *
- * It returns a {@link TranslatedFailure} rather than a bare `Error` because the mapping is only HALF
- * the decision. It is ISOMORPHIC — the same mapping runs in a browser and in a server — and the two
- * environments must NOT do the same thing with a downstream 4xx (see
- * `ProxyClient.adaptDownstreamFailure`). The wrapper carries the one fact that hook cannot recover
- * on its own: whether the APP claimed this status, or the built-in default did.
- */
+/** Reconstructs transport-neutral API failures from an HTTP response. */
 export class ClientErrorTranslator {
-    /**
-     * Parse an error response and decide which error the caller should see, and who decided it.
-     *
-     * The app's `ErrorTranslators` wins, so an app can reconstruct its OWN error types (e.g. a
-     * custom 460) AND override built-ins. `undefined` means "not mine" — fall through to
-     * {@link builtInError}, which stays the generic default. Symmetric with the server's
-     * ExpressWrapper.handleError(), which consults ClientRegistry.tryTranslateToWire() first.
-     *
-     * @param response - the WHOLE response, normalised out of the transport by
-     *   `HttpResponseDtoFactory` — status code, reason phrase, header list and parsed body
-     * @returns the chosen error plus its provenance and the downstream status
-     */
-    // webpieces-disable no-function-outside-class -- pure, stateless status-to-type mapping with nothing to inject, called from a BROWSER bundle where no DI container exists; static is the established idiom of this class
+    // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
     static translateError(response: HttpResponseDto): TranslatedFailure {
-        const statusCode = response.status.code;
-
         const custom = ClientRegistry.tryTranslateFromWire(response);
-        if (custom !== undefined) {
-            return new TranslatedFailure(custom, true, statusCode);
-        }
+        if (custom !== undefined) return new TranslatedFailure(custom, true, response.status.code);
+        return new TranslatedFailure(this.builtInError(response), false, response.status.code);
+    }
 
-        return new TranslatedFailure(
-            ClientErrorTranslator.builtInError(response),
-            false,
-            statusCode,
+    /** Semantic body kind is authoritative when it agrees with the HTTP adapter status. */
+    // webpieces-disable no-function-outside-class -- public delegable default mapping
+    static builtInError(response: HttpResponseDto): Error {
+        if (ApiErrorCodec.isPayload(response.body)) {
+            const decoded = ApiErrorCodec.decode(response.body);
+            if (
+                ApiErrorHttpStatus.hasCode(decoded) &&
+                ApiErrorHttpStatus.code(decoded) === response.status.code
+            )
+                return decoded;
+            return new ApiImplementationError('Internal Error', undefined, true);
+        }
+        return this.fromStatus(
+            response.status.code,
+            this.fallbackMessage(response.body, response.status.reason),
         );
     }
 
-    /**
-     * The built-in status → error mapping (symmetric with the server's ExpressWrapper.handleError()):
-     * - 400 → BadRequestError (with field, guiAlertMessage)
-     * - 266 → UserError (with errorCode) - 2xx code for user validation
-     * - 401 → UnauthorizedError (with subType)
-     * - 403 → ForbiddenError
-     * - 404 → NotFoundError
-     * - 408 → RequestTimeoutError
-     * - 429 → TooManyRequestsError
-     * - 500 → InternalError
-     * - 502 → BadGatewayError
-     * - 503 → ServiceUnavailableError
-     * - 504 → GatewayTimeoutError
-     * - 598 → VendorError (with waitSeconds) - custom status code
-     * - other → generic HttpError
-     *
-     * # What `message` means on THIS side of the wire
-     *
-     * The reconstructed error carries whatever text the wire carried, and for every status except
-     * **266** a webpieces server deliberately sends only the GENERIC reason phrase — 'Not Found',
-     * 'Internal Server Error', … See `HttpErrorWireMapper` (http-server) for why: `Error.message` is
-     * an operator-facing field that routinely quotes internal detail, so it stays in the server's log
-     * and never reaches a caller. `UserError` (266) is the one type whose message was WRITTEN for
-     * a human to read, and it arrives verbatim.
-     *
-     * So: branch on the TYPE, on `subType`, on `errorCode`, or on `guiAlertMessage` — never on the
-     * prose of `message`. It is now a constant per status by design, and treating it as diagnostic
-     * information will not work against a current webpieces server. The diagnosis lives in the
-     * server's logs, correlated by request id.
-     *
-     * (An app that publishes richer text on purpose does it through
-     * `ClientRegistry.setErrorTranslators()`, which is consulted before this mapping on both sides.)
-     *
-     * PUBLIC, and the client-side twin of `HttpErrorWireMapper.toResponse` being public on the
-     * server: the webpieces DEFAULT is delegable, so an app whose `fromWire` claims one status can
-     * hand every other status straight back here instead of copying this ladder.
-     */
-    // webpieces-disable no-function-outside-class -- public delegable default alongside the static above; same reason
-    public static builtInError(response: HttpResponseDto): Error {
-        const statusCode = response.status.code;
-        const protocolError = ClientErrorTranslator.asProtocolError(response.body);
-        const message = protocolError.message || response.status.reason || 'Unknown error';
-        const subType = protocolError.subType;
-
+    // webpieces-disable no-function-outside-class -- fallback for non-Webpieces HTTP responders
+    private static fromStatus(statusCode: number, message: string): Error {
         switch (statusCode) {
+            case 266:
+                return new ApiEndUserError(message);
             case 400:
-                return new BadRequestError(
-                    message,
-                    protocolError.field,
-                    protocolError.guiAlertMessage,
-                );
-
-            case 266: // UserError - 2xx code for user validation errors
-                return new UserError(message, protocolError.errorCode);
-
+                return new ApiBadRequestError(message);
             case 401:
-                return new UnauthorizedError(message, subType);
-
+                return new ApiUnauthorizedError(message);
             case 403:
-                return new ForbiddenError(message);
-
+                return new ApiForbiddenError(message);
             case 404:
-                return new NotFoundError(message);
-
+                return new ApiNotFoundError(message);
             case 408:
-                return new RequestTimeoutError(message);
-
+                return new ApiRequestTimeoutError(message);
             case 429:
-                // The server has always been able to throw this (HttpErrorWireMapper sends
-                // 'Too Many Requests' for it); the client had no case for it, so it arrived as a bare
-                // HttpError and callers were pushed back to `err.code === 429` — the untyped pattern
-                // this ladder exists to replace. That gap bites harder now that `message` is a
-                // constant per status: branching on the TYPE is the only thing left, so every status
-                // the server can emit needs one.
-                return new TooManyRequestsError(message);
-
+                return new ApiRateLimitedError(message);
             case 500:
-                return new InternalError(message);
-
+                return new ApiImplementationError('Internal Error', undefined, true);
             case 502:
-                return new BadGatewayError(message);
-
+                return new ApiDependencyError(message);
             case 503:
-                return new ServiceUnavailableError(message);
-
+                return new ApiUnavailableError(message);
             case 504:
-                return new GatewayTimeoutError(message);
-
-            case 598: // VendorError - custom status code for vendor/external service errors
-                return new VendorError(message, protocolError.waitSeconds);
-
+                return new ApiDependencyTimeoutError(message);
             default:
-                // Unknown status code and no app translation claimed it: still a real HttpError (so
-                // `err instanceof HttpError` holds after the RPC hop), carrying the status code.
-                return new HttpError(
-                    message || `could not translate statusCode=${statusCode}`,
-                    statusCode,
-                    subType,
-                );
+                return new UnexpectedApiResponseError(statusCode, message);
         }
     }
 
-    /**
-     * The response body as the {@link ProtocolError} this built-in ladder reads.
-     *
-     * {@link HttpResponseDto.body} is `unknown` because an APP owns the body shape when it installs
-     * its own translators. This default does not: a webpieces server always writes a ProtocolError
-     * here, and `ResponseBodyReader` has already parsed one. A body that is not an object at all
-     * (a bare string from something that is not a webpieces server) degrades to an EMPTY
-     * ProtocolError, so the status-to-type mapping below still answers — it never throws on the
-     * error path, which is the one path that must not fail.
-     */
-    // webpieces-disable no-any-unknown -- HttpResponseDto.body is app-owned; this narrows it back to the shape the BUILT-IN ladder reads
-    // webpieces-disable no-function-outside-class -- private helper of the statics above; same reason
-    private static asProtocolError(body: unknown): ProtocolError {
-        const parsed = new ProtocolError();
+    // webpieces-disable no-any-unknown -- HTTP response bodies are app-owned until this boundary safely inspects them
+    // webpieces-disable no-function-outside-class -- bounds diagnostic text from a foreign responder
+    private static fallbackMessage(body: unknown, reason: string): string {
         if (typeof body === 'object' && body !== null) {
-            for (const key of ['message', 'subType', 'field', 'guiAlertMessage', 'errorCode'] as const) {
-                const value = Object.getOwnPropertyDescriptor(body, key)?.value;
-                if (typeof value === 'string') parsed[key] = value.slice(0, 4096);
-            }
-            const wait = Object.getOwnPropertyDescriptor(body, 'waitSeconds')?.value;
-            if (typeof wait === 'number' && Number.isFinite(wait) && wait >= 0) parsed.waitSeconds = Math.min(wait, 86400);
+            const message = Object.getOwnPropertyDescriptor(body, 'message')?.value;
+            if (typeof message === 'string' && message.length > 0) return message.slice(0, 4096);
         }
-        return parsed;
+        return reason || 'Request Failed';
     }
 }

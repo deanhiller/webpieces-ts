@@ -5,7 +5,7 @@ import 'reflect-metadata';
 process.env['METADATA_SERVER_DETECTION'] = 'none';
 
 import { describe, it, expect } from 'vitest';
-import { UnauthorizedError } from '@webpieces/core-util';
+import { ApiUnauthorizedError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
@@ -32,13 +32,13 @@ describe('DefaultOidcVerifier — @WpAuthOidc() trusts the edge (no ["self"] fal
     it('a non-empty allow-list still ENFORCES callers (defense-in-depth)', async () => {
         // @WpAuthOidc('self') names an explicit allow-list; a different caller must be rejected.
         await expect(verifier.verify(devTokenFor(OTHER_CALLER), ['self'])).rejects.toThrow(
-            UnauthorizedError,
+            ApiUnauthorizedError,
         );
     });
 
     it('a garbage token is rejected even under trust-the-edge', async () => {
         await expect(verifier.verify('dev-oidc.not-base64!!', [])).rejects.toThrow(
-            UnauthorizedError,
+            ApiUnauthorizedError,
         );
     });
 });

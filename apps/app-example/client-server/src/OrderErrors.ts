@@ -1,11 +1,9 @@
 import {
     ClientRegistry,
     ErrorTranslators,
-    HttpError,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
-    ProtocolError,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
@@ -13,9 +11,9 @@ import { RequestContext } from '@webpieces/core-context';
  * An app's OWN error type, at its OWN status code — the thing the built-in webpieces ladder cannot
  * know about, and the reason {@link ErrorTranslators} exists.
  */
-export class OrderNotFoundError extends HttpError {
+export class OrderNotFoundError extends Error {
     constructor(public readonly orderId: string) {
-        super(`no order ${orderId}`, 460);
+        super(`no order ${orderId}`);
         this.name = 'OrderNotFoundError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
@@ -23,6 +21,13 @@ export class OrderNotFoundError extends HttpError {
 
 /** The header this app puts on its own error responses — impossible before the response DTO. */
 export const ORDER_SURFACE_HEADER = 'x-order-surface';
+
+export class OrderErrorPayload {
+    public errorCode?: string;
+    public field?: string;
+
+    constructor(public message: string) {}
+}
 
 /**
  * ONE class, BOTH directions — the canonical example from issue #862. It lives in the SERVER app
@@ -50,14 +55,15 @@ export class OrderErrorTranslators implements ErrorTranslators {
             return undefined;
         }
 
-        const body = new ProtocolError();
-        body.message = error.message;
-        body.errorCode = error instanceof OrderNotFoundError ? 'ORDER_NOT_FOUND' : 'ORDER_SURFACE_ERROR';
+        const body = new OrderErrorPayload(error.message);
+        body.errorCode =
+            error instanceof OrderNotFoundError ? 'ORDER_NOT_FOUND' : 'ORDER_SURFACE_ERROR';
         // STRUCTURED, so fromWire rebuilds the exact type rather than re-parsing prose.
         body.field = error instanceof OrderNotFoundError ? error.orderId : undefined;
-        const status = error instanceof OrderNotFoundError
-            ? new HttpResponseStatus(460, 'Order Not Found')
-            : new HttpResponseStatus(461, 'Order Surface Error');
+        const status =
+            error instanceof OrderNotFoundError
+                ? new HttpResponseStatus(460, 'Order Not Found')
+                : new HttpResponseStatus(461, 'Order Surface Error');
         return new HttpResponseDto(status, [new HttpHeader(ORDER_SURFACE_HEADER, path)], body);
     }
 
@@ -66,7 +72,7 @@ export class OrderErrorTranslators implements ErrorTranslators {
         if (response.status.code !== 460) {
             return undefined;
         }
-        const body = response.body as ProtocolError;
+        const body = response.body as OrderErrorPayload;
         return new OrderNotFoundError(body.field ?? 'unknown');
     }
 }

@@ -8,7 +8,7 @@ import {
     ClientRegistry,
     Endpoint,
     HeaderRegistry,
-    TimeoutError,
+    ApiCallTimeoutError,
     toError,
 } from '@webpieces/core-util';
 import { WpAuthPublic, Rpc } from '@webpieces/core-util';
@@ -73,7 +73,7 @@ class Harness {
         let settled = false;
         const pending = this.invoke(method);
         const checked = expect(pending).rejects.toEqual(
-            new TimeoutError(timeoutMs, new CallContext(this.api.name, method)),
+            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method)),
         );
         void pending.then(
             () => {
@@ -113,7 +113,7 @@ describe('node generated client deadlines', () => {
         expect(h.transport.calls).toBe(1);
 
         expect(h.transport.signals[0].aborted).toBe(true);
-        expect(h.transport.signals[0].reason).toBeInstanceOf(TimeoutError);
+        expect(h.transport.signals[0].reason).toBeInstanceOf(ApiCallTimeoutError);
     });
 
     it('resolves timeout method -> API -> ALL and removes overrides with undefined', async () => {
@@ -165,7 +165,7 @@ describe('node generated client deadlines', () => {
                 return await call(30_000);
             } catch (err: unknown) {
                 const error = toError(err);
-                if (!(error instanceof TimeoutError)) throw err;
+                if (!(error instanceof ApiCallTimeoutError)) throw err;
                 firstError = error;
                 await new Promise<void>((resolve: () => void) => setTimeout(resolve, 60_000));
                 return call(20_000);
@@ -173,10 +173,10 @@ describe('node generated client deadlines', () => {
         }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(
-            new TimeoutError(20_000, new CallContext(h.api.name, 'work')),
+            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work')),
         );
         await vi.advanceTimersByTimeAsync(30_000);
-        expect(firstError).toBeInstanceOf(TimeoutError);
+        expect(firstError).toBeInstanceOf(ApiCallTimeoutError);
         expect(h.transport.calls).toBe(1);
         await vi.advanceTimersByTimeAsync(59_999);
         expect(h.transport.calls).toBe(1);
@@ -197,7 +197,7 @@ describe('node generated client deadlines', () => {
         CallRegistry.setStrategy(
             async (call: Attempt<unknown>): Promise<unknown> =>
                 call(10).catch((err: Error) => {
-                    expect(err).toBeInstanceOf(TimeoutError);
+                    expect(err).toBeInstanceOf(ApiCallTimeoutError);
                     h.transport.work = () => Promise.resolve();
                     return call(20);
                 }),
@@ -295,8 +295,8 @@ describe('node response body deadlines', () => {
         const h = new Harness();
         CallRegistry.setTimeout(10, h.api, 'work');
         CallRegistry.setTimeout(20, h.api, 'other');
-        const first = expect(h.invoke()).rejects.toBeInstanceOf(TimeoutError);
-        const second = expect(h.invoke('other')).rejects.toBeInstanceOf(TimeoutError);
+        const first = expect(h.invoke()).rejects.toBeInstanceOf(ApiCallTimeoutError);
+        const second = expect(h.invoke('other')).rejects.toBeInstanceOf(ApiCallTimeoutError);
         await vi.advanceTimersByTimeAsync(10);
         await first;
         expect(h.transport.signals[0].aborted).toBe(true);

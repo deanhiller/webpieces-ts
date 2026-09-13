@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-    BadGatewayError,
-    GatewayTimeoutError,
-    ServiceUnavailableError,
+    ApiDependencyError,
+    ApiDependencyTimeoutError,
+    ApiUnavailableError,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
@@ -19,7 +19,10 @@ const dtoFactory = new HttpResponseDtoFactory();
 const GFE_HTML = '\n<html><head><title>502 Bad Gateway</title></head>\n<body>error</body></html>\n';
 
 function htmlResponse(status: number): Response {
-    return new Response(GFE_HTML, { status, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+    return new Response(GFE_HTML, {
+        status,
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+    });
 }
 
 function jsonResponse(status: number, body: string, contentType = 'application/json'): Response {
@@ -29,7 +32,9 @@ function jsonResponse(status: number, body: string, contentType = 'application/j
 describe('ResponseBodyReader.isJson decides from the DECLARED content-type', () => {
     it('accepts application/json, with or without parameters, in any case', () => {
         expect(reader.isJson(jsonResponse(200, '{}'))).toBe(true);
-        expect(reader.isJson(jsonResponse(200, '{}', 'application/json; charset=utf-8'))).toBe(true);
+        expect(reader.isJson(jsonResponse(200, '{}', 'application/json; charset=utf-8'))).toBe(
+            true,
+        );
         expect(reader.isJson(jsonResponse(200, '{}', 'APPLICATION/JSON'))).toBe(true);
     });
 
@@ -50,15 +55,15 @@ describe('ResponseBodyReader.isJson decides from the DECLARED content-type', () 
  * 502 serving HTML reached the app as `SyntaxError: Unexpected token '<'` — the status discarded,
  * and "the server is booting" indistinguishable from "the code is broken".
  */
-describe('a non-JSON error body becomes a STATUS-typed HttpError, never a SyntaxError', () => {
-    it('502 HTML → BadGatewayError carrying the status and a message naming the cause', async () => {
+describe('a non-JSON error body becomes a status-typed API error, never a SyntaxError', () => {
+    it('502 HTML → ApiDependencyError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
         const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
         const translated = ClientErrorTranslator.translateError(
             dtoFactory.fromFetch(response, protocolError),
         ).error;
 
-        expect(translated).toBeInstanceOf(BadGatewayError);
+        expect(translated).toBeInstanceOf(ApiDependencyError);
         expect(translated).not.toHaveProperty('code');
         expect(translated).not.toBeInstanceOf(SyntaxError);
         expect(translated.message).toContain('WarmupApi.ping');
@@ -68,20 +73,20 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
         expect(translated.message).toContain('<html><head><title>502 Bad Gateway');
     });
 
-    it('503 (cold start) → ServiceUnavailableError, 504 → GatewayTimeoutError', async () => {
+    it('503 (cold start) → ApiUnavailableError, 504 → ApiDependencyTimeoutError', async () => {
         const unavailable = htmlResponse(503);
         expect(
             ClientErrorTranslator.translateError(
                 dtoFactory.fromFetch(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
             ).error,
-        ).toBeInstanceOf(ServiceUnavailableError);
+        ).toBeInstanceOf(ApiUnavailableError);
 
         const timeout = htmlResponse(504);
         expect(
             ClientErrorTranslator.translateError(
                 dtoFactory.fromFetch(timeout, await reader.readErrorBody(timeout, 'A.b')),
             ).error,
-        ).toBeInstanceOf(GatewayTimeoutError);
+        ).toBeInstanceOf(ApiDependencyTimeoutError);
     });
 
     it('quotes only the first 200 chars, on ONE line, so a huge HTML page is not dumped', async () => {
@@ -102,13 +107,16 @@ describe('a non-JSON error body becomes a STATUS-typed HttpError, never a Syntax
  * the old parse-everything path destroyed.
  */
 describe('a body that DECLARED json is still parsed, and still throws when malformed', () => {
-    it('parses a real ProtocolError body into its typed error', async () => {
-        const response = jsonResponse(502, JSON.stringify({ message: 'upstream refused' }));
+    it('parses a real ApiErrorPayload body into its typed error', async () => {
+        const response = jsonResponse(
+            502,
+            JSON.stringify({ kind: 'dependency', message: 'Dependency Error' }),
+        );
         const translated = ClientErrorTranslator.translateError(
             dtoFactory.fromFetch(response, await reader.readErrorBody(response, 'A.b')),
         ).error;
-        expect(translated).toBeInstanceOf(BadGatewayError);
-        expect(translated.message).toBe('upstream refused');
+        expect(translated).toBeInstanceOf(ApiDependencyError);
+        expect(translated.message).toBe('Dependency Error');
     });
 
     it('a malformed application/json body still rejects — that one IS a real defect', async () => {

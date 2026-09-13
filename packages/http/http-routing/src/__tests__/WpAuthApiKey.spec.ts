@@ -7,7 +7,7 @@ import {
     ContextKey,
     ContextTuple,
     DestinationTrust,
-    UnauthorizedError,
+    ApiUnauthorizedError,
     RouteMetadata,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
@@ -95,7 +95,7 @@ class TestApiKeyHook extends ApiKeyHook {
         this.seenAllKeyValues = request.getHeaderValues('x-api-key');
         const record = this.records.get(name);
         if (!record || record[0] !== this.seenKey || record[1] !== this.seenOrgId) {
-            throw new UnauthorizedError('api key / organization mismatch');
+            throw new ApiUnauthorizedError('api key / organization mismatch');
         }
         return new AuthenticatedCaller('apikey-1', [], [new ContextTuple(ORG_ID, record[1])]);
     }
@@ -207,7 +207,7 @@ describe('AuthFilter enforces @WpAuthApiKey', () => {
                 new TestApiKeyHook(),
                 partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-OTHER' }),
             ),
-        ).rejects.toThrow(UnauthorizedError);
+        ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 

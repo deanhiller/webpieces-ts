@@ -107,7 +107,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         } catch (err: unknown) {
             const error = toError(err);
             // Detached job — we never rethrow, so classify only to sharpen the LOG: an operator reads
-            // "the target was unreachable" (OfflineError) instead of a bare "Failed to fetch".
+            // "the target was unreachable" (ApiConnectionError) instead of a bare "Failed to fetch".
             const deliveryError = this.networkRejectClassifier.toNetworkError(error, url);
             log.error(`local task ${taskId} delivery to ${url} threw: ${deliveryError.message}`);
         }

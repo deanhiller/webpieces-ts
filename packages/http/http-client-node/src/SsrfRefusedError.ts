@@ -2,7 +2,7 @@
  * We refused to SEND a request, because the destination failed this client's SSRF policy.
  *
  * Its own type rather than a bare Error so an app can tell "the partner's endpoint rejected us"
- * (an HttpError carrying their status) from "we never contacted the partner at all" — those are
+ * (a status-derived API error) from "we never contacted the partner at all" — those are
  * different incidents with different owners, and only the second one means the URL in our database
  * is hostile or wrong. A delivery worker typically dead-letters this instead of retrying: no number
  * of retries makes 127.0.0.1 an acceptable destination.

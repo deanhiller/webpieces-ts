@@ -1,4 +1,4 @@
-import { ApiErrorCodec, InternalError } from '@webpieces/core-util/errors';
+import { ApiErrorCodec, ApiImplementationError } from '@webpieces/core-util/errors';
 import {
     IpcCallContext,
     IpcConnection,
@@ -44,7 +44,9 @@ export class IpcClientFactory {
                     request,
                     async () => {
                         if (request === null || request === undefined)
-                            throw new InternalError('IPC requests require one non-null DTO');
+                            throw new ApiImplementationError(
+                                'IPC requests require one non-null DTO',
+                            );
                         const reply = await this.connection.request(
                             new IpcRequest(apiId, methodId, context, request),
                         );

@@ -1,5 +1,5 @@
 import { CallContext } from './CallStrategy';
-import { TimeoutError } from './TimeoutError';
+import { ApiCallTimeoutError } from './ApiCallTimeoutError';
 
 /** Transport deadline. The race bounds even transports that ignore cancellation. */
 export class CallDeadline {
@@ -28,7 +28,7 @@ export class CallDeadline {
         const expired = new Promise<never>(
             (_resolve: (value: never) => void, reject: (error: Error) => void) => {
                 timer = setTimeout(() => {
-                    const error = new TimeoutError(timeoutMs, context);
+                    const error = new ApiCallTimeoutError(timeoutMs, context);
                     CallDeadline.failures.set(controller.signal, error);
                     reject(error);
                     controller.abort(error);

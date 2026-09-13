@@ -112,7 +112,7 @@ TraceId (also called correlation ID, request ID) ties these together.
    - Is it catching for cleanup? → Usually wrong pattern
    - **Is this a global entry point?** → **ASK USER**: "I think this code is the entry point where we need a global try-catch block. Is this correct?" (95% of the time it is NOT!)
    - **Is this edge code calling external services?** → **ASK USER**: "This looks like edge code calling an external service. Should I add request/response logging with try-catch?"
-   - **Is this form error handling?** → Valid IF: catches only `HttpUserError` for display AND rethrows other errors (see Form Error Handling Pattern)
+   - **Is this form error handling?** → Valid IF: catches only `ApiEndUserError` for display AND rethrows other errors (see Form Error Handling Pattern)
    - Is it adding context to the error before rethrowing? → May be valid (see Problem 3)
 
 3. **IF REMOVING** the try-catch block:
@@ -232,7 +232,7 @@ export class DebugController implements DebugApi {
   async getErrorById(@PathParam('id') id: string): Promise<DebugErrorResponse> {
     const error = ErrorStore.get(id);
     if (!error) {
-      throw new HttpNotFoundError(`Error ${id} not found`);
+      throw new ApiNotFoundError(`Error ${id} not found`);
     }
 
     return {
@@ -377,9 +377,10 @@ async function callVendorApiWithRetry(request: VendorRequest): Promise<VendorRes
 
   // After retries exhausted, throw with traceId
   const traceId = RequestContext.get<string>('TRACE_ID');
-  throw new HttpVendorError(
+  throw new ApiDependencyBackoffError(
     `Vendor API failed after ${maxRetries} retries. TraceId: ${traceId}`,
-    lastError
+    30,
+    lastError,
   );
 }
 ```
@@ -479,7 +480,7 @@ You may use `// eslint-disable-next-line @webpieces/no-unmanaged-exceptions` ONL
 3. **Resource cleanup** with explicit approval
 4. **Global error handler entry points** (see below)
 5. **Edge code patterns** for vendor/external service calls (see below)
-6. **Form error handling** - catching `HttpUserError` for display, rethrowing others (see below)
+6. **Form error handling** - catching `ApiEndUserError` for display, rethrowing others (see below)
 
 All require:
 - Comment explaining WHY try-catch is needed
@@ -615,9 +616,9 @@ async function sendMail(request: MailRequest): Promise<MailResponse> {
 Frontend forms often need to catch user-facing errors (like validation errors) to display in the UI, while rethrowing unexpected errors to the global handler.
 
 **This pattern is ACCEPTABLE because**:
-- It catches ONLY user-facing errors (`HttpUserError`) for display
+- It catches ONLY user-facing errors (`ApiEndUserError`) for display
 - Unexpected errors are RETHROWN (not swallowed)
-- Server throws `HttpUserError` → protocol translates to error payload → client translates back to exception
+- Server throws `ApiEndUserError` → protocol translates to error payload → client translates back to exception
 
 ### Example: Form Submission Error Handling
 ```typescript
@@ -629,7 +630,7 @@ async submitForm(): Promise<void> {
   } catch (err: unknown) {
     const error = toError(err);
 
-    if (error instanceof HttpUserError) {
+    if (error instanceof ApiEndUserError) {
       // User-facing error - display in form
       this.formError = error.message;
       this.cdr.detectChanges();
@@ -645,31 +646,31 @@ async submitForm(): Promise<void> {
 
 1. **Selective catching**: Only catches errors meant for user display
 2. **No swallowing**: Unexpected errors bubble to global handler with traceId
-3. **Protocol design**: Server intentionally throws `HttpUserError` for user-facing messages
+3. **Protocol design**: Server intentionally throws `ApiEndUserError` for user-facing messages
 4. **UX requirement**: Forms must show validation errors inline, not via global error page
 
 ### Key Requirements
 
-- **ONLY catch specific error types** (e.g., `HttpUserError`, `ValidationError`)
+- **ONLY catch specific error types** (e.g., `ApiEndUserError`, `ValidationError`)
 - **ALWAYS rethrow** errors that aren't user-facing
-- Server-side code MUST throw `HttpUserError` for user-displayable messages
+- Server-side code MUST throw `ApiEndUserError` for user-displayable messages
 
-### `HttpUserError` is not a convention — it is the only message that survives the wire
+### `ApiEndUserError` is not a convention — it is the only message that survives the wire
 
-This is a HARD RULE, enforced by `HttpErrorWireMapper` on the server (`http-server`):
+This is a HARD RULE, enforced by `ApiErrorHttpMapper` on the server (`http-server`):
 
-> **Only `HttpUserError`'s `message` is sent to the caller.** Every other `HttpError` subclass sends
-> the generic HTTP reason phrase for its status — `'Not Found'`, `'Internal Server Error'`, … — and
+> **Only `ApiEndUserError`'s `message` is sent to the caller.** Every other `ApiError` subclass sends
+> its generic semantic message — `'Not Found'`, `'Internal Error'`, … — and
 > its real message goes to the server's LOG only.
 
 `Error.message` is an operator-facing field. It routinely quotes a downstream service url, an HTTP
 method and content-type, a body snippet, a table name or an internal id, and none of that may reach an
 external consumer. So:
 
-- Throwing `new HttpBadRequestError('the email you entered is already taken')` does **not** show that
-  text to the user — the caller receives `'Bad Request'`. Throw `HttpUserError` instead, or pass the
-  text as `HttpBadRequestError`'s `guiMessage`, which IS sent (as `guiAlertMessage`).
-- A client must branch on the error TYPE, on `subType`, on `errorCode` or on `guiAlertMessage` — never
+- Throwing `new ApiBadRequestError('the email you entered is already taken')` does **not** show that
+  text to the user — the caller receives `'Bad Request'`. Throw `ApiEndUserError` instead, or pass the
+  text as `ApiBadRequestError`'s `callerMessage`, which IS sent (as `callerMessage`).
+- A client must branch on the error TYPE, on `subType`, on `errorCode` or on `callerMessage` — never
   on the prose of `message`. Against a current webpieces server that prose is a constant per status.
 - An app that deliberately wants to publish richer text installs an `ErrorTranslators` on
   `ClientRegistry` (`setErrorTranslators`); its `toWire()` response — status, reason phrase, headers
@@ -754,7 +755,6 @@ and in `/debugLocal/{traceId}` responses.
 2. **Edge code**: External API calls, database operations, email services - use logRequest/logSuccess/logFailure pattern
 3. **Retry loops**: Vendor APIs with exponential backoff
 4. **Batching**: Partial failure handling where processing must continue
-5. **Form error handling**: Catch `HttpUserError` for UI display, rethrow all other errors
+5. **Form error handling**: Catch `ApiEndUserError` for UI display, rethrow all other errors
 
 **Remember**: If you can't handle the error meaningfully, don't catch it. Let it bubble to the global handler where it will be logged with full context and traceId.
-

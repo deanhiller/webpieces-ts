@@ -1,69 +1,121 @@
-/** Portable semantic failures. HTTP status mapping belongs to the HTTP adapter. */
-export class ApiError extends Error {
-    readonly kind: string = 'internal';
+export type ApiErrorKind =
+    | 'end-user'
+    | 'bad-request'
+    | 'unauthorized'
+    | 'forbidden'
+    | 'not-found'
+    | 'endpoint-not-found'
+    | 'request-timeout'
+    | 'rate-limited'
+    | 'implementation'
+    | 'dependency'
+    | 'unavailable'
+    | 'dependency-timeout'
+    | 'dependency-backoff'
+    | 'connection';
+
+/** Category for portable API failures. Concrete subclasses alone define protocol mappings. */
+export abstract class ApiError extends Error {
+    abstract readonly kind: ApiErrorKind;
     public subType?: string;
+
     constructor(message: string, cause?: Error) {
         super(message, { cause });
         this.name = new.target.name;
     }
 }
 
-/** NotFound failure, independent of transport. */
-export class NotFoundError extends ApiError { override readonly kind: string = 'not-found'; }
+export class ApiNotFoundError extends ApiError {
+    override readonly kind: ApiErrorKind = 'not-found';
+}
+export class ApiDependencyError extends ApiError {
+    override readonly kind = 'dependency' as const;
+}
+export class ApiUnavailableError extends ApiError {
+    override readonly kind = 'unavailable' as const;
+}
+export class ApiDependencyTimeoutError extends ApiError {
+    override readonly kind = 'dependency-timeout' as const;
+}
 
-/** BadGateway failure, independent of transport. */
-export class BadGatewayError extends ApiError { override readonly kind: string = 'bad-gateway'; }
+/** A bug or invalid implementation state. Local errors become server errors only after a remote decode. */
+export class ApiImplementationError extends ApiError {
+    override readonly kind = 'implementation' as const;
 
-/** ServiceUnavailable failure, independent of transport. */
-export class ServiceUnavailableError extends ApiError { override readonly kind: string = 'service-unavailable'; }
+    constructor(
+        message: string,
+        cause?: Error,
+        public readonly serverError = false,
+    ) {
+        super(message, cause);
+    }
+}
 
-/** GatewayTimeout failure, independent of transport. */
-export class GatewayTimeoutError extends ApiError { override readonly kind: string = 'gateway-timeout'; }
+export class ApiRateLimitedError extends ApiError {
+    override readonly kind = 'rate-limited' as const;
+}
+export class ApiForbiddenError extends ApiError {
+    override readonly kind = 'forbidden' as const;
+}
+export class ApiRequestTimeoutError extends ApiError {
+    override readonly kind = 'request-timeout' as const;
+}
 
-/** Internal failure, independent of transport. */
-export class InternalError extends ApiError { override readonly kind: string = 'internal'; }
+/** A caller-local connection failure. HTTP servers normalize this to ApiImplementationError. */
+export class ApiConnectionError extends ApiError {
+    override readonly kind = 'connection' as const;
+}
 
-/** TooManyRequests failure, independent of transport. */
-export class TooManyRequestsError extends ApiError { override readonly kind: string = 'too-many-requests'; }
+/** The API operation is missing, distinct from an absent domain entity. */
+export class ApiEndpointNotFoundError extends ApiNotFoundError {
+    override readonly kind = 'endpoint-not-found' as const;
+}
 
-/** Forbidden failure, independent of transport. */
-export class ForbiddenError extends ApiError { override readonly kind: string = 'forbidden'; }
+/** Expected end-user mistake. Its message is deliberately caller-safe. */
+export class ApiEndUserError extends ApiError {
+    override readonly kind = 'end-user' as const;
 
-/** RequestTimeout failure, independent of transport. */
-export class RequestTimeoutError extends ApiError { override readonly kind: string = 'request-timeout'; }
-
-/** Offline failure, independent of transport. */
-export class OfflineError extends ApiError { override readonly kind: string = 'offline'; }
-
-/** The API endpoint is missing, distinct from an absent domain entity. */
-export class EndpointNotFoundError extends NotFoundError { override readonly kind: string = 'endpoint-not-found'; }
-/** Expected user mistake: successful protocol/monitoring outcome; GUI catches this error. */
-export class UserError extends ApiError {
-    override readonly kind: string = 'user';
-    constructor(message: string, public errorCode?: string, cause?: Error) {
+    constructor(
+        message: string,
+        public errorCode?: string,
+        cause?: Error,
+    ) {
         super(message, cause);
         this.subType = 'USER_ERROR';
     }
 }
-/** Invalid caller input with optional human-safe field feedback. */
-export class BadRequestError extends ApiError {
-    override readonly kind: string = 'bad-request';
-    constructor(message: string, public field?: string, public guiMessage?: string, cause?: Error) {
+
+/** Invalid API caller input. message is diagnostic; callerMessage is safe to publish. */
+export class ApiBadRequestError extends ApiError {
+    override readonly kind = 'bad-request' as const;
+
+    constructor(
+        message: string,
+        public field?: string,
+        public callerMessage?: string,
+        cause?: Error,
+    ) {
         super(message, cause);
     }
 }
-/** Authentication failure with a contract-defined reason. */
-export class UnauthorizedError extends ApiError {
-    override readonly kind: string = 'unauthorized';
+
+export class ApiUnauthorizedError extends ApiError {
+    override readonly kind = 'unauthorized' as const;
+
     constructor(message: string, subType?: string, cause?: Error) {
         super(message, cause);
         this.subType = subType;
     }
 }
-/** Dependency failure with bounded retry advice. */
-export class VendorError extends ApiError {
-    override readonly kind: string = 'vendor';
-    constructor(message: string, public waitSeconds = 30, cause?: Error) {
+
+export class ApiDependencyBackoffError extends ApiError {
+    override readonly kind = 'dependency-backoff' as const;
+
+    constructor(
+        message: string,
+        public retryAfterSeconds = 30,
+        cause?: Error,
+    ) {
         super(message, cause);
     }
 }

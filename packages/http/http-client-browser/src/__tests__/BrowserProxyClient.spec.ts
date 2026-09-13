@@ -9,15 +9,14 @@ import {
     ContextKey,
     Endpoint,
     HeaderRegistry,
-    BadGatewayError,
-    BadRequestError,
-    HttpError,
-    ForbiddenError,
-    NotFoundError,
-    ServiceUnavailableError,
-    UnauthorizedError,
+    ApiDependencyError,
+    ApiBadRequestError,
+    ApiForbiddenError,
+    ApiNotFoundError,
+    ApiUnavailableError,
+    ApiUnauthorizedError,
     LogManager,
-    OfflineError,
+    ApiConnectionError,
     WpAuthPublic,
     Rpc,
     WebpiecesCoreHeaders,
@@ -119,11 +118,21 @@ function stubFetchWithHeaders(status: number, headers: Record<string, string>): 
     vi.stubGlobal('fetch', fetchMock);
 }
 
-/** Stub fetch with a webpieces ProtocolError body at the given status — the ordinary error path. */
-function stubFetchProtocolError(status: number, message: string): void {
+/** Stub fetch with a webpieces ApiErrorPayload body at the given status — the ordinary error path. */
+function stubFetchApiErrorPayload(status: number, message: string): void {
+    const kind =
+        status === 400
+            ? 'bad-request'
+            : status === 401
+              ? 'unauthorized'
+              : status === 403
+                ? 'forbidden'
+                : status === 404
+                  ? 'not-found'
+                  : 'implementation';
     const fetchMock = vi.fn(() =>
         Promise.resolve(
-            new Response(JSON.stringify({ message }), {
+            new Response(JSON.stringify({ kind, message }), {
                 status,
                 headers: { 'Content-Type': 'application/json' },
             }),
@@ -331,29 +340,29 @@ describe('BrowserProxyClient reports the request lifecycle to a registered liste
  * precisely the failures (offline, a 5xx from infra) a user is most likely to actually hit.
  */
 describe('BrowserProxyClient ends the lifecycle even when no usable body ever arrives', () => {
-    it('a NETWORK reject ends with status 0 and surfaces a typed OfflineError', async () => {
+    it('a NETWORK reject ends with status 0 and surfaces a typed ApiConnectionError', async () => {
         const networkErr = new Error('Failed to fetch');
         stubFetchNetworkReject(networkErr);
         const listener = new RecordingListener();
 
-        // The raw reject is now CLASSIFIED into a typed OfflineError before it rethrows, so an app
-        // does one `instanceof OfflineError` check instead of matching browser message text.
+        // The raw reject is now CLASSIFIED into a typed ApiConnectionError before it rethrows, so an app
+        // does one `instanceof ApiConnectionError` check instead of matching browser message text.
         // webpieces-disable no-unmanaged-exceptions -- the classified reject rethrows after the seam fires
         await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toBeInstanceOf(
-            OfflineError,
+            ApiConnectionError,
         );
 
         const outcome = listener.onlyEnd();
         expect(outcome.ok).toBe(false);
         expect(outcome.status).toBe(0);
         expect(outcome.headers).toBeUndefined();
-        expect(outcome.error).toBeInstanceOf(OfflineError);
+        expect(outcome.error).toBeInstanceOf(ApiConnectionError);
         // The original reject stays reachable as `cause`, so no detail is lost.
-        expect((outcome.error as OfflineError).cause).toBe(networkErr);
+        expect((outcome.error as ApiConnectionError).cause).toBe(networkErr);
     });
 
     /**
-     * An infra 502/504 (load balancer, proxy) serves HTML, so parsing it as our ProtocolError
+     * An infra 502/504 (load balancer, proxy) serves HTML, so parsing it as our ApiErrorPayload
      * throws — and that is EXACTLY the 5xx case this seam exists to catch.
      */
     it('a non-JSON error body STILL ends — an infra 502 serving HTML must not leak the bar', async () => {
@@ -378,7 +387,7 @@ describe('BrowserProxyClient ends the lifecycle even when no usable body ever ar
  * and the app's global handler classified booting infrastructure as a "Client Bug".
  */
 describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra HTML body', () => {
-    it('a 502 HTML page rejects with BadGatewayError, not SyntaxError', async () => {
+    it('a 502 HTML page rejects with ApiDependencyError, not SyntaxError', async () => {
         stubFetchNonJsonBody(502);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -386,7 +395,7 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(BadGatewayError);
+        expect(error).toBeInstanceOf(ApiDependencyError);
         expect(error).not.toBeInstanceOf(SyntaxError);
         expect(error).not.toHaveProperty('code');
         // Names the call and what actually arrived, so the log line says which endpoint and why.
@@ -394,7 +403,7 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         expect((error as Error).message).toContain('text/html');
     });
 
-    it('a 503 cold start rejects with ServiceUnavailableError — the "retry, it is waking" signal', async () => {
+    it('a 503 cold start rejects with ApiUnavailableError — the "retry, it is waking" signal', async () => {
         stubFetchNonJsonBody(503);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -402,7 +411,7 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(ServiceUnavailableError);
+        expect(error).toBeInstanceOf(ApiUnavailableError);
         expect(error).not.toHaveProperty('code');
     });
 
@@ -434,42 +443,42 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
  * its 4xx describes the caller's own broken request. See NodeProxyClient's spec.
  */
 describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', () => {
-    it('404 stays NotFoundError — the resource genuinely does not exist for this user', async () => {
-        stubFetchProtocolError(404, 'no such order');
+    it('404 stays ApiNotFoundError — the resource genuinely does not exist for this user', async () => {
+        stubFetchApiErrorPayload(404, 'no such order');
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const error = await client()
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).toBeInstanceOf(ApiNotFoundError);
         expect(error).not.toHaveProperty('code');
         expect((error as Error).message).toBe('no such order');
     });
 
     it('400 / 401 / 403 each stay their own type, with their own status and message', async () => {
-        stubFetchProtocolError(400, 'email is required');
+        stubFetchApiErrorPayload(400, 'email is required');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const badRequest = await client()
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
-        expect(badRequest).toBeInstanceOf(BadRequestError);
+        expect(badRequest).toBeInstanceOf(ApiBadRequestError);
         expect(badRequest).not.toHaveProperty('code');
 
-        stubFetchProtocolError(401, 'token expired');
+        stubFetchApiErrorPayload(401, 'token expired');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const unauthorized = await client()
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
-        expect(unauthorized).toBeInstanceOf(UnauthorizedError);
+        expect(unauthorized).toBeInstanceOf(ApiUnauthorizedError);
         expect(unauthorized).not.toHaveProperty('code');
 
-        stubFetchProtocolError(403, 'not your org');
+        stubFetchApiErrorPayload(403, 'not your org');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
         const forbidden = await client()
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
-        expect(forbidden).toBeInstanceOf(ForbiddenError);
+        expect(forbidden).toBeInstanceOf(ApiForbiddenError);
         expect(forbidden).not.toHaveProperty('code');
     });
 
@@ -481,13 +490,13 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).toBeInstanceOf(ApiNotFoundError);
         expect((error as Error).message).toContain('PublicApi.save');
         expect((error as Error).message).toContain('text/html');
     });
 
     it('the lifecycle listener sees the SAME error the caller does', async () => {
-        stubFetchProtocolError(404, 'no such order');
+        stubFetchApiErrorPayload(404, 'no such order');
         const listener = new RecordingListener();
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -571,7 +580,11 @@ describe('BrowserProxyClient stamps the api tag with no factory install and no b
 
 it('a real Fetch 266 response remains protocol-ok but throws the user message from a generated browser client', async () => {
     const response = new Response(
-        JSON.stringify({ message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH' }),
+        JSON.stringify({
+            kind: 'end-user',
+            message: 'Passwords do not match',
+            errorCode: 'PASSWORD_MISMATCH',
+        }),
         { status: 266, headers: { 'content-type': 'application/json' } },
     );
     expect(response.ok).toBe(true);
@@ -580,7 +593,7 @@ it('a real Fetch 266 response remains protocol-ok but throws the user message fr
         vi.fn(async () => response),
     );
     await expect(client().save(new SaveRequest('password'))).rejects.toMatchObject({
-        name: 'UserError',
+        name: 'ApiEndUserError',
         message: 'Passwords do not match',
         errorCode: 'PASSWORD_MISMATCH',
     });

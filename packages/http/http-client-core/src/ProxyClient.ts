@@ -427,7 +427,7 @@ export abstract class ProxyClient {
      * edits to the url, the headers or the serialized body are exactly what goes on the wire. It may
      * run more than once for a single RPC when a filter follows a redirect.
      *
-     * A network reject (offline, DNS, CORS preflight) is classified into a typed OfflineError here (a
+     * A network reject (offline, DNS, CORS preflight) is classified into a typed ApiConnectionError here (a
      * genuine bug passes through untouched) so that filters above see the same typed error the caller
      * will, rather than a raw platform reject.
      */
