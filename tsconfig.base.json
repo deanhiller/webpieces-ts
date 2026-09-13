@@ -36,6 +36,9 @@
             "@webpieces/http-server": [
                 "packages/http/http-server/src/index.ts"
             ],
+            "@webpieces/mcp-server": [
+                "packages/http/mcp-server/src/index.ts"
+            ],
             "@webpieces/http-client-core": [
                 "packages/http/http-client-core/src/index.ts"
             ],

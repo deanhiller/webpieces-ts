@@ -92,6 +92,24 @@ export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './ipc/IpcD
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
 export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export {
+    WpMcpTool,
+    WpMcpToolHints,
+    WpMcpToolMetadata,
+    getWpMcpTools,
+} from './mcp/McpMetadata';
+export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
+export {
+    WpDto,
+    WpDtoField,
+    WpDtoFieldOptions,
+    WpDtoFieldMetadata,
+    WpResponseDto,
+    ApiJsonSchema,
+    DtoValidationFailure,
+    DtoSchemaBuilder,
+} from './mcp/DtoSchema';
+export type { DtoClass, DtoArrayItem, DtoValue } from './mcp/DtoSchema';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
 export type {

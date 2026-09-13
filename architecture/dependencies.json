@@ -390,6 +390,17 @@
                 "server2-api"
             ]
         },
+        "mcp-server": {
+            "level": 4,
+            "framework": ["node"],
+            "role": "lib",
+            "webpiecesRuntime": ["@webpieces/http-routing"],
+            "shortDescription": "Generate explicitly opted-in Webpieces API methods as authenticated MCP tools while preserving the normal endpoint filter chain, DTO validation, and safe error boundary.",
+            "responsibilitiesFile": "packages/http/mcp-server/responsibilities.md",
+            "dependsOn": [
+                "http-routing"
+            ]
+        },
         "nx-webpieces-rules": {
             "level": 3,
             "framework": ["node"],

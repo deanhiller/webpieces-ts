@@ -34,7 +34,11 @@ export {
     DocumentDesign,
     isDocumentDesign,
 } from '@webpieces/core-util';
-export type { AuthMode, ApiKind, EndpointOptions } from '@webpieces/core-util';
+export type {
+    AuthMode,
+    ApiKind,
+    EndpointOptions,
+} from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export { SourceFile, ROUTING_METADATA_KEYS } from './decorators';
