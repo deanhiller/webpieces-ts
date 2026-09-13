@@ -1,4 +1,4 @@
-# PLAN — Typed `OfflineError` for network rejects across all clients
+# PLAN — Typed `ApiConnectionError` for network rejects across all clients
 
 > Tracking issue: https://github.com/deanhiller/webpieces-ts/issues/429
 > Reference implementation already built on `deanhiller/offline-error` in the `webpieces-ts30`
@@ -52,24 +52,24 @@ The user-visible payoff is concrete: *"Please check your network connection."* v
 client bug"* is the difference between a user fixing their wifi and a user filing a support ticket
 against us.
 
-**Goal:** clients throw a typed `OfflineError` on a transport reject, in **both** runtimes, so an app
-gets one `instanceof OfflineError` check that behaves identically in an Angular bundle and on Cloud
+**Goal:** clients throw a typed `ApiConnectionError` on a transport reject, in **both** runtimes, so an app
+gets one `instanceof ApiConnectionError` check that behaves identically in an Angular bundle and on Cloud
 Run — and never writes browser-message matching again.
 
 ## Design
 
-### 1. New error type: `OfflineError` (in `core-util`)
+### 1. New error type: `ApiConnectionError` (in `core-util`)
 
-Append to `packages/core/core-util/src/http/errors.ts`. **Extends `Error`, NOT `HttpError`** — there
-is no HTTP status (status 0 / no response ever existed). Subclassing `HttpError` would imply a `code`
-that does not exist and would make it match `instanceof HttpError` ladders that mean *"the server
-replied with a failure"* — a different situation a caller usually wants to retry differently.
+Define it in `packages/core/core-util/src/errors/ApiError.ts`. It is part of the API error category
+for uniform classification, but the HTTP adapter deliberately gives its `connection` kind no status:
+a server boundary normalizes it to `ApiImplementationError`, while clients retain the local type.
 
 ```ts
-export class OfflineError extends Error {
+export class ApiConnectionError extends ApiError {
+    readonly kind = 'connection';
     constructor(message: string, cause?: Error) {
         super(message, { cause });
-        this.name = 'OfflineError';
+        this.name = 'ApiConnectionError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
@@ -77,8 +77,8 @@ export class OfflineError extends Error {
 
 Preserve the original failure as `cause` always.
 
-Also add `HttpTooManyRequestsError` (429) here while in this file — it is the one member of the
-`HttpError` ladder that never made it over from the ported service, forcing apps to check `err.code === 429`
+Also add `ApiRateLimitedError` (429) here while in this file — it is the one member of the
+`API error` ladder that never made it over from the ported service, forcing apps to check `err.code === 429`
 (the exact untyped pattern the ladder exists to avoid).
 
 ### 2. Centralised classifier: `networkReject.ts` (in `core-util`)
@@ -102,15 +102,14 @@ Public surface:
 
 ```ts
 export function isNetworkRejectError(error: Error): boolean;
-// OfflineError when it is a transport reject, else `error` untouched (a real bug keeps its type/stack)
+// ApiConnectionError when it is a transport reject, else `error` untouched (a real bug keeps its type/stack)
 export function toNetworkError(error: Error, url: string): Error;
 ```
 
 ### 3. Export from `core-util`
 
-`packages/core/core-util/src/index.ts`: add `OfflineError`, `HttpTooManyRequestsError` to the
-`./http/errors` re-export, and `export { isNetworkRejectError, toNetworkError } from
-'./http/networkReject';`.
+`packages/core/core-util/src/index.ts`: export `ApiConnectionError`, `ApiRateLimitedError`, and the
+network classifier from their canonical modules.
 
 ### 4. Wire the two production `fetch` call sites
 
@@ -142,17 +141,17 @@ reads "the target was unreachable" instead of a bare "Failed to fetch":
 
 ## Behaviour change / blast radius
 
-A transport reject now surfaces as `OfflineError` instead of the raw error. One pre-existing test
+A transport reject now surfaces as `ApiConnectionError` instead of the raw error. One pre-existing test
 pins the OLD contract and must be updated (not a regression — the assertion *was* the contract):
 
 - `packages/http/http-client-browser/src/__tests__/BrowserProxyClient.spec.ts` — the
   "NETWORK reject ends with status 0" test asserts `rejects.toThrow('Failed to fetch')` and
-  `outcome.error).toBe(networkErr)`. Change to `rejects.toBeInstanceOf(OfflineError)`, assert
-  `outcome.error` is an `OfflineError`, and assert `outcome.error.cause === networkErr` (the original
+  `outcome.error).toBe(networkErr)`. Change to `rejects.toBeInstanceOf(ApiConnectionError)`, assert
+  `outcome.error` is an `ApiConnectionError`, and assert `outcome.error.cause === networkErr` (the original
   is still reachable). The status-0 / no-headers / END-marker assertions stay — that behaviour is
   unchanged.
 
-Everything else is additive. `toError` callers that don't care keep working (an `OfflineError` is
+Everything else is additive. `toError` callers that don't care keep working (an `ApiConnectionError` is
 still an `Error`).
 
 ## Tests
@@ -165,15 +164,15 @@ New `packages/core/core-util/src/http/__tests__/networkReject.spec.ts`, pinning 
 - an ordinary bug (`TypeError: Cannot read properties of undefined`, `Error: Internal Server Error`)
   is NOT classified — silently relabelling a bug as "offline" hides real defects;
 - a self-referential cause chain terminates (depth cap);
-- `toNetworkError` returns an `OfflineError` that names the url, keeps `cause`, is `instanceof Error`
-  but has no `code` and is NOT an `HttpError`; and passes a genuine bug through by identity.
+- `toNetworkError` returns an `ApiConnectionError` that names the url, keeps `cause`, is `instanceof Error`
+  but has no `code` and is NOT an `API error`; and passes a genuine bug through by identity.
 
 ## Acceptance check
 
 A consumer can delete its `isNetworkOfflineError()` string-matcher entirely and replace it with:
 
 ```ts
-if (err instanceof OfflineError) {
+if (err instanceof ApiConnectionError) {
     return new ErrorDisplay('Network Issues', 'Please check your network connection.', false);
 }
 ```
@@ -184,15 +183,15 @@ client), with no string matching anywhere in app code.
 ## Rollout
 
 1. Land here, publish, bump the consumer's `@webpieces/*` version.
-2. In `acme-edu/consumer-repo1` `error-angular`: swap the `HttpError`-ladder's offline branch to
-   `err instanceof OfflineError`, delete `isNetworkOfflineError()`, and switch the 429 branch from
-   `err.code === 429` to `err instanceof HttpTooManyRequestsError`.
+2. In `acme-edu/consumer-repo1` `error-angular`: swap the `API error`-ladder's offline branch to
+   `err instanceof ApiConnectionError`, delete `isNetworkOfflineError()`, and switch the 429 branch from
+   `err.code === 429` to `err instanceof ApiRateLimitedError`.
 
 ## Files touched (from the reference implementation)
 
 | File | Change |
 |---|---|
-| `packages/core/core-util/src/http/errors.ts` | add `OfflineError`, `HttpTooManyRequestsError` |
+| `packages/core/core-util/src/errors/ApiError.ts` | add `ApiConnectionError`, `ApiRateLimitedError` |
 | `packages/core/core-util/src/http/networkReject.ts` | **new** — classifier |
 | `packages/core/core-util/src/index.ts` | export the above |
 | `packages/http/http-client-core/src/ProxyClient.ts` | classify in the network-reject catch (covers browser+node) |

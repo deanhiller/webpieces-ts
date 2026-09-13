@@ -47,14 +47,14 @@ export class HttpResponseStatus {
  * The whole response: status (code + reason), the header LIST, and the body.
  *
  * `body` is `unknown` because it is whatever the app chose to publish. webpieces' OWN default puts a
- * {@link ProtocolError} there, and the built-in client mapping reads it back as one — but an app that
+ * {@link ApiErrorPayload} there, and the built-in client mapping reads it back as one — but an app that
  * owns the whole response owns the body shape too, so the framework does not constrain it.
  */
 export class HttpResponseDto {
     constructor(
         public readonly status: HttpResponseStatus,
         public readonly headers: readonly HttpHeader[],
-        // webpieces-disable no-any-unknown -- the app owns the body shape when it owns the response; webpieces' own default puts a ProtocolError here, an app puts whatever it publishes
+        // webpieces-disable no-any-unknown -- the app owns the body shape when it owns the response; webpieces' own default puts a ApiErrorPayload here, an app puts whatever it publishes
         public readonly body: unknown,
     ) {}
 }

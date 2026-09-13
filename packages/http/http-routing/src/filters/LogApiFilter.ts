@@ -3,7 +3,12 @@ import {
     RequestContext,
     RequestContextApiCallContext,
 } from '@webpieces/core-context';
-import { LogManager, WebpiecesCoreHeaders, LogApiCallImpl, ApiMethodInfo } from '@webpieces/core-util';
+import {
+    LogManager,
+    WebpiecesCoreHeaders,
+    LogApiCallImpl,
+    ApiMethodInfo,
+} from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
@@ -25,10 +30,10 @@ import { MethodMeta } from '../MethodMeta';
  * - [API-server-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
  * - [API-server-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
  *
- * User errors (UnauthorizedError, BadRequestError, etc.) are logged as OTHER, not FAIL,
+ * User errors (ApiUnauthorizedError, ApiBadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective. LogApiCall re-throws the
  * error unchanged; the transport (express adapter, or another framework's adapter) maps
- * HttpError subclasses → HTTP status, so in-process and HTTP paths log identically.
+ * API error subclasses → HTTP status, so in-process and HTTP paths log identically.
  *
  * Headers are read from RequestContext (NOT from meta.requestHeaders which is undefined
  * after ContextFilter runs).
@@ -38,7 +43,6 @@ const log = LogManager.getLogger('LogApiFilter');
 @provideFrameworkSingleton()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-
     /**
      * The SERVER's api-call log seam, built here around the RequestContext-backed ApiCallContext.
      * This is the server's inbound construction point; the outbound ones live in each client package

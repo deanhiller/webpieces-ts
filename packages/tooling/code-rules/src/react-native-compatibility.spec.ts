@@ -21,7 +21,7 @@ function inspect(root: string): string[] {
 }
 describe('React Native compatibility import closure', () => {
     it('accepts platform-neutral errors', () => {
-        expect(inspect(fixture('export class UserError extends Error {}'))).toEqual([]);
+        expect(inspect(fixture('export class ApiEndUserError extends Error {}'))).toEqual([]);
     });
     it('rejects a Node built-in', () => {
         expect(

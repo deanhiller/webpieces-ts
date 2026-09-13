@@ -7,10 +7,10 @@ import {
     WpAuthLocalOnly,
     ContextKey,
     Endpoint,
-    EndpointNotFoundError,
-    HttpErrorStatus,
+    ApiEndpointNotFoundError,
+    ApiErrorHttpStatus,
     HeaderRegistry,
-    UnauthorizedError,
+    ApiUnauthorizedError,
     WpAuthPublic,
     RouteMetadata,
     RuntimeLocality,
@@ -154,10 +154,10 @@ describe('AuthFilter enforces @WpAuthLocalOnly', () => {
         RuntimeLocality.declare('deployed');
         const next = new RecordingNext();
 
-        await expect(runFilter(next)).rejects.toThrow(EndpointNotFoundError);
+        await expect(runFilter(next)).rejects.toThrow(ApiEndpointNotFoundError);
         // 404 on the wire — the SAME answer an unregistered route gives, which is the whole point.
         await expect(
-            runFilter(next).catch((err: EndpointNotFoundError) => HttpErrorStatus.code(err)),
+            runFilter(next).catch((err: ApiEndpointNotFoundError) => ApiErrorHttpStatus.code(err)),
         ).resolves.toBe(404);
         expect(next.invoked).toBe(false);
     });
@@ -170,7 +170,7 @@ describe('AuthFilter enforces @WpAuthLocalOnly', () => {
         expect(RuntimeLocality.isDeclared()).toBe(false);
         const next = new RecordingNext();
 
-        await expect(runFilter(next)).rejects.toThrow(EndpointNotFoundError);
+        await expect(runFilter(next)).rejects.toThrow(ApiEndpointNotFoundError);
         expect(next.invoked).toBe(false);
     });
 });
@@ -205,7 +205,7 @@ describe('AuthFilter treats @WpAuthLocalOnly as NOT caller-verifying on the inbo
         const next = new RecordingNext();
         const headers = new Map<string, string[]>([['x-user-id', ['attacker-supplied']]]);
 
-        await expect(inboundThenFilter(headers, next)).rejects.toThrow(UnauthorizedError);
+        await expect(inboundThenFilter(headers, next)).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 

@@ -39,14 +39,16 @@ import { HttpResponseDto } from './HttpResponseDto';
  * guidelines.
  *
  * ```ts
+ * class OrderErrorPayload {
+ *     constructor(public message: string, public errorCode: string) {}
+ * }
+ *
  * export class OrderErrorTranslators implements ErrorTranslators {
  *     toWire(error: Error): HttpResponseDto | undefined {
  *         if (!(error instanceof OrderNotFoundError)) {
  *             return undefined;              // not mine -> webpieces default
  *         }
- *         const body = new ProtocolError();
- *         body.message = error.message;
- *         body.errorCode = 'ORDER_NOT_FOUND';
+ *         const body = new OrderErrorPayload(error.message, 'ORDER_NOT_FOUND');
  *         return new HttpResponseDto(
  *             new HttpResponseStatus(460, 'Order Not Found'),
  *             [new HttpHeader('x-order-trace', error.traceId)],

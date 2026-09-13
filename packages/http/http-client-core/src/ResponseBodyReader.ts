@@ -1,4 +1,4 @@
-import { ProtocolError } from '@webpieces/core-util';
+import { ApiErrorPayload } from '@webpieces/core-util';
 
 /**
  * `application/json`, plus every `+json` structured suffix (`application/problem+json`,
@@ -21,9 +21,9 @@ const SNIPPET_CHARS = 200;
  * "Client Bug" dialog for a server that was merely booting.
  *
  * The rule, and the whole of it: **only parse a body that CLAIMS to be JSON.** Then
- * - a non-JSON error body becomes a synthesized {@link ProtocolError} that `ClientErrorTranslator`
- *   maps by STATUS — 502 → `BadGatewayError`, 503 → `ServiceUnavailableError`, 504 →
- *   `GatewayTimeoutError` — so a caller can decide "the server is waking, retry";
+ * - a non-JSON error body becomes a synthesized {@link ApiErrorPayload} that `ClientErrorTranslator`
+ *   maps by STATUS — 502 → `ApiDependencyError`, 503 → `ApiUnavailableError`, 504 →
+ *   `ApiDependencyTimeoutError` — so a caller can decide "the server is waking, retry";
  * - a `SyntaxError` from `JSON.parse` goes back to meaning what it should: a response that SAID it
  *   was JSON and was malformed. That is a real bug, and it is exactly the signal the old
  *   parse-everything path destroyed.
@@ -39,22 +39,23 @@ export class ResponseBodyReader {
     }
 
     /**
-     * Read a NON-2xx body as a {@link ProtocolError}, whatever it turns out to be.
+     * Read a NON-2xx body as a {@link ApiErrorPayload}, whatever it turns out to be.
      *
      * - Declared JSON → parse it. A malformed one still throws `SyntaxError`, on purpose: the server
      *   promised JSON and broke the promise, which is a genuine defect worth surfacing as one.
-     * - Anything else → synthesize a ProtocolError describing what actually arrived, so the caller
+     * - Anything else → synthesize a ApiErrorPayload describing what actually arrived, so the caller
      *   gets the STATUS-derived typed error instead of a parse failure.
      *
      * @param response - the fetch Response, already known to be non-ok
      * @param callId   - `ApiName.methodName`, so the message names the call that failed
      */
-    async readErrorBody(response: Response, callId: string): Promise<ProtocolError> {
+    async readErrorBody(response: Response, callId: string): Promise<ApiErrorPayload> {
         if (this.isJson(response)) {
-            return (await response.json()) as ProtocolError;
+            return (await response.json()) as ApiErrorPayload;
         }
 
-        const protocolError = new ProtocolError();
+        // Empty kind deliberately marks this as a foreign HTTP response so status fallback owns it.
+        const protocolError = new ApiErrorPayload('', 'Request Failed');
         protocolError.message = this.describeForeignBody(response, callId, await response.text());
         return protocolError;
     }
@@ -68,7 +69,7 @@ export class ResponseBodyReader {
         const contentType = response.headers.get('content-type') || '(none)';
         return (
             `${callId}: HTTP ${response.status} with content-type "${contentType}" — this response did ` +
-            `not come from the webpieces server (no ProtocolError body). It is almost certainly ` +
+            `not come from the webpieces server (no ApiErrorPayload body). It is almost certainly ` +
             `infrastructure: a load balancer, a proxy, or a cold start on a scale-to-zero backend. ` +
             `body=${JSON.stringify(this.snippet(body))}`
         );

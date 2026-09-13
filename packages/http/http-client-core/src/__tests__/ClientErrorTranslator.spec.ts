@@ -1,31 +1,35 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ClientRegistry,
-    ProtocolError,
-    HttpError,
-    BadRequestError,
-    NotFoundError,
-    UserError,
-    UnauthorizedError,
-    ForbiddenError,
-    RequestTimeoutError,
-    TooManyRequestsError,
-    InternalError,
-    BadGatewayError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    VendorError,
+    ApiErrorPayload,
+    ApiErrorCodec,
+    ApiBadRequestError,
+    ApiNotFoundError,
+    ApiEndUserError,
+    ApiUnauthorizedError,
+    ApiForbiddenError,
+    ApiRequestTimeoutError,
+    ApiRateLimitedError,
+    ApiImplementationError,
+    ApiDependencyError,
+    ApiUnavailableError,
+    ApiDependencyTimeoutError,
+    ApiDependencyBackoffError,
     ErrorTranslators,
     HttpResponseDto,
     HttpResponseStatus,
     WRONG_LOGIN,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
+import { UnexpectedApiResponseError } from '../UnexpectedApiResponseError';
 
-/** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's HttpAiBadRequestError). */
-class AiBadRequestError extends HttpError {
-    constructor(message: string) {
-        super(message, 460);
+/** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's AiBadRequestError). */
+class AiBadRequestError extends Error {
+    constructor(
+        message: string,
+        public readonly statusCode = 460,
+    ) {
+        super(message);
         this.name = 'AiBadRequest';
         Object.setPrototypeOf(this, new.target.prototype);
     }
@@ -37,26 +41,35 @@ class AiErrorTranslators implements ErrorTranslators {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
-        const pe = new ProtocolError();
+        const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.message = error.message;
-        pe.name = error.name;
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
     fromWire(response: HttpResponseDto): Error | undefined {
         if (response.status.code !== 460) {
             return undefined;
         }
-        return new AiBadRequestError((response.body as ProtocolError).message ?? 'AI bad request');
+        return new AiBadRequestError(
+            (response.body as ApiErrorPayload).message ?? 'AI bad request',
+        );
     }
 }
 
 /** The response DTO a client's HttpResponseDtoFactory hands the translator. */
-function fakeResponse(status: number, statusText = '', pe: ProtocolError = new ProtocolError()): HttpResponseDto {
+function fakeResponse(
+    status: number,
+    statusText = '',
+    pe: ApiErrorPayload = new ApiErrorPayload('', 'Request Failed'),
+): HttpResponseDto {
     return new HttpResponseDto(new HttpResponseStatus(status, statusText), [], pe);
 }
 
 /** The error half of the translation, for the assertions that only care about the type. */
-function translate(status: number, pe: ProtocolError = new ProtocolError(), statusText = ''): Error {
+function translate(
+    status: number,
+    pe: ApiErrorPayload = new ApiErrorPayload('', 'Request Failed'),
+    statusText = '',
+): Error {
     return ClientErrorTranslator.translateError(fakeResponse(status, statusText, pe)).error;
 }
 
@@ -71,28 +84,27 @@ describe('ClientErrorTranslator registry integration', () => {
     });
 
     it('reconstructs an installed custom type (460) that the built-in switch cannot', () => {
-        // With no translators, 460 hits the default branch (a generic HttpError, not the app type).
+        // With no translators, 460 becomes an adapter-local unexpected response error.
         const generic = translate(460);
         expect(generic).not.toBeInstanceOf(AiBadRequestError);
-        expect(generic).toBeInstanceOf(HttpError);
+        expect(generic).toBeInstanceOf(UnexpectedApiResponseError);
 
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
-        const pe = new ProtocolError();
+        const pe = new ApiErrorPayload();
         pe.message = 'bad ai input';
         const err = translate(460, pe);
         expect(err).toBeInstanceOf(AiBadRequestError);
         expect(err.message).toBe('bad ai input');
     });
 
-    it('an unclaimed status still uses the built-in mapping (400 -> BadRequestError)', () => {
+    it('an unclaimed status still uses the built-in mapping (400 -> ApiBadRequestError)', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims 460
 
-        const pe = new ProtocolError();
-        pe.message = 'bad field';
+        const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.field = 'email';
         const err = translate(400, pe);
-        expect(err).toBeInstanceOf(BadRequestError);
+        expect(err).toBeInstanceOf(ApiBadRequestError);
     });
 
     it('installed translators OVERRIDE a built-in status (400 -> custom type wins)', () => {
@@ -100,7 +112,9 @@ describe('ClientErrorTranslator registry integration', () => {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 400
-                    ? new AiBadRequestError((response.body as ProtocolError).message ?? 'overridden 400')
+                    ? new AiBadRequestError(
+                          (response.body as ApiErrorPayload).message ?? 'overridden 400',
+                      )
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(override);
@@ -109,10 +123,10 @@ describe('ClientErrorTranslator registry integration', () => {
         expect(err).toBeInstanceOf(AiBadRequestError);
     });
 
-    it('an unknown status with no translators is a real HttpError carrying the status code', () => {
-        const err = translate(499, new ProtocolError(), 'weird');
-        expect(err).toBeInstanceOf(HttpError);
-        expect((err as HttpError).code).toBe(499);
+    it('an unknown status with no translators is adapter-local and carries the status code', () => {
+        const err = translate(499, new ApiErrorPayload('', 'Request Failed'), 'weird');
+        expect(err).toBeInstanceOf(UnexpectedApiResponseError);
+        expect((err as UnexpectedApiResponseError).statusCode).toBe(499);
     });
 });
 
@@ -120,7 +134,7 @@ describe('ClientErrorTranslator registry integration', () => {
  * translateError returns a {@link TranslatedFailure}, not a bare Error, because the mapping is only
  * HALF the decision — the same isomorphic mapping runs in a browser and in a server, and only the
  * PROVENANCE tells `ProxyClient.adaptDownstreamFailure` whether the app chose this error type
- * deliberately or the framework's built-in default did. Two `NotFoundError`s are identical as
+ * deliberately or the framework's built-in default did. Two `ApiNotFoundError`s are identical as
  * values; they are not identical as decisions.
  */
 describe('TranslatedFailure carries the provenance the environment hook needs', () => {
@@ -133,7 +147,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
 
         expect(failure.appRegistered).toBe(false);
         expect(failure.statusCode).toBe(404);
-        expect(failure.error).toBeInstanceOf(NotFoundError);
+        expect(failure.error).toBeInstanceOf(ApiNotFoundError);
     });
 
     it('an APP translator reports appRegistered=true — the deliberate, greppable choice', () => {
@@ -146,13 +160,13 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
         expect(failure.error).toBeInstanceOf(AiBadRequestError);
     });
 
-    it('statusCode is the DOWNSTREAM status, not the registered error\'s own code (relay case)', () => {
+    it("statusCode is the DOWNSTREAM status, not the registered error's own code (relay case)", () => {
         // A gateway app deliberately relays a 404 as its own — its fromWire claims 404.
         const relay: ErrorTranslators = {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed')
+                    ? new ApiNotFoundError((response.body as ApiErrorPayload).message ?? 'relayed')
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
@@ -169,7 +183,7 @@ describe('TranslatedFailure carries the provenance the environment hook needs', 
  *
  * `http-server` does not depend on this package and must not start to for a test's convenience, so
  * the round trip is pinned as two halves that meet on the wire bytes. The fixtures below are exactly
- * what `http-server`'s `HttpErrorWireMapper.spec.ts` ("the exact wire bytes, so the client half can
+ * what `http-server`'s `ApiErrorHttpMapper.spec.ts` ("the exact wire bytes, so the client half can
  * be pinned against them") asserts a webpieces server emits. Change one and the other stops
  * describing reality.
  *
@@ -181,77 +195,89 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
         ClientRegistry.clear();
     });
 
-    /** [status, the generic message the server sends, the class the caller must receive] */
-    const wire: ReadonlyArray<readonly [number, string, new (...args: never[]) => Error]> = [
-        [400, 'Bad Request', BadRequestError],
-        [401, 'Unauthorized', UnauthorizedError],
-        [403, 'Forbidden', ForbiddenError],
-        [404, 'Not Found', NotFoundError],
-        [408, 'Request Timeout', RequestTimeoutError],
-        [429, 'Too Many Requests', TooManyRequestsError],
-        [500, 'Internal Server Error', InternalError],
-        [502, 'Bad Gateway', BadGatewayError],
-        [503, 'Service Unavailable', ServiceUnavailableError],
-        [504, 'Gateway Timeout', GatewayTimeoutError],
-        [598, 'Vendor Error', VendorError],
+    /** [status, server error, class the caller must receive] */
+    const wire: ReadonlyArray<readonly [number, Error, new (...args: never[]) => Error]> = [
+        [400, new ApiBadRequestError('secret'), ApiBadRequestError],
+        [401, new ApiUnauthorizedError('secret'), ApiUnauthorizedError],
+        [403, new ApiForbiddenError('secret'), ApiForbiddenError],
+        [404, new ApiNotFoundError('secret'), ApiNotFoundError],
+        [408, new ApiRequestTimeoutError('secret'), ApiRequestTimeoutError],
+        [429, new ApiRateLimitedError('secret'), ApiRateLimitedError],
+        [500, new ApiImplementationError('secret'), ApiImplementationError],
+        [502, new ApiDependencyError('secret'), ApiDependencyError],
+        [503, new ApiUnavailableError('secret'), ApiUnavailableError],
+        [504, new ApiDependencyTimeoutError('secret'), ApiDependencyTimeoutError],
+        [503, new ApiDependencyBackoffError('secret'), ApiDependencyBackoffError],
     ];
 
-    for (const [status, generic, expectedClass] of wire) {
+    for (const [status, serverError, expectedClass] of wire) {
         it(`${status} -> ${expectedClass.name} carrying the generic message`, () => {
-            const pe = new ProtocolError();
-            pe.message = generic;
+            const pe = ApiErrorCodec.encode(serverError);
 
             const err = translate(status, pe);
 
             expect(err).toBeInstanceOf(expectedClass);
-            expect(err.message).toBe(generic);
+            expect(err.message).toBe(pe.message);
         });
     }
 
-    it('266 -> UserError with the human-facing message and errorCode intact', () => {
-        const pe = new ProtocolError();
-        pe.message = 'Password must be 12+ characters';
+    it('266 -> ApiEndUserError with the human-facing message and errorCode intact', () => {
+        const pe = new ApiErrorPayload('end-user', 'Password must be 12+ characters');
         pe.errorCode = 'PW_SHORT';
         pe.subType = 'USER_ERROR';
 
         const err = translate(266, pe);
 
-        expect(err).toBeInstanceOf(UserError);
+        expect(err).toBeInstanceOf(ApiEndUserError);
         expect(err.message).toBe('Password must be 12+ characters');
-        expect((err as UserError).errorCode).toBe('PW_SHORT');
+        expect((err as ApiEndUserError).errorCode).toBe('PW_SHORT');
     });
 
     it('401 keeps subType, so a caller can still branch on WHY login failed', () => {
-        const pe = new ProtocolError();
-        pe.message = 'Unauthorized';
+        const pe = new ApiErrorPayload('unauthorized', 'Unauthorized');
         pe.subType = WRONG_LOGIN;
 
         const err = translate(401, pe);
 
-        expect(err).toBeInstanceOf(UnauthorizedError);
-        expect((err as UnauthorizedError).subType).toBe(WRONG_LOGIN);
+        expect(err).toBeInstanceOf(ApiUnauthorizedError);
+        expect((err as ApiUnauthorizedError).subType).toBe(WRONG_LOGIN);
     });
 
-    it('400 keeps guiAlertMessage and field — the human-safe half of a bad request', () => {
-        const pe = new ProtocolError();
-        pe.message = 'Bad Request';
+    it('400 keeps callerMessage and field — the human-safe half of a bad request', () => {
+        const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.field = 'email';
-        pe.guiAlertMessage = 'Enter a valid email';
+        pe.callerMessage = 'Enter a valid email';
 
         const err = translate(400, pe);
 
-        expect(err).toBeInstanceOf(BadRequestError);
-        expect((err as BadRequestError).field).toBe('email');
-        expect((err as BadRequestError).guiMessage).toBe('Enter a valid email');
+        expect(err).toBeInstanceOf(ApiBadRequestError);
+        expect((err as ApiBadRequestError).field).toBe('email');
+        expect((err as ApiBadRequestError).callerMessage).toBe('Enter a valid email');
     });
 
-    it('598 keeps waitSeconds', () => {
-        const pe = new ProtocolError();
-        pe.message = 'Vendor Error';
-        pe.waitSeconds = 45;
+    it('503 dependency backoff keeps retryAfterSeconds', () => {
+        const pe = new ApiErrorPayload('dependency-backoff', 'Dependency Unavailable');
+        pe.retryAfterSeconds = 45;
 
-        const err = translate(598, pe);
+        const err = translate(503, pe);
 
-        expect((err as VendorError).waitSeconds).toBe(45);
+        expect((err as ApiDependencyBackoffError).retryAfterSeconds).toBe(45);
+    });
+
+    it('uses semantic kind to distinguish two errors sharing HTTP 404', () => {
+        const err = translate(404, new ApiErrorPayload('endpoint-not-found', 'Endpoint Not Found'));
+        expect(err.name).toBe('ApiEndpointNotFoundError');
+    });
+
+    it('marks decoded implementation failures as server errors', () => {
+        const err = translate(500, new ApiErrorPayload('implementation', 'Internal Error'));
+        expect(err).toBeInstanceOf(ApiImplementationError);
+        expect((err as ApiImplementationError).serverError).toBe(true);
+    });
+
+    it('normalizes a body kind/status mismatch to a remote implementation failure', () => {
+        const err = translate(404, new ApiErrorPayload('forbidden', 'Forbidden'));
+        expect(err).toBeInstanceOf(ApiImplementationError);
+        expect((err as ApiImplementationError).serverError).toBe(true);
     });
 });

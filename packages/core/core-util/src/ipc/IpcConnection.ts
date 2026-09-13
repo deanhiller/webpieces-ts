@@ -1,7 +1,7 @@
 import { toError } from '../lib/errorUtils';
-import { TimeoutError } from '../http/TimeoutError';
+import { ApiCallTimeoutError } from '../http/ApiCallTimeoutError';
 import { CallContext } from '../http/CallStrategy';
-import { ApiErrorCodec, EndpointNotFoundError, InternalError } from '../errors';
+import { ApiErrorCodec, ApiEndpointNotFoundError, ApiImplementationError } from '../errors';
 import {
     IpcCallContext,
     IpcFailure,
@@ -53,7 +53,7 @@ export class IpcConnectionOptions {
             !Number.isSafeInteger(settlementHistoryLimit) ||
             settlementHistoryLimit < 1
         ) {
-            throw new InternalError('IPC timeout and message limit must be positive');
+            throw new ApiImplementationError('IPC timeout and message limit must be positive');
         }
     }
 }
@@ -99,7 +99,8 @@ export class IpcConnection {
 
     /** Install exactly one factory dispatcher BEFORE exposing this connection to the peer. */
     setHandler(handler: (request: IpcRequest) => Promise<IpcReply>): void {
-        if (this.handler) throw new InternalError('An IPC connection already has a dispatcher');
+        if (this.handler)
+            throw new ApiImplementationError('An IPC connection already has a dispatcher');
         if (this.closed) throw this.closed;
         this.handler = handler;
     }
@@ -107,7 +108,7 @@ export class IpcConnection {
     newContext(parent?: IpcCallContext): IpcCallContext {
         const id = this.options.nextId();
         if (this.usedIds.has(id))
-            throw new InternalError('IPC identity generator reused a call ID');
+            throw new ApiImplementationError('IPC identity generator reused a call ID');
         this.usedIds.add(id);
         return new IpcCallContext(parent?.txId ?? id, id, parent?.callId);
     }
@@ -115,14 +116,14 @@ export class IpcConnection {
     request(request: IpcRequest): Promise<IpcReply> {
         if (this.closed) return Promise.reject(this.closed);
         if (this.pending.has(request.context.callId))
-            return Promise.reject(new InternalError('Duplicate pending IPC call'));
+            return Promise.reject(new ApiImplementationError('Duplicate pending IPC call'));
         return new Promise<IpcReply>((resolve, reject) => {
             const pending = new PendingCall(request.context, resolve, reject);
             this.pending.set(request.context.callId, pending);
             pending.cancelTimer = this.options.scheduler.schedule(() => {
                 this.settle(
                     request.context.callId,
-                    new TimeoutError(
+                    new ApiCallTimeoutError(
                         this.options.timeoutMs,
                         new CallContext(request.apiId, request.methodId),
                     ),
@@ -150,7 +151,7 @@ export class IpcConnection {
         if (this.closed) throw this.closed;
         const json = JSON.stringify(message);
         if (json.length > this.options.maxMessageCharacters)
-            throw new InternalError('IPC message exceeds configured limit');
+            throw new ApiImplementationError('IPC message exceeds configured limit');
         await this.transport.send(json);
     }
 
@@ -159,11 +160,11 @@ export class IpcConnection {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary rejects pending calls or encodes a failure that the client throws
         try {
             if (json.length > this.options.maxMessageCharacters)
-                throw new InternalError('IPC message exceeds configured limit');
+                throw new ApiImplementationError('IPC message exceeds configured limit');
             const message = IpcProtocol.parse(json);
             if (message.type === 'request') {
                 if (this.activeRequests.has(message.context.callId))
-                    throw new InternalError('Duplicate active IPC request');
+                    throw new ApiImplementationError('Duplicate active IPC request');
                 this.activeRequests.add(message.context.callId);
                 void this.dispatch(message).catch((error) => this.fail(IpcErrors.normalize(error)));
                 return;
@@ -190,10 +191,11 @@ export class IpcConnection {
         let reply: IpcReply;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary rejects pending calls or encodes a failure that the client throws
         try {
-            if (!this.handler) throw new EndpointNotFoundError('IPC dispatcher is not installed');
+            if (!this.handler)
+                throw new ApiEndpointNotFoundError('IPC dispatcher is not installed');
             reply = await this.handler(request);
             if (!IpcProtocol.sameContext(request.context, reply.context))
-                throw new InternalError('IPC handler reply correlation mismatch');
+                throw new ApiImplementationError('IPC handler reply correlation mismatch');
         } catch (err: unknown) {
             const error = toError(err);
             reply = new IpcFailure(request.context, ApiErrorCodec.encode(error));
@@ -222,7 +224,7 @@ export class IpcConnection {
         }
     }
 
-    private lateReplyError(reply: IpcReply): InternalError {
+    private lateReplyError(reply: IpcReply): ApiImplementationError {
         const previous = this.settlements.get(reply.context.callId);
         let classification = 'unknown';
         if (previous) {
@@ -235,13 +237,13 @@ export class IpcConnection {
         const settlement = previous
             ? ` terminal=${previous.reason} ageMs=${String(Math.max(0, Date.now() - previous.settledAt))}`
             : '';
-        return new InternalError(
+        return new ApiImplementationError(
             `Late or unknown IPC reply classification=${classification}${settlement} ${this.correlationFields(reply.context)}`,
         );
     }
 
-    private correlationError(reply: IpcReply, expected: IpcCallContext): InternalError {
-        return new InternalError(
+    private correlationError(reply: IpcReply, expected: IpcCallContext): ApiImplementationError {
+        return new ApiImplementationError(
             `IPC reply correlation mismatch classification=correlation-mismatched ` +
                 `${this.correlationFields(reply.context)} expectedTxId=${JSON.stringify(expected.txId)}`,
         );
@@ -268,6 +270,6 @@ export class IpcErrors {
     static normalize(value: unknown): Error {
         return value instanceof Error
             ? value
-            : new InternalError('IPC failed with a non-Error value');
+            : new ApiImplementationError('IPC failed with a non-Error value');
     }
 }

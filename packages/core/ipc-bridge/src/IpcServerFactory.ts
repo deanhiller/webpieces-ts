@@ -1,4 +1,8 @@
-import { ApiErrorCodec, EndpointNotFoundError, InternalError } from '@webpieces/core-util/errors';
+import {
+    ApiErrorCodec,
+    ApiEndpointNotFoundError,
+    ApiImplementationError,
+} from '@webpieces/core-util/errors';
 import {
     IpcCallContext,
     IpcApiType,
@@ -43,7 +47,7 @@ export class IpcServerFactory {
     ): void {
         const apiId = assertInternalApi(apiClass);
         if (this.registrations.has(apiId))
-            throw new InternalError(`Duplicate IPC API registration: ${apiId}`);
+            throw new ApiImplementationError(`Duplicate IPC API registration: ${apiId}`);
         const methods = new Map<string, IpcRegistration>();
         for (const [key, methodId] of Object.entries(getIpcEndpoints(apiClass))) {
             methods.set(
@@ -60,11 +64,13 @@ export class IpcServerFactory {
                         request.body,
                         async () => {
                             if (request.body === null || request.body === undefined)
-                                throw new InternalError('IPC requests require one non-null DTO');
+                                throw new ApiImplementationError(
+                                    'IPC requests require one non-null DTO',
+                                );
                             const instance = controller(request.context);
                             const invoke = instance[key as keyof T];
                             if (typeof invoke !== 'function')
-                                throw new InternalError(
+                                throw new ApiImplementationError(
                                     `IPC implementation is missing ${apiId}.${methodId}`,
                                 );
                             const result =
@@ -87,7 +93,7 @@ export class IpcServerFactory {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- receiver translates to a failure reply; the generated client reconstructs and throws it
         try {
             const method = this.registrations.get(request.apiId)?.get(request.methodId);
-            if (!method) throw new EndpointNotFoundError('Unknown IPC API or method');
+            if (!method) throw new ApiEndpointNotFoundError('Unknown IPC API or method');
             const body = await method.invoke(request);
             return new IpcSuccess(request.context, body === undefined ? null : body);
         } catch (err: unknown) {

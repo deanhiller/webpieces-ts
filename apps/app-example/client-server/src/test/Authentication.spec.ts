@@ -3,7 +3,7 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import jwt from 'jsonwebtoken';
 import { AUTH_CONFIG } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
-import { UnauthorizedError, ForbiddenError } from '@webpieces/core-util';
+import { ApiUnauthorizedError, ApiForbiddenError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
 import { TestAuthConfig, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
@@ -78,13 +78,13 @@ describe('Authentication: shared-secret (bound state)', () => {
 
     it('rejects a wrong shared secret (401)', async () => {
         await expect(withAuthHeader('WRONG-key', () => api.internalOp({}))).rejects.toThrow(
-            UnauthorizedError,
+            ApiUnauthorizedError,
         );
     });
 
     it('rejects a missing shared secret (401)', async () => {
         await expect(RequestContext.run(() => api.internalOp({}))).rejects.toThrow(
-            UnauthorizedError,
+            ApiUnauthorizedError,
         );
     });
 });
@@ -133,19 +133,21 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
     it('inOrg app field: a logged-in user WITHOUT an org claim is denied (403)', async () => {
         const token = sign({ sub: 'user-12' }); // authenticated, but no orgId claim
         await expect(withAuthHeader(`Bearer ${token}`, () => api.orgOp({}))).rejects.toThrow(
-            ForbiddenError,
+            ApiForbiddenError,
         );
     });
 
     it('rejects a JWT missing the admin role (403)', async () => {
         const token = sign({ sub: 'user-7', roles: ['viewer'] });
         await expect(withAuthHeader(`Bearer ${token}`, () => api.adminOp({}))).rejects.toThrow(
-            ForbiddenError,
+            ApiForbiddenError,
         );
     });
 
     it('rejects a call with no token (401)', async () => {
-        await expect(RequestContext.run(() => api.adminOp({}))).rejects.toThrow(UnauthorizedError);
+        await expect(RequestContext.run(() => api.adminOp({}))).rejects.toThrow(
+            ApiUnauthorizedError,
+        );
     });
 });
 
@@ -168,7 +170,7 @@ describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
 
     it('rejects a call with no OIDC token (401)', async () => {
         await expect(RequestContext.run(() => api.serviceOp({}))).rejects.toThrow(
-            UnauthorizedError,
+            ApiUnauthorizedError,
         );
     });
 });

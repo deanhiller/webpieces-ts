@@ -8,7 +8,7 @@ import {
     ClientRegistry,
     Endpoint,
     HeaderRegistry,
-    TimeoutError,
+    ApiCallTimeoutError,
     toError,
 } from '@webpieces/core-util';
 import { PubSub, WpAuthOidc } from '@webpieces/core-util';
@@ -67,7 +67,7 @@ class Harness {
         let settled = false;
         const pending = this.invoke(method);
         const checked = expect(pending).rejects.toEqual(
-            new TimeoutError(timeoutMs, new CallContext(this.api.name, method)),
+            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method)),
         );
         void pending.then(
             () => {
@@ -156,7 +156,7 @@ describe('tasks generated client deadlines', () => {
                 return await call(30_000);
             } catch (err: unknown) {
                 const error = toError(err);
-                if (!(error instanceof TimeoutError)) throw err;
+                if (!(error instanceof ApiCallTimeoutError)) throw err;
                 firstError = error;
                 await new Promise<void>((resolve: () => void) => setTimeout(resolve, 60_000));
                 return call(20_000);
@@ -164,10 +164,10 @@ describe('tasks generated client deadlines', () => {
         }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(
-            new TimeoutError(20_000, new CallContext(h.api.name, 'work')),
+            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work')),
         );
         await vi.advanceTimersByTimeAsync(30_000);
-        expect(firstError).toBeInstanceOf(TimeoutError);
+        expect(firstError).toBeInstanceOf(ApiCallTimeoutError);
         expect(h.transport.calls).toBe(1);
         await vi.advanceTimersByTimeAsync(59_999);
         expect(h.transport.calls).toBe(1);
@@ -188,7 +188,7 @@ describe('tasks generated client deadlines', () => {
         CallRegistry.setStrategy(
             async (call: Attempt<unknown>): Promise<unknown> =>
                 call(10).catch((err: Error) => {
-                    expect(err).toBeInstanceOf(TimeoutError);
+                    expect(err).toBeInstanceOf(ApiCallTimeoutError);
                     h.transport.work = () => Promise.resolve();
                     return call(20);
                 }),

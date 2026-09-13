@@ -155,10 +155,10 @@ class ReactNativeGate {
         const errors =
             this.reactNativeRuntimeTypes() +
             this.contractFixture() +
-            `import { UserError, ApiErrorCodec } from '@webpieces/core-util/errors';\n` +
-            `const original = new UserError('passwords do not match');\n` +
+            `import { ApiEndUserError, ApiErrorCodec } from '@webpieces/core-util/errors';\n` +
+            `const original = new ApiEndUserError('passwords do not match');\n` +
             `const restored = ApiErrorCodec.decode(JSON.parse(JSON.stringify(ApiErrorCodec.encode(original))));\n` +
-            `if (!(restored instanceof UserError) || restored.message !== original.message) throw new Error('UserError JSON identity lost');\n`;
+            `if (!(restored instanceof ApiEndUserError) || restored.message !== original.message) throw new Error('ApiEndUserError JSON identity lost');\n`;
         if (name === 'core-util')
             return (
                 errors +

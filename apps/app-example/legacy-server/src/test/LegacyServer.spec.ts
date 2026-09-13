@@ -1,9 +1,16 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
-import { ApiFactory, AUTH_CONFIG, JWT_HOOK, FilterDefinition, MethodMeta, WpResponse } from '@webpieces/http-routing';
+import {
+    ApiFactory,
+    AUTH_CONFIG,
+    JWT_HOOK,
+    FilterDefinition,
+    MethodMeta,
+    WpResponse,
+} from '@webpieces/http-routing';
 import { Filter, Service } from '@webpieces/core-util';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
-import { UnauthorizedError } from '@webpieces/core-util';
+import { ApiUnauthorizedError } from '@webpieces/core-util';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
@@ -73,11 +80,15 @@ async function bootLegacyApi(): Promise<void> {
     recorder = new FilterOrderRecorder();
 
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-        (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(new Server2Simulator());
+        (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(
+            new Server2Simulator(),
+        );
         (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
         (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         options.bind(GlobalOrderFilter).toConstantValue(new GlobalOrderFilter(recorder, 'global'));
-        options.bind(ScopedOrderFilter).toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
+        options
+            .bind(ScopedOrderFilter)
+            .toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
     });
 
     apiFactory = await setupCompanyRuntime(
@@ -98,7 +109,13 @@ describe('legacy-server: api contract via createApiClient — filter chain, prio
     it('runs the full filter chain in priority order (global 1500 before scoped 1400)', async () => {
         const saveApi = apiFactory.createApiClient<SaveApi>(SaveApi);
         await RequestContext.run(async () => {
-            RequestContext.setRequest(new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])));
+            RequestContext.setRequest(
+                new HttpRequest(
+                    'POST',
+                    '/',
+                    new Map([['authorization', ['Bearer test-token-123']]]),
+                ),
+            );
             const response = await saveApi.save({ query: 'legacy-test' });
             expect(response.success).toBe(true);
             expect(response.query).toBe('legacy-test');
@@ -115,10 +132,11 @@ describe('legacy-server: api contract via createApiClient — filter chain, prio
         expect(recorder.executed).toEqual(['global']);
     });
 
-    it('auth: a save with no auth header is rejected by the chain (UnauthorizedError)', async () => {
+    it('auth: a save with no auth header is rejected by the chain (ApiUnauthorizedError)', async () => {
         const saveApi = apiFactory.createApiClient<SaveApi>(SaveApi);
-        await expect(RequestContext.run(() => saveApi.save({ query: 'no-auth' })))
-            .rejects.toThrow(UnauthorizedError);
+        await expect(RequestContext.run(() => saveApi.save({ query: 'no-auth' }))).rejects.toThrow(
+            ApiUnauthorizedError,
+        );
     });
 
     it('createApiClient() gives in-process access through the same filter chain', async () => {

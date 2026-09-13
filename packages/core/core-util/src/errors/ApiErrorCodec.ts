@@ -1,56 +1,57 @@
 import {
+    ApiBadRequestError,
+    ApiConnectionError,
+    ApiDependencyBackoffError,
+    ApiDependencyError,
+    ApiDependencyTimeoutError,
+    ApiEndpointNotFoundError,
+    ApiEndUserError,
     ApiError,
-    BadRequestError,
-    UserError,
-    UnauthorizedError,
-    ForbiddenError,
-    NotFoundError,
-    EndpointNotFoundError,
-    RequestTimeoutError,
-    TooManyRequestsError,
-    InternalError,
-    BadGatewayError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    VendorError,
-    OfflineError,
+    ApiErrorKind,
+    ApiForbiddenError,
+    ApiImplementationError,
+    ApiNotFoundError,
+    ApiRateLimitedError,
+    ApiRequestTimeoutError,
+    ApiUnauthorizedError,
+    ApiUnavailableError,
 } from './ApiError';
 
-/** Allowlisted error envelope shared by non-HTTP transports. Contains only bounded semantic causes, never stacks or arbitrary properties. */
+/** Allowlisted transport-neutral envelope. It never contains stacks or arbitrary properties. */
 export class ApiErrorPayload {
     public cause?: ApiErrorPayload;
     public subType?: string;
     public field?: string;
-    public guiAlertMessage?: string;
+    public callerMessage?: string;
     public errorCode?: string;
-    public waitSeconds?: number;
+    public retryAfterSeconds?: number;
+
     constructor(
-        public kind: string,
-        public message: string,
+        public kind: string = 'implementation',
+        public message: string = 'Internal Error',
     ) {}
 }
 
-/** Bounded, safe, transport-neutral encoding. Unrecognized types become generic internal failures. */
+/** Bounded safe codec shared by HTTP, IPC, and other remote adapters. */
 export class ApiErrorCodec {
-    // webpieces-disable no-function-outside-class -- stateless public codec shared by transport adapters; webpieces-disable no-any-unknown -- thrown values are untrusted until narrowed by the codec
+    // webpieces-disable no-function-outside-class -- stateless public transport codec; webpieces-disable no-any-unknown -- thrown values are untrusted until narrowed
     static encode(error: unknown): ApiErrorPayload {
         return this.encodeDepth(error, 0);
     }
 
-    // webpieces-disable no-function-outside-class -- recursive bounded wire codec; webpieces-disable no-any-unknown -- thrown causes require runtime narrowing
+    // webpieces-disable no-function-outside-class -- recursive bounded transport codec; webpieces-disable no-any-unknown -- thrown causes require narrowing
     private static encodeDepth(error: unknown, depth: number): ApiErrorPayload {
-        const kind = this.kind(error);
-        const payload = new ApiErrorPayload(
-            kind,
-            error instanceof UserError ? error.message.slice(0, 4096) : this.message(kind),
-        );
+        const kind = error instanceof ApiError ? error.kind : 'implementation';
+        const payload = new ApiErrorPayload(kind, this.publicMessage(error, kind));
         if (error instanceof ApiError) payload.subType = this.text(error.subType);
-        if (error instanceof UserError) payload.errorCode = this.text(error.errorCode);
-        if (error instanceof BadRequestError) {
+        if (error instanceof ApiEndUserError) payload.errorCode = this.text(error.errorCode);
+        if (error instanceof ApiBadRequestError) {
             payload.field = this.text(error.field);
-            payload.guiAlertMessage = this.text(error.guiMessage);
+            payload.callerMessage = this.text(error.callerMessage);
         }
-        if (error instanceof VendorError) payload.waitSeconds = this.wait(error.waitSeconds);
+        if (error instanceof ApiDependencyBackoffError) {
+            payload.retryAfterSeconds = this.wait(error.retryAfterSeconds);
+        }
         if (error instanceof Error && depth < 3) {
             const cause = Object.getOwnPropertyDescriptor(error, 'cause')?.value;
             if (cause instanceof Error) payload.cause = this.encodeDepth(cause, depth + 1);
@@ -58,18 +59,27 @@ export class ApiErrorCodec {
         return payload;
     }
 
-    // webpieces-disable no-function-outside-class -- stateless public codec shared by transport adapters; webpieces-disable no-any-unknown -- JSON transport input must be validated before use
+    /** Decode a value received from another process. Implementation failures are marked remote. */
+    // webpieces-disable no-function-outside-class -- stateless public transport codec; webpieces-disable no-any-unknown -- wire values require validation
     static decode(value: unknown): ApiError {
         return this.decodeDepth(value, 0);
     }
 
-    // webpieces-disable no-function-outside-class -- recursive bounded wire codec; webpieces-disable no-any-unknown -- remote causes remain untrusted until validated
+    /** Whether a body carries a recognized Webpieces semantic discriminator. */
+    // webpieces-disable no-function-outside-class -- stateless wire discriminator check; webpieces-disable no-any-unknown -- wire values require validation
+    static isPayload(value: unknown): boolean {
+        if (typeof value !== 'object' || value === null) return false;
+        const kind = Object.getOwnPropertyDescriptor(value, 'kind')?.value;
+        return typeof kind === 'string' && this.kinds.has(kind as ApiErrorKind);
+    }
+
+    // webpieces-disable no-function-outside-class -- recursive bounded transport codec; webpieces-disable no-any-unknown -- remote causes require validation
     private static decodeDepth(value: unknown, depth: number): ApiError {
         const error = this.decodeOne(value);
         if (typeof value === 'object' && value !== null && depth < 3) {
             const cause = Object.getOwnPropertyDescriptor(value, 'cause')?.value;
             if (typeof cause === 'object' && cause !== null) {
-                // webpieces-disable no-anonymous-object-literals -- standard property descriptor keeps Error.cause non-enumerable
+                // webpieces-disable no-anonymous-object-literals -- standard descriptor preserves Error.cause semantics
                 Object.defineProperty(error, 'cause', {
                     value: this.decodeDepth(cause, depth + 1),
                     configurable: true,
@@ -80,83 +90,82 @@ export class ApiErrorCodec {
         return error;
     }
 
-    // webpieces-disable no-function-outside-class -- allowlisted wire codec; webpieces-disable no-any-unknown -- JSON transport input must be validated before use
+    // webpieces-disable no-function-outside-class -- allowlisted wire codec; webpieces-disable no-any-unknown -- wire fields require validation
     private static decodeOne(value: unknown): ApiError {
-        if (typeof value !== 'object' || value === null) return new InternalError('Internal Error');
+        if (typeof value !== 'object' || value === null) return this.remoteImplementationError();
         // webpieces-disable no-any-unknown -- own wire fields remain untrusted until narrowed
         const field = (key: string): unknown => Object.getOwnPropertyDescriptor(value, key)?.value;
         const kind = field('kind');
         const message = this.text(field('message')) ?? this.message(kind);
         switch (kind) {
-            case 'user':
-                return new UserError(message, this.text(field('errorCode')));
+            case 'end-user':
+                return new ApiEndUserError(message, this.text(field('errorCode')));
             case 'bad-request':
-                return new BadRequestError(
+                return new ApiBadRequestError(
                     message,
                     this.text(field('field')),
-                    this.text(field('guiAlertMessage')),
+                    this.text(field('callerMessage')),
                 );
             case 'unauthorized':
-                return new UnauthorizedError(message, this.text(field('subType')));
+                return new ApiUnauthorizedError(message, this.text(field('subType')));
             case 'forbidden':
-                return new ForbiddenError(message);
+                return new ApiForbiddenError(message);
             case 'not-found':
-                return new NotFoundError(message);
+                return new ApiNotFoundError(message);
             case 'endpoint-not-found':
-                return new EndpointNotFoundError(message);
+                return new ApiEndpointNotFoundError(message);
             case 'request-timeout':
-                return new RequestTimeoutError(message);
-            case 'too-many-requests':
-                return new TooManyRequestsError(message);
-            case 'bad-gateway':
-                return new BadGatewayError(message);
-            case 'service-unavailable':
-                return new ServiceUnavailableError(message);
-            case 'gateway-timeout':
-                return new GatewayTimeoutError(message);
-            case 'vendor':
-                return new VendorError(message, this.wait(field('waitSeconds')));
-            case 'offline':
-                return new OfflineError(message);
-            case 'internal':
-                return new InternalError(message);
+                return new ApiRequestTimeoutError(message);
+            case 'rate-limited':
+                return new ApiRateLimitedError(message);
+            case 'dependency':
+                return new ApiDependencyError(message);
+            case 'unavailable':
+                return new ApiUnavailableError(message);
+            case 'dependency-timeout':
+                return new ApiDependencyTimeoutError(message);
+            case 'dependency-backoff':
+                return new ApiDependencyBackoffError(
+                    message,
+                    this.wait(field('retryAfterSeconds')),
+                );
+            case 'connection':
+                return new ApiConnectionError(message);
+            case 'implementation':
+                return new ApiImplementationError(message, undefined, true);
             default:
-                return new InternalError('Internal Error');
+                return this.remoteImplementationError();
         }
     }
 
-    // webpieces-disable no-function-outside-class -- helper of stateless codec; webpieces-disable no-any-unknown -- thrown values need instanceof narrowing before encoding
-    private static kind(error: unknown): string {
-        if (error instanceof UserError) return 'user';
-        if (error instanceof BadRequestError) return 'bad-request';
-        if (error instanceof UnauthorizedError) return 'unauthorized';
-        if (error instanceof ForbiddenError) return 'forbidden';
-        if (error instanceof EndpointNotFoundError) return 'endpoint-not-found';
-        if (error instanceof NotFoundError) return 'not-found';
-        if (error instanceof RequestTimeoutError) return 'request-timeout';
-        if (error instanceof TooManyRequestsError) return 'too-many-requests';
-        if (error instanceof BadGatewayError) return 'bad-gateway';
-        if (error instanceof ServiceUnavailableError) return 'service-unavailable';
-        if (error instanceof GatewayTimeoutError) return 'gateway-timeout';
-        if (error instanceof VendorError) return 'vendor';
-        if (error instanceof OfflineError) return 'offline';
-        return 'internal';
+    // webpieces-disable no-function-outside-class -- concrete normalization for malformed remote errors
+    private static remoteImplementationError(): ApiImplementationError {
+        return new ApiImplementationError('Internal Error', undefined, true);
     }
-    // webpieces-disable no-function-outside-class -- helper of stateless codec; webpieces-disable no-any-unknown -- wire fields need runtime string checks
+
+    // webpieces-disable no-function-outside-class -- caller-safe message selection; webpieces-disable no-any-unknown -- thrown values require narrowing
+    private static publicMessage(error: unknown, kind: ApiErrorKind): string {
+        if (error instanceof ApiEndUserError) return error.message.slice(0, 4096);
+        return this.message(kind);
+    }
+
+    // webpieces-disable no-function-outside-class -- wire string bound; webpieces-disable no-any-unknown -- wire values require validation
     private static text(value: unknown): string | undefined {
         return typeof value === 'string' ? value.slice(0, 4096) : undefined;
     }
-    // webpieces-disable no-function-outside-class -- helper of stateless codec; webpieces-disable no-any-unknown -- wire fields need runtime finite number checks
+
+    // webpieces-disable no-function-outside-class -- wire number bound; webpieces-disable no-any-unknown -- wire values require validation
     private static wait(value: unknown): number | undefined {
         return typeof value === 'number' && Number.isFinite(value) && value >= 0
             ? Math.min(value, 86400)
             : undefined;
     }
-    // webpieces-disable no-function-outside-class -- helper of stateless codec; webpieces-disable no-any-unknown -- wire discriminator must be allowlisted before selection
+
+    // webpieces-disable no-function-outside-class -- allowlisted generic messages; webpieces-disable no-any-unknown -- discriminator is validated by switch
     private static message(kind: unknown): string {
         switch (kind) {
-            case 'user':
-                return 'User Error';
+            case 'end-user':
+                return 'End User Error';
             case 'bad-request':
                 return 'Bad Request';
             case 'unauthorized':
@@ -169,20 +178,37 @@ export class ApiErrorCodec {
                 return 'Endpoint Not Found';
             case 'request-timeout':
                 return 'Request Timeout';
-            case 'too-many-requests':
-                return 'Too Many Requests';
-            case 'bad-gateway':
-                return 'Bad Gateway';
-            case 'service-unavailable':
+            case 'rate-limited':
+                return 'Rate Limited';
+            case 'dependency':
+                return 'Dependency Error';
+            case 'unavailable':
                 return 'Service Unavailable';
-            case 'gateway-timeout':
-                return 'Gateway Timeout';
-            case 'vendor':
-                return 'Vendor Error';
-            case 'offline':
-                return 'Offline';
+            case 'dependency-timeout':
+                return 'Dependency Timeout';
+            case 'dependency-backoff':
+                return 'Dependency Unavailable';
+            case 'connection':
+                return 'Connection Error';
             default:
                 return 'Internal Error';
         }
     }
+
+    private static readonly kinds: ReadonlySet<ApiErrorKind> = new Set<ApiErrorKind>([
+        'end-user',
+        'bad-request',
+        'unauthorized',
+        'forbidden',
+        'not-found',
+        'endpoint-not-found',
+        'request-timeout',
+        'rate-limited',
+        'implementation',
+        'dependency',
+        'unavailable',
+        'dependency-timeout',
+        'dependency-backoff',
+        'connection',
+    ]);
 }

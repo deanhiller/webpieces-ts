@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { HttpHeader, HttpResponseDto, ProtocolError } from '@webpieces/core-util';
+import { HttpHeader, HttpResponseDto, ApiErrorPayload } from '@webpieces/core-util';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
 
 const factory = new HttpResponseDtoFactory();
 
-const names = (dto: HttpResponseDto): string[] => dto.headers.map((h: HttpHeader) => h.name.toLowerCase());
+const names = (dto: HttpResponseDto): string[] =>
+    dto.headers.map((h: HttpHeader) => h.name.toLowerCase());
 const valuesOf = (dto: HttpResponseDto, name: string): string[] =>
-    dto.headers.filter((h: HttpHeader) => h.name.toLowerCase() === name).map((h: HttpHeader) => h.value);
+    dto.headers
+        .filter((h: HttpHeader) => h.name.toLowerCase() === name)
+        .map((h: HttpHeader) => h.value);
 
 /**
  * The CLIENT-side transport boundary. Everything an app's `ErrorTranslators.fromWire` ever sees is
@@ -17,7 +20,10 @@ const valuesOf = (dto: HttpResponseDto, name: string): string[] =>
  */
 describe('HttpResponseDtoFactory normalises a fetch Response', () => {
     it('carries the status code AND the reason phrase, so an app status keeps its own phrase', () => {
-        const dto = factory.fromFetch(new Response('{}', { status: 460, statusText: 'Order Not Found' }), {});
+        const dto = factory.fromFetch(
+            new Response('{}', { status: 460, statusText: 'Order Not Found' }),
+            {},
+        );
 
         expect(dto.status.code).toBe(460);
         expect(dto.status.reason).toBe('Order Not Found');
@@ -30,7 +36,7 @@ describe('HttpResponseDtoFactory normalises a fetch Response', () => {
     });
 
     it('hands through the already-parsed body untouched, whatever its shape', () => {
-        const body = new ProtocolError();
+        const body = new ApiErrorPayload();
         body.errorCode = 'ORDER_NOT_FOUND';
 
         expect(factory.fromFetch(new Response(null, { status: 460 }), body).body).toBe(body);

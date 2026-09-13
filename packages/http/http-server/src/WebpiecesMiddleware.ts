@@ -68,7 +68,7 @@ export class WebpiecesMiddleware {
      * (body parsing, unmatched paths, a bug in the wrapper itself).
      *
      * The page carries NO `error.message`. It used to render one into a `<pre>` block, which is the
-     * same leak `HttpErrorWireMapper` closes on the JSON side and a worse one here: the errors that
+     * same leak `ApiErrorHttpMapper` closes on the JSON side and a worse one here: the errors that
      * reach THIS handler are the unhandled ones, whose messages are stack-adjacent internals nobody
      * wrote for a caller to read. The message is logged one line above, which is where it belongs.
      */

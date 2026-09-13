@@ -2,7 +2,7 @@ import { inject, optional } from 'inversify';
 import {
     ClientRegistry,
     DestinationTrust,
-    InternalError,
+    ApiImplementationError,
     RecordedEndpoint,
     RecordedError,
     LogApiCallImpl,
@@ -235,13 +235,13 @@ export class NodeProxyClient extends ProxyClient {
      * relaying one lets an internal misconfiguration impersonate a legitimate response. That is not
      * hypothetical: a partner-facing Management API reported an EMPTY store estate for an org with six
      * live storefronts, because its dependency had not been promoted and Express served an HTML 404
-     * which arrived here as `NotFoundError` and went straight back out. A 500 would have been
+     * which arrived here as `ApiNotFoundError` and went straight back out. A 500 would have been
      * loud, correct, and attributable to the one server that actually had the bug — which is the whole
      * point: only ONE server should be paged for this.
      *
      * DELIBERATELY 4xx ONLY. 5xx (502/503/504) already mean "the dependency is unavailable", which is
-     * honest and useful outward, and 500 is already a 500. `UserError` (266, a 2xx code carrying
-     * user validation) and `VendorError` (598) are not statuses about our request at all. All of
+     * honest and useful outward, and 500 is already a 500. `ApiEndUserError` (266, a 2xx code carrying
+     * user validation) and `ApiDependencyBackoffError` are not statuses about our request at all. All of
      * them pass through untouched.
      *
      * THE OPT-OUT IS `appRegistered`, not a config key. A thin proxy or gateway that genuinely wants to
@@ -259,12 +259,12 @@ export class NodeProxyClient extends ProxyClient {
      *   `ResponseBodyReader.describeForeignBody`, so the full diagnostic is ours to quote — this is the
      *   mealco incident's exact shape, and it is the case that mattered.
      * - a WEBPIECES peer deliberately sends only the generic reason phrase for its status (see
-     *   `HttpErrorWireMapper` in http-server — only `UserError`'s message is caller-facing), so this
+     *   `ApiErrorHttpMapper` in http-server — only `ApiEndUserError`'s message is caller-facing), so this
      *   reads "Downstream said: Not Found". That is correct and not a regression: the peer's real
      *   message is in the PEER's log, correlated by request id, which is the only place it was ever
      *   safe to read it.
      *
-     * This whole string is an operator-facing message on an `InternalError`, so when THIS
+     * This whole string is an operator-facing message on an `ApiImplementationError`, so when THIS
      * server answers its own caller none of it goes on the wire — it goes to this server's log.
      */
     protected override adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error {
@@ -274,7 +274,7 @@ export class NodeProxyClient extends ProxyClient {
         if (failure.statusCode < 400 || failure.statusCode >= 500) {
             return failure.error;
         }
-        return new InternalError(
+        return new ApiImplementationError(
             `${callId}: dependency answered HTTP ${failure.statusCode}. That status describes OUR ` +
                 `request to it, not an answer for our caller, so this server owns it as a 500 — check the ` +
                 `path, the base URL, whether the dependency is deployed, and our service credentials. ` +

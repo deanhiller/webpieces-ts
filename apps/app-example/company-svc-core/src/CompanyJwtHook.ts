@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken';
 import { JwtHook, AuthenticatedCaller } from '@webpieces/http-routing';
 import {
     ContextTuple,
-    UnauthorizedError,
-    ForbiddenError,
+    ApiUnauthorizedError,
+    ApiForbiddenError,
     JwtRequirement,
     toError,
     WebpiecesCoreHeaders,
@@ -32,7 +32,7 @@ export class CompanyJwtHook extends JwtHook {
         const claims = this.decode(token);
         const subject = claims['sub'] ?? claims['userId'];
         if (subject === undefined || subject === null || subject === '') {
-            throw new UnauthorizedError('JWT has no subject (sub/userId) claim');
+            throw new ApiUnauthorizedError('JWT has no subject (sub/userId) claim');
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
@@ -56,7 +56,9 @@ export class CompanyJwtHook extends JwtHook {
     ): Promise<void> {
         await super.authorizeJwt(values, requirement); // roles any-of
         if (requirement['inOrg'] === true && !values.claims['orgId']) {
-            throw new ForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');
+            throw new ApiForbiddenError(
+                'Endpoint requires an organization (orgId claim) on the JWT',
+            );
         }
     }
 
@@ -72,7 +74,7 @@ export class CompanyJwtHook extends JwtHook {
             return {};
         } catch (err: unknown) {
             const error = toError(err);
-            throw new UnauthorizedError('Invalid JWT token', undefined, error);
+            throw new ApiUnauthorizedError('Invalid JWT token', undefined, error);
         }
     }
 }

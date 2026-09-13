@@ -1,21 +1,22 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
     ClientRegistry,
-    ProtocolError,
-    HttpError,
-    BadRequestError,
-    UserError,
-    VendorError,
-    NotFoundError,
-    RequestTimeoutError,
-    UnauthorizedError,
-    ForbiddenError,
-    InternalError,
-    BadGatewayError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    TooManyRequestsError,
-    EndpointNotFoundError,
+    ApiErrorPayload,
+    ApiError,
+    ApiBadRequestError,
+    ApiEndUserError,
+    ApiDependencyBackoffError,
+    ApiNotFoundError,
+    ApiRequestTimeoutError,
+    ApiUnauthorizedError,
+    ApiForbiddenError,
+    ApiImplementationError,
+    ApiDependencyError,
+    ApiUnavailableError,
+    ApiDependencyTimeoutError,
+    ApiRateLimitedError,
+    ApiEndpointNotFoundError,
+    ApiConnectionError,
     ErrorTranslators,
     HttpHeader,
     HttpResponseDto,
@@ -76,12 +77,19 @@ class FakeResponse {
 }
 
 /** A custom app error at HTTP 461 with its own bidirectional translation — the explicit opt-out. */
-class VendorPortalError extends HttpError {
+class VendorPortalError extends Error {
     constructor(message: string) {
-        super(message, 461);
+        super(message);
         this.name = 'VendorPortalError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
+}
+
+class VendorPortalPayload {
+    constructor(
+        public message: string,
+        public name: string,
+    ) {}
 }
 
 class VendorPortalTranslators implements ErrorTranslators {
@@ -89,9 +97,7 @@ class VendorPortalTranslators implements ErrorTranslators {
         if (!(error instanceof VendorPortalError)) {
             return undefined;
         }
-        const pe = new ProtocolError();
-        pe.message = error.message;
-        pe.name = error.name;
+        const pe = new VendorPortalPayload(error.message, error.name);
         return new HttpResponseDto(
             new HttpResponseStatus(461, 'Vendor Portal Suspended'),
             [
@@ -106,7 +112,7 @@ class VendorPortalTranslators implements ErrorTranslators {
         if (response.status.code !== 461) {
             return undefined;
         }
-        return new VendorPortalError((response.body as ProtocolError).message ?? 'portal');
+        return new VendorPortalError((response.body as VendorPortalPayload).message ?? 'portal');
     }
 }
 
@@ -136,10 +142,9 @@ class WireHarness {
         return res;
     }
 
-    public bodyOf(res: FakeResponse): ProtocolError {
-        return JSON.parse(res.body ?? '{}') as ProtocolError;
+    public bodyOf(res: FakeResponse): ApiErrorPayload {
+        return JSON.parse(res.body ?? '{}') as ApiErrorPayload;
     }
-
 }
 
 const harness = new WireHarness();
@@ -157,23 +162,78 @@ beforeEach(() => {
     capturing.lines.length = 0;
 });
 
-describe('handleError — only UserError message reaches the wire', () => {
+describe('handleError — only ApiEndUserError message reaches the wire', () => {
     /**
      * One row per non-user subclass: the operator message it was thrown with, and the generic text
      * the caller must see instead. `secret` is deliberately distinctive so `toContain` is decisive.
      */
-    const cases: ReadonlyArray<readonly [string, HttpError, number, string]> = [
-        ['BadRequestError', new BadRequestError('column users.ssn failed CHECK'), 400, 'Bad Request'],
-        ['UnauthorizedError', new UnauthorizedError('jwt kid=internal-signer-7 expired'), 401, 'Unauthorized'],
-        ['ForbiddenError', new ForbiddenError('role admin-internal required on tenant 4471'), 403, 'Forbidden'],
-        ['NotFoundError', new NotFoundError('no row in pg.stores where id=88213'), 404, 'Not Found'],
-        ['RequestTimeoutError', new RequestTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'), 408, 'Request Timeout'],
-        ['TooManyRequestsError', new TooManyRequestsError('bucket tenant-4471 drained'), 429, 'Too Many Requests'],
-        ['InternalError', new InternalError('ECONNREFUSED 10.4.0.9:5432'), 500, 'Internal Server Error'],
-        ['BadGatewayError', new BadGatewayError('nginx upstream sidecar-auth refused'), 502, 'Bad Gateway'],
-        ['ServiceUnavailableError', new ServiceUnavailableError('cloud run revision api-00042-xyz booting'), 503, 'Service Unavailable'],
-        ['GatewayTimeoutError', new GatewayTimeoutError('alb idle timeout on /internal/sync'), 504, 'Gateway Timeout'],
-        ['VendorError', new VendorError('stripe key sk_live_51H... rate limited'), 598, 'Vendor Error'],
+    const cases: ReadonlyArray<readonly [string, ApiError, number, string]> = [
+        [
+            'ApiBadRequestError',
+            new ApiBadRequestError('column users.ssn failed CHECK'),
+            400,
+            'Bad Request',
+        ],
+        [
+            'ApiUnauthorizedError',
+            new ApiUnauthorizedError('jwt kid=internal-signer-7 expired'),
+            401,
+            'Unauthorized',
+        ],
+        [
+            'ApiForbiddenError',
+            new ApiForbiddenError('role admin-internal required on tenant 4471'),
+            403,
+            'Forbidden',
+        ],
+        [
+            'ApiNotFoundError',
+            new ApiNotFoundError('no row in pg.stores where id=88213'),
+            404,
+            'Not Found',
+        ],
+        [
+            'ApiRequestTimeoutError',
+            new ApiRequestTimeoutError('upstream pg-dataaccess:8443 did not answer in 30s'),
+            408,
+            'Request Timeout',
+        ],
+        [
+            'ApiRateLimitedError',
+            new ApiRateLimitedError('bucket tenant-4471 drained'),
+            429,
+            'Rate Limited',
+        ],
+        [
+            'ApiImplementationError',
+            new ApiImplementationError('ECONNREFUSED 10.4.0.9:5432'),
+            500,
+            'Internal Error',
+        ],
+        [
+            'ApiDependencyError',
+            new ApiDependencyError('nginx upstream sidecar-auth refused'),
+            502,
+            'Dependency Error',
+        ],
+        [
+            'ApiUnavailableError',
+            new ApiUnavailableError('cloud run revision api-00042-xyz booting'),
+            503,
+            'Service Unavailable',
+        ],
+        [
+            'ApiDependencyTimeoutError',
+            new ApiDependencyTimeoutError('alb idle timeout on /internal/sync'),
+            504,
+            'Dependency Timeout',
+        ],
+        [
+            'ApiDependencyBackoffError',
+            new ApiDependencyBackoffError('stripe key sk_live_51H... rate limited'),
+            503,
+            'Dependency Unavailable',
+        ],
     ];
 
     for (const [name, error, status, generic] of cases) {
@@ -189,27 +249,21 @@ describe('handleError — only UserError message reaches the wire', () => {
         });
     }
 
-    it('a bare HttpError with an app status gets a code-free generic message', () => {
-        const res = harness.send(new HttpError('shard 3 of cluster prod-eu is read-only', 466));
-
-        expect(res.statusCode).toBe(466);
-        expect(harness.bodyOf(res).message).toBe('Request Failed');
-        expect(res.body).not.toContain('shard 3');
-    });
-
     it('never sends `name` — an internal class name is not contract data', () => {
-        // EndpointNotFoundError is the sharp case: its `name` IS the internal class name.
-        const res = harness.send(new EndpointNotFoundError('no route POST /internal/reindex'));
+        // ApiEndpointNotFoundError is the sharp case: its `name` IS the internal class name.
+        const res = harness.send(new ApiEndpointNotFoundError('no route POST /internal/reindex'));
 
         expect(res.statusCode).toBe(404);
-        expect(harness.bodyOf(res).name).toBeUndefined();
-        expect(res.body).not.toContain('EndpointNotFoundError');
+        expect(harness.bodyOf(res)).not.toHaveProperty('name');
+        expect(res.body).not.toContain('ApiEndpointNotFoundError');
         // ...but it is in the log, so nothing that was previously wire-only is lost.
-        expect(capturing.lines.join('\n')).toContain('EndpointNotFoundError');
+        expect(capturing.lines.join('\n')).toContain('ApiEndpointNotFoundError');
     });
 
     it('keeps subType — an app passes it on purpose and the client branches on it', () => {
-        const res = harness.send(new UnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN));
+        const res = harness.send(
+            new ApiUnauthorizedError('bcrypt compare failed for user 991', WRONG_LOGIN),
+        );
 
         expect(harness.bodyOf(res).subType).toBe(WRONG_LOGIN);
         expect(harness.bodyOf(res).message).toBe('Unauthorized');
@@ -228,10 +282,10 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
         'from the webpieces server. body="<pre>Cannot POST /db-stores/fetch-stores</pre>"';
 
     it('sends none of it to the caller, and all of it to the log', () => {
-        const res = harness.send(new InternalError(diagnostic));
+        const res = harness.send(new ApiImplementationError(diagnostic));
 
         expect(res.statusCode).toBe(500);
-        expect(harness.bodyOf(res).message).toBe('Internal Server Error');
+        expect(harness.bodyOf(res).message).toBe('Internal Error');
 
         const body = res.body ?? '';
         expect(body).not.toContain('pg-dataaccess');
@@ -245,16 +299,20 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
     });
 
     it('logs the cause chain too, since only the log carries it now', () => {
-        const cause = new NotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
-        harness.send(new InternalError('downstream call failed', cause));
+        const cause = new ApiNotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
+        harness.send(new ApiImplementationError('downstream call failed', cause));
 
-        expect(capturing.lines.join('\n')).toContain('cause=<pre>Cannot POST /db-stores/fetch-stores</pre>');
+        expect(capturing.lines.join('\n')).toContain(
+            'cause=<pre>Cannot POST /db-stores/fetch-stores</pre>',
+        );
     });
 });
 
 describe('handleError — what still goes out on purpose', () => {
-    it('UserError: its message IS the wire, with errorCode', () => {
-        const res = harness.send(new UserError('That email is already registered', 'EMAIL_TAKEN'));
+    it('ApiEndUserError: its message IS the wire, with errorCode', () => {
+        const res = harness.send(
+            new ApiEndUserError('That email is already registered', 'EMAIL_TAKEN'),
+        );
 
         expect(res.statusCode).toBe(266);
         const pe = harness.bodyOf(res);
@@ -263,22 +321,37 @@ describe('handleError — what still goes out on purpose', () => {
         expect(pe.subType).toBe('USER_ERROR');
     });
 
-    it('BadRequestError: guiAlertMessage + field go out, message does not', () => {
+    it('ApiBadRequestError: callerMessage + field go out, message does not', () => {
         const res = harness.send(
-            new BadRequestError('zod: users.email failed regex at ingest.ts:214', 'email', 'Enter a valid email'),
+            new ApiBadRequestError(
+                'zod: users.email failed regex at ingest.ts:214',
+                'email',
+                'Enter a valid email',
+            ),
         );
 
         const pe = harness.bodyOf(res);
         expect(pe.field).toBe('email');
-        expect(pe.guiAlertMessage).toBe('Enter a valid email');
+        expect(pe.callerMessage).toBe('Enter a valid email');
         expect(pe.message).toBe('Bad Request');
         expect(res.body).not.toContain('ingest.ts');
     });
 
-    it('VendorError: waitSeconds goes out', () => {
-        const res = harness.send(new VendorError('stripe 429 on acct_1Hxx', 45));
+    it('ApiDependencyBackoffError: retryAfterSeconds goes out', () => {
+        const res = harness.send(new ApiDependencyBackoffError('stripe 429 on acct_1Hxx', 45));
 
-        expect(harness.bodyOf(res).waitSeconds).toBe(45);
+        expect(harness.bodyOf(res).retryAfterSeconds).toBe(45);
+        expect(res.headers).toContainEqual(['retry-after', '45']);
+    });
+
+    it('normalizes a caller-local connection failure to an implementation error', () => {
+        const res = harness.send(new ApiConnectionError('ECONNREFUSED private-host:8443'));
+        expect(res.statusCode).toBe(500);
+        expect(harness.bodyOf(res)).toMatchObject({
+            kind: 'implementation',
+            message: 'Internal Error',
+        });
+        expect(res.body).not.toContain('private-host');
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {
@@ -292,7 +365,7 @@ describe('handleError — what still goes out on purpose', () => {
         const pe = harness.bodyOf(res);
         // The app chose to publish this text. The framework does not second-guess it.
         expect(pe.message).toBe('portal says: contract 8812 is suspended');
-        expect(pe.name).toBe('VendorPortalError');
+        expect((pe as unknown as VendorPortalPayload).name).toBe('VendorPortalError');
     });
 
     it('the app owns HEADERS too — and repeats survive, which a Map would have dropped', () => {
@@ -307,11 +380,13 @@ describe('handleError — what still goes out on purpose', () => {
         ]);
     });
 
-    it('a non-HttpError still answers the generic 500 it always did', () => {
-        const res = harness.send(new TypeError('cannot read property id of undefined at Repo.ts:88'));
+    it('an unclassified error is normalized to a concrete implementation error', () => {
+        const res = harness.send(
+            new TypeError('cannot read property id of undefined at Repo.ts:88'),
+        );
 
         expect(res.statusCode).toBe(500);
-        expect(harness.bodyOf(res).message).toBe('Internal Server Error');
+        expect(harness.bodyOf(res).message).toBe('Internal Error');
         expect(res.body).not.toContain('Repo.ts');
     });
 });
@@ -327,18 +402,23 @@ describe('handleError — what still goes out on purpose', () => {
  * the right typed error. Change one and the other's fixture stops describing reality.
  */
 describe('the exact wire bytes, so the client half can be pinned against them', () => {
-    const emitted: ReadonlyArray<readonly [string, HttpError, number, string]> = [
-        ['400', new BadRequestError('internal detail'), 400, 'Bad Request'],
-        ['401', new UnauthorizedError('internal detail'), 401, 'Unauthorized'],
-        ['403', new ForbiddenError('internal detail'), 403, 'Forbidden'],
-        ['404', new NotFoundError('internal detail'), 404, 'Not Found'],
-        ['408', new RequestTimeoutError('internal detail'), 408, 'Request Timeout'],
-        ['429', new TooManyRequestsError('internal detail'), 429, 'Too Many Requests'],
-        ['500', new InternalError('internal detail'), 500, 'Internal Server Error'],
-        ['502', new BadGatewayError('internal detail'), 502, 'Bad Gateway'],
-        ['503', new ServiceUnavailableError('internal detail'), 503, 'Service Unavailable'],
-        ['504', new GatewayTimeoutError('internal detail'), 504, 'Gateway Timeout'],
-        ['598', new VendorError('internal detail'), 598, 'Vendor Error'],
+    const emitted: ReadonlyArray<readonly [string, ApiError, number, string]> = [
+        ['400', new ApiBadRequestError('internal detail'), 400, 'Bad Request'],
+        ['401', new ApiUnauthorizedError('internal detail'), 401, 'Unauthorized'],
+        ['403', new ApiForbiddenError('internal detail'), 403, 'Forbidden'],
+        ['404', new ApiNotFoundError('internal detail'), 404, 'Not Found'],
+        ['408', new ApiRequestTimeoutError('internal detail'), 408, 'Request Timeout'],
+        ['429', new ApiRateLimitedError('internal detail'), 429, 'Rate Limited'],
+        ['500', new ApiImplementationError('internal detail'), 500, 'Internal Error'],
+        ['502', new ApiDependencyError('internal detail'), 502, 'Dependency Error'],
+        ['503', new ApiUnavailableError('internal detail'), 503, 'Service Unavailable'],
+        ['504', new ApiDependencyTimeoutError('internal detail'), 504, 'Dependency Timeout'],
+        [
+            '503-backoff',
+            new ApiDependencyBackoffError('internal detail'),
+            503,
+            'Dependency Unavailable',
+        ],
     ];
 
     for (const [label, thrown, status, generic] of emitted) {
@@ -348,13 +428,15 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
 
             expect(res.statusCode).toBe(status);
             expect(pe.message).toBe(generic);
-            expect(pe.name).toBeUndefined();
+            expect(pe).not.toHaveProperty('name');
             expect(res.body).not.toContain('internal detail');
         });
     }
 
     it('266 emits the human-facing message, errorCode and subType', () => {
-        const pe = harness.bodyOf(harness.send(new UserError('Password must be 12+ characters', 'PW_SHORT')));
+        const pe = harness.bodyOf(
+            harness.send(new ApiEndUserError('Password must be 12+ characters', 'PW_SHORT')),
+        );
 
         expect(pe.message).toBe('Password must be 12+ characters');
         expect(pe.errorCode).toBe('PW_SHORT');
@@ -362,7 +444,9 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
     });
 
     it('401 emits subType, so a caller can still branch on WHY login failed', () => {
-        const pe = harness.bodyOf(harness.send(new UnauthorizedError('bcrypt mismatch', WRONG_LOGIN)));
+        const pe = harness.bodyOf(
+            harness.send(new ApiUnauthorizedError('bcrypt mismatch', WRONG_LOGIN)),
+        );
 
         expect(pe.subType).toBe(WRONG_LOGIN);
         expect(pe.message).toBe('Unauthorized');

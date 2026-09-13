@@ -130,7 +130,7 @@ export class WebpiecesExpressRouter {
     /**
      * Bind EACH method of one ApiClient. The api's @ApiPath/@Endpoint decorators give the paths;
      * for each we wrap the matching client method (the proxy — RequestContext.run + header read +
-     * JSON body parse + error→ProtocolError all live in the wrapper/chain) and register the route.
+     * JSON body parse + error→ApiErrorPayload all live in the wrapper/chain) and register the route.
      * This is one-to-one with a test: an HTTP POST maps straight to `client[method](dto)`.
      *
      * @returns the number of routes mounted for this api.

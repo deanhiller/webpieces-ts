@@ -18,7 +18,7 @@ error response, and could not choose the reason phrase beside its own status cod
 order:
 
 ```
-1. readRequestBody -> JSON.parse         <- THROWS HttpBadRequestError
+1. readRequestBody -> JSON.parse         <- THROWS ApiBadRequestError
 2. toWebpiecesRequest
 3. headers.fillFromRequest(httpRequest)  <- publishes RequestContext.getRequest()
 4. filter chain
@@ -94,11 +94,11 @@ the raw-body republish into every route; that complexity was declined. Pinned by
   alike. It is infrastructure, not app policy, so an app that overrides the error BODY must not have
   to remember to re-emit the trace header. Same for `Content-Type: application/json`, which an app can
   still override by naming it in its own header list.
-- Otherwise today's behaviour: `HttpErrorWireMapper` on the server, `ClientErrorTranslator.builtInError`
+- Otherwise today's behaviour: `ApiErrorHttpMapper` on the server, `ClientErrorTranslator.builtInError`
   on the client.
-- Both defaults are **DELEGABLE and exported**: `HttpErrorWireMapper.toResponse(error)` returns the
+- Both defaults are **DELEGABLE and exported**: `ApiErrorHttpMapper.toResponse(error)` returns the
   same `HttpResponseDto` an app's `toWire` returns, and `ClientErrorTranslator.builtInError(response)`
-  is public. A consumer had copied `HttpErrorWireMapper`'s status-to-message table verbatim into its
+  is public. A consumer had copied `ApiErrorHttpMapper`'s status-to-message table verbatim into its
   own envelope class — copying framework internals is the symptom of a missing export.
 
 ## Files changed
@@ -108,7 +108,7 @@ the raw-body republish into every route; that complexity was declined. Pinned by
 | `core-util/src/http/HttpResponseDto.ts` | **new** — `HttpHeader`, `HttpResponseStatus`, `HttpResponseDto` |
 | `core-util/src/http/ErrorTranslators.ts` | **new** — replaces the deleted `ErrorTranslation.ts` |
 | `core-util/src/http/ClientRegistry.ts` | one slot + `setErrorTranslators`; both `tryTranslate*` now speak the DTO |
-| `http-server/src/HttpErrorWireMapper.ts` | `toResponse()` (the delegable default) + public `genericMessage()` |
+| `http-server/src/ApiErrorHttpMapper.ts` | `toResponse()` (the delegable default) + public `genericMessage()` |
 | `http-server/src/ExpressWrapper.ts` | step-0 publish, one `send(HttpResponseDto)`, txId on every response |
 | `http-client-core/src/HttpResponseDtoFactory.ts` | **new** — fetch `Response` -> the DTO |
 | `http-client-core/src/ClientErrorTranslator.ts` | `translateError(HttpResponseDto)`; `builtInError` public |
@@ -117,7 +117,7 @@ the raw-body republish into every route; that complexity was declined. Pinned by
 ## Tests
 
 - A translator setting a custom header, status code AND reason phrase gets all three on the wire, and
-  two `Set-Cookie`s survive — proving the list-not-map choice (`HttpErrorWireMapper.spec.ts`,
+  two `Set-Cookie`s survive — proving the list-not-map choice (`ApiErrorHttpMapper.spec.ts`,
   `HttpResponseDtoFactory.spec.ts`).
 - `fromWire` receives the identical shape from a node and a browser client: both share `ProxyClient`,
   whose only DTO source is `HttpResponseDtoFactory`.

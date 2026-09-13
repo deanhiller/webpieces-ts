@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestError, InternalError } from '../errors';
+import { ApiBadRequestError, ApiImplementationError } from '../errors';
 import { getMaskSpec, METADATA_KEYS } from '../http/decorators';
 import { MaskSpec } from '../http/LogFieldMask';
 import { IpcIdentity } from './IpcIdentity';
@@ -26,11 +26,13 @@ export function WpInternal(apiId: string): ClassDecorator {
             Reflect.hasMetadata(METADATA_KEYS.API_PATH, target) ||
             Reflect.hasMetadata(METADATA_KEYS.ENDPOINTS, target)
         ) {
-            throw new InternalError(`Internal API ${className} cannot use @ApiPath or @Endpoint.`);
+            throw new ApiImplementationError(
+                `Internal API ${className} cannot use @ApiPath or @Endpoint.`,
+            );
         }
         const authMethods: string[] = Reflect.getMetadata(METADATA_KEYS.AUTH_METHODS, target) || [];
         if (authMethods.length > 0 || Reflect.hasMetadata(METADATA_KEYS.AUTH_META, target)) {
-            throw new InternalError(
+            throw new ApiImplementationError(
                 `Internal API ${className} cannot use HTTP authorization decorators.`,
             );
         }
@@ -44,17 +46,17 @@ export function WpIpcEndpoint(methodId: string, options: IpcEndpointOptions = {}
     IpcIdentity.assert(methodId, 'method');
     const kind = options.kind ?? 'request';
     if (kind !== 'request' && kind !== 'notification')
-        throw new BadRequestError('Invalid IPC endpoint kind');
+        throw new ApiBadRequestError('Invalid IPC endpoint kind');
     return (target: object, propertyKey: string | symbol) => {
         const apiClass = target.constructor;
         const key = propertyKey as string;
         if (['then', 'constructor', '__proto__'].includes(key)) {
-            throw new BadRequestError(`Invalid IPC method name: ${key}`);
+            throw new ApiBadRequestError(`Invalid IPC method name: ${key}`);
         }
         const endpoints: Record<string, string> =
             Reflect.getMetadata(IPC_METADATA_KEYS.ENDPOINTS, apiClass) || {};
         if (Object.values(endpoints).includes(methodId)) {
-            throw new BadRequestError(`Duplicate IPC method identity: ${methodId}`);
+            throw new ApiBadRequestError(`Duplicate IPC method identity: ${methodId}`);
         }
         endpoints[key] = methodId;
         Reflect.defineMetadata(IPC_METADATA_KEYS.ENDPOINTS, endpoints, apiClass);
@@ -96,19 +98,19 @@ export function getIpcMaskSpec(apiClass: Function, methodName: string): MaskSpec
 export function assertInternalApi(apiClass: Function): string {
     const apiId = getIpcApiId(apiClass);
     if (!apiId)
-        throw new InternalError(
+        throw new ApiImplementationError(
             `Class ${apiClass.name || 'Unknown'} must be decorated with @WpInternal(apiId).`,
         );
     if (
         Reflect.hasMetadata(METADATA_KEYS.API_PATH, apiClass) ||
         Reflect.hasMetadata(METADATA_KEYS.ENDPOINTS, apiClass)
     ) {
-        throw new InternalError(
+        throw new ApiImplementationError(
             `Internal API ${apiClass.name || 'Unknown'} cannot use @ApiPath or @Endpoint.`,
         );
     }
     if (Object.keys(getIpcEndpoints(apiClass)).length === 0) {
-        throw new InternalError(
+        throw new ApiImplementationError(
             `Internal API ${apiClass.name || 'Unknown'} must declare at least one @WpIpcEndpoint.`,
         );
     }
@@ -118,7 +120,7 @@ export function assertInternalApi(apiClass: Function): string {
 // webpieces-disable no-function-outside-class -- IPC decorator or immutable reflection metadata helper
 export function assertNotInternalApi(apiClass: Function, transport: string): void {
     if (isInternalApi(apiClass)) {
-        throw new InternalError(
+        throw new ApiImplementationError(
             `${transport} cannot use @WpInternal API ${apiClass.name || 'Unknown'}; use the IPC factories.`,
         );
     }

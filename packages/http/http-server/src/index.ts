@@ -9,7 +9,7 @@ export { RecordingFilter } from './filters/RecordingFilter';
 // The webpieces DEFAULT error response, exported as a DELEGABLE object: it returns the same
 // HttpResponseDto an app's ErrorTranslators.toWire returns, so an app wraps it ("webpieces' answer,
 // plus one header") rather than copying its status-to-message table.
-export { HttpErrorWireMapper } from './HttpErrorWireMapper';
+export { ApiErrorHttpMapper } from './ApiErrorHttpMapper';
 
 // Test-case recording (contract lives in @webpieces/core-util)
 export { TestCaseRecorderImpl } from './recorder/TestCaseRecorderImpl';

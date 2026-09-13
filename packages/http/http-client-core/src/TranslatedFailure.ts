@@ -6,7 +6,7 @@
  * exactly like {@link RequestOutcome}.
  *
  * WHY IT CARRIES `appRegistered` AT ALL: the translated error alone is not enough for an environment
- * hook to act on. `NotFoundError` produced by the BUILT-IN 404 branch and `NotFoundError`
+ * hook to act on. `ApiNotFoundError` produced by the BUILT-IN 404 branch and `ApiNotFoundError`
  * produced by an app's own `ErrorTranslators` are indistinguishable as values, yet they mean opposite
  * things — the first is the framework's generic default, the second is the app saying out loud, at
  * startup and greppably, "relay this status as my own". `ProxyClient.adaptDownstreamFailure` must
@@ -15,7 +15,7 @@
  *
  * `statusCode` is the status the DOWNSTREAM answered — carried explicitly rather than read back off
  * `error.code`, because an app-registered translation may legitimately return an error whose `code`
- * is nothing like the status that produced it, and need not be an `HttpError` at all.
+ * is nothing like the status that produced it, and need not be a portable `ApiError` at all.
  */
 export class TranslatedFailure {
     constructor(

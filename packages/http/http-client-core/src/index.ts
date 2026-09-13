@@ -30,6 +30,7 @@ export { RequestOutcome } from './RequestOutcome';
 export type { ApiPrototype } from './ApiPrototype';
 export { buildClientProxy } from './buildClientProxy';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
+export { UnexpectedApiResponseError } from './UnexpectedApiResponseError';
 // The CLIENT-side transport boundary: a fetch Response becomes the ONE HttpResponseDto an app's
 // ErrorTranslators sees, so node and browser hand `fromWire` the identical shape.
 export { HttpResponseDtoFactory } from './HttpResponseDtoFactory';

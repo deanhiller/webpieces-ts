@@ -7,14 +7,13 @@ import {
     Endpoint,
     ErrorTranslators,
     HttpResponseDto,
-    BadGatewayError,
-    HttpError,
-    UserError,
-    InternalError,
-    NotFoundError,
-    ServiceUnavailableError,
-    VendorError,
-    ProtocolError,
+    ApiDependencyError,
+    ApiEndUserError,
+    ApiImplementationError,
+    ApiNotFoundError,
+    ApiUnavailableError,
+    ApiDependencyBackoffError,
+    ApiErrorPayload,
     WpAuthPublic,
     Rpc,
     TestCaseRecorder,
@@ -90,19 +89,49 @@ function client(): DbStoresApi {
     return buildClientProxy(DbStoresApi, proxyClient);
 }
 
-/** Stub fetch with a webpieces ProtocolError body — a real downstream webpieces server answering. */
-function stubProtocolError(status: number, message: string): void {
+/** Stub fetch with a webpieces ApiErrorPayload body — a real downstream webpieces server answering. */
+function stubApiErrorPayload(status: number, message: string, kind = kindForStatus(status)): void {
     vi.stubGlobal(
         'fetch',
         vi.fn(() =>
             Promise.resolve(
-                new Response(JSON.stringify({ message }), {
+                new Response(JSON.stringify({ kind, message }), {
                     status,
                     headers: { 'Content-Type': 'application/json' },
                 }),
             ),
         ),
     );
+}
+
+// webpieces-disable no-function-outside-class -- compact wire-fixture discriminator for this spec
+function kindForStatus(status: number): string {
+    switch (status) {
+        case 266:
+            return 'end-user';
+        case 400:
+            return 'bad-request';
+        case 401:
+            return 'unauthorized';
+        case 403:
+            return 'forbidden';
+        case 404:
+            return 'not-found';
+        case 408:
+            return 'request-timeout';
+        case 429:
+            return 'rate-limited';
+        case 500:
+            return 'implementation';
+        case 502:
+            return 'dependency';
+        case 503:
+            return 'unavailable';
+        case 504:
+            return 'dependency-timeout';
+        default:
+            return '';
+    }
 }
 
 /**
@@ -155,19 +184,19 @@ afterEach(() => {
  *   for a route that does not exist is broken, and must say so as a 500.
  *
  * The prod incident this fixes: a partner-facing Management API called a dependency that had not been
- * promoted yet. Express served its default HTML 404, the client turned it into `NotFoundError`,
+ * promoted yet. Express served its default HTML 404, the client turned it into `ApiNotFoundError`,
  * and the partner-facing response carried no `stores` key at all — so `jq '.stores | length'` read 0
  * for an org with six live storefronts. The failure impersonated valid data instead of paging the one
  * server that actually had the bug.
  */
 describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", () => {
-    it('a 404 from a dependency is InternalError, NOT NotFoundError', async () => {
-        stubProtocolError(404, 'no route');
+    it('a 404 from a dependency is ApiImplementationError, NOT ApiNotFoundError', async () => {
+        stubApiErrorPayload(404, 'no route');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(InternalError);
-        expect(error).not.toBeInstanceOf(NotFoundError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
+        expect(error).not.toBeInstanceOf(ApiNotFoundError);
         expect(error).not.toHaveProperty('code');
     });
 
@@ -176,7 +205,7 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(InternalError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
         expect(error).not.toHaveProperty('code');
 
         // The 500's own message names the call and the status it is answering FOR.
@@ -186,7 +215,7 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
         // The original client-side diagnostic — the text that made this findable in one read — is
         // reachable as the cause, and quoted in the message too.
         const cause = (error as Error).cause as Error;
-        expect(cause).toBeInstanceOf(NotFoundError);
+        expect(cause).toBeInstanceOf(ApiNotFoundError);
         expect(cause.message).toContain('DbStoresApi.fetchStores');
         expect(cause.message).toContain('text/html');
         expect(cause.message).toContain('did not come from the webpieces server');
@@ -196,12 +225,12 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
 
     it('400 / 401 / 403 / 404 are ALL caller-side defects on this hop, so all four become 500', async () => {
         for (const status of [400, 401, 403, 404]) {
-            stubProtocolError(status, `downstream said ${status}`);
+            stubApiErrorPayload(status, `downstream said ${status}`);
 
             const error = await callAndCatch();
 
             expect(error).not.toHaveProperty('code');
-            expect(error).toBeInstanceOf(InternalError);
+            expect(error).toBeInstanceOf(ApiImplementationError);
             expect((error as Error).message).toContain(`HTTP ${status}`);
             expect(((error as Error).cause as Error).message).toBe(`downstream said ${status}`);
         }
@@ -214,59 +243,59 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
      * response DTO (a nullable field, an empty list), not as an HTTP status.
      */
     it('a LEGITIMATE resource 404 from a dependency still becomes a 500 — deliberately', async () => {
-        stubProtocolError(404, 'store 1234 does not exist');
+        stubApiErrorPayload(404, 'store 1234 does not exist');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(InternalError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
         expect(((error as Error).cause as Error).message).toBe('store 1234 does not exist');
     });
 });
 
 /**
  * The scope line. 5xx already means "the dependency is unavailable" — honest and useful outward —
- * and 500 is already a 500. 266 (UserError, a 2xx code carrying user validation) and 598
- * (VendorError) are not statuses about our request at all. None of them is rewritten.
+ * and 500 is already a 500. 266 (ApiEndUserError, a 2xx code carrying user validation) and
+ * ApiDependencyBackoffError are not failures caused by this client request. None is rewritten.
  */
 describe('NodeProxyClient passes everything that is not a 4xx through unchanged', () => {
     it('502 / 503 keep their type — "the dependency is waking / unavailable" is the right signal', async () => {
-        stubProtocolError(502, 'upstream refused');
-        expect(await callAndCatch()).toBeInstanceOf(BadGatewayError);
+        stubApiErrorPayload(502, 'upstream refused');
+        expect(await callAndCatch()).toBeInstanceOf(ApiDependencyError);
 
-        stubProtocolError(503, 'cold start');
-        expect(await callAndCatch()).toBeInstanceOf(ServiceUnavailableError);
+        stubApiErrorPayload(503, 'cold start');
+        expect(await callAndCatch()).toBeInstanceOf(ApiUnavailableError);
     });
 
     it('a downstream 500 stays a 500 (and is NOT double-wrapped)', async () => {
-        stubProtocolError(500, 'dependency blew up');
+        stubApiErrorPayload(500, 'dependency blew up');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(InternalError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
         expect((error as Error).message).toBe('dependency blew up');
         expect((error as Error).cause).toBeUndefined();
     });
 
-    it('598 VendorError is untouched — it is not a status about OUR request', async () => {
-        stubProtocolError(598, 'vendor is rate limiting us');
+    it('503 ApiDependencyBackoffError is untouched — it is not a status about OUR request', async () => {
+        stubApiErrorPayload(503, 'dependency is rate limiting us', 'dependency-backoff');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(VendorError);
-        expect((error as Error).message).toBe('vendor is rate limiting us');
+        expect(error).toBeInstanceOf(ApiDependencyBackoffError);
+        expect((error as Error).message).toBe('dependency is rate limiting us');
     });
 
     /**
-     * 266 (UserError) cannot reach this seam AT ALL, and that is worth pinning: it is a 2xx, so
+     * 266 (ApiEndUserError) cannot reach this seam AT ALL, and that is worth pinning: it is a 2xx, so
      * `response.ok` is true and the body goes down the SUCCESS path. The wrap could never have
      * touched it even if it wanted to.
      */
-    it('266 reconstructs UserError while retaining successful protocol monitoring', async () => {
-        stubProtocolError(266, 'that email is already taken');
+    it('266 reconstructs ApiEndUserError while retaining successful protocol monitoring', async () => {
+        stubApiErrorPayload(266, 'that email is already taken');
 
         const result = await callAndCatch();
 
-        expect(result).toBeInstanceOf(UserError);
+        expect(result).toBeInstanceOf(ApiEndUserError);
         expect((result as Error).message).toBe('that email is already taken');
     });
 });
@@ -284,16 +313,18 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    ? new ApiNotFoundError(
+                          (response.body as ApiErrorPayload).message ?? 'relayed 404',
+                      )
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
-        stubProtocolError(404, 'no such store');
+        stubApiErrorPayload(404, 'no such store');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(NotFoundError);
-        expect(error).not.toBeInstanceOf(InternalError);
+        expect(error).toBeInstanceOf(ApiNotFoundError);
+        expect(error).not.toBeInstanceOf(ApiImplementationError);
         expect((error as Error).message).toBe('no such store');
     });
 
@@ -302,15 +333,17 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
             toWire: () => undefined,
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 404
-                    ? new NotFoundError((response.body as ProtocolError).message ?? 'relayed 404')
+                    ? new ApiNotFoundError(
+                          (response.body as ApiErrorPayload).message ?? 'relayed 404',
+                      )
                     : undefined,
         };
         ClientRegistry.setErrorTranslators(relay);
-        stubProtocolError(403, 'our service account is not on the allow-list');
+        stubApiErrorPayload(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(InternalError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
         expect(((error as Error).cause as Error).message).toBe(
             'our service account is not on the allow-list',
         );

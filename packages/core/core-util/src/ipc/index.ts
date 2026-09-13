@@ -23,6 +23,6 @@ export { MaskLog } from '../http/decorators';
 export { ApiMethodInfo } from '../http/ApiMethodInfo';
 export { LogApiCallImpl } from '../http/LogApiCall';
 export type { ApiCallContext } from '../http/ApiCallContext';
-export { TimeoutError } from '../http/TimeoutError';
+export { ApiCallTimeoutError } from '../http/ApiCallTimeoutError';
 
 export { toError } from '../lib/errorUtils';

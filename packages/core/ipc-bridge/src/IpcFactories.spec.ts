@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
 import {
     ApiError,
-    ServiceUnavailableError,
-    EndpointNotFoundError,
-    InternalError,
-    UserError,
+    ApiUnavailableError,
+    ApiEndpointNotFoundError,
+    ApiImplementationError,
+    ApiEndUserError,
 } from '@webpieces/core-util/errors';
 import {
     ApiCallContext,
@@ -20,7 +20,7 @@ import {
     WpIpcEndpoint,
     MaskLog,
     getIpcMaskSpec,
-    TimeoutError,
+    ApiCallTimeoutError,
 } from '@webpieces/core-util/ipc';
 import { ApiPath, Endpoint, WpAuthJwt } from '@webpieces/core-util';
 import type { AnyUntrustedContextKey } from '@webpieces/core-util';
@@ -177,32 +177,32 @@ describe('portable IPC JSON boundary', () => {
     it('reconstructs user exceptions rather than returning payloads or fake void success', async () => {
         class Failing extends EchoController {
             override async echo(_request: Value): Promise<Value> {
-                throw new UserError('Passwords do not match', 'passwordMismatch');
+                throw new ApiEndUserError('Passwords do not match', 'passwordMismatch');
             }
             override async notify(_request: Value): Promise<void> {
-                throw new UserError('Rejected event', 'event');
+                throw new ApiEndUserError('Rejected event', 'event');
             }
         }
         const pair = new Pair(new Failing());
         const client = pair.clients.createClient(TestApi);
         await expect(client.echo(new Value('secret'))).rejects.toMatchObject({
-            name: 'UserError',
+            name: 'ApiEndUserError',
             errorCode: 'passwordMismatch',
             message: 'Passwords do not match',
         });
-        await expect(client.notify(new Value('secret'))).rejects.toBeInstanceOf(UserError);
+        await expect(client.notify(new Value('secret'))).rejects.toBeInstanceOf(ApiEndUserError);
         expect(pair.b.sends.join('')).not.toContain('secret');
     });
     it('distinguishes local transport failure from a remote unavailable implementation', async () => {
         class Unavailable extends EchoController {
             override async echo(_request: Value): Promise<Value> {
-                throw new ServiceUnavailableError('private remote backend detail');
+                throw new ApiUnavailableError('private remote backend detail');
             }
         }
         const remote = new Pair(new Unavailable());
         await expect(
             remote.clients.createClient(TestApi).echo(new Value('x')),
-        ).rejects.toBeInstanceOf(ServiceUnavailableError);
+        ).rejects.toBeInstanceOf(ApiUnavailableError);
         const local = new Pair();
         const cause = new Error('native bridge disconnected');
         local.a.sendError = cause;
@@ -238,7 +238,7 @@ describe('portable IPC JSON boundary', () => {
         const pair = new Pair();
         pair.a.drop = true;
         const pending = pair.clients.createClient(TestApi).echo(new Value('x'));
-        const failed = expect(pending).rejects.toBeInstanceOf(TimeoutError);
+        const failed = expect(pending).rejects.toBeInstanceOf(ApiCallTimeoutError);
         await vi.advanceTimersByTimeAsync(11);
         await failed;
         expect(pair.a.sends).toHaveLength(1);
@@ -331,6 +331,6 @@ describe('portable IPC JSON boundary', () => {
                 body: new Value('x'),
             }),
         );
-        await expect(promise).rejects.toBeInstanceOf(InternalError);
+        await expect(promise).rejects.toBeInstanceOf(ApiImplementationError);
     });
 });

@@ -7,7 +7,7 @@
  *
  * The three shapes, one per path:
  * - 2xx            `new RequestOutcome(true, status, headers)`          — no error
- * - HTTP error     `new RequestOutcome(false, status, headers, error)`  — the translated HttpError
+ * - HTTP error     `new RequestOutcome(false, status, headers, error)`  — the translated API error
  * - network reject `new RequestOutcome(false, 0, undefined, error)`     — no Response ever existed
  *
  * A timeout or body parse failure uses the failure shape, with headers/status if they arrived.

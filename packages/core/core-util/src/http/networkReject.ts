@@ -2,14 +2,14 @@
  * Centralised classifier for transport rejects — the ONE place in the framework that decides
  * "the request never reached a server" (offline, DNS, connection refused, CORS preflight).
  *
- * Browser-safe: zero node imports, no framework deps beyond {@link OfflineError}. It runs identically
+ * Browser-safe: zero node imports, no framework deps beyond {@link ApiConnectionError}. It runs identically
  * in an Angular bundle and on Cloud Run.
  *
  * WHY here and not in each app: the browser-wording list below is inherently incomplete and drifts as
  * engines reword their messages. Kept in one module, an app never writes it, and a new wording is
  * fixed exactly once — here — instead of in every consumer's copy of the same fragile string match.
  */
-import { OfflineError } from './errors';
+import { ApiConnectionError } from '../errors';
 
 /**
  * The error shape this classifier reads for the node/undici code. `Error.cause` (ES2022) is already
@@ -57,7 +57,7 @@ const BROWSER_REJECT_MESSAGES: readonly string[] = [
 const MAX_CAUSE_DEPTH = 5;
 
 /**
- * Decides whether a thrown error is a transport reject and, if so, mints the typed {@link OfflineError}
+ * Decides whether a thrown error is a transport reject and, if so, mints the typed {@link ApiConnectionError}
  * for it. Stateless and dependency-free, so a caller can `new` it directly on the browser fetch path
  * (instance methods, not static — webpieces wires behaviour into injectable classes, and a static
  * method is just a module-scope function wearing a class as a namespace).
@@ -73,13 +73,16 @@ export class NetworkRejectClassifier {
     }
 
     /**
-     * If `error` is a transport reject, return an {@link OfflineError} that names `url` and preserves
+     * If `error` is a transport reject, return an {@link ApiConnectionError} that names `url` and preserves
      * the original as `cause`. Otherwise return `error` UNTOUCHED — a genuine bug keeps its own type
      * and stack, so a defect is never silently relabelled as "offline".
      */
     toNetworkError(error: Error, url: string): Error {
         if (this.isNetworkRejectError(error)) {
-            return new OfflineError(`Request to ${url} never reached a server (offline / network reject)`, error);
+            return new ApiConnectionError(
+                `Request to ${url} never reached a server (offline / network reject)`,
+                error,
+            );
         }
         return error;
     }

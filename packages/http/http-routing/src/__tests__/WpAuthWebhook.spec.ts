@@ -15,8 +15,8 @@ import {
     ContextKey,
     ContextTuple,
     Endpoint,
-    BadRequestError,
-    UnauthorizedError,
+    ApiBadRequestError,
+    ApiUnauthorizedError,
     RouteMetadata,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
@@ -133,7 +133,7 @@ class TestWebhookAuthCallback extends WebhookAuthCallback {
         this.seenUrl = request.raw.absoluteUrl;
         this.seenSignature = request.getHeader('sentry-hook-signature');
         if (!this.allow) {
-            throw new UnauthorizedError('signature mismatch');
+            throw new ApiUnauthorizedError('signature mismatch');
         }
         // Proving the signature proved WHICH vendor account this payload is for — a hook that could
         // only return void had no way to say so, and the controller had to re-derive it.
@@ -219,7 +219,7 @@ describe('AuthFilter enforces @WpAuthWebhook', () => {
 
         await expect(
             runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
-        ).rejects.toThrow(UnauthorizedError);
+        ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -298,7 +298,7 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
 
         await expect(
             runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
-        ).rejects.toThrow(UnauthorizedError);
+        ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.accountSeenByController).toBeUndefined();
     });
 });
@@ -349,7 +349,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
                 new TestWebhookAuthCallback(false),
                 webhookRequest('not json', parseError),
             ),
-        ).rejects.toThrow(UnauthorizedError);
+        ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -363,7 +363,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
                 new TestWebhookAuthCallback(true),
                 webhookRequest('not json', parseError),
             ),
-        ).rejects.toThrow(BadRequestError);
+        ).rejects.toThrow(ApiBadRequestError);
         expect(next.invoked).toBe(false);
     });
 });

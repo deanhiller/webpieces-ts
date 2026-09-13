@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ClientRegistry,
-    ProtocolError,
-    HttpError,
-    BadRequestError,
+    ApiErrorPayload,
+    ApiBadRequestError,
     ErrorTranslators,
     HttpHeader,
     HttpResponseDto,
@@ -11,13 +10,20 @@ import {
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
 
-/** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's HttpAiBadRequestError). */
-class AiBadRequestError extends HttpError {
+/** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's AiBadRequestError). */
+class AiBadRequestError extends Error {
     constructor(message: string) {
-        super(message, 460);
+        super(message);
         this.name = 'AiBadRequest';
         Object.setPrototypeOf(this, new.target.prototype);
     }
+}
+
+class AiErrorPayload {
+    constructor(
+        public message: string,
+        public name: string,
+    ) {}
 }
 
 /** Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. */
@@ -26,16 +32,14 @@ class AiErrorTranslators implements ErrorTranslators {
         if (!(error instanceof AiBadRequestError)) {
             return undefined;
         }
-        const pe = new ProtocolError();
-        pe.message = error.message;
-        pe.name = error.name;
+        const pe = new AiErrorPayload(error.message, error.name);
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
     fromWire(response: HttpResponseDto): Error | undefined {
         if (response.status.code !== 460) {
             return undefined;
         }
-        return new AiBadRequestError((response.body as ProtocolError).message ?? 'AI bad request');
+        return new AiBadRequestError((response.body as AiErrorPayload).message ?? 'AI bad request');
     }
 }
 
@@ -102,25 +106,25 @@ describe('ExpressWrapper.handleError registry integration', () => {
 
         expect(res.statusCode).toBe(460);
         expect(res.getHeader('content-type')).toBe('application/json');
-        const pe = JSON.parse(res.body ?? '{}') as ProtocolError;
-        // The translators are the explicit opt-out from HttpErrorWireMapper's genericization: the app
+        const pe = JSON.parse(res.body ?? '{}') as AiErrorPayload;
+        // The translators are the explicit opt-out from ApiErrorHttpMapper's genericization: the app
         // authored this body, so message AND name are published exactly as toWire() returned them.
         expect(pe.message).toBe('bad ai input');
         expect(pe.name).toBe('AiBadRequest');
     });
 
-    it('an unclaimed error still uses the built-in ladder (BadRequestError -> 400)', () => {
+    it('an unclaimed error still uses the built-in ladder (ApiBadRequestError -> 400)', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
 
         const res = new FakeResponse();
-        newWrapper().handleError(asResponse(res), new BadRequestError('bad field', 'email'));
+        newWrapper().handleError(asResponse(res), new ApiBadRequestError('bad field', 'email'));
 
         expect(res.statusCode).toBe(400);
-        const pe = JSON.parse(res.body ?? '{}') as ProtocolError;
+        const pe = JSON.parse(res.body ?? '{}') as ApiErrorPayload;
         expect(pe.field).toBe('email');
         // ...and the built-in ladder genericizes, unlike the app path above.
         expect(pe.message).toBe('Bad Request');
-        expect(pe.name).toBeUndefined();
+        expect(pe).not.toHaveProperty('name');
     });
 
     it('does nothing once headers are already sent', () => {

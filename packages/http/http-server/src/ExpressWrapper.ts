@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import {
     ClientRegistry,
-    BadRequestError,
+    ApiBadRequestError,
     HttpHeader,
     HttpResponseDto,
     toError,
@@ -13,7 +13,7 @@ import {
     RawRequest,
     RequestContextHeaders,
 } from '@webpieces/core-context';
-import { HttpErrorWireMapper } from './HttpErrorWireMapper';
+import { ApiErrorHttpMapper } from './ApiErrorHttpMapper';
 
 /**
  * The cap on an inbound body, in bytes. Reading stops and the request is refused the moment a body
@@ -53,11 +53,11 @@ class ParsedBody {
 
 export class ExpressWrapper {
     /**
-     * Decides what an outside caller is allowed to see of a thrown {@link HttpError}. Stateless —
-     * one instance per wrapper is fine, and the class doc there is where the "only UserError's
+     * Decides what an outside caller is allowed to see of a thrown {@link API error}. Stateless —
+     * one instance per wrapper is fine, and the class doc there is where the "only ApiEndUserError's
      * message goes on the wire" rule is stated.
      */
-    private readonly errorWireMapper = new HttpErrorWireMapper();
+    private readonly errorWireMapper = new ApiErrorHttpMapper();
 
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
@@ -207,13 +207,13 @@ export class ExpressWrapper {
      * past auth. Everywhere else, fail now.
      */
     private parseJson(bodyText: string): ParsedBody {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- translate parse failure to a 400 HttpError
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- translate parse failure to an ApiBadRequestError
         try {
             return new ParsedBody(bodyText ? JSON.parse(bodyText) : {}, undefined);
         } catch (err: unknown) {
             const error = toError(err);
             if (!this.rawBody) {
-                throw new BadRequestError(
+                throw new ApiBadRequestError(
                     'Request body is not valid JSON',
                     undefined,
                     undefined,
@@ -311,7 +311,7 @@ export class ExpressWrapper {
                     chunks = [];
                     req.destroy();
                     reject(
-                        new BadRequestError(
+                        new ApiBadRequestError(
                             `Request body exceeds the ${this.maxBodyBytes} byte limit`,
                         ),
                     );
@@ -337,12 +337,12 @@ export class ExpressWrapper {
      *
      * Two sources, in this order:
      *   1. the app's {@link ErrorTranslators}, if it claims the error — it owns the ENTIRE response;
-     *   2. else {@link HttpErrorWireMapper.toResponse}, the webpieces default, which maps every
-     *      `HttpError` subclass to its status and a CALLER-SAFE body (only `UserError`'s message
+     *   2. else {@link ApiErrorHttpMapper.toResponse}, the webpieces default, which maps every
+     *      `ApiError` subclass to its status and a CALLER-SAFE body (only `ApiEndUserError`'s message
      *      is written for a human, so only it goes out verbatim; everything else sends the generic
      *      reason phrase and logs the real one) and turns anything else into a generic 500.
      *
-     * Nothing status-specific is decided here any more — read `HttpErrorWireMapper` for the full rule
+     * Nothing status-specific is decided here any more — read `ApiErrorHttpMapper` for the full rule
      * and the list of statuses, which must stay in step with `ClientErrorTranslator`'s built-in
      * mapping.
      */
@@ -399,7 +399,7 @@ export class ExpressWrapper {
      * Put the transaction id on EVERY response — success and error, webpieces' default body and an
      * app's own. It is INFRASTRUCTURE, not app policy: an app that overrides what an error looks like
      * must not thereby lose the header its support desk quotes back. That is why this lives here and
-     * not in {@link HttpErrorWireMapper.toResponse} or in an app's translators.
+     * not in {@link ApiErrorHttpMapper.toResponse} or in an app's translators.
      *
      * Silently absent when there is no id to send, which is exactly the accepted known issue recorded
      * at step 0 of {@link executeImpl}: a malformed or oversize body fails before `fillFromRequest`
