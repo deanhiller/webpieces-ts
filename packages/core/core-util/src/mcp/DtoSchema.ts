@@ -22,7 +22,7 @@ export class WpDtoFieldOptions {
         public readonly integer: boolean = false,
         public readonly minimum?: number,
         public readonly maximum?: number,
-        public readonly enumValues?: readonly string[],
+        public readonly enumValues?: readonly [string, ...string[]],
     ) {}
 }
 
@@ -204,8 +204,8 @@ export class DtoSchemaBuilder {
         if (options.minimum !== undefined && options.maximum !== undefined && options.minimum > options.maximum) {
             throw new Error(`${label} minimum cannot exceed maximum.`);
         }
-        if (options.enumValues && (reflected.name !== 'String' || options.enumValues.length === 0)) {
-            throw new Error(`${label} enumValues require a string field and at least one value.`);
+        if (options.enumValues && reflected.name !== 'String') {
+            throw new Error(`${label} enumValues require a string field.`);
         }
     }
 
