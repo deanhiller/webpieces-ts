@@ -33,8 +33,21 @@ export {
     // re-exported here for back-compat.
     DocumentDesign,
     isDocumentDesign,
+    WpMcpTool,
+    getWpMcpTools,
+    WpDto,
+    WpDtoField,
+    WpDtoFieldOptions,
+    WpResponseDto,
 } from '@webpieces/core-util';
-export type { AuthMode, ApiKind, EndpointOptions } from '@webpieces/core-util';
+export type {
+    AuthMode,
+    ApiKind,
+    EndpointOptions,
+    WpMcpToolOptions,
+    DtoClass,
+    DtoArrayItem,
+} from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export { SourceFile, ROUTING_METADATA_KEYS } from './decorators';

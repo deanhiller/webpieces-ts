@@ -32,6 +32,8 @@ export const METADATA_KEYS = {
     ENDPOINT_CALLER: ENDPOINT_CALLER_KEY,
     /** Per-method @MaskLog spec (which DTO fields the LogApiCall path masks). */
     MASK_LOG: 'webpieces:mask-log',
+    /** Per-method opt-in metadata for publishing an RPC endpoint as an MCP tool. */
+    MCP_TOOLS: 'webpieces:mcp-tools',
 };
 
 /**

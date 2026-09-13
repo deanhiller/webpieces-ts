@@ -1,0 +1,26 @@
+{
+    "name": "mcp-server",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/mcp-server/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": { "command": "vitest run packages/http/mcp-server/" }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/http/mcp-server",
+                "main": "packages/http/mcp-server/src/index.ts",
+                "tsConfig": "packages/http/mcp-server/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/mcp-server/package.json",
+                    "packages/http/mcp-server/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}
