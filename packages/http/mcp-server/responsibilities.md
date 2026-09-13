@@ -1,5 +1,8 @@
 # Responsibilities — mcp-server
 
+Generate explicitly opted-in Webpieces API methods as authenticated MCP tools while preserving the
+normal endpoint filter chain, DTO validation, and safe error boundary.
+
 ## In scope
 
 - Convert `@WpMcpTool` API metadata and DTO metadata into MCP tool definitions.

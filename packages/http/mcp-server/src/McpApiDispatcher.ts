@@ -1,11 +1,17 @@
-import { ApiErrorCodec, ApiErrorPayload, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import {
+    ApiErrorCodec,
+    ApiErrorPayload,
+    DtoValue,
+    toError,
+    WebpiecesCoreHeaders,
+} from '@webpieces/core-util';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ApiFactory, ApiClientProxy } from '@webpieces/http-routing';
 import { RegisteredMcpTool } from './McpToolRegistry';
 
 export class McpDispatchSuccess {
     readonly success = true;
-    constructor(public readonly value: unknown, public readonly requestId: string) {}
+    constructor(public readonly value: DtoValue, public readonly requestId: string) {}
 }
 
 export class McpDispatchFailure {
@@ -21,7 +27,7 @@ export class McpApiDispatcher {
 
     async call(
         tool: RegisteredMcpTool,
-        requestDto: unknown,
+        requestDto: DtoValue,
         endpointBearerToken: string,
     ): Promise<McpDispatchResult> {
         const headers = new Map<string, string[]>();
@@ -31,13 +37,13 @@ export class McpApiDispatcher {
             new RequestContextHeaders().fillFromRequest(request);
             const requestId =
                 RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
-            // webpieces-disable no-unmanaged-exceptions -- this boundary sanitizes every endpoint throw
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes endpoint throws
             try {
-                const client = this.apiFactory.createApiClient<ApiClientProxy>(tool.apiClass);
-                const value = await client[tool.methodName](requestDto);
+                const client = this.apiFactory.createApiClient<ApiClientProxy>(tool.apiClass as never);
+                const value = (await client[tool.methodName](requestDto)) as DtoValue;
                 return new McpDispatchSuccess(value, requestId);
-                // webpieces-disable catch-error-pattern -- convert every throw through the safe codec
-            } catch (error: unknown) {
+            } catch (err: unknown) {
+                const error = toError(err);
                 return new McpDispatchFailure(ApiErrorCodec.encode(error), requestId);
             }
         });

@@ -7,7 +7,13 @@ import {
     ListToolsRequestSchema,
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { ApiErrorPayload, DtoValidationFailure, LogManager, toError } from '@webpieces/core-util';
+import {
+    ApiErrorPayload,
+    DtoValidationFailure,
+    DtoValue,
+    LogManager,
+    toError,
+} from '@webpieces/core-util';
 import { ApiFactory, ClassType } from '@webpieces/http-routing';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpApiDispatcher } from './McpApiDispatcher';
@@ -108,7 +114,7 @@ export class WpMcpServer {
 
     private async call(
         tool: RegisteredMcpTool,
-        args: unknown,
+        args: DtoValue,
         credential: VerifiedMcpCredential,
     ): Promise<CallToolResult> {
         const inputFailure = this.registry.schemaBuilder.validate(tool.requestClass, args ?? {});
@@ -125,15 +131,15 @@ export class WpMcpServer {
                 new ModelVisibleToolError('implementation', 'Internal Error', result.requestId),
             );
         }
-        let structured: Record<string, unknown>;
-        // webpieces-disable no-unmanaged-exceptions -- serialization failures become safe tool errors
+        let structured: Record<string, DtoValue>;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes serialization failures
         try {
             structured = this.record(result.value);
-            // webpieces-disable catch-error-pattern -- the model sees a generic error; details stay in logs
-        } catch (error: unknown) {
+        } catch (err: unknown) {
+            const error = toError(err);
             log.error(
                 `MCP response serialization failed for ${tool.apiClass.name}.${tool.methodName}`,
-                toError(error),
+                error,
             );
             return this.errorResult(
                 new ModelVisibleToolError('implementation', 'Internal Error', result.requestId),
@@ -172,13 +178,14 @@ export class WpMcpServer {
         };
     }
 
-    private record(value: unknown): Record<string, unknown> {
+    private record(value: DtoValue): Record<string, DtoValue> {
         const json = JSON.stringify(value);
-        const parsed: unknown = JSON.parse(json);
+        if (json === undefined) throw new Error('MCP structured content is not JSON serializable.');
+        const parsed = JSON.parse(json) as DtoValue;
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
             // webpieces-disable no-anonymous-object-literals -- external MCP structured-content wrapper
             return { value: parsed };
         }
-        return parsed as Record<string, unknown>;
+        return parsed as Record<string, DtoValue>;
     }
 }

@@ -7,6 +7,8 @@ const RESPONSE_DTOS = 'webpieces:response-dtos';
 // webpieces-disable no-any-unknown -- abstract class tokens necessarily erase constructor parameters
 export type DtoClass = abstract new (...args: any[]) => unknown;
 export type DtoArrayItem = 'string' | 'number' | 'integer' | 'boolean' | DtoClass;
+/** Runtime values accepted at the DTO validation boundary. */
+export type DtoValue = object | string | number | boolean | null;
 
 /** Additive field metadata; the scalar/object type itself comes from `design:type`. */
 export class WpDtoFieldOptions {
@@ -118,7 +120,7 @@ export class DtoSchemaBuilder {
         return this.buildAt(dtoClass, new Set<DtoClass>());
     }
 
-    validate(dtoClass: DtoClass, value: unknown): DtoValidationFailure | undefined {
+    validate(dtoClass: DtoClass, value: DtoValue): DtoValidationFailure | undefined {
         return this.validateAt(dtoClass, value, '$');
     }
 
@@ -214,7 +216,7 @@ export class DtoSchemaBuilder {
 
     private validateAt(
         dtoClass: DtoClass,
-        value: unknown,
+        value: DtoValue,
         path: string,
     ): DtoValidationFailure | undefined {
         this.requireDto(dtoClass);
@@ -243,7 +245,7 @@ export class DtoSchemaBuilder {
     private validateField(
         dtoClass: DtoClass,
         field: WpDtoFieldMetadata,
-        value: unknown,
+        value: DtoValue,
         path: string,
     ): DtoValidationFailure | undefined {
         // webpieces-disable no-any-unknown -- reflect-metadata returns an erased constructor token
@@ -286,7 +288,7 @@ export class DtoSchemaBuilder {
 
     private validateArray(
         options: WpDtoFieldOptions,
-        value: unknown,
+        value: DtoValue,
         path: string,
     ): DtoValidationFailure | undefined {
         if (!Array.isArray(value)) return new DtoValidationFailure(`${path} must be an array`);
