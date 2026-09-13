@@ -1,7 +1,6 @@
 import { WpMcpTool } from './McpMetadata';
 import { WpDtoFieldOptions } from './DtoSchema';
 
-// @ts-expect-error enumValues must contain at least one allowed string
 const invalidEmptyEnum = new WpDtoFieldOptions(
     'invalid enum',
     true,
@@ -9,6 +8,7 @@ const invalidEmptyEnum = new WpDtoFieldOptions(
     false,
     undefined,
     undefined,
+    // @ts-expect-error enumValues must contain at least one allowed string
     [],
 );
 
