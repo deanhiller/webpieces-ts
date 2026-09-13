@@ -9,7 +9,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
     ApiErrorPayload,
-    DtoValidationFailure,
     DtoValue,
     LogManager,
     toError,
@@ -117,8 +116,6 @@ export class WpMcpServer {
         args: DtoValue,
         credential: VerifiedMcpCredential,
     ): Promise<CallToolResult> {
-        const inputFailure = this.registry.schemaBuilder.validate(tool.requestClass, args ?? {});
-        if (inputFailure) return this.inputError(inputFailure);
         const result = await this.dispatcher.call(tool, args ?? {}, credential.endpointBearerToken);
         if (!result.success) return this.apiError(result.error, result.requestId);
 
@@ -149,10 +146,6 @@ export class WpMcpServer {
             content: [{ type: 'text', text: JSON.stringify(structured) }],
             structuredContent: structured,
         };
-    }
-
-    private inputError(failure: DtoValidationFailure): CallToolResult {
-        return this.errorResult(new ModelVisibleToolError('bad-request', failure.message));
     }
 
     private apiError(payload: ApiErrorPayload, requestId: string): CallToolResult {

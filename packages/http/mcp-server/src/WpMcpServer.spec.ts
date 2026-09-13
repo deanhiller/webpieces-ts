@@ -276,7 +276,12 @@ describe('WpMcpServer secure API bridge', () => {
         await client.close();
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({ kind: 'bad-request' });
+        expect(result.structuredContent).toMatchObject({
+            kind: 'bad-request',
+            message: 'Bad Request',
+            callerMessage: '$.userId is not allowed',
+        });
+        expect(result.structuredContent?.['requestId']).toMatch(/^svrGenReqId-/);
         expect(JSON.stringify(result)).not.toContain('admin-7');
     });
 
