@@ -116,6 +116,11 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "ensure-we-are-secure": {
+            "mode": "MODIFIED_PROJECTS",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "di-graph": {
             "mode": "RUN_EVERY_TIME",
             "turnOffRuleUntilEpoch": 0,
