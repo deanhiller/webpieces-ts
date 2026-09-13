@@ -87,7 +87,7 @@ export class WpMcpServer {
             if (!tool) {
                 throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`);
             }
-            return this.call(tool, request.params.arguments, credential);
+            return this.call(tool, request.params.arguments ?? {}, credential);
         });
         return server;
     }
