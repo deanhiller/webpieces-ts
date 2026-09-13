@@ -6,7 +6,7 @@ import { Server2Controller } from './controllers/server2-controller';
 /**
  * Server2Routes - server2's route group (a {@link RouteModule}): user filters + the one api route.
  * LogApiFilter (request/response logging) + AuthFilter are auto-installed by the framework; add
- * only user filters. server2 authenticates its CALLER (@AuthSharedSecret on Server2Api), so an
+ * only user filters. server2 authenticates its CALLER (@WpAuthSharedSecret on Server2Api), so an
  * AuthConfig holding the INTERNAL_API_SECRET value must be bound — CompanyAuthConfig does that from
  * env by default. Priority (higher runs first): 1850 RecordingFilter.
  */

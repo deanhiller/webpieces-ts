@@ -24,11 +24,11 @@ import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback'
  *
  * ## The three modes, and why none of them is restricted to a fixed host
  *
- * - `@AuthOidc` → a bearer token minted as this caller's runtime SA, audience = the final base URL.
- * - `@AuthSharedSecret` → the value this client holds for that key, as `Authorization: Webpieces …`.
+ * - `@WpAuthOidc` → a bearer token minted as this caller's runtime SA, audience = the final base URL.
+ * - `@WpAuthSharedSecret` → the value this client holds for that key, as `Authorization: Webpieces …`.
  *   Legitimate against a re-pointed URL: N services implementing ONE contract behind ONE agreed
  *   secret is a real and common topology, and often stands in for OIDC where OIDC is not available.
- * - `@AuthWebhook(name)` → the app's bound {@link WebhookSignerCallback} produces the headers. WE
+ * - `@WpAuthWebhook(name)` → the app's bound {@link WebhookSignerCallback} produces the headers. WE
  *   are the vendor on this side; see that class.
  *
  * Both credential-minting modes ride in the ONE `Authorization` header under their own scheme —
@@ -38,15 +38,18 @@ import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback'
 export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     constructor(
         private readonly gcpOidc: GcpOidc,
-        /** Only @AuthSharedSecret endpoints need it; a server that has none binds nothing. */
+        /** Only @WpAuthSharedSecret endpoints need it; a server that has none binds nothing. */
         private readonly secrets: Secrets | undefined,
-        /** Only @AuthWebhook endpoints need it, and an unbound one makes them THROW. */
+        /** Only @WpAuthWebhook endpoints need it, and an unbound one makes them THROW. */
         private readonly webhookSigner: WebhookSignerCallback | undefined,
     ) {
         super();
     }
 
-    override async filter(request: ClientRequest, nextFilter: Service<ClientRequest, Response>): Promise<Response> {
+    override async filter(
+        request: ClientRequest,
+        nextFilter: Service<ClientRequest, Response>,
+    ): Promise<Response> {
         await this.attach(request);
         return nextFilter.invoke(request);
     }
@@ -54,7 +57,10 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     private async attach(request: ClientRequest): Promise<void> {
         const mode = request.route.authMeta?.mode;
         if (mode?.kind === 'oidc') {
-            request.headers.set('Authorization', `Bearer ${await this.gcpOidc.mintIdToken(request.baseUrl)}`);
+            request.headers.set(
+                'Authorization',
+                `Bearer ${await this.gcpOidc.mintIdToken(request.baseUrl)}`,
+            );
             return;
         }
         if (mode?.kind === 'shared-secret') {
@@ -62,7 +68,7 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
             if (!secret) {
                 throw new MissingSharedSecretError(
                     `${request.contractName}.${request.route.methodName} is ` +
-                        `@AuthSharedSecret('${mode.secretKey}'), but this client's bound Secrets holds no ` +
+                        `@WpAuthSharedSecret('${mode.secretKey}'), but this client's bound Secrets holds no ` +
                         `value for that key, so there is no credential to send. Bind a Secrets carrying ` +
                         `'${mode.secretKey}'. Refusing to send is deliberate: the callee is obliged to 401 an ` +
                         `unauthenticated request, so sending it would report as the peer's failure.`,
@@ -83,13 +89,13 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     /**
      * @throws MissingWebhookSignerError when no {@link WebhookSignerCallback} is bound. FAIL CLOSED,
      *         matching the inbound side exactly: an unbound `WebhookAuthCallback` 401s every
-     *         `@AuthWebhook` endpoint rather than admitting it unverified, so an unbound signer must
+     *         `@WpAuthWebhook` endpoint rather than admitting it unverified, so an unbound signer must
      *         refuse to send rather than deliver something the partner is obliged to reject.
      */
     private async signWebhook(request: ClientRequest, name: string): Promise<void> {
         if (this.webhookSigner === undefined) {
             throw new MissingWebhookSignerError(
-                `${request.contractName}.${request.route.methodName} is @AuthWebhook('${name}'), so this ` +
+                `${request.contractName}.${request.route.methodName} is @WpAuthWebhook('${name}'), so this ` +
                     `client must SIGN the request the way ${name} verifies it — but no WebhookSignerCallback ` +
                     `is bound, so there is nothing to produce the signature. Bind one:\n` +
                     `    options.bind(WEBHOOK_SIGNER_CALLBACK).to(MyWebhookSigner);\n` +

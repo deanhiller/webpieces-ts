@@ -66,9 +66,9 @@
  *
  * Trusted keys DO keep their `httpHeader` — service-to-service propagation of a verified
  * userId is a first-class requirement, not a hole. It is safe because rule 2 gates it on
- * the endpoint's own auth mode: a route that verified WHO called it (`@AuthOidc`,
- * `@AuthSharedSecret`) accepts the caller's trusted headers; a route reachable by a
- * browser (`@AuthJwt`, public) does not.
+ * the endpoint's own auth mode: a route that verified WHO called it (`@WpAuthOidc`,
+ * `@WpAuthSharedSecret`) accepts the caller's trusted headers; a route reachable by a
+ * browser (`@WpAuthJwt`, public) does not.
  *
  * Per CLAUDE.md: data-only structures are classes, not interfaces.
  *
@@ -207,7 +207,14 @@ export class ContextKey<V, T extends Trust = Trust> {
         maskInLogs = false,
         isLogged = true,
     ): ContextKey<V, 'trusted'> {
-        return new ContextKey<V, 'trusted'>(name, 'trusted', provenance, httpHeader, maskInLogs, isLogged);
+        return new ContextKey<V, 'trusted'>(
+            name,
+            'trusted',
+            provenance,
+            httpHeader,
+            maskInLogs,
+            isLogged,
+        );
     }
 
     /**
@@ -225,7 +232,14 @@ export class ContextKey<V, T extends Trust = Trust> {
         maskInLogs = false,
         isLogged = true,
     ): ContextKey<V, 'untrusted'> {
-        return new ContextKey<V, 'untrusted'>(name, 'untrusted', undefined, httpHeader, maskInLogs, isLogged);
+        return new ContextKey<V, 'untrusted'>(
+            name,
+            'untrusted',
+            undefined,
+            httpHeader,
+            maskInLogs,
+            isLogged,
+        );
     }
 
     /** True when this key is transferred over HTTP (has an httpHeader). */

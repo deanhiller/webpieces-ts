@@ -140,7 +140,7 @@ export abstract class ProxyClient {
 
     /**
      * Reject, at bind time, an endpoint this environment cannot satisfy — e.g. a browser cannot
-     * mint the OIDC token an @AuthOidc endpoint demands. Surfacing it here beats failing on the
+     * mint the OIDC token an @WpAuthOidc endpoint demands. Surfacing it here beats failing on the
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
@@ -244,7 +244,7 @@ export abstract class ProxyClient {
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
             const fullPath = basePath + endpointPath;
             // Capture the endpoint's auth mode so the client can mint delivery auth per
-            // @AuthOidc / @AuthSharedSecret, exactly as the server verifies it.
+            // @WpAuthOidc / @WpAuthSharedSecret, exactly as the server verifies it.
             const authMeta = getAuthMeta(apiPrototype, methodName);
             this.assertEndpointSupported(authMeta, methodName);
             const formPost = isFormPost(apiPrototype, methodName);
@@ -328,17 +328,17 @@ export abstract class ProxyClient {
             );
         }
         const authMode = route.authMeta?.mode;
-        // @AuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
+        // @WpAuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
         // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
         if (authMode?.kind === 'apikey') {
             throw new Error(
-                `${this.apiName}.${route.methodName} is @AuthApiKey('${authMode.regime}') — only the partner ` +
+                `${this.apiName}.${route.methodName} is @WpAuthApiKey('${authMode.regime}') — only the partner ` +
                     `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
                     `so a webpieces client has no credential to send.`,
             );
         }
-        // @AuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
-        // that the vendor is always somebody else — but `@AuthWebhook(name)` names a signing SCHEME,
+        // @WpAuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
+        // that the vendor is always somebody else — but `@WpAuthWebhook(name)` names a signing SCHEME,
         // not a direction, and for an OUTBOUND partner webhook WE are the vendor. The environment's
         // outbound-auth filter asks its bound signer to produce the signature, which is the exact
         // mirror of the inbound WebhookAuthCallback that verifies one.

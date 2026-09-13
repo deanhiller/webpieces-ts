@@ -23,9 +23,11 @@ export const RULE_NAMES = {
     NO_CLIENT_CREATION_OUTSIDE_SERVER_OR_CLIENT: 'no-client-creation-outside-server-or-client',
     NO_PROCESS_EXIT_OUTSIDE_MAIN: 'no-process-exit-outside-main',
     NO_FUNCTION_OUTSIDE_CLASS: 'no-function-outside-class',
-    INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS: 'inject-annotation-not-needed-for-concrete-class',
+    INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS:
+        'inject-annotation-not-needed-for-concrete-class',
     FRAMEWORK_TAG: 'framework-tag',
     ROLE_TAG: 'role-tag',
+    ENSURE_WE_ARE_SECURE: 'ensure-we-are-secure',
     NO_INLINE_TYPES: 'no-inline-types',
     NO_DIRECT_API_RESOLVER: 'no-direct-api-resolver',
     NO_CUSTOM_CSS: 'no-custom-css',

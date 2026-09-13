@@ -10,7 +10,7 @@ const log = LogManager.getLogger('gcp-identity-oidc');
 /**
  * Prefix marking a deterministic local (off-GCP) OIDC token. Real Google-signed
  * tokens never start with this, so verify can tell them apart. This is what keeps
- * the @AuthOidc code path fully exercised in tests without any GCP round-trip.
+ * the @WpAuthOidc code path fully exercised in tests without any GCP round-trip.
  */
 const DEV_TOKEN_PREFIX = 'dev-oidc.';
 
@@ -93,7 +93,7 @@ export class GcpOidc {
     }
 
     /**
-     * @AuthOidc() (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
+     * @WpAuthOidc() (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
      * enforces run.invoker. If it is actually PUBLIC, warn LOUDLY (once): we still admit only
      * Google-signed callers, but the edge is not filtering WHO. Never fails — this is advisory.
      */
@@ -107,7 +107,7 @@ export class GcpOidc {
         }
         if (await this.isServicePublic()) {
             log.error(
-                'This endpoint is currently public but marked @AuthOidc which requires the service to be ' +
+                'This endpoint is currently public but marked @WpAuthOidc which requires the service to be ' +
                     'private. You are currently running in a very insecure mode; however, we are only allowing ' +
                     'google-signed callers in. The edge will validate callers are allowed in (make the Cloud Run ' +
                     'service private — remove the allUsers run.invoker binding) to reduce your attack surface.',
@@ -131,11 +131,15 @@ export class GcpOidc {
             return (res.data.bindings ?? []).some(
                 (binding: IamBinding) =>
                     binding.role === 'roles/run.invoker' &&
-                    (binding.members ?? []).some((m: string) => m === 'allUsers' || m === 'allAuthenticatedUsers'),
+                    (binding.members ?? []).some(
+                        (m: string) => m === 'allUsers' || m === 'allAuthenticatedUsers',
+                    ),
             );
         } catch (err: unknown) {
             const error = toError(err);
-            log.debug(`Could not read own Cloud Run IAM policy (need run.services.getIamPolicy): ${error.message}`);
+            log.debug(
+                `Could not read own Cloud Run IAM policy (need run.services.getIamPolicy): ${error.message}`,
+            );
             return false;
         }
     }

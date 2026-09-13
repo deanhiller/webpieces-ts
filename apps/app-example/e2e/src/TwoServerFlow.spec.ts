@@ -9,7 +9,11 @@ import { ClientRegistry } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
 import { Server2AppModules } from '../../server2/src/Server2AppModules';
-import { TestAuthConfig, TestJwtHook, TEST_SHARED_SECRET } from '../../client-server/src/test/TestAuthConfig';
+import {
+    TestAuthConfig,
+    TestJwtHook,
+    TEST_SHARED_SECRET,
+} from '../../client-server/src/test/TestAuthConfig';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -36,7 +40,7 @@ let logLines: string[];
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 async function bootBothServers(): Promise<void> {
-    // Server2Api is @AuthSharedSecret('INTERNAL_API_SECRET'): server2 must ACCEPT this value
+    // Server2Api.fetchValue is method-level @WpAuthSharedSecret('INTERNAL_API_SECRET'): server2 must ACCEPT this value
     // (CompanyAuthConfig reads it from env) and client-server's outbound client must SEND it (its
     // InversifyModule builds Secrets from the same env var). Setting it here wires both halves the
     // way prod does, instead of rebinding two containers.
@@ -50,7 +54,10 @@ async function bootBothServers(): Promise<void> {
     // app-specific headers) and client-server LAST (it carries the header superset), so the
     // shared global registry ends configured as the UNION both servers need.
     const server2ApiFactory = await setupCompanyRuntime(Server2AppModules.create());
-    server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(express(), server2Port);
+    server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(
+        express(),
+        server2Port,
+    );
 
     // Rebind AuthConfig to the test stub so the request's bearer token passes the framework
     // AuthFilter (this test is about context propagation, not real JWT verification).
@@ -58,8 +65,14 @@ async function bootBothServers(): Promise<void> {
         (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
         (await options.rebind(JWT_HOOK)).to(TestJwtHook);
     });
-    const clientApiFactory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
-    clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);
+    const clientApiFactory = await setupCompanyRuntime(
+        ClientServerAppModules.create(),
+        new CompanySetupOptions(undefined, authOverride),
+    );
+    clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(
+        express(),
+        clientServerPort,
+    );
 
     // Capture BOTH servers' log output (they share this test process)
     logLines = [];
@@ -85,7 +98,7 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'authorization': 'Bearer secret-token-abcdef',
+                authorization: 'Bearer secret-token-abcdef',
                 'x-tenant-id': 'tenant-99',
                 'x-request-id': 'caller-req-1',
             },
@@ -101,8 +114,12 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
         // RequestContext.buildLogFields() per record. Context is therefore verified via the echo.
         // The identity is the API CONTRACT class (SaveApi / Server2Api), NOT the controller impl —
         // so a server log line MATCHES the client's for the same call (jsonPayload.api.method.apiClass).
-        expect(logLines.some((l: string) => l.includes('[API-server-req] SaveApi.save'))).toBe(true);
-        expect(logLines.some((l: string) => l.includes('[API-server-req] Server2Api.fetchValue'))).toBe(true);
+        expect(logLines.some((l: string) => l.includes('[API-server-req] SaveApi.save'))).toBe(
+            true,
+        );
+        expect(
+            logLines.some((l: string) => l.includes('[API-server-req] Server2Api.fetchValue')),
+        ).toBe(true);
 
         // The credential NEVER leaves hop 1. `authorization` is read off the inbound HttpRequest and
         // is not a ContextKey, so it never enters the RequestContext, is never logged, and is never
@@ -112,7 +129,7 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
 
         // --- Response echo from hop 2: proves the context ARRIVED, not merely that it was logged ---
         const echo = body.matches![0].description!;
-        expect(echo).toContain('tenant=tenant-99');            // company header crossed the hop
+        expect(echo).toContain('tenant=tenant-99'); // company header crossed the hop
         // ONE id for the whole call tree: the caller's x-request-id reached hop 2 UNCHANGED.
         // Nobody rewrote it, nobody minted a second one.
         expect(echo).toContain('requestId=caller-req-1');

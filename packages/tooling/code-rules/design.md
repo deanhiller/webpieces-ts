@@ -17,6 +17,8 @@ graph TD
     CatchErrorPatternValidator["CatchErrorPatternValidator"]
     CodeRulesApp["CodeRulesApp"]:::controller
     CodeRulesEngine["CodeRulesEngine"]
+    EnsureWeAreSecureConfig["EnsureWeAreSecureConfig"]:::many
+    EnsureWeAreSecureValidator["EnsureWeAreSecureValidator"]
     FrameworkTagConfig["FrameworkTagConfig"]:::many
     FrameworkTagValidator["FrameworkTagValidator"]
     InjectAnnotationNotNeededForConcreteClassConfig["InjectAnnotationNotNeededForConcreteClassConfig"]:::many
@@ -66,6 +68,7 @@ graph TD
     CatchErrorPatternValidator --> CatchErrorPatternConfig
     CodeRulesApp --> CodeRulesEngine
     CodeRulesEngine --> CatchErrorPatternValidator
+    CodeRulesEngine --> EnsureWeAreSecureValidator
     CodeRulesEngine --> FrameworkTagValidator
     CodeRulesEngine --> InjectAnnotationNotNeededForConcreteClassValidator
     CodeRulesEngine --> MatchRulesChecker
@@ -90,6 +93,7 @@ graph TD
     CodeRulesEngine --> RoleTagValidator
     CodeRulesEngine --> RuleReporter
     CodeRulesEngine --> WorkspaceRoot
+    EnsureWeAreSecureValidator --> EnsureWeAreSecureConfig
     FrameworkTagValidator --> FrameworkTagConfig
     InjectAnnotationNotNeededForConcreteClassValidator --> InjectAnnotationNotNeededForConcreteClassConfig
     MatchRulesHolder --> readonly_MatchRuleConfig__

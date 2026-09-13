@@ -4,14 +4,14 @@ import { GcpOidc } from '@webpieces/gcp-identity';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
     ApiPath,
-    AuthLocalOnly,
+    WpAuthLocalOnly,
     ContextKey,
     Endpoint,
     EndpointNotFoundError,
     HttpErrorStatus,
     HeaderRegistry,
     UnauthorizedError,
-    Public,
+    WpAuthPublic,
     RouteMetadata,
     RuntimeLocality,
     AuthMeta,
@@ -25,18 +25,18 @@ import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 /**
- * The ENFORCEMENT half of `@AuthLocalOnly` (the decorator + locality seam + outbound-trust half is
- * pinned in core-util's `AuthLocalOnly.spec.ts`).
+ * The ENFORCEMENT half of `@WpAuthLocalOnly` (the decorator + locality seam + outbound-trust half is
+ * pinned in core-util's `WpAuthLocalOnly.spec.ts`).
  *
  * TWO gates, ONE declaration. Off-local the route is never registered (`ApiRoutingFactory`), and if
  * something registers it by hand anyway, `AuthFilter` 404s it. That is deliberately the same pair of
  * checks apps used to hand-roll across a route module and a controller — the difference is that both
- * now read the single `@AuthLocalOnly()` on the contract instead of being kept in sync by a comment.
+ * now read the single `@WpAuthLocalOnly()` on the contract instead of being kept in sync by a comment.
  */
 
-@AuthLocalOnly()
 @ApiPath('/dev')
 abstract class DevToolsApi {
+    @WpAuthLocalOnly()
     @Endpoint('/logs', 'rpc')
     shipLogs(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -49,15 +49,15 @@ class DevToolsController extends DevToolsApi {
     }
 }
 
-@Public()
 @ApiPath('/open')
 abstract class OpenApi {
+    @WpAuthPublic('Open route fixture')
     @Endpoint('/ping', 'rpc')
     ping(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
-    @AuthLocalOnly()
+    @WpAuthLocalOnly()
     @Endpoint('/debug', 'rpc')
     debug(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -104,8 +104,12 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 }
 
 const LOCAL_ONLY_ROUTE = new RouteMetadata(
-    'POST', '/dev/logs', 'shipLogs', 'DevToolsController',
-    new AuthMeta({ kind: 'local-only' }), 'DevToolsApi',
+    'POST',
+    '/dev/logs',
+    'shipLogs',
+    'DevToolsController',
+    new AuthMeta({ kind: 'local-only' }),
+    'DevToolsApi',
 );
 
 /**
@@ -131,7 +135,7 @@ afterEach(() => {
     RuntimeLocality.clear();
 });
 
-describe('AuthFilter enforces @AuthLocalOnly', () => {
+describe('AuthFilter enforces @WpAuthLocalOnly', () => {
     it('SERVES the endpoint when the startup declared this a local developer machine', async () => {
         RuntimeLocality.declare('local');
         const next = new RecordingNext();
@@ -152,7 +156,9 @@ describe('AuthFilter enforces @AuthLocalOnly', () => {
 
         await expect(runFilter(next)).rejects.toThrow(EndpointNotFoundError);
         // 404 on the wire — the SAME answer an unregistered route gives, which is the whole point.
-        await expect(runFilter(next).catch((err: EndpointNotFoundError) => HttpErrorStatus.code(err))).resolves.toBe(404);
+        await expect(
+            runFilter(next).catch((err: EndpointNotFoundError) => HttpErrorStatus.code(err)),
+        ).resolves.toBe(404);
         expect(next.invoked).toBe(false);
     });
 
@@ -172,20 +178,25 @@ describe('AuthFilter enforces @AuthLocalOnly', () => {
 /**
  * The INBOUND twin of the `DestinationTrust` rule pinned in core-util's spec. One rule seen from two
  * ends: the client omits trusted keys for a destination that cannot verify it, and the server rejects
- * trusted keys on a route that cannot verify the sender. `@AuthLocalOnly` verifies WHERE WE RUN, not
+ * trusted keys on a route that cannot verify the sender. `@WpAuthLocalOnly` verifies WHERE WE RUN, not
  * WHO CALLS — and it has no authenticator at all, so nothing can ever vouch for an inbound trusted
  * header and every one of them must reject the request.
  *
  * If these two ends disagreed, every local-only call carrying context would 401 and look like a
  * framework bug.
  */
-describe('AuthFilter treats @AuthLocalOnly as NOT caller-verifying on the inbound side', () => {
+describe('AuthFilter treats @WpAuthLocalOnly as NOT caller-verifying on the inbound side', () => {
     /** Fill the context from a wire request, then run AuthFilter on the local-only route. */
-    async function inboundThenFilter(headers: Map<string, string[]>, next: RecordingNext): Promise<WpResponse<unknown>> {
+    async function inboundThenFilter(
+        headers: Map<string, string[]>,
+        next: RecordingNext,
+    ): Promise<WpResponse<unknown>> {
         HeaderRegistry.configure([USER_ID, TENANT], /*platformHeaders*/ true);
         RuntimeLocality.declare('local');
         return RequestContext.run(async () => {
-            new RequestContextHeaders().fillFromRequest(new HttpRequest('POST', '/dev/logs', headers));
+            new RequestContextHeaders().fillFromRequest(
+                new HttpRequest('POST', '/dev/logs', headers),
+            );
             return newAuthFilter().filter(new MethodMeta(LOCAL_ONLY_ROUTE), next);
         });
     }

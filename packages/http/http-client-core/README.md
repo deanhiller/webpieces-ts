@@ -18,5 +18,5 @@ nothing but `core-util`, so no node-only import can reach a browser bundle.
 
 `destination` is a `DestinationTrust`, derived here from the route's own `AuthMode`, and it decides
 whether TRUSTED context keys (`x-user-id`, `x-org-id`, `x-webpieces-roles`) ride along: only an
-endpoint that authenticates its caller (`@AuthOidc` / `@AuthSharedSecret`) receives them. Untrusted
+endpoint that authenticates its caller (`@WpAuthOidc` / `@WpAuthSharedSecret`) receives them. Untrusted
 keys always travel. See `docs/architecture/context-propagation.md`.

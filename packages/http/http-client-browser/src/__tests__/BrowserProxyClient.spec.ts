@@ -2,9 +2,9 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
-    AuthApiKey,
-    AuthOidc,
-    AuthSharedSecret,
+    WpAuthApiKey,
+    WpAuthOidc,
+    WpAuthSharedSecret,
     ClientRegistry,
     ContextKey,
     Endpoint,
@@ -18,7 +18,7 @@ import {
     UnauthorizedError,
     LogManager,
     OfflineError,
-    Public,
+    WpAuthPublic,
     Rpc,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
@@ -39,7 +39,7 @@ class SaveRequest {
 @ApiPath('/public')
 abstract class PublicApi {
     @Endpoint('/save', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     save(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -50,7 +50,7 @@ abstract class PublicApi {
 @ApiPath('/secure')
 abstract class OidcApi {
     @Endpoint('/internalOp', 'rpc')
-    @AuthOidc()
+    @WpAuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -61,7 +61,7 @@ abstract class OidcApi {
 @ApiPath('/secret')
 abstract class SharedSecretApi {
     @Endpoint('/internalOp', 'rpc')
-    @AuthSharedSecret('INTERNAL_API_SECRET')
+    @WpAuthSharedSecret('INTERNAL_API_SECRET')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -72,7 +72,7 @@ abstract class SharedSecretApi {
 @ApiPath('/management/v1')
 abstract class ApiKeyApi {
     @Endpoint('/orders', 'rpc')
-    @AuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])
+    @WpAuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     listOrders(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -97,7 +97,9 @@ afterEach(() => {
 /** Capture the URL the client actually fetches, without a network. */
 function stubFetch(): { url: () => string } {
     const fetchMock = vi.fn(() =>
-        Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+        Promise.resolve(
+            new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
     return { url: (): string => String(fetchMock.mock.calls[0]?.[0]) };
@@ -107,7 +109,12 @@ function stubFetch(): { url: () => string } {
 function stubFetchWithHeaders(status: number, headers: Record<string, string>): void {
     const body = status < 400 ? '{}' : JSON.stringify({ code: 'ERR', message: 'boom' });
     const fetchMock = vi.fn(() =>
-        Promise.resolve(new Response(body, { status, headers: { 'Content-Type': 'application/json', ...headers } })),
+        Promise.resolve(
+            new Response(body, {
+                status,
+                headers: { 'Content-Type': 'application/json', ...headers },
+            }),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
 }
@@ -127,16 +134,24 @@ function stubFetchProtocolError(status: number, message: string): void {
 
 /** Stub fetch so the call REJECTS at the network layer — offline, DNS failure, CORS preflight. */
 function stubFetchNetworkReject(err: Error): void {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(err)));
+    vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.reject(err)),
+    );
 }
 
 /** Stub fetch with a body that is NOT JSON — an infra 502/504 serving an HTML error page. */
 function stubFetchNonJsonBody(status: number): void {
     const fetchMock = vi.fn(() =>
-        Promise.resolve(new Response(`<html><head><title>${status} from the load balancer</title></head></html>`, {
-            status,
-            headers: { 'Content-Type': 'text/html', 'x-myorg-server-version': '4.5.6' },
-        })),
+        Promise.resolve(
+            new Response(
+                `<html><head><title>${status} from the load balancer</title></head></html>`,
+                {
+                    status,
+                    headers: { 'Content-Type': 'text/html', 'x-myorg-server-version': '4.5.6' },
+                },
+            ),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
 }
@@ -219,34 +234,39 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 /**
  * A browser holds no service credentials: it cannot mint an OIDC token as a runtime service
  * account, and it must never ship a shared secret. Both are rejected at createRpcClient(), not on the
- * first call in production. `@AuthApiKey` is refused too, for the adjacent reason: the credential is a
+ * first call in production. `@WpAuthApiKey` is refused too, for the adjacent reason: the credential is a
  * CUSTOMER's key (which a browser must never carry) and the header carrying it is the app's ApiKeyHook's
  * choice, so no webpieces client knows what to send.
  */
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
-    it('throws for an @AuthOidc contract', () => {
-        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc')))
-            .toThrow(/@AuthOidc — a browser cannot hold service credentials/);
+    it('throws for an @WpAuthOidc contract', () => {
+        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc'))).toThrow(
+            /@WpAuthOidc — a browser cannot hold service credentials/,
+        );
     });
 
-    it('throws for an @AuthSharedSecret contract', () => {
-        expect(() => factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')))
-            .toThrow(/@AuthSharedSecret — a browser cannot hold service credentials/);
+    it('throws for an @WpAuthSharedSecret contract', () => {
+        expect(() =>
+            factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')),
+        ).toThrow(/@WpAuthSharedSecret — a browser cannot hold service credentials/);
     });
 
-    it('throws for an @AuthApiKey contract, naming the regime and who may actually call it', () => {
-        expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc')))
-            .toThrow(/@AuthApiKey\('onetablet-partner'\).*customer-held/s);
+    it('throws for an @WpAuthApiKey contract, naming the regime and who may actually call it', () => {
+        expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc'))).toThrow(
+            /@WpAuthApiKey\('onetablet-partner'\).*customer-held/s,
+        );
     });
 
-    it('accepts a @Public contract and binds its routes', () => {
+    it('accepts a @WpAuthPublic contract and binds its routes', () => {
         const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
 
         // The Proxy resolves the declared endpoint...
         expect(typeof client.save).toBe('function');
         // ...and rejects one the contract never declared.
         // webpieces-disable no-any-unknown -- deliberately probing an undeclared method
-        expect(() => (client as any).notAnEndpoint).toThrow(/No route found for method 'notAnEndpoint'/);
+        expect(() => (client as any).notAnEndpoint).toThrow(
+            /No route found for method 'notAnEndpoint'/,
+        );
     });
 });
 
@@ -303,7 +323,6 @@ describe('BrowserProxyClient reports the request lifecycle to a registered liste
         expect(outcome.error).toBeDefined();
         expect(outcome.headers?.get('x-myorg-server-version')).toBe('9.9.9');
     });
-
 });
 
 /**
@@ -320,7 +339,9 @@ describe('BrowserProxyClient ends the lifecycle even when no usable body ever ar
         // The raw reject is now CLASSIFIED into a typed OfflineError before it rethrows, so an app
         // does one `instanceof OfflineError` check instead of matching browser message text.
         // webpieces-disable no-unmanaged-exceptions -- the classified reject rethrows after the seam fires
-        await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toBeInstanceOf(OfflineError);
+        await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toBeInstanceOf(
+            OfflineError,
+        );
 
         const outcome = listener.onlyEnd();
         expect(outcome.ok).toBe(false);
@@ -361,7 +382,9 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         stubFetchNonJsonBody(502);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(error).toBeInstanceOf(BadGatewayError);
         expect(error).not.toBeInstanceOf(SyntaxError);
@@ -375,7 +398,9 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         stubFetchNonJsonBody(503);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(error).toBeInstanceOf(ServiceUnavailableError);
         expect(error).not.toHaveProperty('code');
@@ -385,7 +410,9 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         stubFetchNonJsonBody(200);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toContain('PublicApi.save');
@@ -411,7 +438,9 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         stubFetchProtocolError(404, 'no such order');
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(error).toBeInstanceOf(NotFoundError);
         expect(error).not.toHaveProperty('code');
@@ -421,19 +450,25 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
     it('400 / 401 / 403 each stay their own type, with their own status and message', async () => {
         stubFetchProtocolError(400, 'email is required');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const badRequest = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const badRequest = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
         expect(badRequest).toBeInstanceOf(BadRequestError);
         expect(badRequest).not.toHaveProperty('code');
 
         stubFetchProtocolError(401, 'token expired');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const unauthorized = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const unauthorized = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
         expect(unauthorized).toBeInstanceOf(UnauthorizedError);
         expect(unauthorized).not.toHaveProperty('code');
 
         stubFetchProtocolError(403, 'not your org');
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const forbidden = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const forbidden = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
         expect(forbidden).toBeInstanceOf(ForbiddenError);
         expect(forbidden).not.toHaveProperty('code');
     });
@@ -442,7 +477,9 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         stubFetchNonJsonBody(404);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await client().save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(error).toBeInstanceOf(NotFoundError);
         expect((error as Error).message).toContain('PublicApi.save');
@@ -454,7 +491,9 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
         const listener = new RecordingListener();
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const error = await clientWith(listener).save(new SaveRequest('q')).catch((err: unknown) => err);
+        const error = await clientWith(listener)
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
 
         expect(listener.onlyEnd().error).toBe(error);
     });
@@ -480,7 +519,9 @@ class SnapshotOnEmitLoggerFactory implements LoggerFactory {
             if (!message.includes('[API-')) {
                 return;
             }
-            const tag = BrowserApiCallContext.snapshot().get(WebpiecesCoreHeaders.API_CALL_INFO.name);
+            const tag = BrowserApiCallContext.snapshot().get(
+                WebpiecesCoreHeaders.API_CALL_INFO.name,
+            );
             this.seen.push(tag as ApiCallInfo | undefined);
         };
         return { trace: record, debug: record, info: record, warn: record, error: record };
@@ -505,7 +546,9 @@ describe('BrowserProxyClient stamps the api tag with no factory install and no b
         expect(capturing.seen[1]?.result).toBe('success');
 
         // set → log → remove is one synchronous span, so nothing survives the call.
-        expect(BrowserApiCallContext.snapshot().get(WebpiecesCoreHeaders.API_CALL_INFO.name)).toBeUndefined();
+        expect(
+            BrowserApiCallContext.snapshot().get(WebpiecesCoreHeaders.API_CALL_INFO.name),
+        ).toBeUndefined();
     });
 
     it('two independently built clients stamp into the SAME static slot the logger reads', async () => {
@@ -513,23 +556,32 @@ describe('BrowserProxyClient stamps the api tag with no factory install and no b
         LogManager.setFactory(capturing);
         stubFetch();
 
-        const other = new ClientHttpBrowserFactory(new MutableContextStore())
-            .createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        const other = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
+            PublicApi,
+            new ClientConfig('save-svc'),
+        );
         await client().save(new SaveRequest('q'));
         await other.save(new SaveRequest('q'));
 
         // 4 lines from 2 different BrowserApiCallContext instances — none of them silently blank.
         expect(capturing.seen.length).toBe(4);
-        expect(capturing.seen.every(tag => tag !== undefined)).toBe(true);
+        expect(capturing.seen.every((tag) => tag !== undefined)).toBe(true);
     });
 });
 
 it('a real Fetch 266 response remains protocol-ok but throws the user message from a generated browser client', async () => {
-    const response = new Response(JSON.stringify({ message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH' }),
-        { status: 266, headers: { 'content-type': 'application/json' } });
+    const response = new Response(
+        JSON.stringify({ message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH' }),
+        { status: 266, headers: { 'content-type': 'application/json' } },
+    );
     expect(response.ok).toBe(true);
-    vi.stubGlobal('fetch', vi.fn(async () => response));
+    vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => response),
+    );
     await expect(client().save(new SaveRequest('password'))).rejects.toMatchObject({
-        name: 'UserError', message: 'Passwords do not match', errorCode: 'PASSWORD_MISMATCH',
+        name: 'UserError',
+        message: 'Passwords do not match',
+        errorCode: 'PASSWORD_MISMATCH',
     });
 });

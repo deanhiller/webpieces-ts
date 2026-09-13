@@ -8,6 +8,7 @@ import {
     getMaskSpec,
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
+    assertNotInternalApi,
     AuthMode,
     DestinationTrust,
     MaskSpec,
@@ -89,6 +90,7 @@ export class TaskProxyClient {
 
     /** Bind this client to one @PubSub contract + target. */
     init(apiClass: ApiPrototype<object>, config: TaskClientConfig): void {
+        assertNotInternalApi(apiClass, 'Cloud Tasks client');
         if (!isApiPath(apiClass)) {
             throw new Error(
                 `Class ${apiClass.name || 'Unknown'} must be decorated with @ApiPath()`,
@@ -207,12 +209,12 @@ export class TaskProxyClient {
      *
      * No credential can appear here: `authorization` is read off the inbound HttpRequest and is not
      * a ContextKey, so it never enters the RequestContext to be transferred. The invoker mints the
-     * task's own delivery auth per the endpoint's @AuthOidc / @AuthSharedSecret mode.
+     * task's own delivery auth per the endpoint's @WpAuthOidc / @WpAuthSharedSecret mode.
      *
      * TRUSTED keys DO flow on this path, and that is the point of deriving {@link DestinationTrust}
      * from `plan.authMode` rather than hardcoding it: a task is delivered under the OIDC token the
      * invoker mints, so the delivery endpoint authenticates its caller and its AuthFilter admits the
-     * userId/orgId we vouched for. A @PubSub endpoint declared @Public or @AuthJwt would not, and it
+     * userId/orgId we vouched for. A @PubSub endpoint declared @WpAuthPublic or @WpAuthJwt would not, and it
      * correctly stops receiving them — the enqueue keeps working, minus context the callee would
      * have 401'd on.
      */

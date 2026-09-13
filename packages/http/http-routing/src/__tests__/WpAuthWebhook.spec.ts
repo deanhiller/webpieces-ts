@@ -1,11 +1,17 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { HttpRequest, PendingWireTrust, RawHttpRequest, RawRequest, RequestContext } from '@webpieces/core-context';
+import {
+    HttpRequest,
+    PendingWireTrust,
+    RawHttpRequest,
+    RawRequest,
+    RequestContext,
+} from '@webpieces/core-context';
 import {
     ApiPath,
     AuthMeta,
-    AuthWebhook,
+    WpAuthWebhook,
     ContextKey,
     ContextTuple,
     Endpoint,
@@ -24,7 +30,7 @@ import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 /**
- * The ENFORCEMENT half of `@AuthWebhook` (the contract half is pinned in core-util's
+ * The ENFORCEMENT half of `@WpAuthWebhook` (the contract half is pinned in core-util's
  * `webhook-decorator.spec.ts`, the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
  *
  * Everything here is about one property: an `external` endpoint's `calledBy` becomes a FACT instead of
@@ -33,7 +39,7 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @AuthWebhook('sentry')
+    @WpAuthWebhook('sentry')
     @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -48,7 +54,7 @@ class SentryHookController extends SentryHookApi {
 
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @AuthWebhook('sentry')
+    @WpAuthWebhook('sentry')
     @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -62,9 +68,15 @@ class ForgotRawBodyController extends ForgotRawBodyApi {
 }
 
 const WEBHOOK_ROUTE = new RouteMetadata(
-    'POST', '/hook/sentry/issue', 'notify', 'SentryHookController',
-    new AuthMeta({ kind: 'webhook', name: 'sentry' }), 'SentryHookApi',
-    /*formPost*/ false, /*mask*/ undefined, /*rawBody*/ true,
+    'POST',
+    '/hook/sentry/issue',
+    'notify',
+    'SentryHookController',
+    new AuthMeta({ kind: 'webhook', name: 'sentry' }),
+    'SentryHookApi',
+    /*formPost*/ false,
+    /*mask*/ undefined,
+    /*rawBody*/ true,
 );
 
 /**
@@ -112,7 +124,10 @@ class TestWebhookAuthCallback extends WebhookAuthCallback {
      * `request.raw` is read with NO `!` and NO guard — that is the point of {@link RawHttpRequest}.
      * AuthFilter checked the bytes are there once, and the type carries the result here.
      */
-    override async verifyWebhook(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
+    override async verifyWebhook(
+        name: string,
+        request: RawHttpRequest,
+    ): Promise<AuthenticatedCaller> {
         this.seenName = name;
         this.seenBody = request.raw.rawBody;
         this.seenUrl = request.raw.absoluteUrl;
@@ -122,7 +137,11 @@ class TestWebhookAuthCallback extends WebhookAuthCallback {
         }
         // Proving the signature proved WHICH vendor account this payload is for — a hook that could
         // only return void had no way to say so, and the controller had to re-derive it.
-        return new AuthenticatedCaller('sentry-account', [], [new ContextTuple(VENDOR_ACCOUNT, 'org-777')]);
+        return new AuthenticatedCaller(
+            'sentry-account',
+            [],
+            [new ContextTuple(VENDOR_ACCOUNT, 'org-777')],
+        );
     }
 }
 
@@ -154,7 +173,12 @@ function webhookRequest(body: string, parseError?: Error): HttpRequest {
         'POST',
         '/hook/sentry/issue',
         new Map<string, string[]>([['sentry-hook-signature', ['abc123']]]),
-        new RawRequest('https://api.example.com/hook/sentry/issue', Buffer.from(body, 'utf8'), '1.2.3.4', parseError),
+        new RawRequest(
+            'https://api.example.com/hook/sentry/issue',
+            Buffer.from(body, 'utf8'),
+            '1.2.3.4',
+            parseError,
+        ),
     );
 }
 
@@ -176,7 +200,7 @@ async function runFilter(
     });
 }
 
-describe('AuthFilter enforces @AuthWebhook', () => {
+describe('AuthFilter enforces @WpAuthWebhook', () => {
     it('hands the hook the vendor name, the verbatim bytes, the absolute url and the headers', async () => {
         const hook = new TestWebhookAuthCallback(true);
         const next = new RecordingNext();
@@ -193,8 +217,9 @@ describe('AuthFilter enforces @AuthWebhook', () => {
     it('401s and NEVER enters the controller when the hook rejects the signature', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
-            .rejects.toThrow(UnauthorizedError);
+        await expect(
+            runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
+        ).rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -205,8 +230,9 @@ describe('AuthFilter enforces @AuthWebhook', () => {
     it('401s on every webhook endpoint when NO WebhookAuthCallback is bound', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, undefined, webhookRequest('{}')))
-            .rejects.toThrow(/Webhook auth is not enabled/);
+        await expect(runFilter(next, undefined, webhookRequest('{}'))).rejects.toThrow(
+            /Webhook auth is not enabled/,
+        );
         expect(next.invoked).toBe(false);
     });
 
@@ -215,8 +241,9 @@ describe('AuthFilter enforces @AuthWebhook', () => {
         const next = new RecordingNext();
         const noRaw = new HttpRequest('POST', '/hook/sentry/issue', new Map());
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(true), noRaw))
-            .rejects.toThrow(/no raw request was retained/);
+        await expect(runFilter(next, new TestWebhookAuthCallback(true), noRaw)).rejects.toThrow(
+            /no raw request was retained/,
+        );
         expect(next.invoked).toBe(false);
     });
 
@@ -244,7 +271,11 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
     it('puts the returned ContextTuple entries into RequestContext', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{"title":"boom"}'));
+        await runFilter(
+            next,
+            new TestWebhookAuthCallback(true),
+            webhookRequest('{"title":"boom"}'),
+        );
 
         expect(next.invoked).toBe(true);
         expect(next.accountSeenByController).toBe('org-777');
@@ -265,8 +296,9 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
     it('stamps NOTHING when the signature fails — a rejected hook returns no caller at all', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')))
-            .rejects.toThrow(UnauthorizedError);
+        await expect(
+            runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
+        ).rejects.toThrow(UnauthorizedError);
         expect(next.accountSeenByController).toBeUndefined();
     });
 });
@@ -277,14 +309,16 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
  * trusted context headers arriving alongside a perfectly valid signature are NOT believed. Only a
  * value the hook itself independently derived is admitted.
  */
-describe('@AuthWebhook does NOT verify its caller, so forwarded trusted context is not believed', () => {
+describe('@WpAuthWebhook does NOT verify its caller, so forwarded trusted context is not believed', () => {
     it('rejects an inbound trusted header the hook did not independently derive', async () => {
         const next = new RecordingNext();
         const victimKey = ContextKey.trusted<string>('userId', 'a verified user id', 'x-user-id');
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
-            new ContextTuple(victimKey, 'someone-elses-user'),
-        ])).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
+        await expect(
+            runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
+                new ContextTuple(victimKey, 'someone-elses-user'),
+            ]),
+        ).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
         expect(next.invoked).toBe(false);
     });
 
@@ -309,8 +343,13 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const next = new RecordingNext();
         const parseError = new Error('Unexpected token');
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('not json', parseError)))
-            .rejects.toThrow(UnauthorizedError);
+        await expect(
+            runFilter(
+                next,
+                new TestWebhookAuthCallback(false),
+                webhookRequest('not json', parseError),
+            ),
+        ).rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -318,17 +357,24 @@ describe('a malformed body answers 401 before it answers 400', () => {
         const next = new RecordingNext();
         const parseError = new Error('Unexpected token');
 
-        await expect(runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('not json', parseError)))
-            .rejects.toThrow(BadRequestError);
+        await expect(
+            runFilter(
+                next,
+                new TestWebhookAuthCallback(true),
+                webhookRequest('not json', parseError),
+            ),
+        ).rejects.toThrow(BadRequestError);
         expect(next.invoked).toBe(false);
     });
 });
 
 describe('ApiRoutingFactory refuses a webhook route that kept no bytes', () => {
     it('throws at WIRING time, naming the endpoint and the fix', () => {
-        expect(() => new ApiRoutingFactory(ForgotRawBodyApi, ForgotRawBodyController)
-            .configure(new CollectingRouteBuilder()))
-            .toThrow(/is @AuthWebhook.*rawBody: true/s);
+        expect(() =>
+            new ApiRoutingFactory(ForgotRawBodyApi, ForgotRawBodyController).configure(
+                new CollectingRouteBuilder(),
+            ),
+        ).toThrow(/is @WpAuthWebhook.*rawBody: true/s);
     });
 
     it('registers the route, carrying rawBody on its metadata, when the pairing is right', () => {

@@ -1,5 +1,5 @@
 import { ApiErrorPayload, InternalError } from '../errors';
-import { IpcIdentity } from './IpcContract';
+import { IpcIdentity } from './IpcIdentity';
 
 export class IpcCallContext {
     constructor(

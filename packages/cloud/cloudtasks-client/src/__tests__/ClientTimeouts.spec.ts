@@ -11,7 +11,7 @@ import {
     TimeoutError,
     toError,
 } from '@webpieces/core-util';
-import { PubSub, AuthOidc } from '@webpieces/core-util';
+import { PubSub, WpAuthOidc } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
@@ -23,14 +23,15 @@ class Payload {
 }
 
 @PubSub()
-@AuthOidc()
 @ApiPath('/timeout-task')
 abstract class TaskApi {
+    @WpAuthOidc()
     @Endpoint('/work', 'cloudtasks')
     work(_request: Payload): Promise<void> {
         throw new Error('contract only');
     }
 
+    @WpAuthOidc()
     @Endpoint('/other', 'cloudtasks')
     other(_request: Payload): Promise<void> {
         throw new Error('contract only');

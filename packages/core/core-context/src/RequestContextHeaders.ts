@@ -41,7 +41,7 @@ export class RequestContextHeaders {
      *
      * TRUSTED keys are the exception, and `destination` is why this method takes an argument at all.
      * The callee's `AuthFilter` admits an inbound `x-user-id` only on a route that authenticated its
-     * CALLER, so shipping one to a `@Public` / `@AuthJwt` endpoint builds a request the callee is
+     * CALLER, so shipping one to a `@WpAuthPublic` / `@WpAuthJwt` endpoint builds a request the callee is
      * obliged to 401. {@link DestinationTrust} answers that from the destination endpoint's own
      * AuthMode — there is no "send everything" default to fall into. Untrusted keys always travel.
      *
@@ -187,8 +187,8 @@ export class RequestContextHeaders {
         if (!RequestContext.isActive()) {
             throw new Error(
                 'No active RequestContext. A webpieces server-side client only works inside ' +
-                'RequestContext.run(...), which a top-level server filter normally establishes. ' +
-                'In a test, wrap the call: await RequestContext.run(async () => client.foo(req));',
+                    'RequestContext.run(...), which a top-level server filter normally establishes. ' +
+                    'In a test, wrap the call: await RequestContext.run(async () => client.foo(req));',
             );
         }
     }

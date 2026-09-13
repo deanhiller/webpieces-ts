@@ -6,7 +6,7 @@ import { AuthenticatedCaller } from './AuthConfig';
 /**
  * DefaultJwtHook - a batteries-included {@link JwtHook} for the common case: HS256 user JWTs signed
  * with ONE shared secret. Construct it with the secret and bind it — `new DefaultJwtHook(secret)` —
- * and `@AuthJwt` endpoints work with NO custom verification code.
+ * and `@WpAuthJwt` endpoints work with NO custom verification code.
  *
  * `parseJwt` verifies the signature + expiry (jsonwebtoken, HS256 only) and maps standard claims:
  * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. `authorizeJwt`

@@ -6,7 +6,7 @@ import {
     DestinationTrust,
     Endpoint,
     Filter,
-    Public,
+    WpAuthPublic,
     Rpc,
     Secrets,
     Service,
@@ -40,7 +40,7 @@ class WorkRequest {
 @ApiPath('/svc')
 abstract class SvcApi {
     @Endpoint('/work', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: WorkRequest): Promise<void> {
         throw new Error('contract only');
@@ -77,7 +77,10 @@ class FakeAddressResolver extends AddressResolver {
 
 /** An ordinary app filter with a visible effect on the wire, so a test can see it ran. */
 class OutboundLogFilter extends Filter<ClientRequest, Response> {
-    override filter(request: ClientRequest, next: Service<ClientRequest, Response>): Promise<Response> {
+    override filter(
+        request: ClientRequest,
+        next: Service<ClientRequest, Response>,
+    ): Promise<Response> {
         request.headers.set('x-log', 'on');
         return next.invoke(request);
     }
@@ -98,7 +101,10 @@ function stubTransport(): void {
         vi.fn((url: string, options: RequestInit) => {
             sent.push(new SentCall(url, options.headers as Record<string, string>));
             return Promise.resolve(
-                new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+                new Response(JSON.stringify({}), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }),
             );
         }),
     );
@@ -180,7 +186,7 @@ describe('createRpcClient filters are genuinely optional', () => {
         expect(sent[0].headers['x-log']).toBeUndefined();
     });
 
-    it('mutating the caller\'s array after the client is built does NOT change the client', async () => {
+    it("mutating the caller's array after the client is built does NOT change the client", async () => {
         // createRpcClient copies with [...filters], so the client is not a live view of the caller's
         // array. Worth pinning now that passing a mutable array is the normal case.
         const filters: ClientFilterDefinition[] = [];

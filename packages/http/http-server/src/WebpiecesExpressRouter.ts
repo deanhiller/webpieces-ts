@@ -1,5 +1,13 @@
 import { Express } from 'express';
-import { ApiFactory, ApiClient, getApiPath, getEndpoints, isFormPost, isRawBody, WebpiecesConfig } from '@webpieces/http-routing';
+import {
+    ApiFactory,
+    ApiClient,
+    getApiPath,
+    getEndpoints,
+    isFormPost,
+    isRawBody,
+    WebpiecesConfig,
+} from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
@@ -134,7 +142,7 @@ export class WebpiecesExpressRouter {
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
             const path = basePath + endpointPath;
             // The parser is chosen by the @Endpoint annotation, not the request Content-Type — and
-            // so is whether the verbatim bytes survive the parse for an @AuthWebhook hook to verify.
+            // so is whether the verbatim bytes survive the parse for an @WpAuthWebhook hook to verify.
             const wrapper = this.middleware.createExpressWrapper(
                 apiClient.client[methodName],
                 path,

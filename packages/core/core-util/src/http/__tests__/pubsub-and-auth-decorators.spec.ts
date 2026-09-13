@@ -2,10 +2,10 @@ import 'reflect-metadata';
 import {
     ApiPath,
     Endpoint,
-    Public,
-    AuthJwt,
-    AuthOidc,
-    AuthSharedSecret,
+    WpAuthPublic,
+    WpAuthJwt,
+    WpAuthOidc,
+    WpAuthSharedSecret,
     getEndpointKind,
     getEndpointKinds,
     getAuthMode,
@@ -24,14 +24,15 @@ import {
 } from '../api-kind';
 
 @PubSub()
-@AuthOidc()
 @ApiPath('/email')
 abstract class SampleTaskApi {
+    @WpAuthOidc()
     @Endpoint('/send', 'cloudtasks')
     sendEmail(_req: object): Promise<void> {
         throw new Error('subclass');
     }
 
+    @WpAuthOidc()
     @Endpoint('/report', 'cron')
     @Queue('custom-report-queue')
     fireReport(_req: object): Promise<void> {
@@ -40,11 +41,10 @@ abstract class SampleTaskApi {
 }
 
 @Rpc()
-@Public()
 @ApiPath('/rpc')
 abstract class SampleRpcApi {
     @Endpoint('/ping', 'rpc')
-    @AuthSharedSecret('MY_SECRET_ENV')
+    @WpAuthSharedSecret('MY_SECRET_ENV')
     ping(_req: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -70,7 +70,10 @@ describe('API kind + queue naming', () => {
 
 describe('@Endpoint trigger kind', () => {
     it('records the kind per METHOD, so one api can mix triggers', () => {
-        expect(getEndpointKinds(SampleTaskApi)).toEqual({ sendEmail: 'cloudtasks', fireReport: 'cron' });
+        expect(getEndpointKinds(SampleTaskApi)).toEqual({
+            sendEmail: 'cloudtasks',
+            fireReport: 'cron',
+        });
         expect(getEndpointKind(SampleTaskApi, 'sendEmail')).toBe('cloudtasks');
         expect(getEndpointKind(SampleRpcApi, 'ping')).toBe('rpc');
     });
@@ -82,18 +85,30 @@ describe('@Endpoint trigger kind', () => {
 
     it('rejects a @PubSub method declaring a kind no queue can deliver', () => {
         @PubSub()
-        @AuthOidc()
         @ApiPath('/bad')
         abstract class BadTaskApi {
             // 'rpc' on a @PubSub contract: nothing calls a queue synchronously.
-            @Endpoint('/nope', 'rpc') nope(_r: object): Promise<void> { throw new Error('x'); }
+            @WpAuthOidc()
+            @Endpoint('/nope', 'rpc')
+            nope(_r: object): Promise<void> {
+                throw new Error('x');
+            }
         }
-        expect(() => assertPubSubConventions(BadTaskApi)).toThrow(/must be one of: cloudtasks \| cron \| external/);
+        expect(() => assertPubSubConventions(BadTaskApi)).toThrow(
+            /must be one of: cloudtasks \| cron \| external/,
+        );
     });
 });
 
 describe('auth modes', () => {
-    it('resolves class-level @AuthOidc() to an empty (trust-the-edge) caller list', () => {
+    it('rejects class-level auth and empty public reasons', () => {
+        class Api {}
+        const classAuth = WpAuthJwt({ roles: ['admin'] }) as unknown as ClassDecorator;
+        expect(() => classAuth(Api)).toThrow(/method-only/);
+        expect(() => WpAuthPublic('   ')).toThrow(/non-empty reason/);
+    });
+
+    it('resolves method-level @WpAuthOidc() to an empty (trust-the-edge) caller list', () => {
         const mode = getAuthMode(SampleTaskApi, 'sendEmail');
         expect(mode?.kind).toBe('oidc');
         if (mode?.kind === 'oidc') {
@@ -101,7 +116,7 @@ describe('auth modes', () => {
         }
     });
 
-    it('lets a method override with @AuthSharedSecret', () => {
+    it('lets a method override with @WpAuthSharedSecret', () => {
         const mode = getAuthMode(SampleRpcApi, 'ping');
         expect(mode?.kind).toBe('shared-secret');
         if (mode?.kind === 'shared-secret') {
@@ -114,12 +129,19 @@ describe('auth modes', () => {
         expect(() => assertEveryEndpointHasAuthMode(SampleRpcApi)).not.toThrow();
     });
 
-    it('maps @Public and @AuthJwt to the right modes', () => {
-        @AuthJwt({ roles: ['admin'] })
+    it('maps @WpAuthPublic and @WpAuthJwt to the right modes', () => {
         @ApiPath('/x')
         abstract class JwtApi {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
-            @Public() @Endpoint('/b', 'rpc') b(_r: object): Promise<object> { throw new Error('x'); }
+            @WpAuthJwt({ roles: ['admin'] })
+            @Endpoint('/a', 'rpc')
+            a(_r: object): Promise<object> {
+                throw new Error('x');
+            }
+            @WpAuthPublic('Anonymous access is intentionally required') @Endpoint('/b', 'rpc') b(
+                _r: object,
+            ): Promise<object> {
+                throw new Error('x');
+            }
         }
         const aMode = getAuthMode(JwtApi, 'a');
         expect(aMode?.kind).toBe('jwt');
@@ -135,10 +157,13 @@ describe('auth modes', () => {
      * ABSENT field — see the compile-level block below, which is where that is actually enforced.
      */
     it('allRolesAllowed:true is the named wide grant, and rolesRequired reads it as []', () => {
-        @AuthJwt({ allRolesAllowed: true })
         @ApiPath('/wide')
         abstract class WideApi {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+            @WpAuthJwt({ allRolesAllowed: true })
+            @Endpoint('/a', 'rpc')
+            a(_r: object): Promise<object> {
+                throw new Error('x');
+            }
         }
         const mode = getAuthMode(WideApi, 'a');
         expect(mode?.kind).toBe('jwt');
@@ -148,12 +173,18 @@ describe('auth modes', () => {
     });
 
     it('carries app-defined fields alongside the role decision', () => {
-        @AuthJwt({ allRolesAllowed: true, inOrg: true })
         @ApiPath('/org')
         abstract class OrgApi {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
-            @AuthJwt({ roles: ['admin'], tenantScoped: true })
-            @Endpoint('/b', 'rpc') b(_r: object): Promise<object> { throw new Error('x'); }
+            @WpAuthJwt({ allRolesAllowed: true, inOrg: true })
+            @Endpoint('/a', 'rpc')
+            a(_r: object): Promise<object> {
+                throw new Error('x');
+            }
+            @WpAuthJwt({ roles: ['admin'], tenantScoped: true })
+            @Endpoint('/b', 'rpc')
+            b(_r: object): Promise<object> {
+                throw new Error('x');
+            }
         }
         const wide = getAuthMode(OrgApi, 'a');
         if (wide?.kind === 'jwt') {
@@ -176,10 +207,13 @@ describe('auth modes', () => {
      * It lives in `../AuthJwtCompileAssertions.ts`, a non-spec file the type-checker actually compiles.
      */
     it('reads the wide grant back as [] (the runtime half; compile half is in AuthJwtCompileAssertions)', () => {
-        @AuthJwt({ allRolesAllowed: true })
         @ApiPath('/wide2')
         abstract class WideApi2 {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+            @WpAuthJwt({ allRolesAllowed: true })
+            @Endpoint('/a', 'rpc')
+            a(_r: object): Promise<object> {
+                throw new Error('x');
+            }
         }
         const mode = getAuthMode(WideApi2, 'a');
         if (mode?.kind !== 'jwt') throw new Error('expected jwt');
@@ -194,18 +228,31 @@ describe('auth modes', () => {
     it('the missing-auth error names only LIVE decorators, never a removed one', () => {
         @ApiPath('/naked')
         abstract class NakedApi {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> {
+                throw new Error('x');
+            }
         }
         expect(() => assertEveryEndpointHasAuthMode(NakedApi)).toThrow(MISSING_AUTH_DECORATOR_FIX);
         // The menu must be COMPLETE — an incomplete one becomes the API the caller believes exists.
-        for (const member of ["@AuthJwt({roles: ['admin']})", '@AuthJwt({allRolesAllowed: true})',
-            '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)', '@AuthLocalOnly()']) {
+        for (const member of [
+            "@WpAuthJwt({roles: ['admin']})",
+            '@WpAuthJwt({allRolesAllowed: true})',
+            "@WpAuthPublic('why anonymous access is required')",
+            '@WpAuthOidc(...callers)',
+            '@WpAuthSharedSecret(key)',
+            '@WpAuthLocalOnly()',
+        ]) {
             expect(MISSING_AUTH_DECORATOR_FIX).toContain(member);
         }
         // ...and must name NO removed spelling. One list, so retiring a decorator means adding it here
         // rather than remembering that this guard existed — the @Authentication-only version of this
         // assertion would not have caught @AuthJwtAllRolesAllowed or @Auth creeping back in.
-        for (const removed of ['@Authentication', 'AuthenticationConfig', '@AuthJwtAllRolesAllowed', '@Auth(']) {
+        for (const removed of [
+            '@Authentication',
+            'AuthenticationConfig',
+            '@AuthJwtAllRolesAllowed',
+            '@Auth(',
+        ]) {
             expect(MISSING_AUTH_DECORATOR_FIX).not.toContain(removed);
         }
     });
@@ -213,13 +260,16 @@ describe('auth modes', () => {
     /** Two auth decorators on one target is a wiring error, and the message lists the whole family. */
     it('rejects two auth decorators on one target without naming @Authentication', () => {
         expect(() => {
-            @Public()
-            @AuthJwt({ roles: ['admin'] })
             @ApiPath('/dup')
             abstract class DupApi {
-                @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+                @WpAuthPublic('Duplicate decorator test')
+                @WpAuthJwt({ roles: ['admin'] })
+                @Endpoint('/a', 'rpc')
+                a(_r: object): Promise<object> {
+                    throw new Error('x');
+                }
             }
             return DupApi;
-        }).toThrow(/Conflicting auth decorator on class DupApi/);
+        }).toThrow(/Conflicting auth decorator on method 'a' of DupApi/);
     });
 });

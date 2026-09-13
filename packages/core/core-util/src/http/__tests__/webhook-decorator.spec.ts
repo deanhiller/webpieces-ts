@@ -2,12 +2,12 @@ import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import {
     ApiPath,
-    AuthWebhook,
-    AuthJwt,
+    WpAuthWebhook,
+    WpAuthJwt,
     DestinationTrust,
     Endpoint,
     ContextKey,
-    Public,
+    WpAuthPublic,
     assertEveryEndpointHasAuthMode,
     assertEveryWebhookEndpointRetainsRawBody,
     getAuthMode,
@@ -16,18 +16,18 @@ import {
 } from '../../index';
 
 /**
- * The CONTRACT half of `@AuthWebhook` (the enforcement half is pinned in http-routing's
- * `AuthWebhook.spec.ts`, and the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
+ * The CONTRACT half of `@WpAuthWebhook` (the enforcement half is pinned in http-routing's
+ * `WpAuthWebhook.spec.ts`, and the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
  *
  * This file is itself acceptance check 2: the contracts below declare a verified webhook using
  * NOTHING but `@webpieces/core-util` — no server package, no vendor SDK — which is what keeps a
  * level-0 api lib importable by the browser bundle that shares it. The verifier is named by STRING
- * and resolved in the server's container, exactly as `@AuthOidc('gmail-push')` already is.
+ * and resolved in the server's container, exactly as `@WpAuthOidc('gmail-push')` already is.
  */
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @AuthWebhook('sentry')
+    @WpAuthWebhook('sentry')
     @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -37,7 +37,7 @@ abstract class SentryHookApi {
 /** The Twilio case: the hook needs the bytes + url, the controller still wants the flat DTO. */
 @ApiPath('/hook')
 abstract class TwilioHookApi {
-    @AuthWebhook('twilio')
+    @WpAuthWebhook('twilio')
     @Endpoint('/twilio/sms', 'external', { calledBy: 'twilio', formPost: true, rawBody: true })
     inbound(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -47,14 +47,14 @@ abstract class TwilioHookApi {
 /** The misconfiguration the wiring-time assert exists to catch: verify what, exactly? */
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @AuthWebhook('sentry')
+    @WpAuthWebhook('sentry')
     @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 }
 
-describe('@AuthWebhook declares a verified external caller on the contract', () => {
+describe('@WpAuthWebhook declares a verified external caller on the contract', () => {
     it('records a webhook AuthMode carrying the vendor name the hook switches on', () => {
         const mode = getAuthMode(SentryHookApi, 'notify');
 
@@ -64,7 +64,7 @@ describe('@AuthWebhook declares a verified external caller on the contract', () 
         }
     });
 
-    it('satisfies assertEveryEndpointHasAuthMode — it is a real mode, not a @Public workaround', () => {
+    it('satisfies assertEveryEndpointHasAuthMode — it is a real mode, not a @WpAuthPublic workaround', () => {
         expect(() => assertEveryEndpointHasAuthMode(SentryHookApi)).not.toThrow();
     });
 
@@ -72,8 +72,8 @@ describe('@AuthWebhook declares a verified external caller on the contract', () 
         expect(() => {
             @ApiPath('/x')
             abstract class TwoModesApi {
-                @Public()
-                @AuthWebhook('sentry')
+                @WpAuthPublic('Anonymous access is intentionally required')
+                @WpAuthWebhook('sentry')
                 @Endpoint('/y', 'external', { calledBy: 'sentry', rawBody: true })
                 hook(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -97,7 +97,7 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
     it('is OFF by default, so no ordinary route pays for retention', () => {
         @ApiPath('/api')
         abstract class PlainApi {
-            @Public()
+            @WpAuthPublic('Anonymous access is intentionally required')
             @Endpoint('/ping', 'rpc')
             ping(_r: object): Promise<object> {
                 throw new Error('subclass');
@@ -114,9 +114,10 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
  * was built for, which is the failure mode this whole feature exists to remove.
  */
 describe('assertEveryWebhookEndpointRetainsRawBody', () => {
-    it('throws for @AuthWebhook without { rawBody: true }, naming the endpoint and the fix', () => {
-        expect(() => assertEveryWebhookEndpointRetainsRawBody(ForgotRawBodyApi))
-            .toThrow(/'notify' in ForgotRawBodyApi is @AuthWebhook.*rawBody: true/s);
+    it('throws for @WpAuthWebhook without { rawBody: true }, naming the endpoint and the fix', () => {
+        expect(() => assertEveryWebhookEndpointRetainsRawBody(ForgotRawBodyApi)).toThrow(
+            /'notify' in ForgotRawBodyApi is @WpAuthWebhook.*rawBody: true/s,
+        );
     });
 
     it('passes when the pairing is right', () => {
@@ -124,10 +125,10 @@ describe('assertEveryWebhookEndpointRetainsRawBody', () => {
         expect(() => assertEveryWebhookEndpointRetainsRawBody(TwilioHookApi)).not.toThrow();
     });
 
-    it('ignores endpoints that are not @AuthWebhook — rawBody is theirs to skip', () => {
+    it('ignores endpoints that are not @WpAuthWebhook — rawBody is theirs to skip', () => {
         @ApiPath('/api')
         abstract class JwtApi {
-            @AuthJwt({ roles: ['admin'] })
+            @WpAuthJwt({ roles: ['admin'] })
             @Endpoint('/thing', 'rpc')
             thing(_r: object): Promise<object> {
                 throw new Error('subclass');

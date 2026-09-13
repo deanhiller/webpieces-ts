@@ -78,7 +78,7 @@ against each other. `undefined` means "not mine" in both directions.
 
 `executeImpl` now publishes the transport-neutral request at **step 0**, before anything that can
 throw, and republishes it at step 3 with the raw bytes when the route asked for them (so
-`@AuthWebhook` signature verification is unchanged).
+`@WpAuthWebhook` signature verification is unchanged).
 
 **ACCEPTED KNOWN ISSUE, documented not fixed:** `fillFromRequest` — which mints a transaction id when
 the caller sent none — stays below the body read. A malformed or oversize body therefore produces an

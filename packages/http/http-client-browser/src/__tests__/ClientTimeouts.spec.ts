@@ -11,7 +11,7 @@ import {
     TimeoutError,
     toError,
 } from '@webpieces/core-util';
-import { Public, Rpc } from '@webpieces/core-util';
+import { WpAuthPublic, Rpc } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
 import { MutableContextStore } from '../MutableContextStore';
@@ -26,13 +26,13 @@ class Payload {
 @ApiPath('/timeout-test')
 abstract class RpcApi {
     @Endpoint('/work', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     work(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }
 
     @Endpoint('/other', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     other(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }

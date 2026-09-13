@@ -402,6 +402,15 @@ export class RoleTagConfig extends BaseRuleConfig {
     };
 }
 
+// Touching a project audits every production API contract it directly owns.
+export class EnsureWeAreSecureConfig extends BaseRuleConfig {
+    declare mode?: ProjectMode;
+    static readonly SCHEMA: SchemaShape<EnsureWeAreSecureConfig> = {
+        mode: new FieldDef('string', PROJECT_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,

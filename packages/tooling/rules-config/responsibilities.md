@@ -6,6 +6,8 @@ Shared config/schema layer: loads and validates webpieces.config.json, defines e
 
 - Loading, validating, and locating `webpieces.config.json` (`loadAndValidate`, `findConfigFile`, `validateWebpiecesConfig`).
 - Typed per-rule config classes (`*Config`), mode unions (`METHOD_LIMIT_MODES`, `ON_OFF_MODES`, etc.) and `defaultRules` — the canonical schema shared by all consumers.
+- The built-in `ensure-we-are-secure` schema, seeded in `MODIFIED_PROJECTS` mode with only the
+  universal branch/epoch turn-offs (no annotation-level security bypass).
 - Cross-cutting helpers reused by both edit-time and build-time engines: path exclusion, diff/changed-line scoping, disable-directive constants, template loading.
 - Shared error types (`RuleFailError`, `InformAiError`), section/hook-guard metadata, PR-gate config, main-sync status/lock state, match-rule and controller-naming config.
 

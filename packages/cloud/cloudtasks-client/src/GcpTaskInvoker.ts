@@ -1,11 +1,7 @@
 import { inject, optional } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
 import { provideFrameworkSingletonDefaultForApi } from '@webpieces/core-context';
-import {
-    getProjectId,
-    getRegion,
-    getRuntimeServiceAccountEmail,
-} from '@webpieces/gcp-identity';
+import { getProjectId, getRegion, getRuntimeServiceAccountEmail } from '@webpieces/gcp-identity';
 import { LogManager, Secrets, SECRETS } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
@@ -27,7 +23,7 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();
 
-    // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
+    // @optional: only @WpAuthSharedSecret task endpoints need it; the client sends its bound value.
     constructor(@optional() @inject(SECRETS) private readonly secrets?: Secrets) {
         super();
     }

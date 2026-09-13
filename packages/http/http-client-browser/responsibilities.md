@@ -13,7 +13,7 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 
 - The decorator-reading engine, the Proxy trap, and the status→type mapping itself → `http-client-core`
 - Reading a server RequestContext → `core-context` (node-only; a browser has no AsyncLocalStorage)
-- Minting OIDC tokens or holding `Secrets` → a browser cannot hold service credentials. A contract with an `@AuthOidc` endpoint fails fast in `ProxyClient.init`
+- Minting OIDC tokens or holding `Secrets` → a browser cannot hold service credentials. A contract with an `@WpAuthOidc` endpoint fails fast in `ProxyClient.init`
 - Server-side routing, filters, recording → `http-routing` / `http-server`
 
 ## Notes

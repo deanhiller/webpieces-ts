@@ -1,4 +1,4 @@
-import { AuthJwt } from './decorators';
+import { getAuthMeta, getAuthMode, WpAuthJwt } from './decorators';
 
 /**
  * COMPILE-TIME assertions for `JwtRoles` — the guarantee that every broken role decision is a compile
@@ -26,26 +26,34 @@ import { AuthJwt } from './decorators';
 export class AuthJwtCompileAssertions {
     /** The two legitimate spellings must keep compiling; this half is asserted by the ABSENCE of error. */
     legitimate(): void {
-        void AuthJwt({ roles: ['admin'] });
-        void AuthJwt({ roles: ['admin', 'editor'] });
-        void AuthJwt({ allRolesAllowed: true });
-        void AuthJwt({ allRolesAllowed: true, inOrg: true });
-        void AuthJwt({ roles: ['admin'], tenantScoped: true });
+        void WpAuthJwt({ roles: ['admin'] });
+        void WpAuthJwt({ roles: ['admin', 'editor'] });
+        void WpAuthJwt({ allRolesAllowed: true });
+        void WpAuthJwt({ allRolesAllowed: true, inOrg: true });
+        void WpAuthJwt({ roles: ['admin'], tenantScoped: true });
     }
 
     /** Every one of these must be UNWRITABLE. A directive going unused here fails the build. */
     rejected(): void {
         // @ts-expect-error pick a branch — {} may not mean "any authenticated user"
-        void AuthJwt({});
+        void WpAuthJwt({});
         // @ts-expect-error roles needs AT LEAST ONE entry; [] was the old silent widest grant
-        void AuthJwt({ roles: [] });
+        void WpAuthJwt({ roles: [] });
         // @ts-expect-error contradictory: wide AND role-gated at the same time
-        void AuthJwt({ allRolesAllowed: true, roles: ['admin'] });
+        void WpAuthJwt({ allRolesAllowed: true, roles: ['admin'] });
         // @ts-expect-error allRolesAllowed:false is a redundant SECOND spelling of role-gating
-        void AuthJwt({ roles: ['admin'], allRolesAllowed: false });
+        void WpAuthJwt({ roles: ['admin'], allRolesAllowed: false });
         // @ts-expect-error `false` is never how you say "wide" — the other branch is for that
-        void AuthJwt({ allRolesAllowed: false });
+        void WpAuthJwt({ allRolesAllowed: false });
         // @ts-expect-error app-defined fields alone authorize nothing; a role decision is mandatory
-        void AuthJwt({ inOrg: true });
+        void WpAuthJwt({ inOrg: true });
+    }
+
+    /** Class-level auth readers were deleted; every metadata lookup must name the audited method. */
+    readersRequireMethodName(): void {
+        // @ts-expect-error methodName is mandatory so removed class-level auth cannot silently compile
+        void getAuthMeta(AuthJwtCompileAssertions);
+        // @ts-expect-error methodName is mandatory so removed class-level auth cannot silently compile
+        void getAuthMode(AuthJwtCompileAssertions);
     }
 }

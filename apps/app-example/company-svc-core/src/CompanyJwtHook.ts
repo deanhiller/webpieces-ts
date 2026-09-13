@@ -1,11 +1,18 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
 import { JwtHook, AuthenticatedCaller } from '@webpieces/http-routing';
-import { ContextTuple, UnauthorizedError, ForbiddenError, JwtRequirement, toError, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import {
+    ContextTuple,
+    UnauthorizedError,
+    ForbiddenError,
+    JwtRequirement,
+    toError,
+    WebpiecesCoreHeaders,
+} from '@webpieces/core-util';
 
 /**
  * CompanyJwtHook - the company's user-JWT mechanism, bound to the framework {@link JwtHook} so every
- * company service inherits working @AuthJwt auth. Written ONCE at the company layer:
+ * company service inherits working @WpAuthJwt auth. Written ONCE at the company layer:
  *
  *  - parseJwt: verify a user JWT with `jsonwebtoken` (secret from JWT_SECRET) → userId(`sub`) +
  *    roles(`roles` claim) + the USER_ID context entry. Minting a JWT is a login-controller concern.
@@ -29,16 +36,24 @@ export class CompanyJwtHook extends JwtHook {
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
-        return new AuthenticatedCaller(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
+        return new AuthenticatedCaller(
+            userId,
+            roles,
+            [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)],
+            claims,
+        );
     }
 
     /**
-     * AUTHORIZATION: the company policy over the endpoint's @AuthJwt requirement. Default
+     * AUTHORIZATION: the company policy over the endpoint's @WpAuthJwt requirement. Default
      * roles any-of (via super), PLUS this company's custom rule: `inOrg: true` requires the
      * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
      * without touching the framework.
      */
-    override async authorizeJwt(values: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
+    override async authorizeJwt(
+        values: AuthenticatedCaller,
+        requirement: JwtRequirement,
+    ): Promise<void> {
         await super.authorizeJwt(values, requirement); // roles any-of
         if (requirement['inOrg'] === true && !values.claims['orgId']) {
             throw new ForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');

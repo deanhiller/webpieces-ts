@@ -35,7 +35,7 @@ export class PendingTrustedValue {
  * identity.
  *
  * That is not hypothetical on this codebase: the framework's own {@link DefaultJwtHook} returns an
- * EMPTY `AuthenticatedCaller.entries`, so a fully verified `@AuthJwt` request stamps no context entries at
+ * EMPTY `AuthenticatedCaller.entries`, so a fully verified `@WpAuthJwt` request stamps no context entries at
  * all and would leave a forged `x-user-id` completely unopposed.
  *
  * ## The fix
@@ -43,11 +43,11 @@ export class PendingTrustedValue {
  * Inbound trusted values never enter the context. They are stashed HERE, and `AuthFilter` decides
  * what to do with them once it knows who the caller is:
  *
- * - `@AuthOidc` / `@AuthSharedSecret` — the CALLER's own identity was verified, so this is an
+ * - `@WpAuthOidc` / `@WpAuthSharedSecret` — the CALLER's own identity was verified, so this is an
  *   internal service passing along context it already holds. Admit the pending values as trusted.
  *   This is what makes service-to-service propagation of a verified userId work, and it is the whole
  *   reason trusted keys are allowed to have an `httpHeader` at all.
- * - `@AuthJwt` / public — the caller may be a browser or anyone with curl. A pending value is
+ * - `@WpAuthJwt` / public — the caller may be a browser or anyone with curl. A pending value is
  *   admitted ONLY if the authenticator independently derived the SAME value. Anything else — a
  *   different value, or a value nothing vouched for — rejects the request.
  *

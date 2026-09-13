@@ -32,7 +32,7 @@ export class RouteMetadata {
     readonly mask?: MaskSpec;
     /**
      * True when @Endpoint(..., { rawBody: true }): the transport must retain the verbatim bytes +
-     * absolute url for the `@AuthWebhook` hook to verify a vendor signature over. Rides the route
+     * absolute url for the `@WpAuthWebhook` hook to verify a vendor signature over. Rides the route
      * metadata for the same reason {@link formPost} does — the transport adapter decides how to read
      * the body from the ROUTE, without knowing the apiClass/methodName.
      */

@@ -30,7 +30,7 @@ function createMockFetchResponse(value: string): FetchValueResponse {
 }
 
 /**
- * SaveApi has @AuthJwt({allRolesAllowed: true}). The AuthFilter reads the credential off the
+ * SaveApi.save has method-level @WpAuthJwt({allRolesAllowed: true}). The AuthFilter reads the credential off the
  * inbound HttpRequest — never from RequestContext, where it would become a transferred key and ride
  * onto every outbound call — so tests publish an HttpRequest carrying `Authorization: Bearer ...`,
  * exactly as a transport would.
@@ -42,7 +42,9 @@ function createMockFetchResponse(value: string): FetchValueResponse {
  */
 async function runAuthed<T>(fn: () => Promise<T>): Promise<T> {
     return RequestContext.run(async () => {
-        RequestContext.setRequest(new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])));
+        RequestContext.setRequest(
+            new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])),
+        );
         return fn();
     });
 }
@@ -58,7 +60,10 @@ describe('SaveApi with mocked Server2Api', () => {
             (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
-        const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
+        const factory = await setupCompanyRuntime(
+            ClientServerAppModules.create(),
+            new CompanySetupOptions(undefined, appOverrides),
+        );
         saveApi = factory.createApiClient<SaveApi>(SaveApi);
     });
 
@@ -81,14 +86,20 @@ describe('SaveApi with mocked Server2Api', () => {
         // The test declares its OWN bindings inline — including a test-held counter it observes
         // directly (no container access; createApiClient is the only surface the test drives).
         const counter = new SimpleCounter();
-        mockServer2Api.mock.setDefaultReturnValue('fetchValue', createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE'));
+        mockServer2Api.mock.setDefaultReturnValue(
+            'fetchValue',
+            createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE'),
+        );
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
             (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
             (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
         });
-        const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
+        const factory = await setupCompanyRuntime(
+            ClientServerAppModules.create(),
+            new CompanySetupOptions(undefined, appOverrides),
+        );
         const counterApi = factory.createApiClient<SaveApi>(SaveApi);
 
         await runAuthed(async () => {
@@ -99,11 +110,20 @@ describe('SaveApi with mocked Server2Api', () => {
     });
 
     it('should pass different mock values for different requests', async () => {
-        mockServer2Api.mock.addValueToReturn('fetchValue', createMockFetchResponse('MOCKED: VALUE_ONE for query1'));
-        mockServer2Api.mock.addValueToReturn('fetchValue', createMockFetchResponse('MOCKED: VALUE_TWO for query2'));
+        mockServer2Api.mock.addValueToReturn(
+            'fetchValue',
+            createMockFetchResponse('MOCKED: VALUE_ONE for query1'),
+        );
+        mockServer2Api.mock.addValueToReturn(
+            'fetchValue',
+            createMockFetchResponse('MOCKED: VALUE_TWO for query2'),
+        );
 
         const [response1, response2] = await runAuthed(async () => {
-            return [await saveApi.save({ query: 'query1' }), await saveApi.save({ query: 'query2' })];
+            return [
+                await saveApi.save({ query: 'query1' }),
+                await saveApi.save({ query: 'query2' }),
+            ];
         });
 
         expect(response1.matches![0].description).toContain('VALUE_ONE');
@@ -111,25 +131,34 @@ describe('SaveApi with mocked Server2Api', () => {
     });
 
     it('should throw UnauthorizedError when no auth header on authenticated route', async () => {
-        mockServer2Api.mock.addValueToReturn('fetchValue', createMockFetchResponse('MOCKED: should not reach'));
-        await expect(RequestContext.run(() => saveApi.save({ query: 'test' })))
-            .rejects.toThrow(UnauthorizedError);
+        mockServer2Api.mock.addValueToReturn(
+            'fetchValue',
+            createMockFetchResponse('MOCKED: should not reach'),
+        );
+        await expect(RequestContext.run(() => saveApi.save({ query: 'test' }))).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 });
 
 /**
- * PublicApi has @Public(), so no auth header needed.
+ * PublicApi.getInfo has method-level @WpAuthPublic('...'), so no auth header is needed.
  */
 describe('PublicApi', () => {
     let publicApi: PublicApi;
 
     beforeEach(async () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-            (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(createMock<Server2Api>('Server2Api'));
+            (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(
+                createMock<Server2Api>('Server2Api'),
+            );
             (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
-        const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
+        const factory = await setupCompanyRuntime(
+            ClientServerAppModules.create(),
+            new CompanySetupOptions(undefined, appOverrides),
+        );
         publicApi = factory.createApiClient<PublicApi>(PublicApi);
     });
 

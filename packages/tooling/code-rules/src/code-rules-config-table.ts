@@ -22,6 +22,7 @@ import {
     InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
+    EnsureWeAreSecureConfig,
 } from '@webpieces/rules-config';
 
 /** A rule config class usable as an inversify inject-by-type token. */
@@ -52,7 +53,11 @@ export const CONFIG_BINDINGS: ReadonlyArray<readonly [ConfigCtor, keyof Webpiece
     [NoStatePathsInTemplatesConfig, 'no-state-paths-in-templates'],
     [NoProcessExitOutsideMainConfig, 'no-process-exit-outside-main'],
     [NoFunctionOutsideClassConfig, 'no-function-outside-class'],
-    [InjectAnnotationNotNeededForConcreteClassConfig, 'inject-annotation-not-needed-for-concrete-class'],
+    [
+        InjectAnnotationNotNeededForConcreteClassConfig,
+        'inject-annotation-not-needed-for-concrete-class',
+    ],
     [FrameworkTagConfig, 'framework-tag'],
     [RoleTagConfig, 'role-tag'],
+    [EnsureWeAreSecureConfig, 'ensure-we-are-secure'],
 ];

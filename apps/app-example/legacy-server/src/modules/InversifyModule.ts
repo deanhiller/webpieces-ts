@@ -30,11 +30,11 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
 
     bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
 
-    // Shared-secret state: the framework AuthFilter injects AuthConfig for @AuthSharedSecret.
+    // Shared-secret state: the framework AuthFilter injects AuthConfig for @WpAuthSharedSecret.
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
     bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
 
-    // User JWT mechanism: the framework AuthFilter injects JwtHook for @AuthJwt endpoints.
+    // User JWT mechanism: the framework AuthFilter injects JwtHook for @WpAuthJwt endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
     bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
 
@@ -49,7 +49,9 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // (server.ts). Tests rebind this token to the in-process simulator.
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
-            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2'));
+            return ctx
+                .get(ClientHttpFactory)
+                .createRpcClient(Server2Api, new ClientConfig('server2'));
         })
         .inSingletonScope();
 });

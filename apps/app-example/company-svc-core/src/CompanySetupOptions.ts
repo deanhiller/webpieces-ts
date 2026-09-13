@@ -54,7 +54,7 @@ export class CompanySetupOptions {
      *   that was NOT injected, which is exactly what a developer's local run is.
      * @param locality - WHERE this process runs ('local' | 'deployed'), forwarded into
      *   RuntimeSetupOptions and published to {@link RuntimeLocality}. It decides whether
-     *   `@AuthLocalOnly` endpoints are registered at all. The default is `'deployed'` — the
+     *   `@WpAuthLocalOnly` endpoints are registered at all. The default is `'deployed'` — the
      *   RESTRICTIVE answer — so a wrapper that forgets to derive it refuses dev-only endpoints
      *   rather than shipping them. A real company wrapper derives it from its platform, e.g.
      *   `getServiceName() === 'local' ? 'local' : 'deployed'`, and makes this REQUIRED — exactly as

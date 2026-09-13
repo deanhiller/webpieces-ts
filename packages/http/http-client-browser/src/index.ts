@@ -35,7 +35,12 @@ export { MutableContextStore } from './MutableContextStore';
 export type { RequestLifecycleListener } from './RequestLifecycleListener';
 
 // The isomorphic engine, re-exported so a browser app needs one import.
-export { ProxyClient, ClientErrorTranslator, RequestOutcome, TranslatedFailure } from '@webpieces/http-client-core';
+export {
+    ProxyClient,
+    ClientErrorTranslator,
+    RequestOutcome,
+    TranslatedFailure,
+} from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
 
 // ContextMgr is the BROWSER's outbound-header propagation. This is the only package that may use
@@ -57,11 +62,11 @@ export type { ServiceUrlDeriver } from '@webpieces/core-util';
 export {
     ApiPath,
     Endpoint,
-    Public,
-    AuthJwt,
-    AuthOidc,
-    AuthSharedSecret,
-    AuthLocalOnly,
+    WpAuthPublic,
+    WpAuthJwt,
+    WpAuthOidc,
+    WpAuthSharedSecret,
+    WpAuthLocalOnly,
     Rpc,
     PubSub,
     Queue,

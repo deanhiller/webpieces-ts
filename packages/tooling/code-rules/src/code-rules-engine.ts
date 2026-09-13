@@ -26,6 +26,7 @@ import { NoFunctionOutsideClassValidator } from './validate-no-function-outside-
 import { InjectAnnotationNotNeededForConcreteClassValidator } from './validate-inject-annotation-not-needed-for-concrete-class';
 import { FrameworkTagValidator } from './validate-framework-tag';
 import { RoleTagValidator } from './validate-role-tag';
+import { EnsureWeAreSecureValidator } from './validate-ensure-we-are-secure';
 
 /**
  * Owns running the code-rules suite. Every built-in validator is injected as a singleton (its config
@@ -62,18 +63,34 @@ export class CodeRulesEngine {
         private readonly injectAnnotationNotNeeded: InjectAnnotationNotNeededForConcreteClassValidator,
         private readonly frameworkTag: FrameworkTagValidator,
         private readonly roleTag: RoleTagValidator,
+        private readonly ensureWeAreSecure: EnsureWeAreSecureValidator,
     ) {}
 
-    /** The 21 injected built-in validators, in run order. */
+    /** The injected built-in validators, in run order. */
     private builtIns(): CodeValidator<BaseRuleConfig>[] {
         return [
-            this.maxMethodLines, this.maxFileLines, this.requireReturnType, this.noInlineTypeLiterals,
-            this.noAnyUnknown, this.noImplicitAny, this.prismaValidateDtos, this.prismaConverter,
-            this.noDestructure, this.catchErrorPattern, this.noUnmanagedExceptions, this.noDirectApiResolver,
-            this.noSymbolDiTokens, this.noClientCreationOutsideServerOrClient, this.noCustomCss,
+            this.maxMethodLines,
+            this.maxFileLines,
+            this.requireReturnType,
+            this.noInlineTypeLiterals,
+            this.noAnyUnknown,
+            this.noImplicitAny,
+            this.prismaValidateDtos,
+            this.prismaConverter,
+            this.noDestructure,
+            this.catchErrorPattern,
+            this.noUnmanagedExceptions,
+            this.noDirectApiResolver,
+            this.noSymbolDiTokens,
+            this.noClientCreationOutsideServerOrClient,
+            this.noCustomCss,
             this.noStatePathsInTemplates,
-            this.noProcessExitOutsideMain, this.noFunctionOutsideClass,
-            this.injectAnnotationNotNeeded, this.frameworkTag, this.roleTag,
+            this.noProcessExitOutsideMain,
+            this.noFunctionOutsideClass,
+            this.injectAnnotationNotNeeded,
+            this.frameworkTag,
+            this.roleTag,
+            this.ensureWeAreSecure,
         ];
     }
 
@@ -88,7 +105,8 @@ export class CodeRulesEngine {
             if (v.shouldRun()) runs.push(new RuleRun(v.name, () => v.run(root)));
         }
         for (const mr of this.matchRules.rules) {
-            if (this.matchChecker.shouldRun(mr)) runs.push(new RuleRun(mr.name, () => this.matchChecker.runForConfig(mr, root)));
+            if (this.matchChecker.shouldRun(mr))
+                runs.push(new RuleRun(mr.name, () => this.matchChecker.runForConfig(mr, root)));
         }
         return runs;
     }
@@ -110,7 +128,11 @@ export class CodeRulesEngine {
         console.log('');
 
         const result = await this.reporter.runValidators(runs);
-        console.log(result.success ? '\n✅ All code validations passed\n' : '\n❌ Some code validations failed\n');
+        console.log(
+            result.success
+                ? '\n✅ All code validations passed\n'
+                : '\n❌ Some code validations failed\n',
+        );
         return result;
     }
 }

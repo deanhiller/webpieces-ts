@@ -8,11 +8,11 @@ import { AuthMode } from './auth-mode';
  * ## Why the client has to answer this at all
  *
  * The server already decided (see `PendingWireTrust`): an inbound `x-user-id` is admitted only on a
- * route that verified WHO called it — `@AuthOidc` / `@AuthSharedSecret`. On a `@AuthJwt` or `@Public`
+ * route that verified WHO called it — `@WpAuthOidc` / `@WpAuthSharedSecret`. On a `@WpAuthJwt` or `@WpAuthPublic`
  * route the same header must match what the authenticator independently derived, or the request is
  * REJECTED with a 401.
  *
- * That rule is correct, and it means a client that ships `x-user-id` to a `@Public` endpoint is
+ * That rule is correct, and it means a client that ships `x-user-id` to a `@WpAuthPublic` endpoint is
  * building a request the callee is obliged to reject. Before this class the outbound builders
  * forwarded EVERY transferred key with no idea what the destination was, so an internal service
  * calling another service's public or JWT endpoint 401'd itself. The fix belongs on the producing
@@ -33,15 +33,15 @@ import { AuthMode } from './auth-mode';
  */
 export class DestinationTrust {
     /**
-     * The destination authenticates its CALLER (@AuthOidc / @AuthSharedSecret), so it is entitled to
+     * The destination authenticates its CALLER (@WpAuthOidc / @WpAuthSharedSecret), so it is entitled to
      * believe context WE vouch for — this is the service-to-service identity propagation that trusted
      * keys keep an `httpHeader` for.
      */
     private static readonly VERIFIES_CALLER = new DestinationTrust(true);
 
     /**
-     * The destination cannot tell us from a browser with curl (@AuthJwt / @Public / @AuthWebhook /
-     * @AuthApiKey / @AuthLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
+     * The destination cannot tell us from a browser with curl (@WpAuthJwt / @WpAuthPublic / @WpAuthWebhook /
+     * @WpAuthApiKey / @WpAuthLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
      * Untrusted keys still travel.
      */
     private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false);
@@ -64,19 +64,19 @@ export class DestinationTrust {
                 return DestinationTrust.VERIFIES_CALLER;
             case 'jwt':
             case 'public':
-            // @AuthWebhook authenticates an OUTSIDE VENDOR, which is not the same thing as
+            // @WpAuthWebhook authenticates an OUTSIDE VENDOR, which is not the same thing as
             // authenticating a peer in this repo. The vendor knows nothing of webpieces context
             // headers and would never send one, so there is no identity to propagate in either
             // direction — and a webpieces client cannot call such an endpoint anyway (it cannot mint
             // the vendor's signature). Trusted keys stay home.
             case 'webhook':
-            // @AuthApiKey authenticates a CUSTOMER, not a peer service. The holder of the key is
+            // @WpAuthApiKey authenticates a CUSTOMER, not a peer service. The holder of the key is
             // another company's codebase, so nothing it forwards may be believed, and no webpieces
             // client can call it anyway (the framework extracts no api-key header — the app's hook
             // owns which headers carry the credential; the contract's `credentials` list only DESCRIBES
             // them). Trusted keys stay home.
             case 'apikey':
-            // @AuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
+            // @WpAuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
             // credential — so a browser with curl on the same laptop is indistinguishable from us.
             // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to
             // AuthMode is a compile error here rather than a silent permissive fallthrough.)

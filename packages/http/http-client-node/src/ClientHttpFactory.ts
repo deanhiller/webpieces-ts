@@ -1,6 +1,10 @@
 import { inject } from 'inversify';
-import { DocumentDesign } from '@webpieces/core-util';
-import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { assertNotInternalApi, DocumentDesign } from '@webpieces/core-util';
+import {
+    Provider,
+    bindFrameworkProvider,
+    provideFrameworkSingleton,
+} from '@webpieces/core-context';
 import type { ApiPrototype, ClientFilterDefinition } from '@webpieces/http-client-core';
 import { buildClientProxy } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
@@ -40,7 +44,7 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * ]);
  * ```
  * The SSRF guard arms itself the moment that filter re-points a request, and the contract's
- * `@AuthWebhook(name)` selects the app's bound `WebhookSignerCallback` to sign the exact bytes —
+ * `@WpAuthWebhook(name)` selects the app's bound `WebhookSignerCallback` to sign the exact bytes —
  * neither is something the app registers, orders, or can displace.
  *
  * Every client it builds shares one {@link NodeProxyClient} *shape* but never one instance: the
@@ -56,7 +60,8 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
 @provideFrameworkSingleton()
 export class ClientHttpFactory {
     constructor(
-        @inject(NODE_PROXY_CLIENT_PROVIDER) private readonly proxyClientProvider: Provider<NodeProxyClient>,
+        @inject(NODE_PROXY_CLIENT_PROVIDER)
+        private readonly proxyClientProvider: Provider<NodeProxyClient>,
     ) {}
 
     /**
@@ -88,6 +93,7 @@ export class ClientHttpFactory {
         config: ClientConfig,
         filters?: readonly ClientFilterDefinition[],
     ): T {
+        assertNotInternalApi(apiPrototype, 'ClientHttpFactory');
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
         const proxyClient = this.proxyClientProvider.get();

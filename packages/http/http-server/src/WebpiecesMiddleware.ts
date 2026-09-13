@@ -53,7 +53,6 @@ export class WebpiecesMiddleware {
     /** The ONE wire<->context transfer, handed to every route's ExpressWrapper. Stateless. */
     private readonly headers = new RequestContextHeaders();
 
-
     /**
      * Top-level error handler — the last-ditch catch-all. MUST be mounted AFTER all routes (see
      * {@link WebpiecesExpressRouter}). The 4-argument `(err, req, res, next)` signature is what
@@ -163,7 +162,11 @@ export class WebpiecesMiddleware {
      * asked for it, so a production server that enables cors for a cross-host UI does not silently
      * open the door to localhost as well.
      */
-    private isOriginAllowed(origin: string, host: string | undefined, allowedOrigins: string[]): boolean {
+    private isOriginAllowed(
+        origin: string,
+        host: string | undefined,
+        allowedOrigins: string[],
+    ): boolean {
         let originHost: string;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a malformed Origin is untrusted browser input, not a server fault; it must become a 403 here, never bubble to the 500 chokepoint
         try {
@@ -176,7 +179,9 @@ export class WebpiecesMiddleware {
         if (host !== undefined && originHost === host) {
             return true; // same-origin: the server's own UI calling its own api
         }
-        return allowedOrigins.some((allowed: string): boolean => this.matchesOrigin(origin, allowed));
+        return allowedOrigins.some((allowed: string): boolean =>
+            this.matchesOrigin(origin, allowed),
+        );
     }
 
     /**
@@ -214,7 +219,7 @@ export class WebpiecesMiddleware {
      * @param formPost - True for an @Endpoint(..., { formPost: true }) route (parse body as
      *   urlencoded, not JSON). Default false = JSON.
      * @param rawBody - True for an @Endpoint(..., { rawBody: true }) route: retain the verbatim
-     *   bytes + absolute url on the HttpRequest so an @AuthWebhook hook can verify a vendor
+     *   bytes + absolute url on the HttpRequest so an @WpAuthWebhook hook can verify a vendor
      *   signature over them. Default false = the bytes are dropped once parsed.
      * @returns ExpressWrapper instance
      */

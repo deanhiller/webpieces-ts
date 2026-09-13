@@ -2,13 +2,13 @@
 export {
     ApiPath,
     Endpoint,
-    Public,
-    AuthJwt,
+    WpAuthPublic,
+    WpAuthJwt,
     rolesRequired,
-    AuthOidc,
-    AuthSharedSecret,
-    AuthWebhook,
-    AuthLocalOnly,
+    WpAuthOidc,
+    WpAuthSharedSecret,
+    WpAuthWebhook,
+    WpAuthLocalOnly,
     Rpc,
     PubSub,
     Queue,
@@ -37,10 +37,7 @@ export {
 export type { AuthMode, ApiKind, EndpointOptions } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
-export {
-    SourceFile,
-    ROUTING_METADATA_KEYS,
-} from './decorators';
+export { SourceFile, ROUTING_METADATA_KEYS } from './decorators';
 
 // DI provider decorators moved to core-context; re-exported here for back-compat
 export { provideSingletonDefaultForApi } from '@webpieces/core-context';
@@ -54,12 +51,7 @@ export {
 export { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
 
 // Core routing types
-export {
-    Routes,
-    RouteBuilder,
-    RouteDefinition,
-    FilterDefinition,
-} from './WebAppMeta';
+export { Routes, RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 
 // The transport-neutral request type (defined in core-context; this is http-routing's
 // public request — a transport adapter builds one and the chain reads it from RequestContext).
@@ -90,16 +82,26 @@ export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
-//  - AuthConfig: shared-secret STATE (@AuthSharedSecret values).
+//  - AuthConfig: shared-secret STATE (@WpAuthSharedSecret values).
 //  - JwtHook / OidcHook / WebhookAuthCallback / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
-export { AuthConfig, AUTH_CONFIG, AuthenticatedCaller, AUTHENTICATED_CALLER_KEY, SharedSecrets } from './AuthConfig';
 export {
-    JwtHook, JWT_HOOK,
-    OidcHook, OIDC_HOOK,
-    WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK,
-    ApiKeyHook, API_KEY_HOOK,
+    AuthConfig,
+    AUTH_CONFIG,
+    AuthenticatedCaller,
+    AUTHENTICATED_CALLER_KEY,
+    SharedSecrets,
+} from './AuthConfig';
+export {
+    JwtHook,
+    JWT_HOOK,
+    OidcHook,
+    OIDC_HOOK,
+    WebhookAuthCallback,
+    WEBHOOK_AUTH_CALLBACK,
+    ApiKeyHook,
+    API_KEY_HOOK,
 } from './AuthHooks';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.

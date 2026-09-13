@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, AuthJwt } from '@webpieces/core-util';
+import { ApiPath, Endpoint, WpAuthJwt } from '@webpieces/core-util';
 
 // ============================================================
 // Request DTOs
@@ -96,9 +96,9 @@ export interface SaveResponse {
  *
  * Using abstract methods means TypeScript enforces implementation at compile time.
  */
-@AuthJwt({ allRolesAllowed: true })
 @ApiPath('/search')
 export abstract class SaveApi {
+    @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint('/item', 'rpc')
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('Method save() must be implemented by subclass');

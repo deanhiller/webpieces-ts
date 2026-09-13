@@ -145,7 +145,10 @@ export class CapturedContext {
      */
     // webpieces-disable no-any-unknown -- see #entries
     // webpieces-disable no-function-outside-class -- static factory standing in for the (private) constructor; making it an instance method would mean an instance already existed, which is the thing being created
-    static capture(authority: ContextCaptureAuthority, live: Map<string, unknown>): CapturedContext {
+    static capture(
+        authority: ContextCaptureAuthority,
+        live: Map<string, unknown>,
+    ): CapturedContext {
         void authority;
         return new CapturedContext(live);
     }
@@ -185,7 +188,7 @@ export class CapturedContext {
      * parameter makes the two intents equally easy to type and impossible to grep, and a defaulted one
      * makes the permissive branch the shortest thing to write — `.claude/rules/no-backwards-compat.md` shim
      * shape #5, "a widening
-     * that is an ABSENCE rather than a token", the same reason `@AuthJwt({allRolesAllowed: true})` says
+     * that is an ABSENCE rather than a token", the same reason `@WpAuthJwt({allRolesAllowed: true})` says
      * the wide grant out loud. As a transform on the SNAPSHOT rather than a second capture mechanism it
      * composes with BOTH consumers — `runWithContext` and `restoreContext` — for free.
      *
@@ -270,7 +273,10 @@ export class RestorableContext {
      */
     // webpieces-disable no-any-unknown -- see #entries
     // webpieces-disable no-function-outside-class -- static factory standing in for the (private) constructor; an instance method would presuppose the instance being created
-    static of(authority: ContextCaptureAuthority, entries: Map<string, unknown>): RestorableContext {
+    static of(
+        authority: ContextCaptureAuthority,
+        entries: Map<string, unknown>,
+    ): RestorableContext {
         void authority;
         return new RestorableContext(entries);
     }
