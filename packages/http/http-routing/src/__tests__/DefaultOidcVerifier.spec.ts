@@ -20,21 +20,25 @@ function devTokenFor(email: string): string {
     return 'dev-oidc.' + Buffer.from(payload, 'utf8').toString('base64url');
 }
 
-describe('DefaultOidcVerifier — @AuthOidc() trusts the edge (no ["self"] fallback)', () => {
+describe('DefaultOidcVerifier — @WpAuthOidc() trusts the edge (no ["self"] fallback)', () => {
     const verifier = new DefaultOidcVerifier(new GcpOidc());
     const OTHER_CALLER = 'app-sa@proj.iam.gserviceaccount.com'; // a DIFFERENT SA than this service's
 
-    it('empty callers (@AuthOidc()) accepts a genuine token from ANOTHER caller — TRUST THE EDGE', async () => {
+    it('empty callers (@WpAuthOidc()) accepts a genuine token from ANOTHER caller — TRUST THE EDGE', async () => {
         // With the old `callers.length ? callers : ['self']` bug this REJECTED (other-sa !== self).
         await expect(verifier.verify(devTokenFor(OTHER_CALLER), [])).resolves.toBeUndefined();
     });
 
     it('a non-empty allow-list still ENFORCES callers (defense-in-depth)', async () => {
-        // @AuthOidc('self') names an explicit allow-list; a different caller must be rejected.
-        await expect(verifier.verify(devTokenFor(OTHER_CALLER), ['self'])).rejects.toThrow(UnauthorizedError);
+        // @WpAuthOidc('self') names an explicit allow-list; a different caller must be rejected.
+        await expect(verifier.verify(devTokenFor(OTHER_CALLER), ['self'])).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 
     it('a garbage token is rejected even under trust-the-edge', async () => {
-        await expect(verifier.verify('dev-oidc.not-base64!!', [])).rejects.toThrow(UnauthorizedError);
+        await expect(verifier.verify('dev-oidc.not-base64!!', [])).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 });

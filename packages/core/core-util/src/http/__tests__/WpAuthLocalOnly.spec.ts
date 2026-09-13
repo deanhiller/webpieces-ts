@@ -2,10 +2,10 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
     ApiPath,
-    AuthLocalOnly,
-    AuthJwt,
+    WpAuthLocalOnly,
+    WpAuthJwt,
     Endpoint,
-    Public,
+    WpAuthPublic,
     MISSING_AUTH_DECORATOR_FIX,
     getAuthMode,
     assertEveryEndpointHasAuthMode,
@@ -15,22 +15,22 @@ import { DestinationTrust } from '../DestinationTrust';
 import { RuntimeLocality } from '../RuntimeLocality';
 
 /**
- * `@AuthLocalOnly` — the fifth auth mode: an endpoint that exists ONLY on a developer's machine.
+ * `@WpAuthLocalOnly` — the fifth auth mode: an endpoint that exists ONLY on a developer's machine.
  *
  * The two halves apps used to hand-roll (a route module registering the route only locally, plus a
  * `if (env !== 'local') throw` at the top of the handler, kept in sync by a comment) are the
  * framework's job now, driven by this ONE declaration on the contract. This file pins the
  * core-util half: the decorator, the locality seam it reads, and the OUTBOUND trust consequence.
  * The enforcement half (AuthFilter refusal + route non-registration) is pinned in http-routing's
- * `AuthLocalOnly.spec.ts`, where those classes live.
+ * `WpAuthLocalOnly.spec.ts`, where those classes live.
  */
 
 const USER_ID = ContextKey.trusted<string>('userId', 'jwt claim `sub`', 'x-user-id');
 const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
-@AuthLocalOnly()
 @ApiPath('/dev')
 abstract class DevToolsApi {
+    @WpAuthLocalOnly()
     @Endpoint('/logs', 'rpc')
     shipLogs(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -45,18 +45,24 @@ afterEach(() => {
     RuntimeLocality.clear();
 });
 
-describe('@AuthLocalOnly records the local-only mode', () => {
-    it('records kind local-only at class level', () => {
+describe('@WpAuthLocalOnly records the local-only mode', () => {
+    it('records kind local-only at method level', () => {
         expect(getAuthMode(DevToolsApi, 'shipLogs')?.kind).toBe('local-only');
     });
 
-    it('records it at METHOD level, overriding a class-level mode', () => {
-        @Public()
+    it('records distinct auth modes explicitly on each method', () => {
         @ApiPath('/mixed')
         abstract class MixedApi {
-            @Endpoint('/open', 'rpc') open(_r: object): Promise<object> { throw new Error('x'); }
-            @AuthLocalOnly()
-            @Endpoint('/dev', 'rpc') dev(_r: object): Promise<object> { throw new Error('x'); }
+            @WpAuthPublic('Mixed API public fixture')
+            @Endpoint('/open', 'rpc')
+            open(_r: object): Promise<object> {
+                throw new Error('x');
+            }
+            @WpAuthLocalOnly()
+            @Endpoint('/dev', 'rpc')
+            dev(_r: object): Promise<object> {
+                throw new Error('x');
+            }
         }
         expect(getAuthMode(MixedApi, 'open')?.kind).toBe('public');
         expect(getAuthMode(MixedApi, 'dev')?.kind).toBe('local-only');
@@ -74,19 +80,22 @@ describe('@AuthLocalOnly records the local-only mode', () => {
      * gets hand-rolled with a runtime throw all over again.
      */
     it('appears in the missing-auth menu', () => {
-        expect(MISSING_AUTH_DECORATOR_FIX).toContain('@AuthLocalOnly()');
+        expect(MISSING_AUTH_DECORATOR_FIX).toContain('@WpAuthLocalOnly()');
     });
 
     it('conflicts with a second auth decorator, and the message names the whole family', () => {
         expect(() => {
-            @AuthLocalOnly()
-            @AuthJwt({ roles: ['admin'] })
             @ApiPath('/dup')
             abstract class DupApi {
-                @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+                @WpAuthLocalOnly()
+                @WpAuthJwt({ roles: ['admin'] })
+                @Endpoint('/a', 'rpc')
+                a(_r: object): Promise<object> {
+                    throw new Error('x');
+                }
             }
             return DupApi;
-        }).toThrow(/@AuthLocalOnly\(\) is allowed per target/);
+        }).toThrow(/@WpAuthLocalOnly\(\).*is allowed per target/);
     });
 });
 
@@ -118,19 +127,23 @@ describe('RuntimeLocality fails SAFE', () => {
  * NOBODY — it gates on the environment, not on a credential — so it belongs in the same bucket as
  * public/jwt: a caller on the same laptop is indistinguishable from curl.
  */
-describe('DestinationTrust for a @AuthLocalOnly destination', () => {
-    it('omits TRUSTED keys, exactly as for @Public', () => {
+describe('DestinationTrust for a @WpAuthLocalOnly destination', () => {
+    it('omits TRUSTED keys, exactly as for @WpAuthPublic', () => {
         const trust = DestinationTrust.forAuthMode({ kind: 'local-only' });
         expect(trust.allows(USER_ID)).toBe(false);
-        expect(trust.allows(USER_ID)).toBe(DestinationTrust.forAuthMode({ kind: 'public' }).allows(USER_ID));
+        expect(trust.allows(USER_ID)).toBe(
+            DestinationTrust.forAuthMode({ kind: 'public' }).allows(USER_ID),
+        );
     });
 
     it('still lets UNTRUSTED keys travel — nobody makes a security decision on those', () => {
         expect(DestinationTrust.forAuthMode({ kind: 'local-only' }).allows(TENANT)).toBe(true);
     });
 
-    it('is NOT in the caller-verifying bucket that @AuthOidc/@AuthSharedSecret are', () => {
-        expect(DestinationTrust.forAuthMode({ kind: 'oidc', callers: [] }).allows(USER_ID)).toBe(true);
+    it('is NOT in the caller-verifying bucket that @WpAuthOidc/@WpAuthSharedSecret are', () => {
+        expect(DestinationTrust.forAuthMode({ kind: 'oidc', callers: [] }).allows(USER_ID)).toBe(
+            true,
+        );
         expect(DestinationTrust.forAuthMode({ kind: 'local-only' }).allows(USER_ID)).toBe(false);
     });
 });

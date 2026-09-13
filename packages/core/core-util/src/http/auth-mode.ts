@@ -14,10 +14,10 @@
  * every broken combination a compile error:
  *
  * ```typescript
- * @AuthJwt({ roles: ['admin'] })            // ✅ role-gated (any-of)
- * @AuthJwt({ allRolesAllowed: true })       // ✅ every authenticated user, said out loud
- * @AuthJwt({})                              // ❌ pick a branch
- * @AuthJwt({ roles: [] })                   // ❌ needs at least one role
+ * @WpAuthJwt({ roles: ['admin'] })            // ✅ role-gated (any-of)
+ * @WpAuthJwt({ allRolesAllowed: true })       // ✅ every authenticated user, said out loud
+ * @WpAuthJwt({})                              // ❌ pick a branch
+ * @WpAuthJwt({ roles: [] })                   // ❌ needs at least one role
  * ```
  *
  * `allRolesAllowed` exists ONLY on the wide branch (the dangerous half must be a greppable token, and
@@ -35,7 +35,7 @@ export type JwtRoles =
 
 /**
  * JwtRequirement - the {@link JwtRoles} decision PLUS any app-defined authorization fields, e.g.
- * `@AuthJwt({ allRolesAllowed: true, inOrg: true })`. The framework authenticates (JwtHook.parseJwt)
+ * `@WpAuthJwt({ allRolesAllowed: true, inOrg: true })`. The framework authenticates (JwtHook.parseJwt)
  * and enforces the roles any-of; the app overrides JwtHook.authorizeJwt to enforce its own fields.
  * Both hook methods are ASYNC, so an app field like `inOrg` may be answered from a datastore.
  *
@@ -100,13 +100,13 @@ export type ApiKeyCredentials = readonly [ApiKeyCredential, ...ApiKeyCredential[
  * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
  * - `webhook`       → an OUTSIDE vendor signed this request its own way; the app's bound `WebhookAuthCallback`
  *                     verifies it, selected by `name`. The framework ships NO vendor crypto (see
- *                     {@link AuthWebhook}).
+ *                     {@link WpAuthWebhook}).
  * - `apikey`        → a CUSTOMER holds the credential; the app's bound `ApiKeyHook` looks it up
  *                     (async, over the whole header set) and returns the context to seed, selected
  *                     by `regime`. `credentials` DECLARES where the credential rides — an ORDERED,
  *                     non-empty list, because a real regime authenticates a PAIR (a key AND the
  *                     organization id it acts for) that must be presented TOGETHER. NOT a peer
- *                     service — see {@link AuthApiKey}.
+ *                     service — see {@link WpAuthApiKey}.
  * - `local-only`    → exists ONLY on a developer's machine; not registered and never served when
  *                     {@link RuntimeLocality} says this process is deployed. Authenticates NOBODY —
  *                     it is a deployment gate, not a credential.
@@ -122,7 +122,7 @@ export type AuthMode =
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthWebhook / @AuthApiKey / @AuthLocalOnly) —
+ * (@WpAuthPublic / @WpAuthJwt / @WpAuthOidc / @WpAuthSharedSecret / @WpAuthWebhook / @WpAuthApiKey / @WpAuthLocalOnly) —
  * one per credential kind.
  *
  * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose

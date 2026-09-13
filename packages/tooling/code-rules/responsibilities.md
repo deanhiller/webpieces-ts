@@ -6,6 +6,9 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
 
 - Build/CI-time validators run over changed files/methods (`validate-new-methods`, `validate-modified-methods`, `validate-modified-files`, per-rule `validate-*`).
 - Diff-scoped enforcement: only new/modified code is gated, using rules-config diff-scope helpers.
+- Project-scoped API security enforcement (`ensure-we-are-secure`): a directly changed project is
+  audited in full for explicit method-level `@WpAuth*` HTTP policy or IPC-only
+  `@WpInternal`/`@WpIpcEndpoint` contracts. Decorators are recognized by canonical import provenance.
 - CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 
@@ -18,3 +21,14 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
 ## Notes (optional)
 
 Runs at build/CI time as a gate on the committed diff — the after-the-fact counterpart to ai-hook-rules' edit-time enforcement, both drawing rule config from rules-config. Dist bins load the PUBLISHED rules-config from node_modules, so new shared symbols need co-release.
+
+`ensure-we-are-secure` is configured with `"mode": "MODIFIED_PROJECTS"`. Here that means projects
+that directly own a changed file, not their transitive Nx dependents. Once selected, every owned
+production TypeScript file in the project is audited, including unchanged API files. Test/spec
+fixtures are excluded so negative contract tests remain possible. HTTP contracts require
+`@ApiPath` plus exactly one method-level canonical `@WpAuth*` on each `@Endpoint`;
+`@WpAuthPublic` requires an inline non-empty reason. IPC contracts require class-level
+`@WpInternal('api-id')` plus method-level `@WpIpcEndpoint('method-id')`, and cannot mix HTTP
+annotations. Recognition follows imports from `@webpieces/core-util` / `@webpieces/core-util/ipc`,
+including aliases and namespace imports, so a local decorator with the same spelling cannot satisfy
+the rule. Only the universal branch/epoch turn-offs apply; there is no source annotation bypass.

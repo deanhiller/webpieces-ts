@@ -2,14 +2,14 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
-    AuthOidc,
-    AuthSharedSecret,
-    AuthWebhook,
+    WpAuthOidc,
+    WpAuthSharedSecret,
+    WpAuthWebhook,
     ClientRegistry,
     DestinationTrust,
     Endpoint,
     Filter,
-    Public,
+    WpAuthPublic,
     Rpc,
     Secrets,
     Service,
@@ -36,13 +36,13 @@ class DeliverRequest {
 
 /**
  * The backlog's own shape: OUR published contract, delivered to a URL the PARTNER registered. It is
- * @Public because the partner authenticates us by our signature, not by a credential we mint.
+ * @WpAuthPublic because the partner authenticates us by our signature, not by a credential we mint.
  */
 @Rpc()
 @ApiPath('/webhooks')
 abstract class PartnerWebhookApi {
     @Endpoint('/deliver', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -58,7 +58,7 @@ abstract class PartnerWebhookApi {
 @ApiPath('/internal')
 abstract class OidcApi {
     @Endpoint('/work', 'rpc')
-    @AuthOidc()
+    @WpAuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -69,7 +69,7 @@ abstract class OidcApi {
 @ApiPath('/internal')
 abstract class SharedSecretApi {
     @Endpoint('/work', 'rpc')
-    @AuthSharedSecret('partner-secret')
+    @WpAuthSharedSecret('partner-secret')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -81,7 +81,7 @@ abstract class SharedSecretApi {
 @ApiPath('/ot-webhook')
 abstract class SignedWebhookApi {
     @Endpoint('/deliver', 'rpc')
-    @AuthWebhook('partner-hmac')
+    @WpAuthWebhook('partner-hmac')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -438,7 +438,7 @@ describe('the SSRF policy and redirects', () => {
 });
 
 describe('outbound auth against a re-pointed URL', () => {
-    it('@AuthOidc WORKS, and mints for the FINAL destination — not the configured one', async () => {
+    it('@WpAuthOidc WORKS, and mints for the FINAL destination — not the configured one', async () => {
         // The regression #719 introduced: this combination used to throw at BIND time. It is
         // legitimate — N services implementing one contract, each authenticating us by OIDC — and
         // the audience has to be the url we are ACTUALLY talking to, which is why the minter moved
@@ -457,7 +457,7 @@ describe('outbound auth against a re-pointed URL', () => {
         expect(sent[0].headers['Authorization']).toBe('Bearer token-for-https://api.partner.example');
     });
 
-    it('@AuthSharedSecret WORKS — N services behind ONE agreed secret is a real topology', async () => {
+    it('@WpAuthSharedSecret WORKS — N services behind ONE agreed secret is a real topology', async () => {
         const secretClient = client(SharedSecretApi, new ClientConfig('partner-webhooks'), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
         ]);
@@ -486,7 +486,7 @@ describe('outbound auth against a re-pointed URL', () => {
     });
 });
 
-describe('@AuthWebhook, outbound — WE are the vendor', () => {
+describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
     it('hands the signer the FINAL url and the EXACT bytes that are transmitted', async () => {
         const signer = new RecordingWebhookSigner();
         const signedClient = client(
@@ -526,7 +526,7 @@ describe('@AuthWebhook, outbound — WE are the vendor', () => {
         expect(sent).toHaveLength(0);
     });
 
-    it('is callable at all — binding the client no longer throws for @AuthWebhook', () => {
+    it('is callable at all — binding the client no longer throws for @WpAuthWebhook', () => {
         expect(() =>
             client(
                 SignedWebhookApi,

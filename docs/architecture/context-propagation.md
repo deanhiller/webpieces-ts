@@ -148,7 +148,7 @@ The same three lines run for `apikey` (`ApiKeyHook.verifyApiKey(name, request)`)
 
 - `DefaultJwtHook.ts` — HS256 shared-secret user JWTs; maps `sub → userId`, `roles` claim → roles.
 - `CompanyJwtHook.ts` (example app) — puts the `USER_ID` context entry explicitly and adds an
-  `@AuthJwt({ allRolesAllowed: true, inOrg: true })` rule requiring an `orgId` claim:
+  `@WpAuthJwt({ allRolesAllowed: true, inOrg: true })` rule requiring an `orgId` claim:
   ```ts
   return new AuthenticatedCaller(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
   ```
@@ -170,7 +170,7 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
 
   `destination` is a `DestinationTrust`, and it is the OUTBOUND half of the trust rule below. A
   **trusted** key is emitted only when the destination endpoint authenticates its CALLER
-  (`@AuthOidc` / `@AuthSharedSecret`); to a `@AuthJwt` / `@Public` / `@AuthLocalOnly` / undeclared endpoint it is
+  (`@WpAuthOidc` / `@WpAuthSharedSecret`); to a `@WpAuthJwt` / `@WpAuthPublic` / `@WpAuthLocalOnly` / undeclared endpoint it is
   omitted, because that endpoint's `AuthFilter` is obliged to reject it — sending it would 401 our
   own request. Untrusted keys always travel. `DestinationTrust.forAuthMode(route.authMeta?.mode)` is
   the only way to build one, so the caller cannot assert a posture the route does not have, and
@@ -180,8 +180,8 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   straight in, a **trusted** one is stashed in `PendingWireTrust` and NOT written. This fill runs at
   transport level, BEFORE any filter, so nothing has verified the caller yet — writing a trusted value
   here would mean `getTrusted` could return a header a stranger typed. `AuthFilter` then admits the
-  pending values on a route that authenticated its CALLER (`@AuthOidc`/`@AuthSharedSecret`), and on
-  `@AuthJwt`/`@Public`/`@AuthLocalOnly` requires an exact match from the authenticator or rejects the
+  pending values on a route that authenticated its CALLER (`@WpAuthOidc`/`@WpAuthSharedSecret`), and on
+  `@WpAuthJwt`/`@WpAuthPublic`/`@WpAuthLocalOnly` requires an exact match from the authenticator or rejects the
   request. If there
   is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
 
@@ -190,8 +190,8 @@ The Node client (`NodeProxyClient.outboundContextHeaders(destination)`) uses the
 server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps each request in
 `RequestContext.run(...)` then calls `fillFromRequest`. The BROWSER twin
 (`ContextMgr.buildOutboundHeaders(destination)`) applies the same rule, and never reaches the
-permissive branch: `BrowserProxyClient` refuses to bind an `@AuthOidc`/`@AuthSharedSecret` contract
-at all, so every browser destination is `@AuthJwt`, `@Public` or `@AuthLocalOnly` (a browser calling
+permissive branch: `BrowserProxyClient` refuses to bind an `@WpAuthOidc`/`@WpAuthSharedSecret` contract
+at all, so every browser destination is `@WpAuthJwt`, `@WpAuthPublic` or `@WpAuthLocalOnly` (a browser calling
 a dev-only endpoint on the developer's own server is that mode's motivating case).
 
 ## Propagation **through a Cloud Tasks queue**

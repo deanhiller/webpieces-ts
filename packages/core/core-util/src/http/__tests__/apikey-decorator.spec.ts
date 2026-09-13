@@ -2,25 +2,25 @@ import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import {
     ApiPath,
-    AuthApiKey,
+    WpAuthApiKey,
     DestinationTrust,
     Endpoint,
     ContextKey,
     MISSING_AUTH_DECORATOR_FIX,
-    Public,
+    WpAuthPublic,
     assertEveryEndpointHasAuthMode,
     getAuthMode,
 } from '../../index';
 import type { ApiKeyCredential, AuthMode } from '../../index';
 
 /**
- * The CONTRACT half of `@AuthApiKey` (the enforcement half is pinned in http-routing's
- * `AuthApiKey.spec.ts`, and the type-level half in `AuthApiKeyCompileAssertions.ts`).
+ * The CONTRACT half of `@WpAuthApiKey` (the enforcement half is pinned in http-routing's
+ * `WpAuthApiKey.spec.ts`, and the type-level half in `AuthApiKeyCompileAssertions.ts`).
  *
  * A partner-facing contract — one consumed by other companies' codebases — declares its posture using
  * NOTHING but `@webpieces/core-util`, so the level-0 api lib stays importable by the browser bundle
  * that shares it. The verifier is named by STRING and resolved in the server's container, exactly as
- * `@AuthWebhook('sentry')` and `@AuthOidc('gmail-push')` already are.
+ * `@WpAuthWebhook('sentry')` and `@WpAuthOidc('gmail-push')` already are.
  */
 
 /**
@@ -29,12 +29,16 @@ import type { ApiKeyCredential, AuthMode } from '../../index';
  */
 const MANAGEMENT_CREDENTIALS = [
     { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
-    { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
+    {
+        in: 'header',
+        name: 'x-organization-id',
+        description: 'Which of your organizations to act on.',
+    },
 ] as const;
 
-@AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
 @ApiPath('/management/v1')
 abstract class ManagementApi {
+    @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
     @Endpoint('/orders', 'rpc')
     listOrders(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -44,20 +48,22 @@ abstract class ManagementApi {
 /** Per-METHOD, and a second regime on the same server — `regime` tells the one hook them apart. */
 @ApiPath('/mixed')
 abstract class MixedApi {
-    @AuthApiKey('internal-tooling', [{ in: 'bearer', description: 'Send the tooling key as a bearer token.' }])
+    @WpAuthApiKey('internal-tooling', [
+        { in: 'bearer', description: 'Send the tooling key as a bearer token.' },
+    ])
     @Endpoint('/tooling', 'rpc')
     tooling(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     @Endpoint('/health', 'rpc')
     health(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 }
 
-describe('@AuthApiKey declares a customer-key posture on the contract', () => {
+describe('@WpAuthApiKey declares a customer-key posture on the contract', () => {
     it('records an apikey AuthMode carrying the regime name the hook switches on', () => {
         const mode = getAuthMode(ManagementApi, 'listOrders');
 
@@ -67,12 +73,12 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
         }
     });
 
-    it('applies at CLASS level to every endpoint, and at METHOD level beside other modes', () => {
+    it('applies explicitly at method level beside other modes', () => {
         expect(getAuthMode(MixedApi, 'tooling')?.kind).toBe('apikey');
         expect(getAuthMode(MixedApi, 'health')?.kind).toBe('public');
     });
 
-    it('satisfies assertEveryEndpointHasAuthMode — it is a real mode, not a @Public workaround', () => {
+    it('satisfies assertEveryEndpointHasAuthMode — it is a real mode, not a @WpAuthPublic workaround', () => {
         expect(() => assertEveryEndpointHasAuthMode(ManagementApi)).not.toThrow();
     });
 
@@ -80,8 +86,8 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
         expect(() => {
             @ApiPath('/x')
             abstract class TwoModesApi {
-                @Public()
-                @AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
+                @WpAuthPublic('Anonymous access is intentionally required')
+                @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
                 @Endpoint('/y', 'rpc')
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -93,25 +99,25 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
 
     /**
      * A message that teaches an incomplete menu IS the API as far as the next reader is concerned —
-     * which is how `@Public` stayed the only reachable posture for a partner contract in the first place.
+     * which is how `@WpAuthPublic` stayed the only reachable posture for a partner contract in the first place.
      */
     it('is named in the "you forgot authorization" prescription', () => {
-        expect(MISSING_AUTH_DECORATOR_FIX).toContain('@AuthApiKey');
+        expect(MISSING_AUTH_DECORATOR_FIX).toContain('@WpAuthApiKey');
     });
 
     it('is named in the conflicting-decorator message too', () => {
         expect(() => {
             @ApiPath('/x')
             abstract class TwoModesApi {
-                @Public()
-                @AuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
+                @WpAuthPublic('Anonymous access is intentionally required')
+                @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
                 @Endpoint('/y', 'rpc')
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }
             }
             return TwoModesApi;
-        }).toThrow(/@AuthApiKey\(\.\.\.\)/);
+        }).toThrow(/@WpAuthApiKey\(\.\.\.\)/);
     });
 });
 
@@ -120,7 +126,7 @@ describe('@AuthApiKey declares a customer-key posture on the contract', () => {
  * CUSTOMER, not a peer in this repo — so there is no identity of ours to forward and nothing of theirs
  * to believe. Same answer as `AuthFilter.verifiesCaller` on the inbound side.
  *
- * `shared-secret` is asserted right beside it, because "just use @AuthSharedSecret" is precisely the
+ * `shared-secret` is asserted right beside it, because "just use @WpAuthSharedSecret" is precisely the
  * wrong answer this mode exists to remove: it would tell the framework to BELIEVE trusted context a
  * customer forwarded, i.e. let a partner assert another customer's org id and have it admitted.
  */
@@ -142,8 +148,11 @@ describe('DestinationTrust classifies apikey as NOT caller-verifying (trusted ke
     });
 
     it('lands in the OPPOSITE bucket from shared-secret, which is the whole point of a mode of its own', () => {
-        expect(DestinationTrust.forAuthMode({ kind: 'shared-secret', secretKey: 'peer' }).allows(USER_ID))
-            .toBe(true);
+        expect(
+            DestinationTrust.forAuthMode({ kind: 'shared-secret', secretKey: 'peer' }).allows(
+                USER_ID,
+            ),
+        ).toBe(true);
     });
 });
 
@@ -166,7 +175,11 @@ describe('the auth metadata a spec generator reads off a contract', () => {
         // ORDER is significant: it is the order the credentials appear in the published document.
         expect(mode.credentials).toEqual([
             { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
-            { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
+            {
+                in: 'header',
+                name: 'x-organization-id',
+                description: 'Which of your organizations to act on.',
+            },
         ]);
     });
 
@@ -201,11 +214,12 @@ describe('the auth metadata a spec generator reads off a contract', () => {
 
     /**
      * The prescription is the API as far as the next reader is concerned (shim shape #6), so it must
-     * teach the two-argument form — an agent copying `@AuthApiKey('regime')` out of it gets a compile
+     * teach the two-argument form — an agent copying `@WpAuthApiKey('regime')` out of it gets a compile
      * error and no idea why.
      */
     it('the missing-auth prescription teaches the credential list, not the deleted one-arg form', () => {
-        expect(MISSING_AUTH_DECORATOR_FIX)
-            .toContain("@AuthApiKey('regime', [{in: 'header', name: 'x-api-key'}])");
+        expect(MISSING_AUTH_DECORATOR_FIX).toContain(
+            "@WpAuthApiKey('regime', [{in: 'header', name: 'x-api-key'}])",
+        );
     });
 });

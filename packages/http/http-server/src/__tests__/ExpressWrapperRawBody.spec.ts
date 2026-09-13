@@ -5,8 +5,8 @@ import { HttpRequest, RequestContext } from '@webpieces/core-context';
 import { ExpressWrapper, MAX_BODY_BYTES } from '../ExpressWrapper';
 
 /**
- * The TRANSPORT half of `@AuthWebhook` (the contract half lives in core-util's
- * `webhook-decorator.spec.ts`, the enforcement half in http-routing's `AuthWebhook.spec.ts`).
+ * The TRANSPORT half of `@WpAuthWebhook` (the contract half lives in core-util's
+ * `webhook-decorator.spec.ts`, the enforcement half in http-routing's `WpAuthWebhook.spec.ts`).
  *
  * What must be true here: the bytes that reach the hook are the bytes the vendor signed, and the url
  * is the one the vendor addressed — including behind a proxy that terminated TLS, which is the case
@@ -252,7 +252,11 @@ describe('the body cap', () => {
     it('lets a body at the limit through', async () => {
         const cap = new CapturingWrapper(false, true, /*maxBytes*/ 16);
 
-        await cap.executeImpl(fakeRequest('{"a":"123456"}'), asResponse(new FakeResponse()), () => {});
+        await cap.executeImpl(
+            fakeRequest('{"a":"123456"}'),
+            asResponse(new FakeResponse()),
+            () => {},
+        );
 
         expect(cap.published?.raw?.rawBody.length).toBe(14);
     });

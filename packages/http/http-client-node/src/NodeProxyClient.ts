@@ -19,7 +19,12 @@ import {
     provideFrameworkTransient,
 } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { ApiPrototype, ClientFilterDefinition, ProxyClient, TranslatedFailure } from '@webpieces/http-client-core';
+import {
+    ApiPrototype,
+    ClientFilterDefinition,
+    ProxyClient,
+    TranslatedFailure,
+} from '@webpieces/http-client-core';
 import { AddressResolver } from './AddressResolver';
 import { ClientConfig } from './ClientConfig';
 import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
@@ -57,13 +62,15 @@ export class NodeProxyClient extends ProxyClient {
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(AddressResolver) private readonly addressResolver: AddressResolver,
-        // @optional: only @AuthSharedSecret endpoints need it; the client sends its bound value.
+        // @optional: only @WpAuthSharedSecret endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
-        // @optional: only @AuthWebhook endpoints need it, and an unbound one makes them THROW
+        // @optional: only @WpAuthWebhook endpoints need it, and an unbound one makes them THROW
         // rather than deliver unsigned — see WebhookSignerCallback.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
-        @optional() @inject(WEBHOOK_SIGNER_CALLBACK) private readonly webhookSigner?: WebhookSignerCallback,
+        @optional()
+        @inject(WEBHOOK_SIGNER_CALLBACK)
+        private readonly webhookSigner?: WebhookSignerCallback,
     ) {
         // This package is node-only and already depends on core-context, so it builds the
         // RequestContext-backed ApiCallContext itself. No startup install, and therefore nothing a
@@ -75,7 +82,11 @@ export class NodeProxyClient extends ProxyClient {
      * Bind this client to one API contract + target, with the app's outbound filters (url
      * rewriting, header editing, logging, per-call re-pointing).
      */
-    init(apiPrototype: ApiPrototype<object>, config: ClientConfig, appFilters: ClientFilterDefinition[]): void {
+    init(
+        apiPrototype: ApiPrototype<object>,
+        config: ClientConfig,
+        appFilters: ClientFilterDefinition[],
+    ): void {
         this.config = config;
         this.initRoutes(apiPrototype, appFilters);
     }
@@ -98,12 +109,15 @@ export class NodeProxyClient extends ProxyClient {
      *
      * They are unconditional rather than opt-in because neither costs anything on the path that
      * does not need it: the SSRF guard steps aside when nothing re-pointed the request, and the
-     * auth filter does nothing for a `@Public` endpoint. An app therefore cannot forget to install
+     * auth filter does nothing for a `@WpAuthPublic` endpoint. An app therefore cannot forget to install
      * the guard on the one client that takes runtime URLs — the ACT of re-pointing is what arms it.
      */
     protected override clientFilters(): ClientFilterDefinition[] {
         return [
-            new ClientFilterDefinition(SSRF_GUARD_PRIORITY, new SsrfGuardFilter(this.ssrfPolicy(), this.addressResolver)),
+            new ClientFilterDefinition(
+                SSRF_GUARD_PRIORITY,
+                new SsrfGuardFilter(this.ssrfPolicy(), this.addressResolver),
+            ),
             new ClientFilterDefinition(
                 OUTBOUND_AUTH_PRIORITY,
                 new OutboundAuthFilter(this.gcpOidc, this.secrets, this.webhookSigner),
@@ -133,8 +147,8 @@ export class NodeProxyClient extends ProxyClient {
      * Straight from the RequestContext. Throws when there is no active request scope.
      *
      * `destination` rides through unchanged: this is the ONE client that can legitimately propagate a
-     * verified identity, and it does so exactly when the callee will authenticate us (@AuthOidc /
-     * @AuthSharedSecret). Calling a peer's @Public or @AuthJwt endpoint now omits `x-user-id` and
+     * verified identity, and it does so exactly when the callee will authenticate us (@WpAuthOidc /
+     * @WpAuthSharedSecret). Calling a peer's @WpAuthPublic or @WpAuthJwt endpoint now omits `x-user-id` and
      * friends instead of shipping headers that endpoint's AuthFilter is obliged to reject.
      */
     protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {
@@ -156,7 +170,9 @@ export class NodeProxyClient extends ProxyClient {
     ): Promise<unknown> {
         // Preserve the context precondition before logging, which also requires an active scope.
         if (!RequestContext.isActive()) {
-            throw new Error('No active RequestContext. Run the client call inside RequestContext.run(...).');
+            throw new Error(
+                'No active RequestContext. Run the client call inside RequestContext.run(...).',
+            );
         }
         const recorder = this.headers.findRecorder();
         if (!recorder) {
@@ -184,7 +200,12 @@ export class NodeProxyClient extends ProxyClient {
         for (const entry of RequestContext.buildLogFields().entries()) {
             ctxSnapshot[entry[0]] = entry[1];
         }
-        const recorded = new RecordedEndpoint(this.contractName(), route.methodName, [requestDto], ctxSnapshot);
+        const recorded = new RecordedEndpoint(
+            this.contractName(),
+            route.methodName,
+            [requestDto],
+            ctxSnapshot,
+        );
         recorder.addEndpointInfo(recorded);
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- capture failure into the recording, then rethrow unchanged
@@ -255,9 +276,9 @@ export class NodeProxyClient extends ProxyClient {
         }
         return new InternalError(
             `${callId}: dependency answered HTTP ${failure.statusCode}. That status describes OUR ` +
-            `request to it, not an answer for our caller, so this server owns it as a 500 — check the ` +
-            `path, the base URL, whether the dependency is deployed, and our service credentials. ` +
-            `Downstream said: ${failure.error.message}`,
+                `request to it, not an answer for our caller, so this server owns it as a 500 — check the ` +
+                `path, the base URL, whether the dependency is deployed, and our service credentials. ` +
+                `Downstream said: ${failure.error.message}`,
             failure.error,
         );
     }

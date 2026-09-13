@@ -1,15 +1,18 @@
 import { ApiErrorCodec, EndpointNotFoundError, InternalError } from '@webpieces/core-util/errors';
 import {
     IpcCallContext,
-    IpcContract,
+    IpcApiType,
     IpcFailure,
     IpcLogging,
-    IpcMethod,
     IpcReply,
     IpcRequest,
     IpcSuccess,
     IpcCallLogger,
     toError,
+    assertInternalApi,
+    getIpcEndpoints,
+    getIpcMaskSpec,
+    MaskSpec,
 } from '@webpieces/core-util/ipc';
 
 /** Construct a receiver using explicit call context when it needs to make nested outbound calls. */
@@ -26,59 +29,57 @@ export class IpcServerFactory {
     private readonly registrations = new Map<string, Map<string, IpcRegistration>>();
     constructor(private readonly logging: IpcLogging) {}
 
-    create<T extends object>(contract: IpcContract<T>, controller: T): void {
-        this.register(contract, () => controller);
+    create<T extends object>(apiClass: IpcApiType<T>, controller: T): void {
+        this.register(apiClass, () => controller);
     }
 
-    createScoped<T extends object>(contract: IpcContract<T>, scope: IpcControllerScope<T>): void {
-        this.register(contract, (context) => scope.create(context));
+    createScoped<T extends object>(apiClass: IpcApiType<T>, scope: IpcControllerScope<T>): void {
+        this.register(apiClass, (context: IpcCallContext) => scope.create(context));
     }
 
     private register<T extends object>(
-        contract: IpcContract<T>,
+        apiClass: IpcApiType<T>,
         controller: (context: IpcCallContext) => T,
     ): void {
-        if (this.registrations.has(contract.id))
-            throw new InternalError(`Duplicate IPC API registration: ${contract.id}`);
+        const apiId = assertInternalApi(apiClass);
+        if (this.registrations.has(apiId))
+            throw new InternalError(`Duplicate IPC API registration: ${apiId}`);
         const methods = new Map<string, IpcRegistration>();
-        for (const key of Object.keys(contract.methods)) {
-            // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
-            const method = contract.methods[key as keyof T] as IpcMethod<unknown, unknown>;
+        for (const [key, methodId] of Object.entries(getIpcEndpoints(apiClass))) {
             methods.set(
-                method.id,
+                methodId,
                 new IpcRegistration(async (request) => {
                     // Logging wraps validation and invocation; only handle() below encodes exceptions.
                     return IpcCallLogger.execute(
                         this.logging,
                         request.context,
                         'server',
-                        contract.id,
-                        method.id,
-                        method.mask,
+                        apiId,
+                        methodId,
+                        getIpcMaskSpec(apiClass, key) ?? new MaskSpec({}),
                         request.body,
                         async () => {
-                            const body = method.request.parse(request.body);
-                            if (body === null || body === undefined)
+                            if (request.body === null || request.body === undefined)
                                 throw new InternalError('IPC requests require one non-null DTO');
                             const instance = controller(request.context);
                             const invoke = instance[key as keyof T];
                             if (typeof invoke !== 'function')
                                 throw new InternalError(
-                                    `IPC implementation is missing ${contract.id}.${method.id}`,
+                                    `IPC implementation is missing ${apiId}.${methodId}`,
                                 );
                             const result =
                                 await // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
                                 (invoke as (request: unknown) => Promise<unknown>).call(
                                     instance,
-                                    body,
+                                    request.body,
                                 );
-                            return method.response.parse(result);
+                            return result;
                         },
                     );
                 }),
             );
         }
-        this.registrations.set(contract.id, methods);
+        this.registrations.set(apiId, methods);
     }
 
     /** Bootstrap passes this function to the ONE connection's setHandler before sending calls. */

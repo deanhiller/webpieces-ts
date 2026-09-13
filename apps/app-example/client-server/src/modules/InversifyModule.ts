@@ -50,16 +50,16 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Bind services
     bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
 
-    // Shared-secret state: the framework AuthFilter injects AuthConfig for @AuthSharedSecret.
+    // Shared-secret state: the framework AuthFilter injects AuthConfig for @WpAuthSharedSecret.
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
     bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
 
-    // User JWT mechanism: the framework AuthFilter injects JwtHook for @AuthJwt endpoints.
+    // User JWT mechanism: the framework AuthFilter injects JwtHook for @WpAuthJwt endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
     bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
 
     // The ONE shared-secret store for ALL of this service's outbound clients (RPC + Cloud Tasks).
-    // The VALUE it sends per @AuthSharedSecret(key); read from config ONCE here, never in the send
+    // The VALUE it sends per @WpAuthSharedSecret(key); read from config ONCE here, never in the send
     // path (so tests stay parallel-safe). Rotate a client by changing its value here.
     const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
     bind(SECRETS).toConstantValue(secrets); // injected into the Cloud Tasks invokers
@@ -68,8 +68,8 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     //
     // ClientHttpFactory is a framework singleton, so we just resolve it. Every client it builds
     // reads this server's RequestContext (magic context: correlation id, tenant, request-id
-    // chain) and is backed by the SAME Secrets bound above — an @AuthSharedSecret endpoint sends
-    // secrets.get(key). Nothing here calls an @AuthOidc endpoint; a client for one would mint
+    // chain) and is backed by the SAME Secrets bound above — an @WpAuthSharedSecret endpoint sends
+    // secrets.get(key). Nothing here calls an @WpAuthOidc endpoint; a client for one would mint
     // tokens via gcp-identity automatically.
     //
     // 'server2' is the Cloud Run service name. On GCP the URL is derived from it; locally it is
@@ -77,7 +77,9 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Tests rebind this token to a mock/simulator.
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
-            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2'));
+            return ctx
+                .get(ClientHttpFactory)
+                .createRpcClient(Server2Api, new ClientConfig('server2'));
         })
         .inSingletonScope();
 });

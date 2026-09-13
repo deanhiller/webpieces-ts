@@ -1,4 +1,4 @@
-import { ApiPath, AuthSharedSecret, Endpoint } from '@webpieces/core-util';
+import { ApiPath, WpAuthSharedSecret, Endpoint } from '@webpieces/core-util';
 
 /**
  * Request to server2.
@@ -31,13 +31,13 @@ export interface FetchValueResponse {
  * AUTHENTICATES ITS CALLER, and that is the point of the example rather than a detail: server2 is an
  * INTERNAL service, so it proves WHO is calling before it believes anything that caller forwarded.
  * That is what admits the magic context's TRUSTED keys (userId, orgId, roles — see the trust section
- * of ContextKey) on this hop. A `@Public()` endpoint cannot verify its caller, so a trusted key
+ * of ContextKey) on this hop. A `@WpAuthPublic('Anonymous access is intentionally required')` endpoint cannot verify its caller, so a trusted key
  * arriving there is rejected outright by AuthFilter — which is correct, and is why "public endpoint
  * on an internal service that receives forwarded identity" is not a shape this example should teach.
  */
-@AuthSharedSecret('INTERNAL_API_SECRET')
 @ApiPath('/server2')
 export abstract class Server2Api {
+    @WpAuthSharedSecret('INTERNAL_API_SECRET')
     @Endpoint('/fetchValue', 'rpc')
     fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
         throw new Error('Method fetchValue() must be implemented by subclass');

@@ -3,8 +3,12 @@
 // workspace-relative path. `**/*.d.ts` (ambient declarations) and
 // `**/jest.config.ts` legitimately live outside src/ and are exempt here.
 const DEFAULT_EXCLUDE_PATHS: readonly string[] = [
-    'node_modules', 'dist', '.nx', '.git',
-    '**/*.d.ts', '**/jest.config.ts',
+    'node_modules',
+    'dist',
+    '.nx',
+    '.git',
+    '**/*.d.ts',
+    '**/jest.config.ts',
 ];
 
 // On/off is driven by `mode` ("OFF" disables; an absent mode leaves a rule
@@ -39,8 +43,15 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-state-paths-in-templates': { mode: 'NEW_AND_MODIFIED_CODE' },
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
-    'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['browser', 'react', 'angular', 'node', 'express'] },
-    'role-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'] },
+    'framework-tag': {
+        mode: 'MODIFIED_PROJECTS',
+        knownTypes: ['browser', 'react', 'angular', 'node', 'express'],
+    },
+    'role-tag': {
+        mode: 'MODIFIED_PROJECTS',
+        knownTypes: ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'],
+    },
+    'ensure-we-are-secure': { mode: 'MODIFIED_PROJECTS' },
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
     'di-graph': { mode: 'RUN_EVERY_TIME' },
     'missing-design-annotation': { mode: 'RUN_EVERY_TIME' },

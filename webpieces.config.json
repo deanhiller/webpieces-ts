@@ -96,10 +96,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "turnOffRuleUntilEpoch": 1771931925,
-            "allowedPaths": [
-                "libraries/apis/**",
-                "packages/core/core-util/src/http/**"
-            ],
+            "allowedPaths": ["libraries/apis/**", "packages/core/core-util/src/http/**"],
             "turnOffRuleWhileOnBranch": null
         },
         "missing-design-annotation": {
@@ -111,26 +108,11 @@
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null,
-            "knownTypes": [
-                "browser",
-                "react",
-                "angular",
-                "node",
-                "express",
-                "react-native"
-            ]
+            "knownTypes": ["browser", "react", "angular", "node", "express", "react-native"]
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
-            "knownTypes": [
-                "server",
-                "app",
-                "bundle",
-                "designed-lib",
-                "lib",
-                "client",
-                "api-lib"
-            ],
+            "knownTypes": ["server", "app", "bundle", "designed-lib", "lib", "client", "api-lib"],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
@@ -171,9 +153,7 @@
         "validate-ts-in-src": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "turnOffRuleUntilEpoch": 1771931925,
-            "allowedRootFiles": [
-                "jest.setup.ts"
-            ],
+            "allowedRootFiles": ["jest.setup.ts"],
             "excludePaths": [
                 "node_modules",
                 "dist",
@@ -276,9 +256,7 @@
                 {
                     "subagent": "error-output-reviewer",
                     "doc": ".claude/review/error-output.md",
-                    "patterns": [
-                        "packages/**"
-                    ],
+                    "patterns": ["packages/**"],
                     "required": true
                 },
                 {
@@ -295,11 +273,7 @@
                 {
                     "subagent": "ticket-required-reviewer",
                     "doc": ".claude/review/ticket-required.md",
-                    "patterns": [
-                        "**",
-                        ".claude/**",
-                        ".github/**"
-                    ],
+                    "patterns": ["**", ".claude/**", ".github/**"],
                     "required": true
                 }
             ],
@@ -307,10 +281,7 @@
             "gates": [
                 {
                     "name": "API Changed",
-                    "patterns": [
-                        "libraries/apis/**",
-                        "**/*Api.ts"
-                    ],
+                    "patterns": ["libraries/apis/**", "**/*Api.ts"],
                     "warningColor": "yellow"
                 },
                 {
@@ -325,9 +296,7 @@
                 },
                 {
                     "name": "Dependency Graph Changed",
-                    "patterns": [
-                        "architecture/dependencies.json"
-                    ],
+                    "patterns": ["architecture/dependencies.json"],
                     "warningColor": "yellow"
                 },
                 {
@@ -342,49 +311,37 @@
                 },
                 {
                     "name": "Package.json Changed",
-                    "patterns": [
-                        "**/package.json"
-                    ],
+                    "patterns": ["**/package.json"],
                     "warningColor": "yellow",
                     "disabled": true
                 },
                 {
                     "name": "Other API Files Changed",
-                    "patterns": [
-                        "**/*Dto.ts"
-                    ],
+                    "patterns": ["**/*Dto.ts"],
                     "warningColor": "yellow",
                     "disabled": true
                 },
                 {
                     "name": "Authentication Changed",
-                    "patterns": [
-                        "**/authentication.ts"
-                    ],
+                    "patterns": ["**/authentication.ts"],
                     "warningColor": "yellow",
                     "disabled": true
                 },
                 {
                     "name": "DB Schema Changed",
-                    "patterns": [
-                        "**/schema.prisma"
-                    ],
+                    "patterns": ["**/schema.prisma"],
                     "warningColor": "red",
                     "disabled": true
                 },
                 {
                     "name": "Migration Files",
-                    "patterns": [
-                        "**/migrations/**"
-                    ],
+                    "patterns": ["**/migrations/**"],
                     "warningColor": "red",
                     "disabled": true
                 },
                 {
                     "name": "Firestore Schema Changed",
-                    "patterns": [
-                        "**/firestore*.ts"
-                    ],
+                    "patterns": ["**/firestore*.ts"],
                     "warningColor": "yellow",
                     "disabled": true
                 }
@@ -397,9 +354,7 @@
         }
     },
     "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling — `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
-    "excludePaths": [
-        "repositories/**"
-    ],
+    "excludePaths": ["repositories/**"],
     "match-rules": [
         {
             "mode": "NEW_AND_MODIFIED_CODE",
@@ -431,10 +386,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "turnOffRuleUntilEpoch": 0,
             "name": "no-global-providesingleton-in-packages",
-            "patterns": [
-                "@provideSingleton\\s*\\(",
-                "@provideSingletonAs\\s*\\("
-            ],
+            "patterns": ["@provideSingleton\\s*\\(", "@provideSingletonAs\\s*\\("],
             "mainMessage": "Framework code in packages/** must use @provideFrameworkSingleton (a SEPARATE DI registry) so a client's buildProviderModule() never scoops up webpieces framework classes. Plain @provideSingleton is for apps/client code only. (Turn ON once the repo consumes a @webpieces release whose DI-graph analyzer understands provideFrameworkSingleton.)",
             "options": [
                 "In a packages/** framework class, use @provideFrameworkSingleton() (self-bind) or @provideFrameworkSingletonAs(TOKEN) from @webpieces/core-context.",

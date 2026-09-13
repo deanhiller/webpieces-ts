@@ -95,10 +95,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "turnOffRuleUntilEpoch": 0,
-            "allowedPaths": [
-                "libraries/apis/**",
-                "packages/core/core-util/src/http/**"
-            ],
+            "allowedPaths": ["libraries/apis/**", "packages/core/core-util/src/http/**"],
             "turnOffRuleWhileOnBranch": null
         },
         "missing-design-annotation": {
@@ -113,15 +110,7 @@
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
-            "knownTypes": [
-                "server",
-                "app",
-                "bundle",
-                "designed-lib",
-                "lib",
-                "client",
-                "api-lib"
-            ],
+            "knownTypes": ["server", "app", "bundle", "designed-lib", "lib", "client", "api-lib"],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
@@ -162,9 +151,7 @@
         "validate-ts-in-src": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "turnOffRuleUntilEpoch": 0,
-            "allowedRootFiles": [
-                "jest.setup.ts"
-            ],
+            "allowedRootFiles": ["jest.setup.ts"],
             "excludePaths": [
                 "node_modules",
                 "dist",
@@ -218,6 +205,11 @@
             "mode": "RUN_EVERY_TIME",
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
+        },
+        "ensure-we-are-secure": {
+            "mode": "MODIFIED_PROJECTS",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         }
     },
     "hookGuards": {
@@ -251,9 +243,7 @@
             "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b"
         }
     },
-    "excludePaths": [
-        "repositories/**"
-    ],
+    "excludePaths": ["repositories/**"],
     "match-rules": [
         {
             "mode": "NEW_AND_MODIFIED_CODE",
@@ -285,10 +275,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "turnOffRuleUntilEpoch": 0,
             "name": "no-global-providesingleton-in-packages",
-            "patterns": [
-                "@provideSingleton\\s*\\(",
-                "@provideSingletonAs\\s*\\("
-            ],
+            "patterns": ["@provideSingleton\\s*\\(", "@provideSingletonAs\\s*\\("],
             "mainMessage": "Framework code in packages/** must use @provideFrameworkSingleton (a SEPARATE DI registry) so a client's buildProviderModule() never scoops up webpieces framework classes. Plain @provideSingleton is for apps/client code only. (Turn ON once the repo consumes a @webpieces release whose DI-graph analyzer understands provideFrameworkSingleton.)",
             "options": [
                 "In a packages/** framework class, use @provideFrameworkSingleton() (self-bind) or @provideFrameworkSingletonAs(TOKEN) from @webpieces/core-context.",

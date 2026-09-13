@@ -7,7 +7,7 @@ where it runs through the full server filter chain.
 
 ```ts
 // one shared contract
-@PubSub() @AuthOidc() @ApiPath('/email')
+@PubSub() @WpAuthOidc() @ApiPath('/email')
 abstract class EmailApi { @Endpoint('/send') sendEmail(r: SendEmailRequest): Promise<void> {…} }
 
 // build the client once (sync); 'email-svc' is the callee's Cloud Run service name

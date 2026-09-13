@@ -5,7 +5,7 @@
  * all read from the metadata server / ADC at runtime with deterministic localhost
  * fallbacks off-GCP so local dev and tests never touch GCP.
  *
- * Underpins the @AuthOidc service-to-service auth mode (enforced by the framework AuthFilter
+ * Underpins the @WpAuthOidc service-to-service auth mode (enforced by the framework AuthFilter
  * via an app-bound AuthConfig) and the RPC + Cloud Tasks clients.
  *
  * URL RESOLUTION lives in core-util's browser-safe `ClientRegistry`, NOT here; this package

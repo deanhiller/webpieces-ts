@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
     ApiPath,
     Endpoint,
-    Public,
+    WpAuthPublic,
     assertEveryExternalEndpointDeclaresCaller,
     getEndpointKinds,
     getEndpoints,
@@ -18,27 +18,30 @@ import {
 } from '../decorators';
 import { ExternalCaller, getEndpointCaller } from '../external-caller';
 
-@Public()
 @ApiPath('/hooks')
 abstract class CallerApi {
+    @WpAuthPublic('External caller metadata fixture')
     @Endpoint('/rpc', 'rpc')
     plain(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
     // Vendor webhook: kind defaults to 'saas'.
+    @WpAuthPublic('External caller metadata fixture')
     @Endpoint('/twilio', 'external', { formPost: true, calledBy: 'twilio' })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
     // A SECOND method with the SAME caller — one vendor, several endpoints.
+    @WpAuthPublic('External caller metadata fixture')
     @Endpoint('/twilio-status', 'external', { calledBy: 'twilio' })
     status(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
     // Infrastructure rather than a vendor product.
+    @WpAuthPublic('External caller metadata fixture')
     @Endpoint('/push', 'external', { calledBy: 'pubsub-push', callerKind: 'system' })
     push(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -62,11 +65,15 @@ describe('@Endpoint external caller metadata', () => {
     });
 
     it('records the caller with the default kind saas', () => {
-        expect(getEndpointCaller(CallerApi, 'inbound')).toEqual(new ExternalCaller('saas', 'twilio'));
+        expect(getEndpointCaller(CallerApi, 'inbound')).toEqual(
+            new ExternalCaller('saas', 'twilio'),
+        );
     });
 
     it('honours an explicit callerKind', () => {
-        expect(getEndpointCaller(CallerApi, 'push')).toEqual(new ExternalCaller('system', 'pubsub-push'));
+        expect(getEndpointCaller(CallerApi, 'push')).toEqual(
+            new ExternalCaller('system', 'pubsub-push'),
+        );
     });
 
     it('gives two endpoints of one vendor the SAME identity, so the graph converges on one node', () => {
@@ -94,24 +101,26 @@ describe('assertEveryExternalEndpointDeclaresCaller', () => {
     });
 
     it('throws for an external endpoint that bypassed TS and declared none', () => {
-        @Public()
         @ApiPath('/sneaky')
         abstract class SneakyApi {
             // The `as never` is the point: TS refuses this, JS callers and `as any` do not, so the
             // wiring-time assert is the backstop behind the compile error.
+            @WpAuthPublic('External caller metadata fixture')
             @Endpoint('/hook', 'external', { formPost: true } as never)
             inbound(_req: object): Promise<object> {
                 throw new Error('subclass');
             }
         }
-        expect(() => assertEveryExternalEndpointDeclaresCaller(SneakyApi)).toThrow(/declares no caller/);
+        expect(() => assertEveryExternalEndpointDeclaresCaller(SneakyApi)).toThrow(
+            /declares no caller/,
+        );
         expect(() => assertEveryExternalEndpointDeclaresCaller(SneakyApi)).toThrow(/calledBy/);
     });
 
     it('ignores a class with no external endpoints at all', () => {
-        @Public()
         @ApiPath('/plain')
         abstract class PlainApi {
+            @WpAuthPublic('External caller metadata fixture')
             @Endpoint('/go', 'rpc')
             go(_req: object): Promise<object> {
                 throw new Error('subclass');

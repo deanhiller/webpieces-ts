@@ -15,7 +15,7 @@ import {
     ServiceUnavailableError,
     VendorError,
     ProtocolError,
-    Public,
+    WpAuthPublic,
     Rpc,
     TestCaseRecorder,
 } from '@webpieces/core-util';
@@ -36,7 +36,7 @@ class FetchStoresRequest {
 @ApiPath('/db-stores')
 abstract class DbStoresApi {
     @Endpoint('/fetch-stores', 'rpc')
-    @Public()
+    @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     fetchStores(_request: FetchStoresRequest): Promise<void> {
         throw new Error('contract only');
@@ -63,11 +63,13 @@ class StubHeaders {
  */
 class ThrowingAddressResolver extends AddressResolver {
     override resolve(hostname: string): Promise<string[]> {
-        throw new Error(`the SSRF guard must not resolve ${hostname} for a ClientRegistry-resolved url`);
+        throw new Error(
+            `the SSRF guard must not resolve ${hostname} for a ClientRegistry-resolved url`,
+        );
     }
 }
 
-/** GcpOidc stand-in. Every contract here is @Public, so nothing ever mints a token. */
+/** GcpOidc stand-in. Every contract here is @WpAuthPublic, so nothing ever mints a token. */
 class StubOidc {
     mintIdToken(_audience: string): Promise<string> {
         return Promise.resolve('never-used');
@@ -79,7 +81,7 @@ function client(): DbStoresApi {
     const proxyClient = new NodeProxyClient(
         // webpieces-disable no-any-unknown -- test double: only buildOutboundHeaders/findRecorder are reached
         new StubHeaders() as unknown as RequestContextHeaders,
-        // webpieces-disable no-any-unknown -- test double: no @AuthOidc endpoint exists in this spec
+        // webpieces-disable no-any-unknown -- test double: no @WpAuthOidc endpoint exists in this spec
         new StubOidc() as unknown as GcpOidc,
         // Never consulted: every url here comes from ClientRegistry, so the SSRF guard steps aside.
         new ThrowingAddressResolver(),
@@ -129,7 +131,10 @@ function stubExpressHtml404(): void {
 async function callAndCatch(): Promise<unknown> {
     // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
     return RequestContext.run(() =>
-        client().fetchStores(new FetchStoresRequest(51)).catch((err: unknown) => err));
+        client()
+            .fetchStores(new FetchStoresRequest(51))
+            .catch((err: unknown) => err),
+    );
 }
 
 beforeEach(() => {
@@ -155,7 +160,7 @@ afterEach(() => {
  * for an org with six live storefronts. The failure impersonated valid data instead of paging the one
  * server that actually had the bug.
  */
-describe('NodeProxyClient turns a downstream 4xx into THIS server\'s own 500', () => {
+describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", () => {
     it('a 404 from a dependency is InternalError, NOT NotFoundError', async () => {
         stubProtocolError(404, 'no route');
 
@@ -306,7 +311,9 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
         const error = await callAndCatch();
 
         expect(error).toBeInstanceOf(InternalError);
-        expect(((error as Error).cause as Error).message).toBe('our service account is not on the allow-list');
+        expect(((error as Error).cause as Error).message).toBe(
+            'our service account is not on the allow-list',
+        );
     });
 });
 
@@ -326,15 +333,18 @@ describe('NodeProxyClient calls from a host that never ran setupRuntime', () => 
         vi.stubGlobal(
             'fetch',
             vi.fn(() =>
-                Promise.resolve(new Response('{"ok":true}', {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/json' },
-                })),
+                Promise.resolve(
+                    new Response('{"ok":true}', {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                    }),
+                ),
             ),
         );
 
         const result = await RequestContext.run(() =>
-            client().fetchStores(new FetchStoresRequest(51)));
+            client().fetchStores(new FetchStoresRequest(51)),
+        );
 
         expect(result).toEqual({ ok: true });
     });

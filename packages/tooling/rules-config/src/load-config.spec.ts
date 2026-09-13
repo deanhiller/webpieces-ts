@@ -27,21 +27,48 @@ function mktmp(contents: Record<string, string>): string {
 // here would fail the load with a migration instruction, which is what the retired-guard-names describe
 // block below asserts on purpose.
 const HOOK_GUARD_NAMES = [
-    'branch-state-guard', 'branch-creation-guard', 'pr-lifecycle-guard',
+    'branch-state-guard',
+    'branch-creation-guard',
+    'pr-lifecycle-guard',
     // NOT 'whole-repo-build-guard' — it is retired as a repo-config key (it is switched from
     // ~/.webpieces/config.json instead), so naming it here would FAIL the load rather than configure it.
 ];
 const CODE_RULE_NAMES = [
-    'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
-    'no-any-unknown', 'no-implicit-any', 'prisma-validate-dtos', 'prisma-converter',
-    'no-destructure', 'no-unmanaged-exceptions', 'catch-error-pattern', 'throw-cause-required',
-    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-client-creation-outside-server-or-client',
-    'no-custom-css', 'no-state-paths-in-templates', 'no-process-exit-outside-main',
-    'no-function-outside-class', 'inject-annotation-not-needed-for-concrete-class', 'framework-tag',
-    'role-tag', 'no-file-import-cycles',
-    'runtime-architecture', 'nx-wiring', 'di-graph', 'missing-design-annotation', 'no-js-files',
-    'validate-ts-in-src', 'validate-architecture-unchanged', 'validate-no-architecture-cycles',
-    'validate-packagejson', 'validate-versions-locked', 'validate-eslint-sync',
+    'max-method-lines',
+    'max-file-lines',
+    'require-return-type',
+    'no-inline-type-literals',
+    'no-any-unknown',
+    'no-implicit-any',
+    'prisma-validate-dtos',
+    'prisma-converter',
+    'no-destructure',
+    'no-unmanaged-exceptions',
+    'catch-error-pattern',
+    'throw-cause-required',
+    'angular-no-direct-api-in-resolver',
+    'no-symbol-di-tokens',
+    'no-client-creation-outside-server-or-client',
+    'no-custom-css',
+    'no-state-paths-in-templates',
+    'no-process-exit-outside-main',
+    'no-function-outside-class',
+    'inject-annotation-not-needed-for-concrete-class',
+    'framework-tag',
+    'role-tag',
+    'ensure-we-are-secure',
+    'no-file-import-cycles',
+    'runtime-architecture',
+    'nx-wiring',
+    'di-graph',
+    'missing-design-annotation',
+    'no-js-files',
+    'validate-ts-in-src',
+    'validate-architecture-unchanged',
+    'validate-no-architecture-cycles',
+    'validate-packagejson',
+    'validate-versions-locked',
+    'validate-eslint-sync',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
@@ -53,7 +80,13 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {
     const base: Record<string, unknown> = {};
-    for (const name of names) base[name] = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null, ...EXTRA_REQUIRED[name] };
+    for (const name of names)
+        base[name] = {
+            mode: 'OFF',
+            turnOffRuleUntilEpoch: 0,
+            turnOffRuleWhileOnBranch: null,
+            ...EXTRA_REQUIRED[name],
+        };
     return { ...base, ...overrides };
 }
 
@@ -62,7 +95,8 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
     const ruleOverrides: Record<string, unknown> = {};
     const guardOverrides: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(overrides)) {
-        if (HOOK_GUARD_NAMES.includes(k)) guardOverrides[k] = v; else ruleOverrides[k] = v;
+        if (HOOK_GUARD_NAMES.includes(k)) guardOverrides[k] = v;
+        else ruleOverrides[k] = v;
     }
     return {
         rules: offEntries(CODE_RULE_NAMES, ruleOverrides),
@@ -83,11 +117,13 @@ function validExcludePaths(): string[] {
     return [];
 }
 function writeConfig(sections: Record<string, unknown>, prGate: unknown = validPrGate()): string {
-    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-        ...sections,
-        commands: { 'pr-gate': prGate },
-        excludePaths: validExcludePaths(),
-    }) });
+    return mktmp({
+        [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            commands: { 'pr-gate': prGate },
+            excludePaths: validExcludePaths(),
+        }),
+    });
 }
 
 // A genuine syntax error survives every retry, so the hard failure is unchanged — but the message now
@@ -96,7 +132,9 @@ function writeConfig(sections: Record<string, unknown>, prGate: unknown = validP
 describe('loadAndValidate — malformed JSON', () => {
     it('throws InformAiError after the bounded retry, and says how many times it retried', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: '{ this is not json' });
-        expect(() => loadAndValidate(dir)).toThrow('webpieces.config.json could not be parsed as JSON');
+        expect(() => loadAndValidate(dir)).toThrow(
+            'webpieces.config.json could not be parsed as JSON',
+        );
         expect(() => loadAndValidate(dir)).toThrow('retried 3 times');
     });
 });
@@ -113,10 +151,21 @@ describe('loadAndValidate', () => {
     });
 
     it('merges defaults with overrides and honors mode:OFF; exposes all three views', () => {
-        const dir = writeConfig(allRulesOff({
-            'max-file-lines': { limit: 500, mode: 'NEW_AND_MODIFIED_FILES', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-            'no-any-unknown': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-        }));
+        const dir = writeConfig(
+            allRulesOff({
+                'max-file-lines': {
+                    limit: 500,
+                    mode: 'NEW_AND_MODIFIED_FILES',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
+                'no-any-unknown': {
+                    mode: 'OFF',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
+            }),
+        );
         const loaded = loadAndValidate(dir);
 
         expect(loaded.configPath).toBe(path.join(dir, CONFIG_FILENAME));
@@ -131,16 +180,28 @@ describe('loadAndValidate', () => {
     });
 
     it('preserves unknown option keys for consumers that understand them', () => {
-        const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', disableAllowed: false, turnOffRuleUntilEpoch: 12345, turnOffRuleWhileOnBranch: null },
-        }));
+        const dir = writeConfig(
+            allRulesOff({
+                'no-destructure': {
+                    mode: 'NEW_AND_MODIFIED_CODE',
+                    disableAllowed: false,
+                    turnOffRuleUntilEpoch: 12345,
+                    turnOffRuleWhileOnBranch: null,
+                },
+            }),
+        );
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['disableAllowed']).toBe(false);
         expect(rule.options['turnOffRuleUntilEpoch']).toBe(12345);
     });
 
     it('throws listing missing rules when config has none', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: {}, commands: { 'pr-gate': validPrGate() } }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                rules: {},
+                commands: { 'pr-gate': validPrGate() },
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('Not configured in webpieces.config.json');
     });
 
@@ -150,27 +211,36 @@ describe('loadAndValidate', () => {
     });
 
     it('throws when the required excludePaths block is missing', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), commands: { 'pr-gate': validPrGate() } }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...allRulesOff(),
+                commands: { 'pr-gate': validPrGate() },
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('[excludePaths] Not configured');
     });
 
     it('parses excludePaths into the typed ExcludePaths view', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...allRulesOff(),
-            commands: { 'pr-gate': validPrGate() },
-            excludePaths: ['repositories/**', 'vendor/**'],
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...allRulesOff(),
+                commands: { 'pr-gate': validPrGate() },
+                excludePaths: ['repositories/**', 'vendor/**'],
+            }),
+        });
         expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**', 'vendor/**']);
     });
 
     // The retired two-list object fails the LOAD, it is not unioned. Tolerating it is what kept consumer
     // configs (this repo's included) on the dead shape release after release.
     it('throws on the retired { rules, guards } object, naming the union it must become', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...allRulesOff(),
-            commands: { 'pr-gate': validPrGate() },
-            excludePaths: { rules: ['repositories/**'], guards: ['vendor/**'] },
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...allRulesOff(),
+                commands: { 'pr-gate': validPrGate() },
+                excludePaths: { rules: ['repositories/**'], guards: ['vendor/**'] },
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('RETIRED');
         expect(() => loadAndValidate(dir)).toThrow('ONE array holding the union');
     });
@@ -178,9 +248,15 @@ describe('loadAndValidate', () => {
 
 describe('loadAndValidate — escape-hatch fields', () => {
     it('surfaces turnOffRuleUntilEpoch + turnOffRuleWhileOnBranch on the resolved rule (read directly)', () => {
-        const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
-        }));
+        const dir = writeConfig(
+            allRulesOff({
+                'no-destructure': {
+                    mode: 'NEW_AND_MODIFIED_CODE',
+                    turnOffRuleUntilEpoch: 1771931925,
+                    turnOffRuleWhileOnBranch: 'deanhiller/foo',
+                },
+            }),
+        );
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         // RuleGate + AbstractRule.shouldRun read these names directly — no aliasing/normalization anymore.
         expect(rule.options['turnOffRuleUntilEpoch']).toBe(1771931925);
@@ -188,9 +264,15 @@ describe('loadAndValidate — escape-hatch fields', () => {
     });
 
     it('preserves a null branch hatch (the always-on / no-branch value)', () => {
-        const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-        }));
+        const dir = writeConfig(
+            allRulesOff({
+                'no-destructure': {
+                    mode: 'NEW_AND_MODIFIED_CODE',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
+            }),
+        );
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['turnOffRuleWhileOnBranch']).toBeNull();
     });
@@ -200,37 +282,54 @@ describe('loadAndValidate — sections & commands', () => {
     it('errors when a guard is left in the rules section (placement)', () => {
         const sections = allRulesOff();
         // Misplace a guard into rules.
-        (sections['rules'] as Record<string, unknown>)['pr-lifecycle-guard'] = { mode: 'ON', turnOffRuleUntilEpoch: 0 };
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': validPrGate() } }) });
+        (sections['rules'] as Record<string, unknown>)['pr-lifecycle-guard'] = {
+            mode: 'ON',
+            turnOffRuleUntilEpoch: 0,
+        };
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: { 'pr-gate': validPrGate() },
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
     });
 
     it('errors on a retired top-level pr-gate block', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), 'pr-gate': validPrGate() }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), 'pr-gate': validPrGate() }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('top-level "pr-gate" block is RETIRED');
     });
 
     it('throws on the retired flat commands.upsertPr instead of injecting it into the guard', () => {
         const sections = allRulesOff();
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...sections,
-            commands: { 'pr-gate': validPrGate(), upsertPr: 'pnpm my-upsert' },
-            excludePaths: validExcludePaths(),
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: { 'pr-gate': validPrGate(), upsertPr: 'pnpm my-upsert' },
+                excludePaths: validExcludePaths(),
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('"upsertPr" is a RETIRED');
         expect(() => loadAndValidate(dir)).toThrow('commands.guardHints.prCreationOrPush');
     });
 
     it('sources both guard hints from commands.guardHints (canonical) into their guards', () => {
         const sections = allRulesOff();
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...sections,
-            commands: {
-                'pr-gate': validPrGate(),
-                guardHints: { prCreationOrPush: 'pnpm gh-upsert', mergeInProgress: 'pnpm gh-finish' },
-            },
-            excludePaths: validExcludePaths(),
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: {
+                    'pr-gate': validPrGate(),
+                    guardHints: {
+                        prCreationOrPush: 'pnpm gh-upsert',
+                        mergeInProgress: 'pnpm gh-finish',
+                    },
+                },
+                excludePaths: validExcludePaths(),
+            }),
+        });
         const loaded = loadAndValidate(dir);
         expect(loaded.commands.upsertPr).toBe('pnpm gh-upsert');
         expect(loaded.commands.mergeComplete).toBe('pnpm gh-finish');
@@ -249,21 +348,32 @@ describe('loadAndValidate — sections & commands', () => {
     // working with both keys present is a file nobody ever finishes migrating.
     it('still throws when guardHints is present but the retired flat key was left behind', () => {
         const sections = allRulesOff();
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...sections,
-            commands: { 'pr-gate': validPrGate(), guardHints: { prCreationOrPush: 'pnpm canonical' }, upsertPr: 'pnpm legacy' },
-            excludePaths: validExcludePaths(),
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: {
+                    'pr-gate': validPrGate(),
+                    guardHints: { prCreationOrPush: 'pnpm canonical' },
+                    upsertPr: 'pnpm legacy',
+                },
+                excludePaths: validExcludePaths(),
+            }),
+        });
         expect(() => loadAndValidate(dir)).toThrow('"upsertPr" is a RETIRED');
     });
 
     it('falls back to the built-in default when guardHints omits a name', () => {
         const sections = allRulesOff();
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...sections,
-            commands: { 'pr-gate': validPrGate(), guardHints: { prCreationOrPush: 'pnpm canonical' } },
-            excludePaths: validExcludePaths(),
-        }) });
+        const dir = mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: {
+                    'pr-gate': validPrGate(),
+                    guardHints: { prCreationOrPush: 'pnpm canonical' },
+                },
+                excludePaths: validExcludePaths(),
+            }),
+        });
         const loaded = loadAndValidate(dir);
         expect(loaded.commands.upsertPr).toBe('pnpm canonical');
         expect(loaded.commands.mergeComplete).toBe('pnpm wp-finish-upsert-pr');
@@ -284,7 +394,10 @@ describe('loadAndValidate — sections & commands', () => {
 describe('loadAndValidate — config-error banner (unblock instructions)', () => {
     function bannerFor(unknownRuleKey: string): string {
         const sections = allRulesOff();
-        (sections['rules'] as Record<string, unknown>)[unknownRuleKey] = { mode: 'OFF', turnOffRuleUntilEpoch: 0 };
+        (sections['rules'] as Record<string, unknown>)[unknownRuleKey] = {
+            mode: 'OFF',
+            turnOffRuleUntilEpoch: 0,
+        };
         const dir = writeConfig(sections);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -387,21 +500,29 @@ describe('loadAndValidate — every retired key fails the load', () => {
         const sections = allRulesOff();
         if (entry.scope === RETIRED_SCOPE_RULE) {
             const guards = sections['hookGuards'] as Record<string, unknown>;
-            guards[entry.key] = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+            guards[entry.key] = {
+                mode: 'OFF',
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
+            };
             return writeConfig(sections);
         }
         if (entry.label === '[excludePaths]') {
-            return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-                ...sections,
-                commands: { 'pr-gate': validPrGate() },
-                excludePaths: { rules: [], guards: [] },
-            }) });
+            return mktmp({
+                [CONFIG_FILENAME]: JSON.stringify({
+                    ...sections,
+                    commands: { 'pr-gate': validPrGate() },
+                    excludePaths: { rules: [], guards: [] },
+                }),
+            });
         }
-        return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...sections,
-            commands: { 'pr-gate': validPrGate(), [entry.key]: 'pnpm something' },
-            excludePaths: validExcludePaths(),
-        }) });
+        return mktmp({
+            [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: { 'pr-gate': validPrGate(), [entry.key]: 'pnpm something' },
+                excludePaths: validExcludePaths(),
+            }),
+        });
     }
 
     /**

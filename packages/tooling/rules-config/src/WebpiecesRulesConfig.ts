@@ -19,6 +19,7 @@ import {
     InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
+    EnsureWeAreSecureConfig,
     BranchCreationGuardConfig,
     PrLifecycleGuardConfig,
     NoFileImportCyclesConfig,
@@ -55,6 +56,7 @@ export class WebpiecesRulesConfig {
     'inject-annotation-not-needed-for-concrete-class'?: InjectAnnotationNotNeededForConcreteClassConfig;
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
+    'ensure-we-are-secure'?: EnsureWeAreSecureConfig;
     // The THREE hookGuards keys, complete. It used to list five of the nine class-named keys — both
     // bash guards were simply missing — and nothing caught it, because this class is populated by
     // dynamic key assignment in the loader. One key per POLICY makes completeness checkable by eye.

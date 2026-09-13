@@ -1,6 +1,12 @@
 import 'reflect-metadata';
 import { MaskSpec, MaskMode } from './LogFieldMask';
-import { DEFAULT_CALLER_KIND, ENDPOINT_CALLER_KEY, ExternalCaller, ExternalSystemKind, getEndpointCaller } from './external-caller';
+import {
+    DEFAULT_CALLER_KIND,
+    ENDPOINT_CALLER_KEY,
+    ExternalCaller,
+    ExternalSystemKind,
+    getEndpointCaller,
+} from './external-caller';
 // The TYPE layer these decorators attach — split out for file size only (see auth-mode.ts).
 import { ApiKeyCredentials, AuthMeta, AuthMode, JwtRequirement } from './auth-mode';
 
@@ -12,6 +18,8 @@ export const METADATA_KEYS = {
     API_PATH: 'webpieces:api-path',
     ENDPOINTS: 'webpieces:endpoints',
     AUTH_META: 'webpieces:auth-meta',
+    /** Method names carrying one of the canonical authorization decorators. */
+    AUTH_METHODS: 'webpieces:auth-methods',
     /** 'rpc' (default, sync request/response) vs 'pubsub' (fire-and-forget cloud task). */
     API_KIND: 'webpieces:api-kind',
     /** Per-method Cloud Tasks queue-name override (set via @Queue). */
@@ -59,14 +67,14 @@ export interface EndpointOptions {
 
     /**
      * RETAIN the verbatim request bytes + the absolute url the sender addressed, so an
-     * {@link AuthWebhook} hook can verify a vendor signature over them (see `RawRequest`).
+     * {@link WpAuthWebhook} hook can verify a vendor signature over them (see `RawRequest`).
      *
      * Opt-in PER ENDPOINT, sitting beside `formPost` and for the same reason: the cost lands on the
      * handful of webhook routes rather than on every request in the process. It is retention, not
      * new buffering — the express adapter already accumulates the whole body, it simply threw it
      * away once it had parsed a DTO.
      *
-     * REQUIRED by `@AuthWebhook`, checked at wiring time (see
+     * REQUIRED by `@WpAuthWebhook`, checked at wiring time (see
      * {@link assertEveryWebhookEndpointRetainsRawBody}) rather than left to fail as a 401 in
      * production: a hook with nothing to verify is a misconfiguration, not a bad request.
      *
@@ -93,17 +101,21 @@ export interface ExternalEndpointOptions extends EndpointOptions {
  *
  * Usage:
  * ```typescript
- * @AuthJwt({ roles: ['admin'] })
  * @ApiPath('/api/save')
  * abstract class SaveApi {
+ *   @WpAuthJwt({ roles: ['admin'] })
  *   @Endpoint('/item', 'rpc')
  *   save(request: SaveRequest): Promise<SaveResponse> { ... }
  * }
  * ```
  */
 export function ApiPath(basePath: string): ClassDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any) => {
+    return (target: Function) => {
+        if (Reflect.hasMetadata('webpieces:ipc-api-id', target)) {
+            throw new Error(
+                `Class ${target.name || 'Unknown'} cannot combine @ApiPath with @WpInternal.`,
+            );
+        }
         Reflect.defineMetadata(METADATA_KEYS.API_PATH, basePath, target);
 
         // Initialize endpoints map if not exists
@@ -153,11 +165,23 @@ export function ApiPath(basePath: string): ClassDecorator {
  * options and caller ride PARALLEL ENDPOINT_KIND / ENDPOINT_OPTIONS / ENDPOINT_CALLER maps.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(path: string, kind: 'external', options: ExternalEndpointOptions): MethodDecorator;
+export function Endpoint(
+    path: string,
+    kind: 'external',
+    options: ExternalEndpointOptions,
+): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(path: string, kind: Exclude<EndpointKind, 'external'>, options?: EndpointOptions): MethodDecorator;
+export function Endpoint(
+    path: string,
+    kind: Exclude<EndpointKind, 'external'>,
+    options?: EndpointOptions,
+): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(path: string, kind: EndpointKind, options: EndpointOptions = {}): MethodDecorator {
+export function Endpoint(
+    path: string,
+    kind: EndpointKind,
+    options: EndpointOptions = {},
+): MethodDecorator {
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
         const metadataTarget = typeof target === 'function' ? target : target.constructor;
@@ -182,9 +206,18 @@ export function Endpoint(path: string, kind: EndpointKind, options: EndpointOpti
         // ONLY for 'external', mirroring how a queue name is recorded only for the kinds that HAVE
         // a queue: a caller on an rpc endpoint would be a fact about nothing.
         const declared = options as ExternalEndpointOptions;
-        if (kind !== 'external' || typeof declared.calledBy !== 'string' || declared.calledBy === '') return;
-        const callers: Record<string, ExternalCaller> = Reflect.getMetadata(METADATA_KEYS.ENDPOINT_CALLER, metadataTarget) || {};
-        callers[propertyKey as string] = new ExternalCaller(declared.callerKind ?? DEFAULT_CALLER_KIND, declared.calledBy);
+        if (
+            kind !== 'external' ||
+            typeof declared.calledBy !== 'string' ||
+            declared.calledBy === ''
+        )
+            return;
+        const callers: Record<string, ExternalCaller> =
+            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_CALLER, metadataTarget) || {};
+        callers[propertyKey as string] = new ExternalCaller(
+            declared.callerKind ?? DEFAULT_CALLER_KIND,
+            declared.calledBy,
+        );
         Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_CALLER, callers, metadataTarget);
     };
 }
@@ -231,50 +264,65 @@ export function getMaskSpec(apiClass: Function, methodName: string): MaskSpec | 
 }
 
 /**
- * Shared implementation for every auth decorator: stores an {@link AuthMeta} for
- * the given {@link AuthMode} at class- or method-level, rejecting a second auth
- * decorator on the same target.
+ * Shared implementation for every auth decorator. Authorization is deliberately
+ * method-only: a class-level default is too easy to miss when reviewing one endpoint.
  */
-function defineAuthMode(mode: AuthMode): ClassDecorator & MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+function defineAuthMode(mode: AuthMode): MethodDecorator {
     const authMeta = new AuthMeta(mode);
 
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
-        if (propertyKey !== undefined) {
-            // Method decorator
-            const metadataTarget = typeof target === 'function' ? target : target.constructor;
-            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
-        } else {
-            // Class decorator
-            validateNoConflictingDecorators(target, undefined);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
+        if (propertyKey === undefined) {
+            throw new Error(
+                'Authorization decorators are method-only; annotate every @Endpoint explicitly.',
+            );
         }
+        const metadataTarget = typeof target === 'function' ? target : target.constructor;
+        if (Reflect.hasMetadata('webpieces:ipc-api-id', metadataTarget)) {
+            throw new Error(
+                `Internal API ${metadataTarget.name || 'Unknown'} cannot use HTTP authorization decorators.`,
+            );
+        }
+        validateNoConflictingDecorators(metadataTarget, propertyKey as string);
+        Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
+        const methods = new Set<string>(
+            Reflect.getMetadata(METADATA_KEYS.AUTH_METHODS, metadataTarget) || [],
+        );
+        methods.add(propertyKey as string);
+        Reflect.defineMetadata(METADATA_KEYS.AUTH_METHODS, [...methods], metadataTarget);
     };
 }
 
 /**
- * @Public() - endpoint requires no authentication. Class- or method-level.
+ * @WpAuthPublic(reason) - endpoint intentionally requires no authentication.
+ * The non-empty reason makes anonymous exposure an explicit review decision.
  */
-export function Public(): ClassDecorator & MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function WpAuthPublic(reason: string): MethodDecorator {
+    if (typeof reason !== 'string' || reason.trim() === '') {
+        throw new Error(
+            '@WpAuthPublic requires a non-empty reason explaining why anonymous access is required.',
+        );
+    }
     return defineAuthMode({ kind: 'public' });
 }
 
 /**
- * @AuthJwt(requirement) - THE user-facing JWT decorator, covering the whole user-JWT axis: the
+ * @WpAuthJwt(requirement) - THE user-facing JWT decorator, covering the whole user-JWT axis: the
  * compiler-enforced role decision ({@link JwtRoles}) plus app-defined fields ({@link JwtRequirement}).
  *
  * ```typescript
- * @AuthJwt({ roles: ['admin', 'editor'] })          // any-of
- * @AuthJwt({ allRolesAllowed: true, inOrg: true })  // wide + an app rule enforced by authorizeJwt
+ * @WpAuthJwt({ roles: ['admin', 'editor'] })          // any-of
+ * @WpAuthJwt({ allRolesAllowed: true, inOrg: true })  // wide + an app rule enforced by authorizeJwt
  * ```
  *
  * It absorbed the former `@Auth(requirement)` — same argument, same AuthMode, so two spellings of one
- * decision. One decorator per credential kind now: `@Public` / `@AuthJwt` / `@AuthOidc` /
- * `@AuthSharedSecret` / `@AuthLocalOnly`.
+ * decision. One decorator per credential kind now: `@WpAuthPublic` / `@WpAuthJwt` / `@WpAuthOidc` /
+ * `@WpAuthSharedSecret` / `@WpAuthLocalOnly`.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthJwt(requirement: JwtRequirement): ClassDecorator & MethodDecorator {
+export function WpAuthJwt(requirement: JwtRequirement): MethodDecorator {
     return defineAuthMode({ kind: 'jwt', requirement });
 }
 
@@ -289,44 +337,46 @@ export function rolesRequired(requirement: JwtRequirement): readonly string[] {
 }
 
 /**
- * @AuthOidc(...callers) - Google OIDC service-to-service auth (Cloud Tasks delivery / cross-service
+ * @WpAuthOidc(...callers) - Google OIDC service-to-service auth (Cloud Tasks delivery / cross-service
  * RPC). `callers` is an OPTIONAL app-level allow-list of caller service accounts.
  *
  * NO args = TRUST THE EDGE: accept any genuine Google-signed OIDC caller, because a PRIVATE Cloud
  * Run service's edge already gates WHO via `run.invoker` IAM (managed in terraform — one source of
  * truth, no hand-synced list in code). If the service is actually PUBLIC, the verifier logs a loud
- * warning (it can't be the gate then). Pass explicit SAs (`@AuthOidc('svc-a')`) only when you want
+ * warning (it can't be the gate then). Pass explicit SAs (`@WpAuthOidc('svc-a')`) only when you want
  * an additional app-level allow-list as defense-in-depth.
  */
-export function AuthOidc(...callers: string[]): ClassDecorator & MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function WpAuthOidc(...callers: string[]): MethodDecorator {
     return defineAuthMode({ kind: 'oidc', callers });
 }
 
 /**
- * @AuthSharedSecret(key) - constant-time compare of an inbound header against the secret bound for
+ * @WpAuthSharedSecret(key) - constant-time compare of an inbound header against the secret bound for
  * `key`. `key` is a LOOKUP KEY (not an env var): the server looks up its accepted {@link SharedSecrets}
  * by this key, and each client looks up the value it sends by the SAME key (see {@link Secrets}).
  * For internal callers that cannot mint OIDC tokens.
  */
-export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function WpAuthSharedSecret(key: string): MethodDecorator {
     return defineAuthMode({ kind: 'shared-secret', secretKey: key });
 }
 
 /**
- * @AuthWebhook(name) - an OUTSIDE vendor signed this request in its OWN scheme; the app's bound
+ * @WpAuthWebhook(name) - an OUTSIDE vendor signed this request in its OWN scheme; the app's bound
  * `WebhookAuthCallback` proves it. THE mode for every signed inbound webhook — Sentry, GitHub, Stripe, Slack,
  * Twilio — none of which fits the other kinds: no vendor mints Google OIDC tokens, and none sends its
- * secret (they all send a DERIVATION over the request), so `@Public` was the only reachable posture
+ * secret (they all send a DERIVATION over the request), so `@WpAuthPublic` was the only reachable posture
  * and `calledBy: 'sentry'` stayed a claim rather than a fact.
  *
  * ```typescript
- * @AuthWebhook('sentry')
+ * @WpAuthWebhook('sentry')
  * @Endpoint('/hook/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
  * abstract notify(request: SentryIssueHook): Promise<HookAck>;
  * ```
  *
  * `name` is a bare STRING resolved through DI in the server's container, exactly as
- * `@AuthOidc('gmail-push')` already is — never a function reference. An api contract is level 0: a
+ * `@WpAuthOidc('gmail-push')` already is — never a function reference. An api contract is level 0: a
  * direct reference to a verifier would invert the dependency graph and drag a vendor SDK into the
  * browser bundle that imports the same contract.
  *
@@ -338,22 +388,22 @@ export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator 
  * call the vendor's own library — hence the REQUIRED `{ rawBody: true }` (see
  * {@link EndpointOptions.rawBody}), which is checked at wiring time.
  *
- * FAILS CLOSED: with no `WebhookAuthCallback` bound, every `@AuthWebhook` endpoint 401s, matching `JwtHook`.
+ * FAILS CLOSED: with no `WebhookAuthCallback` bound, every `@WpAuthWebhook` endpoint 401s, matching `JwtHook`.
  * Silently allowing an unverified webhook is the one default that must not exist.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
+export function WpAuthWebhook(name: string): MethodDecorator {
     return defineAuthMode({ kind: 'webhook', name });
 }
 
 /**
- * @AuthApiKey(regime, credentials) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook`
+ * @WpAuthApiKey(regime, credentials) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook`
  * authenticates the inbound request against its own datastore and returns the `ContextTuple` entries
  * the framework seeds into `RequestContext`. THE mode for a partner-facing contract consumed by other
  * companies' codebases (POS vendors, back-office platforms, ETL pipelines).
  *
  * ```typescript
- * @AuthApiKey('onetablet-partner', [
+ * @WpAuthApiKey('onetablet-partner', [
  *     { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
  *     { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
  * ])
@@ -362,7 +412,7 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  * ```
  *
  * `regime` is a bare STRING selecting WHICH key regime this route belongs to, exactly as
- * `@AuthSharedSecret(key)` and `@AuthWebhook(vendor)` already are — one hook serves several regimes,
+ * `@WpAuthSharedSecret(key)` and `@WpAuthWebhook(vendor)` already are — one hook serves several regimes,
  * and an api contract is level 0, so it never references a verifier directly.
  *
  * `credentials` DECLARES where the credential rides ({@link ApiKeyCredential}), so a spec generator
@@ -380,10 +430,10 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  * exists to remove. That is a compile error, not a runtime throw (see {@link JwtRoles}'s non-empty
  * tuple, the same device for the same reason).
  *
- * WHY IT IS NOT `@AuthSharedSecret`. Shared-secret declares that AN INTERNAL SERVICE is on the other
+ * WHY IT IS NOT `@WpAuthSharedSecret`. Shared-secret declares that AN INTERNAL SERVICE is on the other
  * end, so the framework BELIEVES the trusted context headers that caller forwarded (see
  * `DestinationTrust.forAuthMode` and `AuthFilter.verifiesCaller`). A customer is not an internal
- * service: declaring a partner endpoint `@AuthSharedSecret` would let that partner assert someone
+ * service: declaring a partner endpoint `@WpAuthSharedSecret` would let that partner assert someone
  * else's org id on the wire and have it admitted — a privilege escalation. `apikey` therefore sits
  * with `jwt` on the caller-NOT-verified side, where an inbound trusted header is admitted only when
  * the hook independently derived the SAME value.
@@ -395,20 +445,21 @@ export function AuthWebhook(name: string): ClassDecorator & MethodDecorator {
  * PAIR. `credentials` does NOT change that: the framework reads no header from it and performs no
  * extraction. It is DECLARATION for readers of the contract, and enforcement stays entirely the hook's.
  *
- * FAILS CLOSED: with no `ApiKeyHook` bound, every `@AuthApiKey` endpoint 401s, matching `JwtHook` and
+ * FAILS CLOSED: with no `ApiKeyHook` bound, every `@WpAuthApiKey` endpoint 401s, matching `JwtHook` and
  * `WebhookAuthCallback`.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthApiKey(regime: string, credentials: ApiKeyCredentials): ClassDecorator & MethodDecorator {
+export function WpAuthApiKey(regime: string, credentials: ApiKeyCredentials): MethodDecorator {
     return defineAuthMode({ kind: 'apikey', regime, credentials });
 }
 
 /**
- * @AuthLocalOnly() - this endpoint exists ONLY on a developer's machine. Off-local it is not
- * registered as a route at all, and if it is somehow reached it 404s. Class- or method-level.
+ * @WpAuthLocalOnly() - this endpoint exists ONLY on a developer's machine. Off-local it is not
+ * registered as a route at all, and if it is somehow reached it 404s. Method-only, like every
+ * authorization decorator, so every endpoint's posture is visible at the method.
  *
  * ```typescript
- * @AuthLocalOnly()
+ * @WpAuthLocalOnly()
  * @Endpoint('/logs', 'rpc')
  * sendBatch(request: SendLogBatchRequest): Promise<SendLogBatchResponse> { ... }
  * ```
@@ -417,11 +468,11 @@ export function AuthApiKey(regime: string, credentials: ApiKeyCredentials): Clas
  * sync by a comment: a route module that registered the route only locally, PLUS a
  * `if (env !== 'local') throw new ForbiddenError(...)` at the top of the handler. Neither half
  * was visible on the CONTRACT, so nothing reading the api — a human, a generated client, or an
- * agent — could tell this endpoint from a `@Public` one. Both halves are the framework's job now,
+ * agent — could tell this endpoint from a `@WpAuthPublic` one. Both halves are the framework's job now,
  * driven by this ONE declaration on the contract, which is where every other "who may call this"
  * fact already lives.
  *
- * It is DELIBERATELY a peer of @Public / @AuthJwt / @AuthOidc / @AuthSharedSecret / @AuthApiKey rather than an
+ * It is DELIBERATELY a peer of @WpAuthPublic / @WpAuthJwt / @WpAuthOidc / @WpAuthSharedSecret / @WpAuthApiKey rather than an
  * option on one of them: one decorator per credential kind, and "local-only" is a different kind of
  * gate — it authenticates nobody, it excludes an entire environment.
  *
@@ -430,7 +481,7 @@ export function AuthApiKey(regime: string, credentials: ApiKeyCredentials): Clas
  * rather than exposing it.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthLocalOnly(): ClassDecorator & MethodDecorator {
+export function WpAuthLocalOnly(): MethodDecorator {
     return defineAuthMode({ kind: 'local-only' });
 }
 
@@ -495,11 +546,15 @@ export function getEndpointOptions(apiClass: Function, methodName: string): Endp
 export function assertEveryExternalEndpointDeclaresCaller(apiClass: Function): void {
     const kinds = getEndpointKinds(apiClass);
     for (const methodName of Object.keys(kinds)) {
-        if (kinds[methodName] !== 'external' || getEndpointCaller(apiClass, methodName) !== undefined) continue;
+        if (
+            kinds[methodName] !== 'external' ||
+            getEndpointCaller(apiClass, methodName) !== undefined
+        )
+            continue;
         throw new Error(
             `External endpoint '${methodName}' in ${apiClass.name || 'Unknown'} declares no caller. Say WHO ` +
-            `posts to it: @Endpoint(path, 'external', { calledBy: '<vendor>' }) — the runtime architecture ` +
-            `graph cannot name an inbound caller it was never told about.`,
+                `posts to it: @Endpoint(path, 'external', { calledBy: '<vendor>' }) — the runtime architecture ` +
+                `graph cannot name an inbound caller it was never told about.`,
         );
     }
 }
@@ -515,7 +570,7 @@ export function isFormPost(apiClass: Function, methodName: string): boolean {
 
 /**
  * True when the method's @Endpoint declared `{ rawBody: true }` — the transport must retain the
- * verbatim bytes + absolute url for an {@link AuthWebhook} hook to verify.
+ * verbatim bytes + absolute url for an {@link WpAuthWebhook} hook to verify.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of isFormPost
 export function isRawBody(apiClass: Function, methodName: string): boolean {
@@ -523,27 +578,31 @@ export function isRawBody(apiClass: Function, methodName: string): boolean {
 }
 
 /**
- * Fail-fast at wiring time when an `@AuthWebhook` endpoint did not ask the transport to keep the
+ * Fail-fast at wiring time when an `@WpAuthWebhook` endpoint did not ask the transport to keep the
  * bytes it is supposed to verify. A hook with nothing to verify is a MISCONFIGURATION, and it must
  * surface at startup, naming the fix — not as a 401 in production on exactly the traffic the endpoint
  * exists for.
  *
  * This pairing is a runtime assert rather than a type because the two halves live on DIFFERENT
- * decorators (`@AuthWebhook` and `@Endpoint`), and no union over one decorator's argument can say
+ * decorators (`@WpAuthWebhook` and `@Endpoint`), and no union over one decorator's argument can say
  * anything about the other's.
  *
- * @throws Error naming the first `@AuthWebhook` endpoint missing `{ rawBody: true }`.
+ * @throws Error naming the first `@WpAuthWebhook` endpoint missing `{ rawBody: true }`.
  */
 // webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
 export function assertEveryWebhookEndpointRetainsRawBody(apiClass: Function): void {
     const endpoints = getEndpoints(apiClass) || {};
     for (const methodName of Object.keys(endpoints)) {
-        if (getAuthMode(apiClass, methodName)?.kind !== 'webhook' || isRawBody(apiClass, methodName)) continue;
+        if (
+            getAuthMode(apiClass, methodName)?.kind !== 'webhook' ||
+            isRawBody(apiClass, methodName)
+        )
+            continue;
         throw new Error(
-            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is @AuthWebhook but its @Endpoint ` +
-            `does not declare { rawBody: true }. A webhook hook verifies a signature over the bytes and ` +
-            `the url the SENDER transmitted, and without that option the transport parses the body and ` +
-            `throws them away — leaving the hook nothing to check.`,
+            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is @WpAuthWebhook but its @Endpoint ` +
+                `does not declare { rawBody: true }. A webhook hook verifies a signature over the bytes and ` +
+                `the url the SENDER transmitted, and without that option the transport parses the body and ` +
+                `throws them away — leaving the hook nothing to check.`,
         );
     }
 }
@@ -556,27 +615,19 @@ export function isApiPath(apiClass: Function): boolean {
 }
 
 /**
- * Get auth metadata for a specific method, falling back to class-level auth.
- * Method-level auth takes precedence over class-level auth.
+ * Get method-level auth metadata. Class-level authorization is forbidden.
  */
-export function getAuthMeta(apiClass: Function, methodName?: string): AuthMeta | undefined {
-    // Check method-level first
-    if (methodName) {
-        const methodAuth = Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass, methodName);
-        if (methodAuth) {
-            return methodAuth;
-        }
-    }
-
-    // Fall back to class-level
-    return Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass);
+// webpieces-disable no-function-outside-class -- reflect-metadata reader paired with the decorator API
+export function getAuthMeta(apiClass: Function, methodName: string): AuthMeta | undefined {
+    return Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass, methodName);
 }
 
 /**
- * Get the auth mode for a method (falling back to class-level), or undefined.
+ * Get the auth mode for a method, or undefined.
  * Convenience wrapper over getAuthMeta for callers that only want the mode.
  */
-export function getAuthMode(apiClass: Function, methodName?: string): AuthMode | undefined {
+// webpieces-disable no-function-outside-class -- typed convenience reader over getAuthMeta
+export function getAuthMode(apiClass: Function, methodName: string): AuthMode | undefined {
     return getAuthMeta(apiClass, methodName)?.mode;
 }
 
@@ -588,11 +639,11 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
  * the first thing offered should not be the widest grant.
  */
 export const MISSING_AUTH_DECORATOR_FIX =
-    "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
-    '@AuthOidc(...callers) / @AuthSharedSecret(key) / ' +
-    "@AuthWebhook('vendor') / @AuthApiKey('regime', [{in: 'header', name: 'x-api-key'}]) / " +
-    '@AuthLocalOnly() to ' +
-    'the class or method.';
+    "Add one of @WpAuthJwt({roles: ['admin']}) / @WpAuthJwt({allRolesAllowed: true}) / " +
+    '@WpAuthOidc(...callers) / @WpAuthSharedSecret(key) / ' +
+    "@WpAuthWebhook('vendor') / @WpAuthApiKey('regime', [{in: 'header', name: 'x-api-key'}]) / " +
+    "@WpAuthLocalOnly() / @WpAuthPublic('why anonymous access is required') to " +
+    'the method.';
 
 /**
  * Fail-fast at wiring time if any endpoint lacks an auth mode. Both the server
@@ -607,7 +658,7 @@ export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
         if (!getAuthMeta(apiClass, methodName)) {
             throw new Error(
                 `Endpoint '${methodName}' in ${apiName} has no auth decorator. ` +
-                MISSING_AUTH_DECORATOR_FIX,
+                    MISSING_AUTH_DECORATOR_FIX,
             );
         }
     }
@@ -617,18 +668,25 @@ export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
  * Validate that a class/method doesn't have conflicting auth decorators.
  * @throws Error if multiple auth decorators are found on the same target.
  */
-export function validateNoConflictingDecorators(apiClass: Function, methodName: string | undefined): void {
+// webpieces-disable no-function-outside-class -- shared decorator metadata validation
+export function validateNoConflictingDecorators(
+    apiClass: Function,
+    methodName: string | undefined,
+): void {
     const existing = methodName
         ? Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass, methodName)
         : Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass);
 
     if (existing) {
         const targetName = apiClass.name || 'Unknown';
-        const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
+        const location = methodName
+            ? `method '${methodName}' of ${targetName}`
+            : `class ${targetName}`;
         throw new Error(
             `Conflicting auth decorator on ${location}. ` +
-            `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) / ` +
-            `@AuthWebhook(...) / @AuthApiKey(...) / @AuthLocalOnly() is allowed per target.`
+                `Only one of @WpAuthJwt({...}) / @WpAuthOidc(...) / @WpAuthSharedSecret(...) / ` +
+                `@WpAuthWebhook(...) / @WpAuthApiKey(...) / @WpAuthLocalOnly() / ` +
+                `@WpAuthPublic('reason') is allowed per target.`,
         );
     }
 }

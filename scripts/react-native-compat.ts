@@ -196,12 +196,8 @@ class ReactNativeGate {
 
     private contractFixture(): string {
         return (
-            `import { IpcMethods } from '@webpieces/core-util/ipc';\n` +
-            `abstract class FixtureApi { abstract execute(request: object): Promise<void>; }\n` +
-            `function checkMetadataExhaustiveness(): void {\n` +
-            `// @ts-expect-error Every declared API method must have metadata.\n` +
-            `const missing: IpcMethods<FixtureApi> = {}; void missing;\n` +
-            `}\n`
+            `import { WpInternal, WpIpcEndpoint } from '@webpieces/core-util/ipc';\n` +
+            `if (typeof WpInternal !== 'function' || typeof WpIpcEndpoint !== 'function') throw new Error('IPC decorators missing');\n`
         );
     }
 

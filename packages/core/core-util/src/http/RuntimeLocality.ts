@@ -1,8 +1,8 @@
 /**
  * Where this process is running, as a NAMED token rather than a boolean:
  *
- * - `'local'`    — a developer's machine. `@AuthLocalOnly` endpoints exist and serve.
- * - `'deployed'` — anywhere else (staging, prod, CI, a container). `@AuthLocalOnly` endpoints are
+ * - `'local'`    — a developer's machine. `@WpAuthLocalOnly` endpoints exist and serve.
+ * - `'deployed'` — anywhere else (staging, prod, CI, a container). `@WpAuthLocalOnly` endpoints are
  *                  not registered and, if reached anyway, 404.
  *
  * A `boolean` would have made the DANGEROUS half (`true`) unnameable and ungreppable — see
@@ -13,7 +13,7 @@ export type Locality = 'local' | 'deployed';
 
 /**
  * RuntimeLocality - the ONE answer to "am I running on a developer's machine?", for the one part of
- * webpieces that needs it: {@link AuthLocalOnly}.
+ * webpieces that needs it: {@link WpAuthLocalOnly}.
  *
  * ## Why this is a seam and not a `process.env` read
  *

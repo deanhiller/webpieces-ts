@@ -10,7 +10,7 @@
  */
 
 /**
- * An `@AuthSharedSecret(key)` endpoint was called by a client whose bound `Secrets` holds no value
+ * An `@WpAuthSharedSecret(key)` endpoint was called by a client whose bound `Secrets` holds no value
  * for that key. Thrown at CALL time, from `OutboundAuthFilter`.
  */
 export class MissingSharedSecretError extends Error {
@@ -18,7 +18,7 @@ export class MissingSharedSecretError extends Error {
         message: string,
         /** `Contract.method`, so the log line names the call without a stack read. */
         public readonly endpoint: string,
-        /** The `@AuthSharedSecret` key that had no value, so the fix names itself. */
+        /** The `@WpAuthSharedSecret` key that had no value, so the fix names itself. */
         public readonly secretKey: string,
     ) {
         super(message);
@@ -27,17 +27,17 @@ export class MissingSharedSecretError extends Error {
 }
 
 /**
- * An `@AuthWebhook(name)` endpoint was called outbound with no `WebhookSignerCallback` bound, so
+ * An `@WpAuthWebhook(name)` endpoint was called outbound with no `WebhookSignerCallback` bound, so
  * nothing can produce the signature the partner verifies. Thrown at CALL time, from
  * `OutboundAuthFilter`, rather than delivering unsigned — the mirror of the inbound side, where an
- * unbound `WebhookAuthCallback` 401s every `@AuthWebhook` endpoint instead of admitting it.
+ * unbound `WebhookAuthCallback` 401s every `@WpAuthWebhook` endpoint instead of admitting it.
  */
 export class MissingWebhookSignerError extends Error {
     constructor(
         message: string,
         /** `Contract.method`, so the log line names the call without a stack read. */
         public readonly endpoint: string,
-        /** The vendor on the contract's `@AuthWebhook(name)`, which selects the scheme. */
+        /** The vendor on the contract's `@WpAuthWebhook(name)`, which selects the scheme. */
         public readonly webhookName: string,
     ) {
         super(message);

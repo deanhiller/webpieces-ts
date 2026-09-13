@@ -40,7 +40,7 @@ export class WebpiecesCoreHeaders {
      */
     static readonly REQUEST_ID_SOURCE = ContextKey.untrusted<string>(
         'requestIdSource',
-        /*httpHeader*/ undefined
+        /*httpHeader*/ undefined,
     );
 
     /**
@@ -56,7 +56,10 @@ export class WebpiecesCoreHeaders {
      * - `isLogged` TRUE → the inbound value lands in the context and flows through the normal log
      *   field map; no backend change needed.
      */
-    static readonly CLIENT_VERSION = ContextKey.untrusted<string>('clientVersion', 'x-webpieces-client-version');
+    static readonly CLIENT_VERSION = ContextKey.untrusted<string>(
+        'clientVersion',
+        'x-webpieces-client-version',
+    );
 
     /**
      * A frontend/app-minted correlation id that groups every request triggered by ONE user ACTION.
@@ -92,8 +95,8 @@ export class WebpiecesCoreHeaders {
      * service is the point. What makes that safe is not the header being absent, it is WHO is
      * allowed to have set it: an inbound value is held PENDING by
      * `RequestContextHeaders.fillFromRequest` and admitted by `AuthFilter` only on a route that
-     * verified its CALLER (`@AuthOidc` / `@AuthSharedSecret`). On a browser-reachable route
-     * (`@AuthJwt` / public) the value must match what the authenticator itself derived, or the
+     * verified its CALLER (`@WpAuthOidc` / `@WpAuthSharedSecret`). On a browser-reachable route
+     * (`@WpAuthJwt` / public) the value must match what the authenticator itself derived, or the
      * request is rejected.
      *
      * `provenance` says "an app-bound JwtHook" rather than naming one hook, because the framework
@@ -138,7 +141,12 @@ export class WebpiecesCoreHeaders {
      *   read it via {@link HeaderRegistry.buildStructuredLogFields} (object-aware); the flat
      *   `buildLogFields()` string map deliberately skips it (typeof-string guard).
      */
-    static readonly API_CALL_INFO = ContextKey.untrusted<ApiCallInfo>('api', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
+    static readonly API_CALL_INFO = ContextKey.untrusted<ApiCallInfo>(
+        'api',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
 
     /**
      * The inbound request's HTTP method and path, stamped ONCE from the {@link HttpRequest} by
@@ -151,9 +159,19 @@ export class WebpiecesCoreHeaders {
      *   method/path, never the caller's. Outbound client calls never set these (no inbound path).
      * - `isLogged` TRUE → emitted by the logging backends as plain strings.
      */
-    static readonly HTTP_METHOD = ContextKey.untrusted<string>('httpMethod', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
+    static readonly HTTP_METHOD = ContextKey.untrusted<string>(
+        'httpMethod',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
 
-    static readonly REQUEST_PATH = ContextKey.untrusted<string>('requestPath', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
+    static readonly REQUEST_PATH = ContextKey.untrusted<string>(
+        'requestPath',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
 
     /**
      * The routed endpoint's IMPLEMENTATION identity: the concrete controller class name
@@ -173,9 +191,19 @@ export class WebpiecesCoreHeaders {
      * - `httpHeader` UNDEFINED → NOT transferred: each hop stamps its OWN routed controller/method.
      * - `isLogged` TRUE → emitted by the logging backends as plain strings.
      */
-    static readonly CONTROLLER = ContextKey.untrusted<string>('controller', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
+    static readonly CONTROLLER = ContextKey.untrusted<string>(
+        'controller',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
 
-    static readonly METHOD = ContextKey.untrusted<string>('method', /*httpHeader*/ undefined, /*maskInLogs*/ false, /*isLogged*/ true);
+    static readonly METHOD = ContextKey.untrusted<string>(
+        'method',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
 
     /**
      * The base URL ONE outbound call should go to, overriding whatever the client's `ClientConfig`

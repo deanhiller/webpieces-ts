@@ -195,6 +195,18 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
         expect(bad.some(e => e.includes('Must be one of') && e.includes('MODIFIED_PROJECTS'))).toBe(true);
     });
 
+    it('seeds ensure-we-are-secure with direct-project scope and universal turn-offs', () => {
+        expect(seedEntryForRule('ensure-we-are-secure')).toEqual({
+            mode: 'MODIFIED_PROJECTS',
+            turnOffRuleUntilEpoch: 0,
+            turnOffRuleWhileOnBranch: null,
+        });
+        const errors = errorsFor('ensure-we-are-secure', validateWebpiecesConfig({
+            'ensure-we-are-secure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+        }));
+        expect(errors.some(e => e.includes('MODIFIED_PROJECTS'))).toBe(true);
+    });
+
     it('recommends the gradual scoped mode in the missing-rule snippet (framework-tag → MODIFIED_PROJECTS)', () => {
         const snippet = validateWebpiecesConfig({}).find(e => e.includes('[framework-tag] Not configured'));
         expect(snippet).toBeDefined();

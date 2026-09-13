@@ -12,7 +12,7 @@ tests) every call falls back to a deterministic localhost value so no GCP is nee
 - `mintIdToken(audience)` — Google-signed OIDC ID token (a `dev-oidc.*` token off-GCP)
 - `verifyOidcFromCallers(idToken, callers)` — verify + allow-list the caller SA
 
-Underpins the `@AuthOidc` service-to-service auth mode enforced by `ServiceAuthFilter`
+Underpins the `@WpAuthOidc` service-to-service auth mode enforced by `ServiceAuthFilter`
 and used by `@webpieces/http-client` (RPC) and `@webpieces/cloudtasks-client`.
 
 **There is exactly ONE service name.** The Cloud Run service name is what you report, what peers

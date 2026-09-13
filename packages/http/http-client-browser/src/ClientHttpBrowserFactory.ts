@@ -1,4 +1,4 @@
-import { ContextMgr, DocumentDesign } from '@webpieces/core-util';
+import { assertNotInternalApi, ContextMgr, DocumentDesign } from '@webpieces/core-util';
 import { ApiPrototype, buildClientProxy } from '@webpieces/http-client-core';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
@@ -30,7 +30,7 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  * store.set(CompanyHeaders.TENANT_ID, tenantId);
  * ```
  *
- * A browser cannot hold service credentials, so a contract with an @AuthOidc or @AuthSharedSecret
+ * A browser cannot hold service credentials, so a contract with an @WpAuthOidc or @WpAuthSharedSecret
  * endpoint throws in `createRpcClient`, not on the first call.
  */
 @DocumentDesign()
@@ -51,6 +51,7 @@ export class ClientHttpBrowserFactory {
      * @param config - This client's state (its baseUrl)
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
+        assertNotInternalApi(apiPrototype, 'ClientHttpBrowserFactory');
         const proxyClient = new BrowserProxyClient(this.contextMgr, this.lifecycleListener);
         proxyClient.init(apiPrototype, config);
         return buildClientProxy(apiPrototype, proxyClient);

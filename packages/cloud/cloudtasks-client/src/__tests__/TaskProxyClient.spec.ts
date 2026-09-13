@@ -7,7 +7,7 @@ process.env['METADATA_SERVER_DETECTION'] = 'none';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ApiPath,
-    AuthOidc,
+    WpAuthOidc,
     ContextKey,
     Endpoint,
     HeaderRegistry,
@@ -34,9 +34,9 @@ class SendEmailRequest {
 
 /** A @PubSub contract shared by the enqueue client and (in prod) the controller. */
 @PubSub()
-@AuthOidc()
 @ApiPath('/email')
 abstract class EmailApi {
+    @WpAuthOidc()
     @Endpoint('/send', 'cloudtasks')
     @Queue('email-send-queue')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
@@ -71,9 +71,7 @@ let scheduler: CloudTaskScheduler;
  * SYNCHRONOUS even though the URL resolve is async.
  */
 function clientFor(config: TaskClientConfig): EmailApi {
-    const provider = new Provider(
-        () => new TaskProxyClient(invoker, new RequestContextHeaders()),
-    );
+    const provider = new Provider(() => new TaskProxyClient(invoker, new RequestContextHeaders()));
     return new ClientCloudTasksFactory(provider).createPubSubClient(EmailApi, config);
 }
 
@@ -89,7 +87,6 @@ beforeEach(() => {
 });
 
 describe('TaskProxyClient enqueue', () => {
-
     it('resolves the target URL from the service name and builds the task request', async () => {
         await RequestContext.run(async () => {
             const ref = await scheduler.addToQueue(
@@ -123,30 +120,32 @@ describe('TaskProxyClient enqueue', () => {
 
         // ...but `authorization` is NOT a ContextKey, so the inbound transfer never puts the caller's
         // credential into the RequestContext and nothing here can transfer it. The invoker mints
-        // the task's own delivery auth per the endpoint's @AuthOidc / @AuthSharedSecret mode.
+        // the task's own delivery auth per the endpoint's @WpAuthOidc / @WpAuthSharedSecret mode.
         expect(headers.has('authorization')).toBe(false);
     });
 
     it('throws when an endpoint is called outside a CloudTaskScheduler lambda', async () => {
         await RequestContext.run(async () => {
-            await expect(emailTasks.sendEmail(new SendEmailRequest('a@b.com')))
-                .rejects.toThrow(/must run inside a CloudTaskScheduler lambda/);
+            await expect(emailTasks.sendEmail(new SendEmailRequest('a@b.com'))).rejects.toThrow(
+                /must run inside a CloudTaskScheduler lambda/,
+            );
         });
     });
 
     it('throws on a method the contract does not declare', () => {
         // webpieces-disable no-any-unknown -- deliberately probing an undeclared method
-        expect(() => (emailTasks as any).notAnEndpoint)
-            .toThrow(/No @PubSub endpoint 'notAnEndpoint'/);
+        expect(() => (emailTasks as any).notAnEndpoint).toThrow(
+            /No @PubSub endpoint 'notAnEndpoint'/,
+        );
     });
-
 });
 
 describe('TaskProxyClient target resolution + request scope', () => {
     it('refuses to enqueue outside a RequestContext — a task with no trace is a bug', async () => {
         // Inside a scheduler frame, but NO RequestContext.run: the scheduler catches it first.
-        await expect(scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com'))))
-            .rejects.toThrow(/RequestContext/);
+        await expect(
+            scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com'))),
+        ).rejects.toThrow(/RequestContext/);
         expect(invoker.captured).toBeUndefined();
     });
 
@@ -180,8 +179,8 @@ describe('TaskProxyClient target resolution + request scope', () => {
 describe('TaskProxyClient enqueues from a host that never ran setupRuntime', () => {
     it('does not throw "ApiCallContext is not installed" — no holder, no bootstrap', async () => {
         await RequestContext.run(async () => {
-            const ref = await scheduler.addToQueue(
-                () => emailTasks.sendEmail(new SendEmailRequest('nest@host.example')),
+            const ref = await scheduler.addToQueue(() =>
+                emailTasks.sendEmail(new SendEmailRequest('nest@host.example')),
             );
             expect(ref.taskId).toBe('captured-task-1');
         });

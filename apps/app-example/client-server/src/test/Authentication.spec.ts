@@ -27,7 +27,10 @@ const TEST_JWT_SECRET = 'test-jwt-secret-for-authentication-spec';
 
 /** Build the app and return its SecureApi client, with the given container overrides. */
 async function secureClient(overrides: ContainerModule): Promise<SecureApi> {
-    const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, overrides));
+    const factory = await setupCompanyRuntime(
+        ClientServerAppModules.create(),
+        new CompanySetupOptions(undefined, overrides),
+    );
     return factory.createApiClient<SecureApi>(SecureApi);
 }
 
@@ -60,23 +63,29 @@ describe('Authentication: shared-secret (bound state)', () => {
     });
 
     it('accepts the correct shared secret', async () => {
-        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET}`, () => api.internalOp({ note: 'hi' }));
+        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET}`, () =>
+            api.internalOp({ note: 'hi' }),
+        );
         expect(res.ok).toBe(true);
     });
 
     it('accepts the rotating secret2 too (zero-downtime rotation window)', async () => {
-        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET_ROTATING}`, () => api.internalOp({}));
+        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET_ROTATING}`, () =>
+            api.internalOp({}),
+        );
         expect(res.ok).toBe(true);
     });
 
     it('rejects a wrong shared secret (401)', async () => {
-        await expect(
-            withAuthHeader('WRONG-key', () => api.internalOp({})),
-        ).rejects.toThrow(UnauthorizedError);
+        await expect(withAuthHeader('WRONG-key', () => api.internalOp({}))).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 
     it('rejects a missing shared secret (401)', async () => {
-        await expect(RequestContext.run(() => api.internalOp({}))).rejects.toThrow(UnauthorizedError);
+        await expect(RequestContext.run(() => api.internalOp({}))).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 });
 
@@ -108,7 +117,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
         expect(res.userId).toBe('user-42'); // proves parseJwt → USER_ID context entry landed
     });
 
-    it('allows ANY logged-in user on a no-role endpoint (@AuthJwt({allRolesAllowed: true}))', async () => {
+    it('allows ANY logged-in user on a no-role endpoint (@WpAuthJwt({allRolesAllowed: true}))', async () => {
         const token = sign({ sub: 'user-99', roles: [] }); // authenticated, but zero roles
         const res = await withAuthHeader(`Bearer ${token}`, () => api.userOp({}));
         expect(res.ok).toBe(true);
@@ -123,16 +132,16 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
 
     it('inOrg app field: a logged-in user WITHOUT an org claim is denied (403)', async () => {
         const token = sign({ sub: 'user-12' }); // authenticated, but no orgId claim
-        await expect(
-            withAuthHeader(`Bearer ${token}`, () => api.orgOp({})),
-        ).rejects.toThrow(ForbiddenError);
+        await expect(withAuthHeader(`Bearer ${token}`, () => api.orgOp({}))).rejects.toThrow(
+            ForbiddenError,
+        );
     });
 
     it('rejects a JWT missing the admin role (403)', async () => {
         const token = sign({ sub: 'user-7', roles: ['viewer'] });
-        await expect(
-            withAuthHeader(`Bearer ${token}`, () => api.adminOp({})),
-        ).rejects.toThrow(ForbiddenError);
+        await expect(withAuthHeader(`Bearer ${token}`, () => api.adminOp({}))).rejects.toThrow(
+            ForbiddenError,
+        );
     });
 
     it('rejects a call with no token (401)', async () => {
@@ -148,8 +157,8 @@ describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
         api = await secureClient(overrides);
     });
 
-    it('accepts a genuine Google-signed OIDC token (@AuthOidc() trusts the edge)', async () => {
-        // Off-GCP, mintIdToken produces a real dev token. @AuthOidc() has no callers → TRUST THE EDGE:
+    it('accepts a genuine Google-signed OIDC token (@WpAuthOidc() trusts the edge)', async () => {
+        // Off-GCP, mintIdToken produces a real dev token. @WpAuthOidc() has no callers → TRUST THE EDGE:
         // verifyOidcFromCallers verifies the signature and accepts any Google-signed caller (the edge's
         // run.invoker IAM gates WHO). Real mint↔verify, no mocking.
         const token = await new GcpOidc().mintIdToken('http://localhost');
@@ -158,6 +167,8 @@ describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
     });
 
     it('rejects a call with no OIDC token (401)', async () => {
-        await expect(RequestContext.run(() => api.serviceOp({}))).rejects.toThrow(UnauthorizedError);
+        await expect(RequestContext.run(() => api.serviceOp({}))).rejects.toThrow(
+            UnauthorizedError,
+        );
     });
 });

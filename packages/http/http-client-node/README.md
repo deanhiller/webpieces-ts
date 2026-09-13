@@ -73,7 +73,7 @@ It is not a different kind of client. It is ONE filter:
 @ApiPath('/ot-webhook')
 export class PartnerWebhookApi {
     @Endpoint('/deliver')
-    @AuthWebhook('partner-hmac')
+    @WpAuthWebhook('partner-hmac')
     deliver(envelope: WebhookEnvelope): Promise<DeliveryAck>;
 }
 
@@ -104,18 +104,18 @@ for (const webhook of webhooks) {
   refused rather than obeyed. The one relaxation — testing the partner path against a local fake —
   has to be said out loud, with a reason:
   `new ContextBaseUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
-- **Every auth mode still works.** `@AuthOidc` mints for the FINAL base URL, `@AuthSharedSecret`
+- **Every auth mode still works.** `@WpAuthOidc` mints for the FINAL base URL, `@WpAuthSharedSecret`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
-  a real topology), and `@AuthWebhook(name)` calls your bound `WebhookSignerCallback`. The minter runs
+  a real topology), and `@WpAuthWebhook(name)` calls your bound `WebhookSignerCallback`. The minter runs
   BELOW the SSRF guard, so a destination that is going to be refused never causes a credential to be
   created.
 - **The hop is VISIBLE.** `@externalSystem runtime <identity>` on the contract draws the destination
   as its own node on the runtime architecture graph, and two services delivering over the same
   contract converge on one box.
 
-## Signing an OUTBOUND webhook — `@AuthWebhook`, the other way round
+## Signing an OUTBOUND webhook — `@WpAuthWebhook`, the other way round
 
-`@AuthWebhook(name)` names a signing SCHEME, not a direction. Inbound, a vendor signs and your bound
+`@WpAuthWebhook(name)` names a signing SCHEME, not a direction. Inbound, a vendor signs and your bound
 `WebhookAuthCallback` (in `@webpieces/http-routing`) verifies. Outbound, WE are the vendor, so your
 bound `WebhookSignerCallback` produces the signature over the final URL and the exact wire bytes:
 
@@ -134,7 +134,7 @@ options.bind(WEBHOOK_SIGNER_CALLBACK).to(PartnerHmacSigner);
 
 The framework ships no vendor crypto, deliberately: Twilio signs the full URL with sorted params,
 Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your hook and the vendor on
-the contract. With **no** `WebhookSignerCallback` bound, every outbound `@AuthWebhook` call THROWS
+the contract. With **no** `WebhookSignerCallback` bound, every outbound `@WpAuthWebhook` call THROWS
 rather than delivering unsigned — the mirror of an unbound `WebhookAuthCallback` 401ing every inbound
 one.
 

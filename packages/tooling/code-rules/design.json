@@ -49,6 +49,22 @@
                     "level": 1
                 },
                 {
+                    "id": "EnsureWeAreSecureConfig",
+                    "className": "EnsureWeAreSecureConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "EnsureWeAreSecureValidator",
+                    "className": "EnsureWeAreSecureValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-ensure-we-are-secure.ts",
+                    "level": 2
+                },
+                {
                     "id": "FrameworkTagConfig",
                     "className": "FrameworkTagConfig",
                     "kind": "class",
@@ -447,6 +463,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "EnsureWeAreSecureValidator",
+                    "injection": "type",
+                    "token": "EnsureWeAreSecureValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-ensure-we-are-secure.ts#EnsureWeAreSecureValidator",
+                    "paramName": "ensureWeAreSecure",
+                    "paramType": "EnsureWeAreSecureValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "FrameworkTagValidator",
                     "injection": "type",
                     "token": "FrameworkTagValidator",
@@ -660,6 +685,15 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/code-rules-context.ts#WorkspaceRoot",
                     "paramName": "workspace",
                     "paramType": "WorkspaceRoot"
+                },
+                {
+                    "from": "EnsureWeAreSecureValidator",
+                    "to": "EnsureWeAreSecureConfig",
+                    "injection": "type",
+                    "token": "EnsureWeAreSecureConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#EnsureWeAreSecureConfig",
+                    "paramName": "config",
+                    "paramType": "EnsureWeAreSecureConfig"
                 },
                 {
                     "from": "FrameworkTagValidator",

@@ -49,15 +49,15 @@ export {
     ApiPath,
     Endpoint,
     // Auth mode decorators (clean service-to-service + user JWT model)
-    Public,
-    AuthJwt,
+    WpAuthPublic,
+    WpAuthJwt,
     rolesRequired,
     MISSING_AUTH_DECORATOR_FIX,
-    AuthOidc,
-    AuthSharedSecret,
-    AuthWebhook,
-    AuthApiKey,
-    AuthLocalOnly,
+    WpAuthOidc,
+    WpAuthSharedSecret,
+    WpAuthWebhook,
+    WpAuthApiKey,
+    WpAuthLocalOnly,
     MaskLog,
     getApiPath,
     getEndpoints,
@@ -76,6 +76,19 @@ export {
     validateNoConflictingDecorators,
     METADATA_KEYS,
 } from './http/decorators';
+export {
+    WpInternal,
+    WpIpcEndpoint,
+    isInternalApi,
+    getIpcApiId,
+    getIpcEndpoints,
+    getIpcEndpointKind,
+    getIpcMaskSpec,
+    assertInternalApi,
+    assertNotInternalApi,
+    IPC_METADATA_KEYS,
+} from './ipc/IpcDecorators';
+export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './ipc/IpcDecorators';
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
 export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
@@ -111,7 +124,7 @@ export {
     getEndpointCaller,
 } from './http/external-caller';
 export type { ExternalSystemKind } from './http/external-caller';
-// Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
+// Client-side shared-secret store (the value THIS service sends per @WpAuthSharedSecret key).
 export { Secrets, SECRETS } from './http/Secrets';
 
 // Type validators
@@ -174,7 +187,7 @@ export type { ServiceUrlDeriver } from './http/ClientRegistry';
 // RequestContextHeaders (to stamp requestIdSource on ids this service mints).
 export { ServiceInfo } from './http/ServiceInfo';
 // "Where am I running" — declared once at startup (setupRuntime, from RuntimeSetupOptions.locality).
-// The ONE input to @AuthLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
+// The ONE input to @WpAuthLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
 export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
 // The ENTIRE HTTP response as pure data — the ONE form both transports (express, fetch) are

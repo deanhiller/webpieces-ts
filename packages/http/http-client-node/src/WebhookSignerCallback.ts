@@ -1,8 +1,8 @@
 /**
- * The OUTBOUND half of `@AuthWebhook(name)` — the exact mirror of `WebhookAuthCallback`, which is
+ * The OUTBOUND half of `@WpAuthWebhook(name)` — the exact mirror of `WebhookAuthCallback`, which is
  * the INBOUND half.
  *
- * `@AuthWebhook('partner-hmac')` on a contract says: this hop is authenticated by a signature over
+ * `@WpAuthWebhook('partner-hmac')` on a contract says: this hop is authenticated by a signature over
  * the request, in a scheme the FRAMEWORK does not know. Which side of it you are on decides which
  * hook runs, and nothing else changes:
  *
@@ -26,9 +26,9 @@
  *
  * ## It FAILS CLOSED
  *
- * With no `WebhookSignerCallback` bound, every outbound `@AuthWebhook` call THROWS rather than
+ * With no `WebhookSignerCallback` bound, every outbound `@WpAuthWebhook` call THROWS rather than
  * going out unsigned — exactly as an unbound `WebhookAuthCallback` 401s every inbound
- * `@AuthWebhook` endpoint. An unsigned delivery is not a degraded delivery; it is a request the
+ * `@WpAuthWebhook` endpoint. An unsigned delivery is not a degraded delivery; it is a request the
  * partner is obliged to reject, and quietly sending one hides the missing binding until a partner
  * complains.
  *
@@ -43,7 +43,7 @@ export abstract class WebhookSignerCallback {
     /**
      * Produce the headers that authenticate ONE outbound request, or throw to refuse to send it.
      *
-     * @param name    the string on the contract's `@AuthWebhook(name)` — which partner this is.
+     * @param name    the string on the contract's `@WpAuthWebhook(name)` — which partner this is.
      * @param request the FINAL request: the absolute url and the exact bytes that are about to go on
      *                the wire. See {@link SignableRequest} for why both of those words matter.
      * @returns header name -> value, merged onto the request. An empty map is legal and means "this

@@ -1,7 +1,13 @@
 import { inject, optional } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { LogManager, toError, NetworkRejectClassifier, Secrets, SECRETS } from '@webpieces/core-util';
+import {
+    LogManager,
+    toError,
+    NetworkRejectClassifier,
+    Secrets,
+    SECRETS,
+} from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');
@@ -33,7 +39,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
-        // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
+        // @optional: only @WpAuthSharedSecret task endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
     ) {
@@ -42,7 +48,8 @@ export class InMemoryTaskInvoker extends TaskInvoker {
 
     override async enqueue(request: TaskRequest): Promise<JobReference> {
         this.counter += 1;
-        const taskId = request.scheduleInfo.dedupName ?? `inmem-${request.queueName}-${this.counter}`;
+        const taskId =
+            request.scheduleInfo.dedupName ?? `inmem-${request.queueName}-${this.counter}`;
         const delayMs = this.computeDelayMs(request.scheduleInfo.epochMsToRunAt);
 
         // Break from the caller: queue the HTTP delivery and return the reference NOW.
@@ -54,7 +61,9 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         timer.unref?.();
         this.pending.set(taskId, timer);
 
-        log.debug(`queued local task ${taskId} -> ${request.targetUrl}${request.path} (delay ${delayMs}ms)`);
+        log.debug(
+            `queued local task ${taskId} -> ${request.targetUrl}${request.path} (delay ${delayMs}ms)`,
+        );
         return new JobReference(taskId);
     }
 
@@ -89,7 +98,9 @@ export class InMemoryTaskInvoker extends TaskInvoker {
                 body: JSON.stringify(request.body ?? {}),
             });
             if (!response.ok) {
-                log.error(`local task ${taskId} delivery to ${url} failed: HTTP ${response.status}`);
+                log.error(
+                    `local task ${taskId} delivery to ${url} failed: HTTP ${response.status}`,
+                );
                 return;
             }
             log.debug(`local task ${taskId} delivered: HTTP ${response.status}`);
@@ -116,7 +127,8 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     private async attachAuth(request: TaskRequest, headers: Record<string, string>): Promise<void> {
         const mode = request.authMode;
         if (mode.kind === 'oidc') {
-            headers['authorization'] = `Bearer ${await this.gcpOidc.mintIdToken(request.targetUrl)}`;
+            headers['authorization'] =
+                `Bearer ${await this.gcpOidc.mintIdToken(request.targetUrl)}`;
             return;
         }
         if (mode.kind === 'shared-secret') {

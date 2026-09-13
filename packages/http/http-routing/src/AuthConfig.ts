@@ -1,7 +1,7 @@
 import { ContextKey, ContextTuple } from '@webpieces/core-util';
 
 /**
- * SharedSecrets - the accepted values for ONE `@AuthSharedSecret(name)`. BOTH secret1 AND secret2
+ * SharedSecrets - the accepted values for ONE `@WpAuthSharedSecret(name)`. BOTH secret1 AND secret2
  * are accepted — this is what makes zero-downtime ROTATION possible:
  *
  *   to rotate: shift secret2 → secret1, and put the NEW secret in secret2. Callers cut over from
@@ -72,7 +72,7 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
 
 /**
  * AuthConfig - the app-provided SHARED-SECRET state the framework {@link AuthFilter} reads to
- * enforce `@AuthSharedSecret(name)` endpoints. It holds ONLY the accepted secret values (STATE) —
+ * enforce `@WpAuthSharedSecret(name)` endpoints. It holds ONLY the accepted secret values (STATE) —
  * there is no verification code here. The verification MECHANISMS are separate optional hooks the
  * app binds when it needs them:
  *
@@ -86,7 +86,7 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
  * when unbound, shared-secret endpoints simply have no accepted secret and fail fast (401).
  */
 export class AuthConfig {
-    /** Accepted shared-secret values keyed by `@AuthSharedSecret(name)`. DEFAULT empty — pass to enable. */
+    /** Accepted shared-secret values keyed by `@WpAuthSharedSecret(name)`. DEFAULT empty — pass to enable. */
     readonly sharedSecrets: Record<string, SharedSecrets>;
 
     constructor(sharedSecrets: Record<string, SharedSecrets> = {}) {

@@ -10,7 +10,7 @@ import { Server2Routes } from './Server2Routes';
  * app-specific headers beyond the company-wide set (getHeaders() returns CompanyHeaders); its one
  * route group is {@link Server2Routes}.
  *
- * Its ONE binding is the shared-secret store: `Server2Api` is `@AuthSharedSecret`, so server2 must
+ * Its ONE binding is the shared-secret store: `Server2Api` is `@WpAuthSharedSecret`, so server2 must
  * hold the accepted value for that key or every inbound call 401s. Authenticating the CALLER is also
  * what lets AuthFilter admit the TRUSTED context keys (userId, orgId, roles) the caller forwarded —
  * on an endpoint that cannot verify who is calling, those are rejected instead.

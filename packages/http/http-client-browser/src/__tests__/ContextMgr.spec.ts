@@ -18,7 +18,7 @@ const LOCAL_ONLY = ContextKey.untrusted<string>('localOnly'); // no httpHeader -
 
 /**
  * Every destination a browser can reach is one of these two — BrowserProxyClient refuses to bind an
- * @AuthOidc / @AuthSharedSecret contract at all, because it can neither mint a token nor hold a
+ * @WpAuthOidc / @WpAuthSharedSecret contract at all, because it can neither mint a token nor hold a
  * secret. Both are the un-verifying kind, so a browser never sends a trusted key.
  */
 const PUBLIC: AuthMode = { kind: 'public' };
@@ -43,8 +43,8 @@ describe('ContextMgr.buildOutboundHeaders', () => {
         const outbound = contextMgr.buildOutboundHeaders(TO_PUBLIC);
 
         expect(outbound.get('x-tenant-id')).toBe('tenant-42');
-        expect(outbound.has('x-local-only')).toBe(false);   // no httpHeader -> not transferred
-        expect(outbound.has('authorization')).toBe(false);  // no value in context
+        expect(outbound.has('x-local-only')).toBe(false); // no httpHeader -> not transferred
+        expect(outbound.has('authorization')).toBe(false); // no value in context
     });
 
     it('sends x-request-id as-is', () => {
@@ -82,8 +82,8 @@ describe('ContextMgr.buildOutboundHeaders', () => {
  *  1. `MutableContextStore.set` only accepts an untrusted key, so THAT store cannot hold one. But
  *     {@link ContextMgr} takes any app-supplied {@link ContextReader}, and `read` is handed an
  *     `AnyContextKey` — so this guarantee belongs to one implementation, not to the seam.
- *  2. `BrowserProxyClient.assertEndpointSupported` refuses to bind an @AuthOidc/@AuthSharedSecret
- *     contract, so every browser destination is @Public or @AuthJwt — the un-verifying kind.
+ *  2. `BrowserProxyClient.assertEndpointSupported` refuses to bind an @WpAuthOidc/@WpAuthSharedSecret
+ *     contract, so every browser destination is @WpAuthPublic or @WpAuthJwt — the un-verifying kind.
  *
  * The rogue reader below is reason 1 defeated; the assertions are reason 2 holding anyway.
  */

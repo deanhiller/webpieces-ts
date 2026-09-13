@@ -13,15 +13,23 @@ import { RequestContextHeaders } from '../RequestContextHeaders';
  * The OUTBOUND half of the trust model (the inbound half lives in `ContextTrust.spec.ts`).
  *
  * The server admits an inbound `x-user-id` only on a route that authenticated its CALLER. So a client
- * that ships one to a `@Public` or `@AuthJwt` endpoint is building a request the callee is obliged to
+ * that ships one to a `@WpAuthPublic` or `@WpAuthJwt` endpoint is building a request the callee is obliged to
  * 401 — and before {@link DestinationTrust} that is exactly what every internal service did, because
  * `buildOutboundHeaders` forwarded every transferred key with no idea what it was calling.
  *
  * These tests pin both directions of that rule, and the invariant that holds across both: an
  * UNTRUSTED key is never affected — nothing was ever going to make a security decision on it.
  */
-const USER_ID = ContextKey.trusted<string>('userId', 'jwt claim `sub`, stamped by AuthFilter', 'x-user-id');
-const ORG_ID = ContextKey.trusted<string>('orgId', 'jwt claim `org`, stamped by AuthFilter', 'x-org-id');
+const USER_ID = ContextKey.trusted<string>(
+    'userId',
+    'jwt claim `sub`, stamped by AuthFilter',
+    'x-user-id',
+);
+const ORG_ID = ContextKey.trusted<string>(
+    'orgId',
+    'jwt claim `org`, stamped by AuthFilter',
+    'x-org-id',
+);
 const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
 const headers = new RequestContextHeaders();
@@ -52,14 +60,14 @@ function outboundTo(mode: AuthMode | undefined): Map<string, string> {
 }
 
 describe('buildOutboundHeaders gates TRUSTED keys on the destination', () => {
-    it('OMITS them for a @Public destination — it could not tell us from curl', () => {
+    it('OMITS them for a @WpAuthPublic destination — it could not tell us from curl', () => {
         const outbound = outboundTo(PUBLIC);
 
         expect(outbound.has('x-user-id')).toBe(false);
         expect(outbound.has('x-org-id')).toBe(false);
     });
 
-    it('OMITS them for an @AuthJwt destination — it authenticates the USER, not the caller', () => {
+    it('OMITS them for an @WpAuthJwt destination — it authenticates the USER, not the caller', () => {
         const outbound = outboundTo(JWT);
 
         expect(outbound.has('x-user-id')).toBe(false);
@@ -72,14 +80,14 @@ describe('buildOutboundHeaders gates TRUSTED keys on the destination', () => {
         expect(outbound.has('x-user-id')).toBe(false);
     });
 
-    it('SENDS them to an @AuthOidc destination — this is the propagation trusted keys exist for', () => {
+    it('SENDS them to an @WpAuthOidc destination — this is the propagation trusted keys exist for', () => {
         const outbound = outboundTo(OIDC);
 
         expect(outbound.get('x-user-id')).toBe('user-7');
         expect(outbound.get('x-org-id')).toBe('org-3');
     });
 
-    it('SENDS them to an @AuthSharedSecret destination — the callee verifies us there too', () => {
+    it('SENDS them to an @WpAuthSharedSecret destination — the callee verifies us there too', () => {
         const outbound = outboundTo(SHARED_SECRET);
 
         expect(outbound.get('x-user-id')).toBe('user-7');

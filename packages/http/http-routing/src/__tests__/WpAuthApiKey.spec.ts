@@ -19,7 +19,7 @@ import { Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 
 /**
- * The ENFORCEMENT half of `@AuthApiKey` (the contract half is pinned in core-util's
+ * The ENFORCEMENT half of `@WpAuthApiKey` (the contract half is pinned in core-util's
  * `apikey-decorator.spec.ts`, and the type-level half in `AuthApiKeyCompileAssertions.ts`).
  *
  * Two properties are being held down here, and the second is the reason the mode exists at all:
@@ -38,12 +38,19 @@ const ORG_ID = ContextKey.trusted<string>(
 );
 
 const API_KEY_ROUTE = new RouteMetadata(
-    'POST', '/management/v1/orders', 'listOrders', 'ManagementController',
+    'POST',
+    '/management/v1/orders',
+    'listOrders',
+    'ManagementController',
     new AuthMeta({
         kind: 'apikey',
         regime: 'onetablet-partner',
-        credentials: [{ in: 'header', name: 'x-api-key' }, { in: 'header', name: 'x-organization-id' }],
-    }), 'ManagementApi',
+        credentials: [
+            { in: 'header', name: 'x-api-key' },
+            { in: 'header', name: 'x-organization-id' },
+        ],
+    }),
+    'ManagementApi',
 );
 
 /** Records whether the chain got past AuthFilter at all — i.e. whether the controller was entered. */
@@ -137,12 +144,16 @@ async function runFilter(
     });
 }
 
-describe('AuthFilter enforces @AuthApiKey', () => {
+describe('AuthFilter enforces @WpAuthApiKey', () => {
     it('hands the hook the regime name and the WHOLE header set, so it can cross-check the pair', async () => {
         const hook = new TestApiKeyHook();
         const next = new RecordingNext();
 
-        await runFilter(next, hook, partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }));
+        await runFilter(
+            next,
+            hook,
+            partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }),
+        );
 
         expect(hook.seenName).toBe('onetablet-partner');
         expect(hook.seenKey).toBe('live-key-123');
@@ -156,7 +167,11 @@ describe('AuthFilter enforces @AuthApiKey', () => {
     it('seeds the returned ContextTuple entries so the CONTROLLER reads them off RequestContext', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, new TestApiKeyHook(), partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }));
+        await runFilter(
+            next,
+            new TestApiKeyHook(),
+            partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }),
+        );
 
         // This is the point of reusing AuthenticatedCaller: putTrusted, the path that already existed.
         expect(next.orgIdSeenByController).toBe('org-777');
@@ -170,7 +185,11 @@ describe('AuthFilter enforces @AuthApiKey', () => {
     it('stamps the AuthenticatedCaller under a TRUSTED ContextKey the controller reads with getTrusted', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, new TestApiKeyHook(), partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }));
+        await runFilter(
+            next,
+            new TestApiKeyHook(),
+            partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-777' }),
+        );
 
         expect(next.callerSeenByController?.userId).toBe('apikey-1');
         // Context-only, never wire-propagable: an object principal has no honest header form, and
@@ -182,8 +201,13 @@ describe('AuthFilter enforces @AuthApiKey', () => {
     it('401s and NEVER enters the controller when the hook rejects the key/organization pair', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, new TestApiKeyHook(), partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-OTHER' })))
-            .rejects.toThrow(UnauthorizedError);
+        await expect(
+            runFilter(
+                next,
+                new TestApiKeyHook(),
+                partnerRequest({ 'x-api-key': 'live-key-123', 'x-org-id': 'org-OTHER' }),
+            ),
+        ).rejects.toThrow(UnauthorizedError);
         expect(next.invoked).toBe(false);
     });
 
@@ -194,8 +218,9 @@ describe('AuthFilter enforces @AuthApiKey', () => {
     it('401s on every api-key endpoint when NO ApiKeyHook is bound', async () => {
         const next = new RecordingNext();
 
-        await expect(runFilter(next, undefined, partnerRequest({ 'x-api-key': 'live-key-123' })))
-            .rejects.toThrow(/API-key auth is not enabled/);
+        await expect(
+            runFilter(next, undefined, partnerRequest({ 'x-api-key': 'live-key-123' })),
+        ).rejects.toThrow(/API-key auth is not enabled/);
         expect(next.invoked).toBe(false);
     });
 
@@ -203,9 +228,11 @@ describe('AuthFilter enforces @AuthApiKey', () => {
     it('401s — never waves through — when there is no inbound request for the hook to read', async () => {
         const next = new RecordingNext();
 
-        await expect(RequestContext.run(async () =>
-            newAuthFilter(new TestApiKeyHook()).filter(new MethodMeta(API_KEY_ROUTE), next),
-        )).rejects.toThrow(/no inbound request was published/);
+        await expect(
+            RequestContext.run(async () =>
+                newAuthFilter(new TestApiKeyHook()).filter(new MethodMeta(API_KEY_ROUTE), next),
+            ),
+        ).rejects.toThrow(/no inbound request was published/);
         expect(next.invoked).toBe(false);
     });
 });
@@ -215,7 +242,7 @@ describe('AuthFilter enforces @AuthApiKey', () => {
  * `shared-secret`. Getting this wrong ships a privilege-escalation path: a partner would be able to
  * assert another customer's org id in `x-org-id` and have the framework admit it as proven.
  */
-describe('@AuthApiKey does NOT verify its caller, so forwarded trusted context is not believed', () => {
+describe('@WpAuthApiKey does NOT verify its caller, so forwarded trusted context is not believed', () => {
     it('rejects an inbound trusted header the hook did not independently derive', async () => {
         const next = new RecordingNext();
 
@@ -228,9 +255,11 @@ describe('@AuthApiKey does NOT verify its caller, so forwarded trusted context i
             'x-user-id': 'someone-elses-user',
         });
 
-        await expect(runFilter(next, new TestApiKeyHook(), request, [
-            new ContextTuple(victimKey, 'someone-elses-user'),
-        ])).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
+        await expect(
+            runFilter(next, new TestApiKeyHook(), request, [
+                new ContextTuple(victimKey, 'someone-elses-user'),
+            ]),
+        ).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
         expect(next.invoked).toBe(false);
     });
 
@@ -260,6 +289,8 @@ describe('@AuthApiKey does NOT verify its caller, so forwarded trusted context i
         expect(trust.allows(ORG_ID)).toBe(false);
         expect(trust.allows(ContextKey.untrusted<string>('actionId', 'x-action-id'))).toBe(true);
         // Contrast, stated out loud: shared-secret is the branch this mode must NOT be in.
-        expect(DestinationTrust.forAuthMode({ kind: 'shared-secret', secretKey: 'k' }).allows(ORG_ID)).toBe(true);
+        expect(
+            DestinationTrust.forAuthMode({ kind: 'shared-secret', secretKey: 'k' }).allows(ORG_ID),
+        ).toBe(true);
     });
 });

@@ -18,14 +18,27 @@ export {
     RETIRED_TOP_LEVEL_MARKER,
     SECTION_PLACEMENT_MARKER,
 } from './config-error-banner';
-export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG_PARSE_ATTEMPTS, CONFIG_PARSE_RETRY_MILLIS } from './config-file';
+export {
+    findConfigFile,
+    CONFIG_FILENAME,
+    ConfigFile,
+    ConfigParseAttempt,
+    CONFIG_PARSE_ATTEMPTS,
+    CONFIG_PARSE_RETRY_MILLIS,
+} from './config-file';
 // The PARSED-BUT-UNVALIDATED config shape. Exported for readers that walk the file generically rather
 // than through the typed config (the pr-gate active-hatch dashboard section reads every rule's hatches).
 export type { RawConfigFile } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
-export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR, LOGS_STATE_DIR } from './state-dir';
+export {
+    DotWebpieces,
+    dotWebpieces,
+    GitDirs,
+    WORKTREE_STATE_DIR,
+    LOGS_STATE_DIR,
+} from './state-dir';
 export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
 // There is NO machine-global state root. `MachineStateHome`/`StateHome`/`WEBPIECES_STATE_HOME` and the
 // `PrBodyStore` that used them are DELETED: the one artifact that needed a scope above the clone was the
@@ -33,7 +46,12 @@ export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
 // webpieces tool writes is `{repo}/.webpieces`, resolved through `DotWebpieces` above. See
 // `decisions/0005-the-pr-description-is-the-merge-body.md`.
 export { AgedTreeSweeper, SweepCount, RETENTION_DAYS } from './aged-tree-sweep';
-export { ClaudeEnv, claudeEnv, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from './claude-env';
+export {
+    ClaudeEnv,
+    claudeEnv,
+    CLAUDE_PROJECT_DIR_ENV,
+    CLAUDE_PROJECT_DIR_UNSET,
+} from './claude-env';
 export { AtomicFile } from './atomic-file';
 // The ONE formatter for a remedy that must run in a named directory: `cd '<root>' && <command>`.
 // Single-quoted so a repo path containing a space is still runnable (and still un-smuggleable).
@@ -49,18 +67,60 @@ export { GENERATED_CODE_PATHS } from './generated-code-paths';
 // CI validator) consult this class, so `allowGlobs` cannot be honoured by one half and ignored by the other.
 export { NoCustomCssScope } from './no-custom-css-scope';
 export { defaultRules, defaultRulesDir } from './default-rules';
-export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
+export {
+    loadTemplate,
+    writeTemplateIfMissing,
+    writeTemplate,
+    TemplateWriter,
+} from './load-template';
 // The instruct-ai docs are delivered as a SET: writing one writes the transitive closure of the docs it
 // links to, so a doc and everything it points at always land together. See instruct-ai-docs.ts.
-export { GIT_WORKFLOW_DOC, GitWorkflowDoc, InstructAiDoc, InstructAiDocSet, MergeProcessDoc } from './instruct-ai-docs';
-export { MERGE_PROCESS_DOC, MergeProcessText, MergeRun, ReferenceMergeRun } from './merge-process-doc';
+export {
+    GIT_WORKFLOW_DOC,
+    GitWorkflowDoc,
+    InstructAiDoc,
+    InstructAiDocSet,
+    MergeProcessDoc,
+} from './instruct-ai-docs';
+export {
+    MERGE_PROCESS_DOC,
+    MergeProcessText,
+    MergeRun,
+    ReferenceMergeRun,
+} from './merge-process-doc';
 export { BUILD_LOG_DOC } from './build-log-doc';
-export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
+export {
+    validateWebpiecesConfig,
+    validatePrGateSection,
+    validateChecklistsSection,
+    validateSectionPlacement,
+    validateExcludePaths,
+    validateMatchRulesSection,
+    allRuleNames,
+    recommendedSeedMode,
+    recommendedSeedModeFor,
+    seedEntryForRule,
+} from './validate-config';
 export { validateCommandsSection } from './commands-section-validators';
-export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFIX } from './config-key-rules';
+export {
+    unknownKeyErrors,
+    isCommentKey,
+    validateTopLevelKeys,
+    COMMENT_KEY_SUFFIX,
+} from './config-key-rules';
 // The retired-key table + the no-back-compat policy it enforces. Exported so the installer can migrate
 // what the errors instruct, and so consumers can enumerate retirements.
-export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConfigKey, isRetiredKey, retiredEntry, retiredKeyError, retiredKeyErrorsIn, retiredRuleFor } from './retired-config-keys';
+export {
+    RETIRED_CONFIG_KEYS,
+    RETIRED_SCOPE_KEY,
+    RETIRED_SCOPE_RULE,
+    RetiredConfigKey,
+    isRetiredKey,
+    retiredEntry,
+    retiredKeyError,
+    retiredKeyErrorsIn,
+    retiredRuleFor,
+} from './retired-config-keys';
 // The MECHANICAL cure the unknown-rule error and the banner both name: strip every key no validator has a
 // schema for, so cleanliness is one command rather than a judgement call made while every Bash call is
 // blocked. `PRUNE_UNKNOWN_COMMAND` (constants.ts) is the single spelling of that command.
@@ -76,12 +136,21 @@ export { validateChecklistDocs } from './checklist-docs-validator';
 // what keeps a rejection repairable. Every `experimental.*` key is an OPT-IN that defaults OFF, including
 // `whole-repo-build-guard`: ON requires an explicit `true`, and there is no per-key default to export.
 export {
-    HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
-    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION,
-    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_MAX_CONCURRENT_BUILDS,
+    HomeConfig,
+    HomeConfigService,
+    RetiredHomeConfigKey,
+    RETIRED_HOME_CONFIG_KEYS,
+    HOME_CONFIG_DIR,
+    HOME_CONFIG_FILE,
+    HOME_EXPERIMENTAL_SECTION,
+    HOME_KEY_ORPHAN_DIR_SWEEP,
+    HOME_KEY_WHOLE_REPO_BUILD_GUARD,
+    HOME_KEY_MAX_CONCURRENT_BUILDS,
     HOME_KEY_TURN_OFF_ALL_REVIEWERS,
     DEFAULT_MAX_CONCURRENT_BUILDS,
-    HOME_KEY_DOC, HOME_KEY_AI_DOC, DOCUMENTATION_KEYS,
+    HOME_KEY_DOC,
+    HOME_KEY_AI_DOC,
+    DOCUMENTATION_KEYS,
 } from './home-config';
 // The MACHINE-WIDE build ledger, `~/.webpieces/builds.log`. THE one carve-out from
 // `no-machine-global-state.spec.ts`'s rule that webpieces writes only under `{repo}/.webpieces` — the
@@ -90,17 +159,32 @@ export {
 // remote owns, and cannot be answered from a per-repo file because every linked worktree has its own
 // `.webpieces/` and would be blind to the sibling it is contending with. See builds-log.ts.
 export {
-    BuildsLog, BuildTicket, BuildTermination, RunningBuild,
-    BUILDS_LOG_FILE, BUILDS_LOCK_FILE, BUILD_START, BUILD_DONE_SUCCESS, BUILD_DONE_FAIL,
-    MAX_BUILDS_LOG_BYTES, BUILDS_LOG_GENERATIONS, MAX_ROW_BYTES,
+    BuildsLog,
+    BuildTicket,
+    BuildTermination,
+    RunningBuild,
+    BUILDS_LOG_FILE,
+    BUILDS_LOCK_FILE,
+    BUILD_START,
+    BUILD_DONE_SUCCESS,
+    BUILD_DONE_FAIL,
+    MAX_BUILDS_LOG_BYTES,
+    BUILDS_LOG_GENERATIONS,
+    MAX_ROW_BYTES,
 } from './builds-log';
 // The orphan-directory sweep: the corpse an `nx g move` leaves on every clone, which git cannot remove
 // because an ignored dist/ or node_modules/ outlives every tracked file under it. See orphan-dir-scan.ts
 // for why the predicate is git's own `clean -Xdn` answer rather than a hand-rolled ignore walk.
 export { OrphanDirScanner, OrphanCandidate } from './orphan-dir-scan';
 export {
-    OrphanDirArchiver, ArchivedOrphan, FailedOrphan, OrphanSweepResult, OrphanSweepManifest,
-    TRASH_STATE_DIR, TRASH_MANIFEST_FILE, TRASH_RETENTION_DAYS,
+    OrphanDirArchiver,
+    ArchivedOrphan,
+    FailedOrphan,
+    OrphanSweepResult,
+    OrphanSweepManifest,
+    TRASH_STATE_DIR,
+    TRASH_MANIFEST_FILE,
+    TRASH_RETENTION_DAYS,
 } from './orphan-dir-archive';
 export { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
 export {
@@ -114,7 +198,13 @@ export {
 } from './match-rules-config';
 export type { ConfigSection } from './sections';
 export { schemaFieldNames } from './rule-schemas';
-export { HOOK_GUARD_NAMES, BRANCH_STATE_GUARD_KEY, PR_LIFECYCLE_GUARD_KEY, isHookGuard, sectionForRule } from './sections';
+export {
+    HOOK_GUARD_NAMES,
+    BRANCH_STATE_GUARD_KEY,
+    PR_LIFECYCLE_GUARD_KEY,
+    isHookGuard,
+    sectionForRule,
+} from './sections';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
@@ -176,6 +266,7 @@ export {
     InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
+    EnsureWeAreSecureConfig,
     BranchCreationGuardConfig,
     PrLifecycleGuardConfig,
     NoFileImportCyclesConfig,
@@ -234,9 +325,7 @@ export type {
     StructuralMode,
     ValidateTsMode,
 } from './rule-configs';
-export {
-    BranchStateGuardConfig,
-} from './main-sync-guard-configs';
+export { BranchStateGuardConfig } from './main-sync-guard-configs';
 export {
     GateDefinition,
     PrGateConfig,
@@ -385,15 +474,8 @@ export {
     BRANCH_RETENTION_ARCHIVE_TAG,
     BRANCH_RETENTION_KEEP,
 } from './branch-archiver';
-export {
-    Worktree,
-    WorktreeWorkInFlight,
-    WorktreeService,
-} from './worktrees';
-export {
-    AgentWorktreeLock,
-    AgentWorktreeLockReader,
-} from './agent-worktree-lock';
+export { Worktree, WorktreeWorkInFlight, WorktreeService } from './worktrees';
+export { AgentWorktreeLock, AgentWorktreeLockReader } from './agent-worktree-lock';
 export {
     HARNESS_NOT_CONSULTED,
     LOCK_LIVENESS_UNVERIFIABLE,
@@ -409,16 +491,8 @@ export {
     AgentActivity,
     HarnessAgentActivityReader,
 } from './harness-agent-activity';
-export {
-    ReapedBranch,
-    ReapResult,
-    BranchReaper,
-} from './branch-reaper';
-export {
-    ReapedWorktree,
-    WorktreeReapResult,
-    WorktreeReaper,
-} from './worktree-reaper';
+export { ReapedBranch, ReapResult, BranchReaper } from './branch-reaper';
+export { ReapedWorktree, WorktreeReapResult, WorktreeReaper } from './worktree-reaper';
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,
@@ -432,8 +506,4 @@ export {
     DEFAULT_UPSERT_PR_COMMAND,
     DEFAULT_MERGE_COMPLETE_COMMAND,
 } from './commands-config';
-export {
-    StaleBinRemoval,
-    StaleBinSweeper,
-    staleBinSweeper,
-} from './stale-bin-sweep';
+export { StaleBinRemoval, StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';

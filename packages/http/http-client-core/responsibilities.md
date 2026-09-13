@@ -10,7 +10,7 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - `ClientTarget` — the base a `ClientConfig` extends: a logging `svcName` plus an async `resolveBaseUrl()`
 - Translating HTTP responses/status codes into the typed `HttpError` hierarchy (`ClientErrorTranslator`), returning a `TranslatedFailure` that also records WHO decided — an app-registered `ClientRegistry` translation, or the built-in default mapping. The symmetry with the server is in the TYPE and the structured fields (`subType`, `errorCode`, `waitSeconds`, `field`, `guiAlertMessage`), NOT in the prose: a webpieces server sends the real `Error.message` for `HttpUserError` (266) alone and the generic reason phrase for every other status (see `HttpErrorWireMapper` in `http-server`), so callers must branch on the type, never on the text of `message`
 - Deciding whether a response body may be parsed at all, from its `content-type` (`ResponseBodyReader`) — an infra 502/503/504 serves HTML, so it becomes a status-typed `HttpError` rather than a `SyntaxError`
-- Attaching outbound delivery auth per the endpoint's `AuthMode` (@AuthOidc bearer via the injected `IdTokenMinter`, @AuthSharedSecret value from the bound `Secrets`)
+- Attaching outbound delivery auth per the endpoint's `AuthMode` (@WpAuthOidc bearer via the injected `IdTokenMinter`, @WpAuthSharedSecret value from the bound `Secrets`)
 
 ## Out of Scope
 

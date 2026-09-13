@@ -7,7 +7,12 @@ import {
     toError,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { RequestContext, HttpRequest, RawRequest, RequestContextHeaders } from '@webpieces/core-context';
+import {
+    RequestContext,
+    HttpRequest,
+    RawRequest,
+    RequestContextHeaders,
+} from '@webpieces/core-context';
 import { HttpErrorWireMapper } from './HttpErrorWireMapper';
 
 /**
@@ -68,7 +73,7 @@ export class ExpressWrapper {
         private formPost: boolean = false,
         /**
          * True for an @Endpoint(..., { rawBody: true }) route: RETAIN the verbatim bytes + the
-         * absolute url on the published {@link HttpRequest}, so an @AuthWebhook hook can verify a
+         * absolute url on the published {@link HttpRequest}, so an @WpAuthWebhook hook can verify a
          * vendor signature over what the sender actually transmitted. Also switches the JSON parse
          * failure from "throw now" to "hold it for AuthFilter" — see {@link RawRequest.bodyParseError}.
          */
@@ -84,8 +89,7 @@ export class ExpressWrapper {
          * `createExpressWrapper` rather than reaching around the middleware to construct a wrapper.
          */
         private maxBodyBytes: number = MAX_BODY_BYTES,
-    ) {
-    }
+    ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
         // MOVED: Wrap entire request in RequestContext.run()
@@ -117,7 +121,7 @@ export class ExpressWrapper {
         //    know" and step aside. The translator was never too late; the context it needs was.
         //
         //    No `raw` yet — the bytes have not been read. Step 3 republishes WITH them, below the
-        //    same request scope and still above the filter chain, so @AuthWebhook signature
+        //    same request scope and still above the filter chain, so @WpAuthWebhook signature
         //    verification sees exactly what it saw before.
         //
         //    KNOWN ISSUE, ACCEPTED AND NOT FIXED (issue #862): this publishes the request but does
@@ -184,7 +188,12 @@ export class ExpressWrapper {
         }
 
         const raw = this.rawBody
-            ? new RawRequest(this.absoluteUrl(req), bodyBytes, req.socket?.remoteAddress, parseError)
+            ? new RawRequest(
+                  this.absoluteUrl(req),
+                  bodyBytes,
+                  req.socket?.remoteAddress,
+                  parseError,
+              )
             : undefined;
         return new ParsedBody(requestDto, raw);
     }
@@ -204,7 +213,12 @@ export class ExpressWrapper {
         } catch (err: unknown) {
             const error = toError(err);
             if (!this.rawBody) {
-                throw new BadRequestError('Request body is not valid JSON', undefined, undefined, error);
+                throw new BadRequestError(
+                    'Request body is not valid JSON',
+                    undefined,
+                    undefined,
+                    error,
+                );
             }
             return new ParsedBody({}, undefined, error);
         }
@@ -296,9 +310,11 @@ export class ExpressWrapper {
                 if (size > this.maxBodyBytes) {
                     chunks = [];
                     req.destroy();
-                    reject(new BadRequestError(
-                        `Request body exceeds the ${this.maxBodyBytes} byte limit`,
-                    ));
+                    reject(
+                        new BadRequestError(
+                            `Request body exceeds the ${this.maxBodyBytes} byte limit`,
+                        ),
+                    );
                     return;
                 }
                 chunks.push(chunk);
@@ -342,9 +358,8 @@ export class ExpressWrapper {
         // could not express at all. `undefined` means "not mine": webpieces' default answers
         // instead. Symmetric with the client's ClientErrorTranslator, which consults
         // tryTranslateFromWire() first, over the identical HttpResponseDto shape.
-        const appResponse = error instanceof Error
-            ? ClientRegistry.tryTranslateToWire(error)
-            : undefined;
+        const appResponse =
+            error instanceof Error ? ClientRegistry.tryTranslateToWire(error) : undefined;
 
         this.send(res, appResponse ?? this.errorWireMapper.toResponse(error));
     }

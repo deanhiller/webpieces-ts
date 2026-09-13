@@ -23,7 +23,7 @@ export class HttpRequest {
         /**
          * The verbatim bytes + absolute url, present ONLY on an `@Endpoint(..., { rawBody: true })`
          * route (see {@link RawRequest}). Absent everywhere else, and absent is the SAFE state:
-         * `@AuthWebhook` has nothing to verify without it and 401s rather than waving the call
+         * `@WpAuthWebhook` has nothing to verify without it and 401s rather than waving the call
          * through. A spec driving a webhook route in-process supplies one here, the same way a spec
          * today supplies an `authorization` header.
          */
@@ -38,7 +38,7 @@ export class HttpRequest {
 
     /** All values of a header. */
     getHeaderValues(key: AnyContextKey | string): string[] | undefined {
-        const name = (typeof key === 'string' ? key : key.httpHeader ?? key.name).toLowerCase();
+        const name = (typeof key === 'string' ? key : (key.httpHeader ?? key.name)).toLowerCase();
         return this.headers.get(name);
     }
 }

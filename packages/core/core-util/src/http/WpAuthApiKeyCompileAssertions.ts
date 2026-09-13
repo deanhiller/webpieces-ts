@@ -1,9 +1,9 @@
 import { ApiKeyCredential, AuthMode } from './auth-mode';
-import { AuthApiKey } from './decorators';
+import { WpAuthApiKey } from './decorators';
 
 /**
  * COMPILE-TIME assertions for the `apikey` member of the {@link AuthMode} union and for the
- * {@link AuthApiKey} signature. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
+ * {@link WpAuthApiKey} signature. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
  * '@ts-expect-error' directive") if the line it guards ever starts compiling.
  *
  * WHY THIS IS NOT A `.spec.ts` FILE — same reason as its sibling `AuthJwtCompileAssertions.ts`:
@@ -22,7 +22,7 @@ import { AuthApiKey } from './decorators';
  * 3. {@link ApiKeyCredential} makes the two OpenAPI schemes MUTUALLY exclusive: a header credential
  *    must carry its header name, and a bearer credential must NOT — its location IS `Authorization`,
  *    so a `name` beside it would be a lie a generator has to guess about.
- * 4. The ONE-ARGUMENT `@AuthApiKey('regime')` form is GONE. It could declare a key regime while
+ * 4. The ONE-ARGUMENT `@WpAuthApiKey('regime')` form is GONE. It could declare a key regime while
  *    saying nothing about where the credential rides, which is the whole defect; per the
  *    no-backwards-compatibility rule there is no overload and no optional second parameter left
  *    behind, and this directive is what proves it.
@@ -39,7 +39,11 @@ export class AuthApiKeyCompileAssertions {
             kind: 'apikey',
             regime: 'onetablet-partner',
             credentials: [
-                { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+                {
+                    in: 'header',
+                    name: 'x-api-key',
+                    description: 'The key issued to your integration.',
+                },
                 { in: 'header', name: 'x-organization-id' },
             ],
         };
@@ -48,19 +52,25 @@ export class AuthApiKeyCompileAssertions {
 
     /** The bearer branch, likewise asserted by the ABSENCE of an error. */
     legitimateBearer(): ApiKeyCredential {
-        const credential: ApiKeyCredential = { in: 'bearer', description: 'Send the key as a bearer token.' };
+        const credential: ApiKeyCredential = {
+            in: 'bearer',
+            description: 'Send the key as a bearer token.',
+        };
         return credential;
     }
 
     /** The decorator's TWO-argument form is the only one; asserted by the ABSENCE of an error. */
-    legitimateDecorator(): ClassDecorator & MethodDecorator {
-        return AuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }]);
+    legitimateDecorator(): MethodDecorator {
+        return WpAuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }]);
     }
 
     /** Every one of these must be UNWRITABLE. A directive going unused here fails the build. */
     rejected(): void {
         // @ts-expect-error `regime` is REQUIRED — it selects which key regime, so it cannot be omitted
-        const noRegime: AuthMode = { kind: 'apikey', credentials: [{ in: 'header', name: 'x-api-key' }] };
+        const noRegime: AuthMode = {
+            kind: 'apikey',
+            credentials: [{ in: 'header', name: 'x-api-key' }],
+        };
         void noRegime;
         // @ts-expect-error `credentials` is REQUIRED — a regime that declares no location is the defect
         const noCredentials: AuthMode = { kind: 'apikey', regime: 'onetablet-partner' };
@@ -68,8 +78,12 @@ export class AuthApiKeyCompileAssertions {
         // @ts-expect-error EMPTY is not a widening — it would emit a document with no security block
         const empty: AuthMode = { kind: 'apikey', regime: 'onetablet-partner', credentials: [] };
         void empty;
-        // @ts-expect-error the discriminant is 'apikey'; 'api-key' is not a member of the union
-        const misspelled: AuthMode = { kind: 'api-key', regime: 'onetablet-partner', credentials: [] };
+        const misspelled: AuthMode = {
+            // @ts-expect-error the discriminant is 'apikey'; 'api-key' is not a member of the union
+            kind: 'api-key',
+            regime: 'onetablet-partner',
+            credentials: [{ in: 'header', name: 'x-api-key' }],
+        };
         void misspelled;
         // @ts-expect-error bearer's location IS `Authorization`; a header name beside it is a lie
         const bearerWithName: ApiKeyCredential = { in: 'bearer', name: 'x-api-key' };
@@ -83,13 +97,13 @@ export class AuthApiKeyCompileAssertions {
     }
 
     /**
-     * The DELETED one-argument form. `@AuthApiKey('onetablet-partner')` used to compile and is now a
+     * The DELETED one-argument form. `@WpAuthApiKey('onetablet-partner')` used to compile and is now a
      * compile error naming the missing `credentials` argument — the delivery mechanism for the
      * migration, and the reason no `@deprecated` overload survives.
      */
     oneArgumentFormIsGone(): void {
         // @ts-expect-error the one-argument form is DELETED; pass the credential list as well
-        const legacy = AuthApiKey('onetablet-partner');
+        const legacy = WpAuthApiKey('onetablet-partner');
         void legacy;
     }
 

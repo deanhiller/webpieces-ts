@@ -21,7 +21,7 @@ store.set(WebpiecesCoreHeaders.AUTHORIZATION, token);
 store.set(CompanyHeaders.TENANT_ID, tenantId);
 ```
 
-A browser cannot hold service credentials, so a contract with an `@AuthOidc` endpoint fails fast at
+A browser cannot hold service credentials, so a contract with an `@WpAuthOidc` endpoint fails fast at
 `createRpcClient`. The server twin is [@webpieces/http-client-node](../http-client-node).
 
 Calls have a **30-second default timeout**, including reading the response body. Configure

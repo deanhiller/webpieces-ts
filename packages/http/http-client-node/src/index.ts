@@ -38,9 +38,13 @@ export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 // hostile' (SsrfRefusedError) without matching message text.
 export { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
 
-// The OUTBOUND half of @AuthWebhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
-// one, or every outbound @AuthWebhook call throws rather than delivering unsigned.
-export { WebhookSignerCallback, SignableRequest, WEBHOOK_SIGNER_CALLBACK } from './WebhookSignerCallback';
+// The OUTBOUND half of @WpAuthWebhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
+// one, or every outbound @WpAuthWebhook call throws rather than delivering unsigned.
+export {
+    WebhookSignerCallback,
+    SignableRequest,
+    WEBHOOK_SIGNER_CALLBACK,
+} from './WebhookSignerCallback';
 
 // The SSRF policy a re-pointed URL is judged under, and the refusal it produces. Automatic, armed by
 // the ACT of re-pointing; the ONLY way to relax it is naming SsrfTestingPolicy at a call site.

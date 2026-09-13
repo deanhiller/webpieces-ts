@@ -1,12 +1,43 @@
 import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
-import { provideFrameworkSingleton, HttpRequest, PendingWireTrust, PendingTrustedValue, RawHttpRequest, RequestContext } from '@webpieces/core-context';
-import { AuthMode, EndpointNotFoundError, BadRequestError, UnauthorizedError, JwtRequirement, LogManager, RuntimeLocality, toError } from '@webpieces/core-util';
+import {
+    provideFrameworkSingleton,
+    HttpRequest,
+    PendingWireTrust,
+    PendingTrustedValue,
+    RawHttpRequest,
+    RequestContext,
+} from '@webpieces/core-context';
+import {
+    AuthMode,
+    EndpointNotFoundError,
+    BadRequestError,
+    UnauthorizedError,
+    JwtRequirement,
+    LogManager,
+    RuntimeLocality,
+    toError,
+} from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
-import { AuthConfig, AUTH_CONFIG, AuthenticatedCaller, AUTHENTICATED_CALLER_KEY, SharedSecrets } from '../AuthConfig';
-import { ApiKeyHook, API_KEY_HOOK, JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK, WebhookAuthCallback, WEBHOOK_AUTH_CALLBACK } from '../AuthHooks';
+import {
+    AuthConfig,
+    AUTH_CONFIG,
+    AuthenticatedCaller,
+    AUTHENTICATED_CALLER_KEY,
+    SharedSecrets,
+} from '../AuthConfig';
+import {
+    ApiKeyHook,
+    API_KEY_HOOK,
+    JwtHook,
+    JWT_HOOK,
+    OidcHook,
+    OIDC_HOOK,
+    WebhookAuthCallback,
+    WEBHOOK_AUTH_CALLBACK,
+} from '../AuthHooks';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -25,7 +56,7 @@ const AUTHORIZATION_HEADER = 'authorization';
  * can never be mistaken for a token, nor accepted where the other was expected:
  *
  *   Authorization: Bearer <user JWT | service OIDC token>
- *   Authorization: Webpieces <@AuthSharedSecret value>
+ *   Authorization: Webpieces <@WpAuthSharedSecret value>
  *
  * The scheme is REQUIRED. A bare value with no scheme is rejected.
  */
@@ -66,20 +97,22 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // Framework default, always available — verifies Google OIDC with zero app wiring.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- AuthFilter is DI-resolved via the esbuild/vitest path, which elides type-only imports (no design:paramtypes), so every param needs its explicit token
         @inject(DefaultOidcVerifier) private readonly oidcVerifier: DefaultOidcVerifier,
-        // @optional: only bind an AuthConfig to enable @AuthSharedSecret endpoints.
+        // @optional: only bind an AuthConfig to enable @WpAuthSharedSecret endpoints.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(AUTH_CONFIG) private readonly authConfig?: AuthConfig,
-        // @optional: only bind a JwtHook to enable @AuthJwt endpoints.
+        // @optional: only bind a JwtHook to enable @WpAuthJwt endpoints.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(JWT_HOOK) private readonly jwtHook?: JwtHook,
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
-        // @optional: only bind a WebhookAuthCallback to enable @AuthWebhook endpoints. Unbound = every such
+        // @optional: only bind a WebhookAuthCallback to enable @WpAuthWebhook endpoints. Unbound = every such
         // endpoint 401s, which is the ONE default that must not be the other way round.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(WEBHOOK_AUTH_CALLBACK) private readonly webhookAuthCallback?: WebhookAuthCallback,
-        // @optional: only bind an ApiKeyHook to enable @AuthApiKey endpoints. Unbound = every such
+        @optional()
+        @inject(WEBHOOK_AUTH_CALLBACK)
+        private readonly webhookAuthCallback?: WebhookAuthCallback,
+        // @optional: only bind an ApiKeyHook to enable @WpAuthApiKey endpoints. Unbound = every such
         // endpoint 401s, for the same reason as the webhook hook above.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(API_KEY_HOOK) private readonly apiKeyHook?: ApiKeyHook,
@@ -111,7 +144,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 await this.enforceOidc(authHeader, mode.callers);
                 break;
             case 'shared-secret':
-                this.enforceSharedSecret(this.credential(authHeader, SHARED_SECRET_SCHEME), mode.secretKey);
+                this.enforceSharedSecret(
+                    this.credential(authHeader, SHARED_SECRET_SCHEME),
+                    mode.secretKey,
+                );
                 break;
             case 'webhook':
                 await this.enforceWebhook(mode.name, meta);
@@ -129,7 +165,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `@AuthWebhook(name)`: hand the app's {@link WebhookAuthCallback} the verbatim request and let it call the
+     * `@WpAuthWebhook(name)`: hand the app's {@link WebhookAuthCallback} the verbatim request and let it call the
      * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
      *
      * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
@@ -147,19 +183,21 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private async enforceWebhook(name: string, meta: MethodMeta): Promise<void> {
         if (!this.webhookAuthCallback) {
             log.warn(
-                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookAuthCallback is bound. ` +
-                `Bind one (options.bind(WEBHOOK_AUTH_CALLBACK).to(YourWebhookAuthCallback)) to enable webhook verification.`,
+                `Refusing @WpAuthWebhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookAuthCallback is bound. ` +
+                    `Bind one (options.bind(WEBHOOK_AUTH_CALLBACK).to(YourWebhookAuthCallback)) to enable webhook verification.`,
             );
             throw new UnauthorizedError('Webhook auth is not enabled on this server');
         }
         const request = RequestContext.getRequest();
         if (!this.hasRawBytes(request)) {
             log.warn(
-                `Refusing @AuthWebhook('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
-                `no raw bytes. Declare @Endpoint(path, 'external', { calledBy: '${name}', rawBody: true }); a ` +
-                `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
+                `Refusing @WpAuthWebhook('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
+                    `no raw bytes. Declare @Endpoint(path, 'external', { calledBy: '${name}', rawBody: true }); a ` +
+                    `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
             );
-            throw new UnauthorizedError('Webhook signature cannot be verified: no raw request was retained');
+            throw new UnauthorizedError(
+                'Webhook signature cannot be verified: no raw request was retained',
+            );
         }
         // Throws UnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
@@ -178,7 +216,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `@AuthApiKey(regime, credentials)`: hand the app's {@link ApiKeyHook} the regime name and the inbound
+     * `@WpAuthApiKey(regime, credentials)`: hand the app's {@link ApiKeyHook} the regime name and the inbound
      * headers and let it look the CUSTOMER's key up. The declared `credentials` are NOT read here — they
      * describe the contract for generators; the hook owns extraction. Three ways to fail, all 401, all
      * before the controller:
@@ -196,19 +234,21 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private async enforceApiKey(regime: string, meta: MethodMeta): Promise<void> {
         if (!this.apiKeyHook) {
             log.warn(
-                `Refusing @AuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
-                `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
+                `Refusing @WpAuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
+                    `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
             );
             throw new UnauthorizedError('API-key auth is not enabled on this server');
         }
         const request = RequestContext.getRequest();
         if (!request) {
             log.warn(
-                `Refusing @AuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no inbound HttpRequest is ` +
-                `in scope, so the hook has no headers to read. A spec driving this route in-process must ` +
-                `publish an HttpRequest carrying the api-key headers.`,
+                `Refusing @WpAuthApiKey('${regime}') endpoint ${meta.routeMeta.path}: no inbound HttpRequest is ` +
+                    `in scope, so the hook has no headers to read. A spec driving this route in-process must ` +
+                    `publish an HttpRequest carrying the api-key headers.`,
             );
-            throw new UnauthorizedError('API key cannot be verified: no inbound request was published');
+            throw new UnauthorizedError(
+                'API key cannot be verified: no inbound request was published',
+            );
         }
         // Throws UnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
         // the key against a second header (the organization the customer is acting for).
@@ -231,7 +271,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private rethrowDeferredBodyError(): void {
         const parseError = RequestContext.getRequest()?.raw?.bodyParseError;
         if (parseError) {
-            throw new BadRequestError('Request body is not valid JSON', undefined, undefined, parseError);
+            throw new BadRequestError(
+                'Request body is not valid JSON',
+                undefined,
+                undefined,
+                parseError,
+            );
         }
     }
 
@@ -287,8 +332,8 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * Decide what happens to the trusted keys that arrived on the WIRE and were held back by
      * {@link PendingWireTrust} (read that class for why they are held rather than written).
      *
-     * `callerVerified` — the endpoint authenticated the SENDER **as a peer service** (`@AuthOidc`,
-     * `@AuthSharedSecret`).
+     * `callerVerified` — the endpoint authenticated the SENDER **as a peer service** (`@WpAuthOidc`,
+     * `@WpAuthSharedSecret`).
      * The sender is a service we trust, this is the service-to-service hop, and its forwarded
      * identity is admitted as-is. This is the case that makes propagating a verified userId across
      * internal services work.
@@ -334,8 +379,11 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         log.error(
             `Rejecting inbound '${item.key.httpHeader}': it is a TRUSTED context key, this route does ` +
-            `not authenticate its caller, and the credential ` +
-            (vouched === undefined ? 'vouched for no such value' : 'derived a different value') + '.',
+                `not authenticate its caller, and the credential ` +
+                (vouched === undefined
+                    ? 'vouched for no such value'
+                    : 'derived a different value') +
+                '.',
         );
         throw new UnauthorizedError(
             `Header '${item.key.httpHeader}' cannot be supplied by the caller on this endpoint`,
@@ -343,7 +391,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `@AuthLocalOnly`: serve only on a developer's machine, and off-local behave EXACTLY as if the
+     * `@WpAuthLocalOnly`: serve only on a developer's machine, and off-local behave EXACTLY as if the
      * endpoint did not exist.
      *
      * WHY 404 AND NOT THE 403 APPS HAND-ROLLED. Off-local the route is not registered at all
@@ -363,17 +411,20 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             return;
         }
         log.warn(
-            `Refusing @AuthLocalOnly endpoint ${meta.routeMeta.path}: ` +
-            (RuntimeLocality.isDeclared()
-                ? 'this process declared itself DEPLOYED.'
-                : 'no startup declared a RuntimeLocality, so this process is treated as DEPLOYED. ' +
-                  'Pass the locality into RuntimeSetupOptions if this really is a developer machine.'),
+            `Refusing @WpAuthLocalOnly endpoint ${meta.routeMeta.path}: ` +
+                (RuntimeLocality.isDeclared()
+                    ? 'this process declared itself DEPLOYED.'
+                    : 'no startup declared a RuntimeLocality, so this process is treated as DEPLOYED. ' +
+                      'Pass the locality into RuntimeSetupOptions if this really is a developer machine.'),
         );
         // Same shape as an unregistered route — see the method doc for why this is not a 403.
         throw new EndpointNotFoundError(`No endpoint at ${meta.routeMeta.path}`);
     }
 
-    private async enforceJwt(header: string | undefined, requirement: JwtRequirement): Promise<void> {
+    private async enforceJwt(
+        header: string | undefined,
+        requirement: JwtRequirement,
+    ): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
             throw new UnauthorizedError('Authentication required');
@@ -389,7 +440,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
-            throw new UnauthorizedError('Missing OIDC bearer token for @AuthOidc endpoint');
+            throw new UnauthorizedError('Missing OIDC bearer token for @WpAuthOidc endpoint');
         }
         // App-bound OidcHook overrides the caller policy; otherwise the framework default runs directly.
         if (this.oidcHook) {
@@ -403,7 +454,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
         const accepted = this.authConfig?.sharedSecrets[secretKey];
         if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
-            throw new UnauthorizedError('Invalid shared secret for @AuthSharedSecret endpoint');
+            throw new UnauthorizedError('Invalid shared secret for @WpAuthSharedSecret endpoint');
         }
     }
 
@@ -426,7 +477,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             this.applyAuthenticatedCaller(await this.jwtHook.parseJwt(token));
         } catch (err: unknown) {
             const error = toError(err);
-            log.debug('Best-effort JWT parse on a public endpoint failed (treating as anonymous): ', error);
+            log.debug(
+                'Best-effort JWT parse on a public endpoint failed (treating as anonymous): ',
+                error,
+            );
         }
     }
 
