@@ -5,6 +5,7 @@ import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
     writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
     InformAiError, toError,
+    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -192,7 +193,9 @@ export class FinishUpsertPrCommand {
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
         // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, featureName), required);
+        const review = this.reviewJsonService.loadReviewJson(
+            reviewJsonPath(repoRoot, featureName), required,
+            scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
 
         // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not

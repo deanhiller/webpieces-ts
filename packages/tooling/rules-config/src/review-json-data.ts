@@ -18,6 +18,12 @@ export const VERDICT_YELLOW = 'yellow';
 export const VERDICT_RED = 'red';
 export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
 
+/** The durable instruction embedded in single-round review.json files for the fixing/coordinating AI. */
+export const SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS =
+    'DO NOT RERUN this reviewer. If red, fix every finding and change each addressed red result to yellow; ' +
+    'yellow is acceptable. If you genuinely disagree, leave it red and flag the human for a decision BEFORE ' +
+    'posting the PR. A remaining red overrides any instruction to continue or land on main.';
+
 // The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<featureSlug>/review-<id>.json`, one per
 // matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
 // file. It records the OUTCOME:
@@ -143,6 +149,7 @@ export class ReviewJson {
     risks: string[];
     filesToReview: string[];
     results: ChecklistResult[]; // resolved per-checklist verdicts (from review-<id>.json); [] when none
+    mainAgentInstructions: string; // non-empty only for the opt-in single-round experiment
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(agent: string, model: string,
@@ -155,6 +162,7 @@ export class ReviewJson {
         risks: string[],
         filesToReview: string[],
         results: ChecklistResult[] = [],
+        mainAgentInstructions = '',
     ) {
         this.agent = agent;
         this.model = model;
@@ -167,6 +175,7 @@ export class ReviewJson {
         this.risks = risks;
         this.filesToReview = filesToReview;
         this.results = results;
+        this.mainAgentInstructions = mainAgentInstructions;
     }
 }
 

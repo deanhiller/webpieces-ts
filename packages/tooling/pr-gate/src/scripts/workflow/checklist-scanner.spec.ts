@@ -64,14 +64,14 @@ function newForkPoint(): ForkPoint {
  * `turnOffAllReviewers: true` in it — which would empty every expectation below for a reason that has
  * nothing to do with the code under test. Every construction states the flag out loud instead.
  */
-function homeConfigWith(turnOffAllReviewers: boolean): HomeConfigService {
+function homeConfigWith(turnOffAllReviewers: boolean, singleRoundReview = false): HomeConfigService {
     const service = new HomeConfigService();
     vi.spyOn(service, 'load').mockReturnValue(
-        new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, turnOffAllReviewers));
+        new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, turnOffAllReviewers, singleRoundReview));
     return service;
 }
 
-function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
+function scannerFor(turnOffAllReviewers = false, singleRoundReview = false): ChecklistScanner {
     const diffScope = new DiffScope();
     const reviewJson = new ReviewJsonService();
     // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
@@ -80,9 +80,21 @@ function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
         newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
         new DiffBasisResolver(newForkPoint(), new GitStatusParser()),
         new PrContextWriter(diffScope, reviewJson), reviewJson,
-        homeConfigWith(turnOffAllReviewers),
+        homeConfigWith(turnOffAllReviewers, singleRoundReview),
     );
 }
+
+describe('ChecklistScanner — single-round mode', () => {
+    it('carries the machine opt-in into the shared stage-②/stage-③ scan', () => {
+        const dir = repoOnBranch();
+        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        fs.writeFileSync(path.join(dir, 'change.sql'), 'SELECT 1;\n');
+        expect(scannerFor(false, true).scan(
+            dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(true);
+        expect(scannerFor(false, false).scan(
+            dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(false);
+    });
+});
 
 describe('ChecklistScanner — UNCOMMITTED work counts', () => {
     // These env vars ARE the regression: DiffScope.resolveBase overlays them, and an NX_HEAD turns

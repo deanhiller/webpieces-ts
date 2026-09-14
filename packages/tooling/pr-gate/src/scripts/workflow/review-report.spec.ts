@@ -171,6 +171,39 @@ describe('reviewers still owed', () => {
     });
 });
 
+describe('singleRoundReview experiment', () => {
+    it('keeps the first invocation normal while embedding durable fixing instructions in review.json', () => {
+        const input = withOneOwedReviewer();
+        input.singleRoundReview = true;
+        const text = report.render(input);
+        expect(text).toContain('subagent_type: db-migration-reviewer');
+        expect(text).toContain('"main_agent_instructions"');
+        expect(text).toContain('DO NOT RERUN this reviewer');
+        expect(text).toContain('change each addressed red result to yellow');
+        expect(text).toContain('flag the human for a decision BEFORE posting the PR');
+    });
+
+    it('on a repeat invocation names no reviewer and directs the caller straight to finish', () => {
+        const input = withOneOwedReviewer();
+        input.singleRoundReview = true;
+        input.singleRoundRepeat = true;
+        input.singleRoundReviewers = ['db-migration-reviewer'];
+        const text = report.render(input);
+        expect(text).toContain('SKIP reviews');
+        expect(text).toContain('pnpm wp-finish-upsert-pr');
+        expect(text).toContain('DO NOT spawn or re-spawn any reviewer');
+        expect(text).not.toContain('subagent_type:');
+        expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
+    });
+
+    it('leaves the default multi-round output unchanged', () => {
+        const text = oneOwed();
+        expect(text).toContain('subagent_type: db-migration-reviewer');
+        expect(text).not.toContain('main_agent_instructions');
+        expect(text).not.toContain('SINGLE-ROUND');
+    });
+});
+
 /**
  * Stage ② had the SAME defect `wp-finish-upsert-pr` did: a refused checklist has no passing verdict, so it
  * is not in `reviewed`, so it was printed as an ordinary owed reviewer with an ordinary spawn block — word

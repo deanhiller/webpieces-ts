@@ -113,13 +113,22 @@ export class ReviewUpsertPrCommand {
         const buildPassedAt = await this.runBuildGate(repoRoot);
 
         const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));  // '' — THIS command writes the context itself, after materializing
-        const briefings = this.briefReviewers(repoRoot, featureName, scan, config);
+        const previousReceipt = this.receipts.read(repoRoot, featureName);
+        const singleRoundReviewers = previousReceipt?.reviewersBriefed ?? [];
+        const singleRoundRepeat = scan.singleRoundReview && singleRoundReviewers.length > 0;
+        // A second stage-② invocation in single-round mode must not create a fresh launch surface. The
+        // original generated instructions stay on disk; this run only refreshes the build receipt and gives
+        // the caller one explicit next action: finish.
+        const briefings = singleRoundRepeat ? [] : this.briefReviewers(repoRoot, featureName, scan, config);
+        const recordedReviewers = singleRoundRepeat
+            ? singleRoundReviewers
+            : briefings.map((b: ReviewerBriefing): string => b.subagent);
         this.receipts.write(repoRoot, featureName, new ReviewStageReceipt(
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
-            briefings.map((b: ReviewerBriefing): string => b.subagent),
+            recordedReviewers,
         ));
         this.reportActiveHatches(repoRoot);
-        this.report(repoRoot, featureName, scan, briefings, opts);
+        this.report(repoRoot, featureName, scan, briefings, opts, singleRoundRepeat, recordedReviewers);
     }
 
     /**
@@ -221,7 +230,7 @@ export class ReviewUpsertPrCommand {
     // eslint-disable-next-line @typescript-eslint/max-params
     private report(
         repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[],
-        opts: ReviewUpsertPrOptions,
+        opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[],
     ): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.reviewPath);
         input.definedCount = scan.defined.length;
@@ -237,6 +246,9 @@ export class ReviewUpsertPrCommand {
         // was reviewed. See ChecklistScanner.
         input.reviewersSuppressed = scan.reviewersDisabled;
         input.suppressed = scan.suppressed.slice();
+        input.singleRoundReview = scan.singleRoundReview;
+        input.singleRoundRepeat = singleRoundRepeat;
+        input.singleRoundReviewers = singleRoundReviewers.slice();
         // `say`: this block IS the next action — which reviewers to spawn, where review.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and
         // no instruction, which is the one thing this stage may never do.

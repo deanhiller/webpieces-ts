@@ -115,6 +115,8 @@ export class ChecklistScan {
      * downstream would mean a second changed-file computation that can disagree with this one.
      */
     suppressed: RequiredChecklist[];
+    /** TRUE only for the top-level `singleRoundReview` machine opt-in. */
+    singleRoundReview: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -139,6 +141,7 @@ export class ChecklistScan {
         // stays a one-liner; the scanner itself always passes the real set.
         results: ChecklistResult[] = [],
         optionalNotRun: RequiredChecklist[] = [],
+        singleRoundReview = false,
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -155,6 +158,7 @@ export class ChecklistScan {
         this.changedFiles = changedFiles;
         this.results = results;
         this.optionalNotRun = optionalNotRun;
+        this.singleRoundReview = singleRoundReview;
     }
 }
 
@@ -220,13 +224,14 @@ export class ChecklistScanner {
         const context = opts.contextStage === ''
             ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
             : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles);
-        if (this.homeConfig.load().turnOffAllReviewers) {
+        const homeConfig = this.homeConfig.load();
+        if (homeConfig.turnOffAllReviewers) {
             // EMPTY: applicable, reviewed, outstanding, formatErrors, results, optionalNotRun. INTACT:
             // defined, roster, basis, changedFiles, context — so every downstream reader can still say
             // WHAT was suppressed, which is the difference between an honest record and a silent one.
             return new ChecklistScan(
                 defined, [], [], [], context, reviewPath, base, roster, [], true, matched, basis,
-                changedFiles, [], []);
+                changedFiles, [], [], homeConfig.singleRoundReview);
         }
         const applicable = matched;
         const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
@@ -253,6 +258,7 @@ export class ChecklistScanner {
             changedFiles,
             results,
             optionalNotRun,
+            homeConfig.singleRoundReview,
         );
     }
 
