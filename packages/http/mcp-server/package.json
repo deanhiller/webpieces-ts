@@ -19,6 +19,7 @@
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
-        "reflect-metadata": "0.2.2"
+        "reflect-metadata": "0.2.2",
+        "tslib": "2.8.1"
     }
 }

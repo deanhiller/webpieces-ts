@@ -112,6 +112,10 @@ ORDER=(
     packages/logging/winston
     packages/logging/bunyan
     packages/http/http-routing
+    # mcp-server was bootstrapped manually at 0.4.765 because trusted publishing cannot create a
+    # new scoped package. Its npm Trusted Publisher is now configured, so CI owns every later release.
+    # It follows core-util, core-context and http-routing, which are all of its @webpieces dependencies.
+    packages/http/mcp-server
     # http-client-core is browser+node and depends only on core-util; its two environment
     # packages depend on it (and http-client-node also on gcp-identity + core-context).
     packages/http/http-client-core
@@ -123,10 +127,6 @@ ORDER=(
 
 # Publishable in package.json, but deliberately never released. Each needs a reason.
 SKIP=(
-    # npm trusted publishing cannot create a brand-new scoped package. First publish the
-    # framework dependencies from this release, then bootstrap this package manually and
-    # configure its trusted publisher. A follow-up release moves it into ORDER.
-    packages/http/mcp-server
 )
 
 contains() {
