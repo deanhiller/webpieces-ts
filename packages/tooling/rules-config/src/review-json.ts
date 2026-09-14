@@ -5,12 +5,14 @@ import { PR_REVIEW_DIR } from './constants';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
+import { ReviewJsonSchemaRenderer } from './review-json-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';
 import {
     VERDICT_GREEN,
     VERDICT_YELLOW,
     VERDICT_RED,
     VERDICT_STATUSES,
+    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
@@ -25,16 +27,14 @@ import {
     PrContext,
 } from './review-json-data';
 
-// Re-exported so review-json.ts stays the single import site for the whole review vocabulary: the data
-// classes moved out to keep this file under the file-size limit, NOT to give callers a second module to
-// learn. Every existing `from './review-json'` import keeps resolving.
+// Re-exported so review-json.ts stays the single import site for the review vocabulary.
 export { ChecklistOverride, ChecklistOverrideService, checklistOverrideService };
-
 export {
     VERDICT_GREEN,
     VERDICT_YELLOW,
     VERDICT_RED,
     VERDICT_STATUSES,
+    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
@@ -224,25 +224,9 @@ export class ReviewJsonService {
         }
     }
 
-    // Copy-paste schema both commands print. `required` is the set of checklists the diff MATCHED; empty
-    // ⇒ output identical to a repo with no checklists. Non-empty ⇒ appends per-checklist instructions
-    // naming the reviewer subagent + doc + the review-<id>.json to write.
-    reviewJsonSchemaHint(filePath: string): string {
-        return (
-            `Write your PR review to:\n  ${filePath}\n\n` +
-            `with this exact JSON shape (riskEmoji optional — derived from riskLevel):\n\n` +
-            `{\n` +
-            `  "title": "concise PR title describing the change (imperative, no branch names)",\n` +
-            `  "agent": "claude | codex | unknown",\n` +
-            `  "model": "opus | sonnet | actual readable model name | unknown",\n` +
-            `  "riskScore": 0,                       // integer 0–100 (higher = riskier)\n` +
-            `  "riskLevel": "green | yellow | red",\n` +
-            `  "summary": "5–10 sentence review summary",\n` +
-            `  "violations": ["pattern/architecture violations you found (empty array if none)"],\n` +
-            `  "risks": ["notable risks (empty array if none)"],\n` +
-            `  "filesToReview": ["paths a human should look at (empty array if none)"]\n` +
-            `}`
-        );
+    // Copy-paste review.json schema shared by every command that asks the coordinating AI to write it.
+    reviewJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
+        return new ReviewJsonSchemaRenderer().render(filePath, mainAgentInstructions);
     }
 
     /**
@@ -307,18 +291,20 @@ export class ReviewJsonService {
      * alongside the usual ones so the AI gets ONE message.
      */
     // webpieces-disable max-lines-new-methods -- one cohesive load+validate pass over the review fields
-    loadReviewJson(filePath: string, required: readonly RequiredChecklist[] = []): ReviewJson {
+    loadReviewJson(
+        filePath: string, required: readonly RequiredChecklist[] = [], expectedMainAgentInstructions = '',
+    ): ReviewJson {
         if (!fs.existsSync(filePath)) {
             throw new InformAiError(
                 `Required review.json not found.${this.archivedReviewHint(filePath)}\n\n` +
-                `${this.reviewJsonSchemaHint(filePath)}\n\n` +
+                `${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
-
-        const raw = this.parseReviewJson(fs.readFileSync(filePath, 'utf8'), filePath);
+        const raw = this.parseReviewJson(fs.readFileSync(filePath, 'utf8'), filePath, expectedMainAgentInstructions);
         if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-            throw new InformAiError(`review.json must be a JSON object.\n\n${this.reviewJsonSchemaHint(filePath)}`);
+            throw new InformAiError(
+                `review.json must be a JSON object.\n\n${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
         }
 
         const errors: string[] = [];
@@ -342,6 +328,7 @@ export class ReviewJsonService {
         if (title === '') {
             errors.push('"title" must be a non-empty, imperative PR title describing the change (no branch names).');
         }
+        const mainAgentInstructions = this.validateMainAgentInstructions(raw, expectedMainAgentInstructions, errors);
 
         const results = this.loadChecklistResults(filePath, required);
         for (const err of this.requiredChecklistErrors(required, results, filePath)) errors.push(err);
@@ -350,7 +337,7 @@ export class ReviewJsonService {
             throw new InformAiError(
                 `review.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
                 errors.map((e: string): string => `  • ${e}`).join('\n') +
-                `\n\n${this.reviewJsonSchemaHint(filePath)}`,
+                `\n\n${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}`,
             );
         }
 
@@ -370,7 +357,17 @@ export class ReviewJsonService {
             this.asStringArray(raw['risks']),
             this.asStringArray(raw['filesToReview']),
             results,
+            mainAgentInstructions,
         );
+    }
+
+    // webpieces-disable no-any-unknown -- AI-authored JSON boundary is validated before use
+    private validateMainAgentInstructions(raw: Record<string, unknown>, expected: string, errors: string[]): string {
+        const actual = typeof raw['main_agent_instructions'] === 'string'
+            ? (raw['main_agent_instructions'] as string).trim() : '';
+        if (expected !== '' && actual !== expected)
+            errors.push('"main_agent_instructions" must exactly preserve the single-round instructions printed by stage ②.');
+        return actual;
     }
 
     /**
@@ -664,7 +661,9 @@ export class ReviewJsonService {
 
     // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError.
     // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadReviewJson narrows each field
-    private parseReviewJson(raw: string, filePath: string): Record<string, unknown> {
+    private parseReviewJson(
+        raw: string, filePath: string, expectedMainAgentInstructions = '',
+    ): Record<string, unknown> {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: convert JSON.parse SyntaxError to an InformAiError for the AI
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -673,7 +672,8 @@ export class ReviewJsonService {
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(
-                `review.json is not valid JSON (${error.message}).\n\n${this.reviewJsonSchemaHint(filePath)}\n\n` +
+                `review.json is not valid JSON (${error.message}).\n\n` +
+                `${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
@@ -694,6 +694,6 @@ export function reviewJsonPath(repoRoot: string, featureName: string): string {
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it
-export function reviewJsonSchemaHint(filePath: string): string {
-    return reviewJsonSvc.reviewJsonSchemaHint(filePath);
+export function reviewJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
+    return reviewJsonSvc.reviewJsonSchemaHint(filePath, mainAgentInstructions);
 }

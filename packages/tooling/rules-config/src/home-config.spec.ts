@@ -136,8 +136,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false).wholeRepoBuildGuard).toBe(false);
-        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false).orphanDirSweep).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false, false).wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false, false).orphanDirSweep).toBe(false);
     });
 
     /**
@@ -540,7 +540,7 @@ describe('an UNKNOWN key is ignored, not rejected — because older releases sha
         const warnings = captureWarnings((): void => { new HomeConfigService().load(home); });
         expect(warnings).toContain('"experimentl"');
         expect(warnings).toContain(`Did you mean "${HOME_EXPERIMENTAL_SECTION}"?`);
-        expect(warnings).toContain(`Understood here: "${HOME_EXPERIMENTAL_SECTION}".`);
+        expect(warnings).toContain(`Understood here: "${HOME_EXPERIMENTAL_SECTION}", "singleRoundReview".`);
     });
 
     // The did-you-mean is what separates "you mistyped" from "this is newer than me", and it has to be
