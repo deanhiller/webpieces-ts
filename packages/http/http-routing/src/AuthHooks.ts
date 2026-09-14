@@ -2,6 +2,19 @@ import { JwtRequirement, rolesRequired, ApiForbiddenError } from '@webpieces/cor
 import { HttpRequest, RawHttpRequest } from '@webpieces/core-context';
 import { AuthenticatedCaller } from './AuthConfig';
 
+/** Framework-normalized result from an application-owned JWT mint operation. */
+export class MintedJwt {
+    constructor(
+        public readonly token: string,
+        public readonly expiresAtEpochSeconds: number,
+    ) {
+        if (token.trim() === '') throw new Error('Minted JWT token must be non-empty.');
+        if (!Number.isFinite(expiresAtEpochSeconds)) {
+            throw new Error('Minted JWT expiry must be a finite epoch-second value.');
+        }
+    }
+}
+
 /**
  * JwtHook - the OPTIONAL user-JWT mechanism. Its DI token is the {@link JWT_HOOK} Symbol injected via
  * `@inject(JWT_HOOK)` (a Symbol, because the app container uses autobind; rebindable in tests). Bind one
@@ -9,6 +22,7 @@ import { AuthenticatedCaller } from './AuthConfig';
  * {@link AuthFilter} treats every jwt endpoint as "not enabled" and fails fast (401) — there is no
  * default JWT verification because it needs an app secret + payload shape the framework can't guess.
  *
+ *  - `mint`         — ISSUANCE: construct/sign a JWT from an application-owned request shape.
  *  - `parseJwt`     — AUTHENTICATION: decode/verify a user JWT into {@link AuthenticatedCaller}, or throw. The
  *                     app owns the strategy (HS256 secret, RS256 + JWKS, a provider SDK, ...).
  *  - `authorizeJwt` — AUTHORIZATION: check the authenticated user against the endpoint's
@@ -17,15 +31,22 @@ import { AuthenticatedCaller } from './AuthConfig';
  *                     `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` →
  *                     `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
  *
- * BOTH ARE ASYNC, and both for the same reason: the strategy is the app's, and an app's strategy
- * reaches the network. `parseJwt` may fetch a JWKS or call a provider SDK; `authorizeJwt`'s own
+ * ALL THREE ARE ASYNC for the same reason: the strategy is the app's, and an app's strategy reaches
+ * the network. `mint` may call KMS/HSM, `parseJwt` may fetch a JWKS or call a provider SDK, and `authorizeJwt`'s
  * motivating example — `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` — is a membership question a
  * real app answers from a datastore. A sync signature makes both of those unwritable, and it made
  * `JwtHook` the last sync hook: {@link OidcHook.verifyOidc}, {@link WebhookAuthCallback.verifyWebhook} and
  * {@link ApiKeyHook.verifyApiKey} all return promises. An implementation that needs no I/O simply has
  * no `await` in its body — {@link DefaultJwtHook} is exactly that and pays nothing for it.
  */
-export abstract class JwtHook {
+export abstract class JwtHook<TMintRequest> {
+    /**
+     * Mint an application endpoint JWT. The application owns the request/claim shape while the
+     * framework constrains the returned token and expiry metadata. Always async so the authority
+     * may use a remote signer, KMS, or HSM.
+     */
+    abstract mint(request: TMintRequest): Promise<MintedJwt>;
+
     /**
      * Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw.
      * ASYNC so an app can reach a JWKS endpoint or a provider SDK; see the class doc.

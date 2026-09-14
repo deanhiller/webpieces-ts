@@ -43,9 +43,17 @@ response classes generate `inputSchema` and `outputSchema`; `@WpDtoField` suppli
 descriptions and the facts TypeScript erases, such as optionality and array element types.
 
 Applications construct `WpMcpServer` with their built `ApiFactory`, the API classes they want scanned,
-and an `McpAccessTokenVerifier`. The verifier checks issuer, signature, expiry, scopes, and the exact
-resource URI, then returns an endpoint bearer credential. The bridge uses that credential only for an
-in-process call through the ordinary `AuthFilter`; it never forwards the MCP token to downstream APIs.
+a paired `McpAccessTokenAuthority`, and their application `JwtHook`. The authority verifies issuer,
+signature/token state, expiry, scopes, the exact resource URI, and current account state on every MCP
+operation. Before every tool call the bridge asks the same application `JwtHook` to mint a distinct,
+short-lived endpoint JWT, then invokes the ordinary `AuthFilter`. Literal MCP-token passthrough is
+rejected, endpoint JWTs are capped at one hour, and MCP access tokens are capped at 30 days.
+
+The verifier's `accountValidatedAtEpochSeconds` must represent an authoritative enabled/revoked and
+role/scope read. The bridge enforces a maximum one-hour decision age; per-request reads are preferred so
+offboarding and role changes take effect on the next call. JWT access-token implementations must enforce
+an explicit algorithm allowlist plus issuer, exact audience/resource, expiry, type/version, and key
+rotation metadata. Opaque tokens remain valid implementations of the same authority contract.
 
 `protectedResourceMetadata()` returns the resource metadata an HTTP adapter can publish at the
 well-known OAuth protected-resource endpoint. OAuth token issuance remains pluggable.

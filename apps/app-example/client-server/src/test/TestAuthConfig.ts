@@ -1,5 +1,5 @@
 import { injectable } from 'inversify';
-import { AuthConfig, JwtHook, AuthenticatedCaller, SharedSecrets } from '@webpieces/http-routing';
+import { AuthConfig, JwtHook, AuthenticatedCaller, MintedJwt, SharedSecrets } from '@webpieces/http-routing';
 import { ContextTuple, WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
@@ -36,7 +36,11 @@ export class TestAuthConfig extends AuthConfig {
  * without minting a real signed JWT. Bound via appOverrides alongside {@link TestAuthConfig}.
  */
 @injectable()
-export class TestJwtHook extends JwtHook {
+export class TestJwtHook extends JwtHook<string> {
+    override async mint(token: string): Promise<MintedJwt> {
+        return new MintedJwt(token, Math.floor(Date.now() / 1000) + 60);
+    }
+
     override async parseJwt(_token: string): Promise<AuthenticatedCaller> {
         return new AuthenticatedCaller(
             'test-user',

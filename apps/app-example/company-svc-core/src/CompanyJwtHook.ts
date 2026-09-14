@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
-import { JwtHook, AuthenticatedCaller } from '@webpieces/http-routing';
+import { JwtHook, AuthenticatedCaller, MintedJwt } from '@webpieces/http-routing';
 import {
     ContextTuple,
     ApiUnauthorizedError,
@@ -14,8 +14,9 @@ import {
  * CompanyJwtHook - the company's user-JWT mechanism, bound to the framework {@link JwtHook} so every
  * company service inherits working @WpAuthJwt auth. Written ONCE at the company layer:
  *
+ *  - mint: construct and sign application JWT claims in the same authority that verifies them.
  *  - parseJwt: verify a user JWT with `jsonwebtoken` (secret from JWT_SECRET) → userId(`sub`) +
- *    roles(`roles` claim) + the USER_ID context entry. Minting a JWT is a login-controller concern.
+ *    roles(`roles` claim) + the USER_ID context entry.
  *  - authorizeJwt: default roles any-of (via super) PLUS the company rule that an `inOrg: true`
  *    requires an orgId claim. Both are async because {@link JwtHook} is: an app rule like `inOrg`
  *    is a membership question a real service answers from a datastore. This one does not need to,
@@ -24,9 +25,28 @@ import {
  * OIDC is NOT wired here — the framework {@link DefaultOidcVerifier} handles service-to-service OIDC
  * by default, so a company service gets it for free. Shared secrets live on {@link CompanyAuthConfig}.
  */
+export class CompanyJwtMintRequest {
+    constructor(
+        public readonly userId: string,
+        public readonly roles: readonly string[],
+        public readonly expiresInSeconds: number,
+    ) {}
+}
+
 @injectable()
-export class CompanyJwtHook extends JwtHook {
+export class CompanyJwtHook extends JwtHook<CompanyJwtMintRequest> {
     private readonly jwtSecret = process.env['JWT_SECRET'] ?? 'dev-insecure-jwt-secret-change-me';
+
+    override async mint(request: CompanyJwtMintRequest): Promise<MintedJwt> {
+        const expiresAtEpochSeconds = Math.floor(Date.now() / 1000) + request.expiresInSeconds;
+        const token = jwt.sign(
+            // webpieces-disable no-anonymous-object-literals -- jsonwebtoken claim bag
+            { roles: request.roles },
+            this.jwtSecret,
+            { subject: request.userId, expiresIn: request.expiresInSeconds },
+        );
+        return new MintedJwt(token, expiresAtEpochSeconds);
+    }
 
     override async parseJwt(token: string): Promise<AuthenticatedCaller> {
         const claims = this.decode(token);

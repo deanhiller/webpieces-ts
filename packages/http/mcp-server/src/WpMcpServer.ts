@@ -9,12 +9,19 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
     ApiErrorPayload,
+    ApiUnauthorizedError,
     DtoValue,
     LogManager,
     toError,
 } from '@webpieces/core-util';
-import { ApiFactory, ClassType } from '@webpieces/http-routing';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import { ApiFactory, ClassType, MintedJwt } from '@webpieces/http-routing';
+import {
+    MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
+    McpEndpointDescriptor,
+    McpProtectedResourceMetadata,
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+} from './McpAuth';
 import { McpApiDispatcher } from './McpApiDispatcher';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 
@@ -37,12 +44,12 @@ export class ModelVisibleToolError {
  * Node-only MCP adapter. Build one Server per authenticated transport/session; every tool call still
  * re-enters the endpoint's ordinary AuthFilter, so tools/list visibility never grants access.
  */
-export class WpMcpServer {
+export class WpMcpServer<TGrant, TMintRequest> {
     private readonly registry: McpToolRegistry;
     private readonly dispatcher: McpApiDispatcher;
 
     constructor(
-        private readonly config: WpMcpServerConfig,
+        private readonly config: WpMcpServerConfig<TGrant, TMintRequest>,
         apiFactory: ApiFactory,
         apiClasses: readonly ClassType[],
     ) {
@@ -51,72 +58,139 @@ export class WpMcpServer {
     }
 
     async build(accessToken: string): Promise<Server> {
-        const credential = await this.config.tokenVerifier.verify(
-            accessToken,
-            this.config.resource,
-        );
-        this.validateCredential(credential);
-        return this.buildForCredential(credential);
+        await this.verifyCredential(accessToken);
+        return this.buildForAccessToken(accessToken);
     }
 
-    protectedResourceMetadata(): ReturnType<WpMcpServerConfig['protectedResourceMetadata']> {
+    protectedResourceMetadata(): McpProtectedResourceMetadata {
         return this.config.protectedResourceMetadata();
     }
 
-    private buildForCredential(credential: VerifiedMcpCredential): Server {
+    private buildForAccessToken(accessToken: string): Server {
         const server = new Server(
             // webpieces-disable no-anonymous-object-literals -- external MCP SDK request structure
             { name: this.config.name, version: this.config.version },
             // webpieces-disable no-anonymous-object-literals -- external MCP SDK capability structure
             { capabilities: { tools: {} } },
         );
-        server.setRequestHandler(ListToolsRequestSchema, () => ({
-            tools: this.registry.tools
-                .filter((tool: RegisteredMcpTool) => tool.isVisibleTo(credential.listingRoles))
-                .map((tool: RegisteredMcpTool) => ({
-                    name: tool.name,
-                    description: tool.description,
-                    inputSchema: tool.inputSchema,
-                    outputSchema: tool.outputSchema,
-                    annotations: tool.annotations,
-                })),
-        }));
+        server.setRequestHandler(ListToolsRequestSchema, async () => {
+            const credential = await this.verifyCredential(accessToken);
+            return {
+                tools: this.registry.tools
+                    .filter((tool: RegisteredMcpTool) => tool.isVisibleTo(credential.listingRoles))
+                    .map((tool: RegisteredMcpTool) => ({
+                        name: tool.name,
+                        description: tool.description,
+                        inputSchema: tool.inputSchema,
+                        outputSchema: tool.outputSchema,
+                        annotations: tool.annotations,
+                    })),
+            };
+        });
         server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
             const tool = this.registry.find(request.params.name);
             if (!tool) {
                 throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`);
             }
-            return this.call(tool, request.params.arguments ?? {}, credential);
+            return this.call(tool, request.params.arguments ?? {}, accessToken);
         });
         return server;
     }
 
+    private async verifyCredential(accessToken: string): Promise<VerifiedMcpCredential> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- security boundary logs owner detail and exposes only a generic authentication failure
+        try {
+            const credential = await this.config.accessTokenAuthority.verifyAccessToken(
+                accessToken,
+                this.config.resource,
+            );
+            this.validateCredential(credential);
+            return credential;
+        } catch (err: unknown) {
+            const error = toError(err);
+            log.warn('MCP access-token verification rejected a request', error);
+            throw new ApiUnauthorizedError('MCP access token rejected.', undefined, error);
+        }
+    }
+
     private validateCredential(credential: VerifiedMcpCredential): void {
+        const now = Math.floor(Date.now() / 1000);
+        if (credential.subject.trim() === '') {
+            throw new Error('MCP access token has no subject.');
+        }
+        if (
+            !Number.isFinite(credential.issuedAtEpochSeconds) ||
+            !Number.isFinite(credential.expiresAtEpochSeconds) ||
+            !Number.isFinite(credential.accountValidatedAtEpochSeconds)
+        ) {
+            throw new Error('MCP access token security timestamps must be finite.');
+        }
         if (credential.resource !== this.config.resource) {
             throw new Error('MCP access token was not issued for this protected resource.');
         }
         if (!this.config.authorizationServers.includes(credential.issuer)) {
             throw new Error('MCP access token issuer is not trusted by this protected resource.');
         }
-        if (credential.expiresAtEpochSeconds <= Date.now() / 1000) {
+        if (credential.issuedAtEpochSeconds > now) {
+            throw new Error('MCP access token was issued in the future.');
+        }
+        if (credential.expiresAtEpochSeconds <= now) {
             throw new Error('MCP access token has expired.');
+        }
+        if (
+            credential.expiresAtEpochSeconds - credential.issuedAtEpochSeconds >
+            MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS
+        ) {
+            throw new Error('MCP access token lifetime exceeds 30 days.');
         }
         for (const scope of this.config.requiredScopes) {
             if (!credential.scopes.includes(scope)) {
                 throw new Error(`MCP access token is missing required scope '${scope}'.`);
             }
         }
-        if (credential.endpointBearerToken.trim() === '') {
-            throw new Error('MCP verifier returned an empty endpoint bearer credential.');
+        if (
+            credential.accountValidatedAtEpochSeconds > now ||
+            now - credential.accountValidatedAtEpochSeconds > this.config.maxAccountValidationAgeSeconds
+        ) {
+            throw new Error('MCP account authorization state is not fresh enough for dispatch.');
         }
     }
 
     private async call(
         tool: RegisteredMcpTool,
         args: DtoValue,
-        credential: VerifiedMcpCredential,
+        accessToken: string,
     ): Promise<CallToolResult> {
-        const result = await this.dispatcher.call(tool, args ?? {}, credential.endpointBearerToken);
+        let credential: VerifiedMcpCredential;
+        // webpieces-disable no-unmanaged-exceptions -- MCP transport boundary normalizes authentication failures before they reach the model
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP transport boundary
+        try {
+            credential = await this.verifyCredential(accessToken);
+        } catch (err: unknown) {
+            //const error = toError(err);
+            throw new McpError(ErrorCode.InvalidRequest, 'Unauthorized');
+        }
+        let endpointJwt: MintedJwt;
+        // webpieces-disable no-unmanaged-exceptions -- MCP transport boundary logs mint failures and exposes only a generic protocol error
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP transport boundary
+        try {
+            const descriptor = new McpEndpointDescriptor(
+                tool.name,
+                tool.apiClass.name,
+                tool.methodName,
+            );
+            const mintRequest = this.config.endpointMintRequest(credential, descriptor);
+            endpointJwt = await this.config.endpointJwtAuthority.mint(mintRequest);
+            this.validateEndpointJwt(endpointJwt, accessToken);
+        } catch (err: unknown) {
+            const error = toError(err);
+            log.error(
+                `MCP endpoint credential mint failed for ${tool.apiClass.name}.${tool.methodName}`,
+                error,
+            );
+            throw new McpError(ErrorCode.InternalError, 'Internal Error');
+        }
+        const result = await this.dispatcher.call(tool, args ?? {}, endpointJwt.token);
         if (!result.success) return this.apiError(result.error, result.requestId);
 
         const outputFailure = this.registry.schemaBuilder.validate(tool.responseClass, result.value);
@@ -146,6 +220,22 @@ export class WpMcpServer {
             content: [{ type: 'text', text: JSON.stringify(structured) }],
             structuredContent: structured,
         };
+    }
+
+    private validateEndpointJwt(endpointJwt: MintedJwt, accessToken: string): void {
+        const now = Math.floor(Date.now() / 1000);
+        if (endpointJwt.token === accessToken) {
+            throw new Error('MCP access-token passthrough to endpoint dispatch is forbidden.');
+        }
+        if (endpointJwt.expiresAtEpochSeconds <= now) {
+            throw new Error('MCP endpoint JWT has already expired.');
+        }
+        if (
+            endpointJwt.expiresAtEpochSeconds - now >
+            this.config.maxEndpointJwtLifetimeSeconds
+        ) {
+            throw new Error('MCP endpoint JWT lifetime exceeds the configured one-hour ceiling.');
+        }
     }
 
     private apiError(payload: ApiErrorPayload, requestId: string): CallToolResult {

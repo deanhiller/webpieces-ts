@@ -2,11 +2,26 @@ import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { sign } from 'jsonwebtoken';
 import { ApiForbiddenError, ApiUnauthorizedError } from '@webpieces/core-util';
-import { DefaultJwtHook } from '../DefaultJwtHook';
+import { DefaultJwtHook, DefaultJwtMintRequest } from '../DefaultJwtHook';
 
 const SECRET = 'test-secret-value';
 
 describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
+    it('mints and parses a normalized short-lived endpoint JWT', async () => {
+        const hook = new DefaultJwtHook(SECRET);
+        const minted = await hook.mint(
+            new DefaultJwtMintRequest('user-123', ['admin'], 60, { orgId: 'org-9' }),
+        );
+
+        const caller = await hook.parseJwt(minted.token);
+
+        expect(minted.expiresAtEpochSeconds).toBeGreaterThan(Math.floor(Date.now() / 1000));
+        expect(caller.userId).toBe('user-123');
+        expect(caller.roles).toEqual(['admin']);
+        expect(caller.claims['orgId']).toBe('org-9');
+        expect(caller.claims['jti']).toEqual(expect.any(String));
+    });
+
     it('parses a valid token: sub → userId, roles claim → roles, payload → claims', async () => {
         const hook = new DefaultJwtHook(SECRET);
         const token = sign({ sub: 'user-123', roles: ['admin', 'editor'], orgId: 'org-9' }, SECRET);

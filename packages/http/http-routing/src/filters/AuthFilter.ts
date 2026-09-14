@@ -102,7 +102,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         @optional() @inject(AUTH_CONFIG) private readonly authConfig?: AuthConfig,
         // @optional: only bind a JwtHook to enable @WpAuthJwt endpoints.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(JWT_HOOK) private readonly jwtHook?: JwtHook,
+        @optional() @inject(JWT_HOOK) private readonly jwtHook?: JwtHook<never>,
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
