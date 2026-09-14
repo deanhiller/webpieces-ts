@@ -1,7 +1,18 @@
-import { verify, JwtPayload } from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
+import { sign, verify, JwtPayload } from 'jsonwebtoken';
 import { ApiUnauthorizedError, toError } from '@webpieces/core-util';
-import { JwtHook } from './AuthHooks';
+import { JwtHook, MintedJwt } from './AuthHooks';
 import { AuthenticatedCaller } from './AuthConfig';
+
+/** Mint input for the optional batteries-included HS256 authority. Custom authorities own their input type. */
+export class DefaultJwtMintRequest {
+    constructor(
+        public readonly subject: string,
+        public readonly roles: readonly string[],
+        public readonly expiresInSeconds: number,
+        public readonly claims: Readonly<JwtPayload>,
+    ) {}
+}
 
 /**
  * DefaultJwtHook - a batteries-included {@link JwtHook} for the common case: HS256 user JWTs signed
@@ -18,12 +29,27 @@ import { AuthenticatedCaller } from './AuthConfig';
  * because the hook is the APP's seam and an app's strategy reaches the network — not because this
  * implementation does. No fake await is added to justify it.
  */
-export class DefaultJwtHook extends JwtHook {
+export class DefaultJwtHook extends JwtHook<DefaultJwtMintRequest> {
     private readonly secret: string;
 
     constructor(secret: string) {
         super();
         this.secret = secret;
+    }
+
+    override async mint(request: DefaultJwtMintRequest): Promise<MintedJwt> {
+        if (request.expiresInSeconds <= 0) {
+            throw new Error('JWT lifetime must be greater than zero seconds.');
+        }
+        // webpieces-disable no-anonymous-object-literals -- jsonwebtoken payload is an external claim bag
+        const payload = { ...request.claims, roles: request.roles };
+        const token = sign(payload, this.secret, {
+            algorithm: 'HS256',
+            subject: request.subject,
+            expiresIn: request.expiresInSeconds,
+            jwtid: randomUUID(),
+        });
+        return new MintedJwt(token, Math.floor(Date.now() / 1000) + request.expiresInSeconds);
     }
 
     override async parseJwt(token: string): Promise<AuthenticatedCaller> {

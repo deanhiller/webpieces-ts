@@ -99,6 +99,7 @@ export {
 } from './AuthConfig';
 export {
     JwtHook,
+    MintedJwt,
     JWT_HOOK,
     OidcHook,
     OIDC_HOOK,
@@ -109,7 +110,7 @@ export {
 } from './AuthHooks';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
-export { DefaultJwtHook } from './DefaultJwtHook';
+export { DefaultJwtHook, DefaultJwtMintRequest } from './DefaultJwtHook';
 
 // Above-boundary context setup shared by every transport adapter.
 
