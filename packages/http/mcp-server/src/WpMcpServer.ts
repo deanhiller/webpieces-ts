@@ -256,7 +256,9 @@ export class WpMcpServer<TGrant, TMintRequest> {
         const structured = this.record(error);
         return {
             content: [{ type: 'text', text: JSON.stringify(structured) }],
-            structuredContent: structured,
+            // `outputSchema` describes the endpoint's success DTO. MCP clients validate
+            // structuredContent against it even when isError is true, so error details must stay
+            // in text content until the protocol supports a separate error schema.
             isError: true,
         };
     }

@@ -271,6 +271,13 @@ describe('WpMcpServer secure API bridge', () => {
         return client;
     }
 
+    function errorContent(result: Awaited<ReturnType<Client['callTool']>>): Record<string, unknown> {
+        expect(result.structuredContent).toBeUndefined();
+        const content = result.content[0];
+        if (!content || content.type !== 'text') throw new Error('MCP error has no text content');
+        return JSON.parse(content.text) as Record<string, unknown>;
+    }
+
     it('publishes annotation documentation and generated request/response schemas', async () => {
         const client = await connect('mcp-user');
         const listed = await client.listTools();
@@ -397,12 +404,13 @@ describe('WpMcpServer secure API bridge', () => {
         await client.close();
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({
+        const error = errorContent(result);
+        expect(error).toMatchObject({
             kind: 'bad-request',
             message: 'Bad Request',
             callerMessage: '$.userId is not allowed',
         });
-        expect(result.structuredContent?.['requestId']).toMatch(/^svrGenReqId-/);
+        expect(error['requestId']).toMatch(/^svrGenReqId-/);
         expect(JSON.stringify(result)).not.toContain('admin-7');
     });
 
@@ -412,7 +420,7 @@ describe('WpMcpServer secure API bridge', () => {
         await client.close();
 
         expect(result.isError).toBe(true);
-        expect(result.structuredContent).toMatchObject({ kind: 'forbidden' });
+        expect(errorContent(result)).toMatchObject({ kind: 'forbidden' });
         expect(controller.adminInvocations).toBe(0);
     });
 
@@ -424,11 +432,12 @@ describe('WpMcpServer secure API bridge', () => {
 
         expect(JSON.stringify(bad)).not.toContain('SQL table secret');
         expect(JSON.stringify(internal)).not.toContain('database password');
-        expect(internal.structuredContent).toMatchObject({
+        const error = errorContent(internal);
+        expect(error).toMatchObject({
             kind: 'implementation',
             message: 'Internal Error',
         });
-        expect(internal.structuredContent?.['requestId']).toMatch(/^svrGenReqId-/);
+        expect(error['requestId']).toMatch(/^svrGenReqId-/);
     });
 
     it('shows explicitly end-user-safe errors to the model', async () => {
@@ -436,7 +445,7 @@ describe('WpMcpServer secure API bridge', () => {
         const result = await client.callTool({ name: 'account_search', arguments: { query: 'human' } });
         await client.close();
 
-        expect(result.structuredContent).toMatchObject({
+        expect(errorContent(result)).toMatchObject({
             kind: 'end-user',
             message: 'Those two values do not match',
             errorCode: 'MISMATCH',
