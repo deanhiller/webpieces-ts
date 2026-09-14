@@ -135,6 +135,7 @@ jobs:
                       - [@webpieces/winston@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/winston/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/bunyan@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/bunyan/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/mcp-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/mcp-server/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client-core@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client-core/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client-browser@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client-browser/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client-node@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client-node/v/${{ steps.version.outputs.full_version }})

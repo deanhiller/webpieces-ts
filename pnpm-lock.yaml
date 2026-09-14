@@ -383,6 +383,9 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
 
   packages/logging/bunyan:
     dependencies:
