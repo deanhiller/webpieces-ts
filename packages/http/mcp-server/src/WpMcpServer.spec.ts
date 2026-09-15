@@ -1,463 +1,619 @@
 import 'reflect-metadata';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
+import { createServer, request as nodeRequest, Server } from 'node:http';
+import {
+    CLIENT_CAPABILITIES_META_KEY,
+    CLIENT_INFO_META_KEY,
+    InMemoryServerEventBus,
+    PROTOCOL_VERSION_META_KEY,
+    ServerEvent,
+    ServerEventBus,
+} from '@modelcontextprotocol/server';
+import express, { Express } from 'express';
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
     ApiPath,
-    ApiBadRequestError,
-    ApiEndUserError,
-    ContextKey,
-    ContextTuple,
     Endpoint,
     HeaderRegistry,
     WpAuthJwt,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WpMcpTool,
     WpResponseDto,
 } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
-import {
-    AuthenticatedCaller,
-    JWT_HOOK,
-    JwtHook,
-    MintedJwt,
-    WebpiecesRouter,
-    WebpiecesRouterFactory,
-} from '@webpieces/http-routing';
-import {
-    McpAccessTokenAuthority,
-    MintedMcpAccessToken,
-    VerifiedMcpCredential,
-    WpMcpServerConfig,
-} from './McpAuth';
+import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
+import { McpApiBinding } from './McpApiBinding';
+import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import { McpBindOptions } from './McpBindOptions';
+import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
+import {
+    ENDPOINT_PATH,
+    MODERN_VERSION,
+    RemoteSearchApi,
+    RemoteSearchClient,
+    SearchApi,
+    SearchController,
+    SearchRequest,
+    SearchResponse,
+    TestJwtHook,
+    TestTokenAuthority,
+    USER_ID,
+} from './__tests__/WpMcpServerTestFixtures';
 
-const USER_ID = ContextKey.trusted<string>('mcpSpecUserId', 'identity proven by TestJwtHook');
-
-@WpDto()
-class SearchRequest {
-    @WpDtoField(new WpDtoFieldOptions('Search text', true))
-    query!: string;
+interface RpcResponse {
+    result?: Record<string, unknown>;
+    error?: { code: number; message: string };
 }
 
-@WpDto()
-class SearchResponse {
-    @WpDtoField(new WpDtoFieldOptions('Authenticated user that executed the endpoint', true))
-    userId!: string;
+class SharedTestEventBus implements ServerEventBus {
+    private readonly listeners = new Set<(event: ServerEvent) => void>();
 
-    @WpDtoField(new WpDtoFieldOptions('Search result', true))
-    result!: string;
-}
-
-@ApiPath('/mcp-spec')
-abstract class SearchApi {
-    @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/search', 'rpc')
-    @WpResponseDto(() => SearchResponse)
-    @WpMcpTool({
-        name: 'account_search',
-        description: 'Search records owned by the authenticated user.',
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-    })
-    search(_request: SearchRequest): Promise<SearchResponse> {
-        throw new Error('contract only');
+    publish(event: ServerEvent): void {
+        for (const listener of this.listeners) listener(event);
     }
 
-    @WpAuthJwt({ roles: ['admin'] })
-    @Endpoint('/admin', 'rpc')
-    @WpResponseDto(() => SearchResponse)
-    @WpMcpTool({
-        name: 'admin_search',
-        description: 'Search all accounts. Administrators only.',
-        readOnlyHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-    })
-    admin(_request: SearchRequest): Promise<SearchResponse> {
-        throw new Error('contract only');
-    }
-
-    @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/not-a-tool', 'rpc')
-    notATool(_request: SearchRequest): Promise<SearchResponse> {
-        throw new Error('contract only');
+    subscribe(listener: (event: ServerEvent) => void): () => void {
+        this.listeners.add(listener);
+        return (): void => {
+            this.listeners.delete(listener);
+        };
     }
 }
 
-@injectable()
-class SearchController extends SearchApi {
-    adminInvocations = 0;
-
-    override async search(request: SearchRequest): Promise<SearchResponse> {
-        if (request.query === 'internal') throw new Error('database password appeared here');
-        if (request.query === 'bad') {
-            throw new ApiBadRequestError('SQL table secret', 'query', 'Choose a different query');
-        }
-        if (request.query === 'human') {
-            throw new ApiEndUserError('Those two values do not match', 'MISMATCH');
-        }
-        const response = new SearchResponse();
-        response.userId = RequestContext.getTrusted(USER_ID) ?? 'missing';
-        response.result = request.query;
-        return response;
-    }
-
-    override async admin(request: SearchRequest): Promise<SearchResponse> {
-        this.adminInvocations += 1;
-        return this.search(request);
-    }
-
-    override async notATool(request: SearchRequest): Promise<SearchResponse> {
-        return this.search(request);
-    }
+interface BoundTestBridge {
+    bridge: WpMcpServer<string, string>;
+    server: Server;
+    url: string;
 }
 
-class TestJwtHook extends JwtHook<string> {
-    mintCount = 0;
-    mintedTokens: string[] = [];
-    lifetimeSeconds = 60;
-
-    override async mint(subject: string): Promise<MintedJwt> {
-        const token = subject === 'passthrough' ? 'mcp-passthrough' : `${subject}-endpoint-token-${++this.mintCount}`;
-        this.mintedTokens.push(token);
-        return new MintedJwt(token, Math.floor(Date.now() / 1000) + this.lifetimeSeconds);
-    }
-
-    override async parseJwt(token: string): Promise<AuthenticatedCaller> {
-        if (token.startsWith('admin-endpoint-token-')) {
-            return new AuthenticatedCaller('admin-7', ['admin'], [new ContextTuple(USER_ID, 'admin-7')]);
-        }
-        if (!token.startsWith('user-endpoint-token-')) throw new Error('invalid test token');
-        return new AuthenticatedCaller('user-7', [], [new ContextTuple(USER_ID, 'user-7')]);
-    }
-}
-
-class TestMcpTokenAuthority implements McpAccessTokenAuthority<string> {
-    seenResource?: string;
-    verificationCount = 0;
-    userRoles: readonly string[] = [];
-    disabled = false;
-
-    async mintAccessToken(grant: string): Promise<MintedMcpAccessToken> {
-        const now = Math.floor(Date.now() / 1000);
-        return new MintedMcpAccessToken(`mcp-${grant}`, 'https://api.example.test/mcp', now, now + 60);
-    }
-
-    async verifyAccessToken(token: string, expectedResource: string): Promise<VerifiedMcpCredential> {
-        this.seenResource = expectedResource;
-        this.verificationCount += 1;
-        if (this.disabled) throw new Error('account disabled');
-        if (token === 'mcp-admin') {
-            return this.credential('admin', expectedResource, ['admin']);
-        }
-        if (token === 'mcp-wrong-resource') {
-            return this.credential('user', 'https://attacker.test/mcp', []);
-        }
-        if (token === 'mcp-wrong-issuer') {
-            const now = Math.floor(Date.now() / 1000);
-            return new VerifiedMcpCredential(
-                'user',
-                'https://attacker.test',
-                expectedResource,
-                now,
-                now + 60,
-                ['tools'],
-                now,
-            );
-        }
-        if (token === 'mcp-expired') {
-            const now = Math.floor(Date.now() / 1000);
-            return new VerifiedMcpCredential(
-                'user',
-                'https://login.example.test',
-                expectedResource,
-                now - 61,
-                now - 1,
-                ['tools'],
-                now,
-            );
-        }
-        if (token === 'mcp-missing-scope') {
-            const now = Math.floor(Date.now() / 1000);
-            return new VerifiedMcpCredential(
-                'user',
-                'https://login.example.test',
-                expectedResource,
-                now,
-                now + 60,
-                [],
-                now,
-            );
-        }
-        if (token === 'mcp-stale-account') {
-            const credential = this.credential('user', expectedResource, []);
-            return new VerifiedMcpCredential(
-                credential.subject,
-                credential.issuer,
-                credential.resource,
-                credential.issuedAtEpochSeconds,
-                credential.expiresAtEpochSeconds,
-                credential.scopes,
-                Math.floor(Date.now() / 1000) - 3601,
-            );
-        }
-        if (token.startsWith('invalid-')) throw new Error(`strict token rejection: ${token}`);
-        if (token === 'mcp-passthrough') return this.credential('passthrough', expectedResource, []);
-        if (token !== 'mcp-user') throw new Error('wrong issuer, expiry, audience, or signature');
-        return this.credential('user', expectedResource, this.userRoles);
-    }
-
-    private credential(
-        subject: string,
-        resource: string,
-        roles: readonly string[],
-    ): VerifiedMcpCredential {
-        const now = Math.floor(Date.now() / 1000);
-        return new VerifiedMcpCredential(
-            subject,
-            'https://login.example.test',
-            resource,
-            now,
-            now + 60,
-            ['tools'],
-            now,
-            roles,
-        );
-    }
-}
-
-describe('WpMcpServer secure API bridge', () => {
+describe('WpMcpServer modern HTTP bridge', () => {
     let bridge: WpMcpServer<string, string>;
     let controller: SearchController;
-    let authority: TestMcpTokenAuthority;
+    let authority: TestTokenAuthority;
     let jwtHook: TestJwtHook;
+    let remote: RemoteSearchClient;
+    let router: WebpiecesRouter;
+    let httpServer: Server;
+    let baseUrl: string;
+    let nextId = 0;
 
     beforeAll(async () => {
         HeaderRegistry.configure([USER_ID], true);
         jwtHook = new TestJwtHook();
-        const bindings = new ContainerModule((options: ContainerModuleLoadOptions) => {
+        const module = new ContainerModule((options: ContainerModuleLoadOptions) => {
             options.bind(JWT_HOOK).toConstantValue(jwtHook);
         });
-        const router: WebpiecesRouter = await WebpiecesRouterFactory.create({ appBindings: [bindings] });
+        router = await WebpiecesRouterFactory.create({ appBindings: [module] });
         router.addRoutes(SearchApi, SearchController);
         controller = router.getContainer().get(SearchController);
-        authority = new TestMcpTokenAuthority();
-        bridge = new WpMcpServer(
-            new WpMcpServerConfig(
-                'test-server',
-                '1.0.0',
-                'https://api.example.test/mcp',
-                authority,
-                jwtHook,
-                (credential: VerifiedMcpCredential) => credential.subject,
-                ['https://login.example.test'],
-                ['tools'],
+        authority = new TestTokenAuthority();
+        remote = new RemoteSearchClient();
+        bridge = new WpMcpServer(serverConfig());
+        const app: Express = express();
+        bridge.bind(
+            app,
+            new McpBindOptions(
+                ENDPOINT_PATH,
+                [
+                    McpApiBinding.local(SearchApi, router),
+                    McpApiBinding.remote(RemoteSearchApi, () => remote),
+                ],
+                McpDeployment.singleProcess(1_234),
+                ['https://trusted.example.test'],
             ),
-            router,
-            [SearchApi],
         );
+        httpServer = createServer(app);
+        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+            httpServer.once('error', reject);
+            httpServer.listen(0, '127.0.0.1', resolve);
+        });
+        const address = httpServer.address();
+        if (!address || typeof address === 'string') throw new Error('test server has no port');
+        baseUrl = `http://127.0.0.1:${address.port}`;
     });
 
-    async function connect(token: string): Promise<Client> {
-        const server = await bridge.build(token);
-        const pair = InMemoryTransport.createLinkedPair();
-        const client = new Client({ name: 'spec-client', version: '1.0.0' });
-        await Promise.all([server.connect(pair[1]), client.connect(pair[0])]);
-        return client;
-    }
-
-    function errorContent(result: Awaited<ReturnType<Client['callTool']>>): Record<string, unknown> {
-        expect(result.structuredContent).toBeUndefined();
-        const content = result.content[0];
-        if (!content || content.type !== 'text') throw new Error('MCP error has no text content');
-        return JSON.parse(content.text) as Record<string, unknown>;
-    }
-
-    it('publishes annotation documentation and generated request/response schemas', async () => {
-        const client = await connect('mcp-user');
-        const listed = await client.listTools();
-        await client.close();
-
-        expect(authority.seenResource).toBe('https://api.example.test/mcp');
-        expect(listed.tools.map((tool: (typeof listed.tools)[number]) => tool.name)).toEqual(['account_search']);
-        expect(listed.tools[0]).toMatchObject({
-            description: 'Search records owned by the authenticated user.',
-            inputSchema: {
-                required: ['query'],
-                properties: { query: { type: 'string', description: 'Search text' } },
-            },
-            outputSchema: {
-                required: ['userId', 'result'],
-                properties: { userId: { description: 'Authenticated user that executed the endpoint' } },
-            },
+    afterAll(async () => {
+        await bridge.close();
+        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+            httpServer.close((error?: Error) => (error ? reject(error) : resolve()));
         });
     });
 
-    it('refuses an access token unless the app verifier accepts it for this exact resource', async () => {
-        await expect(bridge.build('wrong-resource-token')).rejects.toThrow('MCP access token rejected.');
-        await expect(bridge.build('mcp-wrong-resource')).rejects.toThrow('MCP access token rejected.');
-        await expect(bridge.build('mcp-wrong-issuer')).rejects.toThrow('MCP access token rejected.');
-        await expect(bridge.build('mcp-expired')).rejects.toThrow('MCP access token rejected.');
-        await expect(bridge.build('mcp-missing-scope')).rejects.toThrow('MCP access token rejected.');
-        await expect(bridge.build('mcp-stale-account')).rejects.toThrow('MCP access token rejected.');
-        for (const invalid of ['issuer', 'audience', 'type', 'version', 'algorithm', 'key']) {
-            await expect(bridge.build(`invalid-${invalid}`)).rejects.toThrow('MCP access token rejected.');
+    function serverConfig(): WpMcpServerConfig<string, string> {
+        return new WpMcpServerConfig(
+            'test-server',
+            '1.0.0',
+            'https://api.example.test/mcp',
+            authority,
+            jwtHook,
+            (credential: VerifiedMcpCredential) => credential.subject,
+            ['https://login.example.test'],
+            ['tools'],
+        );
+    }
+
+    async function bindTestBridge(deployment: McpDeployment): Promise<BoundTestBridge> {
+        const instance = new WpMcpServer<string, string>(serverConfig());
+        const app: Express = express();
+        instance.bind(
+            app,
+            new McpBindOptions(ENDPOINT_PATH, [McpApiBinding.local(SearchApi, router)], deployment),
+        );
+        const server = createServer(app);
+        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+            server.once('error', reject);
+            server.listen(0, '127.0.0.1', resolve);
+        });
+        const address = server.address();
+        if (!address || typeof address === 'string')
+            throw new Error('distributed test server has no port');
+        return { bridge: instance, server, url: `http://127.0.0.1:${address.port}` };
+    }
+
+    async function closeTestServer(server: Server): Promise<void> {
+        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+            server.close((error?: Error) => (error ? reject(error) : resolve()));
+        });
+    }
+
+    function request(
+        method: string,
+        params: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+        return {
+            jsonrpc: '2.0',
+            id: ++nextId,
+            method,
+            params: {
+                ...params,
+                _meta: {
+                    [PROTOCOL_VERSION_META_KEY]: MODERN_VERSION,
+                    [CLIENT_INFO_META_KEY]: { name: 'webpieces-spec', version: '1.0.0' },
+                    [CLIENT_CAPABILITIES_META_KEY]: {},
+                },
+            },
+        };
+    }
+
+    async function post(
+        body: Record<string, unknown>,
+        token = 'mcp-user',
+        extraHeaders: Record<string, string> = {},
+        path = ENDPOINT_PATH,
+    ): Promise<{ response: Response; payload: RpcResponse }> {
+        const headers: Record<string, string> = {
+            authorization: `Bearer ${token}`,
+            accept: 'application/json',
+            'content-type': 'application/json',
+            'mcp-protocol-version': MODERN_VERSION,
+            'mcp-method': typeof body['method'] === 'string' ? body['method'] : 'unknown',
+            ...extraHeaders,
+        };
+        const params = body['params'];
+        if (params && typeof params === 'object' && !Array.isArray(params)) {
+            const name = (params as Record<string, unknown>)['name'];
+            if (typeof name === 'string' && headers['mcp-name'] === undefined)
+                headers['mcp-name'] = name;
+            const args = (params as Record<string, unknown>)['arguments'];
+            if (args && typeof args === 'object' && !Array.isArray(args)) {
+                const query = (args as Record<string, unknown>)['query'];
+                if (typeof query === 'string' && headers['mcp-param-query'] === undefined) {
+                    headers['mcp-param-query'] = query;
+                }
+            }
         }
-        expect(authority.seenResource).toBe('https://api.example.test/mcp');
-    });
+        const response = await fetch(`${baseUrl}${path}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+        });
+        const text = await response.text();
+        return { response, payload: text.startsWith('{') ? (JSON.parse(text) as RpcResponse) : {} };
+    }
 
-    it('fails closed on non-finite security timestamps', async () => {
-        const original = authority.verifyAccessToken.bind(authority);
-        authority.verifyAccessToken = async (_token: string, resource: string) =>
-            new VerifiedMcpCredential(
-                'user',
-                'https://login.example.test',
-                resource,
-                Number.NaN,
-                Number.POSITIVE_INFINITY,
-                ['tools'],
-                Number.NaN,
-            );
-        await expect(bridge.build('mcp-user')).rejects.toThrow('MCP access token rejected.');
-        authority.verifyAccessToken = original;
-    });
+    async function callTool(
+        name: string,
+        args: Record<string, unknown>,
+        token = 'mcp-user',
+    ): Promise<RpcResponse> {
+        return (await post(request('tools/call', { name, arguments: args }), token)).payload;
+    }
 
-    it('pairs access-token minting with verification and caps minted access tokens at 30 days', async () => {
-        const minted = await authority.mintAccessToken('user');
-        expect(minted.resource).toBe('https://api.example.test/mcp');
-        expect(minted.expiresAtEpochSeconds - minted.issuedAtEpochSeconds).toBe(60);
-        expect(() => new MintedMcpAccessToken('too-long', minted.resource, 0, 30 * 24 * 60 * 60 + 1)).toThrow(
-            /30 days/i,
-        );
-    });
+    function resultOf(payload: RpcResponse): Record<string, unknown> {
+        expect(payload.error).toBeUndefined();
+        if (!payload.result) throw new Error('MCP response has no result');
+        return payload.result;
+    }
 
-    it('uses a protocol error for an unknown tool instead of a tool execution result', async () => {
-        const client = await connect('mcp-user');
+    function structuredOf(payload: RpcResponse): Record<string, unknown> {
+        const value = resultOf(payload)['structuredContent'];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new Error(`missing structuredContent: ${JSON.stringify(payload)}`);
+        }
+        return value as Record<string, unknown>;
+    }
 
-        await expect(client.callTool({ name: 'not_a_tool', arguments: {} })).rejects.toThrow(
-            /Unknown tool/,
-        );
-        await client.close();
-    });
+    function modelErrorOf(payload: RpcResponse): Record<string, unknown> {
+        const result = resultOf(payload);
+        const content = result['content'];
+        expect(result['isError']).toBe(true);
+        if (!Array.isArray(content) || typeof content[0]?.text !== 'string')
+            throw new Error('missing error content');
+        return JSON.parse(content[0].text) as Record<string, unknown>;
+    }
 
-    it('re-enters AuthFilter and seeds trusted identity only from the endpoint JWT hook', async () => {
-        const client = await connect('mcp-user');
-        const first = await client.callTool({ name: 'account_search', arguments: { query: 'mine' } });
-        const second = await client.callTool({ name: 'account_search', arguments: { query: 'again' } });
-        await client.close();
-
-        expect(first.isError).not.toBe(true);
-        expect(first.structuredContent).toEqual({ userId: 'user-7', result: 'mine' });
-        expect(second.structuredContent).toEqual({ userId: 'user-7', result: 'again' });
-        expect(jwtHook.mintedTokens.at(-1)).not.toBe(jwtHook.mintedTokens.at(-2));
-        expect(authority.verificationCount).toBeGreaterThanOrEqual(3);
-    });
-
-    it('revalidates account state and current roles on the next MCP operation', async () => {
-        authority.disabled = false;
-        authority.userRoles = [];
-        const client = await connect('mcp-user');
-        expect((await client.listTools()).tools.map((tool: { name: string }) => tool.name)).toEqual(['account_search']);
-
-        authority.userRoles = ['admin'];
-        expect((await client.listTools()).tools.map((tool: { name: string }) => tool.name)).toEqual([
+    it('uses the app path, modern envelope, schemas, cache hints, and a stable revision', async () => {
+        const reply = await post(request('tools/list'));
+        expect(reply.response.status).toBe(200);
+        expect(reply.response.headers.get('x-accel-buffering')).toBe('no');
+        const result = resultOf(reply.payload);
+        expect(result).toMatchObject({
+            resultType: 'complete',
+            ttlMs: 1_234,
+            cacheScope: 'private',
+        });
+        const tools = result['tools'] as Array<Record<string, unknown>>;
+        expect(tools.map((tool: Record<string, unknown>) => tool['name'])).toEqual([
             'account_search',
-            'admin_search',
+            'remote_search',
         ]);
-
-        authority.disabled = true;
-        await expect(
-            client.callTool({ name: 'account_search', arguments: { query: 'mine' } }),
-        ).rejects.toThrow(/Unauthorized/);
-        authority.disabled = false;
-        authority.userRoles = [];
-        await client.close();
+        expect(tools[0]).toMatchObject({
+            inputSchema: { required: ['query'], properties: { query: { type: 'string' } } },
+            outputSchema: { required: ['userId', 'result'] },
+        });
+        expect(bridge.registryRevision).toMatch(/^[a-f0-9]{12}$/);
+        expect((await post(request('tools/list'), 'mcp-user', {}, '/mcp')).response.status).toBe(
+            404,
+        );
     });
 
-    it('rejects literal MCP access-token passthrough and endpoint JWTs over one hour', async () => {
-        const passthrough = await connect('mcp-passthrough');
-        await expect(
-            passthrough.callTool({ name: 'account_search', arguments: { query: 'mine' } }),
-        ).rejects.toThrow('Internal Error');
-        await passthrough.close();
-
-        jwtHook.lifetimeSeconds = 3601;
-        const client = await connect('mcp-user');
-        await expect(
-            client.callTool({ name: 'account_search', arguments: { query: 'mine' } }),
-        ).rejects.toThrow('Internal Error');
-        jwtHook.lifetimeSeconds = 60;
-        await client.close();
+    it('opens request-scoped SSE for subscriptions and distributes tool invalidation', async () => {
+        const body = request('subscriptions/listen', { notifications: { toolsListChanged: true } });
+        const abort = new AbortController();
+        const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, {
+            method: 'POST',
+            headers: {
+                authorization: 'Bearer mcp-user',
+                accept: 'text/event-stream',
+                'content-type': 'application/json',
+                'mcp-protocol-version': MODERN_VERSION,
+                'mcp-method': 'subscriptions/listen',
+            },
+            body: JSON.stringify(body),
+            signal: abort.signal,
+        });
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain('text/event-stream');
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('subscription response has no body');
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toContain(
+            'notifications/subscriptions/acknowledged',
+        );
+        bridge.toolsChanged();
+        const second = await reader.read();
+        expect(new TextDecoder().decode(second.value)).toContain(
+            'notifications/tools/list_changed',
+        );
+        abort.abort();
     });
 
-    it('rejects caller-supplied fields before they can become context', async () => {
-        const client = await connect('mcp-user');
-        const result = await client.callTool({
+    it('uses a shared distributed bus across servers and close terminates an active listener', async () => {
+        expect(() => McpDeployment.distributed(new InMemoryServerEventBus())).toThrow(
+            /cannot use InMemoryServerEventBus/,
+        );
+        const bus = new SharedTestEventBus();
+        const first = await bindTestBridge(McpDeployment.distributed(bus));
+        const second = await bindTestBridge(McpDeployment.distributed(bus));
+        const body = request('subscriptions/listen', { notifications: { toolsListChanged: true } });
+        const response = await fetch(`${first.url}${ENDPOINT_PATH}`, {
+            method: 'POST',
+            headers: {
+                authorization: 'Bearer mcp-user',
+                accept: 'text/event-stream',
+                'content-type': 'application/json',
+                'mcp-protocol-version': MODERN_VERSION,
+                'mcp-method': 'subscriptions/listen',
+            },
+            body: JSON.stringify(body),
+        });
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('distributed subscription has no response body');
+        const acknowledged = await reader.read();
+        expect(new TextDecoder().decode(acknowledged.value)).toContain(
+            'notifications/subscriptions/acknowledged',
+        );
+        second.bridge.toolsChanged();
+        const changed = await reader.read();
+        expect(new TextDecoder().decode(changed.value)).toContain(
+            'notifications/tools/list_changed',
+        );
+        await first.bridge.close();
+        const closed = await reader.read();
+        const closeText = new TextDecoder().decode(closed.value);
+        expect(closed.done || closeText.includes('"resultType":"complete"')).toBe(true);
+        await second.bridge.close();
+        await closeTestServer(first.server);
+        await closeTestServer(second.server);
+    });
+
+    it('streams controller progress and a terminal result with the caller id and progress token', async () => {
+        const body = request('tools/call', {
             name: 'account_search',
-            arguments: { query: 'mine', userId: 'admin-7', roles: ['admin'] },
+            arguments: { query: 'progress' },
         });
-        await client.close();
-
-        expect(result.isError).toBe(true);
-        const error = errorContent(result);
-        expect(error).toMatchObject({
-            kind: 'bad-request',
-            message: 'Bad Request',
-            callerMessage: '$.userId is not allowed',
+        const id = body['id'];
+        const params = body['params'] as Record<string, unknown>;
+        const metadata = params['_meta'] as Record<string, unknown>;
+        metadata['progressToken'] = 'caller-progress';
+        const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, {
+            method: 'POST',
+            headers: {
+                authorization: 'Bearer mcp-user',
+                accept: 'text/event-stream',
+                'content-type': 'application/json',
+                'mcp-protocol-version': MODERN_VERSION,
+                'mcp-method': 'tools/call',
+                'mcp-name': 'account_search',
+                'mcp-param-query': 'progress',
+            },
+            body: JSON.stringify(body),
         });
-        expect(error['requestId']).toMatch(/^svrGenReqId-/);
-        expect(JSON.stringify(result)).not.toContain('admin-7');
+        const stream = await response.text();
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain('text/event-stream');
+        expect(stream).toContain('notifications/progress');
+        expect(stream).toContain('"progressToken":"caller-progress"');
+        expect(stream).toContain('"progress":1');
+        expect(stream).toContain('"total":2');
+        expect(stream).toContain('halfway');
+        expect(stream).toContain(`"id":${String(id)}`);
+        expect(stream).toContain('"result":"progress"');
     });
 
-    it('treats tools/list filtering as UX and still denies a direct hidden-tool call', async () => {
-        const client = await connect('mcp-user');
-        const result = await client.callTool({ name: 'admin_search', arguments: { query: 'all' } });
-        await client.close();
+    it('propagates client response cancellation into the controller invocation signal', async () => {
+        let markStarted: (() => void) | undefined;
+        let markAborted: (() => void) | undefined;
+        const started = new Promise<void>((resolve: () => void) => {
+            markStarted = resolve;
+        });
+        const aborted = new Promise<void>((resolve: () => void) => {
+            markAborted = resolve;
+        });
+        SearchController.waitStartedHook = (): void => markStarted?.();
+        SearchController.waitAbortedHook = (): void => markAborted?.();
+        const body = request('tools/call', {
+            name: 'account_search',
+            arguments: { query: 'wait' },
+        });
+        const params = body['params'] as Record<string, unknown>;
+        const metadata = params['_meta'] as Record<string, unknown>;
+        metadata['progressToken'] = 'cancel-progress';
+        const abort = new AbortController();
+        const progressRead = new Promise<void>(
+            (resolve: () => void, reject: (error: Error) => void) => {
+                const clientRequest = nodeRequest(
+                    `${baseUrl}${ENDPOINT_PATH}`,
+                    {
+                        method: 'POST',
+                        signal: abort.signal,
+                        headers: {
+                            authorization: 'Bearer mcp-user',
+                            accept: 'text/event-stream',
+                            'content-type': 'application/json',
+                            'mcp-protocol-version': MODERN_VERSION,
+                            'mcp-method': 'tools/call',
+                            'mcp-name': 'account_search',
+                            'mcp-param-query': 'wait',
+                        },
+                    },
+                    (response): void => {
+                        response.once('data', (_chunk: Buffer): void => {
+                            abort.abort();
+                            response.destroy();
+                            clientRequest.destroy();
+                            resolve();
+                        });
+                    },
+                );
+                clientRequest.once('error', (error: Error): void => {
+                    if (error.name !== 'AbortError') reject(error);
+                });
+                clientRequest.end(JSON.stringify(body));
+            },
+        );
+        await started;
+        await progressRead;
+        await aborted;
+        expect(abort.signal.aborted).toBe(true);
+        SearchController.waitStartedHook = undefined;
+        SearchController.waitAbortedHook = undefined;
+    });
 
-        expect(result.isError).toBe(true);
-        expect(errorContent(result)).toMatchObject({ kind: 'forbidden' });
+    it('runs the real local AuthFilter with a fresh endpoint JWT', async () => {
+        expect(structuredOf(await callTool('account_search', { query: 'mine' }))).toEqual({
+            userId: 'user-7',
+            result: 'mine',
+        });
+        expect(structuredOf(await callTool('account_search', { query: 'again' }))).toEqual({
+            userId: 'user-7',
+            result: 'again',
+        });
+        expect(jwtHook.mintedTokens.at(-1)).not.toBe(jwtHook.mintedTokens.at(-2));
+    });
+
+    it('seeds remote trusted context without forwarding the MCP bearer token', async () => {
+        expect(structuredOf(await callTool('remote_search', { query: 'remote' }))).toEqual({
+            userId: 'user-delegated',
+            result: 'remote',
+        });
+        expect(remote.seenAuthorization).toBeUndefined();
+    });
+
+    it('filters privileged tools but denies direct hidden calls independently', async () => {
+        authority.roles = [];
+        const listed = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<
+            Record<string, unknown>
+        >;
+        expect(listed.map((tool: Record<string, unknown>) => tool['name'])).not.toContain(
+            'admin_search',
+        );
+        const hidden = await callTool('admin_search', { query: 'all' });
+        expect(hidden.error?.message).toMatch(/not found/i);
         expect(controller.adminInvocations).toBe(0);
+        authority.roles = ['admin'];
+        const adminTools = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<
+            Record<string, unknown>
+        >;
+        expect(adminTools.map((tool: Record<string, unknown>) => tool['name'])).toContain(
+            'admin_search',
+        );
+        authority.roles = [];
     });
 
-    it('never exposes raw bad-request or implementation diagnostics to the model', async () => {
-        const client = await connect('mcp-user');
-        const bad = await client.callTool({ name: 'account_search', arguments: { query: 'bad' } });
-        const internal = await client.callTool({ name: 'account_search', arguments: { query: 'internal' } });
-        await client.close();
+    it('authenticates every operation and validates Origin', async () => {
+        for (const rejected of [
+            'invalid',
+            'wrong-resource',
+            'wrong-issuer',
+            'expired',
+            'missing-scope',
+            'stale-account',
+        ]) {
+            expect((await post(request('tools/list'), rejected)).response.status).toBe(401);
+        }
+        expect(
+            (
+                await post(request('tools/list'), 'mcp-user', {
+                    origin: 'https://trusted.example.test',
+                })
+            ).response.status,
+        ).toBe(200);
+        const denied = await post(request('tools/list'), 'mcp-user', {
+            origin: 'https://evil.example.test',
+        });
+        expect(denied.response.status).toBe(403);
+        expect(denied.payload.error?.message).toBe('Forbidden');
+    });
 
-        expect(JSON.stringify(bad)).not.toContain('SQL table secret');
+    it('uses exact HTTP and JSON-RPC errors for legacy, unknown methods, and header mismatches', async () => {
+        expect((await fetch(`${baseUrl}${ENDPOINT_PATH}`)).status).toBe(404);
+        const legacy = await post({
+            jsonrpc: '2.0',
+            id: ++nextId,
+            method: 'initialize',
+            params: {
+                protocolVersion: '2025-03-26',
+                clientInfo: { name: 'old', version: '1' },
+                capabilities: {},
+            },
+        });
+        expect(legacy.response.status).toBe(400);
+        expect(legacy.payload.error).toBeDefined();
+        const mismatch = await post(request('tools/list'), 'mcp-user', {
+            'mcp-protocol-version': '2025-11-25',
+        });
+        expect(mismatch.response.status).toBe(400);
+        expect(mismatch.payload.error?.code).toBe(-32_020);
+        const unknown = await post(request('unknown/method'));
+        expect(unknown.response.status).toBe(404);
+        expect(unknown.payload.error?.code).toBe(-32_601);
+        const nameMismatch = await post(
+            request('tools/call', { name: 'account_search', arguments: { query: 'mine' } }),
+            'mcp-user',
+            { 'mcp-name': 'different_tool' },
+        );
+        expect(nameMismatch.response.status).toBe(400);
+        expect(nameMismatch.payload.error?.code).toBe(-32_020);
+        const paramMismatch = await post(
+            request('tools/call', { name: 'account_search', arguments: { query: 'mine' } }),
+            'mcp-user',
+            { 'mcp-param-query': 'different-query' },
+        );
+        expect(paramMismatch.response.status).toBe(400);
+        expect(paramMismatch.payload.error?.code).toBe(-32_020);
+    });
+
+    it('sanitizes implementation errors but preserves explicit model-safe errors', async () => {
+        const internal = await callTool('account_search', { query: 'internal' });
+        const human = await callTool('account_search', { query: 'human' });
         expect(JSON.stringify(internal)).not.toContain('database password');
-        const error = errorContent(internal);
-        expect(error).toMatchObject({
+        expect(modelErrorOf(internal)).toMatchObject({
             kind: 'implementation',
             message: 'Internal Error',
         });
-        expect(error['requestId']).toMatch(/^svrGenReqId-/);
-    });
-
-    it('shows explicitly end-user-safe errors to the model', async () => {
-        const client = await connect('mcp-user');
-        const result = await client.callTool({ name: 'account_search', arguments: { query: 'human' } });
-        await client.close();
-
-        expect(errorContent(result)).toMatchObject({
+        expect(modelErrorOf(human)).toMatchObject({
             kind: 'end-user',
-            message: 'Those two values do not match',
-            errorCode: 'MISMATCH',
+            message: 'Safe human message',
+            errorCode: 'SAFE',
         });
     });
 
-    it('returns protected-resource metadata without implementing an authorization server', () => {
+    it('rejects unknown tools and caller-injected fields before dispatch', async () => {
+        const unknown = await callTool('not_a_tool', {});
+        expect(unknown.error?.message).toMatch(/not found/i);
+        const injected = await callTool('account_search', { query: 'mine', userId: 'admin-7' });
+        const result = resultOf(injected);
+        expect(result['isError']).toBe(true);
+        expect(result['content']).toEqual([
+            expect.objectContaining({
+                type: 'text',
+                text: expect.stringMatching(/input validation error/i),
+            }),
+        ]);
+        expect(JSON.stringify(injected)).not.toContain('admin-7');
+    });
+
+    it('requires MCP auth metadata and topology-compatible HTTP auth at startup', () => {
+        @ApiPath('/invalid')
+        class MissingMcpAuthApi {
+            @WpAuthJwt({ allRolesAllowed: true })
+            @Endpoint('/tool', 'rpc')
+            @WpResponseDto(() => SearchResponse)
+            @WpMcpTool({ name: 'missing_mcp_auth', description: 'invalid' })
+            tool(_request: SearchRequest): Promise<SearchResponse> {
+                throw new Error('contract only');
+            }
+        }
+        const missing = new WpMcpServer(serverConfig());
+        expect(() =>
+            missing.bind(
+                express(),
+                new McpBindOptions(
+                    '/invalid-one',
+                    [McpApiBinding.local(MissingMcpAuthApi, router)],
+                    McpDeployment.singleProcess(),
+                ),
+            ),
+        ).toThrow(/must declare @WpMcpAuthJwt/);
+        const mismatch = new WpMcpServer(serverConfig());
+        expect(() =>
+            mismatch.bind(
+                express(),
+                new McpBindOptions(
+                    '/invalid-two',
+                    [McpApiBinding.remote(SearchApi, () => new SearchController())],
+                    McpDeployment.singleProcess(),
+                ),
+            ),
+        ).toThrow(/requires @WpAuthOidc/);
+    });
+
+    it('exposes resource metadata, invalidates tools, and refuses token passthrough', async () => {
         expect(bridge.protectedResourceMetadata()).toMatchObject({
             resource: 'https://api.example.test/mcp',
             authorization_servers: ['https://login.example.test'],
-            bearer_methods_supported: ['header'],
             scopes_supported: ['tools'],
         });
+        expect(() => bridge.toolsChanged()).not.toThrow();
+        expect(
+            modelErrorOf(await callTool('account_search', { query: 'mine' }, 'mcp-passthrough')),
+        ).toMatchObject({
+            kind: 'implementation',
+        });
+        jwtHook.lifetimeSeconds = 3_601;
+        expect(modelErrorOf(await callTool('account_search', { query: 'mine' }))).toMatchObject({
+            kind: 'implementation',
+        });
+        jwtHook.lifetimeSeconds = 60;
     });
 });

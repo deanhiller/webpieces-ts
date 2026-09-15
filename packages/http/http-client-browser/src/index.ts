@@ -42,6 +42,7 @@ export {
     TranslatedFailure,
 } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
+export { StreamingCapabilityError } from '@webpieces/http-client-core';
 
 // ContextMgr is the BROWSER's outbound-header propagation. This is the only package that may use
 // it; the server reads RequestContext directly (RequestContextHeaders in @webpieces/core-context).

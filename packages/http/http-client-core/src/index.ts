@@ -42,3 +42,12 @@ export { ResponseBodyReader } from './ResponseBodyReader';
 export { ClientRequest } from './ClientRequest';
 export { ClientFilterDefinition } from './ClientFilter';
 export type { ClientFilter } from './ClientFilter';
+// Generic streaming wire adapters: NDJSON uploads, request-scoped SSE downloads, and a typed
+// capability failure for runtimes that cannot safely keep both fetch halves open concurrently.
+export { NdjsonRequestStream } from './NdjsonRequestStream';
+export { SseEvent, SseEventParser } from './SseEventParser';
+export { SseResponseStream } from './SseResponseStream';
+export { StreamEnvelopeCodec } from './StreamEnvelopeCodec';
+export { StreamingCapabilityError } from './StreamingCapabilityError';
+export { Utf8Codec } from './Utf8Codec';
+export type { ByteReadableStream, ByteStreamReader, ByteReadResult } from './ByteStream';

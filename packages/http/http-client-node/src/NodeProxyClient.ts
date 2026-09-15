@@ -1,4 +1,8 @@
 import { inject, optional } from 'inversify';
+import { once } from 'node:events';
+import { request as httpRequest, IncomingMessage } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { Readable } from 'node:stream';
 import {
     ClientRegistry,
     DestinationTrust,
@@ -21,6 +25,8 @@ import {
 import { GcpOidc } from '@webpieces/gcp-identity';
 import {
     ApiPrototype,
+    ByteReadableStream,
+    ClientRequest,
     ClientFilterDefinition,
     ProxyClient,
     TranslatedFailure,
@@ -101,6 +107,78 @@ export class NodeProxyClient extends ProxyClient {
      */
     protected override resolveBaseUrl(): Promise<string> {
         return ClientRegistry.resolve(this.config.svcName);
+    }
+
+    /** Node/undici supports a live ReadableStream body when fetch is given `duplex: 'half'`. */
+    protected override supportsConcurrentDuplexFetch(): boolean {
+        return true;
+    }
+
+    /**
+     * Node's native HTTP stream is genuinely concurrent: unlike browser Fetch, an early response
+     * does not cancel the still-open upload. The returned Web Response keeps parsing isomorphic.
+     */
+    protected override sendStreamingTransport(
+        request: ClientRequest,
+        signal: AbortSignal,
+        body: ByteReadableStream,
+    ): Promise<Response> {
+        return new Promise<Response>(
+            (resolve: (response: Response) => void, reject: (error: Error) => void) => {
+                const url = new URL(request.url);
+                const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
+                const outgoing = send(
+                    url,
+                    {
+                        method: 'POST',
+                        headers: request.headersAsRecord(),
+                        signal,
+                    },
+                    (incoming: IncomingMessage): void => {
+                        const headers = new Headers();
+                        for (const [name, value] of Object.entries(incoming.headers)) {
+                            if (Array.isArray(value)) {
+                                for (const item of value) headers.append(name, item);
+                            } else if (value !== undefined) {
+                                headers.set(name, value);
+                            }
+                        }
+                        const responseBody = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+                        resolve(
+                            new Response(responseBody, {
+                                status: incoming.statusCode ?? 500,
+                                statusText: incoming.statusMessage,
+                                headers,
+                            }),
+                        );
+                    },
+                );
+                outgoing.once('error', reject);
+                // webpieces-disable no-any-unknown -- a native socket/write rejection is normalized by toError
+                void this.pumpStreamingRequest(body, outgoing).catch((err: unknown) => {
+                    const error = toError(err);
+                    outgoing.destroy(error);
+                });
+            },
+        );
+    }
+
+    private async pumpStreamingRequest(
+        body: ByteReadableStream,
+        outgoing: import('node:http').ClientRequest,
+    ): Promise<void> {
+        const reader = body.getReader();
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- socket errors reject writer acknowledgements
+        try {
+            for (;;) {
+                const part = await reader.read();
+                if (part.done) break;
+                if (!outgoing.write(part.value)) await once(outgoing, 'drain');
+            }
+            outgoing.end();
+        } finally {
+            reader.releaseLock();
+        }
     }
 
     /**

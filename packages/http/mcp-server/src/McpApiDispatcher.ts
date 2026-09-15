@@ -4,43 +4,61 @@ import {
     ApiErrorPayload,
     DtoSchemaBuilder,
     DtoValue,
+    rolesRequired,
     toError,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
-import { ApiFactory, ApiClientProxy } from '@webpieces/http-routing';
 import { RegisteredMcpTool } from './McpToolRegistry';
+import { VerifiedMcpCredential } from './McpAuth';
+import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationContext';
 
 export class McpDispatchSuccess {
     readonly success = true;
-    constructor(public readonly value: DtoValue, public readonly requestId: string) {}
+    constructor(
+        public readonly value: DtoValue,
+        public readonly requestId: string,
+    ) {}
 }
 
 export class McpDispatchFailure {
     readonly success = false;
-    constructor(public readonly error: ApiErrorPayload, public readonly requestId: string) {}
+    constructor(
+        public readonly error: ApiErrorPayload,
+        public readonly requestId: string,
+    ) {}
 }
 
 export type McpDispatchResult = McpDispatchSuccess | McpDispatchFailure;
 
-/** Executes one tool through the same ApiFactory proxy/filter/controller path as HTTP. */
+/** Executes through the explicit local or remote Webpieces client, never a controller reference. */
 export class McpApiDispatcher {
     private readonly schemaBuilder = new DtoSchemaBuilder();
-
-    constructor(private readonly apiFactory: ApiFactory) {}
 
     async call(
         tool: RegisteredMcpTool,
         requestDto: DtoValue,
-        endpointBearerToken: string,
+        credential: VerifiedMcpCredential,
+        invocation: McpInvocationContext,
+        endpointBearerToken?: string,
     ): Promise<McpDispatchResult> {
-        const headers = new Map<string, string[]>();
-        headers.set('authorization', [`Bearer ${endpointBearerToken}`]);
-        const request = new HttpRequest('POST', `/__webpieces/mcp/${tool.name}`, headers);
-        return RequestContext.run(async () => {
+        return RequestContext.runDetachedScope(async () => {
+            const headers = new Map<string, string[]>();
+            if (tool.binding.topology === 'local') {
+                if (!endpointBearerToken)
+                    throw new Error(`Local MCP tool ${tool.name} has no endpoint JWT.`);
+                headers.set('authorization', [`Bearer ${endpointBearerToken}`]);
+            }
+            const request = new HttpRequest('POST', `/__webpieces/mcp/${tool.name}`, headers);
             new RequestContextHeaders().fillFromRequest(request);
+            RequestContext.putTrusted(MCP_INVOCATION_CONTEXT, invocation);
+            if (tool.binding.topology === 'remote') {
+                for (const tuple of credential.trustedContext)
+                    RequestContext.putTrusted(tuple.key, tuple.value);
+            }
             const requestId =
-                RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
+                RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ??
+                'missing-request-id';
             const inputFailure = this.schemaBuilder.validate(tool.requestClass, requestDto);
             if (inputFailure) {
                 return new McpDispatchFailure(
@@ -54,10 +72,19 @@ export class McpApiDispatcher {
                     requestId,
                 );
             }
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes endpoint throws
+            const required = rolesRequired(tool.mcpAuth.requirement);
+            if (
+                required.length > 0 &&
+                !required.some((role: string) => credential.listingRoles.includes(role))
+            ) {
+                return new McpDispatchFailure(
+                    new ApiErrorPayload('forbidden', 'Forbidden'),
+                    requestId,
+                );
+            }
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- protocol boundary sanitizes endpoint failures
             try {
-                const client = this.apiFactory.createApiClient<ApiClientProxy>(tool.apiClass as never);
-                const value = (await client[tool.methodName](requestDto)) as DtoValue;
+                const value = (await tool.binding.invoke(tool.methodName, requestDto)) as DtoValue;
                 return new McpDispatchSuccess(value, requestId);
             } catch (err: unknown) {
                 const error = toError(err);
