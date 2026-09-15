@@ -154,6 +154,17 @@ export type ProjectApiRelations = Record<string, ApiRelation>;
  */
 export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
 
+/** HTTP verbs understood by the generated contract runtime. */
+export type ContractHttpMethod = 'GET' | 'POST';
+
+/** One path/query/body mapping emitted into architecture/dependencies.json. */
+export interface ApiParameterMeta {
+    index: number;
+    source: 'path' | 'query' | 'body';
+    /** Path/query wire name; a JSON/form body occupies the whole entity and has no key. */
+    wireName?: string;
+}
+
 /**
  * One method on an API contract, as written in source: what triggers it, where it is mounted, and
  * (for a queued method) which Cloud Tasks queue delivers it.
@@ -163,6 +174,12 @@ export interface ApiMethodMeta {
     /** The @Endpoint path, relative to the class's @ApiPath basePath. */
     path: string;
     kind: EndpointKind;
+    /** The actual incoming/outgoing verb; POST when @Endpoint omits httpMethod. */
+    httpMethod?: ContractHttpMethod;
+    /** Explicit parameter mappings; absent only when the method has none. */
+    parameters?: ApiParameterMeta[];
+    /** Present when callers receive the transport-neutral full response. */
+    responseType?: 'full';
     /**
      * `@Queue(...)` override, else `${ApiClassName}-${methodName}`.
      *
@@ -334,7 +351,10 @@ export class EmptiedApiContract {
 
 /** Derive the relation kind from the (possibly empty) implements/uses ref lists. */
 // webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs
-export function deriveApiRelationKind(implementsRefs: ApiRef[], usesRefs: ApiRef[]): ApiRelationKind {
+export function deriveApiRelationKind(
+    implementsRefs: ApiRef[],
+    usesRefs: ApiRef[],
+): ApiRelationKind {
     if (implementsRefs.length > 0 && usesRefs.length > 0) return 'uses-implements';
     if (implementsRefs.length > 0) return 'implements';
     return 'uses';
@@ -348,6 +368,7 @@ export function deriveApiRelationKind(implementsRefs: ApiRef[], usesRefs: ApiRef
 export function sortApiRefs(refs: ApiRef[]): ApiRef[] {
     return [...refs].sort(
         (a: ApiRef, b: ApiRef) =>
-            a.api.localeCompare(b.api) || (a.targetService ?? '').localeCompare(b.targetService ?? ''),
+            a.api.localeCompare(b.api) ||
+            (a.targetService ?? '').localeCompare(b.targetService ?? ''),
     );
 }

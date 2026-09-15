@@ -47,6 +47,10 @@ export class MethodMeta {
         requestDto?: unknown,
         // webpieces-disable no-any-unknown -- request-scoped bag holds heterogeneous filter data
         metadata?: Map<string, unknown>,
+        /** API method arguments in declaration order; defaults to the historical one-body call. */
+        public readonly requestArgs: readonly unknown[] = requestDto === undefined
+            ? []
+            : [requestDto],
     ) {
         this.routeMeta = routeMeta;
         this.requestDto = requestDto;

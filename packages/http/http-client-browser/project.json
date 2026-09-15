@@ -48,5 +48,5 @@
             ]
         }
     },
-    "tags": ["framework:browser", "framework:react-native", "role:designed-lib"]
+    "tags": ["framework:browser", "framework:react-native", "framework:node", "role:designed-lib"]
 }

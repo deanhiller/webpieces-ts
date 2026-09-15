@@ -18,9 +18,17 @@ function exampleProjects(): Map<string, ProjectInfo> {
         infos.set(name, new ProjectInfo(name, root, tags));
     };
     add('client-server', 'apps/app-example/client-server', ['framework:express', 'role:server']);
-    add('client-server-api', 'apps/app-example/client-server-api', ['framework:browser', 'framework:node', 'role:lib']);
+    add('client-server-api', 'apps/app-example/client-server-api', [
+        'framework:browser',
+        'framework:node',
+        'role:lib',
+    ]);
     add('server2', 'apps/app-example/server2', ['framework:express', 'role:server']);
-    add('server2-api', 'apps/app-example/server2-api', ['framework:browser', 'framework:node', 'role:lib']);
+    add('server2-api', 'apps/app-example/server2-api', [
+        'framework:browser',
+        'framework:node',
+        'role:lib',
+    ]);
     add('angular-site', 'apps/app-example/angular-site', ['framework:angular', 'role:client']);
     // legacy-server has only a solution-style tsconfig.json (no tsconfig.app/lib) — exercises the
     // src-glob program fallback. app-example-e2e has only a *.spec.ts — exercises the "not scanned".
@@ -97,7 +105,9 @@ describe('ApiUsageScanner — the target service at the call site', () => {
     });
 
     it('records nothing when the config is a variable (angular-site passes one in)', () => {
-        const uses = result.relationsByProject.get('angular-site')!['client-server-api'] as ApiRelation;
+        const uses = result.relationsByProject.get('angular-site')![
+            'client-server-api'
+        ] as ApiRelation;
         expect(uses.uses.length).toBeGreaterThan(0);
         for (const ref of uses.uses) expect(ref.targetService).toBeUndefined();
     });
@@ -122,7 +132,9 @@ describe('ApiUsageScanner — project-coverage edge cases', () => {
 });
 
 describe('buildApiContracts — the per-method trigger table committed to dependencies.json', () => {
-    const contracts = buildApiContracts(new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan());
+    const contracts = buildApiContracts(
+        new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan(),
+    );
 
     it('records each contract with its owner, api kind and @ApiPath basePath', () => {
         expect(contracts['SecureApi'].owner).toBe('client-server-api');
@@ -136,7 +148,13 @@ describe('buildApiContracts — the per-method trigger table committed to depend
         // `Server2Api-fetchValue` for a synchronous endpoint put it one naive
         // `methods.map(m => m.queueName)` away from being provisioned as a real Cloud Tasks queue.
         expect(contracts['Server2Api'].methods).toEqual([
-            { name: 'fetchValue', path: '/fetchValue', kind: 'rpc' },
+            {
+                name: 'fetchValue',
+                path: '/fetchValue',
+                kind: 'rpc',
+                httpMethod: 'POST',
+                parameters: [{ index: 0, source: 'body' }],
+            },
         ]);
     });
 

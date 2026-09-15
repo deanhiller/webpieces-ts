@@ -11,6 +11,10 @@ import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('RouteBuilder');
 
+interface NamedClass {
+    name?: string;
+}
+
 /**
  * FilterWithMeta - Pairs a resolved filter instance with its definition.
  * Stores both the DI-resolved filter and the metadata needed for matching.
@@ -29,13 +33,14 @@ export class FilterWithMeta {
 export class RouteHandlerImpl<TResult> implements RouteHandler<TResult> {
     constructor(
         private controller: Record<string, unknown>,
-        private method: (this: unknown, requestDto?: unknown) => Promise<TResult>,
+        // webpieces-disable no-any-unknown -- route handlers invoke arbitrary API argument shapes
+        private method: (this: unknown, ...args: unknown[]) => Promise<TResult>,
     ) {}
 
     async execute(meta: MethodMeta): Promise<TResult> {
         // Invoke the method with requestDto from meta
         // The controller is already resolved - no DI lookup on every request!
-        const result: TResult = await this.method.call(this.controller, meta.requestDto);
+        const result: TResult = await this.method.apply(this.controller, [...meta.requestArgs]);
         return result;
     }
 }
@@ -112,10 +117,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         this.routes.push(routeWithMeta);
 
         // Also add to map for O(1) lookup by method:path
-        const key = this.createRouteKey(
-            route.routeMeta.httpMethod,
-            route.routeMeta.path
-        );
+        const key = this.createRouteKey(route.routeMeta.httpMethod, route.routeMeta.path);
         this.routeMap.set(key, routeWithMeta);
     }
 
@@ -147,7 +149,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         // Get the controller method
         const method = controller[routeMeta.methodName];
         if (typeof method !== 'function') {
-            const controllerName = (route.controllerClass as { name?: string }).name || 'Unknown';
+            const controllerName = (route.controllerClass as NamedClass).name || 'Unknown';
             throw new Error(
                 `Method ${routeMeta.methodName} not found on controller ${controllerName}`,
             );
@@ -155,14 +157,13 @@ export class RouteBuilderImpl implements RouteBuilder {
 
         const handler = new RouteHandlerImpl<TResult>(
             controller,
-            method as (this: unknown, requestDto?: unknown) => Promise<TResult>
+            // webpieces-disable no-any-unknown -- resolved controller method has the registered API's arguments
+            method as (this: unknown, ...args: unknown[]) => Promise<TResult>,
         );
 
         // Return handler with route definition
-        return new RouteHandlerWithMeta(
-            handler as RouteHandler<unknown>,
-            route,
-        );
+        // webpieces-disable no-any-unknown -- heterogeneous handlers share one registration collection
+        return new RouteHandlerWithMeta(handler as RouteHandler<unknown>, route);
     }
 
     /**
@@ -268,7 +269,9 @@ export class RouteBuilderImpl implements RouteBuilder {
         };
 
         if (matchingFilters.length === 0) {
-            throw new Error("No filters found for route — the framework auto-installs LogApiFilter + AuthFilter, so this indicates a wiring problem.");
+            throw new Error(
+                'No filters found for route — the framework auto-installs LogApiFilter + AuthFilter, so this indicates a wiring problem.',
+            );
         }
 
         // Chain filters: highest priority (first in array) should run first (be outermost)

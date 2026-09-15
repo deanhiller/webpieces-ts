@@ -3,7 +3,11 @@ import {
     ClientRegistry,
     ApiBadRequestError,
     HttpHeader,
+    HttpContractMapper,
     HttpResponseDto,
+    HttpResponseStatus,
+    RouteMetadata,
+    ApiImplementationError,
     toError,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
@@ -61,7 +65,7 @@ export class ExpressWrapper {
 
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
-        private clientMethod: (requestDto: unknown) => Promise<unknown>,
+        private clientMethod: (...args: unknown[]) => Promise<unknown>,
         private path: string,
         /** Owns the wire<->context transfer, both directions. Stateless framework singleton. */
         private headers: RequestContextHeaders,
@@ -89,6 +93,8 @@ export class ExpressWrapper {
          * `createExpressWrapper` rather than reaching around the middleware to construct a wrapper.
          */
         private maxBodyBytes: number = MAX_BODY_BYTES,
+        /** Exact shared contract route; omitted only by focused legacy wrapper unit tests. */
+        private readonly routeMeta?: RouteMetadata,
     ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -149,12 +155,36 @@ export class ExpressWrapper {
 
         // 4. Invoke the api CLIENT method — the SAME proxy tests use. Its filter chain + controller
         //    run here, reading the context filled above; the chain never touches express `req`.
-        const result = await this.clientMethod(parsed.requestDto);
+        const args = this.routeMeta
+            ? HttpContractMapper.fromWire(
+                  this.routeMeta.parameterBindings,
+                  this.routeMeta.bodyParameterIndex,
+                  parsed.requestDto,
+                  this.pathValues(req),
+                  this.queryValues(req),
+              )
+            : [parsed.requestDto];
+        const result = await this.clientMethod(...args);
 
-        // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())
-        const responseJson = JSON.stringify(result);
-        this.stampTransactionId(res);
-        res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+        // 5. The contract chooses body-only 200 JSON or caller-owned status/headers/body.
+        if (this.routeMeta?.responseType === 'full') {
+            if (!(result instanceof HttpResponseDto)) {
+                throw new ApiImplementationError(
+                    `${this.routeMeta.apiName}.${this.routeMeta.methodName} declares responseType:'full' ` +
+                        `but returned ${result instanceof Object ? result.constructor.name : typeof result}; ` +
+                        `return HttpResponseDto.`,
+                );
+            }
+            this.send(res, result);
+            return;
+        }
+        if (result instanceof HttpResponseDto) {
+            throw new ApiImplementationError(
+                `${this.routeMeta?.apiName ?? 'API'}.${this.routeMeta?.methodName ?? 'method'} returned ` +
+                    `HttpResponseDto but its @Endpoint does not declare responseType:'full'.`,
+            );
+        }
+        this.send(res, new HttpResponseDto(new HttpResponseStatus(200, 'OK'), [], result));
     }
 
     /**
@@ -180,7 +210,7 @@ export class ExpressWrapper {
         if (this.formPost) {
             // application/x-www-form-urlencoded → flat key→value. URLSearchParams is lenient
             // (never throws) — right for EXTERNAL webhooks (e.g. Twilio) that post form-encoded.
-            requestDto = Object.fromEntries(new URLSearchParams(bodyText));
+            requestDto = this.formBody(bodyText);
         } else {
             const json = this.parseJson(bodyText);
             requestDto = json.requestDto;
@@ -224,6 +254,42 @@ export class ExpressWrapper {
         }
     }
 
+    /** Preserve repeated form keys as arrays while keeping the historical flat scalar shape. */
+    private formBody(bodyText: string): Record<string, string | string[]> {
+        const result: Record<string, string | string[]> = {};
+        new URLSearchParams(bodyText).forEach((value: string, key: string) => {
+            const existing = result[key];
+            if (existing === undefined) result[key] = value;
+            else if (Array.isArray(existing)) existing.push(value);
+            else result[key] = [existing, value];
+        });
+        return result;
+    }
+
+    /** Express has already URL-decoded route placeholders by the time a handler runs. */
+    private pathValues(req: Request): Map<string, string | readonly string[]> {
+        const values = new Map<string, string | readonly string[]>();
+        const params = req.params ?? {};
+        for (const name of Object.keys(params)) {
+            values.set(name, params[name]);
+        }
+        return values;
+    }
+
+    /** Parse the original query string so repeated keys survive instead of being collapsed. */
+    private queryValues(req: Request): Map<string, string | readonly string[]> {
+        const values = new Map<string, string | readonly string[]>();
+        const rawUrl = req.originalUrl ?? req.url ?? '';
+        const query = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?') + 1) : '';
+        new URLSearchParams(query).forEach((value: string, name: string) => {
+            const existing = values.get(name);
+            if (existing === undefined) values.set(name, value);
+            else if (typeof existing === 'string') values.set(name, [existing, value]);
+            else values.set(name, [...existing, value]);
+        });
+        return values;
+    }
+
     /**
      * Read HTTP headers from Express request.
      * Returns Map of header name (lowercase) -> array of values.
@@ -236,7 +302,12 @@ export class ExpressWrapper {
      * in-process with no transport at all.
      */
     private toWebpiecesRequest(req: Request, raw?: RawRequest): HttpRequest {
-        return new HttpRequest(req.method, this.path, this.readExpressHeaders(req), raw);
+        return new HttpRequest(
+            req.method,
+            req.path ?? this.path,
+            this.readExpressHeaders(req),
+            raw,
+        );
     }
 
     /**
@@ -382,7 +453,7 @@ export class ExpressWrapper {
         const declaresContentType = response.headers.some(
             (header: HttpHeader) => header.name.toLowerCase() === 'content-type',
         );
-        if (!declaresContentType) {
+        if (!declaresContentType && response.body !== undefined) {
             res.setHeader('Content-Type', 'application/json');
         }
         for (const header of response.headers) {
@@ -392,7 +463,22 @@ export class ExpressWrapper {
         // `new HttpResponseStatus(460, 'Order Not Found')` gets 'Order Not Found' on the status line
         // rather than node's blank default for an unregistered code.
         res.statusMessage = response.status.reason;
-        res.status(response.status.code).send(JSON.stringify(response.body));
+        const payload =
+            response.body === undefined
+                ? undefined
+                : this.responsePayload(response, declaresContentType);
+        res.status(response.status.code).send(payload);
+    }
+
+    /** JSON by default; explicit text content types write the caller's string verbatim. */
+    private responsePayload(response: HttpResponseDto, declaresContentType: boolean): string {
+        const contentType = response.headers.find(
+            (header: HttpHeader) => header.name.toLowerCase() === 'content-type',
+        )?.value;
+        if (declaresContentType && contentType !== undefined && !/json/i.test(contentType)) {
+            return typeof response.body === 'string' ? response.body : String(response.body);
+        }
+        return JSON.stringify(response.body) ?? '';
     }
 
     /**

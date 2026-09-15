@@ -77,6 +77,11 @@ export {
     METADATA_KEYS,
 } from './http/decorators';
 export {
+    PathParam,
+    QueryParam,
+    getHttpParameterDeclarations,
+} from './http/http-parameter-decorators';
+export {
     WpInternal,
     WpIpcEndpoint,
     isInternalApi,
@@ -91,13 +96,21 @@ export {
 export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './ipc/IpcDecorators';
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
-export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export { RouteMetadataFactory } from './http/RouteMetadataFactory';
 export {
-    WpMcpTool,
-    WpMcpToolHints,
-    WpMcpToolMetadata,
-    getWpMcpTools,
-} from './mcp/McpMetadata';
+    BoundHttpRequest,
+    HttpContractMapper,
+    HttpParameterBinding,
+    HttpParameterDeclaration,
+} from './http/HttpContract';
+export type {
+    ContractHttpMethod,
+    EndpointResponseType,
+    HttpParameterSource,
+    HttpParameterValueType,
+} from './http/HttpContract';
+export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export { WpMcpTool, WpMcpToolHints, WpMcpToolMetadata, getWpMcpTools } from './mcp/McpMetadata';
 export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
 export {
     WpDto,

@@ -1,11 +1,12 @@
 import { ClassType } from './ApiRoutingFactory';
+import { RouteMetadata } from '@webpieces/core-util';
 
 /**
  * ApiClientProxy - the in-process client createApiClient(api) returns: a map of method name →
  * invoker(dto) that runs the filter chain → controller. (Cast to the API interface T for callers.)
  */
 // webpieces-disable no-any-unknown -- proxy holds methods of arbitrary API shapes; DTOs are erased
-export type ApiClientProxy = Record<string, (requestDto: unknown) => Promise<unknown>>;
+export type ApiClientProxy = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 /**
  * ApiClient - one registered API surface, reified by {@link ApiClientFactory}:
@@ -22,5 +23,7 @@ export class ApiClient {
     constructor(
         public readonly api: ClassType,
         public readonly client: ApiClientProxy,
+        /** The exact registered routes this transport must expose for the contract. */
+        public readonly routes: readonly RouteMetadata[],
     ) {}
 }

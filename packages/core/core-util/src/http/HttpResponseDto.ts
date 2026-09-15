@@ -50,11 +50,12 @@ export class HttpResponseStatus {
  * {@link ApiErrorPayload} there, and the built-in client mapping reads it back as one — but an app that
  * owns the whole response owns the body shape too, so the framework does not constrain it.
  */
-export class HttpResponseDto {
+// webpieces-disable no-any-unknown -- the app owns the full-response body shape
+export class HttpResponseDto<TBody = unknown> {
     constructor(
         public readonly status: HttpResponseStatus,
         public readonly headers: readonly HttpHeader[],
         // webpieces-disable no-any-unknown -- the app owns the body shape when it owns the response; webpieces' own default puts a ApiErrorPayload here, an app puts whatever it publishes
-        public readonly body: unknown,
+        public readonly body: TBody,
     ) {}
 }

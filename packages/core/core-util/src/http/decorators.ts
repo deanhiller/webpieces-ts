@@ -4,11 +4,15 @@ import {
     DEFAULT_CALLER_KIND,
     ENDPOINT_CALLER_KEY,
     ExternalCaller,
-    ExternalSystemKind,
     getEndpointCaller,
 } from './external-caller';
 // The TYPE layer these decorators attach — split out for file size only (see auth-mode.ts).
 import { ApiKeyCredentials, AuthMeta, AuthMode, JwtRequirement } from './auth-mode';
+import { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
+import { HTTP_PARAMETERS_METADATA_KEY } from './http-parameter-decorators';
+
+export type { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
+export { PathParam, QueryParam, getHttpParameterDeclarations } from './http-parameter-decorators';
 
 /**
  * Metadata keys for storing API routing information.
@@ -34,6 +38,8 @@ export const METADATA_KEYS = {
     MASK_LOG: 'webpieces:mask-log',
     /** Per-method opt-in metadata for publishing an RPC endpoint as an MCP tool. */
     MCP_TOOLS: 'webpieces:mcp-tools',
+    /** Per-method explicit path/query parameter declarations, keyed by parameter index. */
+    HTTP_PARAMETERS: HTTP_PARAMETERS_METADATA_KEY,
 };
 
 /**
@@ -59,44 +65,6 @@ export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
  * Options for a single @Endpoint. Kept in a metadata map PARALLEL to ENDPOINTS so the existing
  * `Record<methodName, path>` shape every consumer iterates stays unchanged.
  */
-export interface EndpointOptions {
-    /**
-     * Parse the request body as application/x-www-form-urlencoded (flat key→value) instead of JSON.
-     * For EXTERNAL webhooks (e.g. Twilio) that post form-encoded. The request DTO must be FLAT —
-     * urlencoded has no nesting (unlike JSON). Default false = JSON.
-     */
-    formPost?: boolean;
-
-    /**
-     * RETAIN the verbatim request bytes + the absolute url the sender addressed, so an
-     * {@link WpAuthWebhook} hook can verify a vendor signature over them (see `RawRequest`).
-     *
-     * Opt-in PER ENDPOINT, sitting beside `formPost` and for the same reason: the cost lands on the
-     * handful of webhook routes rather than on every request in the process. It is retention, not
-     * new buffering — the express adapter already accumulates the whole body, it simply threw it
-     * away once it had parsed a DTO.
-     *
-     * REQUIRED by `@WpAuthWebhook`, checked at wiring time (see
-     * {@link assertEveryWebhookEndpointRetainsRawBody}) rather than left to fail as a 401 in
-     * production: a hook with nothing to verify is a misconfiguration, not a bad request.
-     *
-     * Combines with `formPost` — `{ formPost: true, rawBody: true }` is the Twilio case, where the
-     * hook needs the bytes and the url while the controller still wants the flat parsed DTO.
-     */
-    rawBody?: boolean;
-}
-
-/**
- * Options for an `external` @Endpoint: everything {@link EndpointOptions} carries, PLUS a REQUIRED
- * declaration of WHO is calling. See {@link Endpoint} for why, `external-caller.ts` for identity.
- */
-export interface ExternalEndpointOptions extends EndpointOptions {
-    /** The outside system that posts here (`'twilio'`) — the graph node IDENTITY, not display text. */
-    calledBy: string;
-    /** What that caller IS; picks the node's shape. Defaults to `'saas'` (see DEFAULT_CALLER_KIND). */
-    callerKind?: ExternalSystemKind;
-}
-
 /**
  * @ApiPath(basePath) - Class decorator that marks a class as an API definition
  * and sets the base path for all endpoints.
@@ -128,10 +96,8 @@ export function ApiPath(basePath: string): ClassDecorator {
 }
 
 /**
- * @Endpoint(path, kind, options?) - Method decorator that registers a POST endpoint at the given
- * path and declares WHAT TRIGGERS it.
- *
- * All endpoints are POST-only (matching gRPC/thrift style).
+ * @Endpoint(path, kind, options?) - Method decorator that registers an HTTP endpoint at the given
+ * path and declares WHAT TRIGGERS it. POST is the default; GET is explicit in `httpMethod`.
  *
  * Usage:
  * ```typescript

@@ -73,9 +73,11 @@ export class ClientRequest {
          */
         // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
         public readonly requestDto: unknown,
+        /** Encoded route path + query for this call, resolved from its typed arguments. */
+        public readonly resolvedPath: string = route.path,
     ) {
         this.currentBaseUrl = baseUrl;
-        this.currentUrl = `${baseUrl}${route.path}`;
+        this.currentUrl = `${baseUrl}${resolvedPath}`;
     }
 
     /** The host this call is currently addressed to, with no path. */
@@ -108,7 +110,7 @@ export class ClientRequest {
      */
     pointAtBaseUrl(baseUrl: string): void {
         this.currentBaseUrl = baseUrl;
-        this.currentUrl = `${baseUrl}${this.route.path}`;
+        this.currentUrl = `${baseUrl}${this.resolvedPath}`;
         this.rePointed = true;
     }
 

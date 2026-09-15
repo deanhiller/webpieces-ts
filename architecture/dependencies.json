@@ -125,6 +125,7 @@
             "responsibilitiesFile": "apps/app-example/e2e/responsibilities.md",
             "dependsOn": [
                 "client-server",
+                "http-client-browser",
                 "server2"
             ]
         },
@@ -287,7 +288,7 @@
         },
         "http-client-browser": {
             "level": 2,
-            "framework": ["browser","react-native"],
+            "framework": ["browser","react-native","node"],
             "role": "designed-lib",
             "shortDescription": "The browser-side HTTP client: generates type-safe clients from the SAME API contract the server implements. Deliberately DI-free, because it may be bundled by React just as easily as by Angular, so it ships no `inversify` and no node-only `core-context`.",
             "responsibilitiesFile": "packages/http/http-client-browser/responsibilities.md",

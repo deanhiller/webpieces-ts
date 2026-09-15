@@ -8,6 +8,7 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 - `ClientConfig` — per-client state: the base URL, plus an optional logging name
 - Rethrowing a downstream failure EXACTLY as translated (`BrowserProxyClient.adaptDownstreamFailure`). Here the client is the end user's agent and the "downstream" is the app's own backend, so a 404/401/403 is a real answer the UI must act on. This is the deliberate opposite of `http-client-node`, which owns a downstream 4xx as its own 500
 - `MutableContextStore` — the browser `ContextReader`. Browsers have no ambient request scope, so the app sets context values (login token, tenant) as they become known and every outbound call transfers them as headers
+- Exposing the core client's typed GET/POST, explicit path/query, JSON/form, and full-response behavior without a Node-only dependency; manual redirects remain subject to native browser CORS/opaque-response rules
 
 ## Out of Scope
 
@@ -19,3 +20,5 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 ## Notes
 
 Tagged `framework:browser`, so the `library-types-match-client` rule structurally forbids it from depending on any `framework:node` package — that lattice check, not a source grep, is what guarantees no node import reaches the bundle. The server twin is `http-client-node`; both sit on `http-client-core`.
+
+Also tagged `framework:node`: modern Node provides compatible `fetch`, so real HTTP integration tests can exercise this exact client. That widens where the package can run; it does not permit Node-only dependencies because its browser/react-native promises remain in force.

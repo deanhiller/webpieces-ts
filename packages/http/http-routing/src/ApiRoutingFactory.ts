@@ -1,16 +1,12 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
 import {
     isApiPath,
-    getApiPath,
     getEndpoints,
     getAuthMeta,
-    isFormPost,
-    isRawBody,
     assertEveryWebhookEndpointRetainsRawBody,
     assertNotInternalApi,
-    getMaskSpec,
     LogManager,
-    RouteMetadata,
+    RouteMetadataFactory,
     AuthMeta,
     MISSING_AUTH_DECORATOR_FIX,
     RuntimeLocality,
@@ -91,13 +87,12 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
         // traffic the endpoint exists for.
         assertEveryWebhookEndpointRetainsRawBody(this.apiMetaClass);
 
-        const basePath = getApiPath(this.apiMetaClass)!;
         const endpoints = getEndpoints(this.apiMetaClass) || {};
         const controllerFilepath = this.getControllerFilepath();
         const apiName = this.apiMetaClass.name || 'Unknown';
         const controllerName = this.controllerClass.name || 'Unknown';
 
-        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
+        for (const methodName of Object.keys(endpoints)) {
             // Validate controller implements this method
             if (typeof this.controllerClass.prototype[methodName] !== 'function') {
                 throw new Error(
@@ -127,17 +122,10 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                 continue;
             }
 
-            const fullPath = basePath + endpointPath;
-            const routeMeta = new RouteMetadata(
-                'POST',
-                fullPath,
+            const routeMeta = RouteMetadataFactory.create(
+                this.apiMetaClass,
                 methodName,
                 controllerName,
-                authMeta,
-                apiName,
-                isFormPost(this.apiMetaClass, methodName),
-                getMaskSpec(this.apiMetaClass, methodName),
-                isRawBody(this.apiMetaClass, methodName),
             );
 
             routeBuilder.addRoute(

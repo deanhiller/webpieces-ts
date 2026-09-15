@@ -63,7 +63,9 @@ pnpm nx run <project>:build                                             # one pr
 > cascade](./docs/architecture/api-first-vs-codegen.md) (one contract, no `server → gen api → gen
 > client` rebuild chain) and [running alongside
 > Express](./docs/architecture/express-coexistence.md) (embed webpieces route-by-route next to your
-> existing framework). See [`docs/ADOPTION.md`](./docs/ADOPTION.md) for the production track record.
+> existing framework). See the [typed HTTP contract guide](./docs/typed-http-contracts.md) for GET,
+> path/query parameters, JSON/form bodies, full status/header/body responses, authentication, and
+> OAuth-shaped migration. See [`docs/ADOPTION.md`](./docs/ADOPTION.md) for the production track record.
 >
 > **The engineering practice, not just the framework:**
 > [`docs/ENGINEERING-PRACTICE.md`](./docs/ENGINEERING-PRACTICE.md) — the org-level conventions
