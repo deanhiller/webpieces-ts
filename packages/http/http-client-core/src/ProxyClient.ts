@@ -14,6 +14,10 @@ import {
     CallRegistry,
     CallDeadline,
     CallContext,
+    DtoValue,
+    RequestStream,
+    ResponseStream,
+    StreamTransportError,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -23,6 +27,17 @@ import { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 import { RequestOutcome } from './RequestOutcome';
 import { ResponseBodyReader } from './ResponseBodyReader';
 import { TranslatedFailure } from './TranslatedFailure';
+import { NdjsonRequestStream } from './NdjsonRequestStream';
+import { SseResponseStream } from './SseResponseStream';
+import { StreamingCapabilityError } from './StreamingCapabilityError';
+import { ByteReadableStream } from './ByteStream';
+
+class OpenedStreamingTransport {
+    constructor(
+        readonly response: Response,
+        readonly upload: NdjsonRequestStream,
+    ) {}
+}
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -185,6 +200,16 @@ export abstract class ProxyClient {
      */
     protected abstract adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error;
 
+    /** Whether fetch can read the response while its streaming request body remains open. */
+    protected abstract supportsConcurrentDuplexFetch(): boolean;
+
+    /** Environment-owned full-duplex transport after the shared filter chain has prepared it. */
+    protected abstract sendStreamingTransport(
+        request: ClientRequest,
+        signal: AbortSignal,
+        body: ByteReadableStream,
+    ): Promise<Response>;
+
     /**
      * Fires before the logical call's attempts, once per RPC — the progress "start marker". Symmetric with
      * {@link onRequestEnd}: every start is followed by exactly one end, on every path, so a listener
@@ -320,6 +345,7 @@ export abstract class ProxyClient {
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.refuseEndpointNoClientCanCall(route);
+        if (route.streaming) return this.makeStreamingRequest(route, args);
         const mapped = HttpContractMapper.toWire(
             route.path,
             route.parameterBindings,
@@ -328,6 +354,141 @@ export abstract class ProxyClient {
         );
         const logValue = mapped.body === undefined ? args : mapped.body;
         return this.execute(route, logValue, () => this.executeCall(route, args));
+    }
+
+    /** Open a typed stream without bypassing the ordinary context/auth/filter request pipeline. */
+    // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
+    private async makeStreamingRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
+        if (!this.supportsConcurrentDuplexFetch()) {
+            throw new StreamingCapabilityError(
+                'browser',
+                'Fetch request streaming is half-duplex and has no protocol-compatible full-duplex fallback.',
+            );
+        }
+        const destination = this.responseStream(args);
+        return this.execute(route, 'stream-open', () =>
+            this.executeStreamingCall(route, destination),
+        );
+    }
+
+    // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
+    private responseStream(args: unknown[]): ResponseStream<DtoValue> {
+        const candidate = args[0];
+        if (args.length !== 1 || typeof candidate !== 'object' || candidate === null) {
+            throw new StreamTransportError(
+                `${this.apiName} streaming methods require exactly one ResponseStream argument.`,
+            );
+        }
+        // webpieces-disable no-any-unknown -- reflected method argument is narrowed by the method checks below
+        const record = candidate as Record<string, unknown>;
+        if (
+            typeof record['event'] !== 'function' ||
+            typeof record['fail'] !== 'function' ||
+            typeof record['complete'] !== 'function' ||
+            typeof record['onCancel'] !== 'function'
+        ) {
+            throw new StreamTransportError(
+                `${this.apiName} streaming method argument does not implement ResponseStream.`,
+            );
+        }
+        return candidate as ResponseStream<DtoValue>;
+    }
+
+    /** One streaming handshake. Subsequent events stay on this established transport. */
+    private async executeStreamingCall(
+        route: RouteMetadata,
+        destination: ResponseStream<DtoValue>,
+    ): Promise<RequestStream<DtoValue>> {
+        this.onRequestStart(route);
+        let response: Response | undefined;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
+        try {
+            const requestStream = await CallRegistry.execute(
+                this.apiClass,
+                route.methodName,
+                (timeoutMs: number) =>
+                    CallDeadline.run(
+                        timeoutMs,
+                        new CallContext(this.apiName, route.methodName),
+                        async (deadlineSignal: AbortSignal) => {
+                            const result = await this.openStreamingTransport(
+                                route,
+                                destination,
+                                deadlineSignal,
+                            );
+                            response = result.response;
+                            return result.upload;
+                        },
+                    ),
+                30_000,
+            );
+            this.onRequestEnd(
+                route,
+                new RequestOutcome(true, response?.status ?? 0, response?.headers),
+            );
+            return requestStream;
+        } catch (err: unknown) {
+            const error = toError(err);
+            this.onRequestEnd(
+                route,
+                new RequestOutcome(false, response?.status ?? 0, response?.headers, error),
+            );
+            throw err;
+        }
+    }
+
+    private async openStreamingTransport(
+        route: RouteMetadata,
+        destination: ResponseStream<DtoValue>,
+        deadlineSignal: AbortSignal,
+    ): Promise<OpenedStreamingTransport> {
+        const metadata = route.streaming;
+        if (!metadata) throw new StreamTransportError('Streaming metadata disappeared.');
+        const request = await this.prepareStreamingRequest(route);
+        const controller = new AbortController();
+        deadlineSignal.addEventListener('abort', (): void => controller.abort(), { once: true });
+        const upload = new NdjsonRequestStream(
+            metadata,
+            // webpieces-disable no-any-unknown -- AbortController accepts a platform-defined cancellation reason
+            (reason?: unknown) => controller.abort(reason),
+        );
+        const response = await this.chain.execute(request, () =>
+            this.sendStreamingOnce(request, controller.signal, upload.body),
+        );
+        if (!response.ok) {
+            await upload.transportFailed(
+                new StreamTransportError(
+                    `Streaming handshake failed with HTTP ${response.status}.`,
+                ),
+            );
+            await this.readResponse(response, route);
+            throw new StreamTransportError('Streaming handshake was rejected.');
+        }
+        const contentType = response.headers.get('content-type') ?? '';
+        if (!contentType.toLowerCase().startsWith('text/event-stream')) {
+            const error = new StreamTransportError(
+                `Streaming response requires text/event-stream, received '${contentType || 'missing'}'.`,
+            );
+            await upload.transportFailed(error);
+            throw error;
+        }
+        void new SseResponseStream()
+            .consume(response, destination, metadata, upload)
+            .catch(() => undefined);
+        return new OpenedStreamingTransport(response, upload);
+    }
+
+    /** Fresh filter-visible request metadata; the live request body is transport-owned. */
+    private async prepareStreamingRequest(route: RouteMetadata): Promise<ClientRequest> {
+        const baseUrl = await this.resolveBaseUrl();
+        const headers = new Map<string, string>();
+        headers.set('Content-Type', 'application/x-ndjson');
+        headers.set('Accept', 'text/event-stream');
+        const context = this.outboundContextHeaders(
+            DestinationTrust.forAuthMode(route.authMeta?.mode),
+        );
+        for (const entry of context.entries()) headers.set(entry[0], entry[1]);
+        return new ClientRequest(route, this.apiName, baseUrl, headers, undefined, undefined);
     }
 
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
@@ -471,6 +632,22 @@ export abstract class ProxyClient {
         try {
             // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
             return await fetch(request.url, options);
+        } catch (err: unknown) {
+            const error = toError(err);
+            throw this.networkRejectClassifier.toNetworkError(error, request.url);
+        }
+    }
+
+    /** Node fetch's streaming upload option. Browser callers are refused before reaching here. */
+    private async sendStreamingOnce(
+        request: ClientRequest,
+        signal: AbortSignal,
+        body: ByteReadableStream,
+    ): Promise<Response> {
+        CallDeadline.throwIfAborted(signal);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- platform rejects are normalized below
+        try {
+            return await this.sendStreamingTransport(request, signal, body);
         } catch (err: unknown) {
             const error = toError(err);
             throw this.networkRejectClassifier.toNetworkError(error, request.url);

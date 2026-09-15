@@ -5,6 +5,7 @@ import { RouteMetadata, toError } from '@webpieces/core-util';
 import { RequestContextHeaders } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { ExpressWrapper } from './ExpressWrapper';
+import { StreamExpressWrapper } from './StreamExpressWrapper';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
 // CORS mount/allow/block lines log under their own name (not [WebpiecesMiddleware]); the backend
@@ -237,5 +238,13 @@ export class WebpiecesMiddleware {
             undefined,
             route,
         );
+    }
+
+    createStreamExpressWrapper(
+        // webpieces-disable no-any-unknown -- stream DTOs are erased at the routing boundary
+        clientMethod: (...args: unknown[]) => Promise<unknown>,
+        route: RouteMetadata,
+    ): StreamExpressWrapper {
+        return new StreamExpressWrapper(clientMethod, route, this.headers);
     }
 }

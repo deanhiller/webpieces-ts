@@ -22,5 +22,5 @@
             }
         }
     },
-    "tags": ["framework:node", "role:lib"]
+    "tags": ["framework:express", "role:lib"]
 }

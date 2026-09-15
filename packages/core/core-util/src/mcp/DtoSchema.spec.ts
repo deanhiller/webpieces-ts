@@ -1,12 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
-import {
-    DtoSchemaBuilder,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
-    WpResponseDto,
-} from './DtoSchema';
+import { DtoSchemaBuilder, WpDto, WpDtoField, WpDtoFieldOptions, WpResponseDto } from './DtoSchema';
 import { getWpMcpTools, WpMcpTool } from './McpMetadata';
 
 @WpDto()
@@ -17,7 +11,18 @@ class AddressDto {
 
 @WpDto()
 class SearchRequest {
-    @WpDtoField(new WpDtoFieldOptions('Words to find', true))
+    @WpDtoField(
+        new WpDtoFieldOptions(
+            'Words to find',
+            true,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            'query',
+        ),
+    )
     query!: string;
 
     @WpDtoField(new WpDtoFieldOptions('Maximum results', false, undefined, true, 1, 20))
@@ -62,7 +67,7 @@ describe('DTO JSON Schema metadata', () => {
             additionalProperties: false,
             required: ['query', 'categories', 'address'],
             properties: {
-                query: { type: 'string', description: 'Words to find' },
+                query: { type: 'string', description: 'Words to find', 'x-mcp-header': 'query' },
                 limit: { type: 'integer', minimum: 1, maximum: 20 },
                 categories: { type: 'array', items: { type: 'string' } },
                 address: {
@@ -118,6 +123,60 @@ describe('DTO JSON Schema metadata', () => {
         }
 
         expect(() => builder.build(MissingArrayItems)).toThrow(/must declare arrayItems/);
-        expect(() => builder.build(ContradictoryField)).toThrow(/numeric constraints.*not a number/);
+        expect(() => builder.build(ContradictoryField)).toThrow(
+            /numeric constraints.*not a number/,
+        );
+
+        @WpDto()
+        class InvalidMcpHeader {
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'Name',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    'bad header',
+                ),
+            )
+            name!: string;
+        }
+
+        expect(() => builder.build(InvalidMcpHeader)).toThrow(/RFC 9110 token/);
+
+        @WpDto()
+        class DuplicateMcpHeader {
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'First',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    'tenant',
+                ),
+            )
+            first!: string;
+
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'Second',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    'TENANT',
+                ),
+            )
+            second!: string;
+        }
+
+        expect(() => builder.build(DuplicateMcpHeader)).toThrow(/duplicates.*case-insensitively/);
     });
 });

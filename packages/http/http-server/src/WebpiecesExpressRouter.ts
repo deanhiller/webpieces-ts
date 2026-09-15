@@ -133,10 +133,12 @@ export class WebpiecesExpressRouter {
             const path = this.expressPath(route);
             // The parser is chosen by the @Endpoint annotation, not the request Content-Type — and
             // so is whether the verbatim bytes survive the parse for an @WpAuthWebhook hook to verify.
-            const wrapper = this.middleware.createExpressWrapper(
-                apiClient.client[route.methodName],
-                route,
-            );
+            const wrapper = route.streaming
+                ? this.middleware.createStreamExpressWrapper(
+                      apiClient.client[route.methodName],
+                      route,
+                  )
+                : this.middleware.createExpressWrapper(apiClient.client[route.methodName], route);
             this.registerHandler(app, route.httpMethod, path, wrapper.execute.bind(wrapper));
             count++;
         }

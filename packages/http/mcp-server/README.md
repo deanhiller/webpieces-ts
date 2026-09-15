@@ -4,8 +4,9 @@ Publishes explicitly annotated Webpieces RPC endpoints as MCP tools. The bridge 
 output JSON Schema from DTO metadata, invokes the normal Webpieces filter/controller path, and turns
 exceptions into safe model-visible MCP results.
 
-`@WpMcpTool` is an opt-in. Existing endpoint authentication remains authoritative on every call.
-The MCP adapter never accepts trusted context values from tool arguments or headers.
+`@WpMcpTool` is an opt-in and every tool must also declare `@WpMcpAuthJwt`. MCP user
+authorization and endpoint transport authentication are deliberately separate. The MCP adapter
+never accepts trusted context values from tool arguments or unverified headers.
 
 ```ts
 @WpDto()
@@ -22,6 +23,7 @@ class FindOrderResponse {
 
 @ApiPath('/orders')
 abstract class OrdersApi {
+    @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint('/find', 'rpc')
     @WpResponseDto(() => FindOrderResponse)
@@ -42,12 +44,49 @@ The `@WpMcpTool.description` becomes the tool description returned by `tools/lis
 response classes generate `inputSchema` and `outputSchema`; `@WpDtoField` supplies property
 descriptions and the facts TypeScript erases, such as optionality and array element types.
 
-Applications construct `WpMcpServer` with their built `ApiFactory`, the API classes they want scanned,
-a paired `McpAccessTokenAuthority`, and their application `JwtHook`. The authority verifies issuer,
-signature/token state, expiry, scopes, the exact resource URI, and current account state on every MCP
-operation. Before every tool call the bridge asks the same application `JwtHook` to mint a distinct,
-short-lived endpoint JWT, then invokes the ordinary `AuthFilter`. Literal MCP-token passthrough is
-rejected, endpoint JWTs are capped at one hour, and MCP access tokens are capped at 30 days.
+Applications supply the endpoint path, explicit bindings, and deployment topology. There is no
+framework-owned `/mcp` path:
+
+```ts
+const mcp = new WpMcpServer(config);
+mcp.bind(expressApp, new McpBindOptions(
+    connectorConfig.endpointPath,
+    [
+        McpApiBinding.local(OrdersApi, apiFactory),
+        McpApiBinding.remote(RemoteOrdersApi, () => remoteOrdersClient),
+    ],
+    McpDeployment.singleProcess(),
+));
+```
+
+The official MCP v2 server and Node adapter own MCP 2026-07-28 JSON-RPC validation, JSON versus
+request-scoped SSE responses, backpressure, cancellation, keepalives, and subscriptions. Webpieces
+owns the Express path, root `RequestContext`, authentication boundary, schema-derived tool registry,
+and dispatch through the normal API proxy.
+
+During a tool invocation, `RequestContext.getTrusted(MCP_INVOCATION_CONTEXT)` exposes the verified
+JSON-RPC ID, tool/user/role facts, the official SDK cancellation `AbortSignal`, and (when the client
+supplied `_meta.progressToken`) a `reportProgress(...)` callback. Progress remains related to that
+one request and causes the official handler to select request-scoped SSE; closing that response
+aborts the same signal. The context key has no HTTP header and is never propagated as caller input.
+
+For a local binding the API method must combine `@WpMcpAuthJwt` with `@WpAuthJwt`. Before every tool
+call the bridge asks the application `JwtHook` to mint a distinct short-lived endpoint JWT and invokes
+`ApiFactory.createApiClient`, preserving `JwtHook`, `LogApiFilter`, and `AuthFilter`. Literal MCP-token
+passthrough is rejected. For a remote binding the endpoint must use `@WpAuthOidc`; the generated Node
+client supplies its service credential and propagates only trusted delegated context established by
+the MCP access-token authority. Neither an external MCP bearer nor a browser session JWT is sent to
+the downstream endpoint.
+
+`McpDeployment.singleProcess()` uses an in-memory invalidation bus and makes that limit explicit.
+Distributed deployments must use `McpDeployment.distributed(sharedBus)`. List responses have a bounded
+TTL, registry metadata contains a surface-derived revision, `toolsChanged()` publishes a
+level-triggered invalidation, and `close()` drains active response streams. A reconnecting client must
+re-listen and refresh its authoritative lists; notifications are not a durable or replayable event log.
+
+The authority verifies issuer, signature/token state, expiry, scopes, the exact resource URI, and
+current account state on every MCP operation. Endpoint JWTs are capped at one hour and MCP access
+tokens at 30 days.
 
 The verifier's `accountValidatedAtEpochSeconds` must represent an authoritative enabled/revoked and
 role/scope read. The bridge enforces a maximum one-hour decision age; per-request reads are preferred so

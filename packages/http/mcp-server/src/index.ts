@@ -10,10 +10,13 @@ export {
 } from './McpAuth';
 export type { McpAccessTokenAuthority, McpEndpointMintRequestFactory } from './McpAuth';
 export { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
-export {
-    McpApiDispatcher,
-    McpDispatchFailure,
-    McpDispatchSuccess,
-} from './McpApiDispatcher';
+export { McpApiBinding } from './McpApiBinding';
+export type { McpBindingTopology } from './McpApiBinding';
+export { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationContext';
+export type { McpProgressReporter } from './McpInvocationContext';
+export { McpBindOptions } from './McpBindOptions';
+export { McpDeployment } from './McpDeployment';
+export type { McpDeploymentMode } from './McpDeployment';
+export { McpApiDispatcher, McpDispatchFailure, McpDispatchSuccess } from './McpApiDispatcher';
 export type { McpDispatchResult } from './McpApiDispatcher';
 export { ModelVisibleToolError, WpMcpServer } from './WpMcpServer';

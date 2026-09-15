@@ -9,9 +9,12 @@ import {
 import { BrowserApiCallContext } from './BrowserApiCallContext';
 import {
     ApiPrototype,
+    ByteReadableStream,
+    ClientRequest,
     ProxyClient,
     RequestOutcome,
     TranslatedFailure,
+    StreamingCapabilityError,
 } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { RequestLifecycleListener } from './RequestLifecycleListener';
@@ -60,6 +63,24 @@ export class BrowserProxyClient extends ProxyClient {
      */
     protected override async resolveBaseUrl(): Promise<string> {
         return (await ClientRegistry.tryResolve(this.config.svcName)) ?? '';
+    }
+
+    /** Browser Fetch request streaming is specified as half-duplex, not concurrent duplex. */
+    protected override supportsConcurrentDuplexFetch(): boolean {
+        return false;
+    }
+
+    protected override sendStreamingTransport(
+        _request: ClientRequest,
+        _signal: AbortSignal,
+        _body: ByteReadableStream,
+    ): Promise<Response> {
+        return Promise.reject(
+            new StreamingCapabilityError(
+                'browser',
+                'Fetch request streaming is half-duplex and has no safe bidirectional fallback.',
+            ),
+        );
     }
 
     /**

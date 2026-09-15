@@ -23,6 +23,8 @@ export class WpDtoFieldOptions {
         public readonly minimum?: number,
         public readonly maximum?: number,
         public readonly enumValues?: readonly [string, ...string[]],
+        /** MCP 2026 SEP-2243 custom-header name mirrored as `Mcp-Param-{name}`. */
+        public readonly mcpHeader?: string,
     ) {}
 }
 
@@ -44,6 +46,8 @@ export class ApiJsonSchema {
     enum?: string[];
     minimum?: number;
     maximum?: number;
+    /** MCP 2026 SEP-2243 schema extension consumed by the official SDK. */
+    declare 'x-mcp-header'?: string;
 
     constructor(type?: 'object' | 'string' | 'number' | 'integer' | 'boolean' | 'array') {
         this.type = type;
@@ -117,7 +121,9 @@ export class DtoSchemaBuilder {
     }
 
     build(dtoClass: DtoClass): ApiJsonSchema {
-        return this.buildAt(dtoClass, new Set<DtoClass>());
+        const schema = this.buildAt(dtoClass, new Set<DtoClass>());
+        this.validateMcpHeaders(schema, new Map<string, string>());
+        return schema;
     }
 
     validate(dtoClass: DtoClass, value: DtoValue): DtoValidationFailure | undefined {
@@ -154,7 +160,8 @@ export class DtoSchemaBuilder {
             dtoClass.prototype,
             field.propertyKey,
         ) as DtoClass | undefined;
-        if (!reflected) throw new Error(`No reflected type for ${dtoClass.name}.${field.propertyKey}.`);
+        if (!reflected)
+            throw new Error(`No reflected type for ${dtoClass.name}.${field.propertyKey}.`);
         const options = field.options;
         this.validateOptions(dtoClass, field, reflected);
         let schema: ApiJsonSchema;
@@ -170,7 +177,9 @@ export class DtoSchemaBuilder {
                 break;
             case 'Array':
                 if (!options.arrayItems) {
-                    throw new Error(`${dtoClass.name}.${field.propertyKey} must declare arrayItems.`);
+                    throw new Error(
+                        `${dtoClass.name}.${field.propertyKey} must declare arrayItems.`,
+                    );
                 }
                 schema = new ApiJsonSchema('array');
                 schema.items = this.itemSchema(options.arrayItems, parents);
@@ -182,6 +191,7 @@ export class DtoSchemaBuilder {
         if (options.minimum !== undefined) schema.minimum = options.minimum;
         if (options.maximum !== undefined) schema.maximum = options.maximum;
         if (options.enumValues) schema.enum = [...options.enumValues];
+        if (options.mcpHeader) schema['x-mcp-header'] = options.mcpHeader;
         return schema;
     }
 
@@ -201,17 +211,44 @@ export class DtoSchemaBuilder {
         ) {
             throw new Error(`${label} declares numeric constraints but is not a number.`);
         }
-        if (options.minimum !== undefined && options.maximum !== undefined && options.minimum > options.maximum) {
+        if (
+            options.minimum !== undefined &&
+            options.maximum !== undefined &&
+            options.minimum > options.maximum
+        ) {
             throw new Error(`${label} minimum cannot exceed maximum.`);
         }
         if (options.enumValues && reflected.name !== 'String') {
             throw new Error(`${label} enumValues require a string field.`);
+        }
+        if (options.mcpHeader !== undefined) {
+            if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(options.mcpHeader)) {
+                throw new Error(`${label} mcpHeader must be an RFC 9110 token.`);
+            }
+            if (!['String', 'Number', 'Boolean'].includes(reflected.name)) {
+                throw new Error(`${label} mcpHeader requires a primitive field.`);
+            }
         }
     }
 
     private itemSchema(item: DtoArrayItem, parents: Set<DtoClass>): ApiJsonSchema {
         if (typeof item !== 'string') return this.buildAt(item, parents);
         return new ApiJsonSchema(item === 'integer' ? 'integer' : item);
+    }
+
+    private validateMcpHeaders(schema: ApiJsonSchema, seen: Map<string, string>): void {
+        const header = schema['x-mcp-header'];
+        if (header) {
+            const key = header.toLowerCase();
+            const prior = seen.get(key);
+            if (prior) {
+                throw new Error(`mcpHeader '${header}' duplicates '${prior}' case-insensitively.`);
+            }
+            seen.set(key, header);
+        }
+        for (const child of Object.values(schema.properties ?? {})) {
+            this.validateMcpHeaders(child, seen);
+        }
     }
 
     private validateAt(
@@ -236,7 +273,12 @@ export class DtoSchemaBuilder {
                 }
                 continue;
             }
-            const failure = this.validateField(dtoClass, field, fieldValue, `${path}.${field.propertyKey}`);
+            const failure = this.validateField(
+                dtoClass,
+                field,
+                fieldValue,
+                `${path}.${field.propertyKey}`,
+            );
             if (failure) return failure;
         }
         return undefined;
@@ -257,9 +299,12 @@ export class DtoSchemaBuilder {
         const expected = reflected?.name;
         if (expected === 'Array') return this.validateArray(field.options, value, path);
         if (expected === 'String') {
-            if (typeof value !== 'string') return new DtoValidationFailure(`${path} must be a string`);
+            if (typeof value !== 'string')
+                return new DtoValidationFailure(`${path} must be a string`);
             if (field.options.enumValues && !field.options.enumValues.includes(value)) {
-                return new DtoValidationFailure(`${path} must be one of: ${field.options.enumValues.join(', ')}`);
+                return new DtoValidationFailure(
+                    `${path} must be one of: ${field.options.enumValues.join(', ')}`,
+                );
             }
             return undefined;
         }
@@ -301,7 +346,10 @@ export class DtoSchemaBuilder {
                 continue;
             }
             const wanted = options.arrayItems === 'integer' ? 'number' : options.arrayItems;
-            if (typeof item !== wanted || (options.arrayItems === 'integer' && !Number.isInteger(item))) {
+            if (
+                typeof item !== wanted ||
+                (options.arrayItems === 'integer' && !Number.isInteger(item))
+            ) {
                 return new DtoValidationFailure(`${path}[${index}] must be ${options.arrayItems}`);
             }
         }
@@ -316,7 +364,9 @@ export class DtoSchemaBuilder {
 
     private requireDto(dtoClass: DtoClass): void {
         if (!Reflect.getMetadata(DTO_MARKER, dtoClass)) {
-            throw new Error(`${dtoClass.name} must be decorated with @WpDto() for schema generation.`);
+            throw new Error(
+                `${dtoClass.name} must be decorated with @WpDto() for schema generation.`,
+            );
         }
     }
 }
