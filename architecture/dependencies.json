@@ -16,7 +16,14 @@
                 {
                     "name": "getInfo",
                     "path": "/info",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 }
             ]
         },
@@ -28,7 +35,14 @@
                 {
                     "name": "save",
                     "path": "/item",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 }
             ]
         },
@@ -40,27 +54,62 @@
                 {
                     "name": "userOp",
                     "path": "/user",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 },
                 {
                     "name": "adminOp",
                     "path": "/admin",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 },
                 {
                     "name": "orgOp",
                     "path": "/org",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 },
                 {
                     "name": "internalOp",
                     "path": "/internal",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 },
                 {
                     "name": "serviceOp",
                     "path": "/service",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 }
             ]
         },
@@ -72,7 +121,14 @@
                 {
                     "name": "fetchValue",
                     "path": "/fetchValue",
-                    "kind": "rpc"
+                    "kind": "rpc",
+                    "httpMethod": "POST",
+                    "parameters": [
+                        {
+                            "index": 0,
+                            "source": "body"
+                        }
+                    ]
                 }
             ]
         }
