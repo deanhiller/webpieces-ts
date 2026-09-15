@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
     gitHead: null as string | null,
     gitIsDir: true,
     execBranchCalls: 0,
+    revListCalls: 0,
 }));
 
 vi.mock('fs', () => ({
@@ -56,7 +57,10 @@ vi.mock('child_process', () => ({
             return `${state.branch}\n`;
         }
         if (cmd.includes('status --porcelain')) return state.porcelain;
-        if (cmd.includes('rev-list')) return '3\n';
+        if (cmd.includes('rev-list')) {
+            state.revListCalls += 1;
+            return '3\n';
+        }
         return '';
     },
     spawnSync: (): { status: number } => ({ status: state.ancestorRc }),
@@ -101,6 +105,7 @@ function ctx(relativePath: string = 'src/a.ts'): FileContext {
 function rule(): ReadStaleGuardRule {
     const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
+    cfg.maxCommitsBehind = 5;
     return new ReadStaleGuardRule(cfg);
 }
 
@@ -109,6 +114,7 @@ function rule(): ReadStaleGuardRule {
 function status(over: Partial<MainSyncStatus> = {}): MainSyncStatus {
     const base = new MainSyncStatus('main', false, '', true, 'fork', 'origin-sha', 'head', false, [], 'ts');
     base.localMain = 'local-sha';
+    base.commitsBehind = 6;
     return Object.assign(base, over);
 }
 
@@ -123,7 +129,34 @@ function reset(): void {
     state.gitHead = null;
     state.gitIsDir = true;
     state.execBranchCalls = 0;
+    state.revListCalls = 0;
 }
+
+describe('read-stale-guard — cached commit threshold', () => {
+    beforeEach(reset);
+
+    it('allows through five commits behind and blocks at six', () => {
+        for (const commitsBehind of [0, 1, 5]) {
+            state.status = status({ commitsBehind });
+            expect(rule().check(ctx()).length).toBe(0);
+        }
+        state.status = status({ commitsBehind: 6 });
+        expect(rule().check(ctx()).length).toBe(1);
+    });
+
+    it('lets an explicit zero restore strict blocking at one commit behind', () => {
+        const cfg = new BranchStateGuardConfig();
+        cfg.mode = 'ON';
+        cfg.maxCommitsBehind = 0;
+        state.status = status({ commitsBehind: 1 });
+        expect(new ReadStaleGuardRule(cfg).check(ctx()).length).toBe(1);
+    });
+
+    it('fails open when an older cache has no commit distance', () => {
+        state.status = status({ commitsBehind: null });
+        expect(rule().check(ctx()).length).toBe(0);
+    });
+});
 
 // ---- the per-read cost path ---------------------------------------------------------------------
 // This runs on EVERY read, so it must not spawn a git process on the common (feature-branch) case.
@@ -188,7 +221,8 @@ describe('read-stale-guard — blocking', () => {
     });
 
     it('reports how far behind main is', () => {
-        expect(rule().check(ctx())[0].message).toContain('3 commit(s) behind');
+        expect(rule().check(ctx())[0].message).toContain('6 commit(s) behind');
+        expect(state.revListCalls).toBe(0);
     });
 
 });

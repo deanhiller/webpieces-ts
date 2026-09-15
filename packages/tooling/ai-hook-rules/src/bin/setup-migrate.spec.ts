@@ -136,6 +136,7 @@ describe('migrate', () => {
             mode: 'ON',
             branchNamingConvention: '{whoami}/{feature}',
             hangTimeoutMinutes: 9,
+            maxCommitsBehind: 5,
             turnOffRuleUntilEpoch: 0,
             turnOffRuleWhileOnBranch: null,
         });

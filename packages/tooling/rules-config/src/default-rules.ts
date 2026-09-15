@@ -109,7 +109,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     //
     // Nothing is armed behind anyone's back either way: every built-in requires an explicit entry (the
     // config-sync check blocks until one exists), so a consumer states this mode themselves on upgrade.
-    'branch-state-guard': { mode: 'ON' },
+    'branch-state-guard': { mode: 'ON', maxCommitsBehind: 5 },
 };
 
 export const defaultRulesDir: readonly string[] = [];

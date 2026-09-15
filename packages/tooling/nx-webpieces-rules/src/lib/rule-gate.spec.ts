@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { allRuleNames, sectionForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 import { RuleGate } from './rule-gate';
 
 // A webpieces.config.json that VALIDATES: every built-in present in its correct section (all OFF),
@@ -14,9 +14,9 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
     const hookGuards: Record<string, unknown> = {};
     for (const name of allRuleNames()) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
-        const entry: Record<string, unknown> = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
-        // Schema-required on this guard only (see rule-configs.ts) — unattended deletion is never a default.
-        if (name === 'branch-creation-guard') entry['autoReapMergedBranches'] = false;
+        const entry: Record<string, unknown> = {
+            ...seedEntryForRule(name), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
+        };
         const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
         // Overrides are merged OVER the base entry so a test that only tweaks mode/epoch still carries the
         // required turnOffRuleWhileOnBranch (and autoReapMergedBranches) from the base.

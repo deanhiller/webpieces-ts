@@ -326,7 +326,7 @@ export type {
     StructuralMode,
     ValidateTsMode,
 } from './rule-configs';
-export { BranchStateGuardConfig } from './main-sync-guard-configs';
+export { BranchStateGuardConfig, DEFAULT_MAX_COMMITS_BEHIND } from './main-sync-guard-configs';
 export {
     GateDefinition,
     PrGateConfig,

@@ -13,10 +13,10 @@ import { allRuleNames, retiredRuleFor, sectionForRule, seedEntryForRule } from '
  *
  *  1. `checklists` is dropped. Its `doc` paths are validated REPO-RELATIVE and point at
  *     `.claude/review/*.md`, which exist here and not in a temp clone.
- *  2. Every locally-known rule with no entry is SEEDED. The repo's config is validated by the PUBLISHED
+ *  2. Every locally-known rule is completed from its SEED. The repo's config is validated by the PUBLISHED
  *     validator and therefore lags local source by one release
  *     (`.claude/rules/published-vs-local-source.md`): a rule added in this working tree cannot get a
- *     config entry until its release ships,
+ *     config entry or newly-required field until its release ships,
  *     while the LOCAL validator a spec runs already demands one. Without this, adding any rule turns
  *     these specs red for exactly one release — a failure that says nothing about the code under test.
  *  3. Every RETIRED rule entry is dropped — the same one-release lag pointing the other way. When a rule
@@ -28,7 +28,7 @@ import { allRuleNames, retiredRuleFor, sectionForRule, seedEntryForRule } from '
  * `shim-testkit.ts`).
  */
 export class RepoConfigFixture {
-    /** The repo's config as a mutable object, checklists dropped and missing rules seeded. */
+    /** The repo's config as a mutable object, checklists dropped and local seed fields completed. */
     // webpieces-disable no-any-unknown -- the repo's own config document, opaque until a spec edits it
     load(): Record<string, unknown> {
         const source = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'webpieces.config.json');
@@ -39,7 +39,7 @@ export class RepoConfigFixture {
         delete commands['pr-gate']['checklists'];
         delete commands['pr-gate']['checklistsWhy'];
         this.dropRetiredRules(config);
-        this.seedMissingRules(config);
+        this.completeRulesFromSeed(config);
         return config;
     }
 
@@ -63,14 +63,17 @@ export class RepoConfigFixture {
     }
 
     // webpieces-disable no-any-unknown -- see load()
-    private seedMissingRules(config: Record<string, unknown>): void {
+    private completeRulesFromSeed(config: Record<string, unknown>): void {
         // webpieces-disable no-any-unknown -- narrowing the two rule sections
         const rules = config['rules'] as Record<string, unknown>;
         // webpieces-disable no-any-unknown -- narrowing the two rule sections
         const guards = config['hookGuards'] as Record<string, unknown>;
         for (const name of allRuleNames()) {
             const section = sectionForRule(name) === 'hookGuards' ? guards : rules;
-            if (!(name in section)) section[name] = seedEntryForRule(name);
+            const seed = seedEntryForRule(name);
+            // webpieces-disable no-any-unknown -- one rule's opaque config entry, merged over its typed seed
+            const existing = section[name] as Record<string, unknown> | undefined;
+            section[name] = existing === undefined ? seed : { ...seed, ...existing };
         }
     }
 }

@@ -62,6 +62,7 @@ function ctx(command: string): BashContext {
 function rule(): StaleMainBashGuardRule {
     const cfg = new BranchStateGuardConfig();
     cfg.mode = 'ON';
+    cfg.maxCommitsBehind = 5;
     return new StaleMainBashGuardRule(cfg);
 }
 
@@ -69,6 +70,7 @@ function rule(): StaleMainBashGuardRule {
 function staleMainStatus(over: Partial<MainSyncStatus> = {}): MainSyncStatus {
     const base = new MainSyncStatus('main', false, '', true, 'fork', 'origin-sha', 'head', false, [], 'ts');
     base.localMain = 'local-sha';
+    base.commitsBehind = 6;
     return Object.assign(base, over);
 }
 
@@ -93,6 +95,28 @@ beforeEach(() => {
 // The incident: main 18 commits behind, Read blocked as designed, and the agent then ls/grep/cat-ed
 // the same stale tree all session because nothing looked at Bash.
 describe('stale-main-bash-guard — blocks content reads of the stale tree', () => {
+    it('allows through five cached commits behind and blocks at six', () => {
+        for (const commitsBehind of [0, 1, 5]) {
+            state.status = staleMainStatus({ commitsBehind });
+            expect(blocked('cat src/app.ts')).toBe(false);
+        }
+        state.status = staleMainStatus({ commitsBehind: 6 });
+        expect(blocked('cat src/app.ts')).toBe(true);
+    });
+
+    it('lets an explicit zero restore strict blocking at one commit behind', () => {
+        const cfg = new BranchStateGuardConfig();
+        cfg.mode = 'ON';
+        cfg.maxCommitsBehind = 0;
+        state.status = staleMainStatus({ commitsBehind: 1 });
+        expect(new StaleMainBashGuardRule(cfg).check(ctx('cat src/app.ts')).length).toBe(1);
+    });
+
+    it('fails open when an older cache has no commit distance', () => {
+        state.status = staleMainStatus({ commitsBehind: null });
+        expect(blocked('cat src/app.ts')).toBe(false);
+    });
+
     it('blocks the exact commands from the incident', () => {
         expect(blocked('ls .github/workflows/')).toBe(true);
         expect(blocked('cat .github/workflows/promote-to-prod.yml')).toBe(true);
@@ -132,9 +156,9 @@ describe('stale-main-bash-guard — blocks content reads of the stale tree', () 
      */
     it('names the staleness as the finding, and the cure is a new branch', () => {
         const message = rule().check(ctx('cat src/app.ts'))[0].message;
-        expect(message).toContain('local `main` is BEHIND origin/main');
+        expect(message).toContain('local `main` is 6 commits behind origin/main');
+        expect(message).toContain('branch-state-guard.maxCommitsBehind=5');
         expect(message).toContain('git checkout -b <new-branch> origin/main');
-        expect(message).not.toContain('commit(s) behind');
     });
 
     /*
@@ -260,7 +284,7 @@ describe('stale-main-bash-guard — the cure may be composed with the work, but 
     it('does not accept a bare fetch as the cure — it advances nothing local', () => {
         expect(blocked('git fetch origin main && cat src/app.ts')).toBe(true);
         const message = rule().check(ctx('git fetch origin main && cat src/app.ts'))[0].message;
-        expect(message).toContain('local `main` is BEHIND origin/main');
+        expect(message).toContain('local `main` is 6 commits behind origin/main');
         expect(message).not.toContain('Your cure is joined with');
     });
 

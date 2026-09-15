@@ -130,6 +130,7 @@ describe('main-sync status IO', () => {
         expect(read?.hasForkPoint).toBe(true);
         expect(read?.branch).toBe('dean/x');
         expect(read?.branchAlreadyMerged).toBe(false);
+        expect(read?.commitsBehind).toBeNull();
     });
 
     it('round-trips branchAlreadyMerged + mergedPr', () => {
@@ -282,6 +283,18 @@ describe('computeMainSyncStatus (integration)', () => {
         const status = computeMainSyncStatus(work);
         if (prev === undefined) delete process.env['GIT_BRANCH']; else process.env['GIT_BRANCH'] = prev;
         expect(status.branch).toBe('feature');
+    });
+
+    it('computes commit distance in the slow status refresh', () => {
+        stageRepo(work, ['other.txt'], ['shared.txt']);
+        git(work, 'checkout -q --detach refs/heads/main');
+        fs.writeFileSync(path.join(work, 'remote-only.txt'), 'upstream\n');
+        git(work, 'add remote-only.txt');
+        git(work, 'commit -q -m upstream');
+        git(work, 'update-ref refs/remotes/origin/main HEAD');
+        git(work, 'checkout -q feature');
+
+        expect(computeMainSyncStatus(work).commitsBehind).toBe(1);
     });
 
     it('flags conflict=true when main and the branch touched the same file', () => {

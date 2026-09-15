@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { MainSyncStatusService } from './main-sync-status';
+import { MAIN_SYNC_STATUS_VERSION } from './main-sync-file';
 
 /**
  * The refresher is single-flight across the whole repo — one `.git`, one `origin/main`, one lock — but
@@ -93,7 +94,7 @@ describe('computeAllMainSyncStatuses — every worktree in one map', () => {
         // their own HEADs, so their featureHeads are recorded rather than shared.
         expect(file.branches['deanhiller/a']?.featureHead).not.toBe('');
         expect(file.branches['deanhiller/b']?.featureHead).not.toBe('');
-        expect(file.version).toBe(2);
+        expect(file.version).toBe(MAIN_SYNC_STATUS_VERSION);
     });
 
     // TEST 6: read-stale-guard's state A looks itself up under 'main'. With nothing checked out on

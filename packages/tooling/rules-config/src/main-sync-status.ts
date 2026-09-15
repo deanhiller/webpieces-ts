@@ -328,6 +328,7 @@ export class MainSyncStatusService {
             status.mergedPr = mergedPr;
             status.openPr = openPr;
             status.localMain = localMain;
+            status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
             return status;
         }
 
@@ -336,6 +337,7 @@ export class MainSyncStatusService {
             const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
             noFork.openPr = openPr;
             noFork.localMain = localMain;
+            noFork.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.out);
             return noFork;
         }
 
@@ -357,6 +359,7 @@ export class MainSyncStatusService {
         );
         status.openPr = openPr;
         status.localMain = localMain;
+        status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.out);
         return status;
     }
 
@@ -395,6 +398,7 @@ export class MainSyncStatusService {
                 branch, false, '', true, originMain.out, originMain.out, featureHead.out, false, [], new Date().toISOString(),
             );
             status.localMain = this.localMainHash(repoRoot);
+            status.commitsBehind = 0;
             this.writeMainSyncStatus(repoRoot, status);
         } catch (err: unknown) {
             const error = toError(err);
@@ -469,6 +473,14 @@ export class MainSyncStatusService {
         return result.ok ? result.out : '';
     }
 
+    // Slow-path only: the detached refresher calls this after fetching. Guards never count commits.
+    private commitDistance(repoRoot: string, localMain: string, originMain: string): number | null {
+        if (localMain === '' || originMain === '') return null;
+        const result = this.capture(repoRoot, 'git', ['rev-list', '--count', `${localMain}..${originMain}`]);
+        if (!result.ok || !/^\d+$/.test(result.out)) return null;
+        return Number(result.out);
+    }
+
     private changedFiles(repoRoot: string, base: string, head: string): string[] {
         const result = this.capture(repoRoot, 'git', ['diff', '--name-only', base, head]);
         if (!result.ok || result.out === '') return [];
@@ -526,6 +538,7 @@ export class MainSyncStatusService {
             originMain.ok ? originMain.out : '', localMain, false, [], new Date().toISOString(),
         );
         status.localMain = localMain;
+        status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
         return status;
     }
 

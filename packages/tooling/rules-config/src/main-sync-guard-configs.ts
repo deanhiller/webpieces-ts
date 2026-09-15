@@ -1,6 +1,8 @@
 import { FieldDef, SchemaShape } from './field-def';
 import { BaseRuleConfig, BASE_RULE_SCHEMA, OnOffMode, ON_OFF_MODES } from './rule-configs';
 
+export const DEFAULT_MAX_COMMITS_BEHIND = 5;
+
 /**
  * `branch-state-guard` — ONE key, ONE policy: *may I work here, and is what I read current?*
  *
@@ -37,11 +39,15 @@ export class BranchStateGuardConfig extends BaseRuleConfig {
     // Tunes the DETACHED refresher's stale-lock reclaim window (main-sync.lock.json). One value for one
     // refresher writing one cache — which is what it always physically was.
     hangTimeoutMinutes?: number;
+    // Maximum cached commit distance tolerated on local main. Required so every repo consciously
+    // carries the policy; 5 means 0..5 are allowed and stale-main blocks starting at 6.
+    maxCommitsBehind!: number;
 
     static readonly SCHEMA: SchemaShape<BranchStateGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         branchNamingConvention: FieldDef.optional('string'),
         hangTimeoutMinutes: FieldDef.optional('number'),
+        maxCommitsBehind: new FieldDef('number'),
         ...BASE_RULE_SCHEMA,
     };
 }
