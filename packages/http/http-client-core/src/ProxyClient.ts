@@ -1,11 +1,6 @@
 import {
     isApiPath,
-    getApiPath,
     getEndpoints,
-    getAuthMeta,
-    isFormPost,
-    isRawBody,
-    getMaskSpec,
     AuthMeta,
     DestinationTrust,
     RouteMetadata,
@@ -13,6 +8,8 @@ import {
     ApiMethodInfo,
     toError,
     NetworkRejectClassifier,
+    HttpContractMapper,
+    RouteMetadataFactory,
     FilterChain,
     CallRegistry,
     CallDeadline,
@@ -234,34 +231,19 @@ export abstract class ProxyClient {
             throw new Error(`Class ${className} must be decorated with @ApiPath()`);
         }
 
-        const basePath = getApiPath(apiPrototype)!;
         const endpoints = getEndpoints(apiPrototype) || {};
 
         // apiName as the class name so client logs read "SaveApi.save", not "undefined.save"
         this.apiName = apiPrototype.name || 'UnknownApi';
 
         this.routeMap = new Map<string, RouteMetadata>();
-        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-            const fullPath = basePath + endpointPath;
-            // Capture the endpoint's auth mode so the client can mint delivery auth per
-            // @WpAuthOidc / @WpAuthSharedSecret, exactly as the server verifies it.
-            const authMeta = getAuthMeta(apiPrototype, methodName);
+        for (const methodName of Object.keys(endpoints)) {
+            // One shared factory joins and validates method/path/query/body metadata for every
+            // transport, rather than letting each generated client reinterpret the decorators.
+            const route = RouteMetadataFactory.create(apiPrototype, methodName);
+            const authMeta = route.authMeta;
             this.assertEndpointSupported(authMeta, methodName);
-            const formPost = isFormPost(apiPrototype, methodName);
-            this.routeMap.set(
-                methodName,
-                new RouteMetadata(
-                    'POST',
-                    fullPath,
-                    methodName,
-                    this.apiName,
-                    authMeta,
-                    undefined,
-                    formPost,
-                    getMaskSpec(apiPrototype, methodName),
-                    isRawBody(apiPrototype, methodName),
-                ),
-            );
+            this.routeMap.set(methodName, route);
         }
 
         // APP filters first (highest priority OUTERMOST, matching the server's FilterMatcher), then
@@ -317,16 +299,6 @@ export abstract class ProxyClient {
      * @throws Error naming the endpoint, what it declared, and who its real caller is.
      */
     private refuseEndpointNoClientCanCall(route: RouteMetadata): void {
-        // formPost exists ONLY for EXTERNAL inbound webhooks (e.g. Twilio is the caller). This proxy
-        // JSON.stringifies the body, so calling one would silently send a wrong-encoded body.
-        if (route.formPost) {
-            throw new Error(
-                `${this.apiName}.${route.methodName} is @Endpoint(..., { formPost: true }) — the ` +
-                    `webpieces client does not support calling form-encoded endpoints yet. formPost is ` +
-                    `for EXTERNAL inbound webhooks (e.g. Twilio) only. If this endpoint needs a ` +
-                    `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
-            );
-        }
         const authMode = route.authMeta?.mode;
         // @WpAuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
         // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
@@ -348,12 +320,18 @@ export abstract class ProxyClient {
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.refuseEndpointNoClientCanCall(route);
-        const requestDto = args[0];
-        return this.execute(route, requestDto, () => this.executeCall(route, requestDto));
+        const mapped = HttpContractMapper.toWire(
+            route.path,
+            route.parameterBindings,
+            route.bodyParameterIndex,
+            args,
+        );
+        const logValue = mapped.body === undefined ? args : mapped.body;
+        return this.execute(route, logValue, () => this.executeCall(route, args));
     }
 
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
-    private async executeCall(route: RouteMetadata, requestDto: unknown): Promise<unknown> {
+    private async executeCall(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.onRequestStart(route);
         let response: Response | undefined;
         // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
@@ -370,7 +348,7 @@ export abstract class ProxyClient {
                         timeoutMs,
                         new CallContext(this.apiName, route.methodName),
                         async (signal: AbortSignal) => {
-                            const request = await this.prepareRequest(route, requestDto);
+                            const request = await this.prepareRequest(route, args);
                             CallDeadline.throwIfAborted(signal);
                             const received = await this.chain.execute(request, () =>
                                 this.sendOnce(request, signal),
@@ -400,12 +378,16 @@ export abstract class ProxyClient {
 
     /** Fresh mutable request for every attempt, including URL, headers, auth and body. */
     // webpieces-disable no-any-unknown -- request DTO is erased at the proxy boundary
-    private async prepareRequest(
-        route: RouteMetadata,
-        requestDto: unknown,
-    ): Promise<ClientRequest> {
+    private async prepareRequest(route: RouteMetadata, args: unknown[]): Promise<ClientRequest> {
         const baseUrl = await this.resolveBaseUrl();
-        const headers = new Map<string, string>([['Content-Type', 'application/json']]);
+        const mapped = HttpContractMapper.toWire(
+            route.path,
+            route.parameterBindings,
+            route.bodyParameterIndex,
+            args,
+        );
+        const headers = new Map<string, string>();
+        const body = this.serializeBody(route, mapped.body, headers);
         const context = this.outboundContextHeaders(
             DestinationTrust.forAuthMode(route.authMeta?.mode),
         );
@@ -415,9 +397,48 @@ export abstract class ProxyClient {
             this.apiName,
             baseUrl,
             headers,
-            JSON.stringify(requestDto),
-            requestDto,
+            body,
+            mapped.body,
+            mapped.path,
         );
+    }
+
+    /** Serialize exactly the encoding the endpoint declared; GET is always bodyless. */
+    // webpieces-disable no-any-unknown -- request DTO type is erased at the generated proxy boundary
+    private serializeBody(
+        route: RouteMetadata,
+        requestDto: unknown,
+        headers: Map<string, string>,
+    ): string | undefined {
+        if (route.httpMethod === 'GET' || requestDto === undefined) return undefined;
+        if (route.formPost) {
+            headers.set('Content-Type', 'application/x-www-form-urlencoded');
+            return this.serializeForm(requestDto, route);
+        }
+        headers.set('Content-Type', 'application/json');
+        return JSON.stringify(requestDto);
+    }
+
+    /** Flat form DTO -> deterministic urlencoded bytes, repeating array-valued fields. */
+    // webpieces-disable no-any-unknown -- form DTO fields are contract-owned and heterogeneous
+    private serializeForm(requestDto: unknown, route: RouteMetadata): string {
+        if (requestDto === null || typeof requestDto !== 'object' || Array.isArray(requestDto)) {
+            throw new Error(
+                `${this.apiName}.${route.methodName} declares formPost:true, so its body must be a flat object.`,
+            );
+        }
+        const params = new URLSearchParams();
+        // webpieces-disable no-any-unknown -- checked object is narrowed to its contract-owned field bag
+        for (const key of Object.keys(requestDto as Record<string, unknown>).sort()) {
+            // webpieces-disable no-any-unknown -- checked object is narrowed to its contract-owned field bag
+            const value = (requestDto as Record<string, unknown>)[key];
+            if (value === undefined || value === null) continue;
+            const values = Array.isArray(value) ? value : [value];
+            for (const item of values) {
+                if (item !== undefined && item !== null) params.append(key, String(item));
+            }
+        }
+        return params.toString();
     }
 
     /**
@@ -437,7 +458,10 @@ export abstract class ProxyClient {
             method: request.route.httpMethod,
             signal,
             headers: request.headersAsRecord(),
-            redirect: request.followRedirects ? 'follow' : 'manual',
+            redirect:
+                request.route.responseType === 'full' || !request.followRedirects
+                    ? 'manual'
+                    : 'follow',
         };
         if (request.body !== undefined) {
             options.body = request.body;
@@ -457,6 +481,12 @@ export abstract class ProxyClient {
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
     private async readResponse(response: Response, route: RouteMetadata): Promise<unknown> {
         const callId = `${this.apiName}.${route.methodName}`;
+        if (route.responseType === 'full') {
+            return this.responseDtoFactory.fromFetch(
+                response,
+                await this.readFullResponseBody(response),
+            );
+        }
         // 266 is protocol success, but its body represents an expected user exception.
         if (response.ok && response.status !== 266) {
             if (!this.bodyReader.isJson(response)) {
@@ -471,5 +501,16 @@ export abstract class ProxyClient {
             this.responseDtoFactory.fromFetch(response, protocolError),
         );
         throw this.adaptDownstreamFailure(translated, callId);
+    }
+
+    /** Preserve empty, JSON, and protocol text bodies for caller-owned full responses. */
+    // webpieces-disable no-any-unknown -- a full response deliberately preserves the caller-owned body
+    private async readFullResponseBody(response: Response): Promise<unknown> {
+        if (response.status === 204 || response.status === 304) return undefined;
+        const text = await response.text();
+        if (text === '') return undefined;
+        if (!this.bodyReader.isJson(response)) return text;
+        // webpieces-disable no-any-unknown -- parsed JSON is returned untouched to the typed contract caller
+        return JSON.parse(text) as unknown;
     }
 }

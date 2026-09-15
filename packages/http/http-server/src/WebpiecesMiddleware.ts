@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { provideFrameworkSingleton, WebpiecesConfig } from '@webpieces/http-routing';
-import { toError } from '@webpieces/core-util';
+import { RouteMetadata, toError } from '@webpieces/core-util';
 import { RequestContextHeaders } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { ExpressWrapper } from './ExpressWrapper';
@@ -225,11 +225,17 @@ export class WebpiecesMiddleware {
      */
     createExpressWrapper(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
-        clientMethod: (requestDto: unknown) => Promise<unknown>,
-        path: string,
-        formPost: boolean = false,
-        rawBody: boolean = false,
+        clientMethod: (...args: unknown[]) => Promise<unknown>,
+        route: RouteMetadata,
     ): ExpressWrapper {
-        return new ExpressWrapper(clientMethod, path, this.headers, formPost, rawBody);
+        return new ExpressWrapper(
+            clientMethod,
+            route.path,
+            this.headers,
+            route.formPost,
+            route.rawBody,
+            undefined,
+            route,
+        );
     }
 }

@@ -17,6 +17,8 @@ import { classDecorators, decoratorName } from '../di-graph/bindings';
 import {
     ApiClassInfo,
     ApiMethodMeta,
+    ApiParameterMeta,
+    ContractHttpMethod,
     ApiTransport,
     EmptiedApiContract,
     EndpointKind,
@@ -97,7 +99,8 @@ export function stringConstantsOf(sourceFile: ts.SourceFile): ModuleStringConsta
 export function stringValueOf(expr: ts.Expression | undefined): string | null {
     if (expr === undefined) return null;
     if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return expr.text;
-    if (ts.isAsExpression(expr) || ts.isParenthesizedExpression(expr)) return stringValueOf(expr.expression);
+    if (ts.isAsExpression(expr) || ts.isParenthesizedExpression(expr))
+        return stringValueOf(expr.expression);
     return null;
 }
 
@@ -156,13 +159,23 @@ export class DecoratorArgDiagnostics {
     constructor(private readonly workspaceRoot: string) {}
 
     /** Record `argument` (as written) as unresolvable at `node`'s location. */
-    record(api: string, decorator: string, method: string | null, argument: string, node: ts.Node): void {
-        this.found.push(new NonLiteralDecoratorArg(api, decorator, method, argument, this.locate(node)));
+    record(
+        api: string,
+        decorator: string,
+        method: string | null,
+        argument: string,
+        node: ts.Node,
+    ): void {
+        this.found.push(
+            new NonLiteralDecoratorArg(api, decorator, method, argument, this.locate(node)),
+        );
     }
 
     /** Record an `@Endpoint` whose path argument is unreadable — fatal, see UnresolvedEndpointPathError. */
     recordUnresolvedPath(api: string, method: string, argument: string, node: ts.Node): void {
-        this.unresolvedPaths.push(new UnresolvedEndpointPath(api, method, argument, this.locate(node)));
+        this.unresolvedPaths.push(
+            new UnresolvedEndpointPath(api, method, argument, this.locate(node)),
+        );
     }
 
     /** Record a class that declared `declared` `@Endpoint` methods and kept none of them. */
@@ -172,7 +185,9 @@ export class DecoratorArgDiagnostics {
 
     /** Record an `external` `@Endpoint` whose caller is unreadable — fatal, see UndeclaredExternalCallerError. */
     recordUndeclaredCaller(api: string, method: string, argument: string, node: ts.Node): void {
-        this.undeclaredCallers.push(new UndeclaredExternalCaller(api, method, argument, this.locate(node)));
+        this.undeclaredCallers.push(
+            new UndeclaredExternalCaller(api, method, argument, this.locate(node)),
+        );
     }
 
     all(): NonLiteralDecoratorArg[] {
@@ -268,8 +283,29 @@ export function endpointMethodsOf(
             diagnostics.recordUnresolvedPath(api, name, pathArg.unresolvedName, endpoint);
         }
         const kind = kindArg.value;
-        if (pathArg.value === null || kind === null || !ENDPOINT_KINDS.includes(kind as EndpointKind)) continue;
-        const method: ApiMethodMeta = { name, path: pathArg.value, kind: kind as EndpointKind };
+        if (
+            pathArg.value === null ||
+            kind === null ||
+            !ENDPOINT_KINDS.includes(kind as EndpointKind)
+        )
+            continue;
+        const httpMethod = httpMethodOf(args[2], constants, diagnostics, api, name, endpoint);
+        const method: ApiMethodMeta = {
+            name,
+            path: pathArg.value,
+            kind: kind as EndpointKind,
+            httpMethod,
+        };
+        const parameters = httpParametersOf(
+            member,
+            httpMethod,
+            constants,
+            diagnostics,
+            api,
+            name,
+        );
+        if (parameters.length > 0) method.parameters = parameters;
+        if (endpointResponseTypeOf(args[2], constants) === 'full') method.responseType = 'full';
         // Only a queued or scheduled endpoint HAS a queue. Naming one for a synchronous rpc invited a
         // tool to read `methods.map(m => m.queueName)` as a provisioning list and create queues that
         // nothing will ever deliver to.
@@ -282,7 +318,8 @@ export function endpointMethodsOf(
         if (method.kind === 'external') {
             const caller = externalCallerOf(args[2], constants);
             if (caller.declaration !== null) method.caller = caller.declaration;
-            else if (diagnostics !== null) diagnostics.recordUndeclaredCaller(api, name, caller.problem!, endpoint);
+            else if (diagnostics !== null)
+                diagnostics.recordUndeclaredCaller(api, name, caller.problem!, endpoint);
         }
         methods.push(method);
     }
@@ -292,6 +329,63 @@ export function endpointMethodsOf(
         diagnostics.recordEmptiedContract(api, declared, cls);
     }
     return methods;
+}
+
+/** `@Endpoint(..., { httpMethod: 'GET' })`, defaulting to the runtime's POST default. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function httpMethodOf(
+    options: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    method: string,
+    node: ts.Node,
+): ContractHttpMethod {
+    if (options === undefined || !ts.isObjectLiteralExpression(options)) return 'POST';
+    const declared = objectPropertyValue(options, 'httpMethod', constants);
+    reportUnresolved(diagnostics, api, 'Endpoint.httpMethod', method, declared, node);
+    return declared.value === 'GET' ? 'GET' : 'POST';
+}
+
+/** Only the non-default full-response marker needs an architecture field. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function endpointResponseTypeOf(
+    options: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+): 'body' | 'full' {
+    if (options === undefined || !ts.isObjectLiteralExpression(options)) return 'body';
+    return objectPropertyValue(options, 'responseType', constants).value === 'full'
+        ? 'full'
+        : 'body';
+}
+
+/** Explicit `@PathParam` / `@QueryParam` mappings in source declaration order. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function httpParametersOf(
+    member: ts.MethodDeclaration,
+    httpMethod: ContractHttpMethod,
+    constants: ModuleStringConstants,
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    method: string,
+): ApiParameterMeta[] {
+    const parameters: ApiParameterMeta[] = [];
+    member.parameters.forEach((parameter: ts.ParameterDeclaration, index: number) => {
+        let mapped = false;
+        for (const source of ['path', 'query'] as const) {
+            const decoratorNameWanted = source === 'path' ? 'PathParam' : 'QueryParam';
+            const decorator = decoratorOn(parameter, decoratorNameWanted);
+            if (decorator === null) continue;
+            mapped = true;
+            const wireName = decoratorArgValue(decoratorArgs(decorator)[0], constants);
+            reportUnresolved(diagnostics, api, decoratorNameWanted, method, wireName, decorator);
+            if (wireName.value !== null) {
+                parameters.push({ index, source, wireName: wireName.value });
+            }
+        }
+        if (!mapped && httpMethod === 'POST') parameters.push({ index, source: 'body' });
+    });
+    return parameters;
 }
 
 /** Default `callerKind` when an `external` endpoint declares `calledBy` alone — mirrors core-util. */
@@ -347,7 +441,10 @@ export function objectPropertyValue(
 ): DecoratorArgValue {
     for (const property of literal.properties) {
         if (!ts.isPropertyAssignment(property) || property.name === undefined) continue;
-        const key = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : null;
+        const key =
+            ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+                ? property.name.text
+                : null;
         if (key !== name) continue;
         return decoratorArgValue(property.initializer, constants);
     }
@@ -386,7 +483,9 @@ export function reportUnresolved(
 
 /** The arguments of a decorator's call expression, or [] when it is a bare `@Foo` reference. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function decoratorArgs(decorator: ts.Decorator): ts.NodeArray<ts.Expression> | ts.Expression[] {
+export function decoratorArgs(
+    decorator: ts.Decorator,
+): ts.NodeArray<ts.Expression> | ts.Expression[] {
     return ts.isCallExpression(decorator.expression) ? decorator.expression.arguments : [];
 }
 
@@ -395,6 +494,13 @@ export function decoratorArgs(decorator: ts.Decorator): ts.NodeArray<ts.Expressi
 export function memberDecorator(member: ts.ClassElement, name: string): ts.Decorator | null {
     const decorators = ts.getDecorators(member as ts.HasDecorators) ?? [];
     return decorators.find((d: ts.Decorator) => decoratorName(d) === name) ?? null;
+}
+
+/** The named decorator on any decorator-capable AST node (notably a method parameter). */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching memberDecorator
+export function decoratorOn(node: ts.HasDecorators, name: string): ts.Decorator | null {
+    const decorators = ts.getDecorators(node) ?? [];
+    return decorators.find((decorator: ts.Decorator) => decoratorName(decorator) === name) ?? null;
 }
 
 /**
@@ -454,7 +560,9 @@ export function implementedTypeNames(cls: ts.ClassDeclaration): Set<string> {
 
 // webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
 export function isAbstractClass(cls: ts.ClassDeclaration): boolean {
-    return (ts.getModifiers(cls) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.AbstractKeyword);
+    return (ts.getModifiers(cls) ?? []).some(
+        (m: ts.Modifier) => m.kind === ts.SyntaxKind.AbstractKeyword,
+    );
 }
 
 // webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
@@ -498,7 +606,6 @@ export function isTestFile(fileName: string): boolean {
     );
 }
 
-
 /** {api, owner, type:'rpc'|'pubsub'} for an in-repo contract class, else null. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
 export function apiClassInfoFromNode(
@@ -521,7 +628,8 @@ export function apiClassInfoFromNode(
  */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
 export function externalApiInfoFrom(node: ts.Node, project: string): ApiClassInfo | null {
-    const named = ts.isInterfaceDeclaration(node) || (ts.isClassDeclaration(node) && isAbstractClass(node));
+    const named =
+        ts.isInterfaceDeclaration(node) || (ts.isClassDeclaration(node) && isAbstractClass(node));
     if (!named || !node.name || !isExported(node)) return null;
     const api = node.name.text;
     if (!api.endsWith(EXTERNAL_CONTRACT_SUFFIX)) return null;
@@ -547,11 +655,17 @@ export function externalApiInfoFrom(node: ts.Node, project: string): ApiClassInf
  * something false about the architecture.
  */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function externalSystemTagFrom(node: ts.Node, api: string): ExternalSystemDeclaration | null {
+export function externalSystemTagFrom(
+    node: ts.Node,
+    api: string,
+): ExternalSystemDeclaration | null {
     for (const tag of ts.getJSDocTags(node)) {
         if (tag.tagName.text !== EXTERNAL_SYSTEM_TAG) continue;
         const comment = typeof tag.comment === 'string' ? tag.comment : '';
-        const parts = comment.trim().split(/\s+/).filter((part: string) => part !== '');
+        const parts = comment
+            .trim()
+            .split(/\s+/)
+            .filter((part: string) => part !== '');
         if (parts.length === 0) continue;
         const kind = parts[0].toLowerCase();
         if (!isExternalSystemKind(kind)) continue;
@@ -564,7 +678,9 @@ export function externalSystemTagFrom(node: ts.Node, api: string): ExternalSyste
 /** True when the declaration carries an `export` modifier. */
 // webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
 export function isExported(node: ts.InterfaceDeclaration | ts.ClassDeclaration): boolean {
-    return (ts.getModifiers(node) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.ExportKeyword);
+    return (ts.getModifiers(node) ?? []).some(
+        (m: ts.Modifier) => m.kind === ts.SyntaxKind.ExportKeyword,
+    );
 }
 
 // webpieces-disable no-function-outside-class -- recursive fs walker, matching the AST-helper style here

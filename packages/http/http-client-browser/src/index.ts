@@ -62,6 +62,8 @@ export type { ServiceUrlDeriver } from '@webpieces/core-util';
 export {
     ApiPath,
     Endpoint,
+    PathParam,
+    QueryParam,
     WpAuthPublic,
     WpAuthJwt,
     WpAuthOidc,

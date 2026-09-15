@@ -1,5 +1,6 @@
 import { MaskSpec } from './LogFieldMask';
 import { AuthMeta } from './auth-mode';
+import { EndpointResponseType, HttpParameterBinding } from './HttpContract';
 
 /**
  * Route metadata stored per-method at runtime.
@@ -48,6 +49,12 @@ export class RouteMetadata {
         formPost: boolean = false,
         mask?: MaskSpec,
         rawBody: boolean = false,
+        /** Explicit path/query mappings, in API declaration order. */
+        readonly parameterBindings: readonly HttpParameterBinding[] = [],
+        /** The sole unannotated POST parameter, or undefined for a bodyless route. */
+        readonly bodyParameterIndex?: number,
+        /** Whether clients receive only the body or the complete status/header/body response. */
+        readonly responseType: EndpointResponseType = 'body',
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -58,5 +65,8 @@ export class RouteMetadata {
         this.formPost = formPost;
         this.mask = mask;
         this.rawBody = rawBody;
+        this.parameterBindings = parameterBindings;
+        this.bodyParameterIndex = bodyParameterIndex;
+        this.responseType = responseType;
     }
 }

@@ -2,6 +2,8 @@
 export {
     ApiPath,
     Endpoint,
+    PathParam,
+    QueryParam,
     WpAuthPublic,
     WpAuthJwt,
     rolesRequired,
@@ -15,6 +17,7 @@ export {
     getApiPath,
     getEndpoints,
     getEndpointOptions,
+    getHttpParameterDeclarations,
     isFormPost,
     isRawBody,
     isApiPath,
@@ -27,6 +30,8 @@ export {
     getQueueName,
     AuthMeta,
     RouteMetadata,
+    RouteMetadataFactory,
+    HttpContractMapper,
     METADATA_KEYS,
     ValidateImplementation,
     // @DocumentDesign moved to core-util (design-root marker, browser + Node);
@@ -38,6 +43,8 @@ export type {
     AuthMode,
     ApiKind,
     EndpointOptions,
+    ContractHttpMethod,
+    EndpointResponseType,
 } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities

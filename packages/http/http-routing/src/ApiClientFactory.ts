@@ -1,8 +1,9 @@
 import { inject } from 'inversify';
 import {
-    getApiPath,
     getEndpoints,
+    HttpContractMapper,
     RouteMetadata,
+    RouteMetadataFactory,
 } from '@webpieces/core-util';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { MethodMeta } from './MethodMeta';
@@ -24,8 +25,8 @@ function requireActiveContext(routeMeta: RouteMetadata): void {
     }
     throw new Error(
         `${routeMeta.controllerClassName}.${routeMeta.methodName} was called with no active RequestContext. ` +
-        `A server transport must wrap each request in RequestContext.run(...) (WebpiecesMiddleware does). ` +
-        `In a test, wrap the call yourself: await RequestContext.run(async () => api.foo(req));`,
+            `A server transport must wrap each request in RequestContext.run(...) (WebpiecesMiddleware does). ` +
+            `In a test, wrap the call yourself: await RequestContext.run(async () => api.foo(req));`,
     );
 }
 
@@ -66,29 +67,46 @@ export class ApiClientFactory {
      * the proxy's matching method, so no route metadata needs to leave here.
      */
     apiClients(): ApiClient[] {
-        const apis = new Set<ClassType>();
+        const routesByApi = new Map<ClassType, RouteMetadata[]>();
         for (const route of this.routeBuilder.getRoutes()) {
-            apis.add(route.definition.apiClass as ClassType);
+            const api = route.definition.apiClass as ClassType;
+            const routes = routesByApi.get(api) ?? [];
+            routes.push(route.definition.routeMeta);
+            routesByApi.set(api, routes);
         }
         // apiClients() just loops createApiClient — the EXACT method tests call — so the platform
         // (HTTP) and tests (in-process) bind the identical proxy, 1-to-1.
-        return [...apis].map((api: ClassType) => {
-            // webpieces-disable no-any-unknown -- the registered api is an unconstrained ClassType
-            const client = this.createApiClient<ApiClientProxy>(api as any);
-            return new ApiClient(api, client);
-        });
+        const clients: ApiClient[] = [];
+        for (const entry of routesByApi.entries()) {
+            const api = entry[0];
+            const routes = entry[1];
+            // Build only the routes that were actually registered. A @WpAuthLocalOnly method is
+            // deliberately absent off-local and must not make mounting the rest of its API fail.
+            const client = this.buildProxy(api, routes);
+            clients.push(new ApiClient(api, client, routes));
+        }
+        return clients;
     }
 
     /** Build the proxy record (method name → invoker) from the API prototype's decorators. */
-    // webpieces-disable no-any-unknown -- accepts any ClassType / abstract-constructor API prototype
-    private buildProxy(apiPrototype: any): ApiClientProxy {
-        const basePath = getApiPath(apiPrototype) || '';
+    private buildProxy(
+        // webpieces-disable no-any-unknown -- accepts any ClassType / abstract-constructor API prototype
+        apiPrototype: any,
+        registeredRoutes?: readonly RouteMetadata[],
+    ): ApiClientProxy {
         const endpoints = getEndpoints(apiPrototype) || {};
         const proxy: ApiClientProxy = {};
+        const methodNames = registeredRoutes
+            ? registeredRoutes.map((route: RouteMetadata) => route.methodName)
+            : Object.keys(endpoints);
 
-        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-            const httpMethod = 'POST';
-            const path = basePath + endpointPath;
+        for (const methodName of methodNames) {
+            const contractRoute =
+                registeredRoutes?.find(
+                    (route: RouteMetadata) => route.methodName === methodName,
+                ) ?? RouteMetadataFactory.create(apiPrototype, methodName);
+            const httpMethod = contractRoute.httpMethod;
+            const path = contractRoute.path;
 
             // Use the REGISTERED route's metadata — it carries the real controller name AND api
             // name (so logging/recording read the right one); createRouteInvoker composes its chain.
@@ -101,9 +119,22 @@ export class ApiClientFactory {
             const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
 
             // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
-            proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
+            proxy[methodName] = async (...args: unknown[]): Promise<unknown> => {
                 requireActiveContext(routeMeta);
-                return this.runMethod(routeMeta, requestDto, service);
+                // Run the shared mapping even in-process. It validates the exact path/query/body
+                // shape production clients use, then the controller receives the original typed args.
+                const mapped = HttpContractMapper.toWire(
+                    routeMeta.path,
+                    routeMeta.parameterBindings,
+                    routeMeta.bodyParameterIndex,
+                    args,
+                );
+                return this.runMethod(
+                    routeMeta,
+                    mapped.body === undefined ? args : mapped.body,
+                    args,
+                    service,
+                );
             };
         }
 
@@ -111,8 +142,17 @@ export class ApiClientFactory {
     }
 
     // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
-    private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>): Promise<unknown> {
-        const responseWrapper = await service.invoke(new MethodMeta(routeMeta, requestDto));
+    private async runMethod(
+        routeMeta: RouteMetadata,
+        requestDto: unknown,
+        requestArgs: unknown[],
+        // webpieces-disable no-any-unknown -- filter service carries arbitrary contract response DTOs
+        service: Service<MethodMeta, WpResponse<unknown>>,
+        // webpieces-disable no-any-unknown -- API return type is erased at the routing proxy boundary
+    ): Promise<unknown> {
+        const responseWrapper = await service.invoke(
+            new MethodMeta(routeMeta, requestDto, undefined, requestArgs),
+        );
         return responseWrapper.response;
     }
 }

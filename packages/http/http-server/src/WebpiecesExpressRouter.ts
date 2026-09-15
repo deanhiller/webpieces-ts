@@ -1,14 +1,6 @@
 import { Express } from 'express';
-import {
-    ApiFactory,
-    ApiClient,
-    getApiPath,
-    getEndpoints,
-    isFormPost,
-    isRawBody,
-    WebpiecesConfig,
-} from '@webpieces/http-routing';
-import { LogManager } from '@webpieces/core-util';
+import { ApiFactory, ApiClient, WebpiecesConfig } from '@webpieces/http-routing';
+import { LogManager, RouteMetadata } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
 const log = LogManager.getLogger('WebpiecesExpressRouter');
@@ -136,24 +128,24 @@ export class WebpiecesExpressRouter {
      * @returns the number of routes mounted for this api.
      */
     private mountApiClient(app: Express, apiClient: ApiClient): number {
-        const basePath = getApiPath(apiClient.api) || '';
-        const endpoints = getEndpoints(apiClient.api) || {};
         let count = 0;
-        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-            const path = basePath + endpointPath;
+        for (const route of apiClient.routes) {
+            const path = this.expressPath(route);
             // The parser is chosen by the @Endpoint annotation, not the request Content-Type — and
             // so is whether the verbatim bytes survive the parse for an @WpAuthWebhook hook to verify.
             const wrapper = this.middleware.createExpressWrapper(
-                apiClient.client[methodName],
-                path,
-                isFormPost(apiClient.api, methodName),
-                isRawBody(apiClient.api, methodName),
+                apiClient.client[route.methodName],
+                route,
             );
-            // All webpieces routes are POST (the api-tier convention).
-            this.registerHandler(app, 'POST', path, wrapper.execute.bind(wrapper));
+            this.registerHandler(app, route.httpMethod, path, wrapper.execute.bind(wrapper));
             count++;
         }
         return count;
+    }
+
+    /** Contract `{name}` placeholders -> Express 5 `:name` route syntax. */
+    private expressPath(route: RouteMetadata): string {
+        return route.path.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, ':$1');
     }
 
     private registerHandler(
