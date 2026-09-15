@@ -33,112 +33,14 @@
 // package's transitive dependencies.
 // ---------------------------------------------------------------------------
 
-/** Which tools a row covers. `B` Bash · `R` Read · `E` Write/Edit. */
-export type L2Tool = 'B' | 'R' | 'E';
+import {
+    L2_ALLOW, L2_BLOCK, L2_EXEMPT, L2_FAIL_OPEN, L2_FAIL_OPEN_ROW, L2Row, L2UseCase, NO_ROW_EXIT,
+} from './l2-row';
 
-/** What L2 does with a row — the same action codebook every layer reports in (GUARD_MATRIX.md). */
-export type L2ActionKind = 'allow' | 'exempt' | 'block' | 'fail-open';
-
-/**
- * The TERMINAL fail-open row, and the one number in this table that is not from the 1-10 design.
- *
- * Everything in rows 6-10 needs the main-sync cache, and the cache is written by a fire-and-forget
- * refresher that populates it for the NEXT call — so the first tool call of every session has none.
- * "Stop here and ALLOW" was written as a DIVIDER in the design table, i.e. as prose between two blocks
- * of rows. Prose cannot be stamped into a log line, and this is the single most frequently taken exit
- * in the whole layer (every session's first call, every unreadable branch, every unreachable forge), so
- * it is a row with a number like any other.
- *
- * It is 11 rather than 6-with-a-renumber because row numbers are IDENTITY here: they are printed in the
- * doc and logged as `row=`, so shifting 6-10 down would silently re-point every reference. The doc
- * prints it in its true position, between rows 5 and 6, with its number shown — same treatment L1 gives
- * row 8, which is printed third and numbered 8.
- */
-export const L2_FAIL_OPEN_ROW = 11;
-
-/** The `act` cell: the doc's literal label, plus the machine-readable kind behind it. */
-export class L2Action {
-    constructor(readonly label: string, readonly kind: L2ActionKind) {}
-}
-
-export const L2_ALLOW = new L2Action('1 allow', 'allow');
-export const L2_EXEMPT = new L2Action('2 exempt', 'exempt');
-export const L2_BLOCK = new L2Action('4 block', 'block');
-export const L2_FAIL_OPEN = new L2Action('1 allow (fail-open)', 'fail-open');
-
-/**
- * One row of the "L2 use cases" table: what you SEE, the state it puts you in, the verdict, the fix.
- *
- * THE POINT OF THIS CLASS is that a use case is added HERE, in code, beside the row it exercises — not
- * into a hand-written doc section that drifts. When a new situation comes up in a session, it becomes
- * one more `new L2UseCase(...)` on the row that judged it, `pnpm guards:generate` re-renders the doc,
- * and the byte-lock spec fails if anyone edits the rendered table instead.
- *
- * The four text fields are rendered VERBATIM. `reason` is the ENFORCEMENT half and is never rendered:
- * it is the exact `reason` string the guard logs for this case, so a spec can push it back through
- * `l2RowForReason` and assert it lands on the row this use case is filed under. That closes the loop
- * the L2 decision log opens — `row=` in the trail, this table on the page, one join between them.
- *
- * `reason` is REQUIRED, and a case that exercises something which is not an L2 row exit says so with
- * `NO_ROW_EXIT` rather than by omitting the argument. An optional field would make opting OUT of the
- * only real enforcement here the shortest thing to type and impossible to grep — the widening-by-absence
- * shape `.claude/rules/no-backwards-compat.md` rejects. `grep NO_ROW_EXIT` now lists every unenforced case.
- */
-export class L2UseCase {
-    // eslint-disable-next-line @typescript-eslint/max-params -- four verbatim doc cells plus the reason behind them
-    constructor(
-        readonly num: number,
-        readonly symptom: string,
-        readonly state: string,
-        readonly verdict: string,
-        readonly fix: string,
-        readonly reason: string,
-    ) {}
-}
-
-/**
- * The `reason` for a use case that is NOT an L2 row exit, and so has nothing to join back to.
- *
- * The only legitimate case today is row 3: merge-in-progress is L4's state, and L2 exempts it without
- * logging a reason of its own. Named rather than absent, so "this case is not enforced" is a value in
- * the table you can grep for instead of a missing argument nobody notices.
- */
-export const NO_ROW_EXIT = 'NO_ROW_EXIT (not an L2 row exit — another layer owns this state)';
-
-/**
- * One row of L2's decision table.
- *
- * `cure` is rendered verbatim into the doc and is LITERAL by policy: L0's cure-reachability discipline
- * says a message pointing at documentation for its own remedy cannot be tested, and it caught a fault
- * prescribing a bin that had been renamed away. `—` is the only legal non-command cure, and only on a
- * row that allows.
- */
-export class L2Row {
-    // eslint-disable-next-line @typescript-eslint/max-params -- the five cells of one doc row plus its use cases
-    constructor(
-        readonly num: number,
-        readonly tools: readonly L2Tool[],
-        /** The `state` cell, verbatim. */
-        readonly state: string,
-        readonly action: L2Action,
-        /** The `cure` cell, verbatim. `—` when the row allows. */
-        readonly cure: string,
-        /**
-         * The observed situations this row judges. Rendered as the "L2 use cases" table.
-         *
-         * A NON-EMPTY tuple, and required: a row nobody has ever seen fire is either dead or
-         * undocumented, and both are worth knowing. Expressing that in the TYPE rather than as a
-         * runtime assertion is the JwtRoles pattern — the invariant is enforced at the moment the row
-         * is written, which is the only moment that changes what somebody types.
-         */
-        readonly useCases: readonly [L2UseCase, ...L2UseCase[]],
-    ) {}
-
-    /** `B R E`, the doc's own spelling of the tool cell. */
-    toolCell(): string {
-        return this.tools.join(' ');
-    }
-}
+export {
+    L2Action, L2ActionKind, L2Tool,
+    L2_ALLOW, L2_BLOCK, L2_EXEMPT, L2_FAIL_OPEN, L2_FAIL_OPEN_ROW, L2Row, L2UseCase, NO_ROW_EXIT,
+} from './l2-row';
 
 /**
  * THE THIRTEEN L2 ROWS, in first-match-wins order.
@@ -281,16 +183,16 @@ export const L2_ROWS: readonly L2Row[] = [
             'Swap the `;` for `&&` — `pnpm wp-sync-main && <your command>` — or run the cure alone and re-issue the command in the next call',
             'cure-prefixed, work runs anyway'),
     ]),
-    new L2Row(6, ['B', 'R'], 'on `main`, behind `origin/main`', L2_BLOCK, '`pnpm wp-sync-main`, or `git checkout -b <new> origin/main`', [
+    new L2Row(6, ['B', 'R'], 'on `main`, farther behind `origin/main` than `maxCommitsBehind`', L2_BLOCK, '`pnpm wp-sync-main`, or `git checkout -b <new> origin/main`', [
         new L2UseCase(13,
             'The Read tool refuses a file on a stale `main` while you have UNCOMMITTED edits',
-            'on `main`, behind `origin/main`, dirty tree',
+            'on `main`, beyond `maxCommitsBehind`, dirty tree',
             'BLOCK. This used to fail open, on the argument that the prescribed `git pull` is not a clean fast-forward when the tree is dirty. That was true of the MESSAGE, not the row: the cure cell always offered a second form, and it works dirty',
             '`git checkout -b <new> origin/main` — uncommitted changes come with you onto the new branch. If git refuses because `origin/main` touched the same files, `git stash` first (never blocked), then retry, then `git stash pop`',
             'on-stale-main'),
         new L2UseCase(15,
             'The Read tool refuses a file that exists, on a `main` 18 commits behind',
-            'on `main`, behind `origin/main`, clean tree',
+            'on `main`, beyond `maxCommitsBehind`, clean tree',
             'BLOCK: judged by live ancestry (`git merge-base --is-ancestor`), not hash equality, so a pull takes effect instantly',
             '`pnpm wp-sync-main`, or `git checkout -b <new> origin/main`',
             'on-stale-main'),
@@ -302,12 +204,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'on-stale-main'),
         new L2UseCase(10,
             'A Bash command that WRITES tracked files as a side effect — `npx expo install`, a formatter, codegen, `sed -i`, a `>` redirect',
-            'on a `main` known to be BEHIND, and the write is incidental to a command whose stated purpose is something else',
+            'on a `main` known to be beyond `maxCommitsBehind`, and the write is incidental to a command whose stated purpose is something else',
             'BLOCK: inside this row `B` is default-DENY plus row 4\'s skip list, never a blocklist of readers — a command nobody thought to enumerate is caught by not being on the list, which is the only shape that could have caught this one',
             '`git checkout -b <new> origin/main` BEFORE running anything that may write',
             'on-stale-main'),
     ]),
-    new L2Row(7, ['B', 'R'], 'on `main`, current', L2_ALLOW, '—', [
+    new L2Row(7, ['B', 'R'], 'on `main`, current or within `maxCommitsBehind`', L2_ALLOW, '—', [
         new L2UseCase(17,
             'Reading files on a `main` you just pulled',
             'on `main`, and `origin/main` is an ancestor of HEAD',
@@ -320,6 +222,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'ALLOW. This used to BLOCK, from the branch alone: the tool the repo prescribes put the agent here, and the guard whose name says STALE then refused everything off a narrow allowlist for a reason that had nothing to do with staleness. WRITES here are still blocked, by row 5 — that hazard is real at any freshness',
             'None needed',
             'local-main-contains-origin (up to date)'),
+        new L2UseCase(31,
+            'Reading or running Bash while local `main` is five commits behind and the configured maximum is five',
+            'on `main`, cached `commitsBehind` is at or below `maxCommitsBehind`',
+            'ALLOW: the detached refresher computed the distance; the guard hot path only reads the cache',
+            'None needed',
+            'within-max-commits-behind'),
     ]),
     new L2Row(8, ['B', 'R', 'E'], 'on a branch whose PR is **already merged**', L2_BLOCK, '`git fetch origin main && git checkout -b <new> origin/main`', [
         new L2UseCase(18,
@@ -408,6 +316,7 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // for the Read tool, stale-main-bash-guard for Bash. Same cache, same ancestry test, one verdict.
     'on-stale-main': 6,
     'local-main-contains-origin (up to date)': 7,
+    'within-max-commits-behind': 7,
     // Rows 12/13 — composition, judged INSIDE row 6's state: the tree is established behind, and the
     // only remaining question is whether the command carries its own cure and with which operator.
     'cure-prefixed, && short-circuits the work': 12,
@@ -422,6 +331,7 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // Row 11 — every "could not establish", including the two dirty-tree valves the code still opens
     // (see NOT_DONE) and the unreachable forge.
     'branch-undeterminable': L2_FAIL_OPEN_ROW,
+    'commit-distance-unknown': L2_FAIL_OPEN_ROW,
     // The target tree HAS no branch name (mid-rebase / mid-bisect), so there is no key into the
     // branch-keyed cache — use case 14, which the row already describes. It used to arrive here as the
     // literal branch `HEAD`, miss in the cache and log `no-sync-cache`: the right verdict recorded under

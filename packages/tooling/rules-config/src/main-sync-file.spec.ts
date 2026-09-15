@@ -22,6 +22,7 @@ function status(branch: string, merged: boolean = false): MainSyncStatus {
     const built = new MainSyncStatus(
         branch, merged, merged ? '77' : '', true, 'fork', 'origin-sha', `head-${branch}`, false, [], 'ts');
     built.localMain = 'local-sha';
+    built.commitsBehind = 6;
     return built;
 }
 
@@ -45,6 +46,7 @@ describe('branch-keyed main-sync status file', () => {
         expect(store.branchStatus(read, 'main')?.branch).toBe('main');
         expect(store.branchStatus(read, 'deanhiller/feat')?.branchAlreadyMerged).toBe(true);
         expect(store.branchStatus(read, 'deanhiller/feat')?.mergedPr).toBe('77');
+        expect(store.branchStatus(read, 'main')?.commitsBehind).toBe(6);
     });
 
     // TEST 2: an unknown branch is a MISS, not a cross-branch hit. Null is what every guard already
@@ -71,6 +73,14 @@ describe('branch-keyed main-sync status file', () => {
         expect(read?.version).toBe(1);
         expect(store.branchStatus(read, 'deanhiller/old')?.mergedPr).toBe('77');
         expect(store.branchStatus(read, 'main')).toBeNull();
+    });
+
+    it('reads an older cache without commit distance as unknown so threshold guards fail open', () => {
+        const legacy = status('main');
+        const raw = JSON.parse(JSON.stringify(legacy)) as Record<string, unknown>;
+        delete raw['commitsBehind'];
+        fs.writeFileSync(file, JSON.stringify({ version: 2, branches: { main: raw } }));
+        expect(store.branchStatus(store.readFile(file), 'main')?.commitsBehind).toBeNull();
     });
 
     // TEST 4: parsing NEVER throws. Every one of these is a plausible on-disk state (a torn write from

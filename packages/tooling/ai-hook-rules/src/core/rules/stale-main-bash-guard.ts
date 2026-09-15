@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, DEFAULT_MAX_COMMITS_BEHIND, readMainSyncStatus, Option } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -60,11 +60,12 @@ import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
  *   ALLOWED   `git checkout -b <x> origin/main` (current by construction), `git checkout <sha>`,
  *             `git checkout -- <file>`, and any other branch.
  *
- * ── ROWS 6/7: the block fires only once `main` is KNOWN STALE ────────────────────────────────
+ * ── ROWS 6/7: the block fires only beyond the configured stale threshold ────────────────────
  *
  * The finding is not "you are on `main`" — it is **"what you would read here is out of date"**. So the
  * ladder below asks the main-sync cache, exactly as read-stale-guard's State A does, and BLOCKS only
- * when local `main` is known to be BEHIND `origin/main`. Unknown → allow. Current → allow.
+ * when cached `commitsBehind` is greater than `maxCommitsBehind`. Unknown → allow. At or below
+ * the threshold → allow. The detached refresher computes the count; this hot path never does.
  *
  * WHY, when this guard spent a release judging the branch alone: because the branch alone denies
  * everything off a narrow allowlist on a PERFECTLY CURRENT `main`, and a current `main` is exactly
@@ -99,7 +100,7 @@ import { CurePrefixScan, CurePrefix } from './cure-prefix-scan';
  * whose stated purpose is something else and whose effect is to modify tracked files. What changed is
  * WHEN that polarity applies, not the polarity.
  *
- *   BLOCKED   on a `main` known to be BEHIND: anything not on the skip list — builds, tests,
+ *   BLOCKED   on a `main` known beyond the configured threshold: anything not on the skip list — builds, tests,
  *             installers, formatters, codegen, `cat`/`grep`/`ls` of the tree, git writes.
  *   ALLOWED   every command on a `main` that is current or whose freshness is unknown — and, in the
  *             blocked state, everything that gets you OUT or tells you where you are:
@@ -134,7 +135,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
 
     readonly description =
         'Block a bare `git checkout main` (use `pnpm wp-sync-main`, or chain the pull into ' +
-        'the same command), and — once local main is KNOWN to be behind origin/main — block Bash ' +
+        'the same command), and — once local main is beyond maxCommitsBehind — block Bash ' +
         'there, allowlisting only the commands that get you off it. A main that is current, or whose ' +
         'freshness is unknown, is left alone.';
     override readonly defaultOptions = {
@@ -155,7 +156,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             new Option(this.recovery.updateMainSteps('unknown').join('\n')
                 + '\nIf you hand-roll the git instead, the pull must be in the SAME command as the checkout.', true),
             new Option('Already on main: pnpm wp-sync-main (then re-run) — it pulls main and takes the trash out in the one command this repo prescribes. You may chain your command onto it with && (pnpm wp-sync-main && <your command>), which is skipped if the pull fails; a ; instead runs your command anyway and is refused.'),
-            new Option('Still allowed: every BASH command, on a main that is current or whose freshness is not known — this guard only closes once local main is known to be BEHIND origin/main. (Write/Edit on main is a different policy and is blocked by feature-branch-guard however current main is.) In that state you keep the Read tool while main is current (read-stale-guard closes it when main falls behind, because stale reads are worthless) plus everything that gets you OUT or tells you where you are: git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs, and reading webpieces.config.json.'),
+            new Option('Still allowed: every BASH command, on a main at or below branch-state-guard.maxCommitsBehind or whose commit distance is not known. (Write/Edit on main is a different policy and is blocked by feature-branch-guard however current main is.) Beyond that threshold you keep the commands that get you OUT or tell you where you are: git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -187,7 +188,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
     }
 
     /**
-     * ROWS 6/7 — block ONLY when local `main` is KNOWN to be behind `origin/main`.
+     * ROWS 6/7 — block ONLY when cached `commitsBehind` exceeds `maxCommitsBehind`.
      *
      * Read this beside read-stale-guard.checkStaleMain: it is the same ladder over the same cache, and
      * that is on purpose — the Read and the Bash halves of one state must not disagree about whether
@@ -218,8 +219,13 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
-        // ESTABLISHED BEHIND. Now — and only now — the default-deny polarity applies.
-        return this.judgeComposition(ctx, branch, cache);
+        const maxCommitsBehind = this.config.maxCommitsBehind ?? DEFAULT_MAX_COMMITS_BEHIND;
+        const withinThreshold = this.freshness.isWithinAllowedDrift(status, maxCommitsBehind);
+        if (withinThreshold === null) return this.failOpen(ctx, branch, 'commit-distance-unknown', cache);
+        if (withinThreshold) return this.allow(ctx, branch, 'within-max-commits-behind', cache);
+
+        // ESTABLISHED BEYOND THE CONFIGURED THRESHOLD. Only now does default-deny apply.
+        return this.judgeComposition(ctx, branch, cache, status.commitsBehind ?? 0, maxCommitsBehind);
     }
 
     /**
@@ -236,7 +242,9 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
      * recomputes `localMain` against `originMain`, so a pull that failed re-blocks. An allowed `;`
      * compound never gets that second look.
      */
-    private judgeComposition(ctx: BashContext, branch: string, cache: string): readonly Violation[] {
+    private judgeComposition(
+        ctx: BashContext, branch: string, cache: string, commitsBehind: number, maxCommitsBehind: number,
+    ): readonly Violation[] {
         const prefix = this.curePrefix.classify(ctx.command);
         if (prefix.kind === 'short-circuits') {
             return this.allow(ctx, branch, 'cure-prefixed, && short-circuits the work', cache);
@@ -244,7 +252,9 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         if (prefix.kind === 'runs-anyway') {
             return this.block(ctx, branch, 'cure-prefixed, work runs anyway', this.compositionMessage(prefix), cache);
         }
-        return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
+        return this.block(
+            ctx, branch, 'on-stale-main',
+            this.staleMainMessage(ctx.workspaceRoot, commitsBehind, maxCommitsBehind), cache);
     }
 
     /**
@@ -286,8 +296,9 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
      * prints it, because a Read really can be cured by staying put. A Bash session cannot — the next
      * command is as likely to write as to read.)
      */
-    private staleMainMessage(workspaceRoot: string): string {
-        return 'Blocked: local `main` is BEHIND origin/main, so what you would read here is out of '
+    private staleMainMessage(workspaceRoot: string, commitsBehind: number, maxCommitsBehind: number): string {
+        return `Blocked: local \`main\` is ${commitsBehind} commits behind origin/main, exceeding `
+            + `branch-state-guard.maxCommitsBehind=${maxCommitsBehind}, so what you would read here is out of `
             + 'date and a plan built on it is built on code upstream has moved past. A CURRENT main is '
             + 'not blocked — reading main to PLAN is fine, and this fires only once being behind is '
             + 'established. Bash is default-deny in this state rather than a list of readers, because a '

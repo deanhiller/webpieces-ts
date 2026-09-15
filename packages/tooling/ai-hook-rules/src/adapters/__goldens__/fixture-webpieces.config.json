@@ -217,6 +217,7 @@
             "mode": "ON",
             "branchNamingConvention": "{whoami}/{featurename}",
             "hangTimeoutMinutes": 5,
+            "maxCommitsBehind": 5,
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

@@ -20,8 +20,8 @@ import { toError } from './to-error';
  * branch identical and only changing the LOOKUP means no guard's field access changed.
  */
 
-// Bumped when the shape changes. v1 = a single bare MainSyncStatus at the top level.
-export const MAIN_SYNC_STATUS_VERSION = 2;
+// Bumped when the shape changes. v1 = one bare status; v2 = branch map; v3 = cached commit distance.
+export const MAIN_SYNC_STATUS_VERSION = 3;
 
 // Data-only (per CLAUDE.md, classes for data). The per-branch payload — unchanged from v1.
 export class MainSyncStatus {
@@ -42,6 +42,9 @@ export class MainSyncStatus {
     // could not be read. Paired with `originMain`, this is what tells the read-stale-guard whether a
     // checked-out `main` is behind its remote. Defaulted field for the same reason as `openPr`.
     localMain: string = '';
+    // Computed by the detached refresher as local main..origin/main. Null means an older cache or git
+    // could not establish the distance; stale-main threshold checks fail open in that state.
+    commitsBehind: number | null = null;
     /**
      * Did the forge answer when this entry was computed? See PullRequestIndex.forgeReachable.
      *
@@ -152,6 +155,7 @@ interface RawStatus {
     timestamp?: string;
     openPr?: string;
     localMain?: string;
+    commitsBehind?: number | null;
     forgeReachable?: boolean;
 }
 
@@ -311,6 +315,10 @@ export class MainSyncFileStore {
         );
         status.openPr = raw.openPr ?? '';
         status.localMain = raw.localMain ?? '';
+        status.commitsBehind = typeof raw.commitsBehind === 'number'
+            && Number.isInteger(raw.commitsBehind) && raw.commitsBehind >= 0
+            ? raw.commitsBehind
+            : null;
         status.forgeReachable = raw.forgeReachable ?? true;
         return status;
     }

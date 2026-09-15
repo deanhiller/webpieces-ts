@@ -74,6 +74,7 @@ const CODE_RULE_NAMES = [
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
 // another required field is a one-line fixture change rather than a hunt through every test.
 const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
+    'branch-state-guard': { maxCommitsBehind: 5 },
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
     'branch-creation-guard': { autoReapMergedBranches: false },
 };

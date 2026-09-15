@@ -14,6 +14,13 @@ import { MainSyncStatus } from '@webpieces/rules-config';
  * disagreeing about whether a pull has landed.
  */
 export class MainFreshness {
+    /** Null means the async cache predates the count or could not establish it: callers fail open. */
+    isWithinAllowedDrift(status: MainSyncStatus, maxCommitsBehind: number): boolean | null {
+        const behind = status.commitsBehind;
+        if (behind === null || !Number.isInteger(behind) || behind < 0) return null;
+        return behind <= maxCommitsBehind;
+    }
+
     /**
      * Is `commit` an ancestor of (i.e. already contained in) HEAD? Local-only and fast — no network.
      *
@@ -45,6 +52,7 @@ export class MainFreshness {
      */
     summarize(status: MainSyncStatus): string {
         const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
-        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} merged=${merged} ts=${status.timestamp}`;
+        const behind = status.commitsBehind === null ? '?' : String(status.commitsBehind);
+        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} behind=${behind} merged=${merged} ts=${status.timestamp}`;
     }
 }

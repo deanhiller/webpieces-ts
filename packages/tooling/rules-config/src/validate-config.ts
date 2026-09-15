@@ -229,6 +229,9 @@ function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: R
         } else if (key === 'turnOffRuleUntilEpoch') {
             const capError = epochCapError(`[${ruleName}]`, value as number);
             if (capError) errors.push(capError);
+        } else if (ruleName === 'branch-state-guard' && key === 'maxCommitsBehind'
+            && (!Number.isInteger(value) || (value as number) < 0)) {
+            errors.push('[branch-state-guard] "maxCommitsBehind" must be a non-negative integer.');
         }
     }
     return errors;

@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, DEFAULT_MAX_COMMITS_BEHIND, readMainSyncStatus, MainSyncStatus, Option } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -24,7 +24,7 @@ import { TreeRecovery } from './tree-recovery';
 /**
  * Blocks READS while the checked-out branch is a stale place to read from. TWO states:
  *
- *   A. on `main`, and local main is BEHIND origin/main
+ *   A. on `main`, and local main is farther BEHIND origin/main than the configured tolerance
  *   B. on a feature branch whose PR is ALREADY MERGED (a pre-merge snapshot; origin/main has moved
  *      past it and a squash merge means its HEAD is not even an ancestor of main)
  *
@@ -57,7 +57,7 @@ import { TreeRecovery } from './tree-recovery';
  * entirely alone let a session `cat`/`grep`/`ls` the same stale tree the Read block was rejecting,
  * for a whole session, while the logs read "read-stale-guard handled". stale-main-bash-guard is the
  * State-A Bash counterpart (as merged-branch-bash-guard is State B's): in the SAME state this guard
- * blocks — `main`, KNOWN BEHIND `origin/main` by the ancestry test below — it default-denies Bash and
+ * blocks — `main`, KNOWN BEYOND the cached commit-distance tolerance below — it default-denies Bash and
  * allowlists only the commands that get you out, so the cure is never blocked and this guard can stay
  * simple and Read-only.
  *
@@ -88,7 +88,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     // The ancestry test and the cache summary, shared with stale-main-bash-guard — see main-freshness.ts.
     private readonly freshness = new MainFreshness();
 
-    readonly description = 'Block reads on a branch that is stale to read from — a `main` behind origin/main, or a feature branch whose PR is already merged.';
+    readonly description = 'Block reads on a branch that is stale to read from — a `main` beyond its configured commit-distance tolerance, or a feature branch whose PR is already merged.';
     override readonly files = ['**/*'];
     override readonly defaultOptions = {
         hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
@@ -97,10 +97,10 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         'This branch is stale to read from — reading it would give you pre-merge/out-of-date content.',
         'Get onto current code before reading anything else:',
         [
-            new Option('On main, behind origin/main → pnpm wp-sync-main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
+            new Option('On main, beyond branch-state-guard.maxCommitsBehind → pnpm wp-sync-main (CLEAN TREE ONLY), or git checkout -b <new-branch> origin/main which works with UNCOMMITTED CHANGES and brings them along. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main, which likewise carries your edits. Then retry the read.', true),
             new Option('If a checkout -b refuses because origin/main changed the same files you edited: git stash (never blocked), redo the checkout, then git stash pop.'),
             new Option("If pnpm wp-sync-main dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then run it again."),
-            new Option('Still allowed right now: reading webpieces.config.json, and the Bash commands that get you OUT or tell you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs. Everything ELSE through Bash is blocked in this same state (a main that is behind → stale-main-bash-guard; a merged branch → merged-branch-bash-guard), and Write/Edit on main is blocked by feature-branch-guard however current main is. There is no side door: get onto a branch off origin/main.'),
+            new Option('Still allowed right now: reading webpieces.config.json, and the Bash commands that get you OUT or tell you where you are — git checkout -b <new> origin/main, git switch, git pull/fetch, git status|log|diff|show|branch, git stash, gh, curl/wget, every wp-* bin, installs. Everything ELSE through Bash is blocked in this same state (a main beyond maxCommitsBehind → stale-main-bash-guard; a merged branch → merged-branch-bash-guard), and Write/Edit on main is blocked by feature-branch-guard however current main is. There is no side door: get onto a branch off origin/main.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -162,6 +162,11 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
             return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
         }
 
+        const maxCommitsBehind = this.config.maxCommitsBehind ?? DEFAULT_MAX_COMMITS_BEHIND;
+        const withinThreshold = this.freshness.isWithinAllowedDrift(status, maxCommitsBehind);
+        if (withinThreshold === null) return this.failOpen(ctx, branch, 'commit-distance-unknown', cache);
+        if (withinThreshold) return this.allow(ctx, branch, 'within-max-commits-behind', cache);
+
         // NO DIRTY VALVE. It used to fail open here, on the argument that the prescribed in-place pull
         // is not a clean fast-forward on a dirty tree. That argument was about the MESSAGE, not the row:
         // row 6's cure cell has always offered `git checkout -b <new> origin/main` as an alternative,
@@ -170,7 +175,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         // (StaleMainMessage.forReads), so the cure an agent reads is one it can actually run.
         // Residual, same as row 8: if origin/main touched the files you edited, git refuses the switch
         // — `git stash` is on the skip list and clears it. Two steps worst case, never a dead end.
-        return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(judged), cache);
+        return this.block(
+            ctx, branch, 'on-stale-main',
+            this.staleMainMessage(judged, status.commitsBehind ?? 0), cache);
     }
 
     /**
@@ -243,30 +250,13 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         return relativePath === 'webpieces.config.json';
     }
 
-    // How far behind we are, for the message. Best-effort — a bare "behind" reads fine without it.
-    private behindCount(workspaceRoot: string): string {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const out = execSync('git rev-list --count HEAD..origin/main', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-            return /^\d+$/.test(out) ? out : '?';
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return '?';
-        }
-    }
-
     // StaleMainMessage's remaining consumer. It used to be shared with stale-main-bash-guard so the two
     // halves of the State-A block could never prescribe different cures; that guard now blocks on the
     // BRANCH (row 5) rather than on staleness and carries its own message, so this is the only caller.
-    private staleMainMessage(judged: JudgedTree): string {
+    private staleMainMessage(judged: JudgedTree, commitsBehind: number): string {
         return [
             judged.header(),
-            new StaleMainMessage(judged.root).forReads(this.behindCount(judged.root)),
+            new StaleMainMessage(judged.root).forReads(String(commitsBehind)),
             judged.redirectNote([judged.pnpmCure('wp-sync-main')]),
         ].join('\n');
     }
