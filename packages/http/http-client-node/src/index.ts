@@ -60,3 +60,4 @@ export { ProxyClient, ClientErrorTranslator, TranslatedFailure } from '@webpiece
 export { ClientRequest, ClientFilterDefinition } from '@webpieces/http-client-core';
 export type { ClientFilter } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
+export { StreamingCapabilityError } from '@webpieces/http-client-core';

@@ -103,6 +103,22 @@ export {
     HttpParameterBinding,
     HttpParameterDeclaration,
 } from './http/HttpContract';
+export {
+    StreamCorrelation,
+    StreamEnvelope,
+    StreamingEndpointMetadata,
+    StreamEventValidator,
+    StreamTransportError,
+    StreamWriter,
+    WpStream,
+    getStreamingEndpoint,
+} from './http/StreamingContract';
+export type {
+    RequestStream,
+    ResponseStream,
+    StreamEnvelopeKind,
+    StreamFailureOptions,
+} from './http/StreamingContract';
 export type {
     ContractHttpMethod,
     EndpointResponseType,
@@ -112,10 +128,12 @@ export type {
 export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
 export { WpMcpTool, WpMcpToolHints, WpMcpToolMetadata, getWpMcpTools } from './mcp/McpMetadata';
 export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
+export { WpMcpAuthJwt, WpMcpJwtAuthMetadata, getWpMcpAuthJwt } from './mcp/McpAuthMetadata';
 export {
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
+    WpMcpHeader,
     WpDtoMapFieldOptions,
     WpDtoFieldMetadata,
     WpResponseDto,
@@ -294,6 +312,7 @@ export {
     ApiEndpointNotFoundError,
     ApiErrorCodec,
     ApiErrorPayload,
+    ApiErrorBoundary,
 } from './errors';
 export type { ApiErrorKind } from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';

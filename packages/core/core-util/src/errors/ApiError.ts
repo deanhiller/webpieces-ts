@@ -71,7 +71,14 @@ export class ApiEndpointNotFoundError extends ApiNotFoundError {
     override readonly kind = 'endpoint-not-found' as const;
 }
 
-/** Expected end-user mistake. Its message is deliberately caller-safe. */
+/**
+ * Expected mistake by the ACTOR driving the call: the input was well-formed but wrong in a way the actor
+ * must fix (for example "the two passwords you entered do not match"). The actor may be a human user in
+ * a GUI OR an LLM calling an MCP tool; the same class serves both. Its message is deliberately
+ * caller-safe and is the only ApiError message published verbatim: `ApiErrorCodec` keeps it (and
+ * `errorCode`) across every remote hop, so a downstream service's text reaches the GUI or the model
+ * byte-for-byte.
+ */
 export class ApiEndUserError extends ApiError {
     override readonly kind = 'end-user' as const;
 
@@ -85,7 +92,12 @@ export class ApiEndUserError extends ApiError {
     }
 }
 
-/** Invalid API caller input. message is diagnostic; callerMessage is safe to publish. */
+/**
+ * Invalid API caller input (malformed, or failed validation). `message` is operator-only diagnostic
+ * text and may name internals; it is never published. `callerMessage` (plus `field`) is what a GUI OR
+ * an MCP model is shown so it can correct its input, so throw sites that want the caller to
+ * self-correct MUST set it.
+ */
 export class ApiBadRequestError extends ApiError {
     override readonly kind = 'bad-request' as const;
 

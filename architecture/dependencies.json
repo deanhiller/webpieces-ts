@@ -448,14 +448,15 @@
             ]
         },
         "mcp-server": {
-            "level": 4,
-            "framework": ["node"],
+            "level": 5,
+            "framework": ["express"],
             "role": "lib",
-            "webpiecesRuntime": ["@webpieces/http-routing"],
+            "webpiecesRuntime": ["@webpieces/http-client-node","@webpieces/http-routing","@webpieces/http-server"],
             "shortDescription": "Generate explicitly opted-in Webpieces API methods as authenticated MCP tools while preserving the normal endpoint filter chain, DTO validation, and safe error boundary.",
             "responsibilitiesFile": "packages/http/mcp-server/responsibilities.md",
             "dependsOn": [
-                "http-routing"
+                "http-client-node",
+                "http-server"
             ]
         },
         "nx-webpieces-rules": {

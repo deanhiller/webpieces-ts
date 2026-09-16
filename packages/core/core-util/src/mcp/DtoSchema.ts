@@ -24,7 +24,18 @@ export class WpDtoFieldOptions {
         public readonly minimum?: number,
         public readonly maximum?: number,
         public readonly enumValues?: readonly [string, ...string[]],
+        /** MCP 2026 SEP-2243 header mirrored as `Mcp-Param-{name}`. */
+        public readonly mcpHeader?: WpMcpHeader,
     ) {}
+}
+
+/**
+ * Names the `x-mcp-header` a primitive tool parameter is mirrored into (`Mcp-Param-{name}`). A class,
+ * not a bare string, so the 8th `WpDtoFieldOptions` argument can never be mistaken for a map value
+ * type (maps use `WpDtoMapFieldOptions`).
+ */
+export class WpMcpHeader {
+    constructor(public readonly name: string) {}
 }
 
 /**
@@ -60,6 +71,8 @@ export class ApiJsonSchema {
     enum?: string[];
     minimum?: number;
     maximum?: number;
+    /** MCP 2026 SEP-2243 schema extension consumed by the official SDK. */
+    declare 'x-mcp-header'?: string;
 
     constructor(type?: 'object' | 'string' | 'number' | 'integer' | 'boolean' | 'array') {
         this.type = type;
@@ -68,7 +81,11 @@ export class ApiJsonSchema {
 
 /** A validation result safe to show to an API caller/model. */
 export class DtoValidationFailure {
-    constructor(public readonly message: string) {}
+    constructor(
+        /** JSON path of the offending value, e.g. `$.address.city`. */
+        public readonly field: string,
+        public readonly message: string,
+    ) {}
 }
 
 /** Marks a request/response class as a schema-bearing DTO, including intentionally empty DTOs. */
@@ -144,7 +161,9 @@ export class DtoSchemaBuilder {
     }
 
     build(dtoClass: DtoClass): ApiJsonSchema {
-        return this.buildAt(dtoClass, new Set<DtoClass>());
+        const schema = this.buildAt(dtoClass, new Set<DtoClass>());
+        this.validateMcpHeaders(schema, new Map<string, string>());
+        return schema;
     }
 
     validate(dtoClass: DtoClass, value: DtoValue): DtoValidationFailure | undefined {
@@ -181,7 +200,8 @@ export class DtoSchemaBuilder {
             dtoClass.prototype,
             field.propertyKey,
         ) as DtoClass | undefined;
-        if (!reflected) throw new Error(`No reflected type for ${dtoClass.name}.${field.propertyKey}.`);
+        if (!reflected)
+            throw new Error(`No reflected type for ${dtoClass.name}.${field.propertyKey}.`);
         this.validateOptions(dtoClass, field, reflected);
         const options = field.options;
         if (options instanceof WpDtoMapFieldOptions) {
@@ -203,7 +223,9 @@ export class DtoSchemaBuilder {
                 break;
             case 'Array':
                 if (!options.arrayItems) {
-                    throw new Error(`${dtoClass.name}.${field.propertyKey} must declare arrayItems.`);
+                    throw new Error(
+                        `${dtoClass.name}.${field.propertyKey} must declare arrayItems.`,
+                    );
                 }
                 schema = new ApiJsonSchema('array');
                 schema.items = this.itemSchema(options.arrayItems, parents);
@@ -215,6 +237,7 @@ export class DtoSchemaBuilder {
         if (options.minimum !== undefined) schema.minimum = options.minimum;
         if (options.maximum !== undefined) schema.maximum = options.maximum;
         if (options.enumValues) schema.enum = [...options.enumValues];
+        if (options.mcpHeader) schema['x-mcp-header'] = options.mcpHeader.name;
         return schema;
     }
 
@@ -227,7 +250,9 @@ export class DtoSchemaBuilder {
         const options = field.options;
         if (options instanceof WpDtoMapFieldOptions) {
             if (reflected !== Object) {
-                throw new Error(`${label} declares mapValues but is not a map (Record<string, V>).`);
+                throw new Error(
+                    `${label} declares mapValues but is not a map (Record<string, V>).`,
+                );
             }
             return;
         }
@@ -246,17 +271,49 @@ export class DtoSchemaBuilder {
         ) {
             throw new Error(`${label} declares numeric constraints but is not a number.`);
         }
-        if (options.minimum !== undefined && options.maximum !== undefined && options.minimum > options.maximum) {
+        if (
+            options.minimum !== undefined &&
+            options.maximum !== undefined &&
+            options.minimum > options.maximum
+        ) {
             throw new Error(`${label} minimum cannot exceed maximum.`);
         }
         if (options.enumValues && reflected.name !== 'String') {
             throw new Error(`${label} enumValues require a string field.`);
+        }
+        if (options.mcpHeader !== undefined) {
+            if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(options.mcpHeader.name)) {
+                throw new Error(`${label} mcpHeader must be an RFC 9110 token.`);
+            }
+            if (!['String', 'Number', 'Boolean'].includes(reflected.name)) {
+                throw new Error(`${label} mcpHeader requires a primitive field.`);
+            }
+            if (reflected.name === 'Number' && !options.integer) {
+                throw new Error(
+                    `${label} mcpHeader cannot mirror a non-integer number (MCP 2026-07-28).`,
+                );
+            }
         }
     }
 
     private itemSchema(item: DtoElementType, parents: Set<DtoClass>): ApiJsonSchema {
         if (typeof item !== 'string') return this.buildAt(item, parents);
         return new ApiJsonSchema(item === 'integer' ? 'integer' : item);
+    }
+
+    private validateMcpHeaders(schema: ApiJsonSchema, seen: Map<string, string>): void {
+        const header = schema['x-mcp-header'];
+        if (header) {
+            const key = header.toLowerCase();
+            const prior = seen.get(key);
+            if (prior) {
+                throw new Error(`mcpHeader '${header}' duplicates '${prior}' case-insensitively.`);
+            }
+            seen.set(key, header);
+        }
+        for (const child of Object.values(schema.properties ?? {})) {
+            this.validateMcpHeaders(child, seen);
+        }
     }
 
     private validateAt(
@@ -266,22 +323,31 @@ export class DtoSchemaBuilder {
     ): DtoValidationFailure | undefined {
         this.requireDto(dtoClass);
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-            return new DtoValidationFailure(`${path} must be an object`);
+            return new DtoValidationFailure(path, `${path} must be an object`);
         }
         const fields = this.fields(dtoClass);
         const known = new Set(fields.map((field: WpDtoFieldMetadata) => field.propertyKey));
         for (const key of Object.keys(value)) {
-            if (!known.has(key)) return new DtoValidationFailure(`${path}.${key} is not allowed`);
+            if (!known.has(key))
+                return new DtoValidationFailure(`${path}.${key}`, `${path}.${key} is not allowed`);
         }
         for (const field of fields) {
             const fieldValue = Object.getOwnPropertyDescriptor(value, field.propertyKey)?.value;
             if (fieldValue === undefined) {
                 if (field.options.required) {
-                    return new DtoValidationFailure(`${path}.${field.propertyKey} is required`);
+                    return new DtoValidationFailure(
+                        `${path}.${field.propertyKey}`,
+                        `${path}.${field.propertyKey} is required`,
+                    );
                 }
                 continue;
             }
-            const failure = this.validateField(dtoClass, field, fieldValue, `${path}.${field.propertyKey}`);
+            const failure = this.validateField(
+                dtoClass,
+                field,
+                fieldValue,
+                `${path}.${field.propertyKey}`,
+            );
             if (failure) return failure;
         }
         return undefined;
@@ -304,31 +370,35 @@ export class DtoSchemaBuilder {
         const expected = reflected?.name;
         if (expected === 'Array') return this.validateArray(options, value, path);
         if (expected === 'String') {
-            if (typeof value !== 'string') return new DtoValidationFailure(`${path} must be a string`);
+            if (typeof value !== 'string')
+                return new DtoValidationFailure(path, `${path} must be a string`);
             if (options.enumValues && !options.enumValues.includes(value)) {
-                return new DtoValidationFailure(`${path} must be one of: ${options.enumValues.join(', ')}`);
+                return new DtoValidationFailure(
+                    path,
+                    `${path} must be one of: ${options.enumValues.join(', ')}`,
+                );
             }
             return undefined;
         }
         if (expected === 'Number') {
             if (typeof value !== 'number' || !Number.isFinite(value)) {
-                return new DtoValidationFailure(`${path} must be a number`);
+                return new DtoValidationFailure(path, `${path} must be a number`);
             }
             if (options.integer && !Number.isInteger(value)) {
-                return new DtoValidationFailure(`${path} must be an integer`);
+                return new DtoValidationFailure(path, `${path} must be an integer`);
             }
             if (options.minimum !== undefined && value < options.minimum) {
-                return new DtoValidationFailure(`${path} must be >= ${options.minimum}`);
+                return new DtoValidationFailure(path, `${path} must be >= ${options.minimum}`);
             }
             if (options.maximum !== undefined && value > options.maximum) {
-                return new DtoValidationFailure(`${path} must be <= ${options.maximum}`);
+                return new DtoValidationFailure(path, `${path} must be <= ${options.maximum}`);
             }
             return undefined;
         }
         if (expected === 'Boolean') {
             return typeof value === 'boolean'
                 ? undefined
-                : new DtoValidationFailure(`${path} must be a boolean`);
+                : new DtoValidationFailure(path, `${path} must be a boolean`);
         }
         return this.validateAt(reflected, value, path);
     }
@@ -338,10 +408,15 @@ export class DtoSchemaBuilder {
         value: DtoValue,
         path: string,
     ): DtoValidationFailure | undefined {
-        if (!Array.isArray(value)) return new DtoValidationFailure(`${path} must be an array`);
-        if (!options.arrayItems) return new DtoValidationFailure(`${path} has no item type`);
+        if (!Array.isArray(value))
+            return new DtoValidationFailure(path, `${path} must be an array`);
+        if (!options.arrayItems) return new DtoValidationFailure(path, `${path} has no item type`);
         for (let index = 0; index < value.length; index += 1) {
-            const failure = this.validateElement(options.arrayItems, value[index], `${path}[${index}]`);
+            const failure = this.validateElement(
+                options.arrayItems,
+                value[index],
+                `${path}[${index}]`,
+            );
             if (failure) return failure;
         }
         return undefined;
@@ -353,11 +428,11 @@ export class DtoSchemaBuilder {
         path: string,
     ): DtoValidationFailure | undefined {
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-            return new DtoValidationFailure(`${path} must be an object map`);
+            return new DtoValidationFailure(path, `${path} must be an object map`);
         }
         const prototype: object | null = Object.getPrototypeOf(value);
         if (prototype !== Object.prototype && prototype !== null) {
-            return new DtoValidationFailure(`${path} must be a plain object map`);
+            return new DtoValidationFailure(path, `${path} must be a plain object map`);
         }
         for (const key of Object.keys(value)) {
             const entry: DtoValue = Object.getOwnPropertyDescriptor(value, key)?.value;
@@ -375,7 +450,7 @@ export class DtoSchemaBuilder {
         if (typeof type !== 'string') return this.validateAt(type, item, path);
         const wanted = type === 'integer' ? 'number' : type;
         if (typeof item !== wanted || (type === 'integer' && !Number.isInteger(item))) {
-            return new DtoValidationFailure(`${path} must be ${type}`);
+            return new DtoValidationFailure(path, `${path} must be ${type}`);
         }
         return undefined;
     }
@@ -388,7 +463,9 @@ export class DtoSchemaBuilder {
 
     private requireDto(dtoClass: DtoClass): void {
         if (!Reflect.getMetadata(DTO_MARKER, dtoClass)) {
-            throw new Error(`${dtoClass.name} must be decorated with @WpDto() for schema generation.`);
+            throw new Error(
+                `${dtoClass.name} must be decorated with @WpDto() for schema generation.`,
+            );
         }
     }
 }

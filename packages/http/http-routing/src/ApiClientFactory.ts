@@ -1,9 +1,17 @@
 import { inject } from 'inversify';
 import {
+    ApiErrorCodec,
+    DtoValue,
     getEndpoints,
     HttpContractMapper,
+    RequestStream,
+    ResponseStream,
     RouteMetadata,
     RouteMetadataFactory,
+    StreamEnvelope,
+    StreamEventValidator,
+    StreamTransportError,
+    StreamWriter,
 } from '@webpieces/core-util';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { MethodMeta } from './MethodMeta';
@@ -102,9 +110,8 @@ export class ApiClientFactory {
 
         for (const methodName of methodNames) {
             const contractRoute =
-                registeredRoutes?.find(
-                    (route: RouteMetadata) => route.methodName === methodName,
-                ) ?? RouteMetadataFactory.create(apiPrototype, methodName);
+                registeredRoutes?.find((route: RouteMetadata) => route.methodName === methodName) ??
+                RouteMetadataFactory.create(apiPrototype, methodName);
             const httpMethod = contractRoute.httpMethod;
             const path = contractRoute.path;
 
@@ -121,6 +128,9 @@ export class ApiClientFactory {
             // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
             proxy[methodName] = async (...args: unknown[]): Promise<unknown> => {
                 requireActiveContext(routeMeta);
+                if (routeMeta.streaming) {
+                    return this.runStreamingMethod(routeMeta, args, service);
+                }
                 // Run the shared mapping even in-process. It validates the exact path/query/body
                 // shape production clients use, then the controller receives the original typed args.
                 const mapped = HttpContractMapper.toWire(
@@ -139,6 +149,139 @@ export class ApiClientFactory {
         }
 
         return proxy;
+    }
+
+    /**
+     * Join the two in-memory halves through the same envelopes used by wire transports. This is
+     * intentionally not a controller shortcut: opening the stream still invokes `service`, so the
+     * ordinary logging/auth/application filter chain runs before a writer is returned.
+     */
+    // webpieces-disable no-any-unknown -- stream event DTOs are erased at the routing boundary
+    private async runStreamingMethod(
+        routeMeta: RouteMetadata,
+        requestArgs: readonly unknown[],
+        service: Service<MethodMeta, WpResponse<unknown>>,
+    ): Promise<RequestStream<DtoValue>> {
+        const streaming = routeMeta.streaming;
+        if (!streaming) throw new Error('Streaming route metadata is required.');
+        const clientResponse = this.requireResponseStream(routeMeta, requestArgs[0]);
+        const validator = new StreamEventValidator();
+        const serverResponse = new StreamWriter<DtoValue>(
+            async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
+                this.deliverResponseEnvelope(clientResponse, envelope),
+            (value: DtoValue): void =>
+                validator.validate(streaming.responseEventClass, value, 'response'),
+            streaming.supportsNonTerminalFailures,
+        );
+
+        // A rejected invocation is the open/handshake failure. It deliberately escapes unchanged,
+        // matching unary in-process calls and allowing an HTTP adapter to apply its normal mapper.
+        const responseWrapper = await service.invoke(
+            new MethodMeta(routeMeta, undefined, undefined, [serverResponse]),
+        );
+        const serverRequest = this.requireRequestStream(routeMeta, responseWrapper.response);
+        const clientRequest = new StreamWriter<DtoValue>(
+            async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
+                this.deliverRequestEnvelope(serverRequest, envelope),
+            (value: DtoValue): void =>
+                validator.validate(streaming.requestEventClass, value, 'request'),
+            streaming.supportsNonTerminalFailures,
+        );
+        // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
+        clientRequest.onCancel(async (reason?: unknown): Promise<void> => {
+            // Both sides observe one cancellation. Promise.all ensures a faulty callback on one
+            // half cannot prevent the other half from being notified.
+            await Promise.all([serverResponse.cancel(reason), serverRequest.cancel(reason)]);
+        });
+        return clientRequest;
+    }
+
+    private async deliverResponseEnvelope(
+        destination: ResponseStream<DtoValue>,
+        envelope: StreamEnvelope<DtoValue>,
+    ): Promise<void> {
+        switch (envelope.kind) {
+            case 'event':
+                if (envelope.value === undefined) {
+                    throw new StreamTransportError('Response event envelope has no value.');
+                }
+                return destination.event(envelope.value, envelope.correlation);
+            case 'failure':
+                if (!envelope.error) {
+                    throw new StreamTransportError('Response failure envelope has no error.');
+                }
+                return destination.fail(
+                    ApiErrorCodec.decode(envelope.error),
+                    envelope.correlation,
+                    { terminal: envelope.terminal },
+                );
+            case 'complete':
+                return destination.complete();
+        }
+    }
+
+    private async deliverRequestEnvelope(
+        destination: RequestStream<DtoValue>,
+        envelope: StreamEnvelope<DtoValue>,
+    ): Promise<void> {
+        switch (envelope.kind) {
+            case 'event':
+                if (envelope.value === undefined) {
+                    throw new StreamTransportError('Request event envelope has no value.');
+                }
+                return destination.event(envelope.value, envelope.correlation);
+            case 'failure':
+                if (!envelope.error) {
+                    throw new StreamTransportError('Request failure envelope has no error.');
+                }
+                return destination.fail(
+                    ApiErrorCodec.decode(envelope.error),
+                    envelope.correlation,
+                    { terminal: envelope.terminal },
+                );
+            case 'complete':
+                return destination.complete();
+        }
+    }
+
+    // webpieces-disable no-any-unknown -- runtime structural check narrows an erased API argument
+    private requireResponseStream(
+        routeMeta: RouteMetadata,
+        candidate: unknown,
+    ): ResponseStream<DtoValue> {
+        if (
+            typeof candidate === 'object' &&
+            candidate !== null &&
+            typeof Reflect.get(candidate, 'event') === 'function' &&
+            typeof Reflect.get(candidate, 'fail') === 'function' &&
+            typeof Reflect.get(candidate, 'complete') === 'function' &&
+            typeof Reflect.get(candidate, 'onCancel') === 'function'
+        ) {
+            return candidate as ResponseStream<DtoValue>;
+        }
+        throw new StreamTransportError(
+            `${routeMeta.apiName}.${routeMeta.methodName} requires a ResponseStream argument.`,
+        );
+    }
+
+    // webpieces-disable no-any-unknown -- runtime structural check narrows an erased controller result
+    private requireRequestStream(
+        routeMeta: RouteMetadata,
+        candidate: unknown,
+    ): RequestStream<DtoValue> {
+        if (
+            typeof candidate === 'object' &&
+            candidate !== null &&
+            typeof Reflect.get(candidate, 'event') === 'function' &&
+            typeof Reflect.get(candidate, 'fail') === 'function' &&
+            typeof Reflect.get(candidate, 'complete') === 'function' &&
+            typeof Reflect.get(candidate, 'cancel') === 'function'
+        ) {
+            return candidate as RequestStream<DtoValue>;
+        }
+        throw new StreamTransportError(
+            `${routeMeta.controllerClassName}.${routeMeta.methodName} did not return a RequestStream.`,
+        );
     }
 
     // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary

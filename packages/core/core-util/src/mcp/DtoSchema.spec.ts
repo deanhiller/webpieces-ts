@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     ApiJsonSchema,
     DtoSchemaBuilder,
+    WpMcpHeader,
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
@@ -19,7 +20,18 @@ class AddressDto {
 
 @WpDto()
 class SearchRequest {
-    @WpDtoField(new WpDtoFieldOptions('Words to find', true))
+    @WpDtoField(
+        new WpDtoFieldOptions(
+            'Words to find',
+            true,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            new WpMcpHeader('query'),
+        ),
+    )
     query!: string;
 
     @WpDtoField(new WpDtoFieldOptions('Maximum results', false, undefined, true, 1, 20))
@@ -64,7 +76,7 @@ describe('DTO JSON Schema metadata', () => {
             additionalProperties: false,
             required: ['query', 'categories', 'address'],
             properties: {
-                query: { type: 'string', description: 'Words to find' },
+                query: { type: 'string', description: 'Words to find', 'x-mcp-header': 'query' },
                 limit: { type: 'integer', minimum: 1, maximum: 20 },
                 categories: { type: 'array', items: { type: 'string' } },
                 address: {
@@ -120,7 +132,65 @@ describe('DTO JSON Schema metadata', () => {
         }
 
         expect(() => builder.build(MissingArrayItems)).toThrow(/must declare arrayItems/);
-        expect(() => builder.build(ContradictoryField)).toThrow(/numeric constraints.*not a number/);
+        expect(() => builder.build(ContradictoryField)).toThrow(
+            /numeric constraints.*not a number/,
+        );
+    });
+
+    it('validates MCP 2026 x-mcp-header declarations', () => {
+        const builder = new DtoSchemaBuilder();
+
+        @WpDto()
+        class InvalidMcpHeader {
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'Name',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    new WpMcpHeader('bad header'),
+                ),
+            )
+            name!: string;
+        }
+
+        expect(() => builder.build(InvalidMcpHeader)).toThrow(/RFC 9110 token/);
+
+        @WpDto()
+        class DuplicateMcpHeader {
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'First',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    new WpMcpHeader('tenant'),
+                ),
+            )
+            first!: string;
+
+            @WpDtoField(
+                new WpDtoFieldOptions(
+                    'Second',
+                    true,
+                    undefined,
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    new WpMcpHeader('TENANT'),
+                ),
+            )
+            second!: string;
+        }
+
+        expect(() => builder.build(DuplicateMcpHeader)).toThrow(/duplicates.*case-insensitively/);
     });
 
     describe('typed maps', () => {
@@ -183,19 +253,26 @@ describe('DTO JSON Schema metadata', () => {
 
         it('rejects wrongly typed map values with a keyed path', () => {
             const base = { sentencesByLocale: {} };
-            expect(builder.validate(PassageDto, { ...base, translations: { es: 3 } })?.message).toBe(
-                '$.translations.es must be string',
-            );
+            expect(
+                builder.validate(PassageDto, { ...base, translations: { es: 3 } })?.message,
+            ).toBe('$.translations.es must be string');
             expect(builder.validate(PassageDto, { ...base, counts: { es: 1.5 } })?.message).toBe(
                 '$.counts.es must be integer',
             );
             expect(
-                builder.validate(PassageDto, { sentencesByLocale: { es: { text: 'x', extra: 1 } } })?.message,
+                builder.validate(PassageDto, { sentencesByLocale: { es: { text: 'x', extra: 1 } } })
+                    ?.message,
             ).toBe('$.sentencesByLocale.es.extra is not allowed');
             expect(builder.validate(PassageDto, { sentencesByLocale: { es: 'x' } })?.message).toBe(
                 '$.sentencesByLocale.es must be an object',
             );
-            expect(builder.validate(PassageDto, {})?.message).toBe('$.sentencesByLocale is required');
+            expect(builder.validate(PassageDto, {})?.message).toBe(
+                '$.sentencesByLocale is required',
+            );
+            expect(builder.validate(PassageDto, {})?.field).toBe('$.sentencesByLocale');
+            expect(builder.validate(PassageDto, { ...base, translations: { es: 3 } })?.field).toBe(
+                '$.translations.es',
+            );
         });
 
         it('rejects map values that are not plain objects', () => {
@@ -219,7 +296,9 @@ describe('DTO JSON Schema metadata', () => {
                 @WpDtoField(new WpDtoMapFieldOptions('Children by name', true, TreeNode))
                 children!: Record<string, TreeNode>;
             }
-            expect(() => builder.build(TreeNode)).toThrow('Recursive DTO TreeNode cannot use an inline MCP schema.');
+            expect(() => builder.build(TreeNode)).toThrow(
+                'Recursive DTO TreeNode cannot use an inline MCP schema.',
+            );
         });
 
         it('rejects map options on a field that is not a map', () => {

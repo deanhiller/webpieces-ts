@@ -1,24 +1,20 @@
-import {
-    AuthenticatedCaller,
-    JwtHook,
-    MintedJwt,
-} from '@webpieces/http-routing';
-import {
-    McpAccessTokenAuthority,
-    MintedMcpAccessToken,
-    VerifiedMcpCredential,
-} from './McpAuth';
+import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
+import { McpAccessTokenAuthority, MintedMcpAccessToken, VerifiedMcpCredential } from './McpAuth';
 
 class ExampleJwtMintRequest {
     constructor(public readonly subject: string) {}
 }
 
 class ExampleMcpGrant {
-    constructor(public readonly subject: string, public readonly resource: string) {}
+    constructor(
+        public readonly subject: string,
+        public readonly resource: string,
+    ) {}
 }
 
 /** Compile assertion: one application authority can own both endpoint JWT and MCP token lifecycles. */
-export class McpAuthorityCompileAssertions extends JwtHook<ExampleJwtMintRequest>
+export class McpAuthorityCompileAssertions
+    extends JwtHook<ExampleJwtMintRequest>
     implements McpAccessTokenAuthority<ExampleMcpGrant>
 {
     override async mint(request: ExampleJwtMintRequest): Promise<MintedJwt> {

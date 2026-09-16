@@ -12,14 +12,27 @@
         "url": "https://github.com/deanhiller/webpieces-ts.git",
         "directory": "packages/http/mcp-server"
     },
-    "keywords": ["webpieces", "mcp", "server", "ai"],
-    "publishConfig": { "access": "public" },
+    "keywords": [
+        "webpieces",
+        "mcp",
+        "server",
+        "ai"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
     "dependencies": {
-        "@modelcontextprotocol/sdk": "1.29.0",
+        "@modelcontextprotocol/node": "2.0.0",
+        "@modelcontextprotocol/server": "2.0.0",
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
+        "express": "5.1.0",
         "reflect-metadata": "0.2.2",
         "tslib": "2.8.1"
+    },
+    "devDependencies": {
+        "@webpieces/http-client-node": "workspace:*",
+        "@webpieces/http-server": "workspace:*"
     }
 }

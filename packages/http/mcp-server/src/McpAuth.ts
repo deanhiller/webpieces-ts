@@ -1,4 +1,5 @@
 import { JwtHook } from '@webpieces/http-routing';
+import { ContextTuple } from '@webpieces/core-util';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
@@ -16,7 +17,9 @@ export class MintedMcpAccessToken {
             throw new Error('Minted MCP access token and resource must be non-empty.');
         }
         if (!Number.isFinite(issuedAtEpochSeconds) || !Number.isFinite(expiresAtEpochSeconds)) {
-            throw new Error('Minted MCP access token timestamps must be finite epoch-second values.');
+            throw new Error(
+                'Minted MCP access token timestamps must be finite epoch-second values.',
+            );
         }
         if (expiresAtEpochSeconds <= issuedAtEpochSeconds) {
             throw new Error('MCP access token expiry must be after issuance.');
@@ -44,10 +47,16 @@ export class VerifiedMcpCredential {
         public readonly accountValidatedAtEpochSeconds: number,
         /** Advisory tools/list filtering only. Endpoint authorization always runs again. */
         public readonly listingRoles: readonly string[] = [],
+        /** Trusted delegated identity derived only by the access-token authority. */
+        public readonly trustedContext: readonly ContextTuple[] = [],
     ) {}
 }
 
-/** Application-owned paired mint/verify authority for resource-bound MCP access tokens. */
+/**
+ * Application-owned paired mint/verify authority for resource-bound MCP access tokens.
+ * `verifyAccessToken` must throw `ApiUnauthorizedError` for a token it rejects (the bind boundary
+ * answers 401 + `WWW-Authenticate`); any other throw is treated as an implementation failure (500).
+ */
 export interface McpAccessTokenAuthority<TGrant> {
     mintAccessToken(grant: TGrant): Promise<MintedMcpAccessToken>;
     verifyAccessToken(
@@ -113,7 +122,9 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
             maxAccountValidationAgeSeconds <= 0 ||
             maxAccountValidationAgeSeconds > MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS
         ) {
-            throw new Error('MCP account validation cache ceiling must be between 1 second and 1 hour.');
+            throw new Error(
+                'MCP account validation cache ceiling must be between 1 second and 1 hour.',
+            );
         }
         if (
             maxEndpointJwtLifetimeSeconds <= 0 ||
