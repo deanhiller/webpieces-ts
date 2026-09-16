@@ -219,6 +219,9 @@ export class WebpiecesCoreHeaders {
      * });
      * ```
      *
+     * The contract's path IS appended to it (base + `@ApiPath` + `@Endpoint`). When the stored value
+     * is a complete url — the usual partner-webhook row — use {@link OVERRIDE_FULL_URL} instead.
+     *
      * ONLY a client carrying a `ContextBaseUrlFilter` reads it. Every other client IGNORES this key
      * entirely, which is what stops an ambient value re-pointing every other client in the same
      * fan-out loop at a partner's server. Installing that ONE filter IS the opt-in, so
@@ -237,6 +240,34 @@ export class WebpiecesCoreHeaders {
      */
     static readonly OVERRIDE_BASE_URL = ContextKey.untrusted<string>(
         'overrideBaseUrl',
+        /*httpHeader*/ undefined,
+        /*maskInLogs*/ false,
+        /*isLogged*/ true,
+    );
+
+    /**
+     * The COMPLETE url — host, path AND query — ONE outbound call should be sent to, verbatim. The
+     * sibling of {@link OVERRIDE_BASE_URL} for the other shape of runtime destination: a partner
+     * that does not implement our contract at their own host, but hands us one opaque url to POST
+     * to (`https://hooks.partner.example/in/abc?token=xyz`, straight out of a webhook row). With a
+     * base-URL override the contract's path would be appended to it and the url would be wrong; with
+     * this one the contract's path is NOT appended and nothing is inserted.
+     *
+     * ```ts
+     * RequestContext.run(() => {
+     *     RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, webhook.url);
+     *     return partnerWebhookClient.deliver(envelope);
+     * });
+     * ```
+     *
+     * ONLY a client carrying a `ContextFullUrlFilter` reads it, for exactly the reasons given on
+     * {@link OVERRIDE_BASE_URL}: installing that filter IS the opt-in, and every other client ignores
+     * the key. Not transferred over the wire (per-hop, or it becomes an SSRF pivot across the call
+     * tree), logged (it is what you want in a failed-delivery log line), and UNTRUSTED (a partner
+     * edited it) — which is why re-pointing at it arms the framework's SSRF guard automatically.
+     */
+    static readonly OVERRIDE_FULL_URL = ContextKey.untrusted<string>(
+        'overrideFullUrl',
         /*httpHeader*/ undefined,
         /*maskInLogs*/ false,
         /*isLogged*/ true,
@@ -280,5 +311,6 @@ export class WebpiecesCoreHeaders {
         WebpiecesCoreHeaders.CONTROLLER,
         WebpiecesCoreHeaders.METHOD,
         WebpiecesCoreHeaders.OVERRIDE_BASE_URL,
+        WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
     ];
 }

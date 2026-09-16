@@ -19,7 +19,7 @@
  *
  * // a client whose destination arrives per call: ONE filter, and nothing else changes
  * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
- *     new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
+ *     new ClientFilterDefinition(1000, new ContextFullUrlFilter()),
  * ]);
  * ```
  */
@@ -31,6 +31,9 @@ export { ClientConfig } from './ClientConfig';
 // Install this on the ONE client whose destination is data. Installing it IS the opt-in; a client
 // without it ignores an ambient OVERRIDE_BASE_URL entirely.
 export { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
+// The same opt-in for a COMPLETE stored url (host + path + query), sent verbatim with no contract
+// path appended — the usual partner-webhook shape. Reads OVERRIDE_FULL_URL.
+export { ContextFullUrlFilter } from './ContextFullUrlFilter';
 export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 
 // The two ways outbound auth refuses to send: a binding a contract's auth mode requires is absent.

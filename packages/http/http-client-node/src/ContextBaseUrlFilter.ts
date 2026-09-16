@@ -6,20 +6,27 @@ import { SsrfPolicy } from './SsrfPolicy';
 
 /**
  * Reads {@link WebpiecesCoreHeaders.OVERRIDE_BASE_URL} out of the ambient RequestContext and points
- * THIS ONE CALL at it. Ships in the box, and is the whole of the runtime-base-URL feature:
+ * THIS ONE CALL at that HOST, KEEPING this route's path: the url sent is
+ * `override + @ApiPath + @Endpoint`. That is the shape for a tenant or self-hosted deployment that
+ * implements OUR contract at their own base URL:
  *
  * ```ts
- * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+ * const tenant = factory.createRpcClient(TenantApi, new ClientConfig('tenant-svc'), [
  *     new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
  * ]);
  *
- * for (const webhook of webhooks) {
- *     await RequestContext.run(() => {
- *         RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, webhook.url);
- *         return partner.deliver(envelope);
- *     });
- * }
+ * await RequestContext.run(() => {
+ *     RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, tenantRow.baseUrl);
+ *     return tenant.sync(request);
+ * });
  * ```
+ *
+ * ## A partner webhook url is NOT a base URL — use ContextFullUrlFilter
+ *
+ * A url a partner registered for webhooks is usually a COMPLETE destination
+ * (`https://hooks.partner.example/in/abc?token=xyz`). Appending the contract's path to it produces
+ * the wrong url. For that, install `ContextFullUrlFilter` and set
+ * `WebpiecesCoreHeaders.OVERRIDE_FULL_URL`: the stored url is sent byte for byte.
  *
  * ## INSTALLING IT IS THE OPT-IN
  *

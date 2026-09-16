@@ -130,8 +130,54 @@ export class RouteMetadataFactory {
         return undefined;
     }
 
+    /**
+     * Refuse a contract in which two endpoints resolve to the same HTTP method + path.
+     *
+     * Empty paths are LEGAL (`@ApiPath('')` + `@Endpoint('', ...)` is how a contract says "the whole
+     * destination arrives per call"), so the thing actually worth rejecting is ambiguity: two methods
+     * that land on one route. On the server the second registration would silently shadow the first
+     * in the route map, and on the client both would dial the same URL — neither is ever what the
+     * author meant. Placeholder NAMES are ignored when comparing (`/a/{id}` and `/a/{key}` are the
+     * same route to a router), `''` and `'/'` compare equal (the server serves an empty path at the
+     * root), and the error names BOTH methods so the fix is obvious.
+     *
+     * Called by every transport that binds a whole contract (the generated clients and the server's
+     * route registration), so a duplicate dies at startup however the contract is consumed.
+     *
+     * @throws Error naming both colliding methods and the shared route.
+     */
+    // webpieces-disable no-function-outside-class -- deterministic contract validation shared by DI-free browser and server runtimes
+    static assertNoDuplicateRoutes(apiClass: Function): void {
+        const label = apiClass.name || 'Unknown';
+        const seen = new Map<string, string>();
+        for (const methodName of Object.keys(getEndpoints(apiClass) ?? {})) {
+            const route = this.create(apiClass, methodName);
+            // '' and '/' are one route to a server (every request path starts with '/').
+            const shape = (route.path === '' ? '/' : route.path).replace(/\{[^{}]+\}/g, '{}');
+            const key = `${route.httpMethod} ${shape}`;
+            const previous = seen.get(key);
+            if (previous !== undefined) {
+                throw new Error(
+                    `${label}.${previous} and ${label}.${methodName} both resolve to ` +
+                        `${route.httpMethod} '${route.path}'. Two endpoints of one contract cannot share ` +
+                        `an HTTP method + path; give one of them a distinct @Endpoint path or HTTP method.`,
+                );
+            }
+            seen.set(key, methodName);
+        }
+    }
+
+    /**
+     * Join `@ApiPath` and `@Endpoint` into the route path.
+     *
+     * Both empty joins to `''`, NOT `'/'`. A contract declaring `@ApiPath('')` + `@Endpoint('', ...)`
+     * is saying "this route adds nothing to the base URL", and a client whose base URL is a full
+     * destination (host + path + query) must send it byte for byte. Before #926 the client joined with
+     * plain concatenation (`'' + ''`), and forcing a `/` here broke exactly that (#944).
+     */
     // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory
     private static joinPath(basePath: string, endpointPath: string): string {
+        if (basePath === '' && endpointPath === '') return '';
         const joined = `${basePath}/${endpointPath}`.replace(/\/{2,}/g, '/');
         return joined.startsWith('/') ? joined : `/${joined}`;
     }

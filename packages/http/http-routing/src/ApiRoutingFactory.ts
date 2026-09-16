@@ -86,6 +86,8 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
         // mistake, so it dies at STARTUP naming the fix — not as a 401 in production on exactly the
         // traffic the endpoint exists for.
         assertEveryWebhookEndpointRetainsRawBody(this.apiMetaClass);
+        // Two endpoints on one method + path would silently shadow each other in the route map.
+        RouteMetadataFactory.assertNoDuplicateRoutes(this.apiMetaClass);
 
         const endpoints = getEndpoints(this.apiMetaClass) || {};
         const controllerFilepath = this.getControllerFilepath();
