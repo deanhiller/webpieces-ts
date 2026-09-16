@@ -33,7 +33,7 @@ export class ReviewerBriefingBuilder {
         repoRoot: string, req: RequiredChecklist, scan: ChecklistScan,
         entryByFile: Map<string, DiffManifestEntry>, diffDir: string, shared: ContextEntry[], manifest: DiffManifest,
     ): ReviewerBriefing {
-        const b = new ReviewerBriefing(req.subagent, req.id, repoRoot);
+        const b = new ReviewerBriefing(req.reviewer.agentName, req.id, repoRoot);
         b.docPath = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
         b.diffDir = diffDir;
         b.allDiffPath = diffDir === '' ? '' : path.join(diffDir, 'ALL.diff');
@@ -46,7 +46,7 @@ export class ReviewerBriefingBuilder {
         b.verdictPath = this.reviewJsonService.checklistResultPath(scan.reviewPath, req.id);
         b.fileDiffCommand = scan.context.fileDiffCommand;
         b.dirty = scan.basis.dirty;
-        b.ownAgentFileInDiff = this.ownAgentFileIn(manifest, req.subagent);
+        b.ownAgentFileInDiff = this.ownAgentFileIn(manifest, req.reviewer.agentName);
         this.copyManifestFacts(b, manifest);
         return b;
     }
@@ -79,12 +79,12 @@ export class ReviewerBriefingBuilder {
     }
 
     /**
-     * The reviewer's own `.claude/agents/<subagent>.md`, when THIS diff changes it. Detected here rather than
+     * The reviewer agent's own `.claude/agents/<agentName>.md`, when THIS diff changes it. Detected here rather than
      * left to the reviewer to notice: on the measured run two reviewers reviewed their own definition and
      * neither mentioned it, and every PR that edits the review gate reproduces that.
      */
-    private ownAgentFileIn(manifest: DiffManifest, subagent: string): string {
-        const suffix = path.join('.claude', 'agents', `${subagent}.md`);
+    private ownAgentFileIn(manifest: DiffManifest, agentName: string): string {
+        const suffix = path.join('.claude', 'agents', `${agentName}.md`);
         const hit = manifest.entries.find((e: DiffManifestEntry): boolean => e.file.split('/').join(path.sep).endsWith(suffix));
         return hit === undefined ? '' : (hit.fileAbs === '' ? hit.file : hit.fileAbs);
     }

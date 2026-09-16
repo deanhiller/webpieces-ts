@@ -3,25 +3,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ChecklistValidator } from './checklist-validator';
-import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
-import { findConfigFile } from './config-file';
+import {
+    ChecklistDefinition, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
+} from './checklist-config';
+import { CONFIG_FILENAME } from './config-file';
 import { validateChecklistDocs } from './checklist-docs-validator';
 
 const svc = new ChecklistValidator();
-
-/**
- * THIS repo's live `commands.pr-gate.checklists`, read straight off disk. Returns [] when there is no
- * config to find, so the block below stays silent in a consumer repo rather than failing there.
- */
-function liveChecklists(configPath: string | null): ChecklistDefinition[] {
-    if (configPath === null) return [];
-    // webpieces-disable no-any-unknown -- parsed config JSON is opaque until narrowed on the next line
-    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
-    const commands = raw['commands'] as Record<string, unknown> | undefined;
-    const prGate = commands?.['pr-gate'] as Record<string, unknown> | undefined;
-    const items = (prGate?.['checklists'] ?? []) as RawChecklistItem[];
-    return items.map((i: RawChecklistItem): ChecklistDefinition => toChecklist(i));
-}
+const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
 
 /**
  * A scratch repo. `docs` are written under `.claude/review/`; `agents` become `.claude/agents/<name>.md`.
@@ -39,156 +28,127 @@ function repoWith(docs: string[] = [], agents: string[] = []): string {
     return dir;
 }
 
-function defs(items: readonly { subagent?: string; doc?: string; patterns?: string[] }[]): ChecklistDefinition[] {
-    return items.map((i: { subagent?: string; doc?: string; patterns?: string[] }): ChecklistDefinition => toChecklist(i));
+function defs(items: readonly RawChecklistItem[]): ChecklistDefinition[] {
+    return items.map((i: RawChecklistItem): ChecklistDefinition => toChecklist(i, POLICY));
 }
 
 describe('ChecklistValidator', () => {
     it('accepts a valid set', () => {
-        const dir = repoWith(['db.md'], ['db-reviewer']);
-        expect(svc.validate(dir, defs([{ subagent: 'db-reviewer', doc: '.claude/review/db.md', patterns: ['**/*.sql'] }]))).toEqual([]);
+        const dir = repoWith(['db.md']);
+        expect(svc.validate(dir, defs([{ id: 'db', doc: '.claude/review/db.md', patterns: ['**/*.sql'] }]))).toEqual([]);
     });
 
-    it('accepts an entry with no doc — the reviewer just reads the diff', () => {
-        const dir = repoWith([], ['db-reviewer']);
-        expect(svc.validate(dir, defs([{ subagent: 'db-reviewer' }]))).toEqual([]);
+    it('rejects an entry with no doc — the generic reviewer has nothing else to review against', () => {
+        const errors = svc.validate(repoWith(), defs([{ id: 'db' }]));
+        expect(errors.some((e: string): boolean => /"db"\.doc is required/.test(e))).toBe(true);
     });
 
-    it('rejects an empty subagent — it has no id, so it could key no verdict file', () => {
+    it('rejects an empty id — it could key no verdict file', () => {
         const errors = svc.validate(repoWith(), defs([{ doc: '' }]));
-        expect(errors.some((e: string): boolean => /checklists\[0\].subagent must be a non-empty string/.test(e))).toBe(true);
+        expect(errors.some((e: string): boolean => /checklists\[0\]\.id must be a non-empty string/.test(e))).toBe(true);
     });
 
-    it('rejects a duplicate subagent — distinct reviewers ARE the independence guarantee', () => {
-        const dir = repoWith([], ['r']);
-        expect(svc.validate(dir, defs([{ subagent: 'r' }, { subagent: 'r' }])).some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
+    it('rejects a duplicate id — each checklist writes its own verdict file', () => {
+        const dir = repoWith(['a.md']);
+        const errors = svc.validate(dir, defs([
+            { id: 'r', doc: '.claude/review/a.md' }, { id: 'r', doc: '.claude/review/a.md' },
+        ]));
+        expect(errors.some((e: string): boolean => /duplicate id "r"/.test(e))).toBe(true);
+    });
+
+    it('rejects an id that is not file-name safe', () => {
+        const errors = svc.validate(repoWith(['a.md']), defs([{ id: 'a/b', doc: '.claude/review/a.md' }]));
+        expect(errors.some((e: string): boolean => /must use only letters/.test(e))).toBe(true);
     });
 
     it('rejects a doc that does not exist, and says paths are repo-relative', () => {
-        const dir = repoWith([], ['r']);
-        const errors = svc.validate(dir, defs([{ subagent: 'r', doc: '.claude/review/gone.md' }]));
+        const errors = svc.validate(repoWith(), defs([{ id: 'r', doc: '.claude/review/gone.md' }]));
         expect(errors.some((e: string): boolean => e.includes('.claude/review/gone.md'))).toBe(true);
         expect(errors.some((e: string): boolean => e.includes('REPO-relative'))).toBe(true);
     });
 
+    it('skips the doc-existence check on a structure-only validation (no repoRoot)', () => {
+        expect(svc.validate(undefined, defs([{ id: 'r', doc: '.claude/review/gone.md' }]))).toEqual([]);
+    });
+
     // Every error must name the one place checklists are configured, so a reader knows what to open.
     it('cites pr-gate.checklists in webpieces.config.json on every error', () => {
-        const dir = repoWith([], ['r']);
-        const errors = svc.validate(dir, defs([{ subagent: 'r', doc: '.claude/review/gone.md' }]));
+        const errors = svc.validate(repoWith(), defs([{ id: 'r', doc: '.claude/review/gone.md' }]));
         expect(errors.every((e: string): boolean => e.includes('pr-gate.checklists in webpieces.config.json'))).toBe(true);
     });
 });
 
 /**
- * The check that was missing before: `subagent` is the ONE required field and the distinct-reviewer guarantee
- * rests on it, yet nothing confirmed it named a real agent. A typo validated clean, then got printed as
- * "spawn this" — and since wp-finish blocks on review-<typo>.json, the coding agent's easiest path became
- * writing the reviewer's verdict itself: exactly the self-certification the rule exists to prevent.
+ * The reviewer agent is repo-wide now (`commands.pr-gate.reviewerAgentName`), so it is checked ONCE. A typo
+ * that validated clean would be printed as "spawn this", and the coding agent's easiest way past the
+ * resulting block would be writing the verdicts itself — the self-certification the gate exists to prevent.
  */
-describe('ChecklistValidator — the reviewer subagent must actually exist', () => {
-    it('rejects a subagent with no .claude/agents/<name>.md', () => {
-        const dir = repoWith([], ['deploy-infra-reviewer']);
-        const errors = svc.validate(dir, defs([{ subagent: 'deploy-infra-revewer' }]));
-        expect(errors.some((e: string): boolean => /names no reviewer/.test(e))).toBe(true);
-        expect(errors.some((e: string): boolean => e.includes('deploy-infra-revewer.md'))).toBe(true);
+describe('ChecklistValidator.validateReviewerAgent — the reviewer agent must actually exist', () => {
+    it('rejects a missing webpieces-reviewer and names pnpm wp-upgrade-shim as the cure', () => {
+        const errors = svc.validateReviewerAgent(repoWith([], ['other']), POLICY);
+        expect(errors.join('\n')).toContain('.claude/agents/webpieces-reviewer.md does not exist');
+        expect(errors.join('\n')).toContain('pnpm wp-upgrade-shim');
     });
 
-    it('explains the consequence, so the AI does not "fix" it by self-certifying', () => {
-        const errors = svc.validate(repoWith([], ['x']), defs([{ subagent: 'typo' }]));
-        expect(errors.join('\n')).toContain('review-typo.json');
-        expect(errors.join('\n')).toContain('Create that agent file or fix the name');
+    it('tells a repo-owned agent name to create the file instead', () => {
+        const errors = svc.validateReviewerAgent(
+            repoWith([], ['other']), new ReviewerAgentPolicy('typo-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST));
+        expect(errors.join('\n')).toContain('typo-reviewer.md');
+        expect(errors.join('\n')).toContain('Create that agent file');
+        expect(errors.join('\n')).not.toContain('wp-upgrade-shim');
     });
 
     it('accepts it when the agent file is there', () => {
-        const dir = repoWith([], ['deploy-infra-reviewer']);
-        expect(svc.validate(dir, defs([{ subagent: 'deploy-infra-reviewer' }]))).toEqual([]);
+        expect(svc.validateReviewerAgent(repoWith([], ['webpieces-reviewer']), POLICY)).toEqual([]);
     });
 
     // A consumer driving the gate outside Claude Code has no .claude/agents dir at all; checking for one
     // would break them over a directory they were never expected to have.
     it('stays off entirely when the repo has no .claude/agents dir', () => {
-        expect(svc.validate(repoWith(), defs([{ subagent: 'nobody-at-all' }]))).toEqual([]);
+        expect(svc.validateReviewerAgent(repoWith(), POLICY)).toEqual([]);
     });
 });
 
 /**
- * THIS repo's own live `commands.pr-gate.checklists`, validated against the files on disk.
+ * The isolated `validate-checklist-docs` entry point, end to end against a FIXTURE repo shaped like this
+ * repo's own four required checklists in the new `id` form.
  *
- * Every case above runs against a scratch repo, which proves the validator works and proves nothing
- * about whether the config beside it is wired correctly. This block closes that gap: it is the test that
- * would have caught a checklist naming a doc or an agent file nobody ever created — the failure mode
- * where the gate cheerfully tells a reviewer to open a path that does not exist and the reviewer's
- * easiest way out is to certify itself.
- *
- * `findConfigFile` / `validateChecklistDocs` walk UP from the cwd, so this works whether vitest is
- * launched from the project directory or the workspace root, and both stay silent (return [] / no
- * errors) in a repo that has no webpieces.config.json at all.
+ * This used to validate THIS repo's live `commands.pr-gate.checklists`. It cannot in this release: the live
+ * config is still on the retired `subagent` key, because the repo runs the PUBLISHED validator, which does
+ * not know `id` / `reviewerAgentName` yet (see .claude/rules/published-vs-local-source.md). Adopting the new
+ * shape in the live config — and pointing this block back at it — is the follow-up PR tracked on #938.
  */
-describe("this repo's own pr-gate checklists are wired to files that exist", () => {
-    const configPath = findConfigFile(process.cwd());
-    const repoRoot = configPath === null ? '' : path.dirname(configPath);
-    const live = liveChecklists(configPath);
+describe('validateChecklistDocs validates a repo wired to files that exist', () => {
+    const REQUIRED = [
+        { id: 'backwards-compat', doc: '.claude/review/backwards-compatibility.md', patterns: ['packages/**'], required: true },
+        { id: 'error-output', doc: '.claude/review/error-output.md', patterns: ['packages/**'], required: true },
+        { id: 'experiment-lifecycle', doc: '.claude/review/experiment-lifecycle.md', patterns: ['packages/**', '.claude/rules/**'], required: true },
+        { id: 'ticket-required', doc: '.claude/review/ticket-required.md', patterns: ['**', '.claude/**', '.github/**'], required: true },
+    ];
 
-    it('validates clean — every doc and every reviewer agent file is on disk', () => {
-        expect(validateChecklistDocs(process.cwd())).toEqual([]);
+    function fixtureRepo(checklists: unknown[]): string {
+        const dir = repoWith(
+            ['backwards-compatibility.md', 'error-output.md', 'experiment-lifecycle.md', 'ticket-required.md'],
+            ['webpieces-reviewer']);
+        fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', reviewerAgentName: 'webpieces-reviewer', checklists } },
+        }));
+        return dir;
+    }
+
+    it('validates clean — every doc is on disk', () => {
+        expect(validateChecklistDocs(fixtureRepo(REQUIRED))).toEqual([]);
     });
 
-    // Named one by one rather than counted: a count stays green when one reviewer is silently swapped for
-    // another, and each of these enforces a policy this repo has already violated once in anger.
-    it.each([
-        'backwards-compat-reviewer',
-        'error-output-reviewer',
-        'experiment-lifecycle-reviewer',
-        'ticket-required-reviewer',
-    ])('%s is registered, REQUIRED, and names a doc and an agent file that exist', (subagent: string) => {
-        const entry = live.find((c: ChecklistDefinition): boolean => c.subagent === subagent);
-        expect(entry, `${subagent} is missing from commands.pr-gate.checklists`).toBeDefined();
-        const found = entry as ChecklistDefinition;
-        expect(found.required).toBe(true);
-        expect(found.patterns.length).toBeGreaterThan(0);
-        expect(found.doc).not.toBe('');
-        expect(fs.existsSync(path.join(repoRoot, found.doc)), `missing doc ${found.doc}`).toBe(true);
-        const agentFile = path.join(repoRoot, '.claude', 'agents', `${subagent}.md`);
-        expect(fs.existsSync(agentFile), `missing agent file ${agentFile}`).toBe(true);
+    it('reports a doc that is not on disk', () => {
+        const errors = validateChecklistDocs(fixtureRepo([{ id: 'x', doc: '.claude/review/nope.md', required: true }]));
+        expect(errors.some((e: string): boolean => e.includes('nope.md'))).toBe(true);
     });
 
-    /**
-     * `experiment-lifecycle-reviewer`'s EXACT pattern list, which the case above can only assert is
-     * non-empty. The reviewer's subject is a SETTING an AI must not end, and that decision shows up in
-     * the flags and their read paths under `packages/**`, in the config, and in the "ships OFF and
-     * stays OFF for two years" policy prose — which now lives in `.claude/rules/**`, having moved out
-     * of `CLAUDE.md` when that file became a routing index (`CLAUDE.md` stays on the list because it
-     * still carries the rules an agent must obey unprompted). A checklist watching only `packages/**`
-     * would miss a diff that ends an experiment by editing the policy sentence — so a narrowing of this
-     * list is a silent hole, and this is the case that goes red for it.
-     */
-    it('experiment-lifecycle-reviewer watches code, config AND policy prose', () => {
-        if (configPath === null) return;
-        const entry = live.find(
-            (c: ChecklistDefinition): boolean => c.subagent === 'experiment-lifecycle-reviewer');
-        expect(entry, 'experiment-lifecycle-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
-        expect((entry as ChecklistDefinition).patterns)
-            .toEqual(['packages/**', 'webpieces.config.json', 'CLAUDE.md', '.claude/rules/**']);
-    });
-
-    /**
-     * `ticket-required-reviewer` is the one checklist scoped to the PR rather than to the diff: EVERY
-     * change is supposed to be traceable to an issue, including a one-line typo fix, so a narrowing of
-     * this list means the diffs least likely to be ticketed by hand are exactly the ones nobody checks.
-     *
-     * The two dot-directory entries are not redundant with `**`, which is the non-obvious part worth
-     * pinning. Checklist patterns run through `isPathExcluded`, which calls minimatch WITHOUT
-     * `{ dot: true }` — its strict sibling `matchesAnyGlob` passes the flag and documents this exact
-     * hazard — so `**` does not match `.claude/rules/tickets.md` or `.github/workflows/*.yml`. A
-     * docs/governance PR touching only dot-directories is precisely the shape least likely to carry a
-     * ticket, so dropping these two would open the hole the universal pattern exists to close. They are
-     * literal-prefixed, so they keep matching whichever way that flag ever goes.
-     */
-    it('ticket-required-reviewer matches EVERY diff, dot-directories included', () => {
-        if (configPath === null) return;
-        const entry = live.find(
-            (c: ChecklistDefinition): boolean => c.subagent === 'ticket-required-reviewer');
-        expect(entry, 'ticket-required-reviewer is missing from commands.pr-gate.checklists').toBeDefined();
-        expect((entry as ChecklistDefinition).patterns).toEqual(['**', '.claude/**', '.github/**']);
+    it('reports the retired subagent key', () => {
+        const errors = validateChecklistDocs(fixtureRepo([
+            { subagent: 'x-reviewer', doc: '.claude/review/error-output.md', required: true },
+        ]));
+        expect(errors.some((e: string): boolean => e.includes('"subagent" is a RETIRED'))).toBe(true);
     });
 });

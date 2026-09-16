@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
+import {
+    ChecklistInstructionsService, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
+} from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { ReviewReport, ReviewReportInput } from './review-report';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
@@ -47,7 +49,9 @@ const OUTCOMES = new Map<string, MergeOutcome>([
     ['failed', new MergeOutcome(false, false, 'did NOT merge and could NOT auto-merge', MERGE_RESULT_FAILED)],
 ]);
 
-const report = new ReviewReport(new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()));
+const report = new ReviewReport(
+    new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
+    new ChecklistInstructionsService(new ReviewJsonService()));
 
 const reviewInput = (definedCount: number, applicableCount: number, briefings: ReviewerBriefing[]): ReviewReportInput => {
     const built = new ReviewReportInput('/repo', 'dean-feature', '/repo/.webpieces/pr-review/dean-feature/review.json');
@@ -73,13 +77,16 @@ const emitted = (): Map<string, string> => {
     rendered.set('review-report: no checklists', report.render(reviewInput(0, 0, [])));
     rendered.set('review-report: nothing matched', report.render(reviewInput(3, 0, [])));
     rendered.set('review-report: one owed reviewer', report.render(reviewInput(1, 1, [owedReviewer()])));
+    const grouped = reviewInput(2, 2, [owedReviewer(), owedReviewer()]);
+    grouped.reviewer = new ReviewerAgentPolicy('webpieces-reviewer', 1);
+    rendered.set('review-report: grouped reviewers (reviewerAgents)', report.render(grouped));
     return rendered;
 };
 
 describe('no string the gate prints tells an AI to end its turn', () => {
     it('renders something for every case, so an empty map cannot pass this file', () => {
         const rendered = emitted();
-        expect(rendered.size).toBe(OUTCOMES.size * 2 + 3);
+        expect(rendered.size).toBe(OUTCOMES.size * 2 + 4);
         expect([...rendered.values()].filter((text: string): boolean => text.length > 0).length)
             .toBeGreaterThan(OUTCOMES.size);
     });

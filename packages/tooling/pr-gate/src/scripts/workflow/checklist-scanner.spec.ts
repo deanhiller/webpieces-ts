@@ -3,7 +3,10 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ChecklistDefinition, ChecklistOverride, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, RequiredChecklist, ReviewJsonService, toChecklist } from '@webpieces/rules-config';
+import {
+    ChecklistDefinition, ChecklistOverride, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig,
+    HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService, toChecklist,
+} from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
@@ -34,7 +37,9 @@ function repoOnBranch(): string {
 }
 
 /** One raw config entry as a fixture. `required` is omitted by most tests — see {@link defs}. */
-interface RawItem { subagent?: string; doc?: string; patterns?: string[]; required?: boolean }
+const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+
+interface RawItem { id?: string; doc?: string; patterns?: string[]; required?: boolean }
 
 /**
  * The already-validated `prGate.checklists` a command would hand the scanner. Built through the real
@@ -46,7 +51,7 @@ interface RawItem { subagent?: string; doc?: string; patterns?: string[]; requir
  * says `required: false` explicitly.
  */
 function defs(items: readonly RawItem[]): ChecklistDefinition[] {
-    return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }));
+    return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }, REVIEWER));
 }
 
 function newAiBranchName(): AiBranchName {
@@ -87,7 +92,7 @@ function scannerFor(turnOffAllReviewers = false, singleRoundReview = false): Che
 describe('ChecklistScanner — single-round mode', () => {
     it('carries the machine opt-in into the shared stage-②/stage-③ scan', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.writeFileSync(path.join(dir, 'change.sql'), 'SELECT 1;\n');
         expect(scannerFor(false, true).scan(
             dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(true);
@@ -111,7 +116,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
 
     it('matches a checklist on a MODIFIED-but-uncommitted file', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.mkdirSync(path.join(dir, 'db'));
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'CREATE TABLE a();\n');
         git(dir, 'git add -A');
@@ -123,7 +128,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
 
     it('matches a checklist on an UNTRACKED file', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.mkdirSync(path.join(dir, 'db'));
         fs.writeFileSync(path.join(dir, 'db', '002.sql'), 'CREATE TABLE b();\n'); // never `git add`ed
         const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
@@ -135,7 +140,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
     // vanished — so the reviewer that must run was never listed, purely because of an env var.
     it('STILL matches uncommitted work when NX_BASE / NX_HEAD are set', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.mkdirSync(path.join(dir, 'db'));
         fs.writeFileSync(path.join(dir, 'db', '003.sql'), 'CREATE TABLE c();\n');
         process.env['NX_BASE'] = 'main';
@@ -148,7 +153,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
     // most wants to key on. The scanner must override it.
     it('sees non-.ts files (tsOnly:false)', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'ops-reviewer', patterns: ['**/Dockerfile', '**/.env*'] }]);
+        const checklists = defs([{ id: 'ops-reviewer', patterns: ['**/Dockerfile', '**/.env*'] }]);
         fs.writeFileSync(path.join(dir, 'Dockerfile'), 'FROM node\n');
         expect(scannerFor().scan(dir, checklists, new ChecklistScanOptions(false)).applicable).toHaveLength(1);
     });
@@ -158,10 +163,10 @@ describe('ChecklistScanner — X / N / Z', () => {
     // X = 4 defined. The repo below changes a .sql and a Dockerfile, so N = 2 (db + ops); the .css and
     // *Api.ts checklists must NOT fire.
     const FOUR = defs([
-        { subagent: 'db-reviewer', patterns: ['**/*.sql'] },
-        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'] },
-        { subagent: 'ui-reviewer', patterns: ['**/*.css'] },
-        { subagent: 'api-reviewer', patterns: ['**/*Api.ts'] },
+        { id: 'db-reviewer', patterns: ['**/*.sql'] },
+        { id: 'ops-reviewer', patterns: ['**/Dockerfile'] },
+        { id: 'ui-reviewer', patterns: ['**/*.css'] },
+        { id: 'api-reviewer', patterns: ['**/*Api.ts'] },
     ]);
 
     function repoWithFour(): string {
@@ -220,8 +225,8 @@ describe('ChecklistScanner — X / N / Z', () => {
 // Same fixture, split out to keep each describe inside the method-length limit.
 describe('ChecklistScanner — degenerate and always-write cases', () => {
     const FOUR = defs([
-        { subagent: 'db-reviewer', patterns: ['**/*.sql'] },
-        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'] },
+        { id: 'db-reviewer', patterns: ['**/*.sql'] },
+        { id: 'ops-reviewer', patterns: ['**/Dockerfile'] },
     ]);
 
     function repoWithFour(): string {
@@ -317,7 +322,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
         fs.writeFileSync(path.join(dir, 'a.sql'), 'x\n');
         git(dir, 'git add -A');
         git(dir, 'git commit -qm a');
-        const checklists = defs([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
         expect(scan.forkPoint).toBe('');
         expect(scan.applicable).toEqual([]);
@@ -327,10 +332,10 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
 // Shared by the two roster describes below (split only to stay inside the method-length limit): 4 defined,
 // of which the .sql and Dockerfile ones fire and the .css / *Api.ts ones are evaluated and skipped.
 const ROSTER_FOUR = defs([
-    { subagent: 'db-reviewer', patterns: ['**/*.sql'] },
-    { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'] },
-    { subagent: 'ui-reviewer', patterns: ['**/*.css'] },
-    { subagent: 'api-reviewer', patterns: ['**/*Api.ts'] },
+    { id: 'db-reviewer', patterns: ['**/*.sql'] },
+    { id: 'ops-reviewer', patterns: ['**/Dockerfile'] },
+    { id: 'ui-reviewer', patterns: ['**/*.css'] },
+    { id: 'api-reviewer', patterns: ['**/*Api.ts'] },
 ]);
 
 function repoForRoster(): string {
@@ -396,8 +401,8 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
 describe('ChecklistScanner — optional checklists', () => {
     // Both match the fixture repo. One blocks, one is offered.
     const MIXED = defs([
-        { subagent: 'db-reviewer', patterns: ['**/*.sql'], required: true },
-        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'], required: false },
+        { id: 'db-reviewer', patterns: ['**/*.sql'], required: true },
+        { id: 'ops-reviewer', patterns: ['**/Dockerfile'], required: false },
     ]);
 
     it('carries `required` from config through to the matched set', () => {
@@ -475,7 +480,7 @@ describe('ChecklistScanner — verdict file formats', () => {
 describe('ChecklistScanner — patternless checklists always apply', () => {
     it('a checklist with no patterns is applicable on any change', () => {
         const dir = repoOnBranch();
-        const checklists = defs([{ subagent: 'security-reviewer' }]);
+        const checklists = defs([{ id: 'security-reviewer' }]);
         fs.writeFileSync(path.join(dir, 'anything.txt'), 'x\n');
         const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
         expect(scan.applicable).toHaveLength(1);
@@ -483,9 +488,11 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
         expect(scan.applicable[0].matchedPatterns).toEqual([]);
     });
 
-    it('keeps the ChecklistDefinition contract the scanner relies on (id == subagent)', () => {
-        const def = new ChecklistDefinition('r', 'r', '.claude/review/r.md', ['**/*.sql'], true);
-        expect(def.id).toBe(def.subagent);
+    it('carries the repo-wide reviewer policy onto every matched checklist', () => {
+        const dir = repoOnBranch();
+        fs.writeFileSync(path.join(dir, 'anything.txt'), 'x\n');
+        const scan = scannerFor().scan(dir, defs([{ id: 'a' }, { id: 'b' }]), new ChecklistScanOptions(false));
+        expect(scan.applicable.map((r: RequiredChecklist): string => r.reviewer.agentName)).toEqual(['webpieces-reviewer', 'webpieces-reviewer']);
     });
 });
 
@@ -501,8 +508,8 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
  */
 describe('ChecklistScanner — turnOffAllReviewers', () => {
     const TWO_REQUIRED = defs([
-        { subagent: 'db-reviewer', patterns: ['**/*.sql'], required: true },
-        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'], required: true },
+        { id: 'db-reviewer', patterns: ['**/*.sql'], required: true },
+        { id: 'ops-reviewer', patterns: ['**/Dockerfile'], required: true },
     ]);
 
     function repoWithBoth(): string {

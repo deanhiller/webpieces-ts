@@ -442,14 +442,14 @@ export class ReviewJsonService {
     // eslint-disable-next-line @typescript-eslint/max-params
     refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, reviewJsonFilePath: string, archivedPath = ''): string {
         const finding = `${verdict.detail.split('\n').join('\n      ')}\n`;
-        const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.subagent}) wrote:\n      ` + finding;
+        const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.reviewer.agentName}) wrote:\n      ` + finding;
         const retired = archivedPath === ''
             ? '      Fix it, then re-run.\n'
             // Re-spawning is said only after the finding, because an instruction to spawn a subagent is the
             // one line an AI acts on first — see refusedChecklists for what that cost.
             : `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
               `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
-              `"${req.subagent}" subagent review again and write a new verdict.\n`;
+              `"${req.reviewer.agentName}" subagent review again and write a new verdict.\n`;
         return head + retired + this.overrideRoute(req, reviewJsonFilePath);
     }
 
@@ -547,7 +547,7 @@ export class ReviewJsonService {
                 if (!req.required) continue;
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(
-                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +
+                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.reviewer.agentName}" subagent to review it, ` +
                     `then write ${this.checklistFileName(req.id)} with ` +
                     `{"id":"${req.id}","status":"${VERDICT_GREEN}","agent":"unknown","model":"unknown","output":"…"}.${doc}`,
                 );

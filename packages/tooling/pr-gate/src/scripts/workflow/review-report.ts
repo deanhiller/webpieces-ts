@@ -1,7 +1,9 @@
+import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, reviewJsonSchemaHint,
-    RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
+    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy,
+    ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 
@@ -72,6 +74,8 @@ export class ReviewReportInput {
     singleRoundReview: boolean;
     singleRoundRepeat: boolean;
     singleRoundReviewers: string[];
+    // commands.pr-gate.reviewerAgentName + reviewerAgents: which agent type to spawn, and the per-round cap.
+    reviewer: ReviewerAgentPolicy;
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {
         this.repoRoot = repoRoot;
@@ -89,6 +93,7 @@ export class ReviewReportInput {
         this.singleRoundReview = false;
         this.singleRoundRepeat = false;
         this.singleRoundReviewers = [];
+        this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
     }
 }
 
@@ -118,6 +123,7 @@ export class ReviewReport {
     constructor(
         private readonly checklistNotice: ChecklistNotice,
         private readonly reviewerInstructions: ReviewerInstructionsService,
+        private readonly checklistInstructions: ChecklistInstructionsService,
     ) {}
 
     render(input: ReviewReportInput): string {
@@ -169,7 +175,7 @@ export class ReviewReport {
         // all-clear is not printed when anything is still owed — and "some reviewers are reused, others
         // must be spawned" is exactly the shape in which an agent re-spawns the reused ones too.
         for (const r of input.reviewed) {
-            lines.push(`  ✓ ${r.subagent} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`);
+            lines.push(`  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`);
         }
         // A verdict file that EXISTS but is unreadable as a verdict is called out here. Without it this
         // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
@@ -202,7 +208,7 @@ export class ReviewReport {
             + `${required.length} of them REQUIRED:`,
         ];
         for (const r of input.suppressed) {
-            lines.push(`     • ${r.subagent}${r.required ? '  (REQUIRED — suppressed anyway)' : '  (optional)'}`);
+            lines.push(`     • ${r.id}${r.required ? '  (REQUIRED — suppressed anyway)' : '  (optional)'}`);
         }
         lines.push(
             '',
@@ -231,7 +237,7 @@ export class ReviewReport {
         return [
             '',
             `  ⏭️  ${skipped.length} OPTIONAL checklist(s) matched this diff and were SKIPPED (--no-optional):`,
-            ...skipped.map((b: ReviewerBriefing): string => `       ${b.subagent} — ${this.why(b)}`),
+            ...skipped.map((b: ReviewerBriefing): string => `       ${b.checklistId} — ${this.why(b)}`),
             '      Not blocking. Drop the flag and re-run this command to offer them after all.',
         ];
     }
@@ -346,9 +352,10 @@ export class ReviewReport {
      */
     private spawnStep(input: ReviewReportInput, owed: readonly ReviewerBriefing[], step: number, withAwait: boolean): string {
         const lines: string[] = [
-            `STEP ${step} — only once that file is written, spawn these ${owed.length} REQUIRED reviewer subagent(s) — a`,
-            '         SEPARATE one each. They block the PR, so do NOT ask whether to run them. You may NOT',
-            '         review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
+            `STEP ${step} — only once that file is written, review these ${owed.length} REQUIRED checklist(s) with`,
+            ...this.howManyAgents(input, owed.length),
+            '         They block the PR, so do NOT ask whether to run them. You may NOT review your own',
+            '         work, and you may NOT write a reviewer\'s verdict file on its behalf.',
             '',
         ];
         lines.push(...this.refusedWarning(input, owed));
@@ -420,11 +427,31 @@ export class ReviewReport {
             '         optional reviewer blocks the PR exactly like a required one.',
             '',
         ];
+        lines.push(...this.optionalAgentLines(input, offerable.length));
         lines.push(...this.refusedWarning(input, offerable));
         for (const b of offerable) lines.push(...this.oneSpawnBlock(input, b));
         if (withAwait) lines.push(...this.awaitLines());
         lines.push('');
         return lines.join('\n');
+    }
+
+    // How the picked optional checklists are staffed. Grouped, the cap covers the WHOLE round, required
+    // reviewers included — otherwise "at most N" would quietly become 2N the moment a human said yes.
+    private optionalAgentLines(input: ReviewReportInput, count: number): string[] {
+        const reviewer = input.reviewer;
+        const required = this.requiredOwed(input).length;
+        // The Codex pointer is printed once per report: by the required step when there is one.
+        const codex = required > 0 ? [] : [this.agentDefinitionLine(input)];
+        if (!reviewer.grouped()) {
+            return [`         Each picked checklist gets its own \`${reviewer.agentName}\` subagent, spawned as its block shows.`, ...codex, ''];
+        }
+        const scope = required > 0 ? `, COUNTING the ${required} required checklist(s) above — fold picked ones into those subagents` : '';
+        return [
+            `         Review what they picked with \`${reviewer.agentName}\` subagents: at most ${reviewer.maxAgents} IN TOTAL`,
+            `         this round${scope}. Hand each subagent the instructions file of every checklist it covers.`,
+            ...codex,
+            ...(count > 0 ? [''] : []),
+        ];
     }
 
     // Said up front, not only beside the block: an agent that has decided to spawn everything listed here
@@ -494,23 +521,68 @@ export class ReviewReport {
      * loop this exists to break.
      */
     private oneSpawnBlock(input: ReviewReportInput, b: ReviewerBriefing): string[] {
-        const instructionsFile = this.reviewerInstructions.pathFor(input.repoRoot, input.featureName, b.subagent);
+        const instructionsFile = this.reviewerInstructions.pathFor(input.repoRoot, input.featureName, b.checklistId);
+        if (input.reviewer.grouped()) {
+            // Grouped: the subagent_type is stated once, above; each block is one checklist's file to hand
+            // to whichever subagent covers it.
+            return [...this.leadIn(input, b), `      instructions:  ${instructionsFile}`, ''];
+        }
         return [
             ...this.leadIn(input, b),
-            `      subagent_type: ${b.subagent}`,
+            `      subagent_type: ${b.agentName}`,
             '      prompt:        Read your instructions file FIRST and follow it exactly:',
             `                     ${instructionsFile}`,
             '',
         ];
     }
 
+    /**
+     * HOW MANY subagents, of WHICH type — the one place this report states it, shared by the required and
+     * the optional step so the two cannot disagree.
+     *
+     * Without `commands.pr-gate.reviewerAgents` it is one separate subagent per checklist, as it always was.
+     * With it, the main AI gets a CAP and the grouping decision: the point of the key is to stop paying for
+     * N agents re-reading the same diff, and the AI is the one that can see which checklists belong together.
+     * The cap is per ROUND, so a re-run after a red verdict re-reviews only the owed checklists — the only
+     * ones listed — under the same cap.
+     */
+    private howManyAgents(input: ReviewReportInput, count: number): string[] {
+        const reviewer = input.reviewer;
+        if (!reviewer.grouped()) {
+            return [`         a SEPARATE \`${reviewer.agentName}\` subagent for each.`, this.agentDefinitionLine(input)];
+        }
+        const cap = Math.min(reviewer.maxAgents, count);
+        return [
+            `         AT MOST ${cap} subagent(s) of type \`${reviewer.agentName}\` (commands.pr-gate.reviewerAgents = ${reviewer.maxAgents}).`,
+            `         ${this.checklistInstructions.groupingHint(count, cap)}`,
+            '         Spawn each one as:',
+            `             subagent_type: ${reviewer.agentName}`,
+            '             prompt:        Read EACH instructions file below FIRST and follow it exactly. Review each',
+            '                            checklist only over its own in-scope files and write ONE verdict file per',
+            '                            checklist — never one for a checklist you were not given.',
+            '                            <then list the instructions file of every checklist this subagent covers>',
+            '         Every checklist below must be covered by exactly one of those subagents.',
+            this.agentDefinitionLine(input),
+        ];
+    }
+
+    /**
+     * The ONE canonical reviewer definition, named for a harness that cannot spawn it by type. Codex has no
+     * registered agent types, so its subagent is generic; pointing it at the same committed file keeps one
+     * definition for both harnesses instead of a Codex-specific copy that drifts (#863).
+     */
+    private agentDefinitionLine(input: ReviewReportInput): string {
+        const file = path.join(input.repoRoot, '.claude', 'agents', `${input.reviewer.agentName}.md`);
+        return `         Codex (no agent types): spawn a generic subagent and have it read ${file} first.`;
+    }
+
     // The lines above the spawn coordinates: normally just why this reviewer is in scope; for one that
     // already refused, its verdict verbatim plus the order the two actions must happen in.
     private leadIn(input: ReviewReportInput, b: ReviewerBriefing): string[] {
         const refusal = input.refused.find((r: RefusedReviewer): boolean => r.checklistId === b.checklistId);
-        if (!refusal) return [`  ▶ ${b.subagent} — ${this.why(b)}`, ...this.docLine(b)];
+        if (!refusal) return [`  ▶ ${b.checklistId} — ${this.why(b)}`, ...this.docLine(b)];
         return [
-            `  ⛔ ${b.subagent} — ALREADY REVIEWED THIS BRANCH AND REFUSED. It will refuse again on unchanged code.`,
+            `  ⛔ ${b.checklistId} — ALREADY REVIEWED THIS BRANCH AND REFUSED. It will refuse again on unchanged code.`,
             `      ${refusal.message}`,
             '      FIX THE FINDING FIRST (or record a human-authored override). ONLY THEN spawn it again, to',
             '      write a fresh verdict:',

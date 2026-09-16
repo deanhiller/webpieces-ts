@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ChecklistOverride, ChecklistResult, RequiredChecklist, ReviewJsonService } from './review-json';
+import { REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy } from './checklist-config';
+
+const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
 
 /**
  * `override-<id>.json` END TO END, through the two surfaces that actually decide anything: what
@@ -15,7 +18,7 @@ import { ChecklistOverride, ChecklistResult, RequiredChecklist, ReviewJsonServic
  */
 
 const REQ = (id: string): RequiredChecklist =>
-    new RequiredChecklist(id, `${id}-reviewer`, `.claude/review/${id}.md`, ['x.sql']);
+    new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), `.claude/review/${id}.md`, ['x.sql']);
 
 const VALID_REVIEW = JSON.stringify({
     title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 'ok',
@@ -87,7 +90,7 @@ describe('loadReviewJson resolves a red verdict against override-<id>.json', () 
 describe('refusalError prints the override route', () => {
     const svc = new ReviewJsonService();
     const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
-    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, `${id}-reviewer`, '', ['x.sql'], ['**/*.sql']);
+    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), '', ['x.sql'], ['**/*.sql']);
     const refusalFor = (id: string): string => {
         const results = [new ChecklistResult('unknown', 'unknown', id, 'red', 'refused', null)];
         return svc.refusalError(req(id), svc.resolveVerdict(req(id), results), REVIEW_PATH);

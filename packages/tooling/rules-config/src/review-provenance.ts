@@ -27,7 +27,7 @@ const WHAT_THIS_IS =
 /** Where ONE reviewer's inputs and output live on disk. Data-only (per CLAUDE.md). */
 export class ReviewerPaths {
     verdictFile: string;       // the review-<id>.json this reviewer was told to write
-    instructionsFile: string;  // its generated <subagent>.instructions.md
+    instructionsFile: string;  // its checklist's generated <id>.instructions.md
     docPath: string;           // its checklist's guidance doc ('' when the checklist names none)
 
     constructor(verdictFile: string, instructionsFile: string, docPath: string) {
@@ -71,7 +71,7 @@ export class ReviewerTranscript {
     models: string[];
 
     constructor(evidence: ReviewerEvidence, paths: ReviewerPaths) {
-        this.id = evidence.agentType; // a checklist's id IS its subagent name (see ChecklistDefinition)
+        this.id = evidence.checklistId; // the checklist; agentType is the (shared) reviewer agent type
         this.agentType = evidence.agentType;
         this.agentId = evidence.agentId;
         this.transcript = evidence.transcriptPath;

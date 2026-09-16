@@ -5,7 +5,12 @@ import {
     BRANCH_RETENTION_KEEP,
 } from './branch-archiver';
 import { ChecklistValidator } from './checklist-validator';
-import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
+import {
+    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    ReviewerAgentPolicy, toChecklist,
+} from './checklist-config';
+import { UPGRADE_SHIM_COMMAND } from './constants';
+import { retiredKeyErrorsIn } from './retired-config-keys';
 
 // The two `pr-gate` sub-sections whose validation is bulky enough to own a file: the review `checklists`
 // and the one rationale key that is rejected outright. Split out of validate-config.ts only for size;
@@ -40,21 +45,25 @@ export function validateNoGateSaltRationale(s: Record<string, unknown>): string[
 
 const CHECKLIST_EXAMPLE = (
     'Example:\n' +
+    '    "reviewerAgentName": "webpieces-reviewer",\n' +
     '    "checklists": [\n' +
-    '      { "subagent": "db-migration-reviewer",\n' +
+    '      { "id": "db-migrations",\n' +
     '        "doc": ".claude/review/db-migrations.md",\n' +
     '        "patterns": ["**/migrations/**", "**/*.sql"],\n' +
     '        "required": true }\n' +
     '    ]\n' +
-    '  Each entry needs its OWN reviewer subagent (a .claude/agents/<subagent>.md) — that is how independent\n' +
-    '  review is enforced. "doc" is REPO-relative. Omit "patterns" (or use []) to run on every PR.\n' +
-    '  "required" is MANDATORY on every entry: true blocks the PR until the reviewer passes; false makes it\n' +
-    '  an OPTIONAL review the human is offered and may decline (but if they DO run it, a red verdict still\n' +
-    '  blocks).'
+    '  "id" names the checklist and keys its review-<id>.json. Every checklist is reviewed by the agent\n' +
+    '  "reviewerAgentName" names, against its own "doc" (REQUIRED, REPO-relative). Omit "patterns" (or use\n' +
+    '  []) to run on every PR. "required" is MANDATORY on every entry: true blocks the PR until the\n' +
+    '  reviewer passes; false makes it an OPTIONAL review the human is offered and may decline (but if they\n' +
+    '  DO run it, a red verdict still blocks).'
 );
 
+// The label every RETIRED checklist-entry key is filed under in RETIRED_CONFIG_KEYS.
+export const CHECKLIST_ENTRY_LABEL = '[pr-gate.checklists]';
+
 /**
- * The `checklists` section of a pr-gate config: an ARRAY of { subagent, doc?, patterns? }, and nothing else.
+ * The `checklists` section of a pr-gate config: an ARRAY of { id, doc, patterns?, required }, and nothing else.
  *
  * The previous `{ "doc": "..." }` shape — which hid the same array in a `<!-- webpieces:checklists -->` HTML
  * comment inside a markdown doc — is REMOVED, not deprecated. It is rejected with the exact edit to make.
@@ -63,15 +72,15 @@ const CHECKLIST_EXAMPLE = (
  * config edit that the coding agent reading this error applies in one pass. A hard failure naming the fix is
  * cheaper than permanent duality.
  *
- * Exported so the isolated validate-checklist-docs target reuses it. `repoRoot` (when known) lets the doc +
- * reviewer-agent existence checks run.
+ * Exported so the isolated validate-checklist-docs target reuses it. `repoRoot` (when known) lets the doc
+ * existence checks run.
  */
 // webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 export function validateChecklistsSection(value: unknown, repoRoot?: string): string[] {
     if (Array.isArray(value)) return validateChecklistArray(value, repoRoot);
     if (typeof value === 'object' && value !== null && 'doc' in value) return [legacyManifestError(value)];
-    return [`[pr-gate] "checklists" must be an ARRAY of { "subagent", "doc"?, "patterns"? }. ${CHECKLIST_EXAMPLE}`];
+    return [`[pr-gate] "checklists" must be an ARRAY of { "id", "doc", "patterns"?, "required" }. ${CHECKLIST_EXAMPLE}`];
 }
 
 /**
@@ -99,9 +108,9 @@ function legacyManifestError(value: object): string {
 /**
  * `required` is MANDATORY on every checklist entry — omitting it is an error, never a default.
  *
- * The error names the entry's own subagent, because that is what the consumer recognizes in a
- * twelve-entry array; `checklists[7]` alone means counting braces. It also states BOTH edits, because the
- * whole point of the key is that the answer differs per checklist and only the consumer knows which.
+ * The error names the entry's own id, because that is what the consumer recognizes in a twelve-entry
+ * array; `checklists[7]` alone means counting braces. It also states BOTH edits, because the whole point of
+ * the key is that the answer differs per checklist and only the consumer knows which.
  *
  * Why a hard rejection instead of `?? true`: an accepted shape is never migrated. Defaulting to true
  * silently keeps the all-blocking behavior this key exists to relieve, and every consumer that would have
@@ -112,7 +121,7 @@ function legacyManifestError(value: object): string {
 // webpieces-disable no-any-unknown -- one opaque checklist entry, narrowed by the typeof guards here
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 function requiredKeyErrors(e: Record<string, unknown>, i: number): string[] {
-    const name = typeof e['subagent'] === 'string' && e['subagent'].trim() !== '' ? ` ("${e['subagent']}")` : '';
+    const name = typeof e['id'] === 'string' && e['id'].trim() !== '' ? ` ("${e['id']}")` : '';
     if (e['required'] === undefined) {
         return [
             `[pr-gate] checklists[${i}]${name} is missing "required". Every checklist must state one — there is\n` +
@@ -130,9 +139,29 @@ function requiredKeyErrors(e: Record<string, unknown>, i: number): string[] {
     return [];
 }
 
-// Structurally check each entry HERE — a bad `patterns` or a non-object entry is a config-file typo and
-// deserves a `checklists[i]` message — then hand the narrowed defs to ChecklistValidator for the checks only
-// the filesystem can answer (the guidance doc exists, the reviewer agent exists).
+// Structurally check ONE entry — a bad `patterns` or a non-string `doc` is a config-file typo and deserves a
+// `checklists[i]` message. A RETIRED key (the per-entry `subagent`) is reported with its migration edit.
+// webpieces-disable no-any-unknown -- one opaque checklist entry, narrowed per-field below
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function checklistEntryErrors(e: Record<string, unknown>, i: number): string[] {
+    const errors = retiredKeyErrorsIn(e, CHECKLIST_ENTRY_LABEL).map((m: string): string => `checklists[${i}] ${m}`);
+    if (e['id'] !== undefined && typeof e['id'] !== 'string') {
+        errors.push(`[pr-gate] checklists[${i}].id must be a string — the checklist's name; it keys review-<id>.json.`);
+    }
+    if (e['doc'] !== undefined && typeof e['doc'] !== 'string') {
+        errors.push(`[pr-gate] checklists[${i}].doc must be a string — the REPO-relative path to the checklist's guidance doc.`);
+    }
+    // webpieces-disable no-any-unknown -- opaque array element, narrowed by the typeof guard
+    if (e['patterns'] !== undefined && !(Array.isArray(e['patterns']) && e['patterns'].every((p: unknown): boolean => typeof p === 'string'))) {
+        errors.push(`[pr-gate] checklists[${i}].patterns must be a string[] of path globs (omit or [] to run on every PR).`);
+    }
+    errors.push(...requiredKeyErrors(e, i));
+    return errors;
+}
+
+// Structurally check each entry, then hand the narrowed defs to ChecklistValidator for the id rules and the
+// checks only the filesystem can answer (the guidance doc exists). The reviewer agent itself is repo-wide
+// and is validated once, beside `reviewerAgentName`, by validateReviewerAgentKeys.
 // webpieces-disable no-any-unknown -- opaque consumer JSON entries, narrowed per-field below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 function validateChecklistArray(value: readonly unknown[], repoRoot?: string): string[] {
@@ -141,24 +170,65 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
     // webpieces-disable no-any-unknown -- each array entry is opaque consumer JSON, narrowed field-by-field below
     value.forEach((entry: unknown, i: number): void => {
         if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-            errors.push(`[pr-gate] checklists[${i}] must be an object { "subagent", "doc"?, "patterns"? }.`);
+            errors.push(`[pr-gate] checklists[${i}] must be an object { "id", "doc", "patterns"?, "required" }.`);
             return;
         }
         // webpieces-disable no-any-unknown -- narrowing one opaque checklist entry
         const e = entry as Record<string, unknown>;
-        if (e['doc'] !== undefined && typeof e['doc'] !== 'string') {
-            errors.push(`[pr-gate] checklists[${i}].doc must be a string — a REPO-relative path to the reviewer's guidance doc (omit it and the reviewer just reads the diff).`);
-        }
-        // webpieces-disable no-any-unknown -- opaque array element, narrowed by the typeof guard
-        if (e['patterns'] !== undefined && !(Array.isArray(e['patterns']) && e['patterns'].every((p: unknown): boolean => typeof p === 'string'))) {
-            errors.push(`[pr-gate] checklists[${i}].patterns must be a string[] of path globs (omit or [] to run on every PR).`);
-        }
-        errors.push(...requiredKeyErrors(e, i));
-        items.push(e as RawChecklistItem);
+        errors.push(...checklistEntryErrors(e, i));
+        // Only the fields that passed their type check reach toChecklist — the wrong-typed ones already
+        // have their own error above, and must not crash the id/doc checks below.
+        items.push({
+            id: typeof e['id'] === 'string' ? e['id'] : undefined,
+            doc: typeof e['doc'] === 'string' ? e['doc'] : undefined,
+            required: e['required'] === true,
+        });
     });
-    if (repoRoot === undefined) return errors;
-    const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item));
+    // The reviewer policy plays no part in these checks (ids and docs), so a placeholder is bound here.
+    const placeholder = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+    const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, placeholder));
     return [...errors, ...new ChecklistValidator().validate(repoRoot, defs)];
+}
+
+export const REVIEWER_AGENT_NAME_KEY = 'reviewerAgentName';
+export const REVIEWER_AGENTS_KEY = 'reviewerAgents';
+
+/**
+ * `reviewerAgentName` (REQUIRED while the gate is active) and `reviewerAgents` (optional positive integer).
+ *
+ * `reviewerAgentName` has no default for the same reason `mergeMode` has none: it names a file the repo
+ * commits, and a silent default would brief every reviewer with an agent type the repo may not have. The
+ * error hands the reader the exact line, which an agent applies in one pass.
+ *
+ * `reviewerAgents` absent is the documented "one subagent per checklist" contract — the count every repo had
+ * before the key existed, so it widens nothing; present, it CAPS the subagents one round may use.
+ */
+// webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; two keys are read
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?: string): string[] {
+    const errors: string[] = [];
+    const name = s[REVIEWER_AGENT_NAME_KEY];
+    const named = typeof name === 'string' && name.trim() !== '';
+    if (!named) {
+        errors.push(
+            `[pr-gate] Missing required field "${REVIEWER_AGENT_NAME_KEY}" — the agent type every reviewer subagent is ` +
+            `spawned as. Add this line to commands.pr-gate in webpieces.config.json:\n` +
+            `    "${REVIEWER_AGENT_NAME_KEY}": "${DEFAULT_REVIEWER_AGENT_NAME}",\n` +
+            `  ${DEFAULT_REVIEWER_AGENT_NAME} is the generic reviewer webpieces ships as .claude/agents/${DEFAULT_REVIEWER_AGENT_NAME}.md ` +
+            `(\`${UPGRADE_SHIM_COMMAND}\` writes it). Point the key at your own agent to use that one instead.`);
+    }
+    const max = s[REVIEWER_AGENTS_KEY];
+    if (REVIEWER_AGENTS_KEY in s && !(typeof max === 'number' && Number.isInteger(max) && max >= 1)) {
+        errors.push(
+            `[pr-gate] "${REVIEWER_AGENTS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a positive integer: the MOST ` +
+            `reviewer subagents one review round may use, with the checklists grouped across them (1 = a single ` +
+            `subagent reviews every checklist). Delete the key to keep one subagent per checklist.`);
+    }
+    if (repoRoot !== undefined && named) {
+        errors.push(...new ChecklistValidator().validateReviewerAgent(
+            repoRoot, new ReviewerAgentPolicy((name as string).trim(), REVIEWER_AGENTS_ONE_PER_CHECKLIST)));
+    }
+    return errors;
 }
 
 // The `landPr` block: what happens to the LOCAL branch once its PR is in main. Optional — omitted

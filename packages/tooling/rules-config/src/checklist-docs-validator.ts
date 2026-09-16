@@ -6,8 +6,8 @@ import { toError } from './to-error';
 
 /**
  * Validate ONLY the pr-gate `checklists` array, in isolation — that it IS an array (the removed `{ doc }`
- * manifest shape is rejected with its migration steps), each entry's subagent is present, distinct, and
- * names a real `.claude/agents/<subagent>.md`, each entry's repo-relative doc exists, and patterns are
+ * manifest shape is rejected with its migration steps), each entry's id is present, distinct and
+ * file-safe, each entry's repo-relative doc exists, a retired `subagent` key is rejected, and patterns are
  * string[]. Same logic loadAndValidate runs, but callable directly so broken checklists fail as their OWN
  * `validate-checklist-docs` check (clear owner) instead of surfacing as an unrelated validator's banner.
  * Returns errors; never throws.

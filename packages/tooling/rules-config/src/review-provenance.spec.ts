@@ -117,7 +117,7 @@ describe('ReviewProvenanceService.write', () => {
         const request = new ProvenanceWriteRequest(prDir, 'dean-feat', 'deadbeef', 'ok');
         request.offered = new OfferedContext(`${prDir}/diff`, `${prDir}/instructions`);
         request.reviewers = [new ReviewerTranscript(
-            new ReviewerEvidence('envvars-reviewer', 'abc', true, false, 26, 14, transcript),
+            new ReviewerEvidence('envvars-reviewer', 'envvars-reviewer', 'abc', true, false, 26, 14, transcript),
             new ReviewerPaths(`${prDir}/review-envvars-reviewer.json`, `${prDir}/x.instructions.md`, 'docs/envvars.md'),
         )];
 
@@ -158,7 +158,7 @@ describe('ReviewProvenanceService.write', () => {
         const prDir = tmpPrDir();
         const request = new ProvenanceWriteRequest(prDir, 'dean-feat', '', 'skipped');
         request.reviewers = [new ReviewerTranscript(
-            new ReviewerEvidence('r', 'a1'), new ReviewerPaths('', '', ''))];
+            new ReviewerEvidence('r', 'r', 'a1'), new ReviewerPaths('', '', ''))];
 
         expect(svc.write(request)).not.toBe('');
         const parsed = readProvenance(prDir);

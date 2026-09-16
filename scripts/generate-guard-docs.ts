@@ -8,6 +8,7 @@ import { LOCATION_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/
 import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
 import { GuardIndexDoc } from '../packages/tooling/ai-hook-rules/src/core/guard-index-doc';
 import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
+import { REVIEWER_AGENT_TEMPLATE, renderReviewerAgent } from '../packages/tooling/ai-hook-rules/src/bin/reviewer-agent';
 import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-matrix';
 
 /**
@@ -97,6 +98,13 @@ function main(): void {
     const shim = path.join(templates, 'ai-hook.sh');
     fs.writeFileSync(shim, renderShim(), { mode: 0o755 });
     wrote.push(shim);
+
+    // The generic PR-gate reviewer agent (issue #938) — the same template arrangement as the shim, and the
+    // same exclusion: this repo's own `.claude/agents/webpieces-reviewer.md` is written by
+    // `wp-upgrade-shim` from the INSTALLED release, never from here.
+    const reviewer = path.join(templates, REVIEWER_AGENT_TEMPLATE);
+    fs.writeFileSync(reviewer, renderReviewerAgent(), 'utf8');
+    wrote.push(reviewer);
 
     for (const target of wrote) process.stdout.write(`wrote ${target}\n`);
 }

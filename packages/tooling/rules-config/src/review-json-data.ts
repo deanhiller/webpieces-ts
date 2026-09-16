@@ -7,6 +7,7 @@
  * `from '@webpieces/rules-config'` keep resolving exactly as before and no consumer changes.
  */
 
+import { ReviewerAgentPolicy } from './checklist-config';
 import { ChecklistOverride } from './checklist-override';
 
 // The three colors a reviewer subagent may report in `review-<id>.json`. A TRI-state, not a boolean,
@@ -76,8 +77,8 @@ export class ChecklistResult {
  * Whether the reviewer must actually run is the {@link RequiredChecklist.required} field below.
  */
 export class RequiredChecklist {
-    id: string;             // = subagent name; keys review-<id>.json
-    subagent: string;       // reviewer agent that must run (agentType the harness stamps)
+    id: string;             // the checklist's name; keys review-<id>.json and its instructions file
+    reviewer: ReviewerAgentPolicy; // the agent type to spawn (agentType the harness stamps) + the round cap
     doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
     matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
     // Which of the checklist's OWN globs actually fired. Printed so a reviewer can judge how coarse the
@@ -91,13 +92,13 @@ export class RequiredChecklist {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
-        id: string, subagent: string, doc: string, matchedFiles: string[], matchedPatterns: string[] = [],
+        id: string, reviewer: ReviewerAgentPolicy, doc: string, matchedFiles: string[], matchedPatterns: string[] = [],
         // Defaulted to the BLOCKING value so any construction that forgets it fails closed — a test or a
         // future call site that silently produced an optional checklist would be a hole in the gate.
         required = true,
     ) {
         this.id = id;
-        this.subagent = subagent;
+        this.reviewer = reviewer;
         this.doc = doc;
         this.matchedFiles = matchedFiles;
         this.matchedPatterns = matchedPatterns;

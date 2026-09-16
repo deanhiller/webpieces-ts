@@ -185,6 +185,19 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
     // renaming the first and deleting the rest.
     ...branchStateRetirements(),
     ...prLifecycleRetirements(),
+
+    // --- The per-checklist reviewer agent (issue #938). A checklist used to name its own agent type in
+    // `subagent`, which also served as its id; every checklist is now reviewed by the ONE agent type that
+    // `commands.pr-gate.reviewerAgentName` names, so the key that is left is only the checklist's NAME.
+    // A rename, so `prunable: false` — deleting it would discard the id every verdict file is keyed by.
+    new RetiredConfigKey(
+        RETIRED_SCOPE_KEY, 'subagent', 'id',
+        'Rename "subagent" to "id" in EVERY commands.pr-gate.checklists entry, keeping its value (it still ' +
+        'names the checklist and keys review-<id>.json). Checklists no longer choose an agent type: every one ' +
+        'is reviewed by the agent commands.pr-gate.reviewerAgentName names — add ' +
+        '"reviewerAgentName": "webpieces-reviewer" there if it is missing.',
+        '[pr-gate.checklists]', false,
+    ),
 ];
 
 // The four branch-state classes. Split into a helper purely to keep the table above readable; the

@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
+import {
+    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewerBriefing,
+    ReviewerInstructionsService, ReviewJsonService,
+} from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-report';
 
+const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
 const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/review.json';
-const report = new ReviewReport(new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()));
+const report = new ReviewReport(
+    new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
+    new ChecklistInstructionsService(new ReviewJsonService()));
 
 const inputWith = (definedCount: number, applicableCount: number): ReviewReportInput => {
     const input = new ReviewReportInput('/repo', 'dean-feature', REVIEW_PATH);
@@ -100,7 +106,7 @@ describe('review.json is written BEFORE any reviewer is spawned', () => {
     it('numbers writing the review file as step 1 and spawning as step 2', () => {
         const text = oneOwed();
         expect(text.indexOf('STEP 1')).toBeLessThan(text.indexOf('STEP 2'));
-        expect(text).toMatch(/STEP 2 — only once that file is written, spawn/);
+        expect(text).toMatch(/STEP 2 — only once that file is written, review these/);
         expect(text).toContain('STEP 3');
     });
 
@@ -140,10 +146,84 @@ describe('a repo with zero checklists gets the verdict first, not a tutorial', (
     // Deleting the how-to would be the wrong fix — it is what teaches a repo to get reviews at all.
     it('still keeps the how-to-configure guidance, just below the all-clear', () => {
         const text = noChecklists();
-        expect(text).toContain('db-migration-reviewer');
+        expect(text).toContain('"id": "db-migrations"');
         expect(text).toContain('"patterns"');
+        // The retired per-entry key must not be taught by the how-to.
+        expect(text).not.toContain('"subagent"');
     });
 });
+
+/**
+ * `commands.pr-gate.reviewerAgents` (issue #938). Absent: a separate `reviewerAgentName` subagent per
+ * checklist, one spawn block each. Present: ONE statement of the cap and the grouping decision, and each
+ * checklist block is just the instructions file to hand to whichever subagent covers it.
+ */
+describe('reviewerAgents — how many reviewer subagents stage ② asks for', () => {
+    const owed = (max: number, ids: readonly string[]): ReviewerReportFixture => {
+        const input = inputWith(ids.length, ids.length);
+        input.reviewer = new ReviewerAgentPolicy('webpieces-reviewer', max);
+        input.briefings = ids.map((id: string): ReviewerBriefing => {
+            const b = new ReviewerBriefing('webpieces-reviewer', id, '/repo');
+            b.matchedPatterns = ['**'];
+            return b;
+        });
+        return input;
+    };
+
+    it('without it: a SEPARATE webpieces-reviewer per checklist, a spawn block each', () => {
+        const text = report.render(owed(REVIEWER_AGENTS_ONE_PER_CHECKLIST, ['a', 'b', 'c']));
+        expect(text).toContain('a SEPARATE `webpieces-reviewer` subagent for each');
+        expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(3);
+        expect(text).not.toContain('AT MOST');
+        expect(text).toContain('/repo/.webpieces/pr-review/dean-feature/instructions/b.instructions.md');
+    });
+
+    it('with reviewerAgents = 1: one subagent for all of them, subagent_type stated once', () => {
+        const text = report.render(owed(1, ['a', 'b', 'c', 'd']));
+        expect(text).toContain('AT MOST 1 subagent(s) of type `webpieces-reviewer` (commands.pr-gate.reviewerAgents = 1)');
+        expect(text).toContain('Use ONE subagent for all of them.');
+        expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(1);
+        expect(text).toContain('write ONE verdict file per');
+        for (const id of ['a', 'b', 'c', 'd']) {
+            expect(text).toContain(`instructions:  /repo/.webpieces/pr-review/dean-feature/instructions/${id}.instructions.md`);
+        }
+        expect(text).not.toContain('SEPARATE');
+    });
+
+    it('with reviewerAgents = 2 over 8 checklists: a grouping example that fits the numbers', () => {
+        const text = report.render(owed(2, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']));
+        expect(text).toContain('AT MOST 2 subagent(s)');
+        expect(text).toContain('2 with about 4 each');
+    });
+
+    it('a re-run after a red verdict lists only the checklists still owed, under the same cap', () => {
+        const input = owed(1, ['a', 'b', 'c']);
+        input.reviewed = [new RequiredChecklist('a', POLICY, '', []), new RequiredChecklist('b', POLICY, '', [])];
+        const text = report.render(input);
+        expect(text).toContain('review these 1 REQUIRED checklist(s) with');
+        expect(text).toContain('AT MOST 1 subagent(s)');
+        expect(text).toContain('instructions/c.instructions.md');
+        expect(text).not.toContain('instructions/a.instructions.md');
+    });
+
+    it('counts optional picks against the SAME cap as the required ones', () => {
+        const input = owed(2, ['req', 'opt']);
+        input.briefings[1].required = false;
+        const text = report.render(input);
+        expect(text).toContain('at most 2 IN TOTAL');
+        expect(text).toContain('COUNTING the 1 required checklist(s) above');
+    });
+
+    it('points Codex at the one canonical agent definition, once', () => {
+        for (const max of [REVIEWER_AGENTS_ONE_PER_CHECKLIST, 1]) {
+            const text = report.render(owed(max, ['a', 'b']));
+            expect(text.split('/repo/.claude/agents/webpieces-reviewer.md').length - 1).toBe(1);
+            expect(text).toContain('Codex (no agent types)');
+        }
+    });
+});
+
+type ReviewerReportFixture = ReturnType<typeof inputWith>;
 
 describe('reviewers still owed', () => {
     it('prints one spawn block naming the subagent and its generated instructions file', () => {
@@ -155,7 +235,7 @@ describe('reviewers still owed', () => {
 
     it('reuses an already-reviewed checklist instead of re-spawning it', () => {
         const input = withOneOwedReviewer();
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
         const text = report.render(input);
         expect(text).toContain('already reviewed on this branch');
         expect(text).toContain('nothing to spawn');
@@ -268,7 +348,7 @@ describe('a reviewer that already REFUSED is not re-instructed as one that never
 describe('required reviewers are spawned; optional ones are only offered', () => {
     it('puts the required reviewer in a spawn step and the optional one in a later ask step', () => {
         const text = mixed();
-        expect(text).toMatch(/STEP 2 — only once that file is written, spawn these 1 REQUIRED/);
+        expect(text).toMatch(/STEP 2 — only once that file is written, review these 1 REQUIRED/);
         expect(text.indexOf('STEP 3 — these 1 OPTIONAL')).toBeGreaterThan(text.indexOf('STEP 2'));
         // Order matters: the mandatory work is stated before the discretionary work.
         expect(text.indexOf('db-migration-reviewer')).toBeLessThan(text.indexOf('frontend-reviewer'));
@@ -354,7 +434,7 @@ describe('--no-optional suppresses the offer without hiding what was skipped', (
     it('never claims everything was reviewed when optional reviews were skipped', () => {
         const input = withMixedReviewers();
         input.skipOptional = true;
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
         const text = report.render(input);
         expect(text).not.toContain('Every checklist that applies is already reviewed');
         expect(text).toContain('every REQUIRED checklist is reviewed (optional ones skipped above)');
@@ -371,7 +451,7 @@ describe('--no-optional suppresses the offer without hiding what was skipped', (
 describe('the once-per-branch rule is stated, not left to be inferred', () => {
     const reusedOnly = (): string => {
         const input = withOneOwedReviewer();
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
         return report.render(input);
     };
 
@@ -390,7 +470,7 @@ describe('the once-per-branch rule is stated, not left to be inferred', () => {
     // the reused one along with the rest.
     it('still forbids re-spawning on the reuse line when other reviewers ARE owed', () => {
         const input = withMixedReviewers();
-        input.reviewed = [new RequiredChecklist('frontend-reviewer', 'frontend-reviewer', '', [])];
+        input.reviewed = [new RequiredChecklist('frontend-reviewer', POLICY, '', [])];
         const text = report.render(input);
         expect(text).not.toContain('nothing to spawn');
         expect(text).toContain('verdict STANDS, do NOT re-spawn');
@@ -401,7 +481,7 @@ describe('the once-per-branch rule is stated, not left to be inferred', () => {
     it('carries the rule in the --no-optional all-clear too', () => {
         const input = withMixedReviewers();
         input.skipOptional = true;
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
         expect(report.render(input)).toContain('ONCE PER BRANCH');
     });
 });
@@ -422,8 +502,8 @@ describe('turnOffAllReviewers — the suppression is stated, and nothing is offe
         const input = inputWith(3, 0); // applicable is 0 BY DECREE — the scanner emptied it
         input.reviewersSuppressed = true;
         input.suppressed = [
-            new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', ['db/1.sql'], ['**/*.sql'], true),
-            new RequiredChecklist('frontend-reviewer', 'frontend-reviewer', '', ['a.css'], ['**/*.css'], false),
+            new RequiredChecklist('db-migration-reviewer', POLICY, '', ['db/1.sql'], ['**/*.sql'], true),
+            new RequiredChecklist('frontend-reviewer', POLICY, '', ['a.css'], ['**/*.css'], false),
         ];
         return input;
     };

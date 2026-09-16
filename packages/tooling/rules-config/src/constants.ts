@@ -95,6 +95,13 @@ export const MERGE_EXPLANATION_FILE = 'merge-explanation.md';
 export const PRUNE_UNKNOWN_COMMAND = 'pnpm wp-prune-unknown-config';
 
 /**
+ * The command that rewrites every webpieces-owned file a repo commits — the L0 hook shim and the generic
+ * reviewer agent (`.claude/agents/webpieces-reviewer.md`). Named here, in the leaf module, so the config
+ * validator that finds that agent missing can print the cure without importing ai-hook-rules.
+ */
+export const UPGRADE_SHIM_COMMAND = 'pnpm wp-upgrade-shim';
+
+/**
  * Fast predicate: does this text carry a webpieces-disable for the given rule?
  * Line-agnostic — the caller decides which line(s) or block of text to feed it.
  * This is the cheap substring form used by code-rules detection and pr-gate's

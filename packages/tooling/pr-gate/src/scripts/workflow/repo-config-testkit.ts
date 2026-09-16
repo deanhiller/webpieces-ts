@@ -1,15 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { allRuleNames, retiredRuleFor, sectionForRule, seedEntryForRule } from '@webpieces/rules-config';
+import {
+    allRuleNames, DEFAULT_REVIEWER_AGENT_NAME, retiredRuleFor, sectionForRule, seedEntryForRule,
+} from '@webpieces/rules-config';
 
 /**
  * THIS repo's own `webpieces.config.json`, prepared for use inside a temp clone.
  *
  * Specs that exercise a command end-to-end need a config the REAL validator accepts, and using the
  * repo's own file (rather than a hand-rolled minimal one) is what keeps them honest — a stub drifts out
- * from under the validator on the next config change. Two adjustments are needed to make that file
- * usable outside this checkout, and both are the same for every such spec, so they live here once:
+ * from under the validator on the next config change. These adjustments are needed to make that file
+ * usable outside this checkout, and all are the same for every such spec, so they live here once:
  *
  *  1. `checklists` is dropped. Its `doc` paths are validated REPO-RELATIVE and point at
  *     `.claude/review/*.md`, which exist here and not in a temp clone.
@@ -23,6 +25,9 @@ import { allRuleNames, retiredRuleFor, sectionForRule, seedEntryForRule } from '
  *     is retired in this working tree, the repo's config must KEEP its entry until the release carrying
  *     the retirement ships (deleting it early would fail the published validator and block every Bash
  *     call), while the LOCAL validator already REJECTS it. Same trade as (2), same fix.
+ *  4. A newly-required `commands.pr-gate` key is completed the same way, when absent — today that is
+ *     `reviewerAgentName` (issue #938), which the published validator does not know yet, so the repo's
+ *     config cannot carry it until that release ships.
  *
  * A testkit, not product code: nothing in a published bin imports it (same role as ai-hook-rules'
  * `shim-testkit.ts`).
@@ -38,6 +43,7 @@ export class RepoConfigFixture {
         const commands = config['commands'] as Record<string, Record<string, unknown>>;
         delete commands['pr-gate']['checklists'];
         delete commands['pr-gate']['checklistsWhy'];
+        commands['pr-gate']['reviewerAgentName'] ??= DEFAULT_REVIEWER_AGENT_NAME;
         this.dropRetiredRules(config);
         this.completeRulesFromSeed(config);
         return config;

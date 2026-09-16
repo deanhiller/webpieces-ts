@@ -6,6 +6,7 @@ import { createInterface } from 'readline';
 import { RepoRootFinder, writeTemplate, writeTemplateIfMissing, CONFIG_POLICY_DOC } from '@webpieces/rules-config';
 
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
+import { REVIEWER_AGENT_MARKER, writeReviewerAgent } from './reviewer-agent';
 import {
     HookRegistrationEntry, GUARDS_BIN, LEGACY_GUARANTEE_ROOT_MARKER,
     RULES_BIN, addHookEntry, applyManagedEnv, readSettings, writeSettings,
@@ -226,6 +227,11 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
     // otherwise clean it up once neither hook references it anymore.
     if (chosen !== null && !chosen.absolute) {
         writeShim(projectRoot);
+        // The generic PR-gate reviewer agent is part of the same committed, managed set as the shim — the
+        // drift check reports it beside the shim, so the installer writes it beside the shim.
+        if (writeReviewerAgent(projectRoot)) {
+            console.log(`  ✅ ${REVIEWER_AGENT_MARKER} (the generic PR-gate reviewer; generated — commit it, do not edit it)`);
+        }
     } else if (!markerReferenced(targets, SHIM_MARKER)) {
         removeShim(projectRoot);
     }

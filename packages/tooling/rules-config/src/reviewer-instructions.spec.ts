@@ -29,7 +29,10 @@ function briefing(): ReviewerBriefing {
 describe('ReviewerInstructionsService — the file that replaces context archaeology', () => {
     it('names the reviewer, its doc, its diff, its source dirs and its verdict file', () => {
         const md = svc.render(briefing());
-        expect(md).toContain('# You are `db-reviewer`');
+        expect(md).toContain('# Checklist `db-reviewer` — reviewed by a `db-reviewer` subagent');
+        // The canonical agent definition is named for a harness (Codex) that cannot spawn it by type.
+        expect(md).toContain('/repo/.claude/agents/db-reviewer.md');
+        expect(md).toContain('Never write a verdict for a checklist you were not handed');
         expect(md).toContain('/repo/.claude/review/db.md');
         expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
         expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff');

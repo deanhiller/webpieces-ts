@@ -3,15 +3,18 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ChecklistDefinition, DiffScope } from '@webpieces/rules-config';
+import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy } from '@webpieces/rules-config';
 import { ChecklistDetector } from './checklist-detector';
 
 const detector = new ChecklistDetector(new DiffScope());
 
-// id = subagent name; doc + patterns + required configurable. `required` defaults to true because that is
-// the blocking behavior every test here predates the flag with; the optional path says false explicitly.
-function def(subagent = 'migrations-reviewer', patterns: string[] = ['**/*.sql'], required = true): ChecklistDefinition {
-    return new ChecklistDefinition(subagent, subagent, `.claude/review/${subagent}.md`, patterns, required);
+// id + doc + patterns + required configurable, all reviewed by one shared agent type (issue #938).
+// `required` defaults to true because that is the blocking behavior every test here predates the flag
+// with; the optional path says false explicitly.
+const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', 2);
+
+function def(id = 'migrations-reviewer', patterns: string[] = ['**/*.sql'], required = true): ChecklistDefinition {
+    return new ChecklistDefinition(id, REVIEWER, `.claude/review/${id}.md`, patterns, required);
 }
 
 describe('ChecklistDetector.detect', () => {
@@ -56,7 +59,7 @@ describe('ChecklistDetector.detect', () => {
         const required = detector.toRequired(detector.detect([def()], ['db/001.sql']));
         expect(required).toHaveLength(1);
         expect(required[0].id).toBe('migrations-reviewer');
-        expect(required[0].subagent).toBe('migrations-reviewer');
+        expect(required[0].reviewer).toBe(REVIEWER);
         expect(required[0].doc).toBe('.claude/review/migrations-reviewer.md');
         expect(required[0].matchedFiles).toEqual(['db/001.sql']);
         expect(required[0].matchedPatterns).toEqual(['**/*.sql']);

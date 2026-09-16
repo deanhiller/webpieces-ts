@@ -108,7 +108,7 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 function validPrGate(): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO' };
+    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgentName: 'webpieces-reviewer' };
 }
 
 // `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required
@@ -507,6 +507,18 @@ describe('loadAndValidate — every retired key fails the load', () => {
                 turnOffRuleWhileOnBranch: null,
             };
             return writeConfig(sections);
+        }
+        if (entry.label === '[pr-gate.checklists]') {
+            // A checklist ENTRY key: carried by an otherwise-valid entry (id + doc + required).
+            const docRoot = mktmp({ 'doc.md': '# doc' });
+            fs.writeFileSync(path.join(docRoot, CONFIG_FILENAME), JSON.stringify({
+                ...sections,
+                commands: { 'pr-gate': { ...validPrGate(), checklists: [
+                    { id: 'x', doc: 'doc.md', required: true, [entry.key]: 'x' },
+                ] } },
+                excludePaths: validExcludePaths(),
+            }));
+            return docRoot;
         }
         if (entry.label === '[excludePaths]') {
             return mktmp({

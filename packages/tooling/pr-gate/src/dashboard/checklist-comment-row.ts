@@ -13,7 +13,7 @@
 export class ChecklistCommentRow {
     agent: string;
     model: string;
-    subagent: string; // the reviewer / checklist id
+    checklistId: string; // the checklist id
     status: string; // CK_* verdict; '' when it did not run
     detail: string; // verbatim reviewer output
     ran: boolean; // false = skipped, which is a NORMAL, healthy outcome
@@ -45,7 +45,7 @@ export class ChecklistCommentRow {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(agent: string, model: string,
-        subagent: string,
+        checklistId: string,
         status: string,
         detail: string,
         ran: boolean,
@@ -56,7 +56,7 @@ export class ChecklistCommentRow {
     ) {
         this.agent = agent;
         this.model = model;
-        this.subagent = subagent;
+        this.checklistId = checklistId;
         this.status = status;
         this.detail = detail;
         this.ran = ran;

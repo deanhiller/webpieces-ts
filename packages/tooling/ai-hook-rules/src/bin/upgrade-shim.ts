@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { renderShim, shimPath, findShimRoot } from './shim';
+import { REVIEWER_AGENT_MARKER, writeReviewerAgent } from './reviewer-agent';
 import { repairRegistrationAt, managedSurfaceDrift, SettingsRepair, LEGACY_GUARANTEE_ROOT_MARKER } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { toError } from '../core/to-error';
@@ -12,7 +13,7 @@ import { toError } from '../core/to-error';
 //
 // WHAT IT REPAIRS, and why all of them (2026-08-07, extended). This used to write EXACTLY ONE FILE,
 // ai-hook.sh, and touch nothing else. That was correct while the installed surface WAS one file. It is
-// now four (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
+// now five (the name `wp-upgrade-shim` is older than the job and is NOT renamed — a rename with no
 // functional change is a cost with no payer; the prose is what gets corrected):
 //
 //   1. .claude/webpieces/ai-hook.sh          the ONE guard shim, shared by every harness and registered
@@ -33,6 +34,8 @@ import { toError } from '../core/to-error';
 //      Bash cwd to the project root — and, because settings `env` is inherited, pins it identically for
 //      every subagent, so a verdict never depends on where an earlier `cd` left the shell. Claude-only:
 //      Codex has no settings `env`, and its cwd is measured not to drift
+//   5. .claude/agents/webpieces-reviewer.md — the generic PR-gate reviewer agent (issue #938), a committed,
+//      generated file with the same contract as the shim; see reviewer-agent.ts
 //
 // WHAT IT DELIBERATELY DOES *NOT* DO: sweep this tree's dangling `node_modules/.bin/wp-*` symlinks. That
 // is the same class of defect as the retired-file removal below — an entry pointing at a missing file is
@@ -91,6 +94,10 @@ export function runUpgradeShim(cwd: string): number {
         // guarantee-root-ONLY settings file would have lost the file and kept the entry.)
         const repairs = repairRegistrationAt(root);
         const removedLegacy = removeRetiredGuaranteeRoot(root);
+        // The generic PR-gate reviewer agent — a managed file like the shim, so the one cure rewrites it too.
+        if (writeReviewerAgent(root)) {
+            console.log(`✅ @webpieces: wrote the generic PR-gate reviewer agent ${REVIEWER_AGENT_MARKER} (generated — commit it, do not edit it).`);
+        }
         reportRepairs(target, removedLegacy, repairs);
         // ADVISORY ONLY, and deliberately after the ✅ lines: it never touches the exit code (see
         // reportTreeDivergence).

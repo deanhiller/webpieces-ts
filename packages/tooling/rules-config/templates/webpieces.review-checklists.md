@@ -1,22 +1,44 @@
 # Webpieces review checklists — how to satisfy them
 
 Your repo defines company review checklists in `pr-gate.checklists` in `webpieces.config.json` — an
-array of `{ subagent, required, doc?, patterns? }`, and that is the **only** accepted shape. Each names a
-reviewer **subagent** (a `.claude/agents/<subagent>.md`, which webpieces verifies exists), says whether it
-**blocks**, and optionally carries a **repo-relative** detail doc and path `patterns`:
+array of `{ id, doc, required, patterns? }`, and that is the **only** accepted shape. Each has an `id`
+(its name; it keys `review-<id>.json`), a **repo-relative** `doc` it is reviewed against, says whether it
+**blocks**, and optionally carries path `patterns`. Checklists do not pick an agent type: every one is
+reviewed by the ONE agent `reviewerAgentName` names (webpieces verifies `.claude/agents/<name>.md` exists):
 
 ```jsonc
-"commands": { "pr-gate": { "checklists": [
-  { "subagent": "db-migration-reviewer",
-    "doc": ".claude/review/db-migrations.md",
-    "patterns": ["**/migrations/**", "**/*.sql"],
-    "required": true },
-  { "subagent": "frontend-reviewer",
-    "doc": ".claude/review/frontend.md",
-    "patterns": ["**/portal/**"],
-    "required": false }
+"commands": { "pr-gate": {
+  "reviewerAgentName": "webpieces-reviewer",   // REQUIRED
+  "reviewerAgents": 1,                         // OPTIONAL — see below
+  "checklists": [
+    { "id": "db-migrations",
+      "doc": ".claude/review/db-migrations.md",
+      "patterns": ["**/migrations/**", "**/*.sql"],
+      "required": true },
+    { "id": "frontend",
+      "doc": ".claude/review/frontend.md",
+      "patterns": ["**/portal/**"],
+      "required": false }
 ] } }
 ```
+
+> **The per-entry `subagent` key is RETIRED** — config validation fails and names the edit: rename it to
+> `id`, and add `"reviewerAgentName": "webpieces-reviewer"` if it is missing. There is no compatibility mode.
+
+## `reviewerAgentName` and `reviewerAgents` — who reviews, and how many of them
+
+- **`reviewerAgentName`** (required) is the `subagent_type` every reviewer is spawned as.
+  `webpieces-reviewer` is a generic, checklist-agnostic reviewer that webpieces owns:
+  `wp-install-ai-hooks` and `pnpm wp-upgrade-shim` write it to `.claude/agents/webpieces-reviewer.md`, and a
+  stale or hand-edited copy is flagged with `pnpm wp-upgrade-shim` as the cure. Point the key at your own
+  agent to use that instead.
+- **`reviewerAgents`** (optional positive integer) caps how many reviewer subagents one round may use.
+  - **Absent** — one SEPARATE subagent per checklist, and `wp-finish` requires a distinct run for each.
+  - **Present (N)** — `wp-review-upsert-pr` tells you to use AT MOST N subagents for the owed checklists and
+    to group them as you judge best (one for all of them, or e.g. two with four each). Each subagent is
+    handed the instructions file of every checklist it covers and still writes ONE verdict file per
+    checklist, so the verdict gate and the PR dashboard behave exactly as before. A re-run after a red
+    verdict re-reviews only the checklists still owed, under the same cap.
 
 ## `required` — which reviews block, and which are offered
 
@@ -65,13 +87,13 @@ pnpm wp-review-upsert-pr
 ```
 
 It validates and commits any in-progress 3-point merge, runs the build gate, then **extracts this branch's
-diff to disk** and writes one instructions file per reviewer under
-`.webpieces/pr-review/<featureSlug>/instructions/`. It prints a copy-paste spawn block per reviewer whose prompt
-is a POINTER to that file and nothing else.
+diff to disk** and writes one instructions file per checklist under
+`.webpieces/pr-review/<featureSlug>/instructions/<id>.instructions.md`. It prints what to spawn, and each
+prompt is a POINTER to those files and nothing else.
 
 That indirection is the design. Everything volatile — the diff, the matched files, the verdict schema, the
-resolved context paths — is REGENERATED every run, so it cannot go stale. The registered
-`.claude/agents/<subagent>.md` stays a thin stub that says "read the instructions file your caller names".
+resolved context paths — is REGENERATED every run, so it cannot go stale. The reviewer agent itself stays
+checklist-agnostic: it says "read the instructions files your caller names".
 When the verdict format last changed, hand-written agent files kept documenting the removed `success`
 field and a real PR had to carry a correction in its spawn prompt to work around it; nothing restated by
 hand can drift out of date if nothing is restated by hand.
@@ -103,15 +125,16 @@ The changed files + the exact base sha the gate uses are in
 
 For each matched **required** checklist — and each **optional** one the human picked — you must:
 
-1. **Spawn its named subagent as a SEPARATE subagent** — a *different* one per checklist. The coding
-   agent may **not** review its own work, and one reviewer may **not** stand in for several. `wp-finish`
-   verifies from the harness's own records that each distinct reviewer actually ran on this branch.
-2. Have that subagent **read its doc, then inspect the real diff** of the changed files it cares about —
+1. **Have a `reviewerAgentName` subagent review it** — a SEPARATE one per checklist, unless
+   `reviewerAgents` lets one subagent cover several. The coding agent may **not** review its own work.
+   `wp-finish` verifies from the harness's own records that a reviewer subagent actually ran on this branch
+   for each checklist (a distinct run per checklist when `reviewerAgents` is absent).
+2. Have that subagent **read the checklist's doc, then inspect the real diff** of the files in its scope —
    `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **write its verdict** to `.webpieces/pr-review/<featureSlug>/review-<id>.json` (one file per
-   checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
+   checklist, so concurrent reviewers never clobber each other). `<id>` is the checklist's `id`.
 
 **How to ask about the optional ones.** `wp-review-upsert-pr` prints them as their own step, listing each
 with the files it matched and the doc it reviews against. Put them to the human in **ONE multi-select
@@ -120,15 +143,15 @@ answering "no" nine times in a row is being worn down rather than consulted, and
 cheap answer is yes to everything — which is exactly the state `required: false` exists to fix. If they
 pick none, that is a complete answer; go straight to finish.
 
-**You may never write a reviewer's `review-<id>.json` yourself.** If a named subagent cannot be spawned,
-that is a config bug, not your cue to self-certify — say so and stop. (webpieces now rejects a checklist
-whose `subagent` has no `.claude/agents/<subagent>.md`, so this should surface as a config error instead.)
+**You may never write a reviewer's `review-<id>.json` yourself.** If the reviewer agent cannot be spawned,
+that is a config bug, not your cue to self-certify — report it to the human. (webpieces rejects a
+`reviewerAgentName` that has no `.claude/agents/<name>.md`, so this should surface as a config error instead.)
 
 ## `review-<id>.json` (each reviewer subagent writes its own)
 
 ```json
 {
-  "id": "<the checklist id / subagent name>",
+  "id": "<the checklist id>",
   "status": "green | yellow | red",
   "output": "what you checked and what you found"
 }
@@ -219,7 +242,7 @@ review must not read as a fully-reviewed one.
 ```
 
 Then run `pnpm wp-finish-upsert-pr`. It re-computes the matched checklists, requires a well-formed,
-passing (or overridden) `review-<id>.json` for each, verifies each distinct reviewer subagent ran, and
+passing (or overridden) `review-<id>.json` for each, verifies a reviewer subagent ran for each, and
 only then opens/updates the PR.
 
 > Provenance is verified from Claude Code's own subagent records — it is not tamper-proof (a determined

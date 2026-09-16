@@ -33,25 +33,58 @@ export class ChecklistInstructionsService {
      */
     render(pending: readonly RequiredChecklist[], reviewPath: string, context: ChecklistReviewContext): string {
         if (pending.length === 0) return '';
-        const lines: string[] = [
-            `You MUST run these ${pending.length} reviewer subagent(s) — a SEPARATE one for each. You may NOT review`,
-            `your own work, and you may NOT write a reviewer's verdict file on its behalf.`,
-            '',
-        ];
+        const lines: string[] = [...this.spawnRule(pending), ''];
         for (const req of pending) lines.push(...this.oneReviewer(req, reviewPath));
         lines.push('', ...this.verdictFormat());
         lines.push('', ...this.diffLines(context));
         return lines.join('\n');
     }
 
-    // Just the reviewer NAMES, for a caller that wants a one-line summary rather than the whole block.
-    names(pending: readonly RequiredChecklist[]): string {
-        return pending.map((r: RequiredChecklist): string => r.subagent).join(', ');
+    /**
+     * HOW MANY subagents, of WHICH type. Without `reviewerAgents` that is one separate subagent per checklist;
+     * with it, at most N subagents with the checklists grouped across them as the AI judges best. Either way
+     * every subagent is the repo's ONE reviewer agent type, and every checklist still gets its own verdict.
+     */
+    spawnRule(pending: readonly RequiredChecklist[]): string[] {
+        const reviewer = pending[0].reviewer;
+        const own = [
+            'You may NOT review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
+        ];
+        if (!reviewer.grouped()) {
+            return [
+                `You MUST run these ${pending.length} checklist review(s) — a SEPARATE \`${reviewer.agentName}\` subagent for each.`,
+                ...own,
+            ];
+        }
+        const cap = Math.min(reviewer.maxAgents, pending.length);
+        return [
+            `You MUST run these ${pending.length} checklist review(s) using AT MOST ${cap} \`${reviewer.agentName}\` subagent(s)`,
+            `(commands.pr-gate.reviewerAgents = ${reviewer.maxAgents}). ${this.groupingHint(pending.length, cap)}`,
+            'Give each subagent every checklist it covers (doc, in-scope files, verdict path); it writes ONE verdict',
+            'file per checklist it covers, and never one for a checklist it was not given.',
+            ...own,
+        ];
     }
 
-    // What ONE subagent must be given: its doc, why it is running + over what, and the file it must write.
+    /**
+     * The grouping sentence, with an example that fits THIS round's numbers — a cap of 1 has no choice to
+     * make, and saying "group them as you judge best" there would invite a second subagent.
+     */
+    groupingHint(count: number, cap: number): string {
+        if (cap <= 1) return 'Use ONE subagent for all of them.';
+        const per = Math.ceil(count / cap);
+        return `Group the checklists across them as you judge best — e.g. one subagent for all of them, or ${cap} with about ${per} each.`;
+    }
+
+    // Just the checklist IDS, for a caller that wants a one-line summary rather than the whole block.
+    names(pending: readonly RequiredChecklist[]): string {
+        return pending.map((r: RequiredChecklist): string => r.id).join(', ');
+    }
+
+    // What the subagent reviewing ONE checklist must be given: its doc, why it is running + over what, and
+    // the file it must write.
     private oneReviewer(req: RequiredChecklist, reviewPath: string): string[] {
-        const lines = [`  • ${req.subagent}`];
+        const lines = [`  • checklist ${req.id}`];
         // The doc is REPO-relative by the time it reaches here (see ChecklistDefinition.doc), so a subagent
         // handed this string can actually open it. Printing the raw config value would not resolve.
         if (req.doc.trim() !== '') lines.push(`      doc to read:  ${req.doc}`);
@@ -86,9 +119,9 @@ export class ChecklistInstructionsService {
     // hand-written agent .md.)
     private verdictFormat(): string[] {
         return [
-            'TELL EACH subagent to write that file with EXACTLY this format (there is NO "success" field —',
+            'TELL EACH subagent to write each of its verdict files with EXACTLY this format (there is NO "success" field —',
             'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
-            ...this.reviewJsonService.verdictSchemaFor('<its own subagent name>', '', '  ').split('\n'),
+            ...this.reviewJsonService.verdictSchemaFor('<the checklist id>', '', '  ').split('\n'),
         ];
     }
 
