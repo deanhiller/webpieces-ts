@@ -6,6 +6,7 @@ import { RequestContextHeaders } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { ExpressWrapper } from './ExpressWrapper';
 import { StreamExpressWrapper } from './StreamExpressWrapper';
+import { RequestBodyReader } from './body/RequestBodyReader';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
 // CORS mount/allow/block lines log under their own name (not [WebpiecesMiddleware]); the backend
@@ -222,12 +223,16 @@ export class WebpiecesMiddleware {
      * @param rawBody - True for an @Endpoint(..., { rawBody: true }) route: retain the verbatim
      *   bytes + absolute url on the HttpRequest so an @WpAuthWebhook hook can verify a vendor
      *   signature over them. Default false = the bytes are dropped once parsed.
+     * @param bodyReader - Where the body bytes come from (the router's choice, see
+     *   `WebpiecesExpressRouter.setBodyReader`). Required so the router's choice can never be
+     *   silently dropped on the way to the wrapper.
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         clientMethod: (...args: unknown[]) => Promise<unknown>,
         route: RouteMetadata,
+        bodyReader: RequestBodyReader,
     ): ExpressWrapper {
         return new ExpressWrapper(
             clientMethod,
@@ -237,6 +242,7 @@ export class WebpiecesMiddleware {
             route.rawBody,
             undefined,
             route,
+            bodyReader,
         );
     }
 

@@ -2,6 +2,8 @@ import { Express } from 'express';
 import { ApiFactory, ApiClient, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogManager, RouteMetadata } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
+import { RequestBodyReader } from './body/RequestBodyReader';
+import { StreamBodyReader } from './body/StreamBodyReader';
 
 const log = LogManager.getLogger('WebpiecesExpressRouter');
 
@@ -31,8 +33,34 @@ type HttpServer = ReturnType<Express['listen']>;
  */
 export class WebpiecesExpressRouter {
     private readonly middleware = new WebpiecesMiddleware();
+    /** Where every mounted route reads its body bytes from. See {@link setBodyReader}. */
+    private bodyReader: RequestBodyReader = new StreamBodyReader();
+    /** Set by {@link bindExpress}; a reader chosen after that would reach no route. */
+    private bound = false;
 
     constructor(private readonly apiFactory: ApiFactory) {}
+
+    /**
+     * Choose how routes read the request body. Call it BEFORE {@link bindExpress}: each route captures
+     * the reader when it is mounted.
+     *
+     * The default ({@link StreamBodyReader}) reads the request stream, which is right whenever
+     * webpieces is mounted ahead of any body parser. A host that parses the body before the app runs
+     * (Cloud Functions gen2 / Firebase, which keep the verbatim bytes on `req.rawBody`) needs
+     * `router.setBodyReader(new PreConsumedBodyReader())`, or every POST fails fast (issue #937).
+     *
+     * @throws Error when called after {@link bindExpress}, because the already-mounted routes would
+     *   silently keep the old reader.
+     */
+    setBodyReader(bodyReader: RequestBodyReader): void {
+        if (this.bound) {
+            throw new Error(
+                'setBodyReader() was called after bindExpress(); the mounted routes already captured ' +
+                    'their body reader. Call setBodyReader() before bindExpress(app).',
+            );
+        }
+        this.bodyReader = bodyReader;
+    }
 
     /**
      * Mount the webpieces routes (each fully self-contained: own body parse, RequestContext,
@@ -42,6 +70,7 @@ export class WebpiecesExpressRouter {
      * routes must stay untouched. The caller owns app.listen() and any global middleware.
      */
     bindExpress(app: Express): void {
+        this.bound = true;
         let count = 0;
         for (const apiClient of this.apiFactory.apiClients()) {
             count += this.mountApiClient(app, apiClient);
@@ -138,7 +167,11 @@ export class WebpiecesExpressRouter {
                       apiClient.client[route.methodName],
                       route,
                   )
-                : this.middleware.createExpressWrapper(apiClient.client[route.methodName], route);
+                : this.middleware.createExpressWrapper(
+                      apiClient.client[route.methodName],
+                      route,
+                      this.bodyReader,
+                  );
             this.registerHandler(app, route.httpMethod, path, wrapper.execute.bind(wrapper));
             count++;
         }
