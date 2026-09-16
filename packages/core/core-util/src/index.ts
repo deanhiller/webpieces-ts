@@ -310,9 +310,15 @@ export {
     ApiDependencyBackoffError,
     ApiConnectionError,
     ApiEndpointNotFoundError,
+    ApiConflictError,
+    ApiUnprocessableError,
+    ApiPreconditionFailedError,
+    ApiUnsupportedMediaTypeError,
+    ApiNotImplementedError,
+    ApiCodedError,
     ApiErrorCodec,
     ApiErrorPayload,
     ApiErrorBoundary,
 } from './errors';
-export type { ApiErrorKind } from './errors';
+export type { ApiErrorKind, ApiStatusCode } from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';

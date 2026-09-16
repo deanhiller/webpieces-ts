@@ -1,4 +1,4 @@
-import { ApiError } from '../errors/ApiError';
+import { ApiCodedError, ApiError } from '../errors/ApiError';
 
 /** HTTP-only adapter: semantic errors themselves have no protocol status property. */
 export class ApiErrorHttpStatus {
@@ -23,10 +23,23 @@ export class ApiErrorHttpStatus {
                 return 404;
             case 'request-timeout':
                 return 408;
+            case 'conflict':
+                return 409;
+            case 'precondition-failed':
+                return 412;
+            case 'unsupported-media-type':
+                return 415;
+            case 'unprocessable':
+                return 422;
             case 'rate-limited':
                 return 429;
             case 'implementation':
                 return 500;
+            case 'not-implemented':
+                return 501;
+            case 'coded':
+                if (error instanceof ApiCodedError) return error.statusCode;
+                throw new Error(`kind 'coded' must be an ApiCodedError, got ${error.name}`);
             case 'dependency':
                 return 502;
             case 'unavailable':

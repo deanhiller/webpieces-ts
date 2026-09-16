@@ -14,8 +14,14 @@ export {
     ApiBadRequestError,
     ApiUnauthorizedError,
     ApiDependencyBackoffError,
+    ApiConflictError,
+    ApiUnprocessableError,
+    ApiPreconditionFailedError,
+    ApiUnsupportedMediaTypeError,
+    ApiNotImplementedError,
+    ApiCodedError,
 } from './ApiError';
-export type { ApiErrorKind } from './ApiError';
+export type { ApiErrorKind, ApiStatusCode } from './ApiError';
 export { ApiErrorCodec, ApiErrorPayload } from './ApiErrorCodec';
 export { ApiErrorBoundary } from './ApiErrorBoundary';
 export {

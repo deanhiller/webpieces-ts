@@ -143,7 +143,8 @@ What the model reads inside an `isError` result: an `ApiEndUserError` message ve
 `errorCode` (it survives the remote hop byte-for-byte); an `ApiBadRequestError`'s `callerMessage` and
 `field`, never its operator `message`; for an implementation failure, generic text naming the tool and
 requestId and saying it is a bug in the tool, not in the arguments; for every other kind, that kind's
-generic message plus `retryAfterSeconds` where present.
+generic message plus `retryAfterSeconds` where present, and for an `ApiCodedError` its
+`statusCode` and `errorCode`.
 
 Every reply carries the requestId so a user can quote it: `_meta["webpieces/requestId"]` on every
 `tools/call` result (success or `isError`), `requestId` in the `isError` payload, and

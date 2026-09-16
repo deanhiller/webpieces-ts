@@ -15,12 +15,22 @@ An error is a business/API outcome; a transport adapter decides how to represent
 unclassified throw to the concrete `ApiImplementationError`; that type maps to 500. The remaining
 defaults are `ApiEndUserError` 266, `ApiBadRequestError` 400, `ApiUnauthorizedError` 401,
 `ApiForbiddenError` 403, `ApiNotFoundError`/`ApiEndpointNotFoundError` 404,
-`ApiRequestTimeoutError` 408, `ApiRateLimitedError` 429, `ApiDependencyError` 502,
+`ApiRequestTimeoutError` 408, `ApiConflictError` 409, `ApiPreconditionFailedError` 412,
+`ApiUnsupportedMediaTypeError` 415, `ApiUnprocessableError` 422, `ApiRateLimitedError` 429,
+`ApiNotImplementedError` 501, `ApiDependencyError` 502,
 `ApiUnavailableError`/`ApiDependencyBackoffError` 503, and `ApiDependencyTimeoutError` 504.
 The backoff form also emits `Retry-After`.
 
-There are no HTTP-prefixed aliases and no arbitrary-status base exception. Applications that own
-a custom status use `ErrorTranslators`; an unclaimed unknown response becomes the HTTP-client-local
+Any other status uses the catch-all `ApiCodedError(message, statusCode, errorCode?, cause?)`. Its
+`statusCode` is typed `ApiStatusCode` (every integer 100-599), so an out-of-range or fractional code
+does not compile; narrow a dynamic number with `ApiCodedError.isStatusCode`. A code a named class
+already owns is accepted. `ApiErrorCodec` carries `statusCode` and `errorCode` across every remote
+hop (the message stays generic), and the HTTP client rebuilds an `ApiCodedError` for any 100-599
+status it has no named class for. Below 500 it is classified as a caller error (except 408 and 429,
+which mirror `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above is a server fault.
+
+There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status use
+`ErrorTranslators`; a response whose status is outside 100-599 becomes the HTTP-client-local
 `UnexpectedApiResponseError`.
 
 `ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`. Existing local `ApiCallTimeoutError(timeoutMs, CallContext)` remains distinct from a remote request timeout. `ApiConnectionError` remains available for actual offline classification; IPC disconnection uses the local `IpcTransportError`, distinct from a remote implementation throwing `ApiUnavailableError`.

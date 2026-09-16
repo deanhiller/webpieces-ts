@@ -1,5 +1,7 @@
 import {
     ApiBadRequestError,
+    ApiCodedError,
+    ApiConflictError,
     ApiDependencyError,
     ApiDependencyTimeoutError,
     ApiEndUserError,
@@ -7,10 +9,14 @@ import {
     ApiForbiddenError,
     ApiImplementationError,
     ApiNotFoundError,
+    ApiNotImplementedError,
+    ApiPreconditionFailedError,
     ApiRateLimitedError,
     ApiRequestTimeoutError,
     ApiUnauthorizedError,
     ApiUnavailableError,
+    ApiUnprocessableError,
+    ApiUnsupportedMediaTypeError,
     ClientRegistry,
     ApiErrorHttpStatus,
     HttpResponseDto,
@@ -45,6 +51,7 @@ export class ClientErrorTranslator {
         );
     }
 
+    /** Non-Webpieces responders: named statuses map to their class, any other 100-599 to ApiCodedError. */
     // webpieces-disable no-function-outside-class -- fallback for non-Webpieces HTTP responders
     private static fromStatus(statusCode: number, message: string): Error {
         switch (statusCode) {
@@ -60,10 +67,20 @@ export class ClientErrorTranslator {
                 return new ApiNotFoundError(message);
             case 408:
                 return new ApiRequestTimeoutError(message);
+            case 409:
+                return new ApiConflictError(message);
+            case 412:
+                return new ApiPreconditionFailedError(message);
+            case 415:
+                return new ApiUnsupportedMediaTypeError(message);
+            case 422:
+                return new ApiUnprocessableError(message);
             case 429:
                 return new ApiRateLimitedError(message);
             case 500:
                 return new ApiImplementationError('Internal Error', undefined, true);
+            case 501:
+                return new ApiNotImplementedError(message);
             case 502:
                 return new ApiDependencyError(message);
             case 503:
@@ -71,6 +88,9 @@ export class ClientErrorTranslator {
             case 504:
                 return new ApiDependencyTimeoutError(message);
             default:
+                // Any other real HTTP status keeps its code; only a value no HTTP status can hold is unexpected.
+                if (ApiCodedError.isStatusCode(statusCode))
+                    return new ApiCodedError(message, statusCode);
                 return new UnexpectedApiResponseError(statusCode, message);
         }
     }

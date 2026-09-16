@@ -7,6 +7,12 @@ export type ApiErrorKind =
     | 'endpoint-not-found'
     | 'request-timeout'
     | 'rate-limited'
+    | 'conflict'
+    | 'unprocessable'
+    | 'precondition-failed'
+    | 'unsupported-media-type'
+    | 'not-implemented'
+    | 'coded'
     | 'implementation'
     | 'dependency'
     | 'unavailable'
@@ -129,5 +135,73 @@ export class ApiDependencyBackoffError extends ApiError {
         cause?: Error,
     ) {
         super(message, cause);
+    }
+}
+
+/** The request conflicts with the current state of the target resource (HTTP 409). */
+export class ApiConflictError extends ApiError {
+    override readonly kind = 'conflict' as const;
+}
+
+/** The request was well-formed but semantically unprocessable (HTTP 422). */
+export class ApiUnprocessableError extends ApiError {
+    override readonly kind = 'unprocessable' as const;
+}
+
+/** A caller-supplied precondition (for example If-Match) did not hold (HTTP 412). */
+export class ApiPreconditionFailedError extends ApiError {
+    override readonly kind = 'precondition-failed' as const;
+}
+
+/** The request body is in a media type this operation does not accept (HTTP 415). */
+export class ApiUnsupportedMediaTypeError extends ApiError {
+    override readonly kind = 'unsupported-media-type' as const;
+}
+
+/** The operation exists in the contract but this server does not implement it (HTTP 501). */
+export class ApiNotImplementedError extends ApiError {
+    override readonly kind = 'not-implemented' as const;
+}
+
+/** Builds the tuple [0, 1, ..., N-1]; tail-recursive so TypeScript can reach 600. */
+type StatusRange<N extends number, Acc extends number[] = []> = Acc['length'] extends N
+    ? Acc
+    : StatusRange<N, [...Acc, Acc['length']]>;
+
+/**
+ * Every integer from 100 through 599 as a literal union. `new ApiCodedError(msg, 600)`,
+ * `new ApiCodedError(msg, 99)` and `new ApiCodedError(msg, 404.5)` do not compile; a dynamic
+ * `number` must be narrowed with {@link ApiCodedError.isStatusCode} first.
+ */
+export type ApiStatusCode = Exclude<StatusRange<600>[number], StatusRange<100>[number]>;
+
+/**
+ * Catch-all carrying an explicit protocol status for outcomes no named ApiError covers. Any code in
+ * 100-599 is accepted, including one a named class already owns. `statusCode` and `errorCode` survive
+ * every remote hop through `ApiErrorCodec`; `message` stays operator-only like every other non
+ * end-user kind. A status below 500 is a caller outcome (except 408 and 429, which mirror
+ * `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above is a server/dependency fault.
+ */
+export class ApiCodedError extends ApiError {
+    override readonly kind = 'coded' as const;
+
+    constructor(
+        message: string,
+        public readonly statusCode: ApiStatusCode,
+        public errorCode?: string,
+        cause?: Error,
+    ) {
+        super(message, cause);
+    }
+
+    /** Narrows a dynamic number (for example one read off the wire) to a legal status code. */
+    // webpieces-disable no-function-outside-class -- stateless status guard; webpieces-disable no-any-unknown -- wire and app values are narrowed here
+    static isStatusCode(value: unknown): value is ApiStatusCode {
+        return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599;
+    }
+
+    /** True when the status describes the caller's mistake rather than a fault on the serving side. */
+    isCallerError(): boolean {
+        return this.statusCode < 500 && this.statusCode !== 408 && this.statusCode !== 429;
     }
 }

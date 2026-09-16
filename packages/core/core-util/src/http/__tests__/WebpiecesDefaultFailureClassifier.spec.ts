@@ -9,6 +9,14 @@ import {
     ApiRequestTimeoutError,
     ApiImplementationError,
     ApiEndUserError,
+    ApiRateLimitedError,
+    ApiDependencyError,
+    ApiConflictError,
+    ApiUnprocessableError,
+    ApiPreconditionFailedError,
+    ApiUnsupportedMediaTypeError,
+    ApiNotImplementedError,
+    ApiCodedError,
 } from '../../errors';
 
 const server = new ApiMethodInfo('server', 'SaveApi', 'save');
@@ -31,6 +39,41 @@ describe('WebpiecesDefaultFailureClassifier', () => {
         expect(isFailure(new ApiUnauthorizedError('x'), server)).toBe(false);
         expect(isFailure(new ApiForbiddenError('x'), server)).toBe(false);
         expect(isFailure(new ApiNotFoundError('x'), server)).toBe(false);
+    });
+
+    it('SERVER: 409/412/415/422 are healthy rejections → non-failure', () => {
+        expect(isFailure(new ApiConflictError('x'), server)).toBe(false);
+        expect(isFailure(new ApiPreconditionFailedError('x'), server)).toBe(false);
+        expect(isFailure(new ApiUnsupportedMediaTypeError('x'), server)).toBe(false);
+        expect(isFailure(new ApiUnprocessableError('x'), server)).toBe(false);
+    });
+
+    it('SERVER: 501 not-implemented is a failure', () => {
+        expect(isFailure(new ApiNotImplementedError('x'), server)).toBe(true);
+    });
+
+    it('SERVER: a 4xx ApiCodedError is a caller error; 408/429 mirror their named kinds', () => {
+        expect(isFailure(new ApiCodedError('x', 460), server)).toBe(false);
+        expect(isFailure(new ApiCodedError('x', 409), server)).toBe(false);
+        expect(isFailure(new ApiCodedError('x', 408), server)).toBe(
+            isFailure(new ApiRequestTimeoutError('x'), server),
+        );
+        expect(isFailure(new ApiCodedError('x', 429), server)).toBe(
+            isFailure(new ApiRateLimitedError('x'), server),
+        );
+    });
+
+    it('SERVER: a 5xx ApiCodedError is a server/dependency fault', () => {
+        expect(isFailure(new ApiCodedError('x', 500), server)).toBe(true);
+        expect(isFailure(new ApiCodedError('x', 507), server)).toBe(true);
+        expect(isFailure(new ApiCodedError('x', 502), server)).toBe(
+            isFailure(new ApiDependencyError('x'), server),
+        );
+    });
+
+    it('CLIENT: new named and coded errors are failures like every other non-266', () => {
+        expect(isFailure(new ApiConflictError('x'), client)).toBe(true);
+        expect(isFailure(new ApiCodedError('x', 460), client)).toBe(true);
     });
 
     it('SERVER: 408 (timeout) is deliberately a FAILURE — the client may never have seen a response', () => {

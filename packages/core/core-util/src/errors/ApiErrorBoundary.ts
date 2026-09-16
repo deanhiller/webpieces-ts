@@ -2,14 +2,19 @@ import { Logger } from '../logging/Logger';
 import { toError } from '../lib/errorUtils';
 import {
     ApiBadRequestError,
+    ApiCodedError,
+    ApiConflictError,
     ApiConnectionError,
     ApiEndUserError,
     ApiError,
     ApiForbiddenError,
     ApiImplementationError,
     ApiNotFoundError,
+    ApiPreconditionFailedError,
     ApiRequestTimeoutError,
     ApiUnauthorizedError,
+    ApiUnprocessableError,
+    ApiUnsupportedMediaTypeError,
 } from './ApiError';
 
 /**
@@ -45,6 +50,14 @@ export class ApiErrorBoundary {
         else if (error instanceof ApiNotFoundError) this.log.info(`Not Found: ${detail}`);
         else if (error instanceof ApiUnauthorizedError) this.log.info(`Unauthorized: ${detail}`);
         else if (error instanceof ApiForbiddenError) this.log.info(`Forbidden: ${detail}`);
+        else if (error instanceof ApiConflictError) this.log.info(`Conflict: ${detail}`);
+        else if (error instanceof ApiUnprocessableError) this.log.info(`Unprocessable: ${detail}`);
+        else if (error instanceof ApiPreconditionFailedError)
+            this.log.info(`Precondition Failed: ${detail}`);
+        else if (error instanceof ApiUnsupportedMediaTypeError)
+            this.log.info(`Unsupported Media Type: ${detail}`);
+        else if (error instanceof ApiCodedError && error.isCallerError())
+            this.log.info(`Coded ${error.statusCode}: ${detail}`);
         else if (error instanceof ApiRequestTimeoutError)
             this.log.error(`Request Timeout: ${detail}`);
         else this.log.error(`API failure: ${detail}`);
