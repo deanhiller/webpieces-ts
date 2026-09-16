@@ -1,20 +1,32 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { createHash } from 'node:crypto';
 import {
+    AuthInfo,
     CallToolRequest,
-    CallToolRequestSchema,
     CallToolResult,
-    ErrorCode,
-    ListToolsRequestSchema,
-    McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+    createMcpHandler,
+    ListToolsResult,
+    McpHttpHandler,
+    McpRequestContext,
+    McpServer,
+    ProgressToken,
+    ServerContext,
+    ServerOptions,
+    Tool,
+    Implementation,
+} from '@modelcontextprotocol/server';
+import { NodeMcpRequestHandler, toNodeHandler } from '@modelcontextprotocol/node';
+import { Express, json, NextFunction, Request, Response } from 'express';
 import {
-    ApiErrorPayload,
+    ApiForbiddenError,
+    ApiImplementationError,
     ApiUnauthorizedError,
     DtoValue,
     LogManager,
     toError,
+    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { ApiFactory, ClassType, MintedJwt } from '@webpieces/http-routing';
+import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
+import { MintedJwt } from '@webpieces/http-routing';
 import {
     MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
     McpEndpointDescriptor,
@@ -23,252 +35,494 @@ import {
     WpMcpServerConfig,
 } from './McpAuth';
 import { McpApiDispatcher } from './McpApiDispatcher';
+import { McpBindOptions } from './McpBindOptions';
+import { McpInvocationContext, McpProgressReporter } from './McpInvocationContext';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
+import { McpFailureScope, WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 
 const log = LogManager.getLogger('WpMcpServer');
 
-/** The only error shape rendered into model-visible MCP content. */
-export class ModelVisibleToolError {
+type AuthenticatedExpressRequest = Request & { auth?: AuthInfo };
+
+/** Facts established once per POST at the bind boundary and handed to the SDK handlers. */
+class McpPostAuthentication {
     constructor(
-        public readonly kind: string,
-        public readonly message: string,
-        public readonly requestId?: string,
-        public readonly field?: string,
-        public readonly callerMessage?: string,
-        public readonly errorCode?: string,
-        public readonly retryAfterSeconds?: number,
+        public readonly accessToken: string,
+        public readonly credential: VerifiedMcpCredential,
+        public readonly disconnectSignal: AbortSignal,
     ) {}
 }
 
 /**
- * Node-only MCP adapter. Build one Server per authenticated transport/session; every tool call still
- * re-enters the endpoint's ordinary AuthFilter, so tools/list visibility never grants access.
+ * The official SDK server with Webpieces-owned tools/list and tools/call handlers. It answers
+ * `toolInputSchemaJson` from the Webpieces registry so the SDK's pre-dispatch SEP-2243
+ * `Mcp-Param-*` header validation still runs without registering SDK-side tool callbacks.
  */
-export class WpMcpServer<TGrant, TMintRequest> {
-    private readonly registry: McpToolRegistry;
-    private readonly dispatcher: McpApiDispatcher;
-
+class WpSdkMcpServer extends McpServer {
     constructor(
-        private readonly config: WpMcpServerConfig<TGrant, TMintRequest>,
-        apiFactory: ApiFactory,
-        apiClasses: readonly ClassType[],
+        info: Implementation,
+        options: ServerOptions,
+        private readonly registry: McpToolRegistry,
     ) {
-        this.registry = new McpToolRegistry(apiClasses);
-        this.dispatcher = new McpApiDispatcher(apiFactory);
+        super(info, options);
     }
 
-    async build(accessToken: string): Promise<Server> {
-        await this.verifyCredential(accessToken);
-        return this.buildForAccessToken(accessToken);
+    // webpieces-disable no-any-unknown -- signature is fixed by the SDK's JSON Schema record type
+    override toolInputSchemaJson(name: string): Record<string, unknown> | undefined {
+        return this.registry.find(name)?.inputSchema as Record<string, DtoValue> | undefined;
+    }
+}
+
+/**
+ * Modern-only MCP 2026-07-28 adapter around the official SDK's request-scoped HTTP handler.
+ *
+ * Error boundary: every failure is mapped by the one `WpMcpErrorTranslator`, and each entry point
+ * has exactly one catch that only delegates to it: the bind HTTP handler (`toHttp`), tools/list
+ * (`toProtocolError`) and tools/call (`toToolResult`). `subscriptions/listen` is served entirely by
+ * the SDK's listen router, so Webpieces has no handler (and no catch) there. The external bearer is
+ * verified exactly once per POST, at the HTTP boundary, before the SDK is involved.
+ */
+export class WpMcpServer<TGrant, TMintRequest> {
+    private readonly dispatcher = new McpApiDispatcher();
+    private readonly translator = new WpMcpErrorTranslator();
+    private registry?: McpToolRegistry;
+    private handler?: McpHttpHandler;
+    private streamingHandler?: McpHttpHandler;
+    private nodeHandler?: NodeMcpRequestHandler;
+    private streamingNodeHandler?: NodeMcpRequestHandler;
+    private revision?: string;
+
+    constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {}
+
+    bind(app: Express, options: McpBindOptions): void {
+        if (this.handler) throw new Error('WpMcpServer.bind(...) may be called only once.');
+        this.registry = new McpToolRegistry(options.bindings);
+        this.revision = this.calculateRegistryRevision(this.registry);
+        this.handler = this.createHandler(options, 'auto');
+        this.streamingHandler = this.createHandler(options, 'sse');
+        this.nodeHandler = toNodeHandler(this.handler, {
+            onerror: (error: Error) => log.error('MCP Node transport failed', error),
+        });
+        this.streamingNodeHandler = toNodeHandler(this.streamingHandler, {
+            onerror: (error: Error) => log.error('MCP streaming Node transport failed', error),
+        });
+        app.post(
+            options.endpointPath,
+            json(),
+            async (req: Request, res: Response): Promise<void> =>
+                this.handleHttp(req, res, options),
+            // Express routes body-parser failures (bad JSON, body too large) to an error handler.
+            (err: Error, req: Request, res: Response, _next: NextFunction): void =>
+                RequestContext.run(() => {
+                    new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
+                    this.translator.toHttpBodyFailure(
+                        err,
+                        res,
+                        this.httpScope(req),
+                        this.challenge(),
+                    );
+                }),
+        );
     }
 
     protectedResourceMetadata(): McpProtectedResourceMetadata {
         return this.config.protectedResourceMetadata();
     }
 
-    private buildForAccessToken(accessToken: string): Server {
-        const server = new Server(
-            // webpieces-disable no-anonymous-object-literals -- external MCP SDK request structure
-            { name: this.config.name, version: this.config.version },
-            // webpieces-disable no-anonymous-object-literals -- external MCP SDK capability structure
-            { capabilities: { tools: {} } },
+    /** Gracefully closes active listen/request streams; clients must reconnect and refresh lists. */
+    async close(): Promise<void> {
+        await Promise.all([this.handler?.close(), this.streamingHandler?.close()]);
+    }
+
+    /** Level-triggered invalidation; the authoritative list is always fetched again by clients. */
+    toolsChanged(): void {
+        this.handler?.notify.toolsChanged();
+    }
+
+    get registryRevision(): string | undefined {
+        return this.revision;
+    }
+
+    private createHandler(options: McpBindOptions, responseMode: 'auto' | 'sse'): McpHttpHandler {
+        return createMcpHandler(
+            (context: McpRequestContext) => this.buildSdkServer(context, options),
+            {
+                legacy: 'reject',
+                responseMode,
+                bus: options.deployment.bus,
+                maxSubscriptions: options.maxSubscriptions,
+                keepAliveMs: options.keepAliveMs,
+                onerror: (error: Error) => log.warn('MCP protocol request rejected', error),
+            },
         );
-        server.setRequestHandler(ListToolsRequestSchema, async () => {
-            const credential = await this.verifyCredential(accessToken);
-            return {
-                tools: this.registry.tools
-                    .filter((tool: RegisteredMcpTool) => tool.isVisibleTo(credential.listingRoles))
-                    .map((tool: RegisteredMcpTool) => ({
-                        name: tool.name,
-                        description: tool.description,
-                        inputSchema: tool.inputSchema,
-                        outputSchema: tool.outputSchema,
-                        annotations: tool.annotations,
-                    })),
-            };
-        });
-        server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
-            const tool = this.registry.find(request.params.name);
-            if (!tool) {
-                throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`);
+    }
+
+    /** Entry point #1: the one catch for everything before and around the SDK exchange. */
+    private async handleHttp(req: Request, res: Response, options: McpBindOptions): Promise<void> {
+        res.setHeader('X-Accel-Buffering', 'no');
+        await RequestContext.run(async () => {
+            new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP HTTP entry point; delegates only to WpMcpErrorTranslator
+            try {
+                await this.serveExpress(req, res, options);
+            } catch (err: unknown) {
+                const error = toError(err);
+                this.translator.toHttp(error, res, this.httpScope(req), this.challenge());
             }
-            return this.call(tool, request.params.arguments ?? {}, accessToken);
         });
+    }
+
+    private async serveExpress(
+        req: Request,
+        res: Response,
+        options: McpBindOptions,
+    ): Promise<void> {
+        const origin = req.header('origin');
+        if (origin && !options.allowedOrigins.includes(origin)) {
+            throw new ApiForbiddenError(`MCP request Origin '${origin}' is not allowed.`);
+        }
+        const authentication = await this.authenticate(req);
+        const request = req as AuthenticatedExpressRequest;
+        request.auth = this.authInfo(authentication);
+        const serve = this.hasProgressToken(req.body)
+            ? this.streamingNodeHandler
+            : this.nodeHandler;
+        if (!serve) throw new ApiImplementationError('MCP Node handlers are not initialized.');
+        await serve(request, res, req.body);
+    }
+
+    /** Verifies the external bearer once for this POST. Handlers never re-verify it. */
+    private async authenticate(req: Request): Promise<McpPostAuthentication> {
+        const match = req.header('authorization')?.match(/^Bearer ([^\s]+)$/i);
+        const token = match?.[1];
+        if (!token) throw new ApiUnauthorizedError('MCP request has no bearer access token.');
+        const credential = await this.config.accessTokenAuthority.verifyAccessToken(
+            token,
+            this.config.resource,
+        );
+        this.validateCredential(credential);
+        return new McpPostAuthentication(token, credential, this.disconnectSignal(req));
+    }
+
+    private disconnectSignal(req: Request): AbortSignal {
+        const disconnected = new AbortController();
+        const res = req.res;
+        const cancel = (): void => disconnected.abort();
+        req.once('aborted', cancel);
+        req.socket.once('close', cancel);
+        res?.once('close', cancel);
+        res?.once('finish', (): void => {
+            req.off('aborted', cancel);
+            req.socket.off('close', cancel);
+            res.off('close', cancel);
+        });
+        return disconnected.signal;
+    }
+
+    private buildSdkServer(context: McpRequestContext, options: McpBindOptions): McpServer {
+        const authentication = context.authInfo?.extra?.['webpiecesAuthentication'];
+        if (context.era !== 'modern' || !(authentication instanceof McpPostAuthentication)) {
+            throw new ApiImplementationError(
+                'WpMcpServer serves only MCP 2026-07-28 requests authenticated by its bind boundary.',
+            );
+        }
+        const registry = this.requireRegistry();
+        const server = new WpSdkMcpServer(
+            { name: this.config.name, version: `${this.config.version}+${this.revision}` },
+            {
+                capabilities: { tools: { listChanged: true } },
+                cacheHints: {
+                    'tools/list': { ttlMs: options.deployment.ttlMs, cacheScope: 'private' },
+                    'server/discover': { ttlMs: options.deployment.ttlMs, cacheScope: 'private' },
+                },
+            },
+            registry,
+        );
+        server.server.removeRequestHandler('tools/list');
+        server.server.removeRequestHandler('tools/call');
+        server.server.setRequestHandler(
+            'tools/list',
+            async (_request: object, sdkContext: ServerContext): Promise<ListToolsResult> =>
+                this.handleListTools(authentication, sdkContext),
+        );
+        server.server.setRequestHandler(
+            'tools/call',
+            async (request: CallToolRequest, sdkContext: ServerContext): Promise<CallToolResult> =>
+                this.handleCallTool(server, request, authentication, sdkContext),
+        );
         return server;
     }
 
-    private async verifyCredential(accessToken: string): Promise<VerifiedMcpCredential> {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- security boundary logs owner detail and exposes only a generic authentication failure
+    /** Entry point #2: tools/list has no tool-result channel, so failures are JSON-RPC errors. */
+    private async handleListTools(
+        authentication: McpPostAuthentication,
+        sdkContext: ServerContext,
+    ): Promise<ListToolsResult> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP tools/list entry point; delegates only to WpMcpErrorTranslator
         try {
-            const credential = await this.config.accessTokenAuthority.verifyAccessToken(
-                accessToken,
-                this.config.resource,
-            );
-            this.validateCredential(credential);
-            return credential;
+            return this.listTools(authentication.credential);
         } catch (err: unknown) {
             const error = toError(err);
-            log.warn('MCP access-token verification rejected a request', error);
-            throw new ApiUnauthorizedError('MCP access token rejected.', undefined, error);
+            throw this.translator.toProtocolError(error, this.sdkScope(sdkContext, 'tools/list'));
         }
     }
 
-    private validateCredential(credential: VerifiedMcpCredential): void {
-        const now = Math.floor(Date.now() / 1000);
-        if (credential.subject.trim() === '') {
-            throw new Error('MCP access token has no subject.');
+    private listTools(credential: VerifiedMcpCredential): ListToolsResult {
+        const tools: Tool[] = [];
+        for (const tool of this.requireRegistry().tools) {
+            if (tool.isVisibleTo(credential.listingRoles)) tools.push(this.toolDefinition(tool));
         }
-        if (
-            !Number.isFinite(credential.issuedAtEpochSeconds) ||
-            !Number.isFinite(credential.expiresAtEpochSeconds) ||
-            !Number.isFinite(credential.accountValidatedAtEpochSeconds)
-        ) {
-            throw new Error('MCP access token security timestamps must be finite.');
-        }
-        if (credential.resource !== this.config.resource) {
-            throw new Error('MCP access token was not issued for this protected resource.');
-        }
-        if (!this.config.authorizationServers.includes(credential.issuer)) {
-            throw new Error('MCP access token issuer is not trusted by this protected resource.');
-        }
-        if (credential.issuedAtEpochSeconds > now) {
-            throw new Error('MCP access token was issued in the future.');
-        }
-        if (credential.expiresAtEpochSeconds <= now) {
-            throw new Error('MCP access token has expired.');
-        }
-        if (
-            credential.expiresAtEpochSeconds - credential.issuedAtEpochSeconds >
-            MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS
-        ) {
-            throw new Error('MCP access token lifetime exceeds 30 days.');
-        }
-        for (const scope of this.config.requiredScopes) {
-            if (!credential.scopes.includes(scope)) {
-                throw new Error(`MCP access token is missing required scope '${scope}'.`);
-            }
-        }
-        if (
-            credential.accountValidatedAtEpochSeconds > now ||
-            now - credential.accountValidatedAtEpochSeconds > this.config.maxAccountValidationAgeSeconds
-        ) {
-            throw new Error('MCP account authorization state is not fresh enough for dispatch.');
-        }
+        return { tools };
     }
 
-    private async call(
-        tool: RegisteredMcpTool,
-        args: DtoValue,
-        accessToken: string,
+    private toolDefinition(tool: RegisteredMcpTool): Tool {
+        return {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema as Tool['inputSchema'],
+            outputSchema: tool.outputSchema as Tool['outputSchema'],
+            annotations: tool.annotations,
+            _meta: { webpiecesRegistryRevision: this.revision },
+        };
+    }
+
+    /**
+     * Entry point #3: an unknown tool is a JSON-RPC -32602; every failure after the tool is found
+     * is an `isError: true` result, identically for local and remote bindings.
+     */
+    private async handleCallTool(
+        server: WpSdkMcpServer,
+        request: CallToolRequest,
+        authentication: McpPostAuthentication,
+        sdkContext: ServerContext,
     ): Promise<CallToolResult> {
-        let credential: VerifiedMcpCredential;
-        // webpieces-disable no-unmanaged-exceptions -- MCP transport boundary normalizes authentication failures before they reach the model
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP transport boundary
+        const name = request.params.name;
+        const scope = this.sdkScope(sdkContext, 'tools/call', name);
+        const tool = this.requireRegistry().find(name);
+        if (!tool) throw this.translator.unknownTool(name, scope);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP tools/call entry point; delegates only to WpMcpErrorTranslator
         try {
-            credential = await this.verifyCredential(accessToken);
-        } catch (err: unknown) {
-            //const error = toError(err);
-            throw new McpError(ErrorCode.InvalidRequest, 'Unauthorized');
-        }
-        let endpointJwt: MintedJwt;
-        // webpieces-disable no-unmanaged-exceptions -- MCP transport boundary logs mint failures and exposes only a generic protocol error
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP transport boundary
-        try {
-            const descriptor = new McpEndpointDescriptor(
-                tool.name,
-                tool.apiClass.name,
-                tool.methodName,
+            const result = await this.callTool(tool, request, authentication, sdkContext);
+            result._meta = this.translator.resultMeta(scope.requestId);
+            return server.server.projectCallToolResult(
+                result,
+                tool.outputSchema as Record<string, DtoValue>,
             );
-            const mintRequest = this.config.endpointMintRequest(credential, descriptor);
-            endpointJwt = await this.config.endpointJwtAuthority.mint(mintRequest);
-            this.validateEndpointJwt(endpointJwt, accessToken);
         } catch (err: unknown) {
             const error = toError(err);
-            log.error(
-                `MCP endpoint credential mint failed for ${tool.apiClass.name}.${tool.methodName}`,
-                error,
-            );
-            throw new McpError(ErrorCode.InternalError, 'Internal Error');
+            return this.translator.toToolResult(error, scope);
         }
-        const result = await this.dispatcher.call(tool, args ?? {}, endpointJwt.token);
-        if (!result.success) return this.apiError(result.error, result.requestId);
+    }
 
-        const outputFailure = this.registry.schemaBuilder.validate(tool.responseClass, result.value);
+    /** Everything a tool call does. No catch in here: failures propagate to handleCallTool. */
+    private async callTool(
+        tool: RegisteredMcpTool,
+        request: CallToolRequest,
+        authentication: McpPostAuthentication,
+        sdkContext: ServerContext,
+    ): Promise<CallToolResult> {
+        const credential = authentication.credential;
+        const endpointJwt =
+            tool.binding.topology === 'local'
+                ? await this.mintEndpointJwt(tool, authentication)
+                : undefined;
+        const invocation = new McpInvocationContext(
+            sdkContext.mcpReq.id,
+            tool.name,
+            credential.subject,
+            credential.listingRoles,
+            AbortSignal.any([sdkContext.mcpReq.signal, authentication.disconnectSignal]),
+            this.progressReporter(sdkContext),
+        );
+        const args = (request.params.arguments ?? {}) as DtoValue;
+        const value = await this.dispatcher.call(
+            tool,
+            args,
+            credential,
+            invocation,
+            endpointJwt?.token,
+        );
+        const outputFailure = this.requireRegistry().schemaBuilder.validate(
+            tool.responseClass,
+            value,
+        );
         if (outputFailure) {
-            log.error(
+            throw new ApiImplementationError(
                 `MCP output schema violation for ${tool.apiClass.name}.${tool.methodName}: ${outputFailure.message}`,
             );
-            return this.errorResult(
-                new ModelVisibleToolError('implementation', 'Internal Error', result.requestId),
-            );
         }
-        let structured: Record<string, DtoValue>;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes serialization failures
-        try {
-            structured = this.record(result.value);
-        } catch (err: unknown) {
-            const error = toError(err);
-            log.error(
-                `MCP response serialization failed for ${tool.apiClass.name}.${tool.methodName}`,
-                error,
-            );
-            return this.errorResult(
-                new ModelVisibleToolError('implementation', 'Internal Error', result.requestId),
-            );
-        }
+        const structured = this.record(value);
         return {
             content: [{ type: 'text', text: JSON.stringify(structured) }],
             structuredContent: structured,
         };
     }
 
-    private validateEndpointJwt(endpointJwt: MintedJwt, accessToken: string): void {
+    private async mintEndpointJwt(
+        tool: RegisteredMcpTool,
+        authentication: McpPostAuthentication,
+    ): Promise<MintedJwt> {
+        const descriptor = new McpEndpointDescriptor(
+            tool.name,
+            tool.apiClass.name,
+            tool.methodName,
+        );
+        const minted = await this.config.endpointJwtAuthority.mint(
+            this.config.endpointMintRequest(authentication.credential, descriptor),
+        );
         const now = Math.floor(Date.now() / 1000);
-        if (endpointJwt.token === accessToken) {
-            throw new Error('MCP access-token passthrough to endpoint dispatch is forbidden.');
-        }
-        if (endpointJwt.expiresAtEpochSeconds <= now) {
-            throw new Error('MCP endpoint JWT has already expired.');
+        if (minted.token === authentication.accessToken) {
+            throw new ApiImplementationError(
+                `MCP access-token passthrough is forbidden (endpoint JWT for ${tool.name}).`,
+            );
         }
         if (
-            endpointJwt.expiresAtEpochSeconds - now >
-            this.config.maxEndpointJwtLifetimeSeconds
+            minted.expiresAtEpochSeconds <= now ||
+            minted.expiresAtEpochSeconds - now > this.config.maxEndpointJwtLifetimeSeconds
         ) {
-            throw new Error('MCP endpoint JWT lifetime exceeds the configured one-hour ceiling.');
+            throw new ApiImplementationError(
+                `MCP endpoint JWT lifetime is invalid for ${tool.name}.`,
+            );
+        }
+        return minted;
+    }
+
+    private validateCredential(credential: VerifiedMcpCredential): void {
+        const now = Math.floor(Date.now() / 1000);
+        const reject = (reason: string): never => {
+            throw new ApiUnauthorizedError(`MCP access token rejected: ${reason}`);
+        };
+        if (credential.subject.trim() === '') reject('no subject');
+        const stamps = [
+            credential.issuedAtEpochSeconds,
+            credential.expiresAtEpochSeconds,
+            credential.accountValidatedAtEpochSeconds,
+        ];
+        if (!stamps.every(Number.isFinite)) reject('security timestamps must be finite');
+        if (credential.resource !== this.config.resource) reject('resource mismatch');
+        if (!this.config.authorizationServers.includes(credential.issuer)) {
+            reject('issuer is not trusted');
+        }
+        if (credential.issuedAtEpochSeconds > now || credential.expiresAtEpochSeconds <= now) {
+            reject('outside its valid time window');
+        }
+        const lifetime = credential.expiresAtEpochSeconds - credential.issuedAtEpochSeconds;
+        if (lifetime > MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS) reject('lifetime exceeds 30 days');
+        for (const scope of this.config.requiredScopes) {
+            if (!credential.scopes.includes(scope)) reject(`missing required scope '${scope}'`);
+        }
+        const validatedAge = now - credential.accountValidatedAtEpochSeconds;
+        if (
+            credential.accountValidatedAtEpochSeconds > now ||
+            validatedAge > this.config.maxAccountValidationAgeSeconds
+        ) {
+            reject('account authorization state is not fresh enough for dispatch');
         }
     }
 
-    private apiError(payload: ApiErrorPayload, requestId: string): CallToolResult {
-        return this.errorResult(
-            new ModelVisibleToolError(
-                payload.kind,
-                payload.message,
-                requestId,
-                payload.field,
-                payload.callerMessage,
-                payload.errorCode,
-                payload.retryAfterSeconds,
-            ),
-        );
-    }
-
-    private errorResult(error: ModelVisibleToolError): CallToolResult {
-        const structured = this.record(error);
+    private authInfo(authentication: McpPostAuthentication): AuthInfo {
+        const credential = authentication.credential;
         return {
-            content: [{ type: 'text', text: JSON.stringify(structured) }],
-            // `outputSchema` describes the endpoint's success DTO. MCP clients validate
-            // structuredContent against it even when isError is true, so error details must stay
-            // in text content until the protocol supports a separate error schema.
-            isError: true,
+            token: authentication.accessToken,
+            clientId: credential.subject,
+            scopes: [...credential.scopes],
+            expiresAt: credential.expiresAtEpochSeconds,
+            resource: new URL(credential.resource),
+            extra: { webpiecesAuthentication: authentication },
         };
     }
 
+    private progressReporter(context: ServerContext): McpProgressReporter | undefined {
+        const token = context.mcpReq._meta?.progressToken;
+        if (token === undefined) return undefined;
+        return async (progress: number, total?: number, message?: string): Promise<void> => {
+            await context.mcpReq.notify({
+                method: 'notifications/progress',
+                params: this.progressParams(token, progress, total, message),
+            });
+        };
+    }
+
+    private progressParams(
+        progressToken: ProgressToken,
+        progress: number,
+        total?: number,
+        message?: string,
+    ): Record<string, DtoValue> {
+        const params: Record<string, DtoValue> = { progressToken, progress };
+        if (total !== undefined) params['total'] = total;
+        if (message !== undefined) params['message'] = message;
+        return params;
+    }
+
+    private requestId(): string {
+        return RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
+    }
+
+    private sdkScope(context: ServerContext, method: string, toolName?: string): McpFailureScope {
+        return new McpFailureScope(this.requestId(), context.mcpReq.id, method, toolName);
+    }
+
+    private httpScope(req: Request): McpFailureScope {
+        const body = this.bodyObject(req.body);
+        const id = body?.['id'];
+        const method = body?.['method'];
+        const params = this.bodyObject(body?.['params']);
+        const name = params?.['name'];
+        return new McpFailureScope(
+            this.requestId(),
+            typeof id === 'string' || typeof id === 'number' ? id : null,
+            typeof method === 'string' ? method : 'unknown',
+            typeof name === 'string' ? name : undefined,
+        );
+    }
+
+    private challenge(): string {
+        return `Bearer resource_metadata="${this.config.resource}"`;
+    }
+
+    private bodyObject(value: DtoValue | undefined): Record<string, DtoValue> | undefined {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+        return value as Record<string, DtoValue>;
+    }
+
+    private hasProgressToken(body: DtoValue): boolean {
+        const params = this.bodyObject(this.bodyObject(body)?.['params']);
+        return this.bodyObject(params?.['_meta'])?.['progressToken'] !== undefined;
+    }
+
+    private toHttpRequest(req: Request): HttpRequest {
+        const headers = new Map<string, string[]>();
+        for (const [name, value] of Object.entries(req.headers)) {
+            if (typeof value === 'string') headers.set(name, [value]);
+            else if (Array.isArray(value)) headers.set(name, value);
+        }
+        return new HttpRequest(req.method, req.originalUrl || req.path, headers);
+    }
+
+    private calculateRegistryRevision(registry: McpToolRegistry): string {
+        const surface = registry.tools.map((tool: RegisteredMcpTool) => [
+            tool.name,
+            tool.description,
+            tool.inputSchema,
+            tool.outputSchema,
+            tool.annotations,
+        ]);
+        return createHash('sha256').update(JSON.stringify(surface)).digest('hex').slice(0, 12);
+    }
+
+    private requireRegistry(): McpToolRegistry {
+        if (!this.registry) throw new Error('Call WpMcpServer.bind(...) before serving requests.');
+        return this.registry;
+    }
+
     private record(value: DtoValue): Record<string, DtoValue> {
-        const json = JSON.stringify(value);
-        if (json === undefined) throw new Error('MCP structured content is not JSON serializable.');
-        const parsed = JSON.parse(json) as DtoValue;
+        const jsonValue = JSON.stringify(value);
+        if (jsonValue === undefined) {
+            throw new ApiImplementationError('MCP structured content is not JSON serializable.');
+        }
+        const parsed = JSON.parse(jsonValue) as DtoValue;
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-            // webpieces-disable no-anonymous-object-literals -- external MCP structured-content wrapper
             return { value: parsed };
         }
         return parsed as Record<string, DtoValue>;

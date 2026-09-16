@@ -1,68 +1,72 @@
 import {
     ApiBadRequestError,
-    ApiErrorCodec,
-    ApiErrorPayload,
+    ApiForbiddenError,
+    ApiImplementationError,
     DtoSchemaBuilder,
     DtoValue,
-    toError,
+    rolesRequired,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
-import { ApiFactory, ApiClientProxy } from '@webpieces/http-routing';
 import { RegisteredMcpTool } from './McpToolRegistry';
+import { VerifiedMcpCredential } from './McpAuth';
+import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationContext';
 
-export class McpDispatchSuccess {
-    readonly success = true;
-    constructor(public readonly value: DtoValue, public readonly requestId: string) {}
-}
-
-export class McpDispatchFailure {
-    readonly success = false;
-    constructor(public readonly error: ApiErrorPayload, public readonly requestId: string) {}
-}
-
-export type McpDispatchResult = McpDispatchSuccess | McpDispatchFailure;
-
-/** Executes one tool through the same ApiFactory proxy/filter/controller path as HTTP. */
+/**
+ * Executes one tool call through the explicit local or remote Webpieces client, never a controller
+ * reference. It has NO try/catch: every failure (bad arguments, MCP authorization, anything the local
+ * proxy or the remote generated client throws) propagates as a typed error to the single tools/call
+ * boundary in `WpMcpServer`, so local and remote bindings are translated identically.
+ */
 export class McpApiDispatcher {
     private readonly schemaBuilder = new DtoSchemaBuilder();
-
-    constructor(private readonly apiFactory: ApiFactory) {}
 
     async call(
         tool: RegisteredMcpTool,
         requestDto: DtoValue,
-        endpointBearerToken: string,
-    ): Promise<McpDispatchResult> {
-        const headers = new Map<string, string[]>();
-        headers.set('authorization', [`Bearer ${endpointBearerToken}`]);
-        const request = new HttpRequest('POST', `/__webpieces/mcp/${tool.name}`, headers);
-        return RequestContext.run(async () => {
+        credential: VerifiedMcpCredential,
+        invocation: McpInvocationContext,
+        endpointBearerToken?: string,
+    ): Promise<DtoValue> {
+        const inputFailure = this.schemaBuilder.validate(tool.requestClass, requestDto);
+        if (inputFailure) {
+            throw new ApiBadRequestError(
+                `MCP arguments for ${tool.name} did not match ${tool.requestClass.name}: ${inputFailure.message}`,
+                inputFailure.field,
+                inputFailure.message,
+            );
+        }
+        const required = rolesRequired(tool.mcpAuth.requirement);
+        if (
+            required.length > 0 &&
+            !required.some((role: string) => credential.listingRoles.includes(role))
+        ) {
+            throw new ApiForbiddenError(
+                `MCP principal ${credential.subject} lacks a role required by @WpMcpAuthJwt on ${tool.name}.`,
+            );
+        }
+        const parentRequestId = RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID);
+        return RequestContext.runDetachedScope(async () => {
+            if (parentRequestId) {
+                RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_ID, parentRequestId);
+            }
+            const headers = new Map<string, string[]>();
+            if (tool.binding.topology === 'local') {
+                if (!endpointBearerToken) {
+                    throw new ApiImplementationError(
+                        `Local MCP tool ${tool.name} has no endpoint JWT.`,
+                    );
+                }
+                headers.set('authorization', [`Bearer ${endpointBearerToken}`]);
+            }
+            const request = new HttpRequest('POST', `/__webpieces/mcp/${tool.name}`, headers);
             new RequestContextHeaders().fillFromRequest(request);
-            const requestId =
-                RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
-            const inputFailure = this.schemaBuilder.validate(tool.requestClass, requestDto);
-            if (inputFailure) {
-                return new McpDispatchFailure(
-                    ApiErrorCodec.encode(
-                        new ApiBadRequestError(
-                            'MCP request DTO did not match its declared schema.',
-                            undefined,
-                            inputFailure.message,
-                        ),
-                    ),
-                    requestId,
-                );
+            RequestContext.putTrusted(MCP_INVOCATION_CONTEXT, invocation);
+            if (tool.binding.topology === 'remote') {
+                for (const tuple of credential.trustedContext)
+                    RequestContext.putTrusted(tuple.key, tuple.value);
             }
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- transport boundary sanitizes endpoint throws
-            try {
-                const client = this.apiFactory.createApiClient<ApiClientProxy>(tool.apiClass as never);
-                const value = (await client[tool.methodName](requestDto)) as DtoValue;
-                return new McpDispatchSuccess(value, requestId);
-            } catch (err: unknown) {
-                const error = toError(err);
-                return new McpDispatchFailure(ApiErrorCodec.encode(error), requestId);
-            }
+            return tool.binding.invoke(tool.methodName, requestDto);
         });
     }
 }

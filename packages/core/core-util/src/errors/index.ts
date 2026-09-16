@@ -17,6 +17,7 @@ export {
 } from './ApiError';
 export type { ApiErrorKind } from './ApiError';
 export { ApiErrorCodec, ApiErrorPayload } from './ApiErrorCodec';
+export { ApiErrorBoundary } from './ApiErrorBoundary';
 export {
     ENTITY_NOT_FOUND,
     WRONG_LOGIN_TYPE,

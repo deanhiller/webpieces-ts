@@ -26,7 +26,7 @@ const noEighthFieldArgument = new WpDtoFieldOptions(
     undefined,
     undefined,
     undefined,
-    // @ts-expect-error maps use WpDtoMapFieldOptions, never an 8th positional argument
+    // @ts-expect-error maps use WpDtoMapFieldOptions; the 8th argument is only a WpMcpHeader
     'string',
 );
 

@@ -14,6 +14,7 @@ import {
     HttpParameterValueType,
 } from './HttpContract';
 import { RouteMetadata } from './RouteMetadata';
+import { getStreamingEndpoint } from './StreamingContract';
 
 /**
  * Build the one runtime route model consumed by incoming routing, in-process clients, and both
@@ -36,28 +37,33 @@ export class RouteMetadataFactory {
         }
         const fullPath = this.joinPath(getApiPath(apiClass) ?? '', endpointPath);
         const options = getEndpointOptions(apiClass, methodName);
+        const streaming = getStreamingEndpoint(apiClass, methodName);
         const httpMethod = this.httpMethod(options.httpMethod, apiClass, methodName);
-        if (httpMethod === 'GET' && options.formPost === true) {
-            throw new Error(
-                `${apiClass.name}.${methodName} is GET and cannot declare formPost:true because GET has no request body.`,
-            );
-        }
-        if (httpMethod === 'GET' && options.rawBody === true) {
-            throw new Error(
-                `${apiClass.name}.${methodName} is GET and cannot declare rawBody:true because GET has no request body.`,
-            );
-        }
-
-        const parameterTypes = this.parameterTypes(apiClass, methodName);
-        const declarations = getHttpParameterDeclarations(apiClass, methodName);
-        const bodyParameterIndex = this.validateParameters(
+        this.validateEndpointOptions(
             apiClass,
             methodName,
-            fullPath,
             httpMethod,
-            parameterTypes,
-            declarations,
+            options.formPost,
+            options.rawBody,
         );
+        const parameterTypes = this.parameterTypes(apiClass, methodName);
+        const declarations = getHttpParameterDeclarations(apiClass, methodName);
+        const bodyParameterIndex = streaming
+            ? this.validateStreamingParameters(
+                  apiClass,
+                  methodName,
+                  httpMethod,
+                  parameterTypes,
+                  declarations,
+              )
+            : this.validateParameters(
+                  apiClass,
+                  methodName,
+                  fullPath,
+                  httpMethod,
+                  parameterTypes,
+                  declarations,
+              );
         const bindings = declarations
             .map(
                 (declaration: HttpParameterDeclaration) =>
@@ -83,7 +89,45 @@ export class RouteMetadataFactory {
             bindings,
             bodyParameterIndex,
             this.responseType(options.responseType, apiClass, methodName),
+            streaming,
         );
+    }
+
+    // webpieces-disable no-function-outside-class -- private pure helper keeps the existing static metadata factory below the method-size limit
+    private static validateEndpointOptions(
+        apiClass: Function,
+        methodName: string,
+        httpMethod: ContractHttpMethod,
+        formPost?: boolean,
+        rawBody?: boolean,
+    ): void {
+        if (httpMethod === 'GET' && formPost === true) {
+            throw new Error(
+                `${apiClass.name}.${methodName} is GET and cannot declare formPost:true because GET has no request body.`,
+            );
+        }
+        if (httpMethod === 'GET' && rawBody === true) {
+            throw new Error(
+                `${apiClass.name}.${methodName} is GET and cannot declare rawBody:true because GET has no request body.`,
+            );
+        }
+    }
+
+    // webpieces-disable no-function-outside-class -- private pure validator alongside existing contract validators
+    private static validateStreamingParameters(
+        apiClass: Function,
+        methodName: string,
+        httpMethod: ContractHttpMethod,
+        parameterTypes: readonly Function[],
+        declarations: readonly HttpParameterDeclaration[],
+    ): undefined {
+        const label = `${apiClass.name || 'Unknown'}.${methodName}`;
+        if (httpMethod !== 'POST') throw new Error(`${label} is streaming and must use POST.`);
+        if (declarations.length > 0)
+            throw new Error(`${label} is streaming and cannot declare path/query parameters.`);
+        if (parameterTypes.length !== 1)
+            throw new Error(`${label} must take exactly one ResponseStream parameter.`);
+        return undefined;
     }
 
     // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory

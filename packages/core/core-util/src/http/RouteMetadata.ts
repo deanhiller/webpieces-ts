@@ -1,6 +1,7 @@
 import { MaskSpec } from './LogFieldMask';
 import { AuthMeta } from './auth-mode';
 import { EndpointResponseType, HttpParameterBinding } from './HttpContract';
+import { StreamingEndpointMetadata } from './StreamingContract';
 
 /**
  * Route metadata stored per-method at runtime.
@@ -55,6 +56,8 @@ export class RouteMetadata {
         readonly bodyParameterIndex?: number,
         /** Whether clients receive only the body or the complete status/header/body response. */
         readonly responseType: EndpointResponseType = 'body',
+        /** Present only for `(ResponseStream) => Promise<RequestStream>` contracts. */
+        readonly streaming?: StreamingEndpointMetadata,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -68,5 +71,6 @@ export class RouteMetadata {
         this.parameterBindings = parameterBindings;
         this.bodyParameterIndex = bodyParameterIndex;
         this.responseType = responseType;
+        this.streaming = streaming;
     }
 }
