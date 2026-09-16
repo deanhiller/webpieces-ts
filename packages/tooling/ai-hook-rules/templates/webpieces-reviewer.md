@@ -12,9 +12,9 @@ checklist(s) you are handed — nothing else.
 
 ## What you are given
 
-Your caller names ONE OR MORE instructions files, one per checklist, under
-`.webpieces/pr-review/<feature>/instructions/<checklist-id>.instructions.md`. Read every one of them
-FIRST. Each is regenerated on every run and holds, for its checklist:
+Your caller names ONE OR MORE instructions files by absolute path, one per checklist
+(`<checklist-id>.instructions.md`). Read every one of them FIRST. Each is regenerated on every run and
+holds, for its checklist:
 
 - the checklist doc to review against — the substance of that review;
 - the files in scope, each with its extracted diff and the absolute path of the full source;

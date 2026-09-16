@@ -45,7 +45,8 @@ describe('renderReviewerAgent — the generic reviewer definition', () => {
     });
 
     it('is checklist-agnostic: one or more checklists, each over its own scope, one verdict each', () => {
-        expect(agent).toContain('ONE OR MORE instructions files, one per checklist');
+        expect(agent).toContain('ONE OR MORE instructions files by absolute path, one per checklist');
+        expect(agent).not.toContain('.webpieces/');
         expect(agent).toContain('ONLY against its own in-scope files');
         expect(agent).toContain('Exactly ONE verdict file per checklist you were handed');
         expect(agent).toContain('nothing for a checklist you were not handed');
