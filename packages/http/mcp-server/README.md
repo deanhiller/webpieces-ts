@@ -42,6 +42,37 @@ The `@WpMcpTool.description` becomes the tool description returned by `tools/lis
 response classes generate `inputSchema` and `outputSchema`; `@WpDtoField` supplies property
 descriptions and the facts TypeScript erases, such as optionality and array element types.
 
+### Typed maps
+
+A `Record<string, V>` reflects as plain `Object`, so its value type must be declared — the same reason
+`arrayItems` exists for arrays. Use `WpDtoMapFieldOptions(description, required, mapValues)`, where
+`mapValues` is `'string' | 'number' | 'integer' | 'boolean'` or a `@WpDto` class:
+
+```ts
+@WpDto()
+class PassageSentenceItem {
+    @WpDtoField(new WpDtoFieldOptions('Sentence text', true))
+    text!: string;
+
+    @WpDtoField(new WpDtoMapFieldOptions('ISO 639-1 -> sentence', false, 'string'))
+    translations?: Record<string, string>;
+}
+
+@WpDto()
+class PassageResponse {
+    @WpDtoField(new WpDtoMapFieldOptions('Sentences by locale', true, PassageSentenceItem))
+    sentencesByLocale!: Record<string, PassageSentenceItem>;
+}
+```
+
+The field emits `{ type: 'object', additionalProperties: <value schema> }`, and validation checks every
+value (`$.translations.es must be string`). An `Object`-typed field without map options — an interface or
+an undeclared `Record` — fails at startup, because an interface can never carry `@WpDto`.
+
+A map is still a closed schema: no key can carry an unspecified value. Check closure with
+`new DtoSchemaBuilder().isClosedSchema(schema)`, not `schema.additionalProperties === false`, which wrongly
+rejects typed maps.
+
 Applications construct `WpMcpServer` with their built `ApiFactory`, the API classes they want scanned,
 a paired `McpAccessTokenAuthority`, and their application `JwtHook`. The authority verifies issuer,
 signature/token state, expiry, scopes, the exact resource URI, and current account state on every MCP

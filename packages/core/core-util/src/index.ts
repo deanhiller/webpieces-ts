@@ -116,13 +116,14 @@ export {
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
+    WpDtoMapFieldOptions,
     WpDtoFieldMetadata,
     WpResponseDto,
     ApiJsonSchema,
     DtoValidationFailure,
     DtoSchemaBuilder,
 } from './mcp/DtoSchema';
-export type { DtoClass, DtoArrayItem, DtoValue } from './mcp/DtoSchema';
+export type { DtoClass, DtoElementType, DtoValue } from './mcp/DtoSchema';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
 export type {

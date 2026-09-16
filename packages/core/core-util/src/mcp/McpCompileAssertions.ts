@@ -1,5 +1,5 @@
 import { WpMcpTool } from './McpMetadata';
-import { WpDtoFieldOptions } from './DtoSchema';
+import { WpDtoFieldOptions, WpDtoMapFieldOptions } from './DtoSchema';
 
 const invalidEmptyEnum = new WpDtoFieldOptions(
     'invalid enum',
@@ -10,6 +10,24 @@ const invalidEmptyEnum = new WpDtoFieldOptions(
     undefined,
     // @ts-expect-error enumValues must contain at least one allowed string
     [],
+);
+
+// @ts-expect-error a map's value type must be a scalar name or a DtoClass
+const invalidMapValue = new WpDtoMapFieldOptions('invalid map', true, 'date');
+
+// @ts-expect-error a map value type is mandatory: it is the whole point of WpDtoMapFieldOptions
+const missingMapValue = new WpDtoMapFieldOptions('invalid map', true);
+
+const noEighthFieldArgument = new WpDtoFieldOptions(
+    'maps are not a WpDtoFieldOptions argument',
+    false,
+    undefined,
+    false,
+    undefined,
+    undefined,
+    undefined,
+    // @ts-expect-error maps use WpDtoMapFieldOptions, never an 8th positional argument
+    'string',
 );
 
 abstract class InvalidMcpContract {
@@ -56,3 +74,6 @@ abstract class InvalidMcpArities {
 void InvalidMcpContract;
 void InvalidMcpArities;
 void invalidEmptyEnum;
+void invalidMapValue;
+void missingMapValue;
+void noEighthFieldArgument;

@@ -6,7 +6,8 @@ const RESPONSE_DTOS = 'webpieces:response-dtos';
 
 // webpieces-disable no-any-unknown -- abstract class tokens necessarily erase constructor parameters
 export type DtoClass = abstract new (...args: any[]) => unknown;
-export type DtoArrayItem = 'string' | 'number' | 'integer' | 'boolean' | DtoClass;
+/** The element type of an array or the value type of a map; TypeScript erases both at runtime. */
+export type DtoElementType = 'string' | 'number' | 'integer' | 'boolean' | DtoClass;
 /** Runtime values accepted at the DTO validation boundary. */
 export type DtoValue = object | string | number | boolean | null;
 
@@ -17,7 +18,7 @@ export class WpDtoFieldOptions {
         /** Required/optional is explicit because TypeScript erases `?` at runtime. */
         public readonly required: boolean,
         /** Required for arrays because TypeScript erases their element type. */
-        public readonly arrayItems?: DtoArrayItem,
+        public readonly arrayItems?: DtoElementType,
         /** A reflected Number is otherwise emitted as JSON Schema `number`. */
         public readonly integer: boolean = false,
         public readonly minimum?: number,
@@ -26,10 +27,24 @@ export class WpDtoFieldOptions {
     ) {}
 }
 
+/**
+ * Field metadata for a typed map such as `Record<string, string>` or `Record<string, SomeDto>`.
+ * Keys are open strings; every VALUE must match `mapValues`. The value type is explicit for the same
+ * reason `arrayItems` is: TypeScript erases it, and a `Record` reflects as plain `Object`.
+ */
+export class WpDtoMapFieldOptions {
+    constructor(
+        public readonly description: string,
+        /** Required/optional is explicit because TypeScript erases `?` at runtime. */
+        public readonly required: boolean,
+        public readonly mapValues: DtoElementType,
+    ) {}
+}
+
 export class WpDtoFieldMetadata {
     constructor(
         public readonly propertyKey: string,
-        public readonly options: WpDtoFieldOptions,
+        public readonly options: WpDtoFieldOptions | WpDtoMapFieldOptions,
     ) {}
 }
 
@@ -39,7 +54,8 @@ export class ApiJsonSchema {
     description?: string;
     properties?: Record<string, ApiJsonSchema>;
     required?: string[];
-    additionalProperties?: boolean;
+    /** `false` closes an object; a schema makes it a typed map whose values all match that schema. */
+    additionalProperties?: boolean | ApiJsonSchema;
     items?: ApiJsonSchema;
     enum?: string[];
     minimum?: number;
@@ -63,7 +79,7 @@ export function WpDto(): ClassDecorator {
 
 /** Adds documentation and runtime-only shape facts to a DTO property. */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpDtoField(options: WpDtoFieldOptions): PropertyDecorator {
+export function WpDtoField(options: WpDtoFieldOptions | WpDtoMapFieldOptions): PropertyDecorator {
     if (options.description.trim() === '') {
         throw new Error('@WpDtoField requires non-empty field documentation.');
     }
@@ -116,6 +132,17 @@ export class DtoSchemaBuilder {
         return response();
     }
 
+    /**
+     * The one closure gate for an object schema. Closed means no key can carry an unspecified value:
+     * either extra keys are forbidden (`additionalProperties: false`) or every extra key's value is
+     * typed (`additionalProperties: <schema>`, a typed map). A missing or `true` value is open.
+     * Use this instead of `schema.additionalProperties === false`, which rejects typed maps.
+     */
+    isClosedSchema(schema: ApiJsonSchema): boolean {
+        const extra = schema.additionalProperties;
+        return extra === false || (typeof extra === 'object' && extra !== null);
+    }
+
     build(dtoClass: DtoClass): ApiJsonSchema {
         return this.buildAt(dtoClass, new Set<DtoClass>());
     }
@@ -155,8 +182,14 @@ export class DtoSchemaBuilder {
             field.propertyKey,
         ) as DtoClass | undefined;
         if (!reflected) throw new Error(`No reflected type for ${dtoClass.name}.${field.propertyKey}.`);
-        const options = field.options;
         this.validateOptions(dtoClass, field, reflected);
+        const options = field.options;
+        if (options instanceof WpDtoMapFieldOptions) {
+            const mapSchema = new ApiJsonSchema('object');
+            mapSchema.description = options.description;
+            mapSchema.additionalProperties = this.itemSchema(options.mapValues, parents);
+            return mapSchema;
+        }
         let schema: ApiJsonSchema;
         switch (reflected.name) {
             case 'String':
@@ -192,6 +225,18 @@ export class DtoSchemaBuilder {
     ): void {
         const label = `${dtoClass.name}.${field.propertyKey}`;
         const options = field.options;
+        if (options instanceof WpDtoMapFieldOptions) {
+            if (reflected !== Object) {
+                throw new Error(`${label} declares mapValues but is not a map (Record<string, V>).`);
+            }
+            return;
+        }
+        if (reflected === Object) {
+            throw new Error(
+                `${label} has type Object: an interface or Record can never be a @WpDto. ` +
+                    'For a map, use WpDtoMapFieldOptions.',
+            );
+        }
         if (reflected.name !== 'Array' && options.arrayItems) {
             throw new Error(`${label} declares arrayItems but is not an array.`);
         }
@@ -209,7 +254,7 @@ export class DtoSchemaBuilder {
         }
     }
 
-    private itemSchema(item: DtoArrayItem, parents: Set<DtoClass>): ApiJsonSchema {
+    private itemSchema(item: DtoElementType, parents: Set<DtoClass>): ApiJsonSchema {
         if (typeof item !== 'string') return this.buildAt(item, parents);
         return new ApiJsonSchema(item === 'integer' ? 'integer' : item);
     }
@@ -254,12 +299,14 @@ export class DtoSchemaBuilder {
             dtoClass.prototype,
             field.propertyKey,
         ) as DtoClass;
+        const options = field.options;
+        if (options instanceof WpDtoMapFieldOptions) return this.validateMap(options, value, path);
         const expected = reflected?.name;
-        if (expected === 'Array') return this.validateArray(field.options, value, path);
+        if (expected === 'Array') return this.validateArray(options, value, path);
         if (expected === 'String') {
             if (typeof value !== 'string') return new DtoValidationFailure(`${path} must be a string`);
-            if (field.options.enumValues && !field.options.enumValues.includes(value)) {
-                return new DtoValidationFailure(`${path} must be one of: ${field.options.enumValues.join(', ')}`);
+            if (options.enumValues && !options.enumValues.includes(value)) {
+                return new DtoValidationFailure(`${path} must be one of: ${options.enumValues.join(', ')}`);
             }
             return undefined;
         }
@@ -267,14 +314,14 @@ export class DtoSchemaBuilder {
             if (typeof value !== 'number' || !Number.isFinite(value)) {
                 return new DtoValidationFailure(`${path} must be a number`);
             }
-            if (field.options.integer && !Number.isInteger(value)) {
+            if (options.integer && !Number.isInteger(value)) {
                 return new DtoValidationFailure(`${path} must be an integer`);
             }
-            if (field.options.minimum !== undefined && value < field.options.minimum) {
-                return new DtoValidationFailure(`${path} must be >= ${field.options.minimum}`);
+            if (options.minimum !== undefined && value < options.minimum) {
+                return new DtoValidationFailure(`${path} must be >= ${options.minimum}`);
             }
-            if (field.options.maximum !== undefined && value > field.options.maximum) {
-                return new DtoValidationFailure(`${path} must be <= ${field.options.maximum}`);
+            if (options.maximum !== undefined && value > options.maximum) {
+                return new DtoValidationFailure(`${path} must be <= ${options.maximum}`);
             }
             return undefined;
         }
@@ -294,16 +341,41 @@ export class DtoSchemaBuilder {
         if (!Array.isArray(value)) return new DtoValidationFailure(`${path} must be an array`);
         if (!options.arrayItems) return new DtoValidationFailure(`${path} has no item type`);
         for (let index = 0; index < value.length; index += 1) {
-            const item = value[index];
-            if (typeof options.arrayItems !== 'string') {
-                const nested = this.validateAt(options.arrayItems, item, `${path}[${index}]`);
-                if (nested) return nested;
-                continue;
-            }
-            const wanted = options.arrayItems === 'integer' ? 'number' : options.arrayItems;
-            if (typeof item !== wanted || (options.arrayItems === 'integer' && !Number.isInteger(item))) {
-                return new DtoValidationFailure(`${path}[${index}] must be ${options.arrayItems}`);
-            }
+            const failure = this.validateElement(options.arrayItems, value[index], `${path}[${index}]`);
+            if (failure) return failure;
+        }
+        return undefined;
+    }
+
+    private validateMap(
+        options: WpDtoMapFieldOptions,
+        value: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            return new DtoValidationFailure(`${path} must be an object map`);
+        }
+        const prototype: object | null = Object.getPrototypeOf(value);
+        if (prototype !== Object.prototype && prototype !== null) {
+            return new DtoValidationFailure(`${path} must be a plain object map`);
+        }
+        for (const key of Object.keys(value)) {
+            const entry: DtoValue = Object.getOwnPropertyDescriptor(value, key)?.value;
+            const failure = this.validateElement(options.mapValues, entry, `${path}.${key}`);
+            if (failure) return failure;
+        }
+        return undefined;
+    }
+
+    private validateElement(
+        type: DtoElementType,
+        item: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        if (typeof type !== 'string') return this.validateAt(type, item, path);
+        const wanted = type === 'integer' ? 'number' : type;
+        if (typeof item !== wanted || (type === 'integer' && !Number.isInteger(item))) {
+            return new DtoValidationFailure(`${path} must be ${type}`);
         }
         return undefined;
     }

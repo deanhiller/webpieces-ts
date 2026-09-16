@@ -15,6 +15,7 @@ import {
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
+    WpDtoMapFieldOptions,
     WpMcpTool,
     WpResponseDto,
 } from '@webpieces/core-util';
@@ -86,6 +87,63 @@ abstract class SearchApi {
     @Endpoint('/not-a-tool', 'rpc')
     notATool(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
+    }
+}
+
+@WpDto()
+class PassageSentence {
+    @WpDtoField(new WpDtoFieldOptions('Sentence text', true))
+    text!: string;
+
+    @WpDtoField(new WpDtoMapFieldOptions('ISO 639-1 -> this sentence in that language', false, 'string'))
+    translations?: Record<string, string>;
+}
+
+@WpDto()
+class PassageRequest {
+    @WpDtoField(new WpDtoMapFieldOptions('Requested word counts by locale', false, 'integer'))
+    minWordsByLocale?: Record<string, number>;
+}
+
+@WpDto()
+class PassageResponse {
+    @WpDtoField(new WpDtoMapFieldOptions('Sentences by locale', true, PassageSentence))
+    sentencesByLocale!: Record<string, PassageSentence>;
+}
+
+@ApiPath('/mcp-spec-passages')
+abstract class PassageApi {
+    @WpAuthJwt({ allRolesAllowed: true })
+    @Endpoint('/passages', 'rpc')
+    @WpResponseDto(() => PassageResponse)
+    @WpMcpTool({
+        name: 'passages_find',
+        description: 'Find passages with their translations keyed by locale.',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+    })
+    passages(_request: PassageRequest): Promise<PassageResponse> {
+        throw new Error('contract only');
+    }
+}
+
+@injectable()
+class PassageController extends PassageApi {
+    override async passages(request: PassageRequest): Promise<PassageResponse> {
+        const sentence = new PassageSentence();
+        sentence.text = 'hello';
+        sentence.translations = { es: 'hola', fr: 'bonjour' };
+        const response = new PassageResponse();
+        response.sentencesByLocale = { en: sentence };
+        if (request.minWordsByLocale?.['xx'] !== undefined) {
+            const broken = new PassageSentence();
+            broken.text = 'broken';
+            // Deliberately violate the map value type to prove output validation walks map values.
+            Object.defineProperty(broken, 'translations', { value: { es: 7 }, enumerable: true });
+            response.sentencesByLocale = { xx: broken };
+        }
+        return response;
     }
 }
 
@@ -245,6 +303,7 @@ describe('WpMcpServer secure API bridge', () => {
         });
         const router: WebpiecesRouter = await WebpiecesRouterFactory.create({ appBindings: [bindings] });
         router.addRoutes(SearchApi, SearchController);
+        router.addRoutes(PassageApi, PassageController);
         controller = router.getContainer().get(SearchController);
         authority = new TestMcpTokenAuthority();
         bridge = new WpMcpServer(
@@ -259,7 +318,7 @@ describe('WpMcpServer secure API bridge', () => {
                 ['tools'],
             ),
             router,
-            [SearchApi],
+            [SearchApi, PassageApi],
         );
     });
 
@@ -284,7 +343,10 @@ describe('WpMcpServer secure API bridge', () => {
         await client.close();
 
         expect(authority.seenResource).toBe('https://api.example.test/mcp');
-        expect(listed.tools.map((tool: (typeof listed.tools)[number]) => tool.name)).toEqual(['account_search']);
+        expect(listed.tools.map((tool: (typeof listed.tools)[number]) => tool.name)).toEqual([
+            'account_search',
+            'passages_find',
+        ]);
         expect(listed.tools[0]).toMatchObject({
             description: 'Search records owned by the authenticated user.',
             inputSchema: {
@@ -296,6 +358,60 @@ describe('WpMcpServer secure API bridge', () => {
                 properties: { userId: { description: 'Authenticated user that executed the endpoint' } },
             },
         });
+    });
+
+    it('publishes, calls and reads back a tool whose request and response carry typed maps', async () => {
+        const client = await connect('mcp-user');
+        const listed = await client.listTools();
+        const tool = listed.tools.find((candidate: { name: string }) => candidate.name === 'passages_find');
+        expect(tool).toMatchObject({
+            inputSchema: {
+                properties: {
+                    minWordsByLocale: { type: 'object', additionalProperties: { type: 'integer' } },
+                },
+            },
+            outputSchema: {
+                required: ['sentencesByLocale'],
+                properties: {
+                    sentencesByLocale: {
+                        type: 'object',
+                        additionalProperties: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                translations: { type: 'object', additionalProperties: { type: 'string' } },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        const result = await client.callTool({
+            name: 'passages_find',
+            arguments: { minWordsByLocale: { es: 3 } },
+        });
+        const badInput = await client.callTool({
+            name: 'passages_find',
+            arguments: { minWordsByLocale: { es: 'three' } },
+        });
+        const badOutput = await client.callTool({
+            name: 'passages_find',
+            arguments: { minWordsByLocale: { xx: 1 } },
+        });
+        await client.close();
+
+        expect(result.isError).not.toBe(true);
+        expect(result.structuredContent).toEqual({
+            sentencesByLocale: { en: { text: 'hello', translations: { es: 'hola', fr: 'bonjour' } } },
+        });
+        expect(badInput.isError).toBe(true);
+        expect(errorContent(badInput)).toMatchObject({
+            kind: 'bad-request',
+            callerMessage: '$.minWordsByLocale.es must be integer',
+        });
+        expect(badOutput.isError).toBe(true);
+        expect(JSON.stringify(badOutput)).not.toContain('"es":7');
     });
 
     it('refuses an access token unless the app verifier accepts it for this exact resource', async () => {
@@ -362,12 +478,16 @@ describe('WpMcpServer secure API bridge', () => {
         authority.disabled = false;
         authority.userRoles = [];
         const client = await connect('mcp-user');
-        expect((await client.listTools()).tools.map((tool: { name: string }) => tool.name)).toEqual(['account_search']);
+        expect((await client.listTools()).tools.map((tool: { name: string }) => tool.name)).toEqual([
+            'account_search',
+            'passages_find',
+        ]);
 
         authority.userRoles = ['admin'];
         expect((await client.listTools()).tools.map((tool: { name: string }) => tool.name)).toEqual([
             'account_search',
             'admin_search',
+            'passages_find',
         ]);
 
         authority.disabled = true;
