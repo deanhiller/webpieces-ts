@@ -258,23 +258,23 @@ describe('DTO JSON Schema metadata', () => {
         });
     });
 
-    describe('ApiJsonSchema.isClosedSchema', () => {
+    describe('DtoSchemaBuilder.isClosedSchema', () => {
         it('accepts a closed object and a typed map', () => {
             const closed = new ApiJsonSchema('object');
             closed.additionalProperties = false;
             const typedMap = new ApiJsonSchema('object');
             typedMap.additionalProperties = new ApiJsonSchema('string');
-            expect(ApiJsonSchema.isClosedSchema(closed)).toBe(true);
-            expect(ApiJsonSchema.isClosedSchema(typedMap)).toBe(true);
-            expect(ApiJsonSchema.isClosedSchema(builder.build(SearchRequest))).toBe(true);
+            expect(builder.isClosedSchema(closed)).toBe(true);
+            expect(builder.isClosedSchema(typedMap)).toBe(true);
+            expect(builder.isClosedSchema(builder.build(SearchRequest))).toBe(true);
         });
 
         it('rejects a schema with no closure and an explicitly open object', () => {
             const open = new ApiJsonSchema('object');
             open.additionalProperties = true;
-            expect(ApiJsonSchema.isClosedSchema(new ApiJsonSchema())).toBe(false);
-            expect(ApiJsonSchema.isClosedSchema(new ApiJsonSchema('object'))).toBe(false);
-            expect(ApiJsonSchema.isClosedSchema(open)).toBe(false);
+            expect(builder.isClosedSchema(new ApiJsonSchema())).toBe(false);
+            expect(builder.isClosedSchema(new ApiJsonSchema('object'))).toBe(false);
+            expect(builder.isClosedSchema(open)).toBe(false);
         });
     });
 });

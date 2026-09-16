@@ -64,17 +64,6 @@ export class ApiJsonSchema {
     constructor(type?: 'object' | 'string' | 'number' | 'integer' | 'boolean' | 'array') {
         this.type = type;
     }
-
-    /**
-     * The one closure gate for an object schema. Closed means no key can carry an unspecified value:
-     * either extra keys are forbidden (`additionalProperties: false`) or every extra key's value is
-     * typed (`additionalProperties: <schema>`, a typed map). A missing or `true` value is open.
-     * Use this instead of `schema.additionalProperties === false`, which rejects typed maps.
-     */
-    static isClosedSchema(schema: ApiJsonSchema): boolean {
-        const extra = schema.additionalProperties;
-        return extra === false || (typeof extra === 'object' && extra !== null);
-    }
 }
 
 /** A validation result safe to show to an API caller/model. */
@@ -141,6 +130,17 @@ export class DtoSchemaBuilder {
             );
         }
         return response();
+    }
+
+    /**
+     * The one closure gate for an object schema. Closed means no key can carry an unspecified value:
+     * either extra keys are forbidden (`additionalProperties: false`) or every extra key's value is
+     * typed (`additionalProperties: <schema>`, a typed map). A missing or `true` value is open.
+     * Use this instead of `schema.additionalProperties === false`, which rejects typed maps.
+     */
+    isClosedSchema(schema: ApiJsonSchema): boolean {
+        const extra = schema.additionalProperties;
+        return extra === false || (typeof extra === 'object' && extra !== null);
     }
 
     build(dtoClass: DtoClass): ApiJsonSchema {

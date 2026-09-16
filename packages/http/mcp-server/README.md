@@ -70,7 +70,7 @@ value (`$.translations.es must be string`). An `Object`-typed field without map 
 an undeclared `Record` — fails at startup, because an interface can never carry `@WpDto`.
 
 A map is still a closed schema: no key can carry an unspecified value. Check closure with
-`ApiJsonSchema.isClosedSchema(schema)`, not `schema.additionalProperties === false`, which wrongly
+`new DtoSchemaBuilder().isClosedSchema(schema)`, not `schema.additionalProperties === false`, which wrongly
 rejects typed maps.
 
 Applications construct `WpMcpServer` with their built `ApiFactory`, the API classes they want scanned,
