@@ -1,7 +1,8 @@
 /**
- * A client carrying a {@link ContextBaseUrlFilter} was called with no
- * `WebpiecesCoreHeaders.OVERRIDE_BASE_URL` in the ambient RequestContext, so this call has nowhere
- * to go.
+ * A client carrying a `ContextBaseUrlFilter` or `ContextFullUrlFilter` was called with no
+ * `WebpiecesCoreHeaders.OVERRIDE_BASE_URL` / `OVERRIDE_FULL_URL` (respectively) in the ambient
+ * RequestContext, so this call has nowhere to go. ONE type for both filters, because a delivery
+ * worker's answer is identical either way: we were misconfigured.
  *
  * It is a THROW rather than a fallback to the client's configured service URL, deliberately: a
  * silent fallback would send a partner's payload to one of our own services, which is a worse

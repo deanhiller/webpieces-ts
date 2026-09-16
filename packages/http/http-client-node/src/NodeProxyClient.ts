@@ -34,6 +34,7 @@ import {
 import { AddressResolver } from './AddressResolver';
 import { ClientConfig } from './ClientConfig';
 import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
+import { ContextFullUrlFilter } from './ContextFullUrlFilter';
 import { OutboundAuthFilter } from './OutboundAuthFilter';
 import { SsrfGuardFilter } from './SsrfGuardFilter';
 import { SsrfPolicy } from './SsrfPolicy';
@@ -206,7 +207,8 @@ export class NodeProxyClient extends ProxyClient {
     /**
      * WHICH policy the guard applies when something does re-point this client.
      *
-     * Read off an installed {@link ContextBaseUrlFilter}, because that filter is where an app says
+     * Read off an installed {@link ContextBaseUrlFilter} or {@link ContextFullUrlFilter}, because
+     * that filter is where an app says
      * "this client may be re-pointed", and the single legitimate relaxation
      * ({@link SsrfTestingPolicy}) belongs at the same construction site as that decision rather
      * than in a second place a reader has to correlate. No such filter — or one built with the
@@ -216,7 +218,9 @@ export class NodeProxyClient extends ProxyClient {
     private ssrfPolicy(): SsrfPolicy {
         for (const definition of this.appFilters) {
             const filter = definition.filter;
-            if (filter instanceof ContextBaseUrlFilter) return filter.ssrfPolicy;
+            if (filter instanceof ContextBaseUrlFilter || filter instanceof ContextFullUrlFilter) {
+                return filter.ssrfPolicy;
+            }
         }
         return new SsrfPolicy();
     }

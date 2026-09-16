@@ -78,21 +78,29 @@ export class PartnerWebhookApi {
 }
 
 const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
-    new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
+    new ClientFilterDefinition(1000, new ContextFullUrlFilter()),
 ]);
 
 for (const webhook of webhooks) {
     await RequestContext.run(() => {
-        RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, webhook.url);
+        // the COMPLETE stored url, e.g. 'https://hooks.partner.example/in/abc?token=xyz'
+        RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, webhook.url);
         return partner.deliver(envelope);
     });
 }
 ```
 
-- **Installing the filter IS the opt-in.** A client without a `ContextBaseUrlFilter` ignores an
-  ambient `OVERRIDE_BASE_URL` entirely, so a URL set for a partner delivery cannot re-point every
-  other client in the same request. `grep -rn ContextBaseUrlFilter` lists every client that can be
-  re-pointed at all.
+- **Two filters, two shapes of destination.** `ContextFullUrlFilter` + `OVERRIDE_FULL_URL` sends the
+  stored url byte for byte — host, path and query — and does NOT append the contract's path; that is
+  the partner-webhook shape. `ContextBaseUrlFilter` + `OVERRIDE_BASE_URL` swaps only the host and
+  keeps `@ApiPath` + `@Endpoint`; that is the shape for a tenant running our contract at their own
+  base URL. The contract path above is therefore documentation (and architecture-graph identity)
+  when the full-URL filter is installed.
+- **Installing the filter IS the opt-in.** A client without one ignores the ambient override key
+  entirely, so a URL set for a partner delivery cannot re-point every other client in the same
+  request. `grep -rnE 'Context(Base|Full)UrlFilter'` lists every client that can be re-pointed at all.
+- **It refuses rather than falls back.** No override in scope throws `MissingRuntimeBaseUrlError`;
+  a partner's payload is never sent to this client's configured service URL.
 - **It cannot leak.** The override lives on the per-call request, never on the client, so one client
   fans out across N partner URLs and each call goes exactly where its own scope said.
 - **SSRF is automatic, and it is the ACT of re-pointing that arms it.** A URL that came out of
@@ -103,7 +111,7 @@ for (const webhook of webhooks) {
   from the transport and re-judged hop by hop, so a partner URL that 302s at `169.254.169.254` is
   refused rather than obeyed. The one relaxation — testing the partner path against a local fake —
   has to be said out loud, with a reason:
-  `new ContextBaseUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
+  `new ContextFullUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
 - **Every auth mode still works.** `@WpAuthOidc` mints for the FINAL base URL, `@WpAuthSharedSecret`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
   a real topology), and `@WpAuthWebhook(name)` calls your bound `WebhookSignerCallback`. The minter runs

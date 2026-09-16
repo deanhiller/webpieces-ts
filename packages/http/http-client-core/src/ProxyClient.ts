@@ -75,7 +75,7 @@ export abstract class ProxyClient {
     /**
      * The app's own filters, as handed to `createRpcClient`. Set by {@link initRoutes} BEFORE it
      * calls {@link clientFilters}, so an environment's built-ins may read the app's intent off them
-     * — @webpieces/http-client-node takes the SSRF policy from an installed `ContextBaseUrlFilter`
+     * — @webpieces/http-client-node takes the SSRF policy from an installed `ContextBaseUrlFilter` / `ContextFullUrlFilter`
      * that way, which keeps the one legitimate relaxation at the same construction site as the
      * decision to be re-pointable at all.
      */
@@ -260,6 +260,9 @@ export abstract class ProxyClient {
 
         // apiName as the class name so client logs read "SaveApi.save", not "undefined.save"
         this.apiName = apiPrototype.name || 'UnknownApi';
+
+        // Two endpoints on one method + path would dial the same URL; refuse the contract up front.
+        RouteMetadataFactory.assertNoDuplicateRoutes(apiPrototype);
 
         this.routeMap = new Map<string, RouteMetadata>();
         for (const methodName of Object.keys(endpoints)) {

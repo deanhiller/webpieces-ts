@@ -14,8 +14,8 @@ import { RouteMetadata } from '@webpieces/core-util';
  * policy judges) and a full URL (base + this route's path, or an absolute Location we were
  * redirected to). Exposing both as writable fields makes it possible for them to disagree, and a
  * base URL that disagrees with the URL actually fetched is precisely the shape of an SSRF bypass.
- * So both are private, and the only two ways to move this request are {@link pointAtBaseUrl} and
- * {@link followRedirectTo}, each of which sets BOTH consistently.
+ * So both are private, and the only ways to move this request are {@link pointAtBaseUrl},
+ * {@link pointAtFullUrl} and {@link followRedirectTo}, each of which sets BOTH consistently.
  *
  * ## Signing
  *
@@ -35,7 +35,7 @@ export class ClientRequest {
 
     /**
      * FALSE while this request still points where the client's own configuration put it; TRUE the
-     * moment anything moved it — {@link pointAtBaseUrl} or {@link followRedirectTo}.
+     * moment anything moved it — {@link pointAtBaseUrl}, {@link pointAtFullUrl} or {@link followRedirectTo}.
      *
      * This flag is what makes the SSRF guard automatic AND free. A URL that came out of
      * `ClientRegistry` is an address WE chose, so judging it would mean resolving DNS on every
@@ -73,7 +73,11 @@ export class ClientRequest {
          */
         // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
         public readonly requestDto: unknown,
-        /** Encoded route path + query for this call, resolved from its typed arguments. */
+        /**
+         * Encoded route path + query for this call, resolved from its typed arguments. May be `''`
+         * for a contract declaring `@ApiPath('')` + `@Endpoint('', ...)`, in which case the url is
+         * the base URL byte for byte.
+         */
         public readonly resolvedPath: string = route.path,
     ) {
         this.currentBaseUrl = baseUrl;
@@ -115,17 +119,39 @@ export class ClientRequest {
     }
 
     /**
-     * Follow a redirect to an ABSOLUTE url. The base URL becomes that url's origin, so a policy
-     * that judges hosts judges the host we are actually about to talk to. Flips
-     * {@link destinationCameFromData} for the same reason {@link pointAtBaseUrl} does: a `Location`
-     * header is the far end's data, not an address we chose.
+     * Re-point this ONE call at a COMPLETE url — host, path and query — used VERBATIM. The contract's
+     * path (and any `@QueryParam` values resolved into it) is NOT appended and no separator is
+     * inserted, because the url is the whole destination: a partner webhook row stores
+     * `https://hooks.partner.example/in/abc?token=xyz`, and that string, byte for byte, is what must
+     * be dialled. `ContextFullUrlFilter` calls this with `WebpiecesCoreHeaders.OVERRIDE_FULL_URL`.
+     *
+     * The base URL becomes that url's origin, so a policy that judges hosts (and the OIDC audience)
+     * sees the host we are actually about to talk to. Flips {@link destinationCameFromData} for the
+     * same reason {@link pointAtBaseUrl} does: the url is data, not an address we chose, so the SSRF
+     * guard is armed by this call and cannot be forgotten.
+     *
+     * Compare {@link pointAtBaseUrl}, which keeps this route's path: that is for a partner that
+     * implements OUR contract at their own host; this is for a partner that gave us one opaque url.
+     *
+     * @throws TypeError if `fullUrl` is not a parseable absolute URL.
+     */
+    pointAtFullUrl(fullUrl: string): void {
+        this.currentBaseUrl = new URL(fullUrl).origin;
+        this.currentUrl = fullUrl;
+        this.rePointed = true;
+    }
+
+    /**
+     * Follow a redirect to an ABSOLUTE url. A `Location` is a complete destination, so this is
+     * exactly {@link pointAtFullUrl} — one implementation, so the two can never disagree about what
+     * the base URL becomes or whether the SSRF guard is armed (it is: a `Location` header is the far
+     * end's data, not an address we chose). Kept as its own name because the CALL SITE reads
+     * differently: the guard is following a hop, not an app choosing a destination.
      *
      * @throws TypeError if `absoluteUrl` is not a parseable absolute URL.
      */
     followRedirectTo(absoluteUrl: string): void {
-        this.currentBaseUrl = new URL(absoluteUrl).origin;
-        this.currentUrl = absoluteUrl;
-        this.rePointed = true;
+        this.pointAtFullUrl(absoluteUrl);
     }
 
     /** The headers in the shape the transport wants. */

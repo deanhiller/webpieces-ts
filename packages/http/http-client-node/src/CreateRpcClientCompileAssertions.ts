@@ -23,6 +23,7 @@ import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-co
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpFactory } from './ClientHttpFactory';
 import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
+import { ContextFullUrlFilter } from './ContextFullUrlFilter';
 
 /** Stand-in for a real contract; only its TYPE is used, and only by tsc. */
 declare const someApi: Parameters<ClientHttpFactory['createRpcClient']>[0];
@@ -59,7 +60,7 @@ class CreateRpcClientCompileAssertions {
     severalFilters(): void {
         factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
-            new ClientFilterDefinition(500, new ContextBaseUrlFilter()),
+            new ClientFilterDefinition(500, new ContextFullUrlFilter()),
         ]);
     }
 
