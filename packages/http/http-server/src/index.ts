@@ -1,6 +1,11 @@
 // Express adapter (the only place express lifecycle lives) over the node-only ApiFactory
 export { WebpiecesExpressRouter } from './WebpiecesExpressRouter';
 export { WebpiecesMiddleware } from './WebpiecesMiddleware';
+// How routes read the body bytes: stream (default) or a host's pre-consumed req.rawBody (issue #937).
+// Chosen via WebpiecesExpressRouter.setBodyReader(...) before bindExpress(app).
+export { RequestBodyReader } from './body/RequestBodyReader';
+export { StreamBodyReader } from './body/StreamBodyReader';
+export { PreConsumedBodyReader } from './body/PreConsumedBodyReader';
 // LogApiFilter is now a FIXED framework filter auto-installed by WebpiecesRouter (outermost, at
 // priority 1,000,000, above AuthFilter). Apps must NOT install it themselves — it is no longer
 // exported here. Remove any `router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'))`.

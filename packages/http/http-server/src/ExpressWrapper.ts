@@ -18,6 +18,8 @@ import {
     RequestContextHeaders,
 } from '@webpieces/core-context';
 import { ApiErrorHttpMapper } from './ApiErrorHttpMapper';
+import { RequestBodyReader } from './body/RequestBodyReader';
+import { StreamBodyReader } from './body/StreamBodyReader';
 
 /**
  * The cap on an inbound body, in bytes. Reading stops and the request is refused the moment a body
@@ -95,6 +97,12 @@ export class ExpressWrapper {
         private maxBodyBytes: number = MAX_BODY_BYTES,
         /** Exact shared contract route; omitted only by focused legacy wrapper unit tests. */
         private readonly routeMeta?: RouteMetadata,
+        /**
+         * Where the body bytes come from. The default reads the request stream; a host that parses
+         * the body before webpieces runs (Cloud Functions gen2) needs `PreConsumedBodyReader`,
+         * chosen via `WebpiecesExpressRouter.setBodyReader`. See {@link RequestBodyReader}.
+         */
+        private readonly bodyReader: RequestBodyReader = new StreamBodyReader(),
     ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -202,7 +210,7 @@ export class ExpressWrapper {
         // Read BYTES, not text. Concatenating per-chunk toString() corrupted any multi-byte
         // character that straddled a chunk boundary — invisible on small bodies, and fatal for a
         // signature computed over the bytes.
-        const bodyBytes = await this.readRequestBody(req);
+        const bodyBytes = await this.bodyReader.read(req, this.maxBodyBytes);
         const bodyText = bodyBytes.toString('utf8');
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         let requestDto: unknown;
@@ -354,49 +362,6 @@ export class ExpressWrapper {
         }
 
         return headers;
-    }
-
-    /**
-     * Read the raw request body as BYTES (we parse manually rather than mounting express.json()).
-     *
-     * Bytes, not a growing string: a per-chunk `toString()` splits any multi-byte character that
-     * straddles a chunk boundary into two replacement characters, so the body a webhook hook verified
-     * would not be the body the vendor signed.
-     *
-     * REFUSES a body over {@link maxBodyBytes} the moment it crosses the line — the chunks read so far
-     * are dropped and the stream is destroyed, so an oversize body is never fully buffered. It answers
-     * 400 rather than 401 even on a webhook route, unavoidably: there is no way to authenticate a
-     * caller whose request we are refusing to finish reading, and that ordering is the point.
-     */
-    private async readRequestBody(req: Request): Promise<Buffer> {
-        return new Promise((resolve: (body: Buffer) => void, reject: (err: Error) => void) => {
-            let chunks: Buffer[] = [];
-            let size = 0;
-            // A socket emits Buffers; a stream someone put in string mode (or a test's Readable.from)
-            // emits strings. Normalize to bytes ONCE, here, so everything downstream counts and
-            // concatenates the same units.
-            req.on('data', (data: Buffer | string) => {
-                const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
-                size += chunk.length;
-                if (size > this.maxBodyBytes) {
-                    chunks = [];
-                    req.destroy();
-                    reject(
-                        new ApiBadRequestError(
-                            `Request body exceeds the ${this.maxBodyBytes} byte limit`,
-                        ),
-                    );
-                    return;
-                }
-                chunks.push(chunk);
-            });
-            req.on('end', () => {
-                resolve(Buffer.concat(chunks));
-            });
-            req.on('error', (err: Error) => {
-                reject(err);
-            });
-        });
     }
 
     /**
