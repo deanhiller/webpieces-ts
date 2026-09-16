@@ -3,11 +3,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    PrGateConfig, RequiredChecklist, ReviewJsonService, ReviewProvenanceService,
+    PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
     ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING,
 } from '@webpieces/rules-config';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
+
+const agent = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
 
 /**
  * The guarantee under test: `wp-finish-upsert-pr` writes the transcript-provenance record BEFORE it refuses
@@ -77,8 +79,8 @@ describe('FinishUpsertPrCommand provenance record', () => {
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f1';
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
-        expect(() => enforce(repoRoot, [new RequiredChecklist('envvars', 'envvars-reviewer', '', [])]))
-            .toThrow(/envvars-reviewer/);
+        expect(() => enforce(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]))
+            .toThrow(/: envvars/);
 
         const parsed = provenanceIn(repoRoot);
         expect(parsed['provenanceStatus']).toBe('missing');
@@ -91,7 +93,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f2';
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
-        enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', 'envvars-reviewer', 'docs/env.md', [])]);
+        enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', agent('envvars-reviewer'), 'docs/env.md', [])]);
 
         const parsed = provenanceIn(repoRoot);
         expect(parsed['provenanceStatus']).toBe('ok');
@@ -115,6 +117,44 @@ describe('FinishUpsertPrCommand provenance record', () => {
         const parsed = provenanceIn(repoRoot);
         expect(parsed['reviewers']).toEqual([]);
         expect(parsed['mainTranscript']).toMatch(/sess-f3\.jsonl$/);
+    });
+});
+
+/**
+ * Issue #938: with `reviewerAgents` set, ONE `webpieces-reviewer` run may cover several checklists; without
+ * it, the same single run leaves every checklist after the first unattributed.
+ */
+describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
+    const shared = (max: number): RequiredChecklist[] => ['a', 'b'].map((id: string): RequiredChecklist =>
+        new RequiredChecklist(id, new ReviewerAgentPolicy('webpieces-reviewer', max), '', []));
+    const configWith = (max: number): PrGateConfig => {
+        const config = new PrGateConfig();
+        config.reviewer = new ReviewerAgentPolicy('webpieces-reviewer', max);
+        return config;
+    };
+
+    it('passes when reviewerAgents lets one run cover both checklists, and records a row per checklist', () => {
+        process.env['HOME'] = fakeHarness('sess-g1', 'webpieces-reviewer', 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g1';
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+
+        enforcerUnderTest().enforce(shared(1), 'dean/feat', repoRoot, configWith(1));
+
+        // webpieces-disable no-any-unknown -- narrowing the parsed reviewers array
+        const reviewers = provenanceIn(repoRoot)['reviewers'] as Record<string, unknown>[];
+        expect(reviewers.map((r: Record<string, unknown>): unknown => r['id'])).toEqual(['a', 'b']);
+        expect(reviewers.every((r: Record<string, unknown>): boolean => r['agentId'] === 'r1')).toBe(true);
+        expect(reviewers.every((r: Record<string, unknown>): boolean => r['agentType'] === 'webpieces-reviewer')).toBe(true);
+    });
+
+    it('refuses the second checklist when reviewerAgents is absent — one run per checklist', () => {
+        process.env['HOME'] = fakeHarness('sess-g2', 'webpieces-reviewer', 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g2';
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+
+        expect(() => enforcerUnderTest().enforce(
+            shared(REVIEWER_AGENTS_ONE_PER_CHECKLIST), 'dean/feat', repoRoot, configWith(REVIEWER_AGENTS_ONE_PER_CHECKLIST)))
+            .toThrow(/^1 checklist\(s\) failed[\s\S]*: b/);
     });
 });
 
@@ -160,8 +200,8 @@ describe('ProvenanceEnforcer refusal wording', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
         writeVerdict(repoRoot, 'envvars');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', 'envvars-reviewer', '', [])]);
-        expect(message).toMatch(/envvars-reviewer/);
+        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        expect(message).toMatch(/envvars/);
         expect(message).not.toMatch(/spawn each as its OWN subagent/);
         expect(message).toMatch(/Do NOT re-spawn/);
         // The recovery the old output never named: the cwd is the thing that has to change.
@@ -173,8 +213,8 @@ describe('ProvenanceEnforcer refusal wording', () => {
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u2';
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', 'envvars-reviewer', '', [])]);
-        expect(message).toMatch(/spawn each as its OWN subagent/);
+        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        expect(message).toMatch(/no reviewer subagent ran on this branch/);
         expect(message).not.toMatch(/Do NOT re-spawn/);
     });
 
@@ -186,9 +226,9 @@ describe('ProvenanceEnforcer refusal wording', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
         const message = refusalFor(repoRoot, [
-            new RequiredChecklist('envvars', 'envvars-reviewer', '', []),
-            new RequiredChecklist('migrations', 'migrations-reviewer', '', []),
-            new RequiredChecklist('security', 'security-reviewer', '', []),
+            new RequiredChecklist('envvars', agent('envvars-reviewer'), '', []),
+            new RequiredChecklist('migrations', agent('migrations-reviewer'), '', []),
+            new RequiredChecklist('security', agent('security-reviewer'), '', []),
         ]);
         expect(message).toMatch(/^3 checklist\(s\) failed the reviewer-provenance check/);
     });
@@ -201,12 +241,12 @@ describe('ProvenanceEnforcer refusal wording', () => {
         writeVerdict(repoRoot, 'envvars');
 
         const message = refusalFor(repoRoot, [
-            new RequiredChecklist('envvars', 'envvars-reviewer', '', []),
-            new RequiredChecklist('migrations', 'migrations-reviewer', '', []),
+            new RequiredChecklist('envvars', agent('envvars-reviewer'), '', []),
+            new RequiredChecklist('migrations', agent('migrations-reviewer'), '', []),
         ]);
         expect(message).toMatch(/^2 checklist\(s\)/);
-        expect(message).toMatch(/did not run on this branch \(spawn each as its OWN subagent[^)]*\): migrations-reviewer/);
-        expect(message).toMatch(/cannot attribute to them: envvars-reviewer/);
+        expect(message).toMatch(/no reviewer subagent ran on this branch for these checklists \([^)]*\): migrations/);
+        expect(message).toMatch(/cannot attribute to them: envvars/);
     });
 });
 
@@ -222,7 +262,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
     it('throws for a MISSING verdict that carries no names, using its detail as the reason', () => {
         const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
         const provenance = new SubagentProvenanceService();
-        provenance.verifyDistinct = (): ProvenanceResult => namelessMissing;
+        provenance.verifyReviewers = (): ProvenanceResult => namelessMissing;
         const reviewJsonService = new ReviewJsonService();
         const enforcer = new ProvenanceEnforcer(
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
@@ -231,7 +271,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
         expect(() => enforcer.enforce(
-            [new RequiredChecklist('envvars', 'envvars-reviewer', '', [])], 'dean/feat', repoRoot, new PrGateConfig()))
+            [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])], 'dean/feat', repoRoot, new PrGateConfig()))
             .toThrow(/transcripts unreadable this round/);
     });
 
@@ -239,7 +279,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
     it('never reports a fault count of zero while refusing', () => {
         const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
         const provenance = new SubagentProvenanceService();
-        provenance.verifyDistinct = (): ProvenanceResult => namelessMissing;
+        provenance.verifyReviewers = (): ProvenanceResult => namelessMissing;
         const reviewJsonService = new ReviewJsonService();
         const enforcer = new ProvenanceEnforcer(
             new FixedBranchName(), provenance, new ReviewProvenanceService(),

@@ -1,22 +1,64 @@
 import * as path from 'path';
 
+/** The {@link ReviewerAgentPolicy.maxAgents} value meaning "`reviewerAgents` is not configured". */
+export const REVIEWER_AGENTS_ONE_PER_CHECKLIST = 0;
+
+/** The generic reviewer agent webpieces ships, and the value the config error tells a repo to add. */
+export const DEFAULT_REVIEWER_AGENT_NAME = 'webpieces-reviewer';
+
+/**
+ * WHICH reviewer agent the gate briefs, and HOW MANY of them one round may use — straight from
+ * `commands.pr-gate.reviewerAgentName` / `commands.pr-gate.reviewerAgents`. Data-only.
+ *
+ * One instance per loaded config, shared by every {@link ChecklistDefinition} and copied onto every matched
+ * checklist, because the answer is repo-wide: a checklist no longer names an agent type of its own. It used
+ * to — a per-entry key pointing at its own `.claude/agents/<name>.md` — and those files added almost nothing
+ * over the checklist `doc` while forcing one subagent per checklist, so a PR matching four checklists paid
+ * for four agents re-reading the same diff (issue #938).
+ */
+export class ReviewerAgentPolicy {
+    /**
+     * The `subagent_type` every reviewer briefing names, e.g. `webpieces-reviewer` — the generic,
+     * checklist-agnostic agent webpieces ships (`.claude/agents/webpieces-reviewer.md`, written by
+     * `wp-install-ai-hooks` / `wp-upgrade-shim`). A repo may point it at its own agent instead.
+     */
+    agentName: string;
+    /**
+     * The most reviewer subagents one stage-② round may use, or {@link REVIEWER_AGENTS_ONE_PER_CHECKLIST}
+     * when `reviewerAgents` is not configured — which keeps the original contract: one separate subagent per
+     * checklist. When set, the main AI groups the owed checklists across at most this many subagents, and
+     * each subagent still writes one verdict file per checklist it covers.
+     */
+    maxAgents: number;
+
+    constructor(agentName: string, maxAgents: number) {
+        this.agentName = agentName;
+        this.maxAgents = maxAgents;
+    }
+
+    /** true when `reviewerAgents` is configured, i.e. one subagent may cover several checklists. */
+    grouped(): boolean {
+        return this.maxAgents !== REVIEWER_AGENTS_ONE_PER_CHECKLIST;
+    }
+}
+
 // A company review checklist: a diff-triggered extension point that lets a CONSUMER inject its own
-// PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist names
-// a reviewer SUBAGENT (a `.claude/agents/<subagent>.md`) and the doc that reviewer reads; when the diff
-// matches the checklist's `patterns`, wp-review-upsert-pr tells the AI to spawn that subagent to review it, and
-// wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json exists AND that
-// named subagent is proven (from the harness's own artifacts) to have actually run.
+// PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist has an
+// `id` and the doc its reviewer reads; when the diff matches the checklist's `patterns`,
+// wp-review-upsert-pr tells the AI to spawn the repo's reviewer agent (`commands.pr-gate.reviewerAgentName`)
+// over it, and wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json
+// exists AND a reviewer subagent is proven (from the harness's own artifacts) to have actually run.
 //
 // Checklists are configured as an ARRAY in `pr-gate.checklists` in webpieces.config.json — the ONLY
-// accepted shape. `patterns` is a path-glob dispatch table and `subagent` is a name binding: both are
+// accepted shape. `patterns` is a path-glob dispatch table and `id` is the checklist's name: both are
 // config, so they live where every tool that reads webpieces.config.json can see, grep and schema them.
 // Data-only.
 export class ChecklistDefinition {
-    id: string;         // = the subagent name; keys review-<id>.json and the dashboard row
-    subagent: string;   // reviewer agent name → .claude/agents/<subagent>.md; the agentType the harness stamps
-    // REPO-RELATIVE guidance doc the reviewer reads (may be '' — then it just reads the diff). Repo-relative
-    // because this value is printed verbatim to a reviewer subagent as "the file to open", and a path
-    // relative to anything else is unresolvable from where that subagent stands.
+    id: string;                    // keys review-<id>.json, its instructions file and its dashboard row
+    reviewer: ReviewerAgentPolicy; // repo-wide: which agent type reviews it, and the per-round cap
+    // REPO-RELATIVE guidance doc the reviewer reads. REQUIRED: with one generic reviewer agent the doc is
+    // the whole checklist. Repo-relative because this value is printed verbatim to a reviewer subagent as
+    // "the file to open", and a path relative to anything else is unresolvable from where it stands.
     doc: string;
     patterns: string[]; // path globs (isPathExcluded semantics); [] = matches any changed file (always runs)
     /**
@@ -38,9 +80,9 @@ export class ChecklistDefinition {
     required: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, subagent: string, doc: string, patterns: string[], required: boolean) {
+    constructor(id: string, reviewer: ReviewerAgentPolicy, doc: string, patterns: string[], required: boolean) {
         this.id = id;
-        this.subagent = subagent;
+        this.reviewer = reviewer;
         this.doc = doc;
         this.patterns = patterns;
         this.required = required;
@@ -49,15 +91,14 @@ export class ChecklistDefinition {
 
 // One config entry straight from JSON, before it is validated + narrowed into a class.
 export interface RawChecklistItem {
-    subagent?: string;
+    id?: string;
     doc?: string;
     patterns?: string[];
     required?: boolean;
 }
 
 /**
- * Build a ChecklistDefinition from an omitting-friendly raw entry. `id` defaults to the subagent name (the
- * only stable, human-meaningful key we have).
+ * Build a ChecklistDefinition from a raw entry, bound to the repo's reviewer policy.
  *
  * `required` is coerced with `=== true` rather than defaulted, and that is not a default in disguise:
  * `validateChecklistArray` has already REJECTED any entry that omitted it or gave a non-boolean, so the
@@ -65,10 +106,9 @@ export interface RawChecklistItem {
  * repoRoot (structure-only) still produces a well-typed def instead of `undefined` leaking through.
  */
 // webpieces-disable no-function-outside-class -- pure config transform beside its data class
-export function toChecklist(raw: RawChecklistItem): ChecklistDefinition {
-    const subagent = raw.subagent ?? '';
+export function toChecklist(raw: RawChecklistItem, reviewer: ReviewerAgentPolicy): ChecklistDefinition {
     return new ChecklistDefinition(
-        subagent, subagent, normalizeChecklistDoc(raw.doc ?? ''), raw.patterns ?? [], raw.required === true);
+        (raw.id ?? '').trim(), reviewer, normalizeChecklistDoc(raw.doc ?? ''), raw.patterns ?? [], raw.required === true);
 }
 
 /** Normalize a checklist entry's repo-relative `doc` to a POSIX path, so every printed path matches. */

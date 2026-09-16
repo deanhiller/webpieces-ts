@@ -122,13 +122,13 @@ export class ReviewUpsertPrCommand {
         const briefings = singleRoundRepeat ? [] : this.briefReviewers(repoRoot, featureName, scan, config);
         const recordedReviewers = singleRoundRepeat
             ? singleRoundReviewers
-            : briefings.map((b: ReviewerBriefing): string => b.subagent);
+            : briefings.map((b: ReviewerBriefing): string => b.checklistId);
         this.receipts.write(repoRoot, featureName, new ReviewStageReceipt(
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
             recordedReviewers,
         ));
         this.reportActiveHatches(repoRoot);
-        this.report(repoRoot, featureName, scan, briefings, opts, singleRoundRepeat, recordedReviewers);
+        this.report(repoRoot, featureName, scan, briefings, opts, singleRoundRepeat, recordedReviewers, config);
     }
 
     /**
@@ -213,7 +213,7 @@ export class ReviewUpsertPrCommand {
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
         fs.mkdirSync(dir, { recursive: true });
         for (const b of briefings) {
-            fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.subagent),
+            fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.checklistId),
                 this.reviewerInstructions.render(b));
         }
         return briefings;
@@ -230,7 +230,7 @@ export class ReviewUpsertPrCommand {
     // eslint-disable-next-line @typescript-eslint/max-params
     private report(
         repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[],
-        opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[],
+        opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[], config: PrGateConfig,
     ): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.reviewPath);
         input.definedCount = scan.defined.length;
@@ -240,6 +240,7 @@ export class ReviewUpsertPrCommand {
         input.briefings = briefings.slice();
         input.refused = this.refusals(scan);
         input.skipOptional = opts.skipOptional;
+        input.reviewer = config.reviewer;
         // Straight off the SCAN — the one place `experimental.turnOffAllReviewers` is read. This command
         // deliberately does NOT consult the home config itself: a second read is a second answer, and the
         // command that lists and the command that blocks would be free to disagree about whether a branch

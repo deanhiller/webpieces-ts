@@ -77,12 +77,14 @@ export class ChecklistNotice {
             '   If you ever want reviews enforced on PRs that touch certain paths, add checklist *.md\n' +
             '   docs and list them in webpieces.config.json:\n' +
             '     "commands": { "pr-gate": { "checklists": [\n' +
-            '       { "subagent": "db-migration-reviewer",\n' +
+            '       { "id": "db-migrations",\n' +
             '         "doc": ".claude/review/db-migrations.md",\n' +
-            '         "patterns": ["**/migrations/**", "**/*.sql"] }\n' +
+            '         "patterns": ["**/migrations/**", "**/*.sql"],\n' +
+            '         "required": true }\n' +
             '     ] } }\n' +
-            '   `doc` is REPO-relative, `patterns` are path globs, and each entry needs its OWN reviewer\n' +
-            '   subagent (a .claude/agents/<subagent>.md) — that is how independent review is enforced.'
+            '   `id` names the checklist, `doc` is REPO-relative, `patterns` are path globs. Every checklist\n' +
+            '   is reviewed by the subagent type `commands.pr-gate.reviewerAgentName` names, in its own run\n' +
+            '   unless `commands.pr-gate.reviewerAgents` caps how many subagents one round may use.'
         );
     }
 

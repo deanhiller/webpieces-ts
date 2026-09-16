@@ -130,7 +130,7 @@ export class ChecklistCommentRenderer {
         const state = row.ran
             ? `⚫ SUPPRESSED${row.required ? ' (REQUIRED)' : ' (optional)'} — no reviewer ran`
             : '⚪ did not apply to this diff';
-        return `- [ ] **${row.subagent}** — ${state}\n  - ${this.whyLine(row)}`;
+        return `- [ ] **${row.checklistId}** — ${state}\n  - ${this.whyLine(row)}`;
     }
 
     /**
@@ -192,7 +192,7 @@ export class ChecklistCommentRenderer {
     private rosterBullet(row: ChecklistCommentRow): string {
         const box = this.reviewerRan(row) ? '- [x]' : '- [ ]';
         return (
-            `${box} ${this.verdictEmoji(row)} **${row.subagent}**${this.optionalTag(row)} — ` +
+            `${box} ${this.verdictEmoji(row)} **${row.checklistId}**${this.optionalTag(row)} — ` +
             `${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
             `  - ${this.whyLine(row)}`
         );
@@ -256,7 +256,7 @@ export class ChecklistCommentRenderer {
         // rather than take "someone approved this" on trust. The reason, who authorized it and when are
         // rendered verbatim in this row's section below.
         if (row.status === CK_OVERRIDDEN) {
-            return `OVERRIDDEN — a human authorized shipping it (recorded in override-${row.subagent}.json)`;
+            return `OVERRIDDEN — a human authorized shipping it (recorded in override-${row.checklistId}.json)`;
         }
         if (row.status === CK_FAIL) return 'FAILED review';
         if (row.status === CK_MISSING) return 'no verdict written';
@@ -314,7 +314,7 @@ export class ChecklistCommentRenderer {
     }
 
     private commentSection(row: ChecklistCommentRow): CommentSection {
-        const heading = `#### ${this.verdictEmoji(row)} ${row.subagent} — ${this.verdictWords(row)}`;
+        const heading = `#### ${this.verdictEmoji(row)} ${row.checklistId} — ${this.verdictWords(row)}`;
         const body =
             row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
         return new CommentSection(heading + '\n\n' + new ReviewIdentityRenderer().render(row.agent, row.model), body);

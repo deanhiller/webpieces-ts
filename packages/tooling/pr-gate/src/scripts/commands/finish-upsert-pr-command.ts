@@ -197,8 +197,8 @@ export class FinishUpsertPrCommand {
             reviewJsonPath(repoRoot, featureName), required,
             scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
 
-        // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
-        //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
+        // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a subagent of the
+        //     repo's reviewerAgentName type actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
         const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
@@ -436,13 +436,13 @@ export class FinishUpsertPrCommand {
      * changed-file total) exists nowhere else without recomputing the diff a second way.
      */
     private commentRows(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): ChecklistCommentRow[] {
-        // agentType -> did it open the diff. Absent ⇒ not assessed, which prints nothing (see ChecklistCommentRow.diffRead).
-        const readByAgent = new Map<string, boolean>();
-        for (const e of provenance.evidence) readByAgent.set(e.agentType, e.readDiff);
+        // checklist id -> did its reviewer open the diff. Absent ⇒ not assessed, which prints nothing (see ChecklistCommentRow.diffRead).
+        const readByChecklist = new Map<string, boolean>();
+        for (const e of provenance.evidence) readByChecklist.set(e.checklistId, e.readDiff);
         return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
             const ran = entry.matchedFiles.length > 0;
             const req = new RequiredChecklist(
-                entry.def.id, entry.def.subagent, entry.def.doc, entry.matchedFiles, entry.matchedPatterns,
+                entry.def.id, entry.def.reviewer, entry.def.doc, entry.matchedFiles, entry.matchedPatterns,
                 entry.def.required);
             // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
             // i.e. as an unreviewed obligation, when in fact it never had one.
@@ -451,10 +451,10 @@ export class FinishUpsertPrCommand {
                 : new ChecklistVerdict(entry.def.id, '', '');
             const identity = review.results.find((result): boolean => result.id === entry.def.id);
             const row = new ChecklistCommentRow(identity?.agent ?? 'unknown', identity?.model ?? 'unknown',
-                entry.def.subagent, verdict.status, verdict.detail, ran,
+                entry.def.id, verdict.status, verdict.detail, ran,
                 entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
             row.required = entry.def.required;
-            const read = readByAgent.get(entry.def.subagent);
+            const read = readByChecklist.get(entry.def.id);
             row.diffRead = read === undefined ? '' : (read ? 'yes' : 'no');
             return row;
         });

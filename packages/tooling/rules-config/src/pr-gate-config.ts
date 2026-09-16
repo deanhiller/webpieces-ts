@@ -1,5 +1,7 @@
 import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
-import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
+import {
+    ChecklistDefinition, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
+} from './checklist-config';
 
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
 // validated `rules` map (the FieldDef schema can't express nested object arrays), but as a
@@ -165,10 +167,18 @@ export class PrGateConfig {
      */
     mergeMode: string;
     // This repo's review checklists, straight from the `pr-gate.checklists` ARRAY in webpieces.config.json —
-    // the ONLY accepted shape (`patterns` is a path-glob dispatch table and `subagent` a name binding, so both
-    // are config). [] = no checklists. The removed `{ doc }` manifest form is a hard config error; see
-    // validateChecklistsSection.
+    // the ONLY accepted shape (`patterns` is a path-glob dispatch table and `id` the checklist's name, so both
+    // are config). Every def carries {@link reviewer}. [] = no checklists. The removed `{ doc }` manifest
+    // form is a hard config error; see validateChecklistsSection.
     checklists: ChecklistDefinition[];
+    /**
+     * `reviewerAgentName` + `reviewerAgents`: the ONE agent type every checklist is reviewed by, and the most
+     * such subagents a round may use. The same instance is bound into every {@link checklists} entry, so a
+     * caller holding only a checklist still knows what to spawn. Field-with-default because the constructor
+     * is at max-params; the empty name only ever survives on the no-config / mode-OFF paths, where no
+     * reviewer is briefed (validatePrGateSection requires the key whenever the gate is active).
+     */
+    reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
     // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
@@ -271,6 +281,8 @@ interface RawPrGateSection {
     mergeMode?: string;
     // An ARRAY, always. validateChecklistsSection rejects every other shape (including the removed { doc }).
     checklists?: RawChecklistItem[];
+    reviewerAgentName?: string;
+    reviewerAgents?: number;
     gateSalt?: string;
     checklistComments?: boolean;
     landPr?: RawLandPr;
@@ -319,8 +331,12 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
     // Optional extension point — omitted ⇒ [] ⇒ no checklists computed anywhere downstream. A non-array here
     // cannot reach us: validateChecklistsSection has already failed the load.
+    // Required (validatePrGateSection) / optional positive integer; absent cap ⇒ one subagent per checklist.
+    const reviewer = new ReviewerAgentPolicy(
+        (raw.reviewerAgentName ?? '').trim(),
+        typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_ONE_PER_CHECKLIST);
     const checklists = Array.isArray(raw.checklists)
-        ? raw.checklists.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item))
+        ? raw.checklists.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, reviewer))
         : defaults.checklists;
     // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
@@ -328,6 +344,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const checklistComments = raw.checklistComments ?? defaults.checklistComments;
     const built = new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
     built.landPr = buildLandPrConfig(raw.landPr);
+    built.reviewer = reviewer;
     // Review-context knobs. All optional and all defaulted, so a config that omits every one of them (which
     // is every consumer's config today) behaves exactly as it did before they existed.
     built.reviewDiffExclude = Array.isArray(raw.reviewDiffExclude) ? raw.reviewDiffExclude : defaults.reviewDiffExclude;

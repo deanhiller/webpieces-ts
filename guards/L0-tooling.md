@@ -104,7 +104,7 @@ below for why the one safe pull spelling is on the list and the bare one is not.
 ONLY through the 3-point fork merge (`pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a
 PR is already open).
 
-### The managed hook surface — what fault `S` compares (6 things, one set)
+### The managed hook surface — what fault `S` compares (7 things, one set)
 
 | # | surface |
 |---|---|
@@ -114,6 +114,7 @@ PR is already open).
 | 4 | .codex/hooks.json hook registration |
 | 5 | .codex/hooks.json relative hook commands |
 | 6 | .claude/settings.json env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR |
+| 7 | .claude/agents/webpieces-reviewer.md |
 
 The registration is TWO PreToolUse entries per harness, and all of them are ABSOLUTE — they
 resolve from any cwd:
@@ -127,7 +128,7 @@ sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
 sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
 ```
 
-`pnpm exec wp-upgrade-shim` repairs all 6. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
+`pnpm exec wp-upgrade-shim` repairs all 7. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
 repairs `.claude/webpieces/ai-hook.sh` and nothing else, so it is the fallback for an installed release too old
 to carry the first.
 

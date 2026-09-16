@@ -68,14 +68,16 @@ never its own release — governance was always the primary's. Both hooks are ab
 guarantee is structural, `cd` into a subdirectory is simply allowed, and version skew between trees is
 caught where it actually lives: the `trinary-version-skew` L1 row (`core/version-sync.ts`).
 
-### Keeping the four in step
+### Keeping the five in step
 
-The installed surface is four things — `.claude/webpieces/ai-hook.sh`, the `settings.json` entries
-registering the two hooks, the ANCHORING of the hook entries the CONSUMER registers beside them, and
-the `settings.json` `env` entry
-`CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` — and they only
-work as a set. The guards binary compares all four against the release it came from and fails closed
-on any mismatch, naming which one moved. **`pnpm exec wp-upgrade-shim`** repairs all four
+The installed surface is five things — `.claude/webpieces/ai-hook.sh`, the `settings.json` entries
+registering the two hooks, the ANCHORING of the hook entries the CONSUMER registers beside them, the
+`settings.json` `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`, and the generic PR-gate
+reviewer agent `.claude/agents/webpieces-reviewer.md` (generated from `templates/webpieces-reviewer.md`;
+point `commands.pr-gate.reviewerAgentName` at it) — and they only
+work as a set. The guards binary compares all five against the release it came from and fails closed
+on any mismatch — including a missing or hand-edited reviewer agent — naming which one moved.
+**`pnpm exec wp-upgrade-shim`** repairs all five
 (rewriting an old relative registration to the absolute form rather than adding beside it, and removing
 a leftover `guarantee-root.sh` registration) and is
 allowed through while that block is up. Its NAME is older than its job — it has not been shim-only

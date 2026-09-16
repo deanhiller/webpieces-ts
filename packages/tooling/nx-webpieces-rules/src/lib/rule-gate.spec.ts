@@ -26,7 +26,7 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
     fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
         rules,
         hookGuards,
-        commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO' } },
+        commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgentName: 'webpieces-reviewer' } },
         excludePaths: [],
         'match-rules': [],
     }));

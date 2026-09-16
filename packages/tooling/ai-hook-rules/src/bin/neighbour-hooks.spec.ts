@@ -11,6 +11,7 @@ import type { ClaudeSettings } from './settings-shape';
 import { NeighbourHookAnchor, anchorNeighbourHooks, neighbourHooksStale } from './neighbour-hooks';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { renderShim, shimPath } from './shim';
+import { writeReviewerAgent } from './reviewer-agent';
 
 /**
  * NEIGHBOUR HOOKS — the consumer's own hook entries in the settings file webpieces manages.
@@ -37,6 +38,7 @@ function mktmp(): string {
 function stageRepo(root: string, neighbours: readonly string[]): string {
     fs.mkdirSync(path.join(root, '.claude', 'webpieces'), { recursive: true });
     fs.writeFileSync(shimPath(root), renderShim(), { mode: 0o755 });
+    writeReviewerAgent(root); // the other committed managed file, so only the neighbours can drift
     fs.mkdirSync(path.join(root, '.claude', 'hooks'), { recursive: true });
     fs.writeFileSync(path.join(root, '.claude', 'hooks', 'guard-deploy.mjs'), '// guard\n');
     const settingsPath = path.join(root, '.claude', 'settings.json');
@@ -149,6 +151,7 @@ describe('drift and repair, end to end', () => {
         const root = mktmp();
         fs.mkdirSync(path.join(root, '.claude', 'webpieces'), { recursive: true });
         fs.writeFileSync(shimPath(root), renderShim(), { mode: 0o755 });
+        writeReviewerAgent(root);
         fs.mkdirSync(path.join(root, '.claude', 'hooks'), { recursive: true });
         fs.writeFileSync(path.join(root, '.claude', 'hooks', 'guard-deploy.mjs'), '// guard\n');
         const settingsPath = path.join(root, '.claude', 'settings.json');

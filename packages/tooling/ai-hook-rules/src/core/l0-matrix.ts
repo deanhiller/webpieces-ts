@@ -6,7 +6,7 @@ import {
     renderShim,
 } from '../bin/shim';
 import { CODEX_READ_STILL_ALLOWED } from '../bin/l0-codex-read';
-import { ENV_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration } from '../bin/hook-registration';
+import { ENV_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration, REVIEWER_AGENT_SURFACE } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
 import {
     L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC,
@@ -264,6 +264,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
             SHIM_MARKER,
             ...HARNESS_REGISTRATIONS.flatMap((h: HarnessRegistration): readonly string[] => [h.registrationSurface, h.neighbourSurface]),
             ENV_SURFACE,
+            REVIEWER_AGENT_SURFACE,
         ], false)),
     new L0Fault(L0_FAULT_CONFIG_MISSING, `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',

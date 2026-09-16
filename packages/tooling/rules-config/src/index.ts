@@ -235,6 +235,7 @@ export {
     MERGE_EXPLANATION_FILE,
     PUSH_DEV_STATE_FILE,
     PRUNE_UNKNOWN_COMMAND,
+    UPGRADE_SHIM_COMMAND,
 } from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {
@@ -349,6 +350,9 @@ export {
 } from './pr-gate-config';
 export {
     ChecklistDefinition,
+    ReviewerAgentPolicy,
+    REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    DEFAULT_REVIEWER_AGENT_NAME,
     toChecklist,
     normalizeChecklistDoc,
     formatFileList,
@@ -375,6 +379,7 @@ export {
     SubagentProvenanceService,
     ReviewerEvidence,
     ReviewerContext,
+    ExpectedReviewer,
     TranscriptScan,
     ProvenanceResult,
     PROVENANCE_OK,

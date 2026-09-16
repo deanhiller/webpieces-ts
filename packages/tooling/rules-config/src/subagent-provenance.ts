@@ -14,10 +14,11 @@ export const PROVENANCE_SKIPPED = 'skipped'; // no CLAUDE_CODE_SESSION_ID (plain
 export class ProvenanceResult {
     status: string; // PROVENANCE_OK | PROVENANCE_MISSING | PROVENANCE_SKIPPED
     detail: string; // human-readable explanation for the warning/error/dashboard
-    // agentIds credited, keyed by agentType, so an evidence pass does not re-scan to find them again.
+    // agentIds credited, keyed by CHECKLIST ID, so an evidence pass does not re-scan to find them again. Two
+    // checklists may map to the same agentId when `reviewerAgents` let one subagent cover both.
     agentIds: Record<string, string>;
     /**
-     * The agentTypes that could NOT be credited — the FACT, with no remedy attached.
+     * The checklist ids that could NOT be credited — the FACT, with no remedy attached.
      *
      * Structured rather than only spelled into `detail` because the remedy depends on something this
      * service cannot see: whether that reviewer already wrote a verdict file. "It never ran" and "it ran
@@ -49,11 +50,12 @@ export class ProvenanceResult {
 /**
  * What ONE credited reviewer actually DID, read from its own transcript. Data-only (per CLAUDE.md).
  *
- * `verifyDistinct` answers "did a reviewer of this type run?" — an INTEGRITY question, and it blocks. This
+ * `verifyReviewers` answers "did a reviewer of this type run?" — an INTEGRITY question, and it blocks. This
  * answers "did it look at the change?" — a QUALITY question, and it only warns. The distinction is
  * deliberate; see {@link SubagentProvenanceService.evidenceFor}.
  */
 export class ReviewerEvidence {
+    checklistId: string;     // the checklist this evidence is FOR (one subagent may appear under several)
     agentType: string;
     agentId: string;
     readDiff: boolean;       // opened the materialized diff dir (or its own instructions file)
@@ -72,7 +74,7 @@ export class ReviewerEvidence {
      * Distinct `message.model` values OBSERVED in the transcript, in first-seen order.
      *
      * The model that actually ran, never the one that was configured — and never anything the reviewer
-     * says about itself. A checklist's `.claude/agents/<subagent>.md` declares `model:`, but that is the
+     * says about itself. The reviewer agent's `.claude/agents/<name>.md` may declare `model:`, but that is the
      * REQUESTED value and it can silently disagree with what served the request: a repo was measured
      * running opus for a reviewer whose agent file said `model: sonnet`. Asking the model instead would
      * be worse — a model is unreliable about its own identity, naming a family instead of a version or
@@ -97,7 +99,8 @@ export class ReviewerEvidence {
     transcriptPath: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '', models: string[] = [], wroteVerdict = false) {
+    constructor(checklistId: string, agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '', models: string[] = [], wroteVerdict = false) {
+        this.checklistId = checklistId;
         this.agentType = agentType;
         this.agentId = agentId;
         this.readDiff = readDiff;
@@ -131,7 +134,7 @@ export class TranscriptScan {
 /**
  * WHERE this branch's review materials live. Data-only.
  *
- * One class for BOTH passes — crediting (`verifyDistinct`) and evidence (`evidenceFor`) — because they
+ * One class for BOTH passes — crediting (`verifyReviewers`) and evidence (`evidenceFor`) — because they
  * ask their questions of the same paths. `diffDir` is the per-branch materialization
  * (`.webpieces/pr-review/<featureSlug>/diff`), which is what makes it usable as PROOF of which branch a
  * reviewer looked at: the path names the branch, it is absolute, and stage ② recreates it per run.
@@ -139,9 +142,9 @@ export class TranscriptScan {
 export class ReviewerContext {
     branch: string;
     diffDir: string;                  // '' when nothing was materialized
-    docPaths: Record<string, string>; // agentType → its checklist doc path ('' when none)
+    docPaths: Record<string, string>; // checklist id → its checklist doc path ('' when none)
     /**
-     * agentType → the absolute path of the verdict file THAT checklist must write on THIS branch
+     * checklist id → the absolute path of the verdict file THAT checklist must write on THIS branch
      * (`.webpieces/pr-review/<featureSlug>/review-<id>.json`). '' when unknown.
      *
      * The strongest attribution signal available, and stronger than `diffDir`: the path is
@@ -161,10 +164,27 @@ export class ReviewerContext {
 }
 
 /**
+ * One checklist that must be credited to a reviewer run, and the agent type that run must carry. Data-only.
+ *
+ * The two used to be one string — a checklist's id WAS its agent type — and provenance keyed everything by
+ * it. Now every checklist is reviewed by the same repo-wide agent type, so the id and the type are
+ * separate facts and a run is matched on the type but credited to the id.
+ */
+export class ExpectedReviewer {
+    checklistId: string;
+    agentType: string;
+
+    constructor(checklistId: string, agentType: string) {
+        this.checklistId = checklistId;
+        this.agentType = agentType;
+    }
+}
+
+/**
  * Verifies — from the Claude Code harness's OWN artifacts, never from anything the model asserts — that
  * a subagent of a given `agentType` actually ran during the current session on the current branch. Used
- * to enforce a checklist's optional `subagent:` field: that an INDEPENDENT reviewer looked, rather than
- * the coding agent self-certifying.
+ * to enforce that every checklist was reviewed by a `reviewerAgentName` subagent: that an INDEPENDENT
+ * reviewer looked, rather than the coding agent self-certifying.
  *
  * The harness writes, beside each subagent transcript:
  *   ~/.claude/projects/<cwd-slug>/<sessionId>/subagents/agent-<id>.meta.json  → { agentType, spawnDepth, … }
@@ -175,7 +195,7 @@ export class ReviewerContext {
  *
  * IMPORTANT — this is NOT tamper-proof. A determined agent can `cat >` a fake agent-*.meta.json. This
  * raises the bar from "trust the model's word" to "deliberate, auditable forgery outside the repo"; it
- * is not cryptographic. Say so wherever `subagent:` is documented.
+ * is not cryptographic. Say so wherever reviewer provenance is documented.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is drawn in the DI design and injected by type.
  */
@@ -190,40 +210,50 @@ export class SubagentProvenanceService {
     // evidence pass then re-visits. See scanTranscript for why one pass answers both.
     private readonly scanByPath = new Map<string, TranscriptScan>();
 
-    // Verify EVERY expected reviewer subagent ran on `context.branch` as a DISTINCT run — the coding agent
-    // may not self-certify, and one reviewer may not stand in for several. SKIPPED (pass) without a
-    // session id.
+    // Verify EVERY expected checklist was reviewed by a reviewer subagent that ran on `context.branch` — the
+    // coding agent may not self-certify. SKIPPED (pass) without a session id.
+    //
+    // `sharedRuns` false (no `reviewerAgents` configured): each checklist needs a DISTINCT run, so one
+    // reviewer may not stand in for several. `sharedRuns` true (`reviewerAgents` set): one run may cover
+    // several checklists, because that grouping is exactly what the repo asked for; a run is still only
+    // credited when it is a real subagent of the right type on this branch.
+    //
+    // Either way a run that NAMED this checklist's verdict file is preferred over one that merely ran on the
+    // branch, so each checklist is credited to the reviewer that actually wrote it whenever that is knowable.
     //
     // Scoped by BRANCH across ALL sessions (not the current session): once a reviewer ran on this branch in
     // any session, a later re-push in a NEW session still finds it, so the review is NOT forced to re-run.
     // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
     // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
-    verifyDistinct(expectedAgentTypes: readonly string[], context: ReviewerContext): ProvenanceResult {
-        if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required', {}, []);
+    verifyReviewers(expected: readonly ExpectedReviewer[], context: ReviewerContext, sharedRuns: boolean): ProvenanceResult {
+        if (expected.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required', {}, []);
         if (!this.inClaudeSession()) return this.skipped('reviewer subagents');
         const dirs = this.allSubagentsDirs();
         const missing: string[] = [];
         const usedAgentIds = new Set<string>();
         const credited: Record<string, string> = {};
-        for (const type of expectedAgentTypes) {
-            const agentId = this.findMatchingAgentId(dirs, type, context, usedAgentIds);
-            if (agentId === '') missing.push(type);
+        for (const want of expected) {
+            const exclude = sharedRuns ? new Set<string>() : usedAgentIds;
+            const agentId = this.findMatchingAgentId(dirs, want, context, exclude);
+            if (agentId === '') missing.push(want.checklistId);
             else {
                 usedAgentIds.add(agentId);
-                credited[type] = agentId;
+                credited[want.checklistId] = agentId;
             }
         }
+        const runs = new Set(Object.values(credited)).size;
         return missing.length === 0
-            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`, credited, [])
+            ? new ProvenanceResult(PROVENANCE_OK,
+                `verified ${expected.length} checklist(s) were reviewed by ${runs} reviewer subagent run(s)`, credited, [])
             : new ProvenanceResult(PROVENANCE_MISSING,
-                `${missing.length} reviewer subagent(s) could not be attributed to this branch: ${missing.join(', ')}`,
+                `${missing.length} checklist(s) could not be attributed to a reviewer subagent on this branch: ${missing.join(', ')}`,
                 credited, missing);
     }
 
     /**
      * What each credited reviewer actually READ, from its own transcript.
      *
-     * `verifyDistinct` proves a reviewer of the right type RAN. It cannot tell a reviewer that read the diff
+     * `verifyReviewers` proves a reviewer of the right type RAN. It cannot tell a reviewer that read the diff
      * and thought about it from one that wrote a verdict having opened nothing. This closes that gap — and
      * the motivating case is real: one reviewer spent 14 of 26 tool calls grepping `node_modules` because
      * nothing had told it where anything was, which `offRepoSearches` now makes visible.
@@ -234,35 +264,36 @@ export class SubagentProvenanceService {
      *      consumer's PR with no self-service recovery — `sidechainOnBranch` is already lenient for exactly
      *      this reason, and blocking on a richer read of the same files would be less safe, not more.
      *   2. A reviewer can legitimately receive the diff another way (inlined into its prompt, say).
-     *   3. verifyDistinct is the INTEGRITY signal and rightly blocks; this is a QUALITY signal. Conflating
+     *   3. verifyReviewers is the INTEGRITY signal and rightly blocks; this is a QUALITY signal. Conflating
      *      them would let a transcript-parsing quirk refuse a PR that a real reviewer really did review.
      *
-     * Returns [] outside a Claude Code session, matching verifyDistinct's SKIP behavior.
+     * Returns [] outside a Claude Code session, matching verifyReviewers's SKIP behavior.
      */
-    evidenceFor(context: ReviewerContext, agentIds: Record<string, string>): ReviewerEvidence[] {
+    evidenceFor(context: ReviewerContext, expected: readonly ExpectedReviewer[], agentIds: Record<string, string>): ReviewerEvidence[] {
         if (!this.inClaudeSession()) return [];
         const dirs = this.allSubagentsDirs();
         const out: ReviewerEvidence[] = [];
-        for (const agentType of Object.keys(agentIds)) {
-            const agentId = agentIds[agentType];
+        for (const want of expected) {
+            const agentId = agentIds[want.checklistId];
+            if (agentId === undefined) continue;
             const jsonl = this.transcriptPath(dirs, agentId);
             if (jsonl === '') {
-                out.push(new ReviewerEvidence(agentType, agentId));
+                out.push(new ReviewerEvidence(want.checklistId, want.agentType, agentId));
                 continue;
             }
-            out.push(this.evidenceFromTranscript(agentType, agentId, jsonl, context));
+            out.push(this.evidenceFromTranscript(want, agentId, jsonl, context));
         }
         return out;
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private evidenceFromTranscript(agentType: string, agentId: string, jsonl: string, context: ReviewerContext): ReviewerEvidence {
+    private evidenceFromTranscript(want: ExpectedReviewer, agentId: string, jsonl: string, context: ReviewerContext): ReviewerEvidence {
         const scan = this.scanTranscript(jsonl);
         const inputs = scan.inputs;
-        const docPath = context.docPaths[agentType] ?? '';
-        const verdictPath = context.verdictPaths[agentType] ?? '';
+        const docPath = context.docPaths[want.checklistId] ?? '';
+        const verdictPath = context.verdictPaths[want.checklistId] ?? '';
         return new ReviewerEvidence(
-            agentType, agentId, this.readDiffDir(scan, context),
+            want.checklistId, want.agentType, agentId, this.readDiffDir(scan, context),
             docPath !== '' && this.mentions(inputs, docPath),
             inputs.length,
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
@@ -370,22 +401,42 @@ export class SubagentProvenanceService {
             {}, []);
     }
 
-    // The agentId of a matching subagent run for `agentType` on `branch`, searched across ALL sessions'
+    // The agentId of a matching subagent run for `want.agentType` on `branch`, searched across ALL sessions'
     // subagent dirs (branch-scoped, so a run from a prior session still counts). '' if none. `exclude`
     // skips agentIds already credited to another checklist so one run can't satisfy two.
-    private findMatchingAgentId(dirs: readonly string[], agentType: string, context: ReviewerContext, exclude: ReadonlySet<string> = new Set()): string {
+    //
+    // Now that every checklist shares ONE agent type, several runs match, so the one that NAMED this
+    // checklist's verdict file wins; the first branch-matching run is the fallback, as before.
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private findMatchingAgentId(dirs: readonly string[], want: ExpectedReviewer, context: ReviewerContext, exclude: ReadonlySet<string>): string {
+        let fallback = '';
         for (const dir of dirs) {
             for (const metaFile of this.metaFiles(dir)) {
                 const agentId = this.agentIdOf(metaFile);
-                if (exclude.has(agentId)) continue;
-                const meta = this.readJson(path.join(dir, metaFile));
-                if (!meta || meta['agentType'] !== agentType) continue;
-                const spawnDepth = meta['spawnDepth'];
-                if (typeof spawnDepth !== 'number' || spawnDepth < 1) continue;
-                if (this.sidechainOnBranch(dir, agentId, agentType, context)) return agentId;
+                if (exclude.has(agentId) || !this.isReviewerRun(dir, metaFile, want.agentType)) continue;
+                if (!this.sidechainOnBranch(dir, agentId, want.checklistId, context)) continue;
+                if (this.namedVerdict(dir, agentId, want.checklistId, context)) return agentId;
+                if (fallback === '') fallback = agentId;
             }
         }
-        return '';
+        return fallback;
+    }
+
+    // A harness-written meta for a real subagent (spawnDepth >= 1) of the wanted type.
+    private isReviewerRun(dir: string, metaFile: string, agentType: string): boolean {
+        const meta = this.readJson(path.join(dir, metaFile));
+        if (!meta || meta['agentType'] !== agentType) return false;
+        const spawnDepth = meta['spawnDepth'];
+        return typeof spawnDepth === 'number' && spawnDepth >= 1;
+    }
+
+    // Did this run's transcript name the checklist's own verdict path?
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private namedVerdict(dir: string, agentId: string, checklistId: string, context: ReviewerContext): boolean {
+        const verdictPath = context.verdictPaths[checklistId] ?? '';
+        const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
+        if (verdictPath === '' || !fs.existsSync(jsonl)) return false;
+        return this.mentions(this.scanTranscript(jsonl).inputs, verdictPath);
     }
 
     // Every `projects/*/<session>/subagents` dir that exists — matching by the recorded gitBranch (not by
@@ -465,7 +516,7 @@ export class SubagentProvenanceService {
      * evidence the reviewer cannot inherit and cannot fake by accident: {@link creditedByWhatItTouched}.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private sidechainOnBranch(dir: string, agentId: string, agentType: string, context: ReviewerContext): boolean {
+    private sidechainOnBranch(dir: string, agentId: string, checklistId: string, context: ReviewerContext): boolean {
         const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
         if (!fs.existsSync(jsonl)) return true;
         const first = this.firstNonEmptyLine(jsonl);
@@ -479,7 +530,7 @@ export class SubagentProvenanceService {
         const want = this.stripWp(context.branch);
         if (this.stripWp(gitBranch) === want) return true;
         if (want !== '' && this.stripWp(this.branchOfCwd(rec['cwd'])) === want) return true;
-        return this.creditedByWhatItTouched(jsonl, agentType, context);
+        return this.creditedByWhatItTouched(jsonl, checklistId, context);
     }
 
     /**
@@ -501,14 +552,14 @@ export class SubagentProvenanceService {
      *      branch, and refusing that would re-open a narrower version of the same unrecoverable deadlock.
      *
      * Independence is NOT weakened by either: `isSidechain === true` and `spawnDepth >= 1` are checked
-     * before we get here (so the main loop's own transcript can never qualify), and `verifyDistinct`
+     * before we get here (so the main loop's own transcript can never qualify), and `verifyReviewers`
      * excludes an agentId already credited to another checklist. It remains non-tamper-proof in exactly
      * the way the class doc already states — forging this now means forging a transcript rather than a
      * meta.json, which is the same bar, not a lower one.
      */
-    private creditedByWhatItTouched(jsonl: string, agentType: string, context: ReviewerContext): boolean {
+    private creditedByWhatItTouched(jsonl: string, checklistId: string, context: ReviewerContext): boolean {
         const scan = this.scanTranscript(jsonl);
-        const verdictPath = context.verdictPaths[agentType] ?? '';
+        const verdictPath = context.verdictPaths[checklistId] ?? '';
         if (verdictPath !== '' && this.mentions(scan.inputs, verdictPath)) return true;
         return this.readDiffDir(scan, context);
     }

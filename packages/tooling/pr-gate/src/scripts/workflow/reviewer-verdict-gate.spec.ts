@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, ReviewJsonService, toError,
+    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    ReviewerAgentPolicy, ReviewJsonService, toError,
 } from '@webpieces/rules-config';
 import { ChecklistRoster } from './checklist-detector';
 import { ChecklistScan } from './checklist-scanner';
@@ -16,8 +17,9 @@ const gate = new ReviewerVerdictGate(svc, new ChecklistInstructionsService(svc))
 // obeys, which is what re-spawned an already-refused reviewer and cost a full subagent run per loop.
 const SPAWN_IMPERATIVE = 'You MUST run these';
 
-const DB = new RequiredChecklist('db-reviewer', 'db-reviewer', '', ['db/001.sql'], ['**/*.sql']);
-const OPS = new RequiredChecklist('ops-reviewer', 'ops-reviewer', '', ['Dockerfile'], ['**/Dockerfile']);
+const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const DB = new RequiredChecklist('db-reviewer', REVIEWER, '', ['db/001.sql'], ['**/*.sql']);
+const OPS = new RequiredChecklist('ops-reviewer', REVIEWER, '', ['Dockerfile'], ['**/Dockerfile']);
 
 function reviewDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-verdict-'));
@@ -213,7 +215,8 @@ describe('one refused + one never-ran ⇒ two sections, each listing only its ow
         const spawnSection = msg.slice(msg.indexOf('❓ NO VERDICT YET'));
         expect(spawnSection).toContain('ops-reviewer');
         expect(spawnSection).not.toContain('db-reviewer');
-        expect(spawnSection).toContain('You MUST run these 1 reviewer subagent(s)');
+        expect(spawnSection).toContain('You MUST run these 1 checklist review(s)');
+        expect(spawnSection).toContain('a SEPARATE `webpieces-reviewer` subagent for each');
     });
 
     it('lists ONLY the refused checklist under the refusal section', () => {
@@ -225,12 +228,40 @@ describe('one refused + one never-ran ⇒ two sections, each listing only its ow
 });
 
 /**
+ * `commands.pr-gate.reviewerAgents` (issue #938): a grouped run is valid, so the never-ran section asks for
+ * AT MOST N subagents over ONLY the checklists still owed — never one separate subagent each.
+ */
+describe('reviewerAgents — the never-ran section respects the cap', () => {
+    const GROUPED = new ReviewerAgentPolicy('webpieces-reviewer', 1);
+    const A = new RequiredChecklist('a', GROUPED, '', ['x'], ['**']);
+    const B = new RequiredChecklist('b', GROUPED, '', ['x'], ['**']);
+    const C = new RequiredChecklist('c', GROUPED, '', ['x'], ['**']);
+
+    it('asks for at most one subagent over the owed checklists, not a separate one each', () => {
+        const msg = refusalOf(reviewDir(), [A, B, C]);
+        expect(msg).toContain('You MUST run these 3 checklist review(s) using AT MOST 1 `webpieces-reviewer` subagent(s)');
+        expect(msg).not.toContain('SEPARATE');
+    });
+
+    it('a re-run lists ONLY the checklists still owed, under the same cap', () => {
+        const dir = reviewDir();
+        writeVerdict(dir, 'a', 'green', 'ok');
+        writeVerdict(dir, 'b', 'green', 'ok');
+        const msg = refusalOf(dir, [A, B, C]);
+        const spawnSection = msg.slice(msg.indexOf('❓ NO VERDICT YET'));
+        expect(spawnSection).toContain('these 1 checklist review(s) using AT MOST 1');
+        expect(spawnSection).toContain('checklist c');
+        expect(spawnSection).not.toContain('checklist a');
+    });
+});
+
+/**
  * OPTIONAL checklists at the gate. The asymmetry these pin is the whole feature: not running one is fine,
  * ignoring one you ran is not.
  */
 describe('optional checklists — declined is fine, refused is not', () => {
     const OPT = new RequiredChecklist(
-        'ops-reviewer', 'ops-reviewer', '', ['Dockerfile'], ['**/Dockerfile'], false);
+        'ops-reviewer', REVIEWER, '', ['Dockerfile'], ['**/Dockerfile'], false);
 
     it('opens the PR when the only unreviewed checklist is an optional one nobody ran', () => {
         const dir = reviewDir();

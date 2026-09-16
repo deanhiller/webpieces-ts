@@ -5,7 +5,7 @@ import {
     ShimLogVerdict, UPGRADE_SHIM_CMD,
 } from '../bin/shim';
 import {
-    ENV_SURFACE, GUARDS_BIN, RULES_BIN, SHIM_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration,
+    ENV_SURFACE, GUARDS_BIN, RULES_BIN, SHIM_SURFACE, HARNESS_REGISTRATIONS, HarnessRegistration, REVIEWER_AGENT_SURFACE,
 } from '../bin/hook-registration';
 import {
     L0FaultCode, L0_FAULT_NAMES, L0_JS_FAULT_CODES, L0_LAYER, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED,
@@ -203,6 +203,7 @@ export class L0ToolingDoc {
             SHIM_SURFACE,
             ...HARNESS_REGISTRATIONS.flatMap((h: HarnessRegistration): readonly string[] => [h.registrationSurface, h.neighbourSurface]),
             ENV_SURFACE,
+            REVIEWER_AGENT_SURFACE,
         ];
         const registrations: string[] = [];
         for (const harness of HARNESS_REGISTRATIONS) {

@@ -5,9 +5,22 @@ import * as os from 'os';
 import * as path from 'path';
 import {
     SubagentProvenanceService, ReviewerContext, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    ExpectedReviewer, ProvenanceResult, ReviewerEvidence,
 } from './subagent-provenance';
 
 const svc = new SubagentProvenanceService();
+
+// The crediting rules below (branch, sidechain, spawnDepth, cwd, what-it-touched) do not depend on how
+// many checklists share an agent type, so most cases use one agent type per checklist with the id equal
+// to it. These helpers express exactly that: each type is its own checklist id, verified as DISTINCT runs.
+// The shared-type cases (issue #938) are at the bottom and call verifyReviewers directly.
+function verifyDistinct(service: SubagentProvenanceService, types: readonly string[], context: ReviewerContext): ProvenanceResult {
+    return service.verifyReviewers(types.map((t: string): ExpectedReviewer => new ExpectedReviewer(t, t)), context, false);
+}
+function evidenceFor(service: SubagentProvenanceService, context: ReviewerContext, agentIds: Record<string, string>): ReviewerEvidence[] {
+    const expected = Object.keys(agentIds).map((t: string): ExpectedReviewer => new ExpectedReviewer(t, t));
+    return service.evidenceFor(context, expected, agentIds);
+}
 
 // The branch under review, with no materialized diff and no verdict paths — i.e. the ONLY credit
 // channels available are the two harness-stamped fields. Cases that exercise the third channel build
@@ -36,44 +49,44 @@ function fakeHarness(sessionId: string, agentType: string, branch: string, spawn
 describe('SubagentProvenanceService', () => {
     it('skips (passes with a warning) when CLAUDE_CODE_SESSION_ID is unset', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        const res = svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat'));
+        const res = verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat'));
         expect(res.status).toBe(PROVENANCE_SKIPPED);
     });
 
     it('verifies OK when a matching subagent ran on this branch', () => {
         process.env['HOME'] = fakeHarness('sess-1', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('tolerates a leftover wpN branch-rename suffix', () => {
         process.env['HOME'] = fakeHarness('sess-2', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-2';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat-wp3')).status).toBe(PROVENANCE_OK);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat-wp3')).status).toBe(PROVENANCE_OK);
     });
 
     it('is MISSING when no subagent of that agentType ran', () => {
         process.env['HOME'] = fakeHarness('sess-3', 'some-other-agent', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-3';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when spawnDepth < 1 (the main loop, not a subagent)', () => {
         process.env['HOME'] = fakeHarness('sess-4', 'checklist-reviewer', 'dean/feat', 0);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-4';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when isSidechain is not true', () => {
         process.env['HOME'] = fakeHarness('sess-5', 'checklist-reviewer', 'dean/feat', 1, false);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-5';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when the session has no subagents dir at all', () => {
         process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-empty-'));
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-none';
-        expect(svc.verifyDistinct(['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 });
 
@@ -93,32 +106,32 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
     it('OK when every expected subagent ran as a distinct run', () => {
         process.env['HOME'] = fakeHarnessMulti('sess-d1', ['envvars-reviewer', 'migrations-reviewer'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d1';
-        expect(svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+        expect(verifyDistinct(svc, ['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('MISSING (naming the culprit) when one expected subagent never ran', () => {
         process.env['HOME'] = fakeHarnessMulti('sess-d2', ['envvars-reviewer'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d2';
-        const res = svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat'));
+        const res = verifyDistinct(svc, ['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat'));
         expect(res.status).toBe(PROVENANCE_MISSING);
         expect(res.detail).toMatch(/migrations-reviewer/);
     });
 
     it('OK immediately for an empty expected set', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        expect(svc.verifyDistinct([], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+        expect(verifyDistinct(svc, [], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('is branch-scoped: a run recorded under a DIFFERENT session still counts (review once per branch)', () => {
         // The reviewer ran in session "old-session"; we are now in a NEW session "new-session".
         process.env['HOME'] = fakeHarnessMulti('old-session', ['checklist-migrations'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'new-session';
-        expect(svc.verifyDistinct(['checklist-migrations'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+        expect(verifyDistinct(svc, ['checklist-migrations'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
     it('SKIPPED without a session id', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        expect(svc.verifyDistinct(['r'], ctx('dean/feat')).status).toBe(PROVENANCE_SKIPPED);
+        expect(verifyDistinct(svc, ['r'], ctx('dean/feat')).status).toBe(PROVENANCE_SKIPPED);
     });
 });
 
@@ -180,7 +193,7 @@ function harnessWithCwd(sessionId: string, agentType: string, gitBranch: string,
 function statusFor(sessionId: string, agentType: string, gitBranch: string, cwd: string, target: string): string {
     process.env['HOME'] = harnessWithCwd(sessionId, agentType, gitBranch, cwd);
     process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
-    return new SubagentProvenanceService().verifyDistinct([agentType], ctx(target)).status;
+    return verifyDistinct(new SubagentProvenanceService(), [agentType], ctx(target)).status;
 }
 
 describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch contradicts it', () => {
@@ -229,7 +242,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify({ isSidechain: true, gitBranch: 'wrong' }) + '\n');
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-c6';
-        expect(new SubagentProvenanceService().verifyDistinct(['r'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(new SubagentProvenanceService(), ['r'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
     it('does not consult git when gitBranch already agrees — even a primary-clone cwd still short-circuits', () => {
@@ -262,8 +275,8 @@ describe('SubagentProvenanceService.evidenceFor', () => {
     it('carries out the transcript path it read the counters from — the only place it is knowable', () => {
         process.env['HOME'] = fakeHarness('sess-e1', 'envvars-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e1';
-        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
-        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds);
+        const result = verifyDistinct(svc, ['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = evidenceFor(svc, ctx('dean/feat'), result.agentIds);
         expect(evidence).toHaveLength(1);
         expect(evidence[0]?.transcriptPath).toMatch(/subagents[/\\]agent-abc\.jsonl$/);
     });
@@ -273,8 +286,8 @@ describe('SubagentProvenanceService.evidenceFor', () => {
         fs.rmSync(path.join(home, '.claude', 'projects', '-Some-Slug', 'sess-e2', 'subagents', 'agent-abc.jsonl'));
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e2';
-        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
-        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds);
+        const result = verifyDistinct(svc, ['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = evidenceFor(svc, ctx('dean/feat'), result.agentIds);
         expect(evidence[0]?.transcriptPath).toBe('');
     });
 });
@@ -290,8 +303,8 @@ function modelsFor(sessionId: string, records: readonly object[]): string[] {
     appendRecords(home, sessionId, records);
     process.env['HOME'] = home;
     process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
-    const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
-    return svc.evidenceFor(ctx('dean/feat'), result.agentIds)[0]?.models ?? [];
+    const result = verifyDistinct(svc, ['envvars-reviewer'], ctx('dean/feat'));
+    return evidenceFor(svc, ctx('dean/feat'), result.agentIds)[0]?.models ?? [];
 }
 
 /**
@@ -343,8 +356,8 @@ describe('SubagentProvenanceService.evidenceFor — which model actually reviewe
         ]);
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-m5';
-        const result = svc.verifyDistinct(['envvars-reviewer'], ctx('dean/feat'));
-        const evidence = svc.evidenceFor(ctx('dean/feat'), result.agentIds)[0];
+        const result = verifyDistinct(svc, ['envvars-reviewer'], ctx('dean/feat'));
+        const evidence = evidenceFor(svc, ctx('dean/feat'), result.agentIds)[0];
         expect(evidence?.models).toEqual(['claude-opus-5']);
         expect(evidence?.toolCallCount).toBe(1);
     });
@@ -379,7 +392,7 @@ function clonesStampWithTouch(sessionId: string, agentType: string, touched: str
 function statusForTouch(sessionId: string, touched: string, context: ReviewerContext): string {
     process.env['HOME'] = clonesStampWithTouch(sessionId, 'checklist-reviewer', touched);
     process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
-    return new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], context).status;
+    return verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], context).status;
 }
 
 const WT = '/Users/x/repo-one-2546/.webpieces/pr-review/feature-ONE-2546';
@@ -408,7 +421,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
             JSON.stringify({ message: { content: [{ type: 'tool_use', input: { command: `cat > ${VERDICT} <<'JSON'` } }] } }) + '\n');
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t2';
-        expect(new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
+        expect(verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
             .toBe(PROVENANCE_OK);
     });
 
@@ -423,8 +436,8 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t4';
         const service = new SubagentProvenanceService();
         const context = worktreeContext('feature/ONE-2546');
-        const result = service.verifyDistinct(['checklist-reviewer'], context);
-        const evidence = service.evidenceFor(context, result.agentIds)[0];
+        const result = verifyDistinct(service, ['checklist-reviewer'], context);
+        const evidence = evidenceFor(service, context, result.agentIds)[0];
         expect(evidence?.wroteVerdict).toBe(true);
         expect(evidence?.readDiff).toBe(false);
     });
@@ -453,7 +466,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
             JSON.stringify({ message: { content: [{ type: 'tool_use', input: { file_path: VERDICT } }] } }) + '\n');
         process.env['HOME'] = home;
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t7';
-        expect(new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
+        expect(verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], worktreeContext('feature/ONE-2546')).status)
             .toBe(PROVENANCE_MISSING);
     });
 
@@ -464,15 +477,90 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t8';
         const context = new ReviewerContext('feature/ONE-2546', '', {},
             { 'other-reviewer': `${WT}/review-other-reviewer.json` });
-        expect(new SubagentProvenanceService().verifyDistinct(['other-reviewer'], context).status).toBe(PROVENANCE_MISSING);
+        expect(verifyDistinct(new SubagentProvenanceService(), ['other-reviewer'], context).status).toBe(PROVENANCE_MISSING);
     });
 
     it('names the unattributed checklists in `missing`, so the caller can word its own remedy', () => {
         process.env['HOME'] = clonesStampWithTouch('sess-t9', 'checklist-reviewer', '/somewhere/else');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-t9';
-        const res = new SubagentProvenanceService().verifyDistinct(['checklist-reviewer'], worktreeContext('feature/ONE-2546'));
+        const res = verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], worktreeContext('feature/ONE-2546'));
         expect(res.missing).toEqual(['checklist-reviewer']);
         // …and no pre-worded imperative: the two failures need OPPOSITE instructions (see ProvenanceEnforcer).
         expect(res.detail).not.toMatch(/spawn each as its OWN subagent/);
+    });
+});
+
+// N runs of ONE agent type on one branch; run i names `touched[i]` in a tool input ('' = names nothing).
+function sharedTypeHarness(sessionId: string, touched: readonly string[], branch: string): string {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-shared-'));
+    const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    touched.forEach((file: string, i: number): void => {
+        fs.writeFileSync(path.join(dir, `agent-s${i}.meta.json`), JSON.stringify({ agentType: 'webpieces-reviewer', spawnDepth: 1 }));
+        const tool = file === '' ? '' : '\n' + JSON.stringify({ message: { content: [{ type: 'tool_use', input: { file_path: file } }] } });
+        fs.writeFileSync(path.join(dir, `agent-s${i}.jsonl`), JSON.stringify({ isSidechain: true, gitBranch: branch }) + tool + '\n');
+    });
+    return home;
+}
+
+/**
+ * Issue #938: every checklist is reviewed by ONE agent type (`reviewerAgentName`), so a run is matched on the
+ * type and CREDITED to a checklist id. Without `reviewerAgents` each checklist still needs its own run; with
+ * it, one run may cover several — that grouping is what the repo configured.
+ */
+describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agent type', () => {
+    const three = ['a', 'b', 'c'].map((id: string): ExpectedReviewer => new ExpectedReviewer(id, 'webpieces-reviewer'));
+    const verdicts = { a: `${WT}/review-a.json`, b: `${WT}/review-b.json`, c: `${WT}/review-c.json` };
+
+    it('DISTINCT mode: one run cannot stand in for three checklists', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s1', [''], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s1';
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), false);
+        expect(res.status).toBe(PROVENANCE_MISSING);
+        expect(res.missing).toEqual(['b', 'c']);
+    });
+
+    it('DISTINCT mode: three runs of the same type satisfy three checklists', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s2', ['', '', ''], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s2';
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), false);
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(new Set(Object.values(res.agentIds)).size).toBe(3);
+    });
+
+    it('SHARED mode (reviewerAgents set): one run may cover every checklist', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s3', [''], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s3';
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), true);
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(res.agentIds).toEqual({ a: 's0', b: 's0', c: 's0' });
+        expect(res.detail).toContain('3 checklist(s) were reviewed by 1 reviewer subagent run(s)');
+    });
+
+    it('SHARED mode still refuses when no run of the type exists', () => {
+        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-none-'));
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s4';
+        expect(svc.verifyReviewers(three, new ReviewerContext('dean/feat'), true).missing).toEqual(['a', 'b', 'c']);
+    });
+
+    it('credits each checklist to the run that NAMED its verdict file, when one did', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s5', ['', verdicts.c, verdicts.a], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s5';
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat', '', {}, verdicts), true);
+        expect(res.agentIds['a']).toBe('s2');
+        expect(res.agentIds['c']).toBe('s1');
+        expect(res.agentIds['b']).toBe('s0');
+    });
+
+    it('evidence is keyed by checklist id and carries the shared agent type', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s6', [verdicts.a], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s6';
+        const context = new ReviewerContext('dean/feat', '', {}, verdicts);
+        const res = svc.verifyReviewers(three, context, true);
+        const evidence = svc.evidenceFor(context, three, res.agentIds);
+        expect(evidence.map((e: ReviewerEvidence): string => e.checklistId)).toEqual(['a', 'b', 'c']);
+        expect(evidence.every((e: ReviewerEvidence): boolean => e.agentType === 'webpieces-reviewer')).toBe(true);
+        expect(evidence[0].wroteVerdict).toBe(true);
+        expect(evidence[1].wroteVerdict).toBe(false);
     });
 });

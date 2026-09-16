@@ -108,9 +108,9 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
 
     // The deny must TEACH the surface it is judging, or a blocked agent repairs three of four and
     // reports success — the failure mode upgrade-shim.ts's header exists to prevent.
-    it('names all four managed things, including the env entry and why it exists', () => {
-        expect(reason).toContain('FOUR things');
-        expect(reason).not.toContain('THREE things');
+    it('names the managed set, including the env entry and why it exists', () => {
+        expect(reason).toContain('manages those files as ONE set');
+        expect(reason).toContain('missing, reverted, hand-edited, or predating this binary');
         // The fourth surface's own line is CONDITIONAL — see ShimStaleDeny.neighbourNote — so it is
         // asserted in its own test below, against a drift list that actually contains it.
         expect(reason).not.toContain('the guard silently stops guarding');

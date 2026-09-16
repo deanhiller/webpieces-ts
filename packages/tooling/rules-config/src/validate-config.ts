@@ -8,7 +8,10 @@ import { sectionForRule, isHookGuard } from './sections';
 import { RULE_SCHEMAS, allRuleNames } from './rule-schemas';
 import { recommendedSeedModeFor, isGradualMode } from './seed-entry';
 import { MODIFIED_CODE_MODES } from './rule-configs';
-import { validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
+import {
+    validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale,
+    validateReviewerAgentKeys,
+} from './pr-gate-section-validators';
 import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
@@ -316,8 +319,10 @@ function prGateExample(): string {
         `    "gates": [\n` +
         `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "warningColor": "yellow" }\n` +
         `    ],\n` +
-        `    "checklists": [   // OPTIONAL — per-area review, one distinct reviewer subagent each\n` +
-        `      { "subagent": "db-migration-reviewer", "doc": ".claude/review/db-migrations.md", "patterns": ["**/*.sql"] }\n` +
+        `    "reviewerAgentName": "webpieces-reviewer",\n` +
+        `    "reviewerAgents": 1,   // OPTIONAL — the most reviewer subagents per round; omit for one per checklist\n` +
+        `    "checklists": [   // OPTIONAL — per-area review, each against its own doc\n` +
+        `      { "id": "db-migrations", "doc": ".claude/review/db-migrations.md", "patterns": ["**/*.sql"], "required": true }\n` +
         `    ]\n` +
         `  }`
     );
@@ -404,6 +409,7 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
         } else if (typeof mm !== 'string' || !PR_GATE_MERGE_MODES.includes(mm as typeof PR_GATE_MERGE_MODES[number])) {
             errors.push(`[pr-gate] "mergeMode" = "${String(mm)}" is not valid. ${MERGE_MODE_HELP}`);
         }
+        errors.push(...validateReviewerAgentKeys(s, repoRoot));
     }
 
     if ('gates' in s) errors.push(...validateGatesSection(s['gates']));

@@ -168,8 +168,8 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
      * THE PRECONDITION, asserted first so its failure is legible — against the REAL probe, not the
      * neutralized one the fixtures run under (see the `vi.mock` at the top of this file for why).
      *
-     * Exactly ONE surface is allowed to disagree with this checkout: `.claude/webpieces/ai-hook.sh`, the
-     * GENERATED artifact that must match the INSTALLED release and therefore lags a PR that changes
+     * Exactly TWO surfaces are allowed to disagree with this checkout: `.claude/webpieces/ai-hook.sh` (and,
+     * the same way, `.claude/agents/webpieces-reviewer.md`), the GENERATED artifacts that must match the INSTALLED release and therefore lags a PR that changes
      * `renderShim()` by one publish. Everything else — the settings.json registration and its managed
      * `env` entry — is written by the installer from this same source and is never expected to drift; a
      * disagreement there is a real defect and still fails here, named, instead of arriving as an
@@ -178,7 +178,10 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
     it('has no managed-surface drift except the committed shim, whose lag is the release ordering', async (): Promise<void> => {
         const real = await vi.importActual<typeof import('../bin/hook-registration')>('../bin/hook-registration');
         const drifted = real.managedSurfaceDrift(governingShimRoot());
-        expect(drifted.filter((surface: string): boolean => surface !== real.SHIM_SURFACE)).toEqual([]);
+        // The reviewer agent (issue #938) lags the same way: this checkout commits it only once the
+        // release that generates it is published and adopted.
+        const lagging = [real.SHIM_SURFACE, real.REVIEWER_AGENT_SURFACE];
+        expect(drifted.filter((surface: string): boolean => !lagging.includes(surface))).toEqual([]);
     });
 
     it.each(GOLDEN_FIXTURES.map((fixture: GoldenFixture): [string, GoldenFixture] => [fixture.name, fixture]))(

@@ -12,7 +12,7 @@ import { validatePrGateSection } from './validate-config';
 
 // A pr-gate section that is valid except for whatever `checklists` value the test is probing.
 function validPrGate(checklists: unknown): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
+    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgentName: 'webpieces-reviewer', gates: [], checklists };
 }
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
@@ -27,77 +27,140 @@ function repoWith(docs: string[] = [], agents: string[] = []): string {
     return dir;
 }
 
+const has = (errors: readonly string[], re: RegExp): boolean => errors.some((e: string): boolean => re.test(e));
+
 describe('validatePrGateSection checklists — the array in webpieces.config.json is the ONLY shape', () => {
     it('accepts a well-formed array with repo-relative docs', () => {
-        const dir = repoWith(['db.md'], ['db-reviewer']);
+        const dir = repoWith(['db.md'], ['webpieces-reviewer']);
         const errors = validatePrGateSection(validPrGate([
-            { subagent: 'db-reviewer', doc: '.claude/review/db.md', patterns: ['**/*.sql'], required: true },
+            { id: 'db', doc: '.claude/review/db.md', patterns: ['**/*.sql'], required: true },
         ]), dir);
         expect(errors).toEqual([]);
     });
 
     it('REJECTS an entry that omits "required" — there is no default in either direction', () => {
-        const dir = repoWith(['db.md'], ['db-reviewer']);
-        const errors = validatePrGateSection(validPrGate([
-            { subagent: 'db-reviewer', doc: '.claude/review/db.md' },
-        ]), dir);
+        const dir = repoWith(['db.md'], ['webpieces-reviewer']);
+        const errors = validatePrGateSection(validPrGate([{ id: 'db', doc: '.claude/review/db.md' }]), dir);
         // The message must name the entry AND both edits: only the consumer knows which this checklist is.
-        expect(errors.some((e: string): boolean => /checklists\[0\] \("db-reviewer"\) is missing "required"/.test(e))).toBe(true);
-        expect(errors.some((e: string): boolean => /"required": true/.test(e) && /"required": false/.test(e))).toBe(true);
+        expect(has(errors, /checklists\[0\] \("db"\) is missing "required"/)).toBe(true);
+        expect(has(errors, /"required": true/) && has(errors, /"required": false/)).toBe(true);
     });
 
     it('rejects a non-boolean "required"', () => {
-        const errors = validatePrGateSection(validPrGate([{ subagent: 'r', required: 'true' }]));
-        expect(errors.some((e: string): boolean => /checklists\[0\] \("r"\)\.required must be a boolean/.test(e))).toBe(true);
+        const errors = validatePrGateSection(validPrGate([{ id: 'r', doc: 'x.md', required: 'true' }]));
+        expect(has(errors, /checklists\[0\] \("r"\)\.required must be a boolean/)).toBe(true);
     });
 
     it('accepts required:false — an OPTIONAL checklist the human may decline', () => {
-        const dir = repoWith(['db.md'], ['db-reviewer']);
+        const dir = repoWith(['db.md'], ['webpieces-reviewer']);
         const errors = validatePrGateSection(validPrGate([
-            { subagent: 'db-reviewer', doc: '.claude/review/db.md', required: false },
+            { id: 'db', doc: '.claude/review/db.md', required: false },
         ]), dir);
         expect(errors).toEqual([]);
     });
 
     it('a repo may declare ZERO required checklists — every one of them optional is a valid choice', () => {
-        const dir = repoWith([], ['a', 'b']);
+        const dir = repoWith(['a.md', 'b.md'], ['webpieces-reviewer']);
         const errors = validatePrGateSection(validPrGate([
-            { subagent: 'a', required: false }, { subagent: 'b', required: false },
+            { id: 'a', doc: '.claude/review/a.md', required: false },
+            { id: 'b', doc: '.claude/review/b.md', required: false },
         ]), dir);
         expect(errors).toEqual([]);
     });
 
     it('resolves item docs REPO-relative — a bare filename is not found', () => {
-        const dir = repoWith(['db.md'], ['db-reviewer']);
-        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'db.md' }]), dir);
-        expect(errors.some((e: string): boolean => /\.doc "db\.md" does not exist/.test(e))).toBe(true);
+        const dir = repoWith(['db.md'], ['webpieces-reviewer']);
+        const errors = validatePrGateSection(validPrGate([{ id: 'db', doc: 'db.md', required: true }]), dir);
+        expect(has(errors, /\.doc "db\.md" does not exist/)).toBe(true);
     });
 
-    it('rejects a non-object entry, a non-string doc, and non-string patterns', () => {
-        expect(validatePrGateSection(validPrGate(['nope'])).some((e: string): boolean => /checklists\[0\] must be an object/.test(e))).toBe(true);
-        expect(validatePrGateSection(validPrGate([{ subagent: 'r', doc: 7 }])).some((e: string): boolean => /checklists\[0\]\.doc must be a string/.test(e))).toBe(true);
-        expect(validatePrGateSection(validPrGate([{ subagent: 'r', patterns: [1] }])).some((e: string): boolean => /checklists\[0\]\.patterns must be a string\[\]/.test(e))).toBe(true);
+    it('REQUIRES a doc — with one generic reviewer agent the doc is the whole checklist', () => {
+        const errors = validatePrGateSection(validPrGate([{ id: 'db', required: true }]));
+        expect(has(errors, /"db"\.doc is required/)).toBe(true);
     });
 
-    it('rejects a duplicate subagent', () => {
-        const dir = repoWith([], ['r']);
-        const errors = validatePrGateSection(validPrGate([{ subagent: 'r' }, { subagent: 'r' }]), dir);
-        expect(errors.some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
+    it('rejects a non-object entry, a non-string id/doc, and non-string patterns', () => {
+        expect(has(validatePrGateSection(validPrGate(['nope'])), /checklists\[0\] must be an object/)).toBe(true);
+        expect(has(validatePrGateSection(validPrGate([{ id: 'r', doc: 7, required: true }])), /checklists\[0\]\.doc must be a string/)).toBe(true);
+        expect(has(validatePrGateSection(validPrGate([{ id: 3, doc: 'x.md', required: true }])), /checklists\[0\]\.id must be a string/)).toBe(true);
+        expect(has(validatePrGateSection(validPrGate([{ id: 'r', doc: 'x.md', patterns: [1], required: true }])), /checklists\[0\]\.patterns must be a string\[\]/)).toBe(true);
     });
 
-    it('rejects a subagent with no .claude/agents/<name>.md', () => {
-        const dir = repoWith([], ['db-reviewer']);
-        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-revewer' }]), dir);
-        expect(errors.some((e: string): boolean => /names no reviewer/.test(e))).toBe(true);
-    });
-
-    it('leaves the reviewer-agent check off for a repo with no .claude/agents dir', () => {
-        const dir = repoWith();
-        expect(validatePrGateSection(validPrGate([{ subagent: 'nobody', required: true }]), dir)).toEqual([]);
+    it('requires a non-empty, unique, file-safe id', () => {
+        expect(has(validatePrGateSection(validPrGate([{ doc: 'x.md', required: true }])), /checklists\[0\]\.id must be a non-empty string/)).toBe(true);
+        expect(has(validatePrGateSection(validPrGate([{ id: '../evil', doc: 'x.md', required: true }])), /must use only letters/)).toBe(true);
+        const dup = validatePrGateSection(validPrGate([
+            { id: 'r', doc: 'x.md', required: true }, { id: 'r', doc: 'x.md', required: true },
+        ]));
+        expect(has(dup, /duplicate id "r"/)).toBe(true);
     });
 
     it('an empty array is valid — it means "no checklists"', () => {
         expect(validatePrGateSection(validPrGate([]), repoWith())).toEqual([]);
+    });
+});
+
+/**
+ * `subagent` → `id` is a HARD rename (issue #938): the old key fails the load with the edit, and nothing
+ * reads it any more — an entry carrying only `subagent` is also an entry with no id.
+ */
+describe('validatePrGateSection rejects the retired per-checklist "subagent" key', () => {
+    it('names the destination and the missing reviewerAgentName line', () => {
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'x.md', required: true }]));
+        expect(has(errors, /checklists\[0\] \[pr-gate\.checklists\] "subagent" is a RETIRED/)).toBe(true);
+        expect(has(errors, /moved to "id"/)).toBe(true);
+        expect(has(errors, /"reviewerAgentName": "webpieces-reviewer"/)).toBe(true);
+    });
+
+    it('does not fall back to it for the id', () => {
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'x.md', required: true }]));
+        expect(has(errors, /checklists\[0\]\.id must be a non-empty string/)).toBe(true);
+    });
+});
+
+describe('validatePrGateSection — reviewerAgentName (required) and reviewerAgents (optional cap)', () => {
+    const noName = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO' };
+
+    it('REQUIRES reviewerAgentName and prints the exact line to add', () => {
+        const errors = validatePrGateSection(noName);
+        expect(has(errors, /Missing required field "reviewerAgentName"/)).toBe(true);
+        expect(errors.join('\n')).toContain('"reviewerAgentName": "webpieces-reviewer"');
+        expect(errors.join('\n')).toContain('pnpm wp-upgrade-shim');
+    });
+
+    it('rejects an empty reviewerAgentName', () => {
+        expect(has(validatePrGateSection({ ...noName, reviewerAgentName: '  ' }), /Missing required field "reviewerAgentName"/)).toBe(true);
+    });
+
+    it('does not require it when the whole gate is OFF', () => {
+        expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
+    });
+
+    it('rejects a reviewerAgentName with no .claude/agents/<name>.md, naming the cure for the webpieces agent', () => {
+        const errors = validatePrGateSection(validPrGate([]), repoWith([], ['something-else']));
+        expect(has(errors, /reviewerAgentName "webpieces-reviewer" names no reviewer/)).toBe(true);
+        expect(has(errors, /pnpm wp-upgrade-shim/)).toBe(true);
+    });
+
+    it('tells a repo with its OWN agent name to create it rather than run the webpieces cure', () => {
+        const errors = validatePrGateSection({ ...validPrGate([]), reviewerAgentName: 'my-reviewer' }, repoWith([], ['other']));
+        expect(has(errors, /"my-reviewer" names no reviewer/)).toBe(true);
+        expect(has(errors, /Create that agent file/)).toBe(true);
+    });
+
+    it('leaves the reviewer-agent check off for a repo with no .claude/agents dir', () => {
+        expect(validatePrGateSection(validPrGate([]), repoWith())).toEqual([]);
+    });
+
+    it('accepts a positive integer reviewerAgents', () => {
+        for (const n of [1, 2, 8]) expect(validatePrGateSection({ ...validPrGate([]), reviewerAgents: n })).toEqual([]);
+    });
+
+    it('rejects a reviewerAgents that is not a positive integer', () => {
+        for (const bad of [0, -1, 1.5, '2', null]) {
+            const errors = validatePrGateSection({ ...validPrGate([]), reviewerAgents: bad });
+            expect(has(errors, /"reviewerAgents" = .* is not valid — it must be a positive integer/), String(bad)).toBe(true);
+        }
     });
 });
 

@@ -9,6 +9,8 @@ import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
+import { REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy } from './checklist-config';
+const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
 
 function tmpFile(contents: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-'));
@@ -206,7 +208,7 @@ function validReview(overrides: Record<string, unknown> = {}): string {
 }
 
 const REQ = (id: string): RequiredChecklist =>
-    new RequiredChecklist(id, id, `.claude/review/${id}.md`, ['x.sql']);
+    new RequiredChecklist(id, agentPolicy(id), `.claude/review/${id}.md`, ['x.sql']);
 
 // Write review.json + optional per-checklist files into one shared dir; return the review.json path.
 function tmpReviewWith(results: Record<string, unknown>): string {
@@ -340,7 +342,7 @@ const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
 
 describe('ReviewJsonService.pendingChecklists', () => {
     const svc2 = new ReviewJsonService();
-    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, id, '', ['x.sql'], ['**/*.sql']);
+    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(id), '', ['x.sql'], ['**/*.sql']);
 
     it('drops the ones that passed and keeps the ones with no verdict', () => {
         const required = [req('a'), req('b')];
@@ -386,17 +388,17 @@ describe('ChecklistInstructionsService', () => {
     });
 
     it('names each subagent, its repo-relative doc, and the exact verdict file it must write', () => {
-        const req = new RequiredChecklist('db', 'db-reviewer', '.claude/review/db.md', ['db/1.sql'], ['**/*.sql']);
+        const req = new RequiredChecklist('db', agentPolicy('db-reviewer'), '.claude/review/db.md', ['db/1.sql'], ['**/*.sql']);
         const text = inst.render([req], REVIEW, CTX);
-        expect(text).toContain('• db-reviewer');
+        expect(text).toContain('• checklist db');
         expect(text).toContain('doc to read:  .claude/review/db.md');
         expect(text).toContain('/repo/.webpieces/pr-review/feat/review-db.json');
     });
 
     it('states the ONE verdict format once, not repeated under every reviewer', () => {
         const two = [
-            new RequiredChecklist('a', 'a', '', ['x'], ['**']),
-            new RequiredChecklist('b', 'b', '', ['x'], ['**']),
+            new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**']),
+            new RequiredChecklist('b', agentPolicy('b'), '', ['x'], ['**']),
         ];
         const text = inst.render(two, REVIEW, CTX);
         expect(text.split('"output": "what you checked / found"').length - 1).toBe(1);
@@ -406,14 +408,14 @@ describe('ChecklistInstructionsService', () => {
     // resolved, leaving a reviewer with filenames and no way to read the change — indistinguishable from a
     // complete instruction. An unresolvable base is now stated as the problem it is.
     it('states an unresolvable base out loud instead of omitting the diff instruction', () => {
-        const req = new RequiredChecklist('a', 'a', '', ['x.ts'], ['**']);
+        const req = new RequiredChecklist('a', agentPolicy('a'), '', ['x.ts'], ['**']);
         const text = inst.render([req], REVIEW, new ChecklistReviewContext());
         expect(text).toContain('No diff base resolved');
         expect(text).toContain('merge-base origin/main HEAD');
     });
 
     it('inlines the diff command it was GIVEN, and the authoritative full-file-set path', () => {
-        const req = new RequiredChecklist('a', 'a', '', ['x'], ['**']);
+        const req = new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**']);
         const text = inst.render([req], REVIEW, CTX);
         expect(text).toContain('git diff abc1234 def5678 -- <file>');
         expect(text).toContain('/repo/.webpieces/pr-review/feat/pr-context.json');
@@ -441,7 +443,7 @@ describe('ChecklistInstructionsService — the diff command', () => {
     it('prints the dirty-tree command with NO head, and never re-assembles `<base> HEAD`', () => {
         const dirty = new ChecklistReviewContext(
             'abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 -- <file>', '', true);
-        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, dirty);
+        const text = inst.render([new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**'])], REVIEW, dirty);
         expect(text).toContain('git diff abc1234 -- <file>');
         expect(text).not.toContain('git diff abc1234 HEAD');
         // …and it must SAY the diff includes uncommitted work, so the reviewer knows what it is judging.
@@ -452,7 +454,7 @@ describe('ChecklistInstructionsService — the diff command', () => {
     it('points at the extracted diff when one was materialized', () => {
         const withDiff = new ChecklistReviewContext(
             'abc1234', '/repo/ctx.json', 'git diff abc1234 def5678 -- <file>', '/repo/.webpieces/pr-review/feat/diff');
-        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, withDiff);
+        const text = inst.render([new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**'])], REVIEW, withDiff);
         expect(text).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
         expect(text).toContain('manifest.json');
     });
@@ -461,7 +463,7 @@ describe('ChecklistInstructionsService — the diff command', () => {
     // resurrect the exact bug above, so the gap is stated instead.
     it('states a missing reproduce command rather than inventing one', () => {
         const noCmd = new ChecklistReviewContext('abc1234', '/repo/ctx.json');
-        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, noCmd);
+        const text = inst.render([new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**'])], REVIEW, noCmd);
         expect(text).toContain('no reproduce command recorded');
         expect(text).not.toContain('git diff abc1234 HEAD');
     });
@@ -477,31 +479,23 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
 
     it('never truncates the matched list silently — it states how many were dropped', () => {
         const many = Array.from({ length: 40 }, (_v: unknown, i: number): string => `db/${i}.sql`);
-        const req = new RequiredChecklist('a', 'a', '', many, ['**/*.sql']);
+        const req = new RequiredChecklist('a', agentPolicy('a'), '', many, ['**/*.sql']);
         expect(inst.render([req], REVIEW, CTX)).toContain('+34 more (40 total)');
     });
 
     it('names the glob that fired, so a precise match is distinguishable from a blanket one', () => {
-        const req = new RequiredChecklist('a', 'a', '', ['db/1.sql'], ['**/*.sql']);
+        const req = new RequiredChecklist('a', agentPolicy('a'), '', ['db/1.sql'], ['**/*.sql']);
         expect(inst.render([req], REVIEW, CTX)).toContain('matched "**/*.sql"');
     });
 
     // NOT every checklist is pattern-matched. Calling a patternless checklist's file list "matched" implies
     // it is a narrow slice of the diff when it is in fact the whole thing.
     it('says ALWAYS RUNS for a patternless checklist instead of calling the whole diff a match', () => {
-        const req = new RequiredChecklist('a', 'a', '', ['x.ts', 'y.ts'], []);
+        const req = new RequiredChecklist('a', agentPolicy('a'), '', ['x.ts', 'y.ts'], []);
         const text = inst.render([req], REVIEW, CTX);
         expect(text).toContain('ALWAYS RUNS');
         expect(text).toContain('all 2 changed file(s)');
         expect(text).not.toContain('file(s) matched');
-    });
-
-    it('names() gives a one-line list for a fail-fast headline', () => {
-        const two = [
-            new RequiredChecklist('a', 'a-reviewer', '', ['x'], ['**']),
-            new RequiredChecklist('b', 'b-reviewer', '', ['x'], ['**']),
-        ];
-        expect(inst.names(two)).toBe('a-reviewer, b-reviewer');
     });
 });
 
@@ -583,7 +577,7 @@ describe('archiveChecklistResult', () => {
 // subagent(s)", which an AI obeys by re-spawning a reviewer that already answered, forever.
 describe('refusedChecklists / refusalError', () => {
     const svc = new ReviewJsonService();
-    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, `${id}-reviewer`, '', ['x.sql'], ['**/*.sql']);
+    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), '', ['x.sql'], ['**/*.sql']);
 
     it('selects exactly the CK_FAIL ones — not MISSING, BAD_FORMAT, WARN, PASS or OVERRIDDEN', () => {
         const required = [req('failed'), req('missing'), req('bad'), req('warn'), req('pass'), req('over')];
@@ -655,9 +649,9 @@ describe('loadReviewJson — optional checklists', () => {
     });
     const svc = new ReviewJsonService();
     const optional = (): RequiredChecklist =>
-        new RequiredChecklist('ops-reviewer', 'ops-reviewer', '', ['Dockerfile'], ['**/Dockerfile'], false);
+        new RequiredChecklist('ops-reviewer', agentPolicy('ops-reviewer'), '', ['Dockerfile'], ['**/Dockerfile'], false);
     const required = (): RequiredChecklist =>
-        new RequiredChecklist('db-reviewer', 'db-reviewer', '', ['db/1.sql'], ['**/*.sql'], true);
+        new RequiredChecklist('db-reviewer', agentPolicy('db-reviewer'), '', ['db/1.sql'], ['**/*.sql'], true);
 
     const errorFrom = (file: string, reqs: RequiredChecklist[]): string => {
         // webpieces-disable no-unmanaged-exceptions -- the thrown message IS the assertion subject here

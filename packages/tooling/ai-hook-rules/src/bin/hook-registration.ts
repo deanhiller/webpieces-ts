@@ -4,6 +4,7 @@ import * as path from 'path';
 import { toError } from '../core/to-error';
 import { AiType } from '../core/agent-event';
 import { SHIM_MARKER, committedShimStale } from './shim';
+import { REVIEWER_AGENT_MARKER, reviewerAgentStale } from './reviewer-agent';
 import { NEIGHBOUR_SURFACE_SUFFIX, anchorNeighbourHooks, neighbourHooksStale } from './neighbour-hooks';
 import type { ClaudeSettings, HookCommand, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
@@ -608,6 +609,9 @@ export const SHIM_SURFACE = SHIM_MARKER;
 export const REGISTRATION_SURFACE = CLAUDE_REGISTRATION.registrationSurface;
 export const CODEX_REGISTRATION_SURFACE = CODEX_REGISTRATION.registrationSurface;
 export const ENV_SURFACE = `.claude/settings.json env.${BASH_CWD_ENV_KEY}`;
+// The generic PR-gate reviewer agent (issue #938): committed, generated, byte-stable — the same contract as
+// the shim, so the same check and the same cure.
+export const REVIEWER_AGENT_SURFACE = REVIEWER_AGENT_MARKER;
 
 /**
  * WHICH of the managed surfaces disagree with this release — the input to fault S.
@@ -630,5 +634,6 @@ export function managedSurfaceDrift(root: string | null): readonly string[] {
         if (neighbourHooksStaleAt(harness, root)) drifted.push(harness.neighbourSurface);
     }
     if (envStaleAt(root)) drifted.push(ENV_SURFACE);
+    if (reviewerAgentStale(root)) drifted.push(REVIEWER_AGENT_SURFACE);
     return drifted;
 }

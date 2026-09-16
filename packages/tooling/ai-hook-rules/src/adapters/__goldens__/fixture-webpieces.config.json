@@ -241,6 +241,7 @@
             "mode": "ON",
             "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
             "mergeMode": "NONE",
+            "reviewerAgentName": "webpieces-reviewer",
             "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b"
         }
     },

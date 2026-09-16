@@ -50,7 +50,7 @@ export class BriefedFile {
  * remove. Data-only.
  */
 export class ReviewerBriefing {
-    subagent: string;
+    agentName: string;            // the agent type the subagent is spawned as (commands.pr-gate.reviewerAgentName)
     docPath: string;              // the checklist's guidance doc ('' when the checklist has none)
     repoRoot: string;
     diffDir: string;              // '' when nothing was materialized
@@ -75,7 +75,7 @@ export class ReviewerBriefing {
     hashForkPoint: string;
     hashFeatureHead: string;
     hashMainHead: string;
-    ownAgentFileInDiff: string;   // ABSOLUTE path when this diff edits THIS reviewer's own agent file; '' otherwise
+    ownAgentFileInDiff: string;   // ABSOLUTE path when this diff edits the reviewer agent's own file; '' otherwise
     // From the checklist's config `required`. Carried so the stage-② report can group the spawn blocks
     // (must run) apart from the ones the human is merely OFFERED, without a second lookup that could
     // disagree with the scan. The reviewer's OWN instructions do not mention it: a reviewer that has been
@@ -84,8 +84,8 @@ export class ReviewerBriefing {
     required: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(subagent: string, checklistId: string, repoRoot: string) {
-        this.subagent = subagent;
+    constructor(agentName: string, checklistId: string, repoRoot: string) {
+        this.agentName = agentName;
         this.checklistId = checklistId;
         this.repoRoot = repoRoot;
         this.docPath = '';
@@ -125,7 +125,8 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
 
 /**
  * Renders the per-reviewer instructions file that `wp-review-upsert-pr` writes to
- * `.webpieces/pr-review/<feature>/instructions/<subagent>.instructions.md`.
+ * `.webpieces/pr-review/<feature>/instructions/<checklistId>.instructions.md` — ONE PER CHECKLIST, so a
+ * subagent covering several checklists (`commands.pr-gate.reviewerAgents`) is simply handed several files.
  *
  * WHY this file exists, measured rather than assumed: a reviewer subagent on consumer-monorepo2 spent **14 of its
  * 26 tool calls** rediscovering context the tooling already had — three separate greps into
@@ -133,8 +134,9 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
  * re-derivation of the dependency graph. It did not over-review; it was under-supplied. Everything below is
  * chosen to delete a specific one of those calls.
  *
- * It is GENERATED per run, and the registered `.claude/agents/<subagent>.md` is a thin stub that points
- * here, because content a human maintains goes stale and a reviewer follows the stale copy. The verdict
+ * It is GENERATED per run, and the reviewer agent (`.claude/agents/<reviewerAgentName>.md`, by default the
+ * webpieces-owned `webpieces-reviewer.md`) is checklist-agnostic and points here, because content a human
+ * maintains goes stale and a reviewer follows the stale copy. The verdict
  * schema in particular comes from {@link ReviewJsonService.verdictSchemaFor}.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
@@ -148,14 +150,14 @@ export class ReviewerInstructionsService {
         return path.join(this.reviewJsonService.prDirFor(repoRoot, featureName), 'instructions');
     }
 
-    /** The file name for a reviewer's generated instructions. */
-    fileNameFor(subagent: string): string {
-        return `${subagent}.instructions.md`;
+    /** The file name for one checklist's generated instructions. */
+    fileNameFor(checklistId: string): string {
+        return `${checklistId}.instructions.md`;
     }
 
-    /** Absolute path of one reviewer's generated instructions file. */
-    pathFor(repoRoot: string, featureName: string, subagent: string): string {
-        return path.join(this.instructionsDirFor(repoRoot, featureName), this.fileNameFor(subagent));
+    /** Absolute path of one checklist's generated instructions file. */
+    pathFor(repoRoot: string, featureName: string, checklistId: string): string {
+        return path.join(this.instructionsDirFor(repoRoot, featureName), this.fileNameFor(checklistId));
     }
 
     render(briefing: ReviewerBriefing): string {
@@ -172,10 +174,15 @@ export class ReviewerInstructionsService {
 
     private identity(b: ReviewerBriefing): string[] {
         return [
-            `# You are \`${b.subagent}\``,
+            `# Checklist \`${b.checklistId}\` — reviewed by a \`${b.agentName}\` subagent`,
             '',
-            'Review as YOURSELF, against your own checklist — not as a general code reviewer.',
-            'You may not write another reviewer\'s verdict file.',
+            'Review this diff against THIS checklist only — not as a general code reviewer — and only over the',
+            'files in scope below. If you were handed several of these files, review each checklist separately',
+            'and write each one its own verdict. Never write a verdict for a checklist you were not handed.',
+            '',
+            `Your agent definition is \`${this.agentFileFor(b)}\`. If your harness did not load it for you`,
+            '(Codex spawns a generic subagent), read it before anything else — it is the one canonical',
+            'definition of how a reviewer works here.',
             '',
             '"You may not review your own authorship" means: you did not write this diff, so review it — but if',
             'the diff CHANGES YOU, say so in `output` rather than pretending the conflict is not there.',
@@ -185,6 +192,11 @@ export class ReviewerInstructionsService {
             'paths are absolute because your working directory is not guaranteed to be the repo root._',
             '',
         ];
+    }
+
+    /** The absolute path of the reviewer agent's committed definition (`.claude/agents/<agentName>.md`). */
+    agentFileFor(b: ReviewerBriefing): string {
+        return path.join(b.repoRoot, '.claude', 'agents', `${b.agentName}.md`);
     }
 
     /**

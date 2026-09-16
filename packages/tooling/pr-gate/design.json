@@ -2274,6 +2274,15 @@
                 },
                 {
                     "from": "ReviewReport",
+                    "to": "ChecklistInstructionsService",
+                    "injection": "type",
+                    "token": "ChecklistInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
+                    "paramName": "checklistInstructions",
+                    "paramType": "ChecklistInstructionsService"
+                },
+                {
+                    "from": "ReviewReport",
                     "to": "ChecklistNotice",
                     "injection": "type",
                     "token": "ChecklistNotice",

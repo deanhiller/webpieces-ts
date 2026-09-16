@@ -4,7 +4,7 @@ import * as path from 'path';
 import {
     prDirFor, reviewJsonPath, RequiredChecklist, PrGateConfig, ReviewJsonService,
     SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
-    ProvenanceResult, ReviewerEvidence, ReviewerContext,
+    ProvenanceResult, ReviewerEvidence, ReviewerContext, ExpectedReviewer,
     ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
     ReviewerInstructionsService, InformAiError,
 } from '@webpieces/rules-config';
@@ -26,7 +26,7 @@ export class ProvenanceReport {
 }
 
 /**
- * Proves each checklist verdict came from its OWN independently-run reviewer subagent, and records what
+ * Proves each checklist verdict came from an independently-run reviewer subagent, and records what
  * each one read.
  *
  * Split out of FinishUpsertPrCommand when that file crossed the 700-line cap, and it is the right seam
@@ -66,20 +66,24 @@ export class ProvenanceEnforcer {
         return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 
-    // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
-    // the coding agent may not self-certify, and one reviewer may not stand in for several. A verified set
-    // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
+    // Enforce that EACH matched checklist was reviewed by a subagent of the repo's reviewer agent type — the
+    // coding agent may not self-certify. Without `reviewerAgents` each checklist needs a DISTINCT run (one
+    // reviewer may not stand in for several); with it, one run may cover several checklists, because that
+    // grouping is what the repo configured. A verified set passes silently; no session id warns but passes;
+    // any missing reviewer throws so the PR does not open.
     // eslint-disable-next-line @typescript-eslint/max-params
     enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
-        const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
+        const expected = required
+            .filter((r: RequiredChecklist): boolean => r.reviewer.agentName.trim() !== '')
+            .map((r: RequiredChecklist): ExpectedReviewer => new ExpectedReviewer(r.id, r.reviewer.agentName.trim()));
         const context = this.contextFor(repoRoot, required, branch);
-        // verifyDistinct short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
+        // verifyReviewers short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
         // checklists still gets a provenance record naming the session and the main agent's own transcript.
-        const result = this.provenance.verifyDistinct(subagents, context);
+        const result = this.provenance.verifyReviewers(expected, context, config.reviewer.grouped());
         report.verified = result.status === PROVENANCE_OK;
         if (result.status === PROVENANCE_SKIPPED) process.stderr.write(`⚠️  ${result.detail}\n`);
-        report.evidence = this.provenance.evidenceFor(context, result.agentIds);
+        report.evidence = this.provenance.evidenceFor(context, expected, result.agentIds);
         const blind = this.blindReviewers(report.evidence, config);
         // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
         // that only ever appeared on success could not answer what the reviewers did the time it was refused.
@@ -113,7 +117,8 @@ export class ProvenanceEnforcer {
         if (result.status === PROVENANCE_MISSING && missing.length === 0) paragraphs.push(result.detail);
         if (neverRan.length > 0) {
             paragraphs.push(
-                `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${neverRan.join(', ')}`);
+                'no reviewer subagent ran on this branch for these checklists (spawn the reviewer agent that ' +
+                `pnpm wp-review-upsert-pr names — do not self-certify): ${neverRan.join(', ')}`);
         }
         if (unattributed.length > 0) paragraphs.push(this.unattributedMessage(unattributed, context));
         if (blind.length > 0) {
@@ -160,10 +165,8 @@ export class ProvenanceEnforcer {
         const docPaths: Record<string, string> = {};
         const verdictPaths: Record<string, string> = {};
         for (const req of required) {
-            const type = req.subagent.trim();
-            if (type === '') continue;
-            docPaths[type] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
-            verdictPaths[type] = this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), req.id);
+            docPaths[req.id] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
+            verdictPaths[req.id] = this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), req.id);
         }
         return new ReviewerContext(branch, path.join(prDirFor(repoRoot, featureName), 'diff'), docPaths, verdictPaths);
     }
@@ -193,20 +196,20 @@ export class ProvenanceEnforcer {
         request.offered = new OfferedContext(
             path.join(prDir, 'diff'), this.reviewerInstructions.instructionsDirFor(repoRoot, featureName));
         request.reviewers = evidence.map((e: ReviewerEvidence): ReviewerTranscript =>
-            new ReviewerTranscript(e, this.reviewerPathsFor(repoRoot, featureName, required, e.agentType)));
+            new ReviewerTranscript(e, this.reviewerPathsFor(repoRoot, featureName, required, e.checklistId)));
         const written = this.provenanceRecord.write(request);
         if (written !== '') process.stdout.write(`   transcript provenance → ${written}\n`);
     }
 
-    // Where ONE reviewer's verdict, instructions and checklist doc live. Keyed by agentType, which IS the
-    // checklist id: ChecklistDefinition sets `id = subagent`, so the two never diverge.
+    // Where ONE checklist's verdict, instructions and doc live — keyed by the checklist id, never by the
+    // agent type, which every checklist now shares.
     // eslint-disable-next-line @typescript-eslint/max-params
-    private reviewerPathsFor(repoRoot: string, featureName: string, required: readonly RequiredChecklist[], agentType: string): ReviewerPaths {
-        const req = required.find((r: RequiredChecklist): boolean => r.subagent.trim() === agentType);
+    private reviewerPathsFor(repoRoot: string, featureName: string, required: readonly RequiredChecklist[], checklistId: string): ReviewerPaths {
+        const req = required.find((r: RequiredChecklist): boolean => r.id === checklistId);
         const doc = req !== undefined && req.doc.trim() !== '' ? path.resolve(repoRoot, req.doc) : '';
         return new ReviewerPaths(
-            this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), req?.id ?? agentType),
-            this.reviewerInstructions.pathFor(repoRoot, featureName, agentType),
+            this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), checklistId),
+            this.reviewerInstructions.pathFor(repoRoot, featureName, checklistId),
             doc,
         );
     }
@@ -219,13 +222,13 @@ export class ProvenanceEnforcer {
      * format shifts, a blocking check wedges every PR in every consumer repo with no self-service recovery.
      * `requireDiffEvidence` lets a repo that has watched the warning promote it deliberately.
      *
-     * Returns the agentTypes rather than a finished sentence so the caller can count CHECKLISTS at fault —
+     * Returns the checklist ids rather than a finished sentence so the caller can count CHECKLISTS at fault —
      * a name can appear in this list and in `missing`, and it must be one checklist in the total, not two.
      */
     private blindReviewers(evidence: readonly ReviewerEvidence[], config: PrGateConfig): string[] {
         const blind = evidence.filter((e: ReviewerEvidence): boolean => !e.readDiff);
         if (blind.length === 0) return [];
-        const names = blind.map((e: ReviewerEvidence): string => e.agentType);
+        const names = blind.map((e: ReviewerEvidence): string => e.checklistId);
         if (config.requireDiffEvidence) return names;
         process.stderr.write(
             `\n⚠️  ${blind.length} reviewer(s) wrote a verdict with no record of opening the extracted diff: ${names.join(', ')}\n` +
