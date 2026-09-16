@@ -87,9 +87,9 @@ pnpm wp-review-upsert-pr
 ```
 
 It validates and commits any in-progress 3-point merge, runs the build gate, then **extracts this branch's
-diff to disk** and writes one instructions file per checklist under
-`.webpieces/pr-review/<featureSlug>/instructions/<id>.instructions.md`. It prints what to spawn, and each
-prompt is a POINTER to those files and nothing else.
+diff to disk** and writes one instructions file per checklist, `<id>.instructions.md`, in the branch's
+review directory — it prints each one's absolute path. It prints what to spawn, and each prompt is a
+POINTER to those files and nothing else.
 
 That indirection is the design. Everything volatile — the diff, the matched files, the verdict schema, the
 resolved context paths — is REGENERATED every run, so it cannot go stale. The reviewer agent itself stays

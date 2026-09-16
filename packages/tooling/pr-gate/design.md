@@ -274,6 +274,7 @@ graph TD
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
+    ReviewReport --> ChecklistInstructionsService
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewerInstructionsService
     ReviewStageReceiptService --> ReviewJsonService

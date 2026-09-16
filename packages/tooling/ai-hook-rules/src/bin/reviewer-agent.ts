@@ -39,7 +39,6 @@ export function reviewerAgentPath(projectRoot: string): string {
 }
 
 // webpieces-disable no-function-outside-class -- pure renderer beside renderShim, in the dependency-free bin module
-// webpieces-disable max-lines-new-methods -- one contiguous document; splitting it hides the text a reviewer reads
 export function renderReviewerAgent(): string {
     return `---
 name: ${REVIEWER_AGENT_NAME}
