@@ -410,6 +410,16 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         },
     );
 
+    it('gives the model a coded status and errorCode after the remote hop', async () => {
+        const remote = modelVisible(await callGateway('remote_throw', 'coded-4xx'), 'remote_throw');
+        expect(remote).toMatchObject({
+            kind: 'coded',
+            message: 'Request Failed',
+            errorCode: 'QUOTA',
+            statusCode: 460,
+        });
+    });
+
     it('gives the model an end-user message byte-for-byte after the remote hop', async () => {
         const remote = modelVisible(await callGateway('remote_throw', 'end-user'), 'remote_throw');
         expect(remote).toMatchObject({

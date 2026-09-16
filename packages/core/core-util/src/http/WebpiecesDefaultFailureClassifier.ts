@@ -4,6 +4,11 @@ import {
     ApiForbiddenError,
     ApiNotFoundError,
     ApiEndUserError,
+    ApiConflictError,
+    ApiUnprocessableError,
+    ApiPreconditionFailedError,
+    ApiUnsupportedMediaTypeError,
+    ApiCodedError,
 } from '../errors/ApiError';
 import { ApiMethodInfo } from './ApiMethodInfo';
 import { FailureClassifier } from './FailureClassifier';
@@ -22,10 +27,14 @@ import { FailureClassifier } from './FailureClassifier';
  *
  * SERVER — a healthy server correctly rejecting a CLIENT'S mistake is metrics NOISE, not a failure:
  * - ApiBadRequestError (400), ApiUnauthorizedError (401), ApiForbiddenError (403),
- *   ApiNotFoundError (404) → the server is fine, the caller erred → NON-failure.
+ *   ApiNotFoundError (404), ApiConflictError (409), ApiPreconditionFailedError (412),
+ *   ApiUnsupportedMediaTypeError (415), ApiUnprocessableError (422), and an ApiCodedError whose
+ *   `isCallerError()` is true (below 500, except 408/429) → the server is fine, the caller erred →
+ *   NON-failure.
  * SERVER — something may actually be WRONG, so SURFACE it (failure):
  * - ApiRequestTimeoutError (408): a 4xx, but the client may NEVER have seen the response — deliberately
- *   absent below, so it counts as a failure. Implementation/dependency failures and non-API errors are failures.
+ *   absent below, so it counts as a failure. Implementation/dependency failures, ApiNotImplementedError
+ *   (501), an ApiCodedError of 500+ (or 408/429), and non-API errors are failures.
  *
  * ApiEndUserError (266): ALWAYS a non-failure, server OR client — an expected "user made a mistake".
  * CLIENT: receiving ANY error except 266 means the outbound call FAILED → failure.
@@ -52,7 +61,12 @@ export class WebpiecesDefaultFailureClassifier implements FailureClassifier {
             error instanceof ApiBadRequestError ||
             error instanceof ApiUnauthorizedError ||
             error instanceof ApiForbiddenError ||
-            error instanceof ApiNotFoundError;
+            error instanceof ApiNotFoundError ||
+            error instanceof ApiConflictError ||
+            error instanceof ApiUnprocessableError ||
+            error instanceof ApiPreconditionFailedError ||
+            error instanceof ApiUnsupportedMediaTypeError ||
+            (error instanceof ApiCodedError && error.isCallerError());
         return !healthyRejection;
     }
 }

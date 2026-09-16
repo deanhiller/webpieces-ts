@@ -44,6 +44,7 @@ export class ModelVisibleToolError {
         public readonly callerMessage?: string,
         public readonly errorCode?: string,
         public readonly retryAfterSeconds?: number,
+        public readonly statusCode?: number,
     ) {}
 }
 
@@ -183,6 +184,17 @@ export class WpMcpErrorTranslator {
                     scope.requestId,
                     payload.field,
                     payload.callerMessage,
+                );
+            case 'coded':
+                return new ModelVisibleToolError(
+                    payload.kind,
+                    payload.message,
+                    scope.requestId,
+                    undefined,
+                    undefined,
+                    payload.errorCode,
+                    undefined,
+                    payload.statusCode,
                 );
             case 'implementation':
                 return new ModelVisibleToolError(

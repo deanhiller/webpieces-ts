@@ -1,5 +1,7 @@
 import {
     ApiBadRequestError,
+    ApiCodedError,
+    ApiConflictError,
     ApiConnectionError,
     ApiDependencyBackoffError,
     ApiDependencyError,
@@ -11,10 +13,14 @@ import {
     ApiForbiddenError,
     ApiImplementationError,
     ApiNotFoundError,
+    ApiNotImplementedError,
+    ApiPreconditionFailedError,
     ApiRateLimitedError,
     ApiRequestTimeoutError,
     ApiUnauthorizedError,
     ApiUnavailableError,
+    ApiUnprocessableError,
+    ApiUnsupportedMediaTypeError,
 } from './ApiError';
 
 /** Allowlisted transport-neutral envelope. It never contains stacks or arbitrary properties. */
@@ -25,6 +31,7 @@ export class ApiErrorPayload {
     public callerMessage?: string;
     public errorCode?: string;
     public retryAfterSeconds?: number;
+    public statusCode?: number;
 
     constructor(
         public kind: string = 'implementation',
@@ -45,6 +52,10 @@ export class ApiErrorCodec {
         const payload = new ApiErrorPayload(kind, this.publicMessage(error, kind));
         if (error instanceof ApiError) payload.subType = this.text(error.subType);
         if (error instanceof ApiEndUserError) payload.errorCode = this.text(error.errorCode);
+        if (error instanceof ApiCodedError) {
+            payload.statusCode = error.statusCode;
+            payload.errorCode = this.text(error.errorCode);
+        }
         if (error instanceof ApiBadRequestError) {
             payload.field = this.text(error.field);
             payload.callerMessage = this.text(error.callerMessage);
@@ -118,6 +129,18 @@ export class ApiErrorCodec {
                 return new ApiRequestTimeoutError(message);
             case 'rate-limited':
                 return new ApiRateLimitedError(message);
+            case 'conflict':
+                return new ApiConflictError(message);
+            case 'unprocessable':
+                return new ApiUnprocessableError(message);
+            case 'precondition-failed':
+                return new ApiPreconditionFailedError(message);
+            case 'unsupported-media-type':
+                return new ApiUnsupportedMediaTypeError(message);
+            case 'not-implemented':
+                return new ApiNotImplementedError(message);
+            case 'coded':
+                return this.coded(message, field('statusCode'), field('errorCode'));
             case 'dependency':
                 return new ApiDependencyError(message);
             case 'unavailable':
@@ -136,6 +159,12 @@ export class ApiErrorCodec {
             default:
                 return this.remoteImplementationError();
         }
+    }
+
+    // webpieces-disable no-function-outside-class -- coded wire decode; webpieces-disable no-any-unknown -- wire fields require validation
+    private static coded(message: string, statusCode: unknown, errorCode: unknown): ApiError {
+        if (!ApiCodedError.isStatusCode(statusCode)) return this.remoteImplementationError();
+        return new ApiCodedError(message, statusCode, this.text(errorCode));
     }
 
     // webpieces-disable no-function-outside-class -- concrete normalization for malformed remote errors
@@ -180,6 +209,18 @@ export class ApiErrorCodec {
                 return 'Request Timeout';
             case 'rate-limited':
                 return 'Rate Limited';
+            case 'conflict':
+                return 'Conflict';
+            case 'unprocessable':
+                return 'Unprocessable Content';
+            case 'precondition-failed':
+                return 'Precondition Failed';
+            case 'unsupported-media-type':
+                return 'Unsupported Media Type';
+            case 'not-implemented':
+                return 'Not Implemented';
+            case 'coded':
+                return 'Request Failed';
             case 'dependency':
                 return 'Dependency Error';
             case 'unavailable':
@@ -204,6 +245,12 @@ export class ApiErrorCodec {
         'endpoint-not-found',
         'request-timeout',
         'rate-limited',
+        'conflict',
+        'unprocessable',
+        'precondition-failed',
+        'unsupported-media-type',
+        'not-implemented',
+        'coded',
         'implementation',
         'dependency',
         'unavailable',

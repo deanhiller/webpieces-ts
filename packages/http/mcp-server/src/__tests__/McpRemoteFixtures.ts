@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { injectable } from 'inversify';
 import {
     ApiBadRequestError,
+    ApiCodedError,
+    ApiConflictError,
     ApiConnectionError,
     ApiDependencyBackoffError,
     ApiDependencyError,
@@ -14,11 +16,15 @@ import {
     ApiForbiddenError,
     ApiImplementationError,
     ApiNotFoundError,
+    ApiNotImplementedError,
     ApiPath,
+    ApiPreconditionFailedError,
     ApiRateLimitedError,
     ApiRequestTimeoutError,
     ApiUnauthorizedError,
     ApiUnavailableError,
+    ApiUnprocessableError,
+    ApiUnsupportedMediaTypeError,
     ContextKey,
     Endpoint,
     ErrorTranslators,
@@ -247,6 +253,27 @@ export const THROW_CASES: readonly ThrowCase[] = [
     }),
     new ThrowCase('rate-limited', 'rate-limited', 'error', () => {
         throw new ApiRateLimitedError('quota internals');
+    }),
+    new ThrowCase('conflict', 'conflict', 'info', () => {
+        throw new ApiConflictError('version internals');
+    }),
+    new ThrowCase('unprocessable', 'unprocessable', 'info', () => {
+        throw new ApiUnprocessableError('rule internals');
+    }),
+    new ThrowCase('precondition-failed', 'precondition-failed', 'info', () => {
+        throw new ApiPreconditionFailedError('etag internals');
+    }),
+    new ThrowCase('unsupported-media-type', 'unsupported-media-type', 'info', () => {
+        throw new ApiUnsupportedMediaTypeError('parser internals');
+    }),
+    new ThrowCase('not-implemented', 'not-implemented', 'error', () => {
+        throw new ApiNotImplementedError('feature internals');
+    }),
+    new ThrowCase('coded-4xx', 'coded', 'info', () => {
+        throw new ApiCodedError('quota internals', 460, 'QUOTA');
+    }),
+    new ThrowCase('coded-5xx', 'coded', 'error', () => {
+        throw new ApiCodedError('disk internals', 507);
     }),
     new ThrowCase('implementation', 'implementation', 'error', () => {
         throw new ApiImplementationError('bug internals');

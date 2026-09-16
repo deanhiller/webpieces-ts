@@ -15,6 +15,12 @@ import {
     ApiUnavailableError,
     ApiDependencyTimeoutError,
     ApiDependencyBackoffError,
+    ApiConflictError,
+    ApiUnprocessableError,
+    ApiPreconditionFailedError,
+    ApiUnsupportedMediaTypeError,
+    ApiNotImplementedError,
+    ApiCodedError,
     ErrorTranslators,
     HttpResponseDto,
     HttpResponseStatus,
@@ -84,10 +90,11 @@ describe('ClientErrorTranslator registry integration', () => {
     });
 
     it('reconstructs an installed custom type (460) that the built-in switch cannot', () => {
-        // With no translators, 460 becomes an adapter-local unexpected response error.
+        // With no translators, 460 becomes a generic ApiCodedError carrying the status.
         const generic = translate(460);
         expect(generic).not.toBeInstanceOf(AiBadRequestError);
-        expect(generic).toBeInstanceOf(UnexpectedApiResponseError);
+        expect(generic).toBeInstanceOf(ApiCodedError);
+        expect((generic as ApiCodedError).statusCode).toBe(460);
 
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
 
@@ -123,10 +130,24 @@ describe('ClientErrorTranslator registry integration', () => {
         expect(err).toBeInstanceOf(AiBadRequestError);
     });
 
-    it('an unknown status with no translators is adapter-local and carries the status code', () => {
+    it('an unknown 100-599 status with no translators becomes ApiCodedError with that status', () => {
         const err = translate(499, new ApiErrorPayload('', 'Request Failed'), 'weird');
+        expect(err).toBeInstanceOf(ApiCodedError);
+        expect((err as ApiCodedError).statusCode).toBe(499);
+    });
+
+    it('a status no HTTP response can carry stays an adapter-local UnexpectedApiResponseError', () => {
+        const err = translate(600, new ApiErrorPayload('', 'Request Failed'), 'weird');
         expect(err).toBeInstanceOf(UnexpectedApiResponseError);
-        expect((err as UnexpectedApiResponseError).statusCode).toBe(499);
+        expect((err as UnexpectedApiResponseError).statusCode).toBe(600);
+    });
+
+    it('non-Webpieces responders: 409/412/415/422/501 map to their named classes', () => {
+        expect(translate(409)).toBeInstanceOf(ApiConflictError);
+        expect(translate(412)).toBeInstanceOf(ApiPreconditionFailedError);
+        expect(translate(415)).toBeInstanceOf(ApiUnsupportedMediaTypeError);
+        expect(translate(422)).toBeInstanceOf(ApiUnprocessableError);
+        expect(translate(501)).toBeInstanceOf(ApiNotImplementedError);
     });
 });
 
@@ -208,6 +229,12 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
         [503, new ApiUnavailableError('secret'), ApiUnavailableError],
         [504, new ApiDependencyTimeoutError('secret'), ApiDependencyTimeoutError],
         [503, new ApiDependencyBackoffError('secret'), ApiDependencyBackoffError],
+        [409, new ApiConflictError('secret'), ApiConflictError],
+        [412, new ApiPreconditionFailedError('secret'), ApiPreconditionFailedError],
+        [415, new ApiUnsupportedMediaTypeError('secret'), ApiUnsupportedMediaTypeError],
+        [422, new ApiUnprocessableError('secret'), ApiUnprocessableError],
+        [501, new ApiNotImplementedError('secret'), ApiNotImplementedError],
+        [460, new ApiCodedError('secret', 460), ApiCodedError],
     ];
 
     for (const [status, serverError, expectedClass] of wire) {
@@ -273,6 +300,24 @@ describe('the exact bodies a webpieces server now emits, reconstructed', () => {
         const err = translate(500, new ApiErrorPayload('implementation', 'Internal Error'));
         expect(err).toBeInstanceOf(ApiImplementationError);
         expect((err as ApiImplementationError).serverError).toBe(true);
+    });
+
+    it('a coded body reconstructs ApiCodedError with its unknown status and errorCode', () => {
+        const pe = ApiErrorCodec.encode(new ApiCodedError('secret', 460, 'SHAPE'));
+
+        const err = translate(460, pe);
+
+        expect(err).toBeInstanceOf(ApiCodedError);
+        expect(err).toMatchObject({ statusCode: 460, errorCode: 'SHAPE' });
+        expect(err.message).not.toContain('secret');
+    });
+
+    it('a coded body whose statusCode disagrees with the HTTP status is a remote implementation failure', () => {
+        const pe = ApiErrorCodec.encode(new ApiCodedError('secret', 460));
+
+        const err = translate(461, pe);
+
+        expect(err).toBeInstanceOf(ApiImplementationError);
     });
 
     it('normalizes a body kind/status mismatch to a remote implementation failure', () => {
