@@ -78,12 +78,24 @@ export class ApiEndpointNotFoundError extends ApiNotFoundError {
 }
 
 /**
+ * The HTTP status an API EDGE answers for an {@link ApiEndUserError}. End-user outcomes only, so
+ * nobody tunnels a 5xx/401/403/429 through the end-user channel (auth, rate limiting and dependency
+ * failure keep their own types). Extend deliberately.
+ */
+export type EdgeHttpStatus = 400 | 404 | 409 | 422;
+
+/**
  * Expected mistake by the ACTOR driving the call: the input was well-formed but wrong in a way the actor
  * must fix (for example "the two passwords you entered do not match"). The actor may be a human user in
  * a GUI OR an LLM calling an MCP tool; the same class serves both. Its message is deliberately
  * caller-safe and is the only ApiError message published verbatim: `ApiErrorCodec` keeps it (and
  * `errorCode`) across every remote hop, so a downstream service's text reaches the GUI or the model
  * byte-for-byte.
+ *
+ * `edgeHttpStatus` travels the same way. It is what a partner-facing API edge (an http-server router
+ * in `'edge'` end-user-status mode) answers instead of 266, so one throw site serves both a GUI and a
+ * published REST contract: `throw new ApiEndUserError('That report does not exist', 'report_not_found', 404)`.
+ * GUI edges ignore it and keep answering 266.
  */
 export class ApiEndUserError extends ApiError {
     override readonly kind = 'end-user' as const;
@@ -91,10 +103,17 @@ export class ApiEndUserError extends ApiError {
     constructor(
         message: string,
         public errorCode?: string,
+        public edgeHttpStatus?: EdgeHttpStatus,
         cause?: Error,
     ) {
         super(message, cause);
         this.subType = 'USER_ERROR';
+    }
+
+    /** Narrows a dynamic value (for example one read off the wire) to a legal {@link EdgeHttpStatus}. */
+    // webpieces-disable no-function-outside-class -- stateless status guard; webpieces-disable no-any-unknown -- wire values are narrowed here
+    static isEdgeHttpStatus(value: unknown): value is EdgeHttpStatus {
+        return value === 400 || value === 404 || value === 409 || value === 422;
     }
 }
 

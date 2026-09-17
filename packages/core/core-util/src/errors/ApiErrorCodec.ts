@@ -21,6 +21,7 @@ import {
     ApiUnavailableError,
     ApiUnprocessableError,
     ApiUnsupportedMediaTypeError,
+    EdgeHttpStatus,
 } from './ApiError';
 
 /** Allowlisted transport-neutral envelope. It never contains stacks or arbitrary properties. */
@@ -32,6 +33,8 @@ export class ApiErrorPayload {
     public errorCode?: string;
     public retryAfterSeconds?: number;
     public statusCode?: number;
+    /** {@link ApiEndUserError.edgeHttpStatus}; absent when the thrower (or an older peer) set none. */
+    public edgeHttpStatus?: number;
 
     constructor(
         public kind: string = 'implementation',
@@ -51,7 +54,10 @@ export class ApiErrorCodec {
         const kind = error instanceof ApiError ? error.kind : 'implementation';
         const payload = new ApiErrorPayload(kind, this.publicMessage(error, kind));
         if (error instanceof ApiError) payload.subType = this.text(error.subType);
-        if (error instanceof ApiEndUserError) payload.errorCode = this.text(error.errorCode);
+        if (error instanceof ApiEndUserError) {
+            payload.errorCode = this.text(error.errorCode);
+            payload.edgeHttpStatus = error.edgeHttpStatus;
+        }
         if (error instanceof ApiCodedError) {
             payload.statusCode = error.statusCode;
             payload.errorCode = this.text(error.errorCode);
@@ -110,7 +116,11 @@ export class ApiErrorCodec {
         const message = this.text(field('message')) ?? this.message(kind);
         switch (kind) {
             case 'end-user':
-                return new ApiEndUserError(message, this.text(field('errorCode')));
+                return new ApiEndUserError(
+                    message,
+                    this.text(field('errorCode')),
+                    this.edgeStatus(field('edgeHttpStatus')),
+                );
             case 'bad-request':
                 return new ApiBadRequestError(
                     message,
@@ -181,6 +191,12 @@ export class ApiErrorCodec {
     // webpieces-disable no-function-outside-class -- wire string bound; webpieces-disable no-any-unknown -- wire values require validation
     private static text(value: unknown): string | undefined {
         return typeof value === 'string' ? value.slice(0, 4096) : undefined;
+    }
+
+    /** Tolerant: a peer that sends nothing, or a status outside {@link EdgeHttpStatus}, decodes as undefined. */
+    // webpieces-disable no-function-outside-class -- wire status bound; webpieces-disable no-any-unknown -- wire values require validation
+    private static edgeStatus(value: unknown): EdgeHttpStatus | undefined {
+        return ApiEndUserError.isEdgeHttpStatus(value) ? value : undefined;
     }
 
     // webpieces-disable no-function-outside-class -- wire number bound; webpieces-disable no-any-unknown -- wire values require validation

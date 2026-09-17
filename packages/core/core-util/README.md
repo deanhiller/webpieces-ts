@@ -6,7 +6,7 @@ Utility functions for WebPieces applications. Works in both browser and Node.js 
 
 React Native consumers use `@webpieces/core-util/errors` for canonical semantic errors (`ApiEndUserError`, `ApiNotFoundError`, and the other API categories) and `@webpieces/core-util/ipc` for shared contracts and connection types. These two subpaths are checked with public declaration fixtures, Metro Android/iOS bundles, and Hermes compilation; the broad root barrel is not certified for React Native.
 
-Use `@webpieces/ipc-bridge` for generated clients and typed receivers. HTTP preserves status 266 for `ApiEndUserError`: monitoring succeeds, while generated clients throw it for GUI display. All API errors are transport-neutral, use standard `cause`, and have no HTTP `.code`. See [the taxonomy and verification guide](https://github.com/deanhiller/webpieces-ts/blob/main/docs/portable-ipc-and-errors.md).
+Use `@webpieces/ipc-bridge` for generated clients and typed receivers. HTTP preserves status 266 for `ApiEndUserError`: monitoring succeeds, while generated clients throw it for GUI display. Its optional `edgeHttpStatus` (400/404/409/422, the third constructor argument before `cause`) survives every hop and is what a partner-facing edge in `setEndUserStatus('edge')` mode answers instead. All API errors are transport-neutral, use standard `cause`, and have no HTTP `.code`. See [the taxonomy and verification guide](https://github.com/deanhiller/webpieces-ts/blob/main/docs/portable-ipc-and-errors.md).
 
 ## Installation
 

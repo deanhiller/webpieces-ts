@@ -320,5 +320,5 @@ export {
     ApiErrorPayload,
     ApiErrorBoundary,
 } from './errors';
-export type { ApiErrorKind, ApiStatusCode } from './errors';
+export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';

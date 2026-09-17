@@ -3,6 +3,7 @@ import {
     ClientRegistry,
     ApiErrorPayload,
     ApiError,
+    ApiErrorCodec,
     ApiBadRequestError,
     ApiEndUserError,
     ApiDependencyBackoffError,
@@ -34,6 +35,7 @@ import {
     WRONG_LOGIN,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
+import { EndUserStatus } from '../ApiErrorHttpMapper';
 
 /**
  * The wire is the ONE place operator prose must not appear. These specs drive the real
@@ -132,20 +134,37 @@ class WireHarness {
         return fake as unknown as import('express').Response;
     }
 
-    private newWrapper(): ExpressWrapper {
+    private newWrapper(endUserStatus: EndUserStatus): ExpressWrapper {
         return new ExpressWrapper(
             () => Promise.resolve({}),
             '/test',
             // webpieces-disable no-any-unknown -- RequestContextHeaders is unused by handleError
             {} as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
+            false,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            endUserStatus,
         );
     }
 
     /** Run an error through the REAL handleError and hand back status + parsed body + raw body. */
-    public send(error: unknown): FakeResponse {
+    public send(error: unknown, endUserStatus: EndUserStatus = 'gui'): FakeResponse {
         const res = new FakeResponse();
-        this.newWrapper().handleError(this.asResponse(res), error);
+        this.newWrapper(endUserStatus).handleError(this.asResponse(res), error);
         return res;
+    }
+
+    /**
+     * One server-to-server hop: what a webpieces client rebuilds from a 266 response body. That is
+     * `ApiErrorCodec.decode` on the parsed bytes — `ClientErrorTranslator` (http-client-core, which
+     * this package must not depend on) does exactly this once the status agrees with the kind; its
+     * own spec and `NodeProxyClient.spec.ts` pin that half.
+     */
+    public hop(res: FakeResponse): ApiError {
+        expect(res.statusCode).toBe(266);
+        return ApiErrorCodec.decode(JSON.parse(res.body ?? '{}'));
     }
 
     public bodyOf(res: FakeResponse): ApiErrorPayload {
@@ -499,5 +518,80 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
 
         expect(pe.subType).toBe(WRONG_LOGIN);
         expect(pe.message).toBe('Unauthorized');
+    });
+});
+
+/**
+ * Issue #948: one downstream throw site serves a GUI edge (266) and a partner API edge (a real 4xx).
+ * Server A throws; each intermediate server is a GUI-mode hop that rethrows what its client decoded;
+ * the outermost server answers in the mode its router chose.
+ */
+describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
+    it('single hop: B in GUI mode answers 266, B in edge mode answers 422, both with msg + code', () => {
+        const atB = harness.hop(
+            harness.send(
+                new ApiEndUserError('That platform is not supported', 'report_unavailable', 422),
+            ),
+        );
+
+        const gui = harness.send(atB, 'gui');
+        expect(gui.statusCode).toBe(266);
+        expect(harness.bodyOf(gui)).toMatchObject({
+            kind: 'end-user',
+            message: 'That platform is not supported',
+            errorCode: 'report_unavailable',
+            edgeHttpStatus: 422,
+        });
+
+        const edge = harness.send(atB, 'edge');
+        expect(edge.statusCode).toBe(422);
+        expect(edge.statusMessage).toBe('Unprocessable Content');
+        expect(harness.bodyOf(edge)).toMatchObject({
+            kind: 'end-user',
+            message: 'That platform is not supported',
+            errorCode: 'report_unavailable',
+        });
+    });
+
+    it('two hops (A -> B -> C): the status is preserved to the edge', () => {
+        const atB = harness.hop(
+            harness.send(new ApiEndUserError('No such report', 'report_not_found', 404)),
+        );
+        const atC = harness.hop(harness.send(atB));
+
+        const edge = harness.send(atC, 'edge');
+        expect(edge.statusCode).toBe(404);
+        expect(harness.bodyOf(edge)).toMatchObject({
+            message: 'No such report',
+            errorCode: 'report_not_found',
+        });
+        expect(harness.send(atC, 'gui').statusCode).toBe(266);
+    });
+
+    it('an older peer that sends no edgeHttpStatus: edge mode answers 400, GUI mode 266', () => {
+        const olderPeerBody = { kind: 'end-user', message: 'Pick a store', errorCode: 'store' };
+        const atB = ApiErrorCodec.decode(olderPeerBody) as ApiEndUserError;
+        expect(atB.edgeHttpStatus).toBeUndefined();
+
+        const edge = harness.send(atB, 'edge');
+        expect(edge.statusCode).toBe(400);
+        expect(harness.bodyOf(edge)).toMatchObject({ message: 'Pick a store', errorCode: 'store' });
+        expect(harness.bodyOf(edge)).not.toHaveProperty('edgeHttpStatus');
+        expect(harness.send(atB, 'gui').statusCode).toBe(266);
+    });
+
+    it('edge mode changes ONLY end-user errors; every other kind keeps its mapping', () => {
+        expect(harness.send(new ApiNotFoundError('row missing'), 'edge').statusCode).toBe(404);
+        expect(harness.send(new ApiImplementationError('bug'), 'edge').statusCode).toBe(500);
+        expect(harness.send(new ApiUnauthorizedError('jwt'), 'edge').statusCode).toBe(401);
+        const bad = harness.send(new ApiBadRequestError('zod', 'email', 'Enter an email'), 'edge');
+        expect(bad.statusCode).toBe(400);
+        expect(harness.bodyOf(bad).kind).toBe('bad-request');
+    });
+
+    it('GUI mode ignores edgeHttpStatus entirely', () => {
+        const res = harness.send(new ApiEndUserError('x', 'y', 409));
+        expect(res.statusCode).toBe(266);
+        expect(res.statusMessage).toBe('End User Error');
     });
 });
