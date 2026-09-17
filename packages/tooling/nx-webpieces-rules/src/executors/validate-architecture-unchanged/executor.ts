@@ -9,7 +9,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
@@ -18,7 +18,9 @@ import type { DependenciesFile } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations, buildApiContracts } from '../../lib/api-usage/api-scanner';
 import { buildExternalSystems } from '../../lib/api-usage/external-systems';
-import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
+import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
+import { ApiContractFiles } from '../../lib/api-contract-files';
+import type { ApiContractFileRefs } from '../../lib/api-contract-files';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { RuleGate } from '../../lib/rule-gate';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
@@ -63,34 +65,34 @@ function reportMismatch(summary: string, workspaceRoot: string): void {
 }
 
 /**
- * A human-readable summary of how the regenerated api contract table differs from the committed one,
- * or null when they match. Named per contract so the message points at the api that changed rather
- * than dumping two JSON blobs.
+ * Which APIs dependencies.json links to a contract file, compared by LINK only — an added or removed
+ * API. The endpoints inside `architecture/apis/<Api>.json` are deliberately NOT compared (#949): an
+ * endpoint change must not fail this rule. Null when the links match.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, matches reportMismatch in this file
-function describeContractDrift(current: ApiContracts, saved: ApiContracts): string | null {
+function describeContractLinkDrift(current: ApiContractFileRefs, saved: ApiContractFileRefs): string | null {
     const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
     const changes: string[] = [];
     for (const name of names) {
         const a = current[name];
         const b = saved[name];
-        if (a === undefined) changes.push(`  - ${name}: in dependencies.json but no longer in source`);
-        else if (b === undefined) changes.push(`  + ${name}: in source but missing from dependencies.json`);
-        else if (JSON.stringify(a) !== JSON.stringify(b)) changes.push(`  ~ ${name}: endpoints/kinds/queues changed`);
+        if (a === undefined) changes.push(`  - ${name}: linked in dependencies.json but no longer in source`);
+        else if (b === undefined) changes.push(`  + ${name}: in source but not linked from dependencies.json`);
+        else if (a !== b) changes.push(`  ~ ${name}: contract file link changed (${b} -> ${a})`);
     }
     if (changes.length === 0) return null;
-    return `apiContracts drift (${changes.length} contract(s)):\n${changes.join('\n')}`;
+    return `apiContractFiles drift (${changes.length} api(s)):\n${changes.join('\n')}`;
 }
 
 /**
- * Drift in EITHER side table of dependencies.json — the api contracts or the external-system
- * declarations — or null when both match. The first difference found is reported; fixing it is the
- * same single command either way, so listing both adds noise rather than information.
+ * Drift in EITHER side table of dependencies.json — the api contract-file links or the
+ * external-system declarations — or null when both match. The first difference found is reported;
+ * fixing it is the same single command either way, so listing both adds noise rather than information.
  */
-// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractDrift above
-function describeTableDrift(current: CurrentArchitecture, saved: DependenciesFile): string | null {
-    const contractDrift = describeContractDrift(current.apiContracts, saved.apiContracts);
-    if (contractDrift !== null) return contractDrift;
+// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractLinkDrift above
+export function describeTableDrift(current: CurrentArchitecture, saved: DependenciesFile): string | null {
+    const linkDrift = describeContractLinkDrift(current.apiContractFiles, saved.apiContractFiles);
+    if (linkDrift !== null) return linkDrift;
     return describeExternalSystemDrift(current.externalSystems, saved.externalSystems);
 }
 
@@ -98,7 +100,7 @@ function describeTableDrift(current: CurrentArchitecture, saved: DependenciesFil
  * The same drift report for the declared external systems, or null when they match. Named per
  * system so the message points at the database that changed rather than dumping two JSON blobs.
  */
-// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractDrift above
+// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractLinkDrift above
 function describeExternalSystemDrift(current: ExternalSystemDecls, saved: ExternalSystemDecls): string | null {
     const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
     const changes: string[] = [];
@@ -134,16 +136,16 @@ async function buildCurrentGraph(workspaceRoot: string): Promise<CurrentArchitec
     const scan = scanAndAttachApiRelations(workspaceRoot, currentGraph, projectInfos, externalApiPaths);
     return new CurrentArchitecture(
         currentGraph,
-        buildApiContracts(scan),
+        new ApiContractFiles().refsFor(buildApiContracts(scan)),
         buildExternalSystems(scan.apiIndex, projectInfos),
     );
 }
 
 /** The regenerated graph plus the two tables beside it — everything dependencies.json holds. */
-class CurrentArchitecture {
+export class CurrentArchitecture {
     constructor(
         public readonly graph: EnhancedGraph,
-        public readonly apiContracts: ApiContracts,
+        public readonly apiContractFiles: ApiContractFileRefs,
         public readonly externalSystems: ExternalSystemDecls,
     ) {}
 }
@@ -205,9 +207,9 @@ export default async function runExecutor(
             return { success: false };
         }
 
-        // Step 6: Compare the two side tables as well. Neither is part of the project graph, so a
-        // changed @Endpoint kind, queue name, or external-system declaration would otherwise pass
-        // here AND pass validate-runtime-architecture (which derives from this same stale file).
+        // Step 6: Compare the two side tables as well: which APIs are linked to a contract file, and
+        // the external-system declarations. The endpoints inside architecture/apis/<Api>.json are
+        // NOT compared — an endpoint change must never fail this rule (#949).
         const tableDrift = describeTableDrift(currentGraph, savedGraph);
         if (tableDrift !== null) {
             reportMismatch(tableDrift, workspaceRoot);
@@ -218,7 +220,10 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Architecture validation failed:', error.message);
+        // A RuleFailError (e.g. a dependencies.json still carrying the moved `apiContracts` key)
+        // carries its cures in Option[]; render them rather than dropping them with `.message`.
+        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        console.error('❌ Architecture validation failed:', rendered);
         if (error instanceof MetadataValidationError) {
             const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
             console.error('');

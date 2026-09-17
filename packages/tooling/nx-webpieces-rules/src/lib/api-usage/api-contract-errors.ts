@@ -1,5 +1,5 @@
 /**
- * The three ways `buildApiContracts` refuses to emit a green, wrong `apiContracts` table.
+ * The three ways `buildApiContracts` refuses to emit a green, wrong api contract table.
  *
  * All three share one rule: an entry that is PRESENT but incomplete is worse than an absent one.
  * Every other entry in the table is complete, so a consumer has no reason to suspect the one that
@@ -22,7 +22,7 @@ export class MissingBasePathError extends Error {
         super(
             `${contracts.length} API contract(s) have @Endpoint methods but no readable @ApiPath basePath:\n` +
                 contracts.map((c: string) => `     • ${c}`).join('\n') +
-                `\n   basePath is REQUIRED in apiContracts — an entry without it makes every consumer\n` +
+                `\n   basePath is REQUIRED in every api contract — an entry without it makes every consumer\n` +
                 `   compute basePath + path as just path, silently. Inline the @ApiPath string literal,\n` +
                 `   or move the constant into the same module as the contract class.`,
         );
@@ -47,7 +47,7 @@ export class UnresolvedEndpointPathError extends Error {
                             `     • ${p.api}.${p.method} — @Endpoint(${p.argument}, ...) at ${p.at}`,
                     )
                     .join('\n') +
-                `\n   path is REQUIRED in apiContracts — every consumer builds its request URL as\n` +
+                `\n   path is REQUIRED in every api contract — every consumer builds its request URL as\n` +
                 `   basePath + path, so an unreadable path is MISSING ROUTING, not cosmetic metadata,\n` +
                 `   and a class whose every path is unreadable drops out of the graph entirely.\n` +
                 `   Inline the @Endpoint string literal, or move the constant into the SAME module as\n` +
@@ -108,7 +108,7 @@ export class EmptiedApiContractError extends Error {
                             `     • ${c.api} — ${c.declared} @Endpoint method(s) declared, 0 usable, at ${c.at}`,
                     )
                     .join('\n') +
-                `\n   A contract with zero usable methods is DROPPED from apiContracts, so the class,\n` +
+                `\n   A contract with zero usable methods is DROPPED from the api contracts, so the class,\n` +
                 `   its queues and its triggers disappear from the architecture graph with no error.\n` +
                 `   Both @Endpoint arguments must be readable: the path as a string literal or a\n` +
                 `   SAME-module const, and the kind as a literal 'rpc' | 'cloudtasks' | 'cron' |\n` +

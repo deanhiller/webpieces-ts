@@ -21,7 +21,8 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
-import { loadBlessedGraph } from '../../lib/graph-loader';
+import { loadBlessedGraph, DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
+import { ApiContractFiles } from '../../lib/api-contract-files';
 import type { DependenciesFile } from '../../lib/graph-loader';
 import { toError } from '../../toError';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
@@ -58,14 +59,38 @@ export interface ExecutorResult {
  */
 // webpieces-disable no-function-outside-class -- executor step helper, matches checkUnchanged in this file
 function deriveOrRender(
+    workspaceRoot: string,
     depsFile: DependenciesFile,
     hiddenProjects: Set<string>,
 ): RuntimeGraphReport | string {
     // webpieces-disable no-unmanaged-exceptions -- top-level handler for this nx target; it renders, it does not swallow
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
+        // The queue/trigger data comes from the generated architecture/apis/<Api>.json files that
+        // dependencies.json links to — the same files generate wrote from its in-memory table.
+        const apiContracts = new ApiContractFiles().load(
+            workspaceRoot, DEFAULT_GRAPH_PATH, depsFile.apiContractFiles);
         return deriveRuntimeGraphReport(
-            depsFile.projects, hiddenProjects, depsFile.apiContracts, depsFile.externalSystems);
+            depsFile.projects, hiddenProjects, apiContracts, depsFile.externalSystems);
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (error instanceof RuleFailError) return renderRuleFailForHuman(error);
+        throw error;
+    }
+}
+
+/**
+ * The committed dependencies.json, or the RENDERED failure when it is absent or cannot be read as the
+ * current shape (e.g. it still carries the retired `apiContracts` key). Rendered here for the same
+ * reason as deriveOrRender: this executor is the top-level handler for its nx target.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches deriveOrRender in this file
+function loadOrRender(workspaceRoot: string): DependenciesFile | string {
+    // webpieces-disable no-unmanaged-exceptions -- top-level handler for this nx target; it renders, it does not swallow
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const depsFile = loadBlessedGraph(workspaceRoot);
+        return depsFile ?? 'No architecture/dependencies.json — run: nx run architecture:generate';
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof RuleFailError) return renderRuleFailForHuman(error);
@@ -126,20 +151,20 @@ export default async function runExecutor(
     // architecture:generate derives from — so the unchanged-check compares like-for-like and can
     // never fail on a clean, freshly-generated tree. (validate-architecture-unchanged separately
     // guarantees dependencies.json itself is fresh.)
-    const depsFile = loadBlessedGraph(workspaceRoot);
-    if (depsFile === null) {
-        console.error('❌ No architecture/dependencies.json — run: nx run architecture:generate');
+    const depsFile = loadOrRender(workspaceRoot);
+    if (typeof depsFile === 'string') {
+        console.error(`\n❌ Runtime architecture validation failed:\n\n${depsFile}\n`);
         return { success: false };
     }
     const hiddenProjects = new Set<string>();
     for (const name of Object.keys(depsFile.projects)) {
         if (depsFile.projects[name].drawOnGraph === false) hiddenProjects.add(name);
     }
-    // apiContracts comes from the SAME loaded file, so the queue/trigger data the derivation sees
-    // here is byte-identical to what generate saw in memory.
+    // The api contracts come from the per-API files dependencies.json links to, which generate
+    // wrote from the table it derived from in memory.
     // A cyclic graph leaves no graph to run the rest of the checks against, and is the one failure
     // this rule never softens through the report-only window below — see deriveOrRender.
-    const derived = deriveOrRender(depsFile, hiddenProjects);
+    const derived = deriveOrRender(workspaceRoot, depsFile, hiddenProjects);
     if (typeof derived === 'string') {
         console.error(`\n❌ Runtime architecture validation failed:\n\n${derived}\n`);
         return { success: false };

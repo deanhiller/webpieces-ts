@@ -236,10 +236,11 @@ export interface ExternalSystemDeclaration {
 }
 
 /**
- * The committed, per-contract view written to `architecture/dependencies.json` under `apiContracts`.
+ * The committed, per-contract view written to `architecture/apis/<ApiName>.json` (one file per API;
+ * dependencies.json only links to it under `apiContractFiles` — see ApiContractFiles).
  *
- * The runtime graph is derived SOLELY from dependencies.json so generate and validate can never
- * diverge — which means anything the runtime graph needs must be COMMITTED there, not re-scanned.
+ * The runtime graph is derived from the committed files so generate and validate can never
+ * diverge — which means anything the runtime graph needs must be COMMITTED, not re-scanned.
  * Per-method trigger kinds and queue names are exactly that: without this table the derivation
  * cannot tell a queued endpoint from a cron sweep, and cannot name the queue between two services.
  */
@@ -258,7 +259,7 @@ export interface ApiContract {
     methods: ApiMethodMeta[];
 }
 
-/** apiClassName -> its committed contract. Serialized as the `apiContracts` key. */
+/** apiClassName -> its committed contract. Serialized as one `architecture/apis/<ApiName>.json` each. */
 export type ApiContracts = Record<string, ApiContract>;
 
 /**
@@ -292,7 +293,7 @@ export class NonLiteralDecoratorArg {
  * this one is FATAL. Upstream components need the URL: an http client builds its request as
  * `basePath + path`, so an unreadable path is missing ROUTING, not missing metadata — the same
  * reasoning that already makes basePath required. Skipping the method instead used to delete it, and
- * a class whose every path was a constant lost every method and vanished from `apiContracts` with
+ * a class whose every path was a constant lost every method and vanished from the contract table with
  * nothing printed anywhere.
  */
 export class UnresolvedEndpointPath {

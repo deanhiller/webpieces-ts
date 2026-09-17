@@ -7,6 +7,7 @@
  * File format (schema aimed at AI consumers):
  * {
  *     "aiInstructions": "...how AI should use the per-project fields...",
+ *     "apiContractFiles": { "<ApiName>": "apis/<ApiName>.json" },
  *     "projects": {
  *         "<project>": { level, framework, shortDescription,
  *                        responsibilitiesFile, designFile, dependsOn }
@@ -26,7 +27,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
-import type { ApiContracts, ExternalSystemDecls, ProjectApiRelations } from './api-usage/api-relations';
+import { RuleFailError, Option } from '@webpieces/rules-config';
+import type { ExternalSystemDecls, ProjectApiRelations } from './api-usage/api-relations';
+import { API_CONTRACT_FILES_RULE, API_CONTRACTS_DIR } from './api-contract-files';
+import type { ApiContractFileRefs } from './api-contract-files';
 import { toError } from '../toError';
 
 /**
@@ -49,7 +53,10 @@ export const AI_INSTRUCTIONS =
     'in this file (marked "drawOnGraph": false) but is omitted from the HTML. A role:server ' +
     'with no webpiecesRuntime package anywhere in its dependency closure and no apiRelations is ' +
     'omitted from the RUNTIME drawing the same way — it speaks none of the webpieces runtime, so ' +
-    'it can only ever draw as a disconnected box; it stays in both JSON files.';
+    'it can only ever draw as a disconnected box; it stays in both JSON files. An API\'s endpoints ' +
+    '(name, kind, path, httpMethod, parameters, queueName, caller) are NOT in this file: ' +
+    '`apiContractFiles` maps each API to its generated contract file, apis/<ApiName>.json relative to ' +
+    'this file — read that file for the API\'s endpoints.';
 
 /**
  * Named command → "command — what it does" map embedded in dependencies.json.
@@ -63,8 +70,9 @@ export type CommandMap = Record<string, string>;
  */
 export const GRAPH_COMMANDS: CommandMap = {
     regenerateArchitecture:
-        'pnpm nx run architecture:generate — rewrites architecture/dependencies.json and ' +
-        'architecture/runtime-dependencies.json; run after adding/removing project dependencies',
+        'pnpm nx run architecture:generate — rewrites architecture/dependencies.json, ' +
+        'architecture/apis/<ApiName>.json and architecture/runtime-dependencies.json; run after ' +
+        'adding/removing project dependencies or changing an API\'s endpoints',
     visualizeArchitecture:
         'pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) ' +
         'as HTML in a browser',
@@ -88,18 +96,15 @@ export class DependenciesFile {
         public readonly commands: CommandMap,
         public readonly projects: EnhancedGraph,
         /**
-         * Every API contract's per-method trigger table (kind + queue name + path).
-         *
-         * MUST be persisted, for the same reason `callsService` must: the runtime graph is derived
-         * SOLELY from this file, and `validate-runtime-architecture` re-derives from the LOADED copy
-         * while generate derives from the in-memory one. A field that is scanned but not written
-         * makes those two inputs differ, and the validator reports a diff no one can fix.
+         * apiClassName -> its contract file (`apis/<ApiName>.json`, relative to this file's
+         * directory). Only the LINK lives here, so adding an endpoint never changes dependencies.json;
+         * the contract itself is read with ApiContractFiles.load.
          */
-        public readonly apiContracts: ApiContracts = {},
+        public readonly apiContractFiles: ApiContractFileRefs = {},
         /**
-         * Declared external systems (databases, buckets, ...) keyed by identity. Persisted for the
-         * same reason apiContracts is: the runtime graph is derived SOLELY from this file, so a
-         * declaration that is scanned but not written would make generate and validate disagree.
+         * Declared external systems (databases, buckets, ...) keyed by identity. MUST be persisted:
+         * the runtime graph is derived from the committed files, so a declaration that is scanned but
+         * not written would make generate and validate disagree.
          */
         public readonly externalSystems: ExternalSystemDecls = {}
     ) {}
@@ -127,15 +132,16 @@ export function loadBlessedGraph(
     try {
         const content = fs.readFileSync(fullPath, 'utf-8');
         const parsed = JSON.parse(content);
+        if (parsed !== null && typeof parsed === 'object' && 'apiContracts' in parsed) {
+            throw movedApiContractsError(fullPath, graphPath);
+        }
         if (parsed !== null && typeof parsed === 'object' && 'projects' in parsed) {
             return new DependenciesFile(
                 typeof parsed.aiInstructions === 'string' ? parsed.aiInstructions : '',
                 parsed.commands !== null && typeof parsed.commands === 'object' ? (parsed.commands as CommandMap) : {},
                 parsed.projects as EnhancedGraph,
-                // Absent in a file written before apiContracts existed; an empty table degrades the
-                // runtime graph to unnamed per-pair queues rather than failing to load.
-                parsed.apiContracts !== null && typeof parsed.apiContracts === 'object'
-                    ? (parsed.apiContracts as ApiContracts)
+                parsed.apiContractFiles !== null && typeof parsed.apiContractFiles === 'object'
+                    ? (parsed.apiContractFiles as ApiContractFileRefs)
                     : {},
                 // Absent in any file written before external systems could be declared; an empty
                 // table simply draws no shaped nodes, which is exactly the old rendering.
@@ -148,8 +154,27 @@ export function loadBlessedGraph(
         return new DependenciesFile('', {}, parsed as EnhancedGraph);
     } catch (err: unknown) {
         const error = toError(err);
+        if (error instanceof RuleFailError) throw error;
         throw new Error(`Failed to load graph from ${fullPath}`, { cause: error });
     }
+}
+
+/**
+ * The endpoint table moved out of dependencies.json (#949). A file still carrying `apiContracts` was
+ * written by an older generator; it is REJECTED rather than read, so there is one place a contract
+ * lives and the runtime graph can never read a stale copy of it.
+ */
+// webpieces-disable no-function-outside-class -- error builder for loadBlessedGraph, module-scope like its siblings
+function movedApiContractsError(fullPath: string, graphPath: string): RuleFailError {
+    const apisDir = path.join(path.dirname(graphPath), API_CONTRACTS_DIR);
+    return new RuleFailError(
+        API_CONTRACT_FILES_RULE,
+        `${fullPath} still carries the \`apiContracts\` key. It moved: each API's contract now lives in ` +
+            `${apisDir}/<ApiName>.json, and dependencies.json only links to it under \`apiContractFiles\`.`,
+        undefined,
+        undefined,
+        [new Option('Regenerate the architecture files and commit the result: pnpm nx run architecture:generate', true)],
+    );
 }
 
 /**
@@ -165,7 +190,7 @@ function formatGraphJson(file: DependenciesFile): string {
         lines.push(`        ${JSON.stringify(name)}: ${JSON.stringify(file.commands[name])}${comma}`);
     });
     lines.push(`    },`);
-    lines.push(...apiContractsLines(file.apiContracts));
+    lines.push(...apiContractFilesLines(file.apiContractFiles));
     lines.push(...externalSystemsLines(file.externalSystems));
     lines.push(`    "projects": {`);
 
@@ -186,17 +211,17 @@ function formatGraphJson(file: DependenciesFile): string {
 }
 
 /**
- * The `"apiContracts": {...}` block (4-space indent), with a trailing comma since `projects` always
- * follows it. Omitted entirely when empty, so a repo with no api contracts keeps the old file shape.
- * The scanner already sorts contracts by name and leaves methods in declaration order, so pretty
- * JSON.stringify is deterministic.
+ * The `"apiContractFiles": {...}` block (4-space indent), with a trailing comma since `projects`
+ * always follows it. Omitted entirely when empty. Keys are sorted, so the output is deterministic.
  */
 // webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling formatters here
-function apiContractsLines(contracts: ApiContracts): string[] {
-    if (Object.keys(contracts).length === 0) return [];
-    const pretty = JSON.stringify(contracts, null, 4).split('\n');
+function apiContractFilesLines(refs: ApiContractFileRefs): string[] {
+    if (Object.keys(refs).length === 0) return [];
+    const sorted: ApiContractFileRefs = {};
+    for (const api of Object.keys(refs).sort()) sorted[api] = refs[api];
+    const pretty = JSON.stringify(sorted, null, 4).split('\n');
     return pretty.map((line: string, index: number) => {
-        const prefix = index === 0 ? '"apiContracts": ' : '';
+        const prefix = index === 0 ? '"apiContractFiles": ' : '';
         const suffix = index === pretty.length - 1 ? ',' : '';
         return `    ${prefix}${line}${suffix}`;
     });
@@ -333,7 +358,7 @@ export function saveGraph(
     graph: EnhancedGraph,
     workspaceRoot: string,
     graphPath: string = DEFAULT_GRAPH_PATH,
-    apiContracts: ApiContracts = {},
+    apiContractFiles: ApiContractFileRefs = {},
     externalSystems: ExternalSystemDecls = {}
 ): void {
     const fullPath = path.join(workspaceRoot, graphPath);
@@ -352,7 +377,7 @@ export function saveGraph(
     }
 
     const content = formatGraphJson(
-        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContracts, externalSystems)
+        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContractFiles, externalSystems)
     );
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
