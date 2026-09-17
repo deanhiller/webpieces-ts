@@ -16,6 +16,7 @@ import {
 } from '@webpieces/core-util';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ExpressWrapper } from './ExpressWrapper';
+import { EndUserStatus } from './ApiErrorHttpMapper';
 
 const KEEP_ALIVE_MILLIS = 15_000;
 const MAX_LINE_BYTES = 1024 * 1024;
@@ -132,6 +133,8 @@ export class StreamExpressWrapper {
         private readonly clientMethod: (...args: unknown[]) => Promise<unknown>,
         private readonly route: RouteMetadata,
         private readonly headers: RequestContextHeaders,
+        /** How a handshake-time `ApiEndUserError` is answered; see {@link EndUserStatus}. */
+        endUserStatus: EndUserStatus = 'gui',
     ) {
         this.ordinaryErrors = new ExpressWrapper(
             clientMethod,
@@ -141,6 +144,8 @@ export class StreamExpressWrapper {
             false,
             undefined,
             route,
+            undefined,
+            endUserStatus,
         );
     }
 

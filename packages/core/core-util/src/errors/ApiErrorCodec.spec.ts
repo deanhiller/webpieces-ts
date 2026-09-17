@@ -60,12 +60,14 @@ describe('canonical error codec', () => {
         const user = new ApiEndUserError(
             'Passwords do not match',
             'mismatch',
+            409,
             new Error('private database password'),
         );
         const payload = ApiErrorCodec.encode(user);
         expect(ApiErrorCodec.decode(payload)).toMatchObject({
             message: user.message,
             errorCode: 'mismatch',
+            edgeHttpStatus: 409,
         });
         expect(JSON.stringify(payload)).not.toContain('private database');
         const bad = new ApiBadRequestError(
@@ -114,6 +116,35 @@ describe('canonical error codec', () => {
         expect(
             ApiErrorCodec.encode(new ApiDependencyBackoffError('x', 100000)).retryAfterSeconds,
         ).toBe(86400);
+    });
+    it('round-trips ApiEndUserError.edgeHttpStatus across JSON for every allowed status', () => {
+        for (const status of [400, 404, 409, 422] as const) {
+            const wire = JSON.parse(
+                JSON.stringify(ApiErrorCodec.encode(new ApiEndUserError('msg', 'code', status))),
+            );
+            expect(wire.edgeHttpStatus).toBe(status);
+            const decoded = ApiErrorCodec.decode(wire) as ApiEndUserError;
+            expect(decoded).toBeInstanceOf(ApiEndUserError);
+            expect(decoded.edgeHttpStatus).toBe(status);
+        }
+    });
+    it('omits edgeHttpStatus from the wire when the thrower set none', () => {
+        const wire = JSON.parse(JSON.stringify(ApiErrorCodec.encode(new ApiEndUserError('m'))));
+        expect(wire).not.toHaveProperty('edgeHttpStatus');
+    });
+    it('decodes an older peer (no edgeHttpStatus) or an illegal one as undefined', () => {
+        const older = ApiErrorCodec.decode({ kind: 'end-user', message: 'm', errorCode: 'c' });
+        expect(older).toBeInstanceOf(ApiEndUserError);
+        expect((older as ApiEndUserError).edgeHttpStatus).toBeUndefined();
+        expect((older as ApiEndUserError).errorCode).toBe('c');
+        for (const bad of [500, 401, 403, 429, 266, '404', 404.5, null]) {
+            const decoded = ApiErrorCodec.decode({
+                kind: 'end-user',
+                message: 'm',
+                edgeHttpStatus: bad,
+            });
+            expect((decoded as ApiEndUserError).edgeHttpStatus).toBeUndefined();
+        }
     });
     it('retains only safe bounded semantic causes, including cyclic and hostile wire graphs', () => {
         const cause = new ApiEndUserError('Correct this input', 'input');

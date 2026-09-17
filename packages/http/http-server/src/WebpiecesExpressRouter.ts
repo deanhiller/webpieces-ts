@@ -4,6 +4,7 @@ import { LogManager, RouteMetadata } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 import { RequestBodyReader } from './body/RequestBodyReader';
 import { StreamBodyReader } from './body/StreamBodyReader';
+import { EndUserStatus } from './ApiErrorHttpMapper';
 
 const log = LogManager.getLogger('WebpiecesExpressRouter');
 
@@ -35,7 +36,9 @@ export class WebpiecesExpressRouter {
     private readonly middleware = new WebpiecesMiddleware();
     /** Where every mounted route reads its body bytes from. See {@link setBodyReader}. */
     private bodyReader: RequestBodyReader = new StreamBodyReader();
-    /** Set by {@link bindExpress}; a reader chosen after that would reach no route. */
+    /** How every mounted route answers an `ApiEndUserError`. See {@link setEndUserStatus}. */
+    private endUserStatus: EndUserStatus = 'gui';
+    /** Set by {@link bindExpress}; a reader or end-user status chosen after that would reach no route. */
     private bound = false;
 
     constructor(private readonly apiFactory: ApiFactory) {}
@@ -60,6 +63,28 @@ export class WebpiecesExpressRouter {
             );
         }
         this.bodyReader = bodyReader;
+    }
+
+    /**
+     * Choose how routes answer an `ApiEndUserError`. Call it BEFORE {@link bindExpress}: each route
+     * captures the choice when it is mounted.
+     *
+     * The default, `'gui'`, answers 266 — right for a GUI backend and for every internal
+     * server-to-server hop. A partner/public REST edge whose contract promises 400/404/409/422 calls
+     * `router.setEndUserStatus('edge')`, and the response then carries the thrower's
+     * `ApiEndUserError.edgeHttpStatus` (400 when it set none). See {@link EndUserStatus}.
+     *
+     * @throws Error when called after {@link bindExpress}, because the already-mounted routes would
+     *   silently keep the old choice.
+     */
+    setEndUserStatus(endUserStatus: EndUserStatus): void {
+        if (this.bound) {
+            throw new Error(
+                'setEndUserStatus() was called after bindExpress(); the mounted routes already ' +
+                    'captured their end-user status. Call setEndUserStatus() before bindExpress(app).',
+            );
+        }
+        this.endUserStatus = endUserStatus;
     }
 
     /**
@@ -166,11 +191,13 @@ export class WebpiecesExpressRouter {
                 ? this.middleware.createStreamExpressWrapper(
                       apiClient.client[route.methodName],
                       route,
+                      this.endUserStatus,
                   )
                 : this.middleware.createExpressWrapper(
                       apiClient.client[route.methodName],
                       route,
                       this.bodyReader,
+                      this.endUserStatus,
                   );
             this.registerHandler(app, route.httpMethod, path, wrapper.execute.bind(wrapper));
             count++;

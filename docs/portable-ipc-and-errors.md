@@ -21,6 +21,14 @@ defaults are `ApiEndUserError` 266, `ApiBadRequestError` 400, `ApiUnauthorizedEr
 `ApiUnavailableError`/`ApiDependencyBackoffError` 503, and `ApiDependencyTimeoutError` 504.
 The backoff form also emits `Retry-After`.
 
+`ApiEndUserError(message, errorCode?, edgeHttpStatus?, cause?)` also carries an optional
+`edgeHttpStatus` (`EdgeHttpStatus`: 400, 404, 409 or 422). `ApiErrorCodec` keeps it across every
+remote hop like `errorCode`; a peer that does not send it decodes as `undefined`. GUI edges ignore
+it and answer 266. A partner-facing REST edge calls
+`WebpiecesExpressRouter.setEndUserStatus('edge')` and answers `edgeHttpStatus`, or 400 when it is
+absent. `edgeHttpStatus` was inserted before `cause` (issue #948), so a call that passed `cause`
+third must now pass it fourth.
+
 Any other status uses the catch-all `ApiCodedError(message, statusCode, errorCode?, cause?)`. Its
 `statusCode` is typed `ApiStatusCode` (every integer 100-599), so an out-of-range or fractional code
 does not compile; narrow a dynamic number with `ApiCodedError.isStatusCode`. A code a named class

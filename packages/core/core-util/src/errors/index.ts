@@ -21,7 +21,7 @@ export {
     ApiNotImplementedError,
     ApiCodedError,
 } from './ApiError';
-export type { ApiErrorKind, ApiStatusCode } from './ApiError';
+export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './ApiError';
 export { ApiErrorCodec, ApiErrorPayload } from './ApiErrorCodec';
 export { ApiErrorBoundary } from './ApiErrorBoundary';
 export {

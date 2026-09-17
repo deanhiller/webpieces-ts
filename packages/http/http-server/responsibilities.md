@@ -10,7 +10,7 @@ Server runtime that assembles the HTTP layer: bootstraps the Inversify DI contai
 - DI container/module wiring (`WebpiecesModule`) binding framework singletons
 - Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter`, `ServiceAuthFilter` (service-to-service `@WpAuthOidc`/`@WpAuthSharedSecret` enforcement on Cloud Tasks / cross-service delivery)
 - In-process (HTTP-less) client factory for tests (`InProcessApiClientFactory`)
-- Normalizing unclassified throws to `ApiImplementationError`, mapping concrete API errors to HTTP, and deciding what an outside caller may see (`ApiErrorHttpMapper`, driven by `ExpressWrapper.handleError`). Only `ApiEndUserError.message` is directly caller-facing; `ApiBadRequestError.callerMessage` is the explicit safe validation field. Every other message is generic and the operator diagnostic stays in logs. The opt-out is an app-registered `ClientRegistry` translation whose complete response is sent verbatim.
+- Normalizing unclassified throws to `ApiImplementationError`, mapping concrete API errors to HTTP, and deciding what an outside caller may see (`ApiErrorHttpMapper`, driven by `ExpressWrapper.handleError`). Only `ApiEndUserError.message` is directly caller-facing; an `ApiEndUserError` answers 266 unless the router chose `setEndUserStatus('edge')`, which answers its `edgeHttpStatus` (400 when absent); `ApiBadRequestError.callerMessage` is the explicit safe validation field. Every other message is generic and the operator diagnostic stays in logs. The opt-out is an app-registered `ClientRegistry` translation whose complete response is sent verbatim.
 - Test-case recorder implementation and spec generation (`TestCaseRecorderImpl`, `SpecGenerator`, `recordable`)
 
 ## Out of Scope

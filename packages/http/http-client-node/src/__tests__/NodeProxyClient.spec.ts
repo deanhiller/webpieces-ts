@@ -301,6 +301,58 @@ describe('NodeProxyClient passes everything that is not a 4xx through unchanged'
 });
 
 /**
+ * Issue #948, client half: `edgeHttpStatus` rides the 266 body across a hop, and it never turns a real
+ * 4xx on a hop into anything but this server's own 500.
+ */
+describe('NodeProxyClient and ApiEndUserError.edgeHttpStatus', () => {
+    it('266 keeps edgeHttpStatus, errorCode and message for the next hop', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            kind: 'end-user',
+                            message: 'That platform is not supported',
+                            errorCode: 'report_unavailable',
+                            edgeHttpStatus: 422,
+                        }),
+                        { status: 266, headers: { 'Content-Type': 'application/json' } },
+                    ),
+                ),
+            ),
+        );
+
+        const result = await callAndCatch();
+
+        expect(result).toBeInstanceOf(ApiEndUserError);
+        expect(result).toMatchObject({
+            message: 'That platform is not supported',
+            errorCode: 'report_unavailable',
+            edgeHttpStatus: 422,
+        });
+    });
+
+    it('266 from an older peer (no field) decodes edgeHttpStatus as undefined', async () => {
+        stubApiErrorPayload(266, 'pick a store');
+
+        const result = await callAndCatch();
+
+        expect(result).toBeInstanceOf(ApiEndUserError);
+        expect((result as ApiEndUserError).edgeHttpStatus).toBeUndefined();
+    });
+
+    it('a real 404 on a hop (route missing) is still our 500 — unchanged', async () => {
+        stubExpressHtml404();
+
+        const error = await callAndCatch();
+
+        expect(error).toBeInstanceOf(ApiImplementationError);
+        expect(error).not.toBeInstanceOf(ApiEndUserError);
+    });
+});
+
+/**
  * THE OPT-OUT, and there is only one: the app's `ErrorTranslators`, installed on `ClientRegistry` at
  * startup. A thin proxy or gateway that genuinely wants to relay a downstream status as its own says
  * so in one greppable line, and that decision wins here. There is deliberately NO ClientConfig flag

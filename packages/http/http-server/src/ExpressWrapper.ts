@@ -17,7 +17,7 @@ import {
     RawRequest,
     RequestContextHeaders,
 } from '@webpieces/core-context';
-import { ApiErrorHttpMapper } from './ApiErrorHttpMapper';
+import { ApiErrorHttpMapper, EndUserStatus } from './ApiErrorHttpMapper';
 import { RequestBodyReader } from './body/RequestBodyReader';
 import { StreamBodyReader } from './body/StreamBodyReader';
 
@@ -63,7 +63,7 @@ export class ExpressWrapper {
      * one instance per wrapper is fine, and the class doc there is where the "only ApiEndUserError's
      * message goes on the wire" rule is stated.
      */
-    private readonly errorWireMapper = new ApiErrorHttpMapper();
+    private readonly errorWireMapper: ApiErrorHttpMapper;
 
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
@@ -103,7 +103,15 @@ export class ExpressWrapper {
          * chosen via `WebpiecesExpressRouter.setBodyReader`. See {@link RequestBodyReader}.
          */
         private readonly bodyReader: RequestBodyReader = new StreamBodyReader(),
-    ) {}
+        /**
+         * How an `ApiEndUserError` is answered: 266 for a GUI edge, `edgeHttpStatus` (or 400) for a
+         * partner-facing API edge. Chosen via `WebpiecesExpressRouter.setEndUserStatus`; see
+         * {@link EndUserStatus}.
+         */
+        endUserStatus: EndUserStatus = 'gui',
+    ) {
+        this.errorWireMapper = new ApiErrorHttpMapper(endUserStatus);
+    }
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
         // MOVED: Wrap entire request in RequestContext.run()
@@ -374,7 +382,8 @@ export class ExpressWrapper {
      * Two sources, in this order:
      *   1. the app's {@link ErrorTranslators}, if it claims the error — it owns the ENTIRE response;
      *   2. else {@link ApiErrorHttpMapper.toResponse}, the webpieces default, which maps every
-     *      `ApiError` subclass to its status and a CALLER-SAFE body (only `ApiEndUserError`'s message
+     *      `ApiError` subclass to its status (an `ApiEndUserError` per this wrapper's
+     *      {@link EndUserStatus}) and a CALLER-SAFE body (only `ApiEndUserError`'s message
      *      is written for a human, so only it goes out verbatim; everything else sends the generic
      *      reason phrase and logs the real one) and turns anything else into a generic 500.
      *
