@@ -278,7 +278,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
         '\n  // Queued hops. Each LINE in a box is one Cloud Tasks queue; queues of one contract\n' +
         '  // sharing the same producers AND consumers are drawn in a single box.\n';
 
-    // A contract with no committed method table (a dependencies.json predating apiContracts) has no
+    // A contract with no method table (no architecture/apis/<Api>.json for it) has no
     // per-method queue at all, so it keeps the historical unnamed per-pair box.
     const byQueue = new Map<string, QueueEndpoints>();
     for (const edge of queued) {

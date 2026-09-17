@@ -496,7 +496,8 @@ export function scanAndAttachApiRelations(
 }
 
 /**
- * The committed `apiContracts` table for architecture/dependencies.json, from a completed scan.
+ * The committed api contract table (one `architecture/apis/<ApiName>.json` per entry), from a
+ * completed scan.
  *
  * Only contracts with ≥1 endpoint are emitted: a vendor seam has no routes, so a table entry for it
  * would be an empty shell, and its identity is already carried by the `external` refs in

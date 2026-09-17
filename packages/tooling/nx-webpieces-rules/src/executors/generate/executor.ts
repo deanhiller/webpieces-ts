@@ -1,7 +1,8 @@
 /**
  * Generate Executor
  *
- * Generates the architecture dependency graph and saves it to architecture/dependencies.json.
+ * Generates the architecture dependency graph and saves it to architecture/dependencies.json, plus
+ * one contract file per API under architecture/apis/ (stale ones are deleted).
  *
  * Usage:
  * nx run architecture:generate
@@ -12,7 +13,8 @@ import { writeTemplate, RuleFailError, renderRuleFailForHuman } from '@webpieces
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { ProjectCycleDetector } from '../../lib/graph-cycles';
-import { saveGraph } from '../../lib/graph-loader';
+import { saveGraph, DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
+import { ApiContractFiles } from '../../lib/api-contract-files';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { ProjectInfo } from '../../lib/project-info';
 import {
@@ -180,11 +182,21 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
     const apiContracts = scanned.apiContracts;
 
-    // Step 4: Save the graph, INCLUDING the per-contract method table and the external-system
+    // Step 4: Write one contract file per API (architecture/apis/<Api>.json) and delete the files of
+    // APIs that no longer exist. dependencies.json only LINKS to them, so an endpoint change rewrites
+    // an api file and never the dependency graph. The runtime validator reads these files back.
+    const effectiveGraphPath = graphPath ?? DEFAULT_GRAPH_PATH;
+    const contractFiles = new ApiContractFiles();
+    const written = contractFiles.write(workspaceRoot, effectiveGraphPath, apiContracts);
+    console.log(`✅ Wrote ${written.written.length} api contract file(s)`);
+    for (const deleted of written.deleted) console.log(`🗑️  Deleted stale api contract file ${deleted}`);
+
+    // Step 4a: Save the graph, INCLUDING the contract-file links and the external-system
     // declarations the runtime derivation reads back — generate derives from the in-memory graph,
-    // validate from the file, so anything not written here would make the two disagree.
+    // validate from the files, so anything not written here would make the two disagree.
     console.log('💾 Saving graph to architecture/dependencies.json...');
-    saveGraph(enhancedGraph, workspaceRoot, graphPath, apiContracts, scanned.externalSystems);
+    const contractRefs = contractFiles.refsFor(apiContracts);
+    saveGraph(enhancedGraph, workspaceRoot, effectiveGraphPath, contractRefs, scanned.externalSystems);
     console.log('✅ Graph saved successfully');
 
     // Step 4b: Write the committed, clickable HTML view next to the JSON so

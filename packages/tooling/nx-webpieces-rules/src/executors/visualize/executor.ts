@@ -11,6 +11,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
 
 export interface VisualizeExecutorOptions {
@@ -60,7 +61,8 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Visualization failed:', error.message);
+        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        console.error('❌ Visualization failed:', rendered);
         return { success: false };
     }
 }

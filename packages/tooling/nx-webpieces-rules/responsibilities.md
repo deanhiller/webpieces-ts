@@ -6,7 +6,7 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
 
 - The `createNodesV2` inference plugin (`src/plugin.ts`) that attaches webpieces validation/generation targets to every project automatically.
 - Architecture graph tooling in `src/lib`: generator, sorter, comparator, loader, visualizer, metadata, framework-resolver, project-info, transitive-reduction, and `responsibilities.md` ingestion.
-- API architecture metadata that records each endpoint's resolved HTTP method, path/query/body parameter mapping, and body-vs-full response ownership so generated design output reflects its real wire contract.
+- API architecture metadata that records each endpoint's resolved HTTP method, path/query/body parameter mapping, and body-vs-full response ownership so generated design output reflects its real wire contract. The full contract is written to one `architecture/apis/<ApiName>.json` per API, which `dependencies.json` only links to.
 - Runtime microservice graph tooling: `runtime-graph`, `runtime-cycles`, `runtime-markers`, `runtime-visualizer`, `runtime-config`.
 - The Inversify DI graph (`src/lib/di-graph`) that emits per-project `design.json` + `design.md`.
 - All `src/executors/*` implementations declared in `executors.json`: `generate`/`visualize`, `di-graph-generate`, and the `validate-*` gates (architecture, cycles, file-import cycles via bundled madge, method/file size, return types, no-any, packagejson, versions-locked, eslint-sync, nx-wiring, DTO/prisma, etc.).

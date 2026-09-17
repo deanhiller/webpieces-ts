@@ -25,6 +25,7 @@ export function createValidateRuntimeArchitectureTarget(): TargetConfiguration {
         inputs: [
             'default',
             '{workspaceRoot}/architecture/dependencies.json',
+            '{workspaceRoot}/architecture/apis/**/*',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
             '{workspaceRoot}/webpieces.config.json',
         ],

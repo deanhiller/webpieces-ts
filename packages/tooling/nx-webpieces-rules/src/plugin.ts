@@ -452,6 +452,7 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
         outputs: [
             '{workspaceRoot}/architecture/dependencies.json',
             '{workspaceRoot}/architecture/dependencies.html',
+            '{workspaceRoot}/architecture/apis',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
         ],
         options: { graphPath },

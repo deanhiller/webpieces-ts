@@ -28,6 +28,7 @@ export const FALLBACK_GENERATED_PATHS: readonly string[] = [
     '**/design.html',
     'architecture/dependencies.json',
     'architecture/dependencies.html',
+    'architecture/apis',
     'architecture/runtime-dependencies.json',
 ];
 

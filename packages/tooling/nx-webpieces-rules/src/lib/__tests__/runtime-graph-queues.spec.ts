@@ -7,7 +7,7 @@
  *  - a `cron` method has no caller at all, only a clock;
  *  - an `external` method is driven from outside the repo (a push subscription, a webhook).
  *
- * All of it comes from the `apiContracts` table committed to dependencies.json, so generate and
+ * All of it comes from the per-api contract tables (architecture/apis/<Api>.json), so generate and
  * validate-runtime-architecture derive it from the same bytes.
  */
 
@@ -92,7 +92,7 @@ const TASK_CONTRACTS: ApiContracts = {
     },
 };
 
-describe('queues + triggers from apiContracts', () => {
+describe('queues + triggers from the api contract tables', () => {
     const derived = deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), TASK_CONTRACTS);
 
     it('keeps a service that enqueues to ITSELF, as an edge through its own queue', () => {

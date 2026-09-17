@@ -146,9 +146,9 @@ class RuntimeGraphDeriver {
         /** Project names tagged drawOnGraph:false — kept in the JSON but flagged so the viz omits them. */
         private readonly hiddenProjects: Set<string>,
         /**
-         * The committed per-contract method table from dependencies.json. Empty means the file
-         * predates `apiContracts`: every pubsub edge then falls back to one unnamed queue per
-         * service pair, exactly as before, instead of failing on a missing table.
+         * The per-contract method tables, read from the generated `architecture/apis/<Api>.json`
+         * files (ApiContractFiles). A contract with no entry — no file, or no endpoints — makes every
+         * pubsub edge through it fall back to one unnamed queue per service pair instead of failing.
          */
         private readonly apiContracts: ApiContracts = {},
         /**
@@ -420,7 +420,7 @@ class RuntimeGraphDeriver {
      * create: two services exchanging three queued methods run three independently-configured,
      * independently-backed-up queues, and collapsing them into one arrow hides which one is stuck.
      *
-     * A contract with no committed method table (a dependencies.json predating `apiContracts`)
+     * A contract with no method table (no `architecture/apis/<Api>.json` for it)
      * degrades to a single unnamed queue for the pair — the old behavior — rather than vanishing.
      */
     private addQueuedEdges(
