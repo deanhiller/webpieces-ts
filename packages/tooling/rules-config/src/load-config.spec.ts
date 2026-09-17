@@ -108,7 +108,7 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 function validPrGate(): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgentName: 'webpieces-reviewer' };
+    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO' };
 }
 
 // `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required
@@ -557,4 +557,46 @@ describe('loadAndValidate — every retired key fails the load', () => {
             if (entry.movedTo !== '') expect(() => loadAndValidate(dir)).toThrow(entry.movedTo);
         });
     }
+});
+
+// Issue #947: which reviewer agent a loaded config resolves to. No repo has to write the webpieces default;
+// an agent of its own takes the override AND the name, and the half-configured shapes fail the load.
+describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', () => {
+    it('resolves to webpieces-reviewer when the config names no agent', () => {
+        const loaded = loadAndValidate(writeConfig(allRulesOff()));
+        expect(loaded.prGate.reviewer.agentName).toBe('webpieces-reviewer');
+        expect(loaded.prGate.checklists).toEqual([]);
+    });
+
+    it('resolves to webpieces-reviewer when overrideReviewerAgent is false', () => {
+        const loaded = loadAndValidate(writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: false }));
+        expect(loaded.prGate.reviewer.agentName).toBe('webpieces-reviewer');
+    });
+
+    it('resolves to the named agent under overrideReviewerAgent: true, and binds it into every checklist', () => {
+        const dir = writeConfig(allRulesOff(), {
+            ...validPrGate(), overrideReviewerAgent: true, reviewerAgentName: ' my-reviewer ',
+            checklists: [{ id: 'a', doc: 'a.md', required: true }],
+        });
+        fs.writeFileSync(path.join(dir, 'a.md'), '# a');
+        const loaded = loadAndValidate(dir);
+        expect(loaded.prGate.reviewer.agentName).toBe('my-reviewer');
+        expect(loaded.prGate.checklists[0].reviewer.agentName).toBe('my-reviewer');
+    });
+
+    it('fails the load on a reviewerAgentName without the override, naming both cures', () => {
+        const dir = writeConfig(allRulesOff(), { ...validPrGate(), reviewerAgentName: 'webpieces-reviewer' });
+        expect(() => loadAndValidate(dir)).toThrow('remove "reviewerAgentName"');
+        expect(() => loadAndValidate(dir)).toThrow('set "overrideReviewerAgent": true');
+    });
+
+    it('fails the load on the override without a name, saying to add it', () => {
+        const dir = writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: true });
+        expect(() => loadAndValidate(dir)).toThrow('"overrideReviewerAgent": true needs "reviewerAgentName"');
+    });
+
+    it('fails the load on a non-boolean overrideReviewerAgent', () => {
+        const dir = writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: 'yes', reviewerAgentName: 'x' });
+        expect(() => loadAndValidate(dir)).toThrow('must be true or false');
+    });
 });

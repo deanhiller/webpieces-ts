@@ -198,7 +198,7 @@ export class FinishUpsertPrCommand {
             scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a subagent of the
-        //     repo's reviewerAgentName type actually ran on this branch — the coding agent may not
+        //     repo's reviewer agent type actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
         const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);

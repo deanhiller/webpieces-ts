@@ -1,6 +1,6 @@
 import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
 import {
-    ChecklistDefinition, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
+    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
 } from './checklist-config';
 
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
@@ -172,13 +172,13 @@ export class PrGateConfig {
     // form is a hard config error; see validateChecklistsSection.
     checklists: ChecklistDefinition[];
     /**
-     * `reviewerAgentName` + `reviewerAgents`: the ONE agent type every checklist is reviewed by, and the most
-     * such subagents a round may use. The same instance is bound into every {@link checklists} entry, so a
-     * caller holding only a checklist still knows what to spawn. Field-with-default because the constructor
-     * is at max-params; the empty name only ever survives on the no-config / mode-OFF paths, where no
-     * reviewer is briefed (validatePrGateSection requires the key whenever the gate is active).
+     * The ONE agent type every checklist is reviewed by — `webpieces-reviewer` unless
+     * `overrideReviewerAgent` is true, in which case `reviewerAgentName` — and `reviewerAgents`, the most such
+     * subagents a round may use. The same instance is bound into every {@link checklists} entry, so a caller
+     * holding only a checklist still knows what to spawn. Field-with-default because the constructor is at
+     * max-params; the default is the webpieces reviewer, exactly what a config that says nothing gets.
      */
-    reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+    reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy(DEFAULT_REVIEWER_AGENT_NAME, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
     // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
@@ -281,6 +281,7 @@ interface RawPrGateSection {
     mergeMode?: string;
     // An ARRAY, always. validateChecklistsSection rejects every other shape (including the removed { doc }).
     checklists?: RawChecklistItem[];
+    overrideReviewerAgent?: boolean;
     reviewerAgentName?: string;
     reviewerAgents?: number;
     gateSalt?: string;
@@ -331,9 +332,14 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
     // Optional extension point — omitted ⇒ [] ⇒ no checklists computed anywhere downstream. A non-array here
     // cannot reach us: validateChecklistsSection has already failed the load.
-    // Required (validatePrGateSection) / optional positive integer; absent cap ⇒ one subagent per checklist.
+    // The webpieces reviewer unless `overrideReviewerAgent` is true, in which case `reviewerAgentName` names the
+    // agent (validatePrGateSection rejects a name without the override, and the override without a name).
+    // Optional positive integer cap; absent ⇒ one subagent per checklist.
+    const agentName = raw.overrideReviewerAgent === true
+        ? (raw.reviewerAgentName ?? '').trim()
+        : DEFAULT_REVIEWER_AGENT_NAME;
     const reviewer = new ReviewerAgentPolicy(
-        (raw.reviewerAgentName ?? '').trim(),
+        agentName,
         typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_ONE_PER_CHECKLIST);
     const checklists = Array.isArray(raw.checklists)
         ? raw.checklists.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, reviewer))

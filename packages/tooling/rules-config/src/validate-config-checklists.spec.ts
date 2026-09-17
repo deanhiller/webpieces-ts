@@ -12,7 +12,7 @@ import { validatePrGateSection } from './validate-config';
 
 // A pr-gate section that is valid except for whatever `checklists` value the test is probing.
 function validPrGate(checklists: unknown): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgentName: 'webpieces-reviewer', gates: [], checklists };
+    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
 }
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
@@ -105,11 +105,11 @@ describe('validatePrGateSection checklists — the array in webpieces.config.jso
  * reads it any more — an entry carrying only `subagent` is also an entry with no id.
  */
 describe('validatePrGateSection rejects the retired per-checklist "subagent" key', () => {
-    it('names the destination and the missing reviewerAgentName line', () => {
+    it('names the destination', () => {
         const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'x.md', required: true }]));
         expect(has(errors, /checklists\[0\] \[pr-gate\.checklists\] "subagent" is a RETIRED/)).toBe(true);
         expect(has(errors, /moved to "id"/)).toBe(true);
-        expect(has(errors, /"reviewerAgentName": "webpieces-reviewer"/)).toBe(true);
+        expect(has(errors, /"reviewerAgentName": "webpieces-reviewer"/)).toBe(false);
     });
 
     it('does not fall back to it for the id', () => {
@@ -118,34 +118,72 @@ describe('validatePrGateSection rejects the retired per-checklist "subagent" key
     });
 });
 
-describe('validatePrGateSection — reviewerAgentName (required) and reviewerAgents (optional cap)', () => {
+/**
+ * Issue #947: the reviewer agent defaults to webpieces-reviewer, so a new repo writes nothing. Using an agent
+ * of your own takes BOTH `"overrideReviewerAgent": true` and `reviewerAgentName`; either one alone is rejected
+ * with the edit that fixes it.
+ */
+describe('validatePrGateSection — overrideReviewerAgent, reviewerAgentName and reviewerAgents', () => {
     const noName = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO' };
 
-    it('REQUIRES reviewerAgentName and prints the exact line to add', () => {
-        const errors = validatePrGateSection(noName);
-        expect(has(errors, /Missing required field "reviewerAgentName"/)).toBe(true);
-        expect(errors.join('\n')).toContain('"reviewerAgentName": "webpieces-reviewer"');
-        expect(errors.join('\n')).toContain('pnpm wp-upgrade-shim');
+    it('accepts a gate that names no reviewer agent at all (the webpieces default)', () => {
+        expect(validatePrGateSection(noName)).toEqual([]);
+        expect(validatePrGateSection({ ...noName, overrideReviewerAgent: false })).toEqual([]);
     });
 
-    it('rejects an empty reviewerAgentName', () => {
-        expect(has(validatePrGateSection({ ...noName, reviewerAgentName: '  ' }), /Missing required field "reviewerAgentName"/)).toBe(true);
+    it('rejects reviewerAgentName without the override, naming both cures', () => {
+        for (const section of [
+            { ...noName, reviewerAgentName: 'webpieces-reviewer' },
+            { ...noName, overrideReviewerAgent: false, reviewerAgentName: 'my-reviewer' },
+        ]) {
+            const text = validatePrGateSection(section).join('\n');
+            expect(text).toContain('"reviewerAgentName" is set but "overrideReviewerAgent" is not true');
+            expect(text).toContain('remove "reviewerAgentName"');
+            expect(text).toContain('set "overrideReviewerAgent": true');
+            expect(text).toContain('webpieces-reviewer');
+        }
     });
 
-    it('does not require it when the whole gate is OFF', () => {
+    it('rejects the override with a missing or empty reviewerAgentName, saying to add it', () => {
+        for (const section of [
+            { ...noName, overrideReviewerAgent: true },
+            { ...noName, overrideReviewerAgent: true, reviewerAgentName: '  ' },
+            { ...noName, overrideReviewerAgent: true, reviewerAgentName: 7 },
+        ]) {
+            const text = validatePrGateSection(section).join('\n');
+            expect(text).toContain('"overrideReviewerAgent": true needs "reviewerAgentName"');
+            expect(text).toContain('"reviewerAgentName": "my-reviewer"');
+        }
+    });
+
+    it('accepts the override together with a name', () => {
+        expect(validatePrGateSection({ ...noName, overrideReviewerAgent: true, reviewerAgentName: 'my-reviewer' })).toEqual([]);
+    });
+
+    it('rejects a non-boolean overrideReviewerAgent', () => {
+        for (const bad of ['true', 1, null, {}]) {
+            const text = validatePrGateSection({ ...noName, overrideReviewerAgent: bad, reviewerAgentName: 'x' }).join('\n');
+            expect(text).toContain('"overrideReviewerAgent" = ');
+            expect(text).toContain('must be true or false');
+        }
+    });
+
+    it('does not check any of it when the whole gate is OFF', () => {
         expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
     });
 
-    it('rejects a reviewerAgentName with no .claude/agents/<name>.md, naming the cure for the webpieces agent', () => {
+    it('rejects a missing default webpieces-reviewer agent file, naming the webpieces cure', () => {
         const errors = validatePrGateSection(validPrGate([]), repoWith([], ['something-else']));
-        expect(has(errors, /reviewerAgentName "webpieces-reviewer" names no reviewer/)).toBe(true);
+        expect(has(errors, /webpieces reviewer agent "webpieces-reviewer" names no reviewer/)).toBe(true);
         expect(has(errors, /pnpm wp-upgrade-shim/)).toBe(true);
     });
 
-    it('tells a repo with its OWN agent name to create it rather than run the webpieces cure', () => {
-        const errors = validatePrGateSection({ ...validPrGate([]), reviewerAgentName: 'my-reviewer' }, repoWith([], ['other']));
-        expect(has(errors, /"my-reviewer" names no reviewer/)).toBe(true);
+    it('checks the OVERRIDE agent file, and tells the repo to create it rather than run the webpieces cure', () => {
+        const errors = validatePrGateSection(
+            { ...validPrGate([]), overrideReviewerAgent: true, reviewerAgentName: 'my-reviewer' }, repoWith([], ['webpieces-reviewer']));
+        expect(has(errors, /reviewerAgentName "my-reviewer" names no reviewer/)).toBe(true);
         expect(has(errors, /Create that agent file/)).toBe(true);
+        expect(has(errors, /wp-upgrade-shim/)).toBe(false);
     });
 
     it('leaves the reviewer-agent check off for a repo with no .claude/agents dir', () => {

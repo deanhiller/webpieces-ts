@@ -49,7 +49,8 @@ export class ChecklistValidator {
     }
 
     /**
-     * The reviewer agent file named by `commands.pr-gate.reviewerAgentName`, checked ONCE for the repo.
+     * The reviewer agent file — `webpieces-reviewer`, or `commands.pr-gate.reviewerAgentName` under
+     * `"overrideReviewerAgent": true` — checked ONCE for the repo.
      *
      * Only enforced when this repo HAS a `.claude/agents` dir — a non-Claude-Code consumer that drives the
      * gate some other way must not be broken by a check for a directory it never has. Without it a typo
@@ -60,11 +61,16 @@ export class ChecklistValidator {
         const agentsDir = path.join(repoRoot, AGENTS_DIR);
         if (reviewer.agentName === '' || !fs.existsSync(agentsDir)) return [];
         if (fs.existsSync(path.join(agentsDir, `${reviewer.agentName}.md`))) return [];
-        const cure = reviewer.agentName === DEFAULT_REVIEWER_AGENT_NAME
+        const isDefault = reviewer.agentName === DEFAULT_REVIEWER_AGENT_NAME;
+        const cure = isDefault
             ? `Run \`${UPGRADE_SHIM_COMMAND}\` — it writes that webpieces-owned file.`
-            : 'Create that agent file, or set "reviewerAgentName" to an agent that exists.';
+            : 'Create that agent file, or set "reviewerAgentName" to an agent that exists, or delete both ' +
+              '"overrideReviewerAgent" and "reviewerAgentName" to use the webpieces reviewer.';
+        const source = isDefault
+            ? 'the webpieces reviewer agent'
+            : 'commands.pr-gate.reviewerAgentName';
         return [
-            `[pr-gate] commands.pr-gate.reviewerAgentName "${reviewer.agentName}" names no reviewer — ` +
+            `[pr-gate] ${source} "${reviewer.agentName}" names no reviewer — ` +
             `${AGENTS_DIR}/${reviewer.agentName}.md does not exist, so nothing can spawn it and wp-finish-upsert-pr ` +
             `would block forever on verdicts no reviewer can write. ${cure}`,
         ];

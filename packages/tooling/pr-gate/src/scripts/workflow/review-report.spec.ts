@@ -154,7 +154,7 @@ describe('a repo with zero checklists gets the verdict first, not a tutorial', (
 });
 
 /**
- * `commands.pr-gate.reviewerAgents` (issue #938). Absent: a separate `reviewerAgentName` subagent per
+ * `commands.pr-gate.reviewerAgents` (issue #938). Absent: a separate reviewer-agent subagent per
  * checklist, one spawn block each. Present: ONE statement of the cap and the grouping decision, and each
  * checklist block is just the instructions file to hand to whichever subagent covers it.
  */

@@ -125,7 +125,7 @@ class ShimStaleDeny {
      */
     private reviewerAgentNote(): string[] {
         if (!this.drifted.includes(REVIEWER_AGENT_MARKER)) return [];
-        return [`    → ${REVIEWER_AGENT_MARKER} is the generic PR-gate reviewer agent webpieces owns; a hand-edited copy would silently change how every PR is reviewed. Fix Option 1 rewrites it. To customize reviews, point commands.pr-gate.reviewerAgentName at an agent of your own instead.`];
+        return [`    → ${REVIEWER_AGENT_MARKER} is the generic PR-gate reviewer agent webpieces owns; a hand-edited copy would silently change how every PR is reviewed. Fix Option 1 rewrites it. To customize reviews, set commands.pr-gate overrideReviewerAgent to true and reviewerAgentName to an agent of your own instead.`];
     }
 
     /**

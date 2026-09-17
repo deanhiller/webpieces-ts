@@ -4,11 +4,11 @@ Your repo defines company review checklists in `pr-gate.checklists` in `webpiece
 array of `{ id, doc, required, patterns? }`, and that is the **only** accepted shape. Each has an `id`
 (its name; it keys `review-<id>.json`), a **repo-relative** `doc` it is reviewed against, says whether it
 **blocks**, and optionally carries path `patterns`. Checklists do not pick an agent type: every one is
-reviewed by the ONE agent `reviewerAgentName` names (webpieces verifies `.claude/agents/<name>.md` exists):
+reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override it (webpieces verifies
+`.claude/agents/<name>.md` exists):
 
 ```jsonc
 "commands": { "pr-gate": {
-  "reviewerAgentName": "webpieces-reviewer",   // REQUIRED
   "reviewerAgents": 1,                         // OPTIONAL — see below
   "checklists": [
     { "id": "db-migrations",
@@ -23,15 +23,18 @@ reviewed by the ONE agent `reviewerAgentName` names (webpieces verifies `.claude
 ```
 
 > **The per-entry `subagent` key is RETIRED** — config validation fails and names the edit: rename it to
-> `id`, and add `"reviewerAgentName": "webpieces-reviewer"` if it is missing. There is no compatibility mode.
+> `id`. There is no compatibility mode.
 
-## `reviewerAgentName` and `reviewerAgents` — who reviews, and how many of them
+## `overrideReviewerAgent`, `reviewerAgentName` and `reviewerAgents` — who reviews, and how many of them
 
-- **`reviewerAgentName`** (required) is the `subagent_type` every reviewer is spawned as.
-  `webpieces-reviewer` is a generic, checklist-agnostic reviewer that webpieces owns:
+- **The reviewer agent** is the `subagent_type` every reviewer is spawned as. By default — write nothing —
+  it is `webpieces-reviewer`, a generic, checklist-agnostic reviewer that webpieces owns:
   `wp-install-ai-hooks` and `pnpm wp-upgrade-shim` write it to `.claude/agents/webpieces-reviewer.md`, and a
-  stale or hand-edited copy is flagged with `pnpm wp-upgrade-shim` as the cure. Point the key at your own
-  agent to use that instead.
+  stale or hand-edited copy is flagged with `pnpm wp-upgrade-shim` as the cure.
+- **`overrideReviewerAgent`** (optional boolean, absent = false) + **`reviewerAgentName`** use an agent of
+  your own instead: set `"overrideReviewerAgent": true` and `"reviewerAgentName": "my-reviewer"`. The two go
+  together — a `reviewerAgentName` without the override, or the override without a name, fails config
+  validation naming the edit.
 - **`reviewerAgents`** (optional positive integer) caps how many reviewer subagents one round may use.
   - **Absent** — one SEPARATE subagent per checklist, and `wp-finish` requires a distinct run for each.
   - **Present (N)** — `wp-review-upsert-pr` tells you to use AT MOST N subagents for the owed checklists and
@@ -125,7 +128,7 @@ The changed files + the exact base sha the gate uses are in
 
 For each matched **required** checklist — and each **optional** one the human picked — you must:
 
-1. **Have a `reviewerAgentName` subagent review it** — a SEPARATE one per checklist, unless
+1. **Have a reviewer-agent subagent review it** — a SEPARATE one per checklist, unless
    `reviewerAgents` lets one subagent cover several. The coding agent may **not** review its own work.
    `wp-finish` verifies from the harness's own records that a reviewer subagent actually ran on this branch
    for each checklist (a distinct run per checklist when `reviewerAgents` is absent).
@@ -145,7 +148,7 @@ pick none, that is a complete answer; go straight to finish.
 
 **You may never write a reviewer's `review-<id>.json` yourself.** If the reviewer agent cannot be spawned,
 that is a config bug, not your cue to self-certify — report it to the human. (webpieces rejects a
-`reviewerAgentName` that has no `.claude/agents/<name>.md`, so this should surface as a config error instead.)
+reviewer agent that has no `.claude/agents/<name>.md`, so this should surface as a config error instead.)
 
 ## `review-<id>.json` (each reviewer subagent writes its own)
 
