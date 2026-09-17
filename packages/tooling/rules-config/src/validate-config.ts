@@ -319,7 +319,6 @@ function prGateExample(): string {
         `    "gates": [\n` +
         `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "warningColor": "yellow" }\n` +
         `    ],\n` +
-        `    "reviewerAgentName": "webpieces-reviewer",\n` +
         `    "reviewerAgents": 1,   // OPTIONAL — the most reviewer subagents per round; omit for one per checklist\n` +
         `    "checklists": [   // OPTIONAL — per-area review, each against its own doc\n` +
         `      { "id": "db-migrations", "doc": ".claude/review/db-migrations.md", "patterns": ["**/*.sql"], "required": true }\n` +

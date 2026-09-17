@@ -79,7 +79,7 @@ describe('ChecklistValidator', () => {
 });
 
 /**
- * The reviewer agent is repo-wide now (`commands.pr-gate.reviewerAgentName`), so it is checked ONCE. A typo
+ * The reviewer agent is repo-wide now (webpieces-reviewer, or the `overrideReviewerAgent` name), so it is checked ONCE. A typo
  * that validated clean would be printed as "spawn this", and the coding agent's easiest way past the
  * resulting block would be writing the verdicts itself — the self-certification the gate exists to prevent.
  */
@@ -131,7 +131,7 @@ describe('validateChecklistDocs validates a repo wired to files that exist', () 
             ['backwards-compatibility.md', 'error-output.md', 'experiment-lifecycle.md', 'ticket-required.md'],
             ['webpieces-reviewer']);
         fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
-            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', reviewerAgentName: 'webpieces-reviewer', checklists } },
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', checklists } },
         }));
         return dir;
     }

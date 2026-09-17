@@ -183,7 +183,7 @@ export class ExpectedReviewer {
 /**
  * Verifies — from the Claude Code harness's OWN artifacts, never from anything the model asserts — that
  * a subagent of a given `agentType` actually ran during the current session on the current branch. Used
- * to enforce that every checklist was reviewed by a `reviewerAgentName` subagent: that an INDEPENDENT
+ * to enforce that every checklist was reviewed by a subagent of the repo reviewer-agent type: that an INDEPENDENT
  * reviewer looked, rather than the coding agent self-certifying.
  *
  * The harness writes, beside each subagent transcript:

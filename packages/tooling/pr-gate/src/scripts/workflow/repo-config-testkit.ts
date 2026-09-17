@@ -25,9 +25,10 @@ import {
  *     is retired in this working tree, the repo's config must KEEP its entry until the release carrying
  *     the retirement ships (deleting it early would fail the published validator and block every Bash
  *     call), while the LOCAL validator already REJECTS it. Same trade as (2), same fix.
- *  4. A newly-required `commands.pr-gate` key is completed the same way, when absent — today that is
- *     `reviewerAgentName` (issue #938), which the published validator does not know yet, so the repo's
- *     config cannot carry it until that release ships.
+ *  4. A `commands.pr-gate.reviewerAgentName` naming the webpieces default WITHOUT `overrideReviewerAgent`
+ *     is dropped — the same one-release lag again (issue #947). The published validator still REQUIRES the
+ *     key, so the repo's config must carry it until the release making it optional ships, while the LOCAL
+ *     validator already rejects a name without the override. A follow-up PR removes it from the live config.
  *
  * A testkit, not product code: nothing in a published bin imports it (same role as ai-hook-rules'
  * `shim-testkit.ts`).
@@ -43,7 +44,10 @@ export class RepoConfigFixture {
         const commands = config['commands'] as Record<string, Record<string, unknown>>;
         delete commands['pr-gate']['checklists'];
         delete commands['pr-gate']['checklistsWhy'];
-        commands['pr-gate']['reviewerAgentName'] ??= DEFAULT_REVIEWER_AGENT_NAME;
+        const prGate = commands['pr-gate'];
+        if (prGate['overrideReviewerAgent'] !== true && prGate['reviewerAgentName'] === DEFAULT_REVIEWER_AGENT_NAME) {
+            delete prGate['reviewerAgentName'];
+        }
         this.dropRetiredRules(config);
         this.completeRulesFromSeed(config);
         return config;

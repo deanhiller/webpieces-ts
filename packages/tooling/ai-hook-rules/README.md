@@ -74,7 +74,7 @@ The installed surface is five things — `.claude/webpieces/ai-hook.sh`, the `se
 registering the two hooks, the ANCHORING of the hook entries the CONSUMER registers beside them, the
 `settings.json` `env` entry `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`, and the generic PR-gate
 reviewer agent `.claude/agents/webpieces-reviewer.md` (generated from `templates/webpieces-reviewer.md`;
-point `commands.pr-gate.reviewerAgentName` at it) — and they only
+used unless `commands.pr-gate` sets `"overrideReviewerAgent": true` and `"reviewerAgentName"`) — and they only
 work as a set. The guards binary compares all five against the release it came from and fails closed
 on any mismatch — including a missing or hand-edited reviewer agent — naming which one moved.
 **`pnpm exec wp-upgrade-shim`** repairs all five

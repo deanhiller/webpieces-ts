@@ -74,7 +74,8 @@ export class ReviewReportInput {
     singleRoundReview: boolean;
     singleRoundRepeat: boolean;
     singleRoundReviewers: string[];
-    // commands.pr-gate.reviewerAgentName + reviewerAgents: which agent type to spawn, and the per-round cap.
+    // The reviewer agent (webpieces-reviewer, or the overrideReviewerAgent name) + reviewerAgents: which agent
+    // type to spawn, and the per-round cap.
     reviewer: ReviewerAgentPolicy;
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {

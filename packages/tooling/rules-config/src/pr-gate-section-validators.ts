@@ -45,18 +45,18 @@ export function validateNoGateSaltRationale(s: Record<string, unknown>): string[
 
 const CHECKLIST_EXAMPLE = (
     'Example:\n' +
-    '    "reviewerAgentName": "webpieces-reviewer",\n' +
     '    "checklists": [\n' +
     '      { "id": "db-migrations",\n' +
     '        "doc": ".claude/review/db-migrations.md",\n' +
     '        "patterns": ["**/migrations/**", "**/*.sql"],\n' +
     '        "required": true }\n' +
     '    ]\n' +
-    '  "id" names the checklist and keys its review-<id>.json. Every checklist is reviewed by the agent\n' +
-    '  "reviewerAgentName" names, against its own "doc" (REQUIRED, REPO-relative). Omit "patterns" (or use\n' +
-    '  []) to run on every PR. "required" is MANDATORY on every entry: true blocks the PR until the\n' +
-    '  reviewer passes; false makes it an OPTIONAL review the human is offered and may decline (but if they\n' +
-    '  DO run it, a red verdict still blocks).'
+    '  "id" names the checklist and keys its review-<id>.json. Every checklist is reviewed by the\n' +
+    '  webpieces-reviewer agent (or your own: "overrideReviewerAgent": true + "reviewerAgentName"), against\n' +
+    '  its own "doc" (REQUIRED, REPO-relative). Omit "patterns" (or use []) to run on every PR.\n' +
+    '  "required" is MANDATORY on every entry: true blocks the PR until the reviewer passes; false makes\n' +
+    '  it an OPTIONAL review the human is offered and may decline (but if they DO run it, a red verdict\n' +
+    '  still blocks).'
 );
 
 // The label every RETIRED checklist-entry key is filed under in RETIRED_CONFIG_KEYS.
@@ -161,7 +161,7 @@ function checklistEntryErrors(e: Record<string, unknown>, i: number): string[] {
 
 // Structurally check each entry, then hand the narrowed defs to ChecklistValidator for the id rules and the
 // checks only the filesystem can answer (the guidance doc exists). The reviewer agent itself is repo-wide
-// and is validated once, beside `reviewerAgentName`, by validateReviewerAgentKeys.
+// and is validated once, beside `overrideReviewerAgent` / `reviewerAgentName`, by validateReviewerAgentKeys.
 // webpieces-disable no-any-unknown -- opaque consumer JSON entries, narrowed per-field below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 function validateChecklistArray(value: readonly unknown[], repoRoot?: string): string[] {
@@ -191,32 +191,51 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
 }
 
 export const REVIEWER_AGENT_NAME_KEY = 'reviewerAgentName';
+export const OVERRIDE_REVIEWER_AGENT_KEY = 'overrideReviewerAgent';
 export const REVIEWER_AGENTS_KEY = 'reviewerAgents';
 
 /**
- * `reviewerAgentName` (REQUIRED while the gate is active) and `reviewerAgents` (optional positive integer).
+ * `overrideReviewerAgent` (optional boolean, absent == false), `reviewerAgentName` (only with the override)
+ * and `reviewerAgents` (optional positive integer).
  *
- * `reviewerAgentName` has no default for the same reason `mergeMode` has none: it names a file the repo
- * commits, and a silent default would brief every reviewer with an agent type the repo may not have. The
- * error hands the reader the exact line, which an agent applies in one pass.
+ * The reviewer agent defaults to {@link DEFAULT_REVIEWER_AGENT_NAME} — the generic reviewer webpieces ships
+ * and manages — so a new repo writes NOTHING here (issue #947). Replacing it changes how every PR is
+ * reviewed, so it must be said out loud with `"overrideReviewerAgent": true` (greppable) AND a
+ * `reviewerAgentName`. A name WITHOUT the override is rejected rather than silently ignored: a key that looks
+ * meaningful but controls nothing is a second spelling of a decision (.claude/rules/no-backwards-compat.md).
  *
  * `reviewerAgents` absent is the documented "one subagent per checklist" contract — the count every repo had
  * before the key existed, so it widens nothing; present, it CAPS the subagents one round may use.
  */
-// webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; two keys are read
+// webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; three keys are read
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?: string): string[] {
     const errors: string[] = [];
+    const override = s[OVERRIDE_REVIEWER_AGENT_KEY];
+    const hasName = REVIEWER_AGENT_NAME_KEY in s;
     const name = s[REVIEWER_AGENT_NAME_KEY];
     const named = typeof name === 'string' && name.trim() !== '';
-    if (!named) {
+    if (OVERRIDE_REVIEWER_AGENT_KEY in s && typeof override !== 'boolean') {
         errors.push(
-            `[pr-gate] Missing required field "${REVIEWER_AGENT_NAME_KEY}" — the agent type every reviewer subagent is ` +
-            `spawned as. Add this line to commands.pr-gate in webpieces.config.json:\n` +
-            `    "${REVIEWER_AGENT_NAME_KEY}": "${DEFAULT_REVIEWER_AGENT_NAME}",\n` +
-            `  ${DEFAULT_REVIEWER_AGENT_NAME} is the generic reviewer webpieces ships as .claude/agents/${DEFAULT_REVIEWER_AGENT_NAME}.md ` +
-            `(\`${UPGRADE_SHIM_COMMAND}\` writes it). Point the key at your own agent to use that one instead.`);
+            `[pr-gate] "${OVERRIDE_REVIEWER_AGENT_KEY}" = ${JSON.stringify(override)} is not valid — it must be true or ` +
+            `false. Delete the key to use the webpieces reviewer (${DEFAULT_REVIEWER_AGENT_NAME}); set it to true, together ` +
+            `with "${REVIEWER_AGENT_NAME_KEY}", to use an agent of your own.`);
+    } else if (override === true && !named) {
+        errors.push(
+            `[pr-gate] "${OVERRIDE_REVIEWER_AGENT_KEY}": true needs "${REVIEWER_AGENT_NAME_KEY}" — add the agent type every ` +
+            `reviewer subagent is spawned as (its .claude/agents/<name>.md must exist) to commands.pr-gate in ` +
+            `webpieces.config.json:\n` +
+            `    "${REVIEWER_AGENT_NAME_KEY}": "my-reviewer",\n` +
+            `  Or delete "${OVERRIDE_REVIEWER_AGENT_KEY}" to use the webpieces reviewer (${DEFAULT_REVIEWER_AGENT_NAME}).`);
+    } else if (override !== true && hasName) {
+        errors.push(
+            `[pr-gate] "${REVIEWER_AGENT_NAME_KEY}" is set but "${OVERRIDE_REVIEWER_AGENT_KEY}" is not true, so it would be ` +
+            `ignored. The reviewer agent defaults to ${DEFAULT_REVIEWER_AGENT_NAME} (.claude/agents/${DEFAULT_REVIEWER_AGENT_NAME}.md, ` +
+            `written by \`${UPGRADE_SHIM_COMMAND}\`). Either:\n` +
+            `  • remove "${REVIEWER_AGENT_NAME_KEY}" from commands.pr-gate in webpieces.config.json to use that default, or\n` +
+            `  • set "${OVERRIDE_REVIEWER_AGENT_KEY}": true beside it to review with your own agent.`);
     }
+    const agentKeysValid = errors.length === 0;
     const max = s[REVIEWER_AGENTS_KEY];
     if (REVIEWER_AGENTS_KEY in s && !(typeof max === 'number' && Number.isInteger(max) && max >= 1)) {
         errors.push(
@@ -224,9 +243,10 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
             `reviewer subagents one review round may use, with the checklists grouped across them (1 = a single ` +
             `subagent reviews every checklist). Delete the key to keep one subagent per checklist.`);
     }
-    if (repoRoot !== undefined && named) {
+    if (repoRoot !== undefined && agentKeysValid) {
+        const agentName = override === true ? (name as string).trim() : DEFAULT_REVIEWER_AGENT_NAME;
         errors.push(...new ChecklistValidator().validateReviewerAgent(
-            repoRoot, new ReviewerAgentPolicy((name as string).trim(), REVIEWER_AGENTS_ONE_PER_CHECKLIST)));
+            repoRoot, new ReviewerAgentPolicy(agentName, REVIEWER_AGENTS_ONE_PER_CHECKLIST)));
     }
     return errors;
 }

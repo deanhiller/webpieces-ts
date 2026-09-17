@@ -3,12 +3,12 @@ import * as path from 'path';
 /** The {@link ReviewerAgentPolicy.maxAgents} value meaning "`reviewerAgents` is not configured". */
 export const REVIEWER_AGENTS_ONE_PER_CHECKLIST = 0;
 
-/** The generic reviewer agent webpieces ships, and the value the config error tells a repo to add. */
+/** The generic reviewer agent webpieces ships, and the reviewer every repo gets unless it sets `overrideReviewerAgent`. */
 export const DEFAULT_REVIEWER_AGENT_NAME = 'webpieces-reviewer';
 
 /**
  * WHICH reviewer agent the gate briefs, and HOW MANY of them one round may use — straight from
- * `commands.pr-gate.reviewerAgentName` / `commands.pr-gate.reviewerAgents`. Data-only.
+ * `commands.pr-gate.overrideReviewerAgent` + `reviewerAgentName` / `commands.pr-gate.reviewerAgents`. Data-only.
  *
  * One instance per loaded config, shared by every {@link ChecklistDefinition} and copied onto every matched
  * checklist, because the answer is repo-wide: a checklist no longer names an agent type of its own. It used
@@ -20,7 +20,8 @@ export class ReviewerAgentPolicy {
     /**
      * The `subagent_type` every reviewer briefing names, e.g. `webpieces-reviewer` — the generic,
      * checklist-agnostic agent webpieces ships (`.claude/agents/webpieces-reviewer.md`, written by
-     * `wp-install-ai-hooks` / `wp-upgrade-shim`). A repo may point it at its own agent instead.
+     * `wp-install-ai-hooks` / `wp-upgrade-shim`). A repo may use its own agent instead by setting
+     * `"overrideReviewerAgent": true` and `"reviewerAgentName"`.
      */
     agentName: string;
     /**
@@ -45,7 +46,7 @@ export class ReviewerAgentPolicy {
 // A company review checklist: a diff-triggered extension point that lets a CONSUMER inject its own
 // PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist has an
 // `id` and the doc its reviewer reads; when the diff matches the checklist's `patterns`,
-// wp-review-upsert-pr tells the AI to spawn the repo's reviewer agent (`commands.pr-gate.reviewerAgentName`)
+// wp-review-upsert-pr tells the AI to spawn the repo's reviewer agent (`webpieces-reviewer`, or an override)
 // over it, and wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json
 // exists AND a reviewer subagent is proven (from the harness's own artifacts) to have actually run.
 //

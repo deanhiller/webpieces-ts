@@ -50,7 +50,7 @@ export class BriefedFile {
  * remove. Data-only.
  */
 export class ReviewerBriefing {
-    agentName: string;            // the agent type the subagent is spawned as (commands.pr-gate.reviewerAgentName)
+    agentName: string;            // the agent type the subagent is spawned as (webpieces-reviewer, or the override)
     docPath: string;              // the checklist's guidance doc ('' when the checklist has none)
     repoRoot: string;
     diffDir: string;              // '' when nothing was materialized
@@ -134,7 +134,7 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
  * re-derivation of the dependency graph. It did not over-review; it was under-supplied. Everything below is
  * chosen to delete a specific one of those calls.
  *
- * It is GENERATED per run, and the reviewer agent (`.claude/agents/<reviewerAgentName>.md`, by default the
+ * It is GENERATED per run, and the reviewer agent (`.claude/agents/<name>.md`, by default the
  * webpieces-owned `webpieces-reviewer.md`) is checklist-agnostic and points here, because content a human
  * maintains goes stale and a reviewer follows the stale copy. The verdict
  * schema in particular comes from {@link ReviewJsonService.verdictSchemaFor}.

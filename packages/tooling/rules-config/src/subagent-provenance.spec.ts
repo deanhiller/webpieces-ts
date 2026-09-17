@@ -504,7 +504,7 @@ function sharedTypeHarness(sessionId: string, touched: readonly string[], branch
 }
 
 /**
- * Issue #938: every checklist is reviewed by ONE agent type (`reviewerAgentName`), so a run is matched on the
+ * Issue #938: every checklist is reviewed by ONE agent type (webpieces-reviewer, or the override), so a run is matched on the
  * type and CREDITED to a checklist id. Without `reviewerAgents` each checklist still needs its own run; with
  * it, one run may cover several — that grouping is what the repo configured.
  */
