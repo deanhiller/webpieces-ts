@@ -267,11 +267,11 @@ describe('ProvenanceEnforcer refusal wording', () => {
      * which was involved, while the real cause was a relocated `$CLAUDE_CONFIG_DIR`.
      */
     it('blames the transcript ROOT, not the reviewers, when the session has no transcript anywhere', () => {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-noroot-'));
+        const home = specTempDirs.make('wp-fin-noroot-');
         process.env['HOME'] = home;
-        process.env['CLAUDE_CONFIG_DIR'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-cfg-'));
+        process.env['CLAUDE_CONFIG_DIR'] = specTempDirs.make('wp-fin-cfg-');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-noroot';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
         const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
@@ -289,7 +289,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
     it('keeps the cwd advice when the session was found but the reviewers were not', () => {
         process.env['HOME'] = unattributableHarness('sess-u5', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u5';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
         const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);

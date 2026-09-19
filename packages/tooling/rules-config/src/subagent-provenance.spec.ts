@@ -96,7 +96,7 @@ describe('SubagentProvenanceService', () => {
     // …and it is credited through the STRONGEST channel too — a transcript naming this branch's own
     // verdict path — which is the shape the incident actually had.
     it('CREDITS a general-purpose fallback that NAMED this checklist’s verdict path (issue #964)', () => {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-964-'));
+        const home = specTempDirs.make('wp-home-964-');
         const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-964', 'subagents');
         const verdict = '/Users/x/repo/.webpieces/pr-review/dean-feat/review-checklist-reviewer.json';
         fs.mkdirSync(dir, { recursive: true });
@@ -646,7 +646,7 @@ describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agen
  */
 // A subagent run under an ARBITRARY config root, with the fallback `~/.claude` deliberately left empty.
 function relocatedHarness(sessionId: string, branch: string): string {
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cfgdir-'));
+    const configDir = specTempDirs.make('wp-cfgdir-');
     const dir = path.join(configDir, 'projects', '-Some-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'webpieces-reviewer', spawnDepth: 1 }));
@@ -656,7 +656,7 @@ function relocatedHarness(sessionId: string, branch: string): string {
 
 describe('SubagentProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => {
     it('finds the reviewer under a relocated config dir', () => {
-        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-nocfg-'));
+        process.env['HOME'] = specTempDirs.make('wp-home-nocfg-');
         process.env['CLAUDE_CONFIG_DIR'] = relocatedHarness('sess-cfg1', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg1';
         expect(verifyDistinct(new SubagentProvenanceService(), ['webpieces-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
@@ -671,7 +671,7 @@ describe('SubagentProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => 
      */
     it('still finds a reviewer under ~/.claude when $CLAUDE_CONFIG_DIR points somewhere with nothing in it', () => {
         process.env['HOME'] = fakeHarness('sess-cfg2', 'webpieces-reviewer', 'dean/feat');
-        process.env['CLAUDE_CONFIG_DIR'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cfgdir-empty-'));
+        process.env['CLAUDE_CONFIG_DIR'] = specTempDirs.make('wp-cfgdir-empty-');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg2';
         expect(verifyDistinct(new SubagentProvenanceService(), ['webpieces-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });

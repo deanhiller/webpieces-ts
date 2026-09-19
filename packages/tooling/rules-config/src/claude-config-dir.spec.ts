@@ -27,7 +27,7 @@ describe('ClaudeConfigDir.root', () => {
     it('is $CLAUDE_CONFIG_DIR when it is set', () => {
         process.env[CLAUDE_CONFIG_DIR_ENV] = '/somewhere/.claude-work';
         expect(claudeConfigDir.root()).toBe('/somewhere/.claude-work');
-        expect(claudeConfigDir.projectsRoot()).toBe(path.join('/somewhere/.claude-work', 'projects'));
+        expect(claudeConfigDir.projectsRoots()[0]).toBe(path.join('/somewhere/.claude-work', 'projects'));
     });
 
     // An exported-but-empty variable is the same state as an unset one: the harness falls back, so a

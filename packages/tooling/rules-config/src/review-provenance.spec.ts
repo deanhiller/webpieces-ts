@@ -33,7 +33,7 @@ afterEach(() => {
  * caller's HOME without a `.claude`, so a pass can only come from resolving the relocated root.
  */
 function fakeConfigDir(sessionId: string, cleanupPeriodDays = 0): string {
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-cfg-'));
+    const configDir = specTempDirs.make('wp-prov-cfg-');
     const projects = path.join(configDir, 'projects', '-Some-Slug');
     fs.mkdirSync(projects, { recursive: true });
     fs.writeFileSync(path.join(projects, `${sessionId}.jsonl`), JSON.stringify({ sessionId }) + '\n');
@@ -45,7 +45,7 @@ function fakeConfigDir(sessionId: string, cleanupPeriodDays = 0): string {
 
 describe('ReviewProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => {
     it('resolves the main transcript under a relocated config dir', () => {
-        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-nohome-'));
+        process.env['HOME'] = specTempDirs.make('wp-prov-nohome-');
         process.env['CLAUDE_CONFIG_DIR'] = fakeConfigDir('sess-cfg');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg';
         expect(svc.mainTranscript()).toMatch(/-Some-Slug[/\\]sess-cfg\.jsonl$/);
@@ -55,13 +55,13 @@ describe('ReviewProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => {
     // that ran without it. One root would refuse; two find it.
     it('still resolves the main transcript under ~/.claude when the relocated root holds nothing', () => {
         process.env['HOME'] = fakeHome('sess-both');
-        process.env['CLAUDE_CONFIG_DIR'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-cfg-empty-'));
+        process.env['CLAUDE_CONFIG_DIR'] = specTempDirs.make('wp-prov-cfg-empty-');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-both';
         expect(svc.mainTranscript()).toMatch(/sess-both\.jsonl$/);
     });
 
     it('reads cleanupPeriodDays from the relocated settings.json', () => {
-        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-nohome-'));
+        process.env['HOME'] = specTempDirs.make('wp-prov-nohome-');
         process.env['CLAUDE_CONFIG_DIR'] = fakeConfigDir('sess-cfg-r', 11);
         expect(svc.retentionDays()).toBe(11);
     });
