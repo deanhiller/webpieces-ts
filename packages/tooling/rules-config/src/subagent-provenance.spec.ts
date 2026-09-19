@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -31,10 +31,19 @@ function ctx(branch: string): ReviewerContext {
 }
 const savedHome = process.env['HOME'];
 const savedSession = process.env['CLAUDE_CODE_SESSION_ID'];
+const savedConfigDir = process.env['CLAUDE_CONFIG_DIR'];
+
+// Every fixture below relocates HOME, so `$CLAUDE_CONFIG_DIR` is cleared for the cases that are about
+// the DEFAULT root — otherwise a developer whose own shell relocates it would be asserting against a
+// second, real tree. The relocation cases set it explicitly.
+beforeEach(() => {
+    delete process.env['CLAUDE_CONFIG_DIR'];
+});
 
 afterEach(() => {
     if (savedHome === undefined) delete process.env['HOME']; else process.env['HOME'] = savedHome;
     if (savedSession === undefined) delete process.env['CLAUDE_CODE_SESSION_ID']; else process.env['CLAUDE_CODE_SESSION_ID'] = savedSession;
+    if (savedConfigDir === undefined) delete process.env['CLAUDE_CONFIG_DIR']; else process.env['CLAUDE_CONFIG_DIR'] = savedConfigDir;
 });
 
 // Build a fake ~/.claude/projects/<slug>/<sessionId>/subagents dir with one agent's artifacts.
@@ -66,9 +75,48 @@ describe('SubagentProvenanceService', () => {
         expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat-wp3')).status).toBe(PROVENANCE_OK);
     });
 
-    it('is MISSING when no subagent of that agentType ran', () => {
-        process.env['HOME'] = fakeHarness('sess-3', 'some-other-agent', 'dean/feat');
+    /**
+     * Issue #964: the agent TYPE is NOT a provenance input.
+     *
+     * The incident: a repo renamed its reviewer agent mid-session, the already-running subagent's
+     * registry snapshot still offered only the OLD names, its `subagent_type: webpieces-reviewer` spawn
+     * was rejected — so it fell back to `general-purpose`, pasted the reviewer instructions into the
+     * prompt, read the diff and wrote all six verdict files. Every one was then refused as
+     * unattributable, because `meta.agentType` said `general-purpose`. No cwd, branch or respawn could
+     * change that snapshot, so the PR was hard-blocked with six green verdicts on disk.
+     *
+     * `general-purpose` here rather than a near-miss name, so this fails loudly on a revert.
+     */
+    it('CREDITS a subagent whose agentType is not the configured reviewer name (issue #964)', () => {
+        process.env['HOME'] = fakeHarness('sess-3', 'general-purpose', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-3';
+        expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+    });
+
+    // …and it is credited through the STRONGEST channel too — a transcript naming this branch's own
+    // verdict path — which is the shape the incident actually had.
+    it('CREDITS a general-purpose fallback that NAMED this checklist’s verdict path (issue #964)', () => {
+        const home = specTempDirs.make('wp-home-964-');
+        const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-964', 'subagents');
+        const verdict = '/Users/x/repo/.webpieces/pr-review/dean-feat/review-checklist-reviewer.json';
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'agent-gp.meta.json'), JSON.stringify({ agentType: 'general-purpose', spawnDepth: 1 }));
+        fs.writeFileSync(path.join(dir, 'agent-gp.jsonl'),
+            JSON.stringify({ isSidechain: true, gitBranch: 'dean/feat' }) + '\n' +
+            JSON.stringify({ message: { content: [{ type: 'tool_use', input: { file_path: verdict } }] } }) + '\n');
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-964';
+        const context = new ReviewerContext('dean/feat', '', {}, { 'checklist-reviewer': verdict });
+        const res = verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], context);
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(res.agentIds['checklist-reviewer']).toBe('gp');
+    });
+
+    // The two gates that DO carry the anti-self-certification property are untouched by #964, and the
+    // spawnDepth/isSidechain cases above pin them.
+    it('is MISSING when the subagent ran on a DIFFERENT branch, whatever it is called', () => {
+        process.env['HOME'] = fakeHarness('sess-3b', 'checklist-reviewer', 'some/other-branch');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-3b';
         expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
 
@@ -110,12 +158,23 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
         expect(verifyDistinct(svc, ['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 
-    it('MISSING (naming the culprit) when one expected subagent never ran', () => {
-        process.env['HOME'] = fakeHarnessMulti('sess-d2', ['envvars-reviewer'], 'dean/feat');
+    /**
+     * MISSING names every culprit — and the fixture is a run on a DIFFERENT BRANCH, which is what
+     * "never ran for this branch" now looks like.
+     *
+     * This case used to be one run of the WRONG NAME on the right branch, and it stopped being a miss
+     * with issue #964: the name is no longer a provenance input, and a run on this branch may cover
+     * several checklists (`reviewerAgents` is a cap, and a cap is a maximum). So the only thing that
+     * makes a checklist uncreditable is that nothing ran on this branch that touched its work — which
+     * is exactly what the gate is for.
+     */
+    it('MISSING (naming every culprit) when the only run is on another branch', () => {
+        process.env['HOME'] = fakeHarnessMulti('sess-d2', ['envvars-reviewer'], 'some/other-branch');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d2';
         const res = verifyDistinct(svc, ['envvars-reviewer', 'migrations-reviewer'], ctx('dean/feat'));
         expect(res.status).toBe(PROVENANCE_MISSING);
         expect(res.detail).toMatch(/migrations-reviewer/);
+        expect(res.missing).toEqual(['envvars-reviewer', 'migrations-reviewer']);
     });
 
     it('OK immediately for an empty expected set', () => {
@@ -571,5 +630,49 @@ describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agen
         expect(evidence.every((e: ReviewerEvidence): boolean => e.agentType === 'webpieces-reviewer')).toBe(true);
         expect(evidence[0].wroteVerdict).toBe(true);
         expect(evidence[1].wroteVerdict).toBe(false);
+    });
+});
+
+/**
+ * Issue #963: `$CLAUDE_CONFIG_DIR` relocates the WHOLE harness tree, and provenance used to look under a
+ * hardcoded `~/.claude`.
+ *
+ * The effect was not a degraded answer, it was a hard block with no user-side workaround: on a machine
+ * with `CLAUDE_CONFIG_DIR=~/.claude-work`, zero transcripts were found — not the reviewers', not even the
+ * main agent's — so every PR was refused while every verdict file sat green on disk, and the refusal
+ * talked about the reviewers' cwd. Re-running the review reports the verdicts still standing with nothing
+ * to spawn, so the only escape was a symlink into `~/.claude`, i.e. hand-placing evidence inside a
+ * verification gate's own evidence tree.
+ */
+// A subagent run under an ARBITRARY config root, with the fallback `~/.claude` deliberately left empty.
+function relocatedHarness(sessionId: string, branch: string): string {
+    const configDir = specTempDirs.make('wp-cfgdir-');
+    const dir = path.join(configDir, 'projects', '-Some-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'webpieces-reviewer', spawnDepth: 1 }));
+    fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify({ isSidechain: true, gitBranch: branch }) + '\n');
+    return configDir;
+}
+
+describe('SubagentProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => {
+    it('finds the reviewer under a relocated config dir', () => {
+        process.env['HOME'] = specTempDirs.make('wp-home-nocfg-');
+        process.env['CLAUDE_CONFIG_DIR'] = relocatedHarness('sess-cfg1', 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg1';
+        expect(verifyDistinct(new SubagentProvenanceService(), ['webpieces-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
+    });
+
+    /**
+     * The BOTH-ROOTS probe. `$CLAUDE_CONFIG_DIR` is a property of the PROCESS, and the process running
+     * `wp-finish-upsert-pr` is not the one that wrote the transcripts — a shell opened before the export,
+     * or a script whose env was sanitized, reads a relocated session's transcripts with the variable
+     * unset, and vice versa. Resolving to exactly ONE root would make the gate depend on env agreement
+     * between two unrelated processes, which nobody can verify and nobody can repair from inside the flow.
+     */
+    it('still finds a reviewer under ~/.claude when $CLAUDE_CONFIG_DIR points somewhere with nothing in it', () => {
+        process.env['HOME'] = fakeHarness('sess-cfg2', 'webpieces-reviewer', 'dean/feat');
+        process.env['CLAUDE_CONFIG_DIR'] = specTempDirs.make('wp-cfgdir-empty-');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg2';
+        expect(verifyDistinct(new SubagentProvenanceService(), ['webpieces-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 });

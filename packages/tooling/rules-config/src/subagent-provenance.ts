@@ -1,8 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { injectable, bindingScopeValues } from 'inversify';
+import { claudeConfigDir } from './claude-config-dir';
 import { toError } from './to-error';
 import { dotWebpieces } from './state-dir';
 
@@ -164,11 +164,16 @@ export class ReviewerContext {
 }
 
 /**
- * One checklist that must be credited to a reviewer run, and the agent type that run must carry. Data-only.
+ * One checklist that must be credited to a reviewer run, plus the agent type the BRIEFING named. Data-only.
  *
  * The two used to be one string — a checklist's id WAS its agent type — and provenance keyed everything by
  * it. Now every checklist is reviewed by the same repo-wide agent type, so the id and the type are
- * separate facts and a run is matched on the type but credited to the id.
+ * separate facts.
+ *
+ * `agentType` is NOT a provenance input: nothing here matches a run on it (issue #964, see
+ * {@link SubagentProvenanceService.isReviewerRun}). It is carried because it is what the BRIEFING told
+ * the agent to spawn and what {@link ReviewerEvidence} reports, which are both worth recording even
+ * though neither is worth gating on.
  */
 export class ExpectedReviewer {
     checklistId: string;
@@ -182,16 +187,18 @@ export class ExpectedReviewer {
 
 /**
  * Verifies — from the Claude Code harness's OWN artifacts, never from anything the model asserts — that
- * a subagent of a given `agentType` actually ran during the current session on the current branch. Used
- * to enforce that every checklist was reviewed by a subagent of the repo reviewer-agent type: that an INDEPENDENT
- * reviewer looked, rather than the coding agent self-certifying.
+ * a real SUBAGENT actually ran on the current branch and did this checklist's work. Used to enforce that
+ * every checklist was reviewed by an INDEPENDENT reviewer, rather than by the coding agent
+ * self-certifying.
  *
  * The harness writes, beside each subagent transcript:
- *   ~/.claude/projects/<cwd-slug>/<sessionId>/subagents/agent-<id>.meta.json  → { agentType, spawnDepth, … }
- *   ~/.claude/projects/<cwd-slug>/<sessionId>/subagents/agent-<id>.jsonl      → record 0 { isSidechain, gitBranch, … }
- * `agentType`/`spawnDepth`/`isSidechain` are written by Claude Code, not by the model. We locate the dir
- * by the unique sessionId (globbing `projects/&#42;/<sessionId>/subagents`), so the cwd-slug never has to be
- * derived/guessed.
+ *   <config>/projects/<cwd-slug>/<sessionId>/subagents/agent-<id>.meta.json  → { agentType, spawnDepth, … }
+ *   <config>/projects/<cwd-slug>/<sessionId>/subagents/agent-<id>.jsonl      → record 0 { isSidechain, gitBranch, … }
+ * `spawnDepth`/`isSidechain` are written by Claude Code, not by the model, and they are what carries the
+ * anti-self-certification property. `agentType` is written there too and is deliberately NOT checked —
+ * see {@link SubagentProvenanceService.isReviewerRun}. `<config>` is `$CLAUDE_CONFIG_DIR` when set, else
+ * `~/.claude`; see {@link ClaudeConfigDir}, and never re-derive it here. Dirs are found by walking
+ * every session, so the cwd-slug never has to be derived/guessed.
  *
  * IMPORTANT — this is NOT tamper-proof. A determined agent can `cat >` a fake agent-*.meta.json. This
  * raises the bar from "trust the model's word" to "deliberate, auditable forgery outside the repo"; it
@@ -404,19 +411,20 @@ export class SubagentProvenanceService {
             {}, []);
     }
 
-    // The agentId of a matching subagent run for `want.agentType` on `branch`, searched across ALL sessions'
-    // subagent dirs (branch-scoped, so a run from a prior session still counts). '' if none. `exclude`
-    // skips agentIds already credited to another checklist so one run can't satisfy two.
+    // The agentId of a subagent run on `branch`, searched across ALL sessions' subagent dirs
+    // (branch-scoped, so a run from a prior session still counts). '' if none. `exclude` skips agentIds
+    // already credited to another checklist so one run can't satisfy two.
     //
-    // Now that every checklist shares ONE agent type, several runs match, so the one that NAMED this
-    // checklist's verdict file wins; the first branch-matching run is the fallback, as before.
+    // The run is NOT matched on its agent type — see isReviewerRun for why that check was removed — so
+    // several runs match and the one that NAMED this checklist's verdict file wins; the first
+    // branch-matching run is the fallback, as before.
     // eslint-disable-next-line @typescript-eslint/max-params
     private findMatchingAgentId(dirs: readonly string[], want: ExpectedReviewer, context: ReviewerContext, exclude: ReadonlySet<string>): string {
         let fallback = '';
         for (const dir of dirs) {
             for (const metaFile of this.metaFiles(dir)) {
                 const agentId = this.agentIdOf(metaFile);
-                if (exclude.has(agentId) || !this.isReviewerRun(dir, metaFile, want.agentType)) continue;
+                if (exclude.has(agentId) || !this.isReviewerRun(dir, metaFile)) continue;
                 if (!this.sidechainOnBranch(dir, agentId, want.checklistId, context)) continue;
                 if (this.namedVerdict(dir, agentId, want.checklistId, context)) return agentId;
                 if (fallback === '') fallback = agentId;
@@ -425,10 +433,32 @@ export class SubagentProvenanceService {
         return fallback;
     }
 
-    // A harness-written meta for a real subagent (spawnDepth >= 1) of the wanted type.
-    private isReviewerRun(dir: string, metaFile: string, agentType: string): boolean {
+    /**
+     * A harness-written meta for a REAL SUBAGENT — `spawnDepth >= 1`, and nothing about its NAME.
+     *
+     * The agent TYPE used to be compared against the configured reviewer agent, and that check is
+     * gone (issue #964). It proved nothing: `agentType` is a label on a prompt, and it does not show
+     * the agent read the checklist, opened the diff, or looked at the right branch. The gates that DO
+     * show those are untouched — `spawnDepth >= 1` plus `isSidechain === true` (see
+     * {@link sidechainOnBranch}) are harness-written, so the main loop still cannot self-certify;
+     * {@link creditedByWhatItTouched} proves the branch and the actual work; `requireDiffEvidence`
+     * proves the diff was opened.
+     *
+     * It was also the ONLY gate with an unfixable failure mode. Claude Code snapshots agent
+     * definitions per session and the refresh does not reach an already-running subagent, so a repo
+     * that renames its reviewer agent mid-session leaves that subagent's registry offering only the
+     * OLD names: the spawn is rejected, the agent falls back to `general-purpose`, does the real
+     * review, writes every verdict — and is refused as unattributable, with no cwd, branch or respawn
+     * able to change it. Measured: six checklists, six verdict files on disk, PR blocked.
+     *
+     * Accepted trade-off: without the name check the implementer's own subagent could in principle be
+     * credited, since it touches the diff dir while running the gate. That is deliberate. The rule is
+     * "if the verdict file is there, a subagent wrote it", and this gate's job is to catch "no
+     * subagent ran at all" — not to adjudicate which subagent it was.
+     */
+    private isReviewerRun(dir: string, metaFile: string): boolean {
         const meta = this.readJson(path.join(dir, metaFile));
-        if (!meta || meta['agentType'] !== agentType) return false;
+        if (!meta) return false;
         const spawnDepth = meta['spawnDepth'];
         return typeof spawnDepth === 'number' && spawnDepth >= 1;
     }
@@ -442,17 +472,24 @@ export class SubagentProvenanceService {
         return this.mentions(this.scanTranscript(jsonl).inputs, verdictPath);
     }
 
-    // Every `projects/*/<session>/subagents` dir that exists — matching by the recorded gitBranch (not by
-    // session id) is what makes provenance survive across sessions.
+    /**
+     * Every `<config>/projects/&#42;/<session>/subagents` dir that exists — matching by the recorded
+     * gitBranch (not by session id) is what makes provenance survive across sessions.
+     *
+     * `<config>` comes from {@link ClaudeConfigDir.projectsRoots}, which is BOTH the configured
+     * `$CLAUDE_CONFIG_DIR` tree and `~/.claude`. This used to be a hardcoded `~/.claude`, and on a
+     * machine with a relocated config dir that found nothing at all — so every PR was refused with a
+     * message about the reviewers' cwd, which is not what was wrong and which no agent could act on.
+     */
     private allSubagentsDirs(): string[] {
-        const projects = path.join(os.homedir(), '.claude', 'projects');
-        if (!fs.existsSync(projects)) return [];
         const out: string[] = [];
-        for (const proj of this.readDir(projects)) {
-            const projDir = path.join(projects, proj);
-            for (const session of this.readDir(projDir)) {
-                const candidate = path.join(projDir, session, 'subagents');
-                if (fs.existsSync(candidate)) out.push(candidate);
+        for (const projects of claudeConfigDir.projectsRoots()) {
+            for (const proj of this.readDir(projects)) {
+                const projDir = path.join(projects, proj);
+                for (const session of this.readDir(projDir)) {
+                    const candidate = path.join(projDir, session, 'subagents');
+                    if (fs.existsSync(candidate)) out.push(candidate);
+                }
             }
         }
         return out;

@@ -386,6 +386,7 @@ export {
     PROVENANCE_MISSING,
     PROVENANCE_SKIPPED,
 } from './subagent-provenance';
+export { CLAUDE_CONFIG_DIR_ENV, ClaudeConfigDir, claudeConfigDir } from './claude-config-dir';
 export {
     ReviewProvenanceService,
     ReviewProvenance,
