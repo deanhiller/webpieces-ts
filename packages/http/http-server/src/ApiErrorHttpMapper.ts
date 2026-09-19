@@ -27,16 +27,20 @@ export type EndUserStatus = 'gui' | 'edge';
  * {@link ErrorTranslators} half on the server: an error in, the exact HTTP response out.
  *
  * An app that registers its own translator declines by DELEGATING here —
- * `new ApiErrorHttpMapper('gui').toResponse(error)` — so "no translator registered" and "a
- * translator that does not claim this error" produce byte-identical responses.
+ * `new ApiErrorHttpMapper('gui').toResponse(error)`, naming the mode its router uses — so "no
+ * translator registered" and "a translator that does not claim this error" produce byte-identical
+ * responses.
  */
 export class ApiErrorHttpMapper {
     /**
-     * @param endUserStatus - `'gui'` (the framework default) or `'edge'`. A router configured with
+     * @param endUserStatus - REQUIRED, with no default. A router configured with
      *   `setEndUserStatus('edge')` must pass `'edge'` here too when it delegates from its own
-     *   translator, or a delegated end-user error would answer 266 instead of its published status.
+     *   translator, and a default would make `new ApiErrorHttpMapper()` publish 266 for a
+     *   delegated end-user error on an edge router with nothing to grep for — a widening that is an
+     *   ABSENCE rather than a token (`.claude/rules/no-backwards-compat.md`, shim shape #5). Saying
+     *   the mode out loud keeps the mismatch a thing you can see at the call site.
      */
-    constructor(private readonly endUserStatus: EndUserStatus = 'gui') {}
+    constructor(private readonly endUserStatus: EndUserStatus) {}
 
     private readonly boundary = new ApiErrorBoundary();
     private readonly genericMessages: Map<number, string> = new Map<number, string>([
