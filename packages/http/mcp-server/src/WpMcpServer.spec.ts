@@ -120,7 +120,7 @@ describe('WpMcpServer modern HTTP bridge', () => {
         return new WpMcpServerConfig<string, string>()
             .setName('test-server')
             .setVersion('1.0.0')
-            .setResource('https://api.example.test/mcp')
+            .setResource('https://api.example.test/app-owned/mcp')
             .setAccessTokenAuthority(authority)
             .setEndpointJwtAuthority(jwtHook)
             .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
@@ -497,7 +497,8 @@ describe('WpMcpServer modern HTTP bridge', () => {
     });
 
     it('uses exact HTTP and JSON-RPC errors for legacy, unknown methods, and header mismatches', async () => {
-        expect((await fetch(`${baseUrl}${ENDPOINT_PATH}`)).status).toBe(404);
+        // MCP 2026-07-28 has no session GET, so a GET is a method error, not a missing route.
+        expect((await fetch(`${baseUrl}${ENDPOINT_PATH}`)).status).toBe(405);
         const legacy = await post({
             jsonrpc: '2.0',
             id: ++nextId,
@@ -550,7 +551,7 @@ describe('WpMcpServer modern HTTP bridge', () => {
             missing.bind(
                 express(),
                 new McpBindOptions(
-                    '/invalid-one',
+                    ENDPOINT_PATH,
                     [McpApiBinding.local(MissingMcpAuthApi, router)],
                     McpDeployment.singleProcess(),
                 ),
@@ -561,7 +562,7 @@ describe('WpMcpServer modern HTTP bridge', () => {
             mismatch.bind(
                 express(),
                 new McpBindOptions(
-                    '/invalid-two',
+                    ENDPOINT_PATH,
                     [McpApiBinding.remote(SearchApi, () => new SearchController())],
                     McpDeployment.singleProcess(),
                 ),
@@ -571,7 +572,7 @@ describe('WpMcpServer modern HTTP bridge', () => {
 
     it('exposes resource metadata, invalidates tools, and refuses token passthrough', async () => {
         expect(bridge.protectedResourceMetadata()).toMatchObject({
-            resource: 'https://api.example.test/mcp',
+            resource: 'https://api.example.test/app-owned/mcp',
             authorization_servers: ['https://login.example.test'],
             scopes_supported: ['tools'],
         });
@@ -586,5 +587,51 @@ describe('WpMcpServer modern HTTP bridge', () => {
             kind: 'implementation',
         });
         jwtHook.lifetimeSeconds = 60;
+    });
+
+    it.each(['GET', 'DELETE', 'PUT'])(
+        'answers 405 with Allow: POST for a %s at the bound endpoint path',
+        async (method: string) => {
+            const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, { method });
+            expect(response.status).toBe(405);
+            expect(response.headers.get('allow')).toBe('POST');
+            expect(await response.json()).toEqual({ error: 'method_not_allowed' });
+        },
+    );
+
+    it('still routes POST to the MCP handler with the 405 route registered', async () => {
+        const reply = await post(request('tools/list'));
+        expect(reply.response.status).toBe(200);
+        expect(reply.payload.error).toBeUndefined();
+    });
+
+    it('refuses to bind when the resource path and the endpointPath disagree', () => {
+        const mismatched = new WpMcpServer<string, string>(serverConfig());
+        expect(() =>
+            mismatched.bind(
+                express(),
+                new McpBindOptions(
+                    '/some-other-path',
+                    [McpApiBinding.local(SearchApi, router)],
+                    McpDeployment.singleProcess(),
+                ),
+            ),
+        ).toThrow(/resource path '\/app-owned\/mcp' must equal endpointPath '\/some-other-path'/);
+    });
+
+    it('names the single-canonical-URI constraint when bind is called twice', async () => {
+        const bound = await bindTestBridge(McpDeployment.singleProcess());
+        expect(() =>
+            bound.bridge.bind(
+                express(),
+                new McpBindOptions(
+                    ENDPOINT_PATH,
+                    [McpApiBinding.local(SearchApi, router)],
+                    McpDeployment.singleProcess(),
+                ),
+            ),
+        ).toThrow(/exactly one canonical URI/);
+        await bound.bridge.close();
+        await closeTestServer(bound.server);
     });
 });

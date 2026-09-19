@@ -134,7 +134,7 @@ describe('application-owned tools/call error translation', () => {
             new WpMcpServerConfig<string, string>()
                 .setName('translator-server')
                 .setVersion('1.0.0')
-                .setResource('https://api.example.test/mcp')
+                .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)
                 .setEndpointJwtAuthority(jwtHook)
                 .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
@@ -247,7 +247,8 @@ describe('application-owned tools/call error translation', () => {
         const reply = await harness.post(harness.request('tools/list'), 'invalid');
         expect(reply.response.status).toBe(401);
         expect(reply.response.headers.get('www-authenticate')).toBe(
-            'Bearer resource_metadata="https://api.example.test/mcp"',
+            'Bearer resource_metadata=' +
+                '"https://api.example.test/.well-known/oauth-protected-resource/app-owned/mcp"',
         );
         expect(translators.calls).toBe(0);
     });
@@ -276,7 +277,7 @@ describe('no application translator registered', () => {
             new WpMcpServerConfig<string, string>()
                 .setName('plain-server')
                 .setVersion('1.0.0')
-                .setResource('https://api.example.test/mcp')
+                .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
                 .setEndpointJwtAuthority(jwtHook)
                 .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)

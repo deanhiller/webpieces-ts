@@ -120,6 +120,14 @@ mcp.bind(expressApp, new McpBindOptions(
 ));
 ```
 
+`bind(...)` registers POST at that path plus a 405 (`Allow: POST`) for every other method there — MCP
+2026-07-28 has no session GET, so a probe gets a method error rather than a 404. It may be called only
+once: one server serves exactly one canonical resource URI. `WpMcpServerConfig.resource` is that URI,
+fixed for the process lifetime and never derived from the request `Host` (a host-derived audience would
+make the boundary's own audience check circular — a confused deputy), and its path must equal
+`endpointPath`, which `bind(...)` verifies. A second hostname is a second deployment, not a second
+audience.
+
 The official MCP v2 server and Node adapter own MCP 2026-07-28 JSON-RPC validation, JSON versus
 request-scoped SSE responses, backpressure, cancellation, keepalives, and subscriptions. Webpieces
 owns the Express path, root `RequestContext`, authentication boundary, schema-derived tool registry,
@@ -228,3 +236,9 @@ rotation metadata. Opaque tokens remain valid implementations of the same author
 
 `protectedResourceMetadata()` returns the resource metadata an HTTP adapter can publish at the
 well-known OAuth protected-resource endpoint. OAuth token issuance remains pluggable.
+
+That endpoint's URL is `WpMcpServerConfig.resourceMetadataUrl` — RFC 9728 §3.1 path insertion, so
+`https://host/mcp` publishes at `https://host/.well-known/oauth-protected-resource/mcp` — and it is the
+value of `resource_metadata` in the 401 `WWW-Authenticate` challenge. RFC 9728 §5.1 defines that
+parameter as the URL of the metadata DOCUMENT, never the resource identifier itself. The framework
+mounts no `.well-known` route; the app publishes the document there.

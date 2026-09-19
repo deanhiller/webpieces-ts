@@ -198,7 +198,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             new WpMcpServerConfig<string, string>()
                 .setName('gateway')
                 .setVersion('1.0.0')
-                .setResource('https://gateway.example.test/mcp')
+                .setResource('https://gateway.example.test/gateway/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
                 .setEndpointJwtAuthority(jwtHook)
                 .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
@@ -472,7 +472,7 @@ function verifiedCredential(): VerifiedMcpCredential {
     return new VerifiedMcpCredential(
         'mcp-user-7',
         'https://issuer.example.test',
-        'https://gateway.example.test/mcp',
+        'https://gateway.example.test/gateway/mcp',
         now,
         now + 60,
         ['tools'],
