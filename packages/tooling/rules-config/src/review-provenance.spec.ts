@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,10 +12,59 @@ import { specTempDirs } from './spec-temp-dirs';
 const svc = new ReviewProvenanceService();
 const savedHome = process.env['HOME'];
 const savedSession = process.env['CLAUDE_CODE_SESSION_ID'];
+const savedConfigDir = process.env['CLAUDE_CONFIG_DIR'];
+
+// Cleared per test so a developer whose own shell relocates the config dir is not silently asserting
+// against a second, real tree; the relocation cases below set it explicitly.
+beforeEach(() => {
+    delete process.env['CLAUDE_CONFIG_DIR'];
+});
 
 afterEach(() => {
     if (savedHome === undefined) delete process.env['HOME']; else process.env['HOME'] = savedHome;
     if (savedSession === undefined) delete process.env['CLAUDE_CODE_SESSION_ID']; else process.env['CLAUDE_CODE_SESSION_ID'] = savedSession;
+    if (savedConfigDir === undefined) delete process.env['CLAUDE_CONFIG_DIR']; else process.env['CLAUDE_CONFIG_DIR'] = savedConfigDir;
+});
+
+/**
+ * Issue #963: the same fixture, written under an ARBITRARY config root rather than `<home>/.claude`.
+ *
+ * Returns the config dir itself (what `$CLAUDE_CONFIG_DIR` is set to), and deliberately leaves the
+ * caller's HOME without a `.claude`, so a pass can only come from resolving the relocated root.
+ */
+function fakeConfigDir(sessionId: string, cleanupPeriodDays = 0): string {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-cfg-'));
+    const projects = path.join(configDir, 'projects', '-Some-Slug');
+    fs.mkdirSync(projects, { recursive: true });
+    fs.writeFileSync(path.join(projects, `${sessionId}.jsonl`), JSON.stringify({ sessionId }) + '\n');
+    if (cleanupPeriodDays > 0) {
+        fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ cleanupPeriodDays }));
+    }
+    return configDir;
+}
+
+describe('ReviewProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => {
+    it('resolves the main transcript under a relocated config dir', () => {
+        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-nohome-'));
+        process.env['CLAUDE_CONFIG_DIR'] = fakeConfigDir('sess-cfg');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-cfg';
+        expect(svc.mainTranscript()).toMatch(/-Some-Slug[/\\]sess-cfg\.jsonl$/);
+    });
+
+    // The both-roots probe: the variable is set in THIS process but the transcripts belong to a session
+    // that ran without it. One root would refuse; two find it.
+    it('still resolves the main transcript under ~/.claude when the relocated root holds nothing', () => {
+        process.env['HOME'] = fakeHome('sess-both');
+        process.env['CLAUDE_CONFIG_DIR'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-cfg-empty-'));
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-both';
+        expect(svc.mainTranscript()).toMatch(/sess-both\.jsonl$/);
+    });
+
+    it('reads cleanupPeriodDays from the relocated settings.json', () => {
+        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-nohome-'));
+        process.env['CLAUDE_CONFIG_DIR'] = fakeConfigDir('sess-cfg-r', 11);
+        expect(svc.retentionDays()).toBe(11);
+    });
 });
 
 // A fake ~/.claude with the main session transcript and, optionally, a settings.json retention setting.

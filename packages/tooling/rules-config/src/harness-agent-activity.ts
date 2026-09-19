@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
+import { claudeConfigDir } from './claude-config-dir';
 import { toError } from './to-error';
 
 /**
@@ -245,25 +245,26 @@ export class HarnessAgentActivityReader {
     /** Every `<config>/projects/<slug>/<session>/subagents` directory that exists right now. */
     private subagentDirs(): string[] {
         const out: string[] = [];
-        const root = this.projectsRoot();
-        for (const project of this.readDir(root)) {
-            const projectDir = path.join(root, project);
-            for (const session of this.readDir(projectDir)) {
-                const subagents = path.join(projectDir, session, 'subagents');
-                if (this.isDirectory(subagents)) out.push(subagents);
+        for (const root of this.projectsRoots()) {
+            for (const project of this.readDir(root)) {
+                const projectDir = path.join(root, project);
+                for (const session of this.readDir(projectDir)) {
+                    const subagents = path.join(projectDir, session, 'subagents');
+                    if (this.isDirectory(subagents)) out.push(subagents);
+                }
             }
         }
         return out;
     }
 
     /**
-     * Seam: where the harness keeps its per-project state. `$CLAUDE_CONFIG_DIR` wins when set, which
-     * is how the harness itself resolves it; specs override this to point at a fixture tree.
+     * Seam: where the harness keeps its per-project state, delegated to the ONE resolver
+     * ({@link ClaudeConfigDir}) so this file and the two provenance modules cannot disagree about
+     * it — they did, and the divergence hard-blocked every PR on a relocated config dir. Specs point
+     * `$CLAUDE_CONFIG_DIR` at a fixture tree, which exercises the same resolution the field uses.
      */
-    protected projectsRoot(): string {
-        const configured = process.env['CLAUDE_CONFIG_DIR'] ?? '';
-        const root = configured !== '' ? configured : path.join(os.homedir(), '.claude');
-        return path.join(root, 'projects');
+    protected projectsRoots(): string[] {
+        return claudeConfigDir.projectsRoots();
     }
 
     private minutesAgo(now: number, written: number): string {

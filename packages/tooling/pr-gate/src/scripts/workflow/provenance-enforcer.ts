@@ -7,6 +7,7 @@ import {
     ProvenanceResult, ReviewerEvidence, ReviewerContext, ExpectedReviewer,
     ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
     ReviewerInstructionsService, InformAiError,
+    claudeConfigDir, CLAUDE_CONFIG_DIR_ENV,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
@@ -66,8 +67,8 @@ export class ProvenanceEnforcer {
         return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 
-    // Enforce that EACH matched checklist was reviewed by a subagent of the repo's reviewer agent type — the
-    // coding agent may not self-certify. One run may cover several checklists, because `reviewerAgents` is a
+    // Enforce that EACH matched checklist was reviewed by a real reviewer SUBAGENT — the coding agent may
+    // not self-certify. Not by one of a particular NAME: see SubagentProvenanceService.isReviewerRun. One run may cover several checklists, because `reviewerAgents` is a
     // required CAP and grouping under it is what the repo configured. A verified set passes silently; no
     // session id warns but passes;
     // any missing reviewer throws so the PR does not open.
@@ -135,23 +136,55 @@ export class ProvenanceEnforcer {
     }
 
     /**
-     * The verdict exists but nothing can prove WHICH branch its reviewer looked at.
+     * The verdict exists but nothing can prove WHICH branch its reviewer looked at — or, in the one case
+     * below, provenance never found the session's transcripts AT ALL and this is not about reviewers.
      *
-     * Reachable when a session rooted in the PRIMARY CLONE spawns reviewers for a branch that lives in a
-     * linked worktree: the harness stamps record 0 from the spawning session's cwd (the Agent tool has no
-     * cwd parameter), so every respawn is stamped identically and re-spawning cannot change the outcome.
-     * Saying so is the whole point of this message — the remedy is a session rooted in the worktree, or a
-     * reviewer that names this branch's own files.
+     * The cwd paragraph is reachable when a session rooted in the PRIMARY CLONE spawns reviewers for a
+     * branch that lives in a linked worktree: the harness stamps record 0 from the spawning session's cwd
+     * (the Agent tool has no cwd parameter), so every respawn is stamped identically and re-spawning
+     * cannot change the outcome. Saying so is the whole point of that message — the remedy is a session
+     * rooted in the worktree, or a reviewer that names this branch's own files.
+     *
+     * It is GATED on having found the session, because it was printed for a completely different fault
+     * and sent two debugging rounds in the wrong direction: see {@link transcriptRootProblem}.
      */
     private unattributedMessage(unattributed: readonly string[], context: ReviewerContext): string {
-        return `these reviewers WROTE a verdict for this branch that provenance cannot attribute to them: ${unattributed.join(', ')}\n` +
-            `    Do NOT re-spawn them. A re-spawn overwrites the verdict file it already wrote and is stamped with the\n` +
-            `    same cwd, so it is refused again — that loop destroys the verdicts and cannot change the outcome.\n` +
+        const head = `these reviewers WROTE a verdict for this branch that provenance cannot attribute to them: ${unattributed.join(', ')}\n` +
+            `    Do NOT re-spawn them. A re-spawn overwrites the verdict file it already wrote, so that loop destroys\n` +
+            `    the verdicts and cannot change the outcome.\n`;
+        const rootProblem = this.transcriptRootProblem();
+        if (rootProblem !== '') return head + rootProblem;
+        return head +
             `    A reviewer is attributed when it names this branch's own files: its verdict\n` +
             `    (${context.verdictPaths[unattributed[0]] ?? '<verdict path>'}) or the extracted diff (${context.diffDir}).\n` +
-            `    If the reviewers ran before pnpm wp-review-upsert-pr materialized that diff, re-run this from a Claude\n` +
-            `    Code session whose cwd IS the worktree holding ${context.branch} — that is the only cwd the harness will\n` +
-            `    stamp on them.`;
+            `    It is stamped with the cwd of the session that spawned it, so if the reviewers ran before\n` +
+            `    pnpm wp-review-upsert-pr materialized that diff, re-run this from a Claude Code session whose\n` +
+            `    cwd IS the worktree holding ${context.branch} — that is the only cwd the harness will stamp on them.`;
+    }
+
+    /**
+     * The transcript ROOT is wrong — said so, instead of blaming the reviewers. '' when it is not.
+     *
+     * The test is exact rather than heuristic: the main agent's transcript is located by SESSION ID alone,
+     * with no cwd, branch or stamping involved, so a known session id with no transcript anywhere can only
+     * mean nothing was searched in the right place. That is a transcript-location problem, and it is not
+     * something a reviewer did.
+     *
+     * It happened, and the cost was the whole point of gating the other message: on a machine with
+     * `$CLAUDE_CONFIG_DIR` relocated, provenance searched a hardcoded `~/.claude`, found neither the
+     * reviewers' transcripts nor the main agent's, and refused every PR with advice about cwd stamping,
+     * worktrees and primary clones — none of which was involved. Two debugging rounds went into that
+     * before `provenance.json`'s empty `mainTranscript` settled it.
+     */
+    private transcriptRootProblem(): string {
+        const session = this.provenanceRecord.sessionId();
+        if (session === '' || this.provenanceRecord.mainTranscript() !== '') return '';
+        const configured = claudeConfigDir.configuredDir();
+        return `    Provenance found NO transcripts at all for session ${session} — not even the main agent's own — under:\n` +
+            claudeConfigDir.projectsRoots().map((root: string): string => `      ${root}\n`).join('') +
+            `    $${CLAUDE_CONFIG_DIR_ENV}=${configured === '' ? '<unset>' : configured}. This is a transcript-LOCATION problem, not a\n` +
+            `    reviewer problem — your reviewers' verdicts are intact and must not be re-run. Point this command at the\n` +
+            `    config dir that session wrote to.`;
     }
 
     /**

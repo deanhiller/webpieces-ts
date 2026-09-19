@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -25,10 +25,18 @@ const agent = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(nam
 
 const savedHome = process.env['HOME'];
 const savedSession = process.env['CLAUDE_CODE_SESSION_ID'];
+const savedConfigDir = process.env['CLAUDE_CONFIG_DIR'];
+
+// Cleared per test: every fixture relocates HOME, so a developer whose own shell relocates the config
+// dir would otherwise be asserting against a second, real tree. The #963 case sets it explicitly.
+beforeEach(() => {
+    delete process.env['CLAUDE_CONFIG_DIR'];
+});
 
 afterEach(() => {
     if (savedHome === undefined) delete process.env['HOME']; else process.env['HOME'] = savedHome;
     if (savedSession === undefined) delete process.env['CLAUDE_CODE_SESSION_ID']; else process.env['CLAUDE_CODE_SESSION_ID'] = savedSession;
+    if (savedConfigDir === undefined) delete process.env['CLAUDE_CONFIG_DIR']; else process.env['CLAUDE_CONFIG_DIR'] = savedConfigDir;
 });
 
 // A ~/.claude holding the main session transcript and one subagent run of `agentType` on `branch`.
@@ -73,7 +81,7 @@ function provenanceIn(repoRoot: string): Record<string, unknown> {
 
 describe('FinishUpsertPrCommand provenance record', () => {
     it('writes the record BEFORE refusing for a reviewer that never ran', () => {
-        process.env['HOME'] = fakeHarness('sess-f1', 'some-other-agent', 'dean/feat');
+        process.env['HOME'] = fakeHarness('sess-f1', 'envvars-reviewer', 'some/other-branch');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f1';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
@@ -247,6 +255,46 @@ describe('ProvenanceEnforcer refusal wording', () => {
         expect(message).toMatch(/^2 checklist\(s\)/);
         expect(message).toMatch(/no reviewer subagent ran on this branch for these checklists \([^)]*\): migrations/);
         expect(message).toMatch(/cannot attribute to them: envvars/);
+    });
+
+    /**
+     * Issue #963: when provenance found NO transcripts for a KNOWN session, the fault is the transcript
+     * ROOT and not the reviewers — say so, instead of the cwd/worktree advice.
+     *
+     * The main agent's transcript is located by session id alone (no cwd, no branch, no stamping), so an
+     * empty one while the session id is set can only mean nothing was searched in the right place. The
+     * old message sent two debugging rounds into cwd stamping, worktrees and primary clones, none of
+     * which was involved, while the real cause was a relocated `$CLAUDE_CONFIG_DIR`.
+     */
+    it('blames the transcript ROOT, not the reviewers, when the session has no transcript anywhere', () => {
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-noroot-'));
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CONFIG_DIR'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-cfg-'));
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-noroot';
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        writeVerdict(repoRoot, 'envvars');
+
+        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        expect(message).toMatch(/NO transcripts at all for session sess-noroot/);
+        expect(message).toMatch(/CLAUDE_CONFIG_DIR=/);
+        expect(message).toMatch(/transcript-LOCATION problem/);
+        // The advice written for a DIFFERENT fault must not appear for this one.
+        expect(message).not.toMatch(/cwd IS the worktree/);
+        // …and the verdicts are still declared intact, so nobody re-spawns over them.
+        expect(message).toMatch(/Do NOT re-spawn/);
+    });
+
+    // The mirror: the session IS found, only these reviewers are not — which is the case the cwd advice
+    // was actually written for, so it must still print.
+    it('keeps the cwd advice when the session was found but the reviewers were not', () => {
+        process.env['HOME'] = unattributableHarness('sess-u5', 'envvars-reviewer');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u5';
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        writeVerdict(repoRoot, 'envvars');
+
+        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        expect(message).toMatch(/cwd IS the worktree/);
+        expect(message).not.toMatch(/transcript-LOCATION problem/);
     });
 });
 

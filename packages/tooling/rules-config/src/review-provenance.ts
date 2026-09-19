@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { injectable, bindingScopeValues } from 'inversify';
+import { claudeConfigDir } from './claude-config-dir';
 import { toError } from './to-error';
 import { ReviewerEvidence } from './subagent-provenance';
 
@@ -173,15 +173,16 @@ export class ReviewProvenance {
  * Why a service and not a field the AI writes: a reviewer subagent CANNOT know its own transcript path. The
  * environment exposes `CLAUDE_CODE_SESSION_ID` — the PARENT session — and no agent id, so a self-reported
  * link would be invented. Every path here is derived from the harness's own artifacts:
- *   ~/.claude/projects/&#42;/<sessionId>.jsonl                            → the main agent's transcript
- *   ~/.claude/projects/&#42;/<sessionId>/subagents/agent-<id>.jsonl       → one reviewer's transcript
+ *   <config>/projects/&#42;/<sessionId>.jsonl                          → the main agent's transcript
+ *   <config>/projects/&#42;/<sessionId>/subagents/agent-<id>.jsonl     → one reviewer's transcript
+ * where `<config>` is {@link ClaudeConfigDir.root} — `$CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
  * The subagent half is already resolved by {@link SubagentProvenanceService}; this carries it to disk and
  * adds the session-level facts (which session, how long the links live).
  *
  * Deliberately a SEPARATE file from review.json / review-<id>.json: those are AI-authored and stay
  * byte-untouched, so nothing here can be confused for something a reviewer claimed about itself.
  *
- * Best-effort throughout — an unreadable ~/.claude degrades the record to empty links, never fails a PR.
+ * Best-effort throughout — an unreadable config tree degrades the record to empty links, never fails a PR.
  * Same reasoning as SubagentProvenanceService: this reads undocumented Claude Code internals, and a format
  * change must not wedge a consumer's PR.
  *
@@ -206,33 +207,46 @@ export class ReviewProvenanceService {
     }
 
     /**
-     * The main agent's own transcript: `~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`. Located by
-     * scanning every project dir for the file named after the session, so the cwd-slug — which is a
-     * mangling of the working directory we would otherwise have to reproduce exactly — never has to be
-     * derived. '' when there is no session or the file is not there.
+     * The main agent's own transcript: `<config>/projects/<cwd-slug>/<sessionId>.jsonl`. Located by
+     * scanning every project dir under every root {@link ClaudeConfigDir.projectsRoots} names, for the file named
+     * after the session — so the cwd-slug, which is a mangling of the working directory we would
+     * otherwise have to reproduce exactly, never has to be derived. '' when there is no session or the
+     * file is not there.
+     *
+     * THIS FIELD IS THE DIAGNOSTIC. It is found by session id alone — no cwd, no branch, no stamping —
+     * so an empty one while {@link sessionId} is set can ONLY mean the transcript ROOT is wrong. That is
+     * exactly what a hardcoded `~/.claude` produced on a machine with `$CLAUDE_CONFIG_DIR` relocated,
+     * and the gate then refused every PR with a message about the reviewers' cwd.
      */
     mainTranscript(): string {
         const session = this.sessionId();
         if (session === '') return '';
-        const projects = path.join(os.homedir(), '.claude', 'projects');
-        for (const proj of this.readDir(projects)) {
-            const candidate = path.join(projects, proj, `${session}.jsonl`);
-            if (fs.existsSync(candidate)) return candidate;
+        for (const projects of claudeConfigDir.projectsRoots()) {
+            for (const proj of this.readDir(projects)) {
+                const candidate = path.join(projects, proj, `${session}.jsonl`);
+                if (fs.existsSync(candidate)) return candidate;
+            }
         }
         return '';
     }
 
     /**
-     * How many days Claude Code keeps transcripts: `cleanupPeriodDays` from ~/.claude/settings.json (then
-     * settings.local.json), else {@link DEFAULT_RETENTION_DAYS}. The setting is usually absent, which is
-     * why the default is documented rather than left implicit.
+     * How many days Claude Code keeps transcripts: `cleanupPeriodDays` from `<config>/settings.json`
+     * (then settings.local.json), else {@link DEFAULT_RETENTION_DAYS}. The setting is usually absent,
+     * which is why the default is documented rather than left implicit.
+     *
+     * `<config>` is every root {@link ClaudeConfigDir.roots} names, for the same reason the transcripts are
+     * searched in both: a hardcoded `~/.claude` silently read SOMEBODY ELSE'S retention (or none) on a
+     * relocated config dir, so the recorded `transcriptsExpireOn` was computed from a default rather
+     * than from the setting the owner actually wrote.
      */
     retentionDays(): number {
-        const dir = path.join(os.homedir(), '.claude');
-        for (const file of ['settings.json', 'settings.local.json']) {
-            const settings = this.readJson(path.join(dir, file));
-            const days = settings?.['cleanupPeriodDays'];
-            if (typeof days === 'number' && Number.isFinite(days) && days > 0) return days;
+        for (const dir of claudeConfigDir.roots()) {
+            for (const file of ['settings.json', 'settings.local.json']) {
+                const settings = this.readJson(path.join(dir, file));
+                const days = settings?.['cleanupPeriodDays'];
+                if (typeof days === 'number' && Number.isFinite(days) && days > 0) return days;
+            }
         }
         return DEFAULT_RETENTION_DAYS;
     }
