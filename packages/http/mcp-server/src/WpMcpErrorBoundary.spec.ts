@@ -127,7 +127,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
             new WpMcpServerConfig<string, string>()
                 .setName('boundary-server')
                 .setVersion('1.0.0')
-                .setResource('https://api.example.test/mcp')
+                .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)
                 .setEndpointJwtAuthority(jwtHook)
                 .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
@@ -352,7 +352,11 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
     it('answers 401 with WWW-Authenticate for missing or rejected bearers, never -32603', async () => {
         const missing = await post(request('tools/list'), null);
         expect(missing.response.status).toBe(401);
-        expect(missing.response.headers.get('www-authenticate')).toContain('resource_metadata=');
+        // The value is the RFC 9728 METADATA DOCUMENT url, never the resource identifier itself.
+        expect(missing.response.headers.get('www-authenticate')).toBe(
+            'Bearer resource_metadata=' +
+                '"https://api.example.test/.well-known/oauth-protected-resource/app-owned/mcp"',
+        );
         const rejected = await post(request('tools/list'), 'invalid');
         expect(rejected.response.status).toBe(401);
         expect(rejected.response.headers.get('www-authenticate')).toContain('Bearer');

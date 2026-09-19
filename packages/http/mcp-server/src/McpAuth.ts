@@ -106,6 +106,10 @@ export class McpProtectedResourceMetadata {
  * `setAccessTokenAuthority(...)` and `setEndpointJwtAuthority(...)` when it implements both security
  * seams.
  *
+ * SINGLE CANONICAL ORIGIN: one server serves exactly one protected resource. {@link setResource} is
+ * fixed for the lifetime of the process, is the audience of every access token, and is never derived
+ * from the request `Host` — see that setter for why a host-derived audience is a confused deputy.
+ *
  * Each setter validates its own value immediately and names itself in the failure. Setters cannot
  * make a field impossible to forget the way a positional constructor could, so
  * {@link WpMcpServerConfig.validate} runs from `WpMcpServer.bind(...)` and fails at startup listing
@@ -152,9 +156,17 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
     }
 
     /**
-     * REQUIRED. The canonical protected-resource URI, which must be an absolute URL: it is the exact
-     * audience every access token is checked against and the `resource_metadata` of the 401
-     * challenge, so a non-URL here is always a mistake — including a name or version landed on it.
+     * REQUIRED. The ONE canonical protected-resource URI, which must be an absolute URL: it is the
+     * exact audience every access token is checked against, and {@link resourceMetadataUrl} is
+     * derived from it for the 401 challenge, so a non-URL here is always a mistake — including a
+     * name or version landed on it.
+     *
+     * It is fixed for the lifetime of the process and must NEVER be derived from the request `Host`
+     * header: the boundary compares a token's audience against this value, so a host-derived
+     * resource compares two values both taken from caller-controlled input — the confused-deputy
+     * shape this check exists to prevent. Its path must equal `McpBindOptions.endpointPath`, which
+     * `WpMcpServer.bind(...)` verifies. A second hostname is a second deployment, not a second
+     * audience.
      */
     setResource(resource: string): this {
         this.resourceValue = this.requireUrl(resource, 'setResource');
@@ -315,6 +327,21 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
 
     get maxEndpointJwtLifetimeSeconds(): number {
         return this.maxEndpointJwtLifetimeSecondsValue;
+    }
+
+    /**
+     * RFC 9728 §3.1: the URL of this resource's protected-resource METADATA DOCUMENT, derived from
+     * {@link resource} by inserting `/.well-known/oauth-protected-resource` between origin and path
+     * (`https://host/mcp` → `https://host/.well-known/oauth-protected-resource/mcp`).
+     *
+     * This — never the resource identifier itself — is what RFC 9728 §5.1 defines `resource_metadata`
+     * to be, so it is the value webpieces puts in the 401 `WWW-Authenticate` challenge. webpieces
+     * mounts no `.well-known` route; publish {@link protectedResourceMetadata} at this URL.
+     */
+    get resourceMetadataUrl(): string {
+        const url = new URL(this.resource);
+        const path = url.pathname === '/' ? '' : url.pathname;
+        return `${url.origin}/.well-known/oauth-protected-resource${path}`;
     }
 
     protectedResourceMetadata(): McpProtectedResourceMetadata {

@@ -18,7 +18,7 @@ import {
     USER_ID,
 } from './__tests__/WpMcpServerTestFixtures';
 
-const RESOURCE = 'https://api.example.test/mcp';
+const RESOURCE = 'https://api.example.test/app-owned/mcp';
 const ISSUER = 'https://login.example.test';
 
 /**
@@ -157,6 +157,36 @@ describe('WpMcpServerConfig fluent setters', () => {
             'WpMcpServerConfig.setMaxEndpointJwtLifetimeSeconds(...) requires 1..3600 seconds, got 3601.',
         );
         expect(() => config.setMaxEndpointJwtLifetimeSeconds(3600)).not.toThrow();
+    });
+
+    it('derives the RFC 9728 metadata URL by path insertion, for every resource shape', () => {
+        const metadataUrlOf = (resource: string): string =>
+            new WpMcpServerConfig<string, string>().setResource(resource).resourceMetadataUrl;
+        expect(metadataUrlOf(RESOURCE)).toBe(
+            'https://api.example.test/.well-known/oauth-protected-resource/app-owned/mcp',
+        );
+        expect(metadataUrlOf('https://h.example.test/mcp')).toBe(
+            'https://h.example.test/.well-known/oauth-protected-resource/mcp',
+        );
+        // a root-path resource appends nothing: no trailing slash on the metadata URL
+        expect(metadataUrlOf('https://h.example.test/')).toBe(
+            'https://h.example.test/.well-known/oauth-protected-resource',
+        );
+        expect(metadataUrlOf('https://h.example.test')).toBe(
+            'https://h.example.test/.well-known/oauth-protected-resource',
+        );
+        expect(metadataUrlOf('https://h.example.test/a/b')).toBe(
+            'https://h.example.test/.well-known/oauth-protected-resource/a/b',
+        );
+        expect(metadataUrlOf('http://localhost:8300/mcp')).toBe(
+            'http://localhost:8300/.well-known/oauth-protected-resource/mcp',
+        );
+    });
+
+    it('bind() refuses a resource whose path is not the endpointPath', () => {
+        expect(() => bind(complete().setResource('https://api.example.test/mcp-v2'))).toThrow(
+            `MCP resource path '/mcp-v2' must equal endpointPath '${ENDPOINT_PATH}'`,
+        );
     });
 
     it('reading an unset required value names the setter that fills it', () => {

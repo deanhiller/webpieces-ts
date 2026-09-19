@@ -44,6 +44,11 @@ const log = LogManager.getLogger('WpMcpServer');
 
 type AuthenticatedExpressRequest = Request & { auth?: AuthInfo };
 
+/** Body of the 405 answered for every non-POST method at the bound MCP endpoint path. */
+class McpMethodNotAllowedBody {
+    readonly error = 'method_not_allowed';
+}
+
 /** Facts established once per POST at the bind boundary and handed to the SDK handlers. */
 class McpPostAuthentication {
     constructor(
@@ -97,11 +102,38 @@ export class WpMcpServer<TGrant, TMintRequest> {
         this.translator = new WpMcpErrorTranslator(config.errorTranslator);
     }
 
+    /**
+     * Mounts this MCP endpoint on `app`: POST at `options.endpointPath`, plus a 405 (`Allow: POST`)
+     * for every other method there.
+     *
+     * SINGLE CANONICAL ORIGIN: one server serves exactly one protected resource, so this may be
+     * called only once and `WpMcpServerConfig.setResource(...)`'s path must equal `endpointPath`.
+     * That resource URI is fixed for the lifetime of the process and is never derived from the
+     * request `Host` — a host-derived audience would make the boundary's own audience check compare
+     * two caller-controlled values, which is the confused deputy this check exists to prevent.
+     * Serving a second hostname is a second deployment, not a second audience.
+     *
+     * The OAuth/discovery half stays app-owned: publish `protectedResourceMetadata()` at
+     * `WpMcpServerConfig.resourceMetadataUrl`, which is where the 401 challenge sends clients.
+     */
     bind(app: Express, options: McpBindOptions): void {
-        if (this.handler) throw new Error('WpMcpServer.bind(...) may be called only once.');
+        if (this.handler) {
+            throw new Error(
+                'WpMcpServer.bind(...) may be called only once; an MCP resource has exactly one ' +
+                    'canonical URI, fixed for the lifetime of the process.',
+            );
+        }
         // Fail at boot naming the forgotten setter, never on the first request with a 401 the client
         // answers by re-authenticating (see WpMcpServerConfig).
         this.config.validate();
+        const resourcePath = new URL(this.config.resource).pathname;
+        if (resourcePath !== options.endpointPath) {
+            throw new Error(
+                `MCP resource path '${resourcePath}' must equal endpointPath ` +
+                    `'${options.endpointPath}'; the canonical resource URI ` +
+                    `'${this.config.resource}' and the bound route are the same endpoint.`,
+            );
+        }
         this.registry = new McpToolRegistry(options.bindings);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
@@ -129,6 +161,13 @@ export class WpMcpServer<TGrant, TMintRequest> {
                     );
                 }),
         );
+        // Registered AFTER the POST route so POST still wins. MCP 2026-07-28 has no session GET
+        // (`subscriptions/listen` is a POST method), so every other method is a method error — and a
+        // discovery probe gets that instead of Express' bare 404.
+        app.all(options.endpointPath, (_req: Request, res: Response): void => {
+            res.setHeader('Allow', 'POST');
+            res.status(405).json(new McpMethodNotAllowedBody());
+        });
     }
 
     protectedResourceMetadata(): McpProtectedResourceMetadata {
@@ -484,7 +523,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
     }
 
     private challenge(): string {
-        return `Bearer resource_metadata="${this.config.resource}"`;
+        return `Bearer resource_metadata="${this.config.resourceMetadataUrl}"`;
     }
 
     private bodyObject(value: DtoValue | undefined): Record<string, DtoValue> | undefined {
