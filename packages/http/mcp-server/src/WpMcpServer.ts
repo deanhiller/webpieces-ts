@@ -84,7 +84,8 @@ class WpSdkMcpServer extends McpServer {
  */
 export class WpMcpServer<TGrant, TMintRequest> {
     private readonly dispatcher = new McpApiDispatcher();
-    private readonly translator = new WpMcpErrorTranslator();
+    /** tools/call gives the app's translators first refusal; every other reply stays framework-owned. */
+    private readonly translator: WpMcpErrorTranslator;
     private registry?: McpToolRegistry;
     private handler?: McpHttpHandler;
     private streamingHandler?: McpHttpHandler;
@@ -92,10 +93,15 @@ export class WpMcpServer<TGrant, TMintRequest> {
     private streamingNodeHandler?: NodeMcpRequestHandler;
     private revision?: string;
 
-    constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {}
+    constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {
+        this.translator = new WpMcpErrorTranslator(config.errorTranslator);
+    }
 
     bind(app: Express, options: McpBindOptions): void {
         if (this.handler) throw new Error('WpMcpServer.bind(...) may be called only once.');
+        // Fail at boot naming the forgotten setter, never on the first request with a 401 the client
+        // answers by re-authenticating (see WpMcpServerConfig).
+        this.config.validate();
         this.registry = new McpToolRegistry(options.bindings);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');

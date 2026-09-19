@@ -28,3 +28,4 @@ export {
     ModelVisibleToolError,
     WpMcpErrorTranslator,
 } from './WpMcpErrorTranslator';
+export type { McpErrorTranslators } from './WpMcpErrorTranslator';

@@ -14,6 +14,8 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Coordinate bounded list caches, request-scoped subscriptions, shutdown, and a pluggable event bus.
 - Validate input/output DTO shapes and map every failure through the one `WpMcpErrorTranslator`
   (shared `ApiErrorBoundary` normalization, `ApiErrorCodec` text, requestId on every reply).
+- Give the application's `McpErrorTranslators` first refusal on every `tools/call` failure, and own
+  the reply for `tools/list` and the pre-SDK HTTP boundary outright.
 
 ## Out of scope
 

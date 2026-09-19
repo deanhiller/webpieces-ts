@@ -75,6 +75,36 @@ A map is still a closed schema: no key can carry an unspecified value. Check clo
 `new DtoSchemaBuilder().isClosedSchema(schema)`, not `schema.additionalProperties === false`, which wrongly
 rejects typed maps.
 
+## Configuration
+
+`WpMcpServerConfig` is built with fluent setters — every name sits next to its own value, so no two
+settings can be swapped, and a future setting is an additive setter rather than a breaking signature
+change. Expect to supply the type arguments explicitly:
+
+```ts
+const config = new WpMcpServerConfig<MyGrant, MyMintRequest>()
+    .setName('my-server')
+    .setVersion('1.0.0')
+    .setResource('https://api.example.com/mcp')
+    .setAccessTokenAuthority(authority)
+    .setEndpointJwtAuthority(jwtHook)
+    .setEndpointMintRequest((credential) => new MyMintRequest(credential.subject))
+    .setAuthorizationServers(['https://login.example.com'])
+    .setRequiredScopes(['tools'])
+    .setErrorTranslator(new MyMcpErrorTranslators())
+    .setMaxAccountValidationAgeSeconds(15 * 60);
+```
+
+Each setter validates its own value immediately and names itself in the failure: `setResource(...)`
+and every entry of `setAuthorizationServers(...)` must be an absolute URL, because they are compared
+against a token's audience and issuer. `setMaxAccountValidationAgeSeconds` and
+`setMaxEndpointJwtLifetimeSeconds` default to one hour and are capped there.
+`setErrorTranslator(...)` is the only optional non-ceiling setting; everything else is required and
+`WpMcpServer.bind(...)` fails at startup listing **every** missing setter
+(`WpMcpServerConfig is missing setResource(...)`). That is deliberate: a misconfigured audience or
+issuer otherwise surfaces as a first-request `401 + WWW-Authenticate`, which is the OAuth discovery
+signal, so a client answers it by re-authenticating and failing again — forever.
+
 Applications supply the endpoint path, explicit bindings, and deployment topology. There is no
 framework-owned `/mcp` path:
 
@@ -149,6 +179,40 @@ generic message plus `retryAfterSeconds` where present, and for an `ApiCodedErro
 Every reply carries the requestId so a user can quote it: `_meta["webpieces/requestId"]` on every
 `tools/call` result (success or `isError`), `requestId` in the `isError` payload, and
 `error.data.requestId` on JSON-RPC and HTTP-boundary errors.
+
+### The application's own `tools/call` translation
+
+An app owns its error taxonomy and owns how those errors should be explained to a model, so it gets
+FIRST REFUSAL on every `tools/call` failure — the same convention `ExpressWrapper.handleError`
+applies on the HTTP path through `ClientRegistry.tryTranslateToWire`. Register one with
+`WpMcpServerConfig.setErrorTranslator(...)`; it is a setter and not a global, because `WpMcpServer` is
+constructed by app code and two servers may run in one process.
+
+```ts
+class LangMcpErrorTranslators implements McpErrorTranslators {
+    toToolResult(error: Error, scope: McpFailureScope): CallToolResult | undefined {
+        if (!(error instanceof LangPassageLockedError)) return undefined; // not mine
+        return {
+            content: [{ type: 'text', text: `Passage ${error.passageId} is locked.` }],
+            structuredContent: { passageId: error.passageId, action: 'ask_the_user_to_unlock' },
+            isError: true,
+        };
+    }
+}
+```
+
+- `error` is the RAW thrown value, NOT normalized, so `instanceof` on the app's own classes works.
+- Returning `undefined` means "not mine" and the webpieces default renders, unchanged.
+- A claimed error owns the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`.
+- webpieces default-fills `_meta["webpieces/requestId"]` only when the returned result has no
+  `_meta`; an app that sets `_meta` keeps it untouched.
+- Operator-detail logging has already run when the translator is called, so claiming an error can
+  never silently kill observability. A translator that THROWS is itself reported through the same
+  boundary and the original error still renders the reply.
+- The scope is `tools/call` ONLY. `tools/list` and the pre-SDK HTTP boundary stay framework-owned:
+  that boundary emits the `401 + WWW-Authenticate: Bearer resource_metadata=...` MCP clients depend
+  on for OAuth discovery, and an app rewriting it breaks connector onboarding in a way that is
+  extremely hard to debug.
 
 A remote binding's generated Node client turns a dependency's 4xx into the gateway's own
 `ApiImplementationError` (see `NodeProxyClient.adaptDownstreamFailure`). A gateway that wants the model
