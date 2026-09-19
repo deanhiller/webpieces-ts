@@ -1,9 +1,7 @@
 import {
     ApiDependencyBackoffError,
     ApiEndUserError,
-    ApiError,
     ApiErrorBoundary,
-    ApiErrorCodec,
     ApiErrorHttpStatus,
     HttpHeader,
     HttpResponseDto,
@@ -53,27 +51,32 @@ export class ApiErrorHttpMapper {
     ]);
 
     /**
-     * Unknown throws and caller-local failures become a concrete implementation failure at this
-     * owning API boundary. ApiError itself has no fallback status mapping.
+     * Unknown throws and caller-local failures answer as a 500 implementation failure at this owning
+     * API boundary. The thrown error itself is never replaced: it is what gets logged and classified.
      */
-    // webpieces-disable no-any-unknown -- thrown values are unknown until normalized at this boundary
+    // webpieces-disable no-any-unknown -- thrown values are unknown until classified at this boundary
     public toResponse(thrown: unknown): HttpResponseDto {
-        const error = this.boundary.normalize(thrown);
-        const status = this.statusFor(error);
-        this.boundary.logOperatorDetail(error);
+        const status = this.statusFor(thrown);
+        this.boundary.logOperatorDetail(thrown);
         const headers =
-            error instanceof ApiDependencyBackoffError
-                ? [new HttpHeader('retry-after', String(error.retryAfterSeconds))]
+            thrown instanceof ApiDependencyBackoffError
+                ? [new HttpHeader('retry-after', String(thrown.retryAfterSeconds))]
                 : [];
         return new HttpResponseDto(
             new HttpResponseStatus(status, this.genericMessage(status)),
             headers,
-            ApiErrorCodec.encode(error),
+            this.boundary.encode(thrown),
         );
     }
 
-    /** The protocol status; only an end-user error in `'edge'` mode departs from the shared mapping. */
-    private statusFor(error: ApiError): number {
+    /**
+     * The protocol status; only an end-user error in `'edge'` mode departs from the shared mapping.
+     * Anything the boundary does not classify as an API outcome is this server's own bug: 500.
+     */
+    // webpieces-disable no-any-unknown -- thrown values are unknown until classified at this boundary
+    private statusFor(thrown: unknown): number {
+        const error = this.boundary.apiOutcome(thrown);
+        if (!error) return 500;
         if (this.endUserStatus === 'edge' && error instanceof ApiEndUserError) {
             return error.edgeHttpStatus ?? 400;
         }

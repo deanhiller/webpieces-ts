@@ -84,6 +84,15 @@ class FakeResponse {
     }
 }
 
+/** An app's own error class: not an ApiError, and the identity a wrapper used to destroy (#959). */
+class LangPassageLockedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'LangPassageLockedError';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
 /** A custom app error at HTTP 461 with its own bidirectional translation — the explicit opt-out. */
 class VendorPortalError extends Error {
     constructor(message: string) {
@@ -412,14 +421,46 @@ describe('handleError — what still goes out on purpose', () => {
         expect(res.headers).toContainEqual(['retry-after', '45']);
     });
 
-    it('normalizes a caller-local connection failure to an implementation error', () => {
+    /**
+     * THE TRAP (#959). `ApiConnectionError` IS an `ApiError`, so the naive "just encode what was
+     * thrown" would publish kind `connection` — and `ApiErrorHttpStatus.code` THROWS on that kind.
+     * A caller-local connection failure is this gateway's own bug and must stay a 500
+     * `implementation`, byte for byte, with the downstream host never reaching the wire.
+     */
+    it('publishes a caller-local connection failure as a 500 implementation error', () => {
         const res = harness.send(new ApiConnectionError('ECONNREFUSED private-host:8443'));
+        expect(res.statusCode).toBe(500);
+        expect(res.statusMessage).toBe('Internal Server Error');
+        expect(harness.bodyOf(res)).toMatchObject({
+            kind: 'implementation',
+            message: 'Internal Error',
+        });
+        expect(res.body).not.toContain('connection');
+        expect(res.body).not.toContain('private-host');
+        // The operator STILL sees which class failed — the substitution used to erase exactly this.
+        expect(capturing.lines.join('\n')).toContain(
+            '[name=ApiConnectionError kind=implementation subType=none] ' +
+                'ECONNREFUSED private-host:8443',
+        );
+    });
+
+    it('keeps a non-ApiError class name in the operator log while publishing nothing of it', () => {
+        const res = harness.send(new LangPassageLockedError('passage 7 locked for tenant_7'));
+
         expect(res.statusCode).toBe(500);
         expect(harness.bodyOf(res)).toMatchObject({
             kind: 'implementation',
             message: 'Internal Error',
         });
-        expect(res.body).not.toContain('private-host');
+        expect(res.body).not.toContain('tenant_7');
+        const logged = capturing.lines.join('\n');
+        expect(logged).toContain(
+            '[name=LangPassageLockedError kind=implementation subType=none] ' +
+                'passage 7 locked for tenant_7',
+        );
+        expect(logged).not.toContain('name=ApiImplementationError');
+        // The wrapper used to copy the message in and keep the original as `cause`, printing it twice.
+        expect(logged).not.toContain('cause=passage 7 locked');
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {

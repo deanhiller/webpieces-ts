@@ -201,6 +201,34 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         });
     });
 
+    /**
+     * THE TRAP (#959). `ApiConnectionError` IS an `ApiError`, so encoding the thrown value naively
+     * would publish kind `connection` to the model. A downstream call of OURS failing is this
+     * server's own bug: it must stay `implementation`, with the generic implementation text, and
+     * the downstream host must not reach the model.
+     */
+    it('renders a caller-local connection failure as implementation, never as kind connection', async () => {
+        logs.lines.length = 0;
+
+        const reply = await callTool('account_search', { query: 'downstream' });
+
+        const visible = modelErrorOf(reply);
+        expect(visible['kind']).toBe('implementation');
+        expect(visible['message']).toContain('Internal error in tool account_search');
+        expect(visible['message']).toContain('bug in the tool, not in your arguments');
+        expect(JSON.stringify(reply)).not.toContain('private-host');
+        expect(JSON.stringify(reply)).not.toContain('connection');
+        // Exactly one boundary line, and it still names the class that actually failed.
+        const lines = logs.containing(
+            '[name=ApiConnectionError kind=implementation subType=none] ' +
+                'ECONNREFUSED private-host:8443',
+        );
+        expect(lines).toHaveLength(1);
+        expect(lines[0].level).toBe('error');
+        expect(lines[0].logger).toBe('WpMcpErrorTranslator');
+        expect(logs.containing('name=ApiImplementationError')).toHaveLength(0);
+    });
+
     it('rejects unknown tools and caller-injected fields before dispatch', async () => {
         const unknown = await post(request('tools/call', { name: 'not_a_tool', arguments: {} }));
         expect(unknown.response.status).toBe(200);
