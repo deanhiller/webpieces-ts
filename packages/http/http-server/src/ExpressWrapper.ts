@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import {
     ClientRegistry,
     ApiBadRequestError,
-    HttpHeader,
     HttpContractMapper,
     HttpResponseDto,
     HttpResponseStatus,
@@ -17,6 +16,7 @@ import {
     RawRequest,
     RequestContextHeaders,
 } from '@webpieces/core-context';
+import { ExpressResponseWriter } from './ExpressResponseWriter';
 import { ApiErrorHttpMapper, EndUserStatus } from './ApiErrorHttpMapper';
 import { RequestBodyReader } from './body/RequestBodyReader';
 import { StreamBodyReader } from './body/StreamBodyReader';
@@ -64,6 +64,7 @@ export class ExpressWrapper {
      * message goes on the wire" rule is stated.
      */
     private readonly errorWireMapper: ApiErrorHttpMapper;
+    private readonly responseWriter = new ExpressResponseWriter();
 
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
@@ -391,68 +392,35 @@ export class ExpressWrapper {
      * and the list of statuses, which must stay in step with `ClientErrorTranslator`'s built-in
      * mapping.
      */
-    // webpieces-disable no-any-unknown -- a thrown error is genuinely unknown until narrowed below
-    public handleError(res: Response, error: unknown): void {
+    // webpieces-disable no-any-unknown -- a thrown value is genuinely unknown until toError narrows it
+    public handleError(res: Response, thrown: unknown): void {
         if (res.headersSent) {
             return;
         }
 
+        // ONE narrowing, at the top, and every layer below it is honest about holding an `Error`.
+        const error = toError(thrown);
         // The app's ErrorTranslators own the WHOLE response — status code, reason phrase, headers
         // and body — so an app can publish its own envelope AND its own `Retry-After` /
         // `WWW-Authenticate` / trace header / cookie, which the old (statusCode, protocolError) pair
-        // could not express at all. `undefined` means "not mine": webpieces' default answers
-        // instead. Symmetric with the client's ClientErrorTranslator, which consults
-        // tryTranslateFromWire() first, over the identical HttpResponseDto shape.
-        const appResponse =
-            error instanceof Error ? ClientRegistry.tryTranslateToWire(error) : undefined;
-
-        this.send(res, appResponse ?? this.errorWireMapper.toResponse(error));
+        // could not express at all. A registered translator REPLACES this default and declines by
+        // delegating back to it, so there is no per-error "not mine" branch here: the only question
+        // is whether this process installed one.
+        const translators = ClientRegistry.getErrorTranslators();
+        this.send(
+            res,
+            translators ? translators.toWire(error) : this.errorWireMapper.toResponse(error),
+        );
     }
 
     /**
-     * Write an {@link HttpResponseDto} to express — the ONE place a response DTO becomes bytes, used
-     * by the app's translators and by webpieces' own default alike.
-     *
-     * `append`, not `setHeader`, because the DTO's headers are a LIST: HTTP permits repeats
-     * (`Set-Cookie` is the everyday one) and `setHeader` would keep only the last of them. That list
-     * shape is the whole reason the DTO does not use a Map.
-     *
-     * `Content-Type: application/json` is INFRASTRUCTURE here, not app policy: webpieces is the one
-     * doing the `JSON.stringify`, so it states what it wrote. Express would otherwise default a
-     * string body to `text/html`, which is wrong for every response this framework sends. A
-     * translator that genuinely wants another type says so in its own header list and wins.
+     * Stamp the transaction id and hand the DTO to the shared {@link ExpressResponseWriter} — the
+     * ONE place a response DTO becomes bytes, used by the app's translators, by webpieces' own
+     * default, and by the MCP pre-SDK boundary alike.
      */
     private send(res: Response, response: HttpResponseDto): void {
         this.stampTransactionId(res);
-        const declaresContentType = response.headers.some(
-            (header: HttpHeader) => header.name.toLowerCase() === 'content-type',
-        );
-        if (!declaresContentType && response.body !== undefined) {
-            res.setHeader('Content-Type', 'application/json');
-        }
-        for (const header of response.headers) {
-            res.append(header.name, header.value);
-        }
-        // express writes the reason phrase from `statusMessage`, so a translator that says
-        // `new HttpResponseStatus(460, 'Order Not Found')` gets 'Order Not Found' on the status line
-        // rather than node's blank default for an unregistered code.
-        res.statusMessage = response.status.reason;
-        const payload =
-            response.body === undefined
-                ? undefined
-                : this.responsePayload(response, declaresContentType);
-        res.status(response.status.code).send(payload);
-    }
-
-    /** JSON by default; explicit text content types write the caller's string verbatim. */
-    private responsePayload(response: HttpResponseDto, declaresContentType: boolean): string {
-        const contentType = response.headers.find(
-            (header: HttpHeader) => header.name.toLowerCase() === 'content-type',
-        )?.value;
-        if (declaresContentType && contentType !== undefined && !/json/i.test(contentType)) {
-            return typeof response.body === 'string' ? response.body : String(response.body);
-        }
-        return JSON.stringify(response.body) ?? '';
+        this.responseWriter.write(res, response);
     }
 
     /**

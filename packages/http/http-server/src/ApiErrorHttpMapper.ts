@@ -1,15 +1,11 @@
 import {
-    ApiDependencyBackoffError,
-    ApiEndUserError,
     ApiErrorBoundary,
     ApiErrorHttpStatus,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
-    LogManager,
+    PublishedKind,
 } from '@webpieces/core-util';
-
-const log = LogManager.getLogger('ApiErrorHttpMapper');
 
 /**
  * How a server answers an {@link ApiEndUserError}.
@@ -26,11 +22,23 @@ const log = LogManager.getLogger('ApiErrorHttpMapper');
  */
 export type EndUserStatus = 'gui' | 'edge';
 
-/** HTTP adapter for the transport-neutral API error taxonomy. */
+/**
+ * HTTP adapter for the transport-neutral API error taxonomy, and the webpieces DEFAULT
+ * {@link ErrorTranslators} half on the server: an error in, the exact HTTP response out.
+ *
+ * An app that registers its own translator declines by DELEGATING here —
+ * `new ApiErrorHttpMapper('gui').toResponse(error)` — so "no translator registered" and "a
+ * translator that does not claim this error" produce byte-identical responses.
+ */
 export class ApiErrorHttpMapper {
-    constructor(private readonly endUserStatus: EndUserStatus) {}
+    /**
+     * @param endUserStatus - `'gui'` (the framework default) or `'edge'`. A router configured with
+     *   `setEndUserStatus('edge')` must pass `'edge'` here too when it delegates from its own
+     *   translator, or a delegated end-user error would answer 266 instead of its published status.
+     */
+    constructor(private readonly endUserStatus: EndUserStatus = 'gui') {}
 
-    private readonly boundary = new ApiErrorBoundary(log);
+    private readonly boundary = new ApiErrorBoundary();
     private readonly genericMessages: Map<number, string> = new Map<number, string>([
         [266, 'End User Error'],
         [400, 'Bad Request'],
@@ -51,36 +59,32 @@ export class ApiErrorHttpMapper {
     ]);
 
     /**
-     * Unknown throws and caller-local failures answer as a 500 implementation failure at this owning
-     * API boundary. The thrown error itself is never replaced: it is what gets logged and classified.
+     * The payload IS the answer. {@link ApiErrorBoundary.encode} has already applied both shared
+     * rules — a caller-local `ApiConnectionError` (and every non-`ApiError`) publishes as
+     * `implementation`, and only an `ApiEndUserError`'s own message is disclosed — and the payload
+     * carries everything HTTP needs after that: `kind`, `statusCode`, `edgeHttpStatus` and
+     * `retryAfterSeconds`. So there is no `instanceof` here and nothing re-derived from the raw
+     * error; unknown throws and caller-local failures come out as a 500 implementation failure
+     * because that is what the payload says.
      */
-    // webpieces-disable no-any-unknown -- thrown values are unknown until classified at this boundary
-    public toResponse(thrown: unknown): HttpResponseDto {
-        const status = this.statusFor(thrown);
-        this.boundary.logOperatorDetail(thrown);
+    public toResponse(error: Error): HttpResponseDto {
+        const payload = this.boundary.encode(error);
+        // The boundary never publishes kind 'connection' — that is the whole first rule above — so
+        // this is the published subset ApiErrorHttpStatus.codeFor accepts.
+        const kind = payload.kind as PublishedKind;
+        const status =
+            this.endUserStatus === 'edge' && kind === 'end-user'
+                ? (payload.edgeHttpStatus ?? 400)
+                : ApiErrorHttpStatus.codeFor(kind, payload.statusCode);
         const headers =
-            thrown instanceof ApiDependencyBackoffError
-                ? [new HttpHeader('retry-after', String(thrown.retryAfterSeconds))]
+            payload.retryAfterSeconds !== undefined
+                ? [new HttpHeader('retry-after', String(payload.retryAfterSeconds))]
                 : [];
         return new HttpResponseDto(
             new HttpResponseStatus(status, this.genericMessage(status)),
             headers,
-            this.boundary.encode(thrown),
+            payload,
         );
-    }
-
-    /**
-     * The protocol status; only an end-user error in `'edge'` mode departs from the shared mapping.
-     * Anything the boundary does not classify as an API outcome is this server's own bug: 500.
-     */
-    // webpieces-disable no-any-unknown -- thrown values are unknown until classified at this boundary
-    private statusFor(thrown: unknown): number {
-        const error = this.boundary.apiOutcome(thrown);
-        if (!error) return 500;
-        if (this.endUserStatus === 'edge' && error instanceof ApiEndUserError) {
-            return error.edgeHttpStatus ?? 400;
-        }
-        return ApiErrorHttpStatus.code(error);
     }
 
     public genericMessage(code: number): string {

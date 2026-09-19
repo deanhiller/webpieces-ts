@@ -23,6 +23,7 @@ import {
     ApiUnsupportedMediaTypeError,
     EdgeHttpStatus,
 } from './ApiError';
+import { toError } from '../lib/errorUtils';
 
 /** Allowlisted transport-neutral envelope. It never contains stacks or arbitrary properties. */
 export class ApiErrorPayload {
@@ -44,13 +45,23 @@ export class ApiErrorPayload {
 
 /** Bounded safe codec shared by HTTP, IPC, and other remote adapters. */
 export class ApiErrorCodec {
-    // webpieces-disable no-function-outside-class -- stateless public transport codec; webpieces-disable no-any-unknown -- thrown values are untrusted until narrowed
-    static encode(error: unknown): ApiErrorPayload {
+    /**
+     * Encode a thrown error faithfully. The input is an `Error`, never `unknown`: every caller in
+     * the framework has already narrowed with `toError` at its catch, and the `unknown` this used to
+     * advertise leaked out of the PRIVATE `.cause` recursion below (`Error.cause` is typed `unknown`
+     * in TypeScript), which is an internal concern.
+     *
+     * This is the FAITHFUL encode: it publishes `kind` exactly as the error declares it. The
+     * boundary rule that a caller-local `ApiConnectionError` publishes as `implementation` belongs
+     * to {@link ApiErrorBoundary}, which every protocol edge uses instead of calling this directly.
+     */
+    // webpieces-disable no-function-outside-class -- stateless public transport codec
+    static encode(error: Error): ApiErrorPayload {
         return this.encodeDepth(error, 0);
     }
 
-    // webpieces-disable no-function-outside-class -- recursive bounded transport codec; webpieces-disable no-any-unknown -- thrown causes require narrowing
-    private static encodeDepth(error: unknown, depth: number): ApiErrorPayload {
+    // webpieces-disable no-function-outside-class -- recursive bounded transport codec
+    private static encodeDepth(error: Error, depth: number): ApiErrorPayload {
         const kind = error instanceof ApiError ? error.kind : 'implementation';
         const payload = new ApiErrorPayload(kind, this.publicMessage(error, kind));
         if (error instanceof ApiError) payload.subType = this.text(error.subType);
@@ -69,9 +80,13 @@ export class ApiErrorCodec {
         if (error instanceof ApiDependencyBackoffError) {
             payload.retryAfterSeconds = this.wait(error.retryAfterSeconds);
         }
-        if (error instanceof Error && depth < 3) {
+        if (depth < 3) {
+            // `Error.cause` is `unknown` by construction, so the recursion narrows it with `toError`
+            // exactly as a catch block would — and then deals only in `Error` like everything else.
             const cause = Object.getOwnPropertyDescriptor(error, 'cause')?.value;
-            if (cause instanceof Error) payload.cause = this.encodeDepth(cause, depth + 1);
+            if (cause !== undefined && cause !== null) {
+                payload.cause = this.encodeDepth(toError(cause), depth + 1);
+            }
         }
         return payload;
     }
@@ -182,8 +197,8 @@ export class ApiErrorCodec {
         return new ApiImplementationError('Internal Error', undefined, true);
     }
 
-    // webpieces-disable no-function-outside-class -- caller-safe message selection; webpieces-disable no-any-unknown -- thrown values require narrowing
-    private static publicMessage(error: unknown, kind: ApiErrorKind): string {
+    // webpieces-disable no-function-outside-class -- caller-safe message selection
+    private static publicMessage(error: Error, kind: ApiErrorKind): string {
         if (error instanceof ApiEndUserError) return error.message.slice(0, 4096);
         return this.message(kind);
     }

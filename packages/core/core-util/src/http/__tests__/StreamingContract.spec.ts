@@ -94,6 +94,34 @@ describe('typed streaming contract', () => {
         await expect(writer.event({ value: 'late' })).rejects.toBeInstanceOf(StreamTransportError);
     });
 
+    /**
+     * #961: `fail` takes `Error`, never `ApiError`. `ApiError` is a CONVENIENCE taxonomy webpieces
+     * ships so the common cases are easy — it is not something the framework may DEMAND from an
+     * application, which is free to subclass `Error` and nothing else.
+     */
+    it("streams an app's own Error subclass, published generically as kind implementation", async () => {
+        class MyLibError extends Error {
+            constructor(message: string) {
+                super(message);
+                this.name = 'MyLibError';
+            }
+        }
+        const envelopes: StreamEnvelope<InputEvent>[] = [];
+        const writer = new StreamWriter<InputEvent>(
+            async (envelope: StreamEnvelope<InputEvent>) => {
+                envelopes.push(envelope);
+            },
+        );
+
+        await writer.fail(new MyLibError('connection string with a password in it'));
+
+        expect(envelopes[0].error).toMatchObject({
+            kind: 'implementation',
+            message: 'Internal Error',
+        });
+        expect(JSON.stringify(envelopes[0])).not.toContain('password');
+    });
+
     it('notifies cancellation exactly once and makes it terminal', async () => {
         const writer = new StreamWriter<InputEvent>(async () => undefined);
         const cancelled = vi.fn();

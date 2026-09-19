@@ -1,5 +1,5 @@
 import {
-    ApiErrorCodec,
+    ApiErrorBoundary,
     ApiEndpointNotFoundError,
     ApiImplementationError,
 } from '@webpieces/core-util/errors';
@@ -31,6 +31,8 @@ class IpcRegistration {
 /** One dispatcher hosts multiple explicitly registered APIs and never enumerates controller members. */
 export class IpcServerFactory {
     private readonly registrations = new Map<string, Map<string, IpcRegistration>>();
+    /** This receiver OWNS the reply, so it publishes through the shared boundary rule, not the raw codec. */
+    private readonly boundary = new ApiErrorBoundary();
     constructor(private readonly logging: IpcLogging) {}
 
     create<T extends object>(apiClass: IpcApiType<T>, controller: T): void {
@@ -98,7 +100,7 @@ export class IpcServerFactory {
             return new IpcSuccess(request.context, body === undefined ? null : body);
         } catch (err: unknown) {
             const error = toError(err);
-            return new IpcFailure(request.context, ApiErrorCodec.encode(error));
+            return new IpcFailure(request.context, this.boundary.encode(error));
         }
     };
 }

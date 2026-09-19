@@ -383,6 +383,9 @@ importers:
       '@webpieces/http-routing':
         specifier: workspace:*
         version: link:../http-routing
+      '@webpieces/http-server':
+        specifier: workspace:*
+        version: link:../http-server
       express:
         specifier: 5.1.0
         version: 5.1.0
@@ -396,9 +399,6 @@ importers:
       '@webpieces/http-client-node':
         specifier: workspace:*
         version: link:../http-client-node
-      '@webpieces/http-server':
-        specifier: workspace:*
-        version: link:../http-server
 
   packages/logging/bunyan:
     dependencies:

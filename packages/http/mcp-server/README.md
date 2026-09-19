@@ -163,21 +163,44 @@ hour and MCP access tokens at 30 days.
 ## Error boundary
 
 `WpMcpErrorTranslator` is the one place a failure becomes an MCP reply, mirroring
-`ApiErrorHttpMapper`. Each entry point has exactly one catch that only delegates to it; the dispatcher
-and the local/remote invokers have none. Classification is the shared `ApiErrorBoundary` rule (a
-non-`ApiError`, or a caller-local `ApiConnectionError`, publishes as kind `implementation`), and each
-failure is logged once at the same per-kind level as HTTP, with `requestId`, JSON-RPC id and tool
-name. The boundary never substitutes an object for the thrown error, so the operator line names the
-class that actually failed and an app's `McpErrorTranslators` can `instanceof` its own error classes.
+`ApiErrorHttpMapper`: an error in, the exact wire shape out. Each entry point has exactly one catch
+that only delegates to it; the dispatcher and the local/remote invokers have none. Classification is
+the shared `ApiErrorBoundary.encode` rule (a non-`ApiError`, or a caller-local `ApiConnectionError`,
+publishes as kind `implementation`). The boundary never substitutes an object for the thrown error,
+so an app's `McpErrorTranslators` can `instanceof` its own error classes.
 
-| Where | Reply |
-|---|---|
-| `tools/call`, tool found: bad arguments, `@WpMcpAuthJwt` denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `isError: true` result |
-| `tools/call`, unknown tool name | JSON-RPC `-32602` `Unknown tool: <name>` |
-| `tools/list` | JSON-RPC `-32602` (bad request) or `-32603` `Internal Error` |
-| before the SDK: bearer, `Origin`, malformed body | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500 |
+There is ONE method per BOUNDARY, named for the boundary it guards. They cannot be one shape — the
+MCP spec fixes each — so the three-ness is made obvious rather than accidental:
+
+| Boundary | Method | Reply |
+|---|---|---|
+| before the SDK: bearer, `Origin`, malformed body | `toBearerBoundaryResponse(error): HttpResponseDto<McpHttpErrorBody>` | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500 |
+| `tools/list` | `toListError(error): never` | throws JSON-RPC `-32602` (bad request) or `-32603` `Internal Error` |
+| `tools/call`, tool found: bad arguments, `@WpMcpAuthJwt` denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` | `isError: true` result |
+| `tools/call`, unknown tool name | `unknownTool(name)` | JSON-RPC `-32602` `Unknown tool: <name>` |
+
+The pre-SDK boundary produces a VALUE like every other API in the framework and `WpMcpServer` writes
+it through the same `ExpressResponseWriter` the ordinary HTTP path uses — it does not hand-roll
+`res.status(...).json(...)`. The body stays JSON-RPC shaped because an MCP client expects that;
+`HttpResponseDto` is generic and its header LIST carries `WWW-Authenticate`.
+
+`toListError` is typed `never` — it THROWS rather than returning a value the caller must remember to
+throw — and it is LOAD-BEARING for disclosure, not defence in depth: the official SDK wraps a foreign
+throw in `-32603` but copies its `message` onto the wire verbatim (measured and pinned by
+`McpSdkForeignThrow.spec.ts`).
+
+**Operator logging is NOT in the translator.** The edges with no filter chain above them — bearer
+verification, `Origin`, a malformed body, `tools/list` — are wrapped in `LogApiCall`, which is this
+repo's one line on logging; `tools/call` dispatches through the ordinary filter chain, so
+`LogApiFilter` owns its line. Exactly one `[API-server-resp-FAIL]` / `-OTHER` line per failure, with
+the request, the identity and the timing on it, and none of the barer second line
+`ApiErrorBoundary.logOperatorDetail` used to add.
 
 `subscriptions/listen` is served entirely by the SDK's listen router, so Webpieces has no handler there.
+
+`requestId` comes from `RequestContext` and the JSON-RPC id and tool name from the request scope,
+so none of the three methods takes a correlation parameter — the deleted `McpFailureScope` was a copy
+of context the renderers can already read.
 
 What the model reads inside an `isError` result: an `ApiEndUserError` message verbatim plus
 `errorCode` (it survives the remote hop byte-for-byte); an `ApiBadRequestError`'s `callerMessage` and
@@ -192,16 +215,20 @@ Every reply carries the requestId so a user can quote it: `_meta["webpieces/requ
 
 ### The application's own `tools/call` translation
 
-An app owns its error taxonomy and owns how those errors should be explained to a model, so it gets
-FIRST REFUSAL on every `tools/call` failure — the same convention `ExpressWrapper.handleError`
-applies on the HTTP path through `ClientRegistry.tryTranslateToWire`. Register one with
+An app owns its error taxonomy and owns how those errors should be explained to a model, so a
+registered translator REPLACES the webpieces default for every `tools/call` failure — the same
+convention `ExpressWrapper.handleError` applies on the HTTP path. Register one with
 `WpMcpServerConfig.setErrorTranslator(...)`; it is a setter and not a global, because `WpMcpServer` is
 constructed by app code and two servers may run in one process.
 
 ```ts
 class LangMcpErrorTranslators implements McpErrorTranslators {
-    toToolResult(error: Error, scope: McpFailureScope): CallToolResult | undefined {
-        if (!(error instanceof LangPassageLockedError)) return undefined; // not mine
+    private readonly fallback = new McpDefaultToolCallRenderer();
+
+    toToolCallResult(error: Error): CallToolResult {
+        if (!(error instanceof LangPassageLockedError)) {
+            return this.fallback.toToolCallResult(error); // not mine -> webpieces default
+        }
         return {
             content: [{ type: 'text', text: `Passage ${error.passageId} is locked.` }],
             structuredContent: { passageId: error.passageId, action: 'ask_the_user_to_unlock' },
@@ -213,13 +240,14 @@ class LangMcpErrorTranslators implements McpErrorTranslators {
 
 - `error` is the thrown value itself — webpieces never substitutes another object for it, so
   `instanceof` on the app's own classes works.
-- Returning `undefined` means "not mine" and the webpieces default renders, unchanged.
+- There is no "not mine" return. Decline by DELEGATING to `McpDefaultToolCallRenderer`, the public
+  class that IS the webpieces default, so declining is byte-identical to registering nothing.
 - A claimed error owns the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`.
 - webpieces default-fills `_meta["webpieces/requestId"]` only when the returned result has no
   `_meta`; an app that sets `_meta` keeps it untouched.
-- Operator-detail logging has already run when the translator is called, so claiming an error can
-  never silently kill observability. A translator that THROWS is itself reported through the same
-  boundary and the original error still renders the reply.
+- The failure has already been logged by the filter chain when the translator is called, so claiming
+  an error can never silently kill observability. A translator that THROWS is reported on its own
+  line and the original error still renders the reply.
 - The scope is `tools/call` ONLY. `tools/list` and the pre-SDK HTTP boundary stay framework-owned:
   that boundary emits the `401 + WWW-Authenticate: Bearer resource_metadata=...` MCP clients depend
   on for OAuth discovery, and an app rewriting it breaks connector onboarding in a way that is

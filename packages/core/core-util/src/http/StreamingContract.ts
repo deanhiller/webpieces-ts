@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ApiError, ApiConnectionError } from '../errors/ApiError';
+import { ApiConnectionError } from '../errors/ApiError';
 import { ApiErrorCodec, ApiErrorPayload } from '../errors/ApiErrorCodec';
 import { ApiJsonSchema, DtoClass, DtoSchemaBuilder, DtoValue } from '../mcp/DtoSchema';
 import { toError } from '../lib/errorUtils';
@@ -21,8 +21,21 @@ export interface StreamFailureOptions {
 /** Server-to-client half of a typed stream. Every write is an explicit backpressure boundary. */
 export interface ResponseStream<T> {
     event(value: T, correlation?: StreamCorrelation): Promise<void>;
+    /**
+     * Publish a failure on this stream. Takes `Error`, the parent of everything: `ApiError` is a
+     * CONVENIENCE taxonomy webpieces ships so the common cases are easy, never something the
+     * framework may demand from an application. An app's own `MyLibError extends Error` is
+     * published as kind `implementation` with generic text, exactly as on every other boundary.
+     *
+     * This is the FAITHFUL {@link ApiErrorCodec} encode, NOT `ApiErrorBoundary.encode`, and that is
+     * deliberate: a stream failure is delivered IN BAND to a peer that is reading the stream, so a
+     * {@link StreamTransportError} (an `ApiConnectionError`) must arrive as kind `connection` for
+     * the peer to reconstruct it as the transport failure it is. Republishing it as
+     * `implementation` — right at an HTTP/MCP edge, where the caller is asking us to do work — would
+     * tell the peer the wrong thing about a stream it is holding one end of.
+     */
     fail(
-        error: ApiError,
+        error: Error,
         correlation?: StreamCorrelation,
         options?: StreamFailureOptions,
     ): Promise<void>;
@@ -34,8 +47,21 @@ export interface ResponseStream<T> {
 /** Client-to-server half. Cancellation exists immediately and is independent of writer readiness. */
 export interface RequestStream<T> {
     event(value: T, correlation?: StreamCorrelation): Promise<void>;
+    /**
+     * Publish a failure on this stream. Takes `Error`, the parent of everything: `ApiError` is a
+     * CONVENIENCE taxonomy webpieces ships so the common cases are easy, never something the
+     * framework may demand from an application. An app's own `MyLibError extends Error` is
+     * published as kind `implementation` with generic text, exactly as on every other boundary.
+     *
+     * This is the FAITHFUL {@link ApiErrorCodec} encode, NOT `ApiErrorBoundary.encode`, and that is
+     * deliberate: a stream failure is delivered IN BAND to a peer that is reading the stream, so a
+     * {@link StreamTransportError} (an `ApiConnectionError`) must arrive as kind `connection` for
+     * the peer to reconstruct it as the transport failure it is. Republishing it as
+     * `implementation` — right at an HTTP/MCP edge, where the caller is asking us to do work — would
+     * tell the peer the wrong thing about a stream it is holding one end of.
+     */
     fail(
-        error: ApiError,
+        error: Error,
         correlation?: StreamCorrelation,
         options?: StreamFailureOptions,
     ): Promise<void>;
@@ -147,7 +173,7 @@ export class StreamWriter<T> implements RequestStream<T>, ResponseStream<T> {
     }
 
     async fail(
-        error: ApiError,
+        error: Error,
         correlation?: StreamCorrelation,
         options?: StreamFailureOptions,
     ): Promise<void> {

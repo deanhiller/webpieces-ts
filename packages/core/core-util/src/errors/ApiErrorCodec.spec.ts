@@ -23,6 +23,7 @@ import {
     ApiNotImplementedError,
     ApiCodedError,
 } from './index';
+import { toError } from '../lib/errorUtils';
 
 const categories = [
     ApiBadRequestError,
@@ -103,7 +104,9 @@ describe('canonical error codec', () => {
         ]) {
             expect(ApiErrorCodec.decode(value)).toBeInstanceOf(ApiImplementationError);
         }
-        expect(ApiErrorCodec.encode('secret')).toMatchObject({
+        // `encode` takes an `Error` now, so a bare thrown value narrows with `toError` first —
+        // exactly what every catch in the framework already does — and still discloses nothing.
+        expect(ApiErrorCodec.encode(toError('secret'))).toMatchObject({
             kind: 'implementation',
             message: 'Internal Error',
         });

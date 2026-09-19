@@ -219,13 +219,14 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(JSON.stringify(reply)).not.toContain('private-host');
         expect(JSON.stringify(reply)).not.toContain('connection');
         // Exactly one boundary line, and it still names the class that actually failed.
-        const lines = logs.containing(
-            '[name=ApiConnectionError kind=implementation subType=none] ' +
-                'ECONNREFUSED private-host:8443',
-        );
+        // EXACTLY ONE operator line for this failure, across ALL loggers — LogApiFilter's, which
+        // carries the request, the identity and the timing. `ApiErrorBoundary.logOperatorDetail`
+        // used to write a second, barer one right here (#961 item 5).
+        const lines = logs.containing('ECONNREFUSED private-host:8443');
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
-        expect(lines[0].logger).toBe('WpMcpErrorTranslator');
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('errorType=ApiConnectionError');
         expect(logs.containing('name=ApiImplementationError')).toHaveLength(0);
     });
 
@@ -329,52 +330,77 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         return logs.containing('SECRET-internal-detail');
     }
 
-    it('never leaks a raw bind-boundary exception and logs it exactly once with correlation', async () => {
+    /**
+     * The bearer boundary has NO filter chain above it, so `WpMcpServer` wraps it in `LogApiCall`
+     * itself — one `[API-server-*]` line with the step on it, and never a second bare one. The
+     * correlation an operator greps (`requestId`) rides `RequestContext` into every record the
+     * logging backend writes, which is why it is no longer pasted into the message text.
+     */
+    it('never leaks a raw bind-boundary exception and logs it exactly once', async () => {
         logs.lines.length = 0;
-        const body = request('tools/list');
-        const reply = await post(body, 'authority-bug');
+        const reply = await post(request('tools/list'), 'authority-bug');
         expect(reply.response.status).toBe(500);
         expect(reply.payload.error).toMatchObject({ code: -32_603, message: 'Internal Error' });
         expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
+        expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
         const lines = secretLines();
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
-        expect(lines[0].message).toContain(`jsonRpcId=${String(body['id'])}`);
-        expect(lines[0].message).toMatch(/requestId=\S+/);
-        expect(lines[0].message).toContain('method=tools/list');
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('McpEndpoint.serve');
     });
 
     it('never leaks a raw tools/list exception and answers a generic JSON-RPC internal error', async () => {
         logs.lines.length = 0;
-        const body = request('tools/list');
-        const reply = await post(body, 'list-bug');
+        const reply = await post(request('tools/list'), 'list-bug');
         expect(reply.response.status).toBe(200);
         expect(reply.payload.error).toMatchObject({ code: -32_603, message: 'Internal Error' });
         expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
+        expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
         const lines = secretLines();
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
-        expect(lines[0].message).toContain(`jsonRpcId=${String(body['id'])}`);
-        expect(lines[0].message).toContain('method=tools/list');
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('McpEndpoint.tools/list');
     });
 
-    it('never leaks a raw tools/call exception and logs it exactly once with the tool name', async () => {
+    it('never leaks a raw tools/call exception and logs it exactly once, from the filter above it', async () => {
         logs.lines.length = 0;
-        const body = request('tools/call', {
-            name: 'account_search',
-            arguments: { query: 'mine' },
-        });
-        jwtHook.failWith = new Error('SECRET-internal-detail');
-        const reply = await post(body);
-        jwtHook.failWith = undefined;
-        expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
-        expect(modelErrorOf(reply.payload)).toMatchObject({ kind: 'implementation' });
-        const lines = secretLines();
+        const reply = await callTool('account_search', { query: 'internal' });
+
+        expect(JSON.stringify(reply)).not.toContain('database password');
+        expect(modelErrorOf(reply)).toMatchObject({ kind: 'implementation' });
+        // tools/call dispatches through the ordinary filter chain, so LogApiFilter owns the line and
+        // the MCP boundary adds none. Counted across ALL loggers, not one filtered logger.
+        const lines = logs.containing('database password appeared here');
         expect(lines).toHaveLength(1);
-        expect(lines[0].level).toBe('error');
-        expect(lines[0].message).toContain(`jsonRpcId=${String(body['id'])}`);
-        expect(lines[0].message).toContain('tool=account_search');
-        expect(lines[0].message).toMatch(/requestId=\S+/);
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('[API-server-resp-FAIL] SearchApi.search');
+    });
+
+    it('a rejected bearer is logged once as a caller error, with its operator message', async () => {
+        logs.lines.length = 0;
+        const reply = await post(request('tools/list'), null);
+
+        expect(reply.response.status).toBe(401);
+        const lines = logs.containing('MCP request has no bearer access token.');
+        expect(lines).toHaveLength(1);
+        expect(lines[0].level).toBe('warn');
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('[API-server-resp-OTHER] McpEndpoint.serve');
+        // ...and the operator message is not on the wire.
+        expect(JSON.stringify(reply.payload)).not.toContain('bearer access token');
+    });
+
+    it('a malformed body is logged once at the body edge, which has no filter above it either', async () => {
+        logs.lines.length = 0;
+        const reply = await post('{"jsonrpc": "2.0", ');
+
+        expect(reply.response.status).toBe(400);
+        const lines = logs.containing('MCP request body rejected');
+        expect(lines).toHaveLength(1);
+        expect(lines[0].logger).toBe('LogApiCall');
+        expect(lines[0].message).toContain('McpEndpoint.body');
     });
 
     it('answers 401 with WWW-Authenticate for missing or rejected bearers, never -32603', async () => {

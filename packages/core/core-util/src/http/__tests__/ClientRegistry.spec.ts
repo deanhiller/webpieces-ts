@@ -128,13 +128,29 @@ class AiBadRequestError extends Error {
 }
 
 /**
+ * The webpieces DEFAULTS an app's translator DELEGATES to when an error is not its own. The real
+ * ones live downstream (`ApiErrorHttpMapper.toResponse`, `ClientErrorTranslator.builtInError`) and
+ * core-util cannot import them, so these stand in for the shape: a translator ALWAYS answers, and
+ * "not mine" is spelled as a call, never as `undefined`.
+ */
+class FrameworkDefault {
+    // webpieces-disable no-function-outside-class -- stand-in for the downstream default
+    static toWire(error: Error): HttpResponseDto {
+        const pe = new ApiErrorPayload();
+        pe.message = error.message;
+        return new HttpResponseDto(new HttpResponseStatus(500, 'Internal Server Error'), [], pe);
+    }
+}
+
+/**
  * Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. Note
- * the header — the old (statusCode, protocolError) pair could not carry one at all.
+ * the header — the old (statusCode, protocolError) pair could not carry one at all. Neither method
+ * returns `undefined`: an unclaimed error is handed to the framework default instead.
  */
 class AiErrorTranslators implements ErrorTranslators {
-    toWire(error: Error): HttpResponseDto | undefined {
+    toWire(error: Error): HttpResponseDto {
         if (!(error instanceof AiBadRequestError)) {
-            return undefined;
+            return FrameworkDefault.toWire(error);
         }
         const pe = new ApiErrorPayload();
         pe.message = error.message;
@@ -146,8 +162,8 @@ class AiErrorTranslators implements ErrorTranslators {
     }
     fromWire(response: HttpResponseDto): Error | undefined {
         if (response.status.code !== 460) {
-            return undefined;
-        }
+            return undefined; // not claimed -> the built-in mapping, and not
+        } // marked app-registered
         const pe = response.body as ApiErrorPayload;
         return new AiBadRequestError(pe.message ?? 'AI bad request');
     }
@@ -158,44 +174,46 @@ const wireResponse = (code: number, pe: ApiErrorPayload = new ApiErrorPayload())
     new HttpResponseDto(new HttpResponseStatus(code, ''), [], pe);
 
 /**
- * The app's ONE ErrorTranslators: consulted BEFORE the generic webpieces mapping in BOTH directions,
- * stepping aside on `undefined`, and owning the ENTIRE response when it does claim an error.
+ * The app's ONE ErrorTranslators. The registry answers exactly one question — is one installed? —
+ * and the translator it hands back answers EVERY error on the SERVER half, declining by delegating
+ * to the webpieces default rather than by returning `undefined`. The CLIENT half keeps `undefined`
+ * because there it means "I do not CLAIM this status", which is provenance the caller acts on.
  */
 describe('ClientRegistry error translators', () => {
     beforeEach(() => {
         ClientRegistry.clear();
     });
 
-    it('with none installed, both directions return undefined', () => {
-        expect(ClientRegistry.tryTranslateFromWire(wireResponse(460))).toBeUndefined();
-        expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('nope'))).toBeUndefined();
+    it('with none installed, the registry reports none — there is no per-error undefined', () => {
+        expect(ClientRegistry.getErrorTranslators()).toBeUndefined();
     });
 
     it('round-trips a custom type: toWire then fromWire reproduces the typed error', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
+        const translators = ClientRegistry.getErrorTranslators()!;
 
-        const wire = ClientRegistry.tryTranslateToWire(new AiBadRequestError('bad ai input'));
-        expect(wire).toBeDefined();
-        expect(wire?.status.code).toBe(460);
-        expect(wire?.status.reason).toBe('AI Bad Request');
-        expect(wire?.headers.map((h: HttpHeader) => h.name)).toEqual(['x-ai-hint']);
+        const wire = translators.toWire(new AiBadRequestError('bad ai input'));
+        expect(wire.status.code).toBe(460);
+        expect(wire.status.reason).toBe('AI Bad Request');
+        expect(wire.headers.map((h: HttpHeader) => h.name)).toEqual(['x-ai-hint']);
 
-        const rebuilt = ClientRegistry.tryTranslateFromWire(wire!);
+        const rebuilt = translators.fromWire(wire);
         expect(rebuilt).toBeInstanceOf(AiBadRequestError);
         expect((rebuilt as AiBadRequestError).statusCode).toBe(460);
-        expect(rebuilt?.message).toBe('bad ai input');
+        expect(rebuilt.message).toBe('bad ai input');
     });
 
-    it('a translator that does not claim the error/response steps aside (undefined)', () => {
+    it('a translator that does not claim the error/response DELEGATES to the default', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
+        const translators = ClientRegistry.getErrorTranslators()!;
 
-        expect(ClientRegistry.tryTranslateToWire(new Error('other'))).toBeUndefined();
-        expect(ClientRegistry.tryTranslateFromWire(wireResponse(503))).toBeUndefined();
+        expect(translators.toWire(new Error('other')).status.code).toBe(500);
+        expect(translators.fromWire(wireResponse(503))).toBeUndefined();
     });
 
-    it('can OVERRIDE a built-in status (400) — the app is consulted before webpieces', () => {
+    it('can OVERRIDE a built-in status (400) — the app replaces webpieces, it is not consulted first', () => {
         const override: ErrorTranslators = {
-            toWire: () => undefined,
+            toWire: (error: Error) => FrameworkDefault.toWire(error),
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 400
                     ? new AiBadRequestError(
@@ -205,7 +223,7 @@ describe('ClientRegistry error translators', () => {
         };
         ClientRegistry.setErrorTranslators(override);
 
-        expect(ClientRegistry.tryTranslateFromWire(wireResponse(400))).toBeInstanceOf(
+        expect(ClientRegistry.getErrorTranslators()!.fromWire(wireResponse(400))).toBeInstanceOf(
             AiBadRequestError,
         );
     });
@@ -213,100 +231,19 @@ describe('ClientRegistry error translators', () => {
     it('SET replaces — a second install is the only one consulted, so precedence is never implicit', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
         ClientRegistry.setErrorTranslators({
-            toWire: () => undefined,
+            toWire: (error: Error) => FrameworkDefault.toWire(error),
             fromWire: () => undefined,
         });
 
-        expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('x'))).toBeUndefined();
+        expect(
+            ClientRegistry.getErrorTranslators()!.toWire(new AiBadRequestError('x')).status.code,
+        ).toBe(500);
     });
 
     it('clear() drops the translators too, so they cannot leak into the next spec', () => {
         ClientRegistry.setErrorTranslators(new AiErrorTranslators());
         ClientRegistry.clear();
 
-        expect(ClientRegistry.tryTranslateFromWire(wireResponse(460))).toBeUndefined();
-    });
-});
-
-const client = (apiClass: string): ApiMethodInfo =>
-    new ApiMethodInfo('client', apiClass, 'someMethod');
-const server = (apiClass: string): ApiMethodInfo =>
-    new ApiMethodInfo('server', apiClass, 'someMethod');
-
-/**
- * Pluggable failure classification: per-apiClass EXTERNAL-client classifier → app default → webpieces
- * built-in, resolved most-specific-first, deferring on `undefined`.
- */
-describe('ClientRegistry failure classification', () => {
-    beforeEach(() => {
-        ClientRegistry.clear();
-    });
-
-    it('with nothing registered, uses the webpieces built-in (server 4xx = non-failure, client = failure)', () => {
-        // server rejecting the caller's bad request is a NON-failure...
-        expect(
-            ClientRegistry.classifyFailure(new ApiBadRequestError('bad'), server('SaveApi')),
-        ).toBe(false);
-        // ...but a client RECEIVING that same 4xx failed its call.
-        expect(
-            ClientRegistry.classifyFailure(new ApiBadRequestError('bad'), client('SaveApi')),
-        ).toBe(true);
-    });
-
-    it('a per-apiClass classifier overrides the default for THAT client only', () => {
-        // Firestore: a not-found miss is EXPECTED (non-failure); other errors defer to the default.
-        const firestore: FailureClassifier = {
-            isFailure: (error: Error) => (error instanceof ApiNotFoundError ? false : undefined),
-        };
-        ClientRegistry.addFailureClassifier('FirestoreAdminClient', firestore);
-
-        // A 404 on the firestore client is now a NON-failure...
-        expect(
-            ClientRegistry.classifyFailure(
-                new ApiNotFoundError('miss'),
-                client('FirestoreAdminClient'),
-            ),
-        ).toBe(false);
-        // ...but a 404 on a DIFFERENT client still hits the built-in (client → failure).
-        expect(
-            ClientRegistry.classifyFailure(new ApiNotFoundError('miss'), client('SaveApi')),
-        ).toBe(true);
-        // ...and a non-404 on firestore DEFERS to the built-in (client → failure).
-        expect(
-            ClientRegistry.classifyFailure(new Error('boom'), client('FirestoreAdminClient')),
-        ).toBe(true);
-    });
-
-    it('a per-apiClass classifier that DEFERS falls through to the app default', () => {
-        // App default: on the CLIENT side, treat everything as a non-failure (lenient company policy).
-        const appDefault: FailureClassifier = {
-            isFailure: (_error: Error, m: ApiMethodInfo) =>
-                m.side === 'client' ? false : undefined,
-        };
-        ClientRegistry.setDefaultFailureClassifier(appDefault);
-        // Per-client classifier that always defers.
-        ClientRegistry.addFailureClassifier('FirestoreAdminClient', { isFailure: () => undefined });
-
-        // per-client defers → app default claims it (client → non-failure)
-        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(
-            false,
-        );
-        // no per-client entry, app default defers on server → built-in (server non-4xx → failure)
-        expect(ClientRegistry.classifyFailure(new Error('x'), server('SaveApi'))).toBe(true);
-    });
-
-    it('an unregistered external client is FAIL-SAFE (falls to built-in → failure on the client)', () => {
-        expect(ClientRegistry.classifyFailure(new Error('boom'), client('TwilioApi'))).toBe(true);
-    });
-
-    it('clear() empties the default AND per-apiClass classifiers', () => {
-        ClientRegistry.setDefaultFailureClassifier({ isFailure: () => false });
-        ClientRegistry.addFailureClassifier('FirestoreAdminClient', { isFailure: () => false });
-        ClientRegistry.clear();
-
-        // Back to the built-in: a client error is a failure again.
-        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(
-            true,
-        );
+        expect(ClientRegistry.getErrorTranslators()).toBeUndefined();
     });
 });

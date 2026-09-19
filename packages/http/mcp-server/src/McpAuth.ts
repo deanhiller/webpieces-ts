@@ -223,14 +223,15 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
     }
 
     /**
-     * OPTIONAL. The application's `tools/call` error translators — first refusal on every tool
-     * failure, owning the ENTIRE result it claims. See {@link McpErrorTranslators}.
+     * OPTIONAL. The application's `tools/call` error translator — it REPLACES the webpieces default
+     * for every tool failure, owning the ENTIRE result, and declines by delegating to
+     * `new McpDefaultToolCallRenderer().toToolCallResult(error)`. See {@link McpErrorTranslators}.
      */
     setErrorTranslator(translators: McpErrorTranslators): this {
         const value = this.requirePresent(translators, 'setErrorTranslator');
-        if (typeof value.toToolResult !== 'function') {
+        if (typeof value.toToolCallResult !== 'function') {
             throw new Error(
-                'WpMcpServerConfig.setErrorTranslator(...) requires a toToolResult(error, scope) method.',
+                'WpMcpServerConfig.setErrorTranslator(...) requires a toToolCallResult(error) method.',
             );
         }
         this.errorTranslatorValue = value;

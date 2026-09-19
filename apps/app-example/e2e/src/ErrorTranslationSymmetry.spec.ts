@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
-import { WebpiecesExpressRouter } from '@webpieces/http-server';
+import { ApiErrorHttpMapper, WebpiecesExpressRouter } from '@webpieces/http-server';
 import {
     ClientRegistry,
     ApiErrorPayload,
@@ -79,7 +79,13 @@ afterAll(async () => {
 beforeEach(() => {
     // ClientRegistry.clear() would drop the url mapping the client needs, so only the translators
     // are reset here — each block installs the ones it is about.
-    ClientRegistry.setErrorTranslators({ toWire: () => undefined, fromWire: () => undefined });
+    // `toWire` has no "not mine" any more: a registered translator answers every error, declining
+    // by delegating to the webpieces default. `fromWire`'s `undefined` stays — there it is
+    // PROVENANCE (TranslatedFailure.appRegistered), not a fallback.
+    ClientRegistry.setErrorTranslators({
+        toWire: (error: Error) => new ApiErrorHttpMapper('gui').toResponse(error),
+        fromWire: () => undefined,
+    });
 });
 
 describe('the app owns the WHOLE response: status, reason, headers and body', () => {

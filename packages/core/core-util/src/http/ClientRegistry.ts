@@ -1,5 +1,4 @@
 import { ErrorTranslators } from './ErrorTranslators';
-import { HttpResponseDto } from './HttpResponseDto';
 import { FailureClassifier } from './FailureClassifier';
 import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -128,8 +127,8 @@ export class ClientRegistry {
         if (url === undefined) {
             throw new Error(
                 `No URL registered for service "${svcName}". Register it at startup: ` +
-                `ClientRegistry.addMapping(svcName, port) for a localhost port, or ` +
-                `ClientRegistry.addUrlMapping(svcName, url) for an explicit URL.`,
+                    `ClientRegistry.addMapping(svcName, port) for a localhost port, or ` +
+                    `ClientRegistry.addUrlMapping(svcName, url) for an explicit URL.`,
             );
         }
         return url;
@@ -166,12 +165,12 @@ export class ClientRegistry {
         if (url === undefined) {
             throw new Error(
                 `No URL for service "${svcName}".\n` +
-                `  - localhost/AWS: ClientRegistry.addMapping('${svcName}', 8401)\n` +
-                `                or ClientRegistry.addUrlMapping('${svcName}', 'https://...')\n` +
-                `  - GCP: install a deriver — ClientRegistry.setDeriver(gcpCloudRunDeriver())\n` +
-                `  - deployed name differs from the module name (e.g. a 'tf-' prefix)? Translate it ONCE\n` +
-                `    in the deriver — setDeriver(s => gcpCloudRunDeriver()('tf-' + s)) — so every call\n` +
-                `    site keeps naming the MODULE, which architecture:validate-runtime-architecture checks`,
+                    `  - localhost/AWS: ClientRegistry.addMapping('${svcName}', 8401)\n` +
+                    `                or ClientRegistry.addUrlMapping('${svcName}', 'https://...')\n` +
+                    `  - GCP: install a deriver — ClientRegistry.setDeriver(gcpCloudRunDeriver())\n` +
+                    `  - deployed name differs from the module name (e.g. a 'tf-' prefix)? Translate it ONCE\n` +
+                    `    in the deriver — setDeriver(s => gcpCloudRunDeriver()('tf-' + s)) — so every call\n` +
+                    `    site keeps naming the MODULE, which architecture:validate-runtime-architecture checks`,
             );
         }
         return url;
@@ -191,23 +190,16 @@ export class ClientRegistry {
     }
 
     /**
-     * exception → the WHOLE response (SERVER side), or `undefined` when no translators are installed
-     * or the installed ones do not claim `error` — the caller then falls through to the webpieces
-     * default.
+     * The app's installed {@link ErrorTranslators}, or `undefined` when this process installed none.
+     *
+     * The `undefined` here is "nobody registered", which is a fact about the PROCESS — it is not a
+     * per-error "not mine". A registered translator answers EVERY error and EVERY response, declining
+     * by delegating to the webpieces default (see {@link ErrorTranslators}), so a caller asks this
+     * question exactly once and then makes one unconditional call.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateToWire(error: Error): HttpResponseDto | undefined {
-        return ClientRegistry.errorTranslators?.toWire(error);
-    }
-
-    /**
-     * the WHOLE response → exception (CLIENT side), or `undefined` when no translators are installed
-     * or the installed ones do not claim `response` — the caller then falls through to the built-in
-     * webpieces status-to-type mapping.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static tryTranslateFromWire(response: HttpResponseDto): Error | undefined {
-        return ClientRegistry.errorTranslators?.fromWire(response);
+    static getErrorTranslators(): ErrorTranslators | undefined {
+        return ClientRegistry.errorTranslators;
     }
 
     /**

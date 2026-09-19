@@ -24,7 +24,7 @@ import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
-import { McpErrorTranslators, McpFailureScope } from './WpMcpErrorTranslator';
+import { McpDefaultToolCallRenderer, McpErrorTranslators } from './WpMcpErrorTranslator';
 import { McpHttpTestHarness, RpcResponse, TestServers } from './__tests__/McpHttpTestHarness';
 import {
     ENDPOINT_PATH,
@@ -86,15 +86,17 @@ class LockController extends LockApi {
     }
 }
 
-/** What an application registers: it claims its own taxonomy and declines everything else. */
+/**
+ * What an application registers: it claims its own taxonomy and DELEGATES everything else to the
+ * webpieces default, which is a public class it already has. There is no "not mine" return value.
+ */
 class LockErrorTranslators implements McpErrorTranslators {
     calls = 0;
-    seenScopes: McpFailureScope[] = [];
+    private readonly fallback = new McpDefaultToolCallRenderer();
 
-    toToolResult(error: Error, scope: McpFailureScope): CallToolResult | undefined {
+    toToolCallResult(error: Error): CallToolResult {
         this.calls += 1;
-        this.seenScopes.push(scope);
-        if (!(error instanceof PassageLockedError)) return undefined;
+        if (!(error instanceof PassageLockedError)) return this.fallback.toToolCallResult(error);
         if (error.passageId === 'translator-bug') throw new Error('SECRET-translator-bug');
         const structured = { passageId: error.passageId, action: 'ask_the_user_to_unlock' };
         const result: CallToolResult = {
@@ -163,7 +165,6 @@ describe('application-owned tools/call error translation', () => {
 
     beforeEach(() => {
         translators.calls = 0;
-        translators.seenScopes = [];
         logs.lines.length = 0;
     });
 
@@ -171,11 +172,13 @@ describe('application-owned tools/call error translation', () => {
         return harness.callTool('passage_open', { passageId });
     }
 
-    /** Only the boundary's own lines; the router's filters log the same failure on their own. */
-    function boundaryLines(text: string): RecordedLogLine[] {
-        return logs
-            .containing(text)
-            .filter((line: RecordedLogLine) => line.logger === 'WpMcpErrorTranslator');
+    /**
+     * ALL loggers, unfiltered. Filtering by logger name was how the old two-lines-per-failure
+     * defect stayed invisible (#961 item 5); counting everything is the assertion that keeps it
+     * from coming back.
+     */
+    function allLines(text: string): RecordedLogLine[] {
+        return logs.containing(text);
     }
 
     it('a claimed error owns the ENTIRE tool result, structuredContent included', async () => {
@@ -213,9 +216,10 @@ describe('application-owned tools/call error translation', () => {
 
     it('logs the operator detail exactly once even when the app renders the reply', async () => {
         await open('locked');
-        const failures = boundaryLines('passage locked is locked');
+        const failures = allLines('passage locked is locked');
         expect(failures).toHaveLength(1);
         expect(failures[0]?.level).toBe('error');
+        expect(failures[0]?.logger).toBe('LogApiCall');
     });
 
     it('a translator that throws is reported and the ORIGINAL error still renders', async () => {
@@ -223,17 +227,17 @@ describe('application-owned tools/call error translation', () => {
         const visible = harness.modelErrorOf(payload);
         expect(visible['kind']).toBe('implementation');
         expect(JSON.stringify(payload)).not.toContain('SECRET-translator-bug');
-        expect(boundaryLines('Application McpErrorTranslators.toToolResult threw')).toHaveLength(1);
-        // the original failure is still the one the operator sees reported first
-        expect(boundaryLines('passage translator-bug is locked')).toHaveLength(1);
+        // The app's OWN bug is a second, different failure, so it gets its own single line.
+        expect(allLines('Application McpErrorTranslators.toToolCallResult threw')).toHaveLength(1);
+        // ...and the original failure is still reported exactly once, by the filter above.
+        expect(allLines('passage translator-bug is locked')).toHaveLength(1);
     });
 
-    it('the scope handed to the app carries the requestId and tool name', async () => {
-        await open('locked');
-        const scope = translators.seenScopes[0];
-        expect(scope?.method).toBe('tools/call');
-        expect(scope?.toolName).toBe('passage_open');
-        expect(scope?.requestId.length).toBeGreaterThan(0);
+    it('the app translator is handed the RAW error, and reads requestId from the result _meta', async () => {
+        const result = harness.resultOf(await open('locked'));
+        expect(translators.calls).toBe(1);
+        const meta = result['_meta'] as Record<string, unknown>;
+        expect(String(meta['webpieces/requestId']).length).toBeGreaterThan(0);
     });
 
     it('tools/list stays framework-owned: the app translator is never consulted', async () => {

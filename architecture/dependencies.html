@@ -320,14 +320,24 @@
 <li>Invoke local APIs through the ordinary proxy/filter chain with a fresh short-lived application JWT.</li>
 <li>Invoke remote APIs through generated Node clients using OIDC plus trusted delegated user context.</li>
 <li>Coordinate bounded list caches, request-scoped subscriptions, shutdown, and a pluggable event bus.</li>
-<li>Validate input/output DTO shapes and map every failure through the one <code>WpMcpErrorTranslator</code></li>
+<li>Validate input/output DTO shapes and map every failure through the one <code>WpMcpErrorTranslator</code>,</li>
 </ul>
-<p>(shared <code>ApiErrorBoundary</code> normalization, <code>ApiErrorCodec</code> text, requestId on every reply).</p>
+<p>which has one method per boundary — <code>toBearerBoundaryResponse</code>, <code>toListError</code>, <code>toToolCallResult</code></p>
+<p>(shared <code>ApiErrorBoundary.encode</code> classification and published text, requestId on every reply).</p>
 <ul>
-<li>Give the application's <code>McpErrorTranslators</code> first refusal on every <code>tools/call</code> failure, and own</li>
+<li>Let an application's <code>McpErrorTranslators</code> REPLACE the webpieces <code>tools/call</code> rendering (declining</li>
 </ul>
-<p>the reply for <code>tools/list</code> and the pre-SDK HTTP boundary outright.</p>
+<p>by delegating to <code>McpDefaultToolCallRenderer</code>), and own the reply for <code>tools/list</code> and the pre-SDK</p>
+<p>HTTP boundary outright.</p>
+<ul>
+<li>Wrap the edges with no filter chain above them — bearer, <code>Origin</code>, body, <code>tools/list</code> — in</li>
+</ul>
+<p><code>LogApiCall</code>, so every failure gets exactly one operator line and the error boundary writes none.</p>
 <h5>Out of scope</h5>
+<ul>
+<li>Operator logging of a failure the filter chain already logged: <code>LogApiFilter</code> / <code>LogApiCall</code> owns</li>
+</ul>
+<p>that line, and a second bare one at the protocol edge is the defect <code>ErrorLogFilter</code> was deleted for.</p>
 <ul>
 <li>Application endpoint authorization: <code>@WpAuthJwt</code> / <code>@WpAuthOidc</code> and <code>AuthFilter</code> own the HTTP boundary.</li>
 <li>Issuing OAuth tokens: applications may use any authorization server, while this package describes</li>

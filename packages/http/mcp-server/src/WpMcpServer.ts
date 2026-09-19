@@ -17,15 +17,23 @@ import {
 import { NodeMcpRequestHandler, toNodeHandler } from '@modelcontextprotocol/node';
 import { Express, json, NextFunction, Request, Response } from 'express';
 import {
+    ApiBadRequestError,
     ApiForbiddenError,
     ApiImplementationError,
+    ApiMethodInfo,
     ApiUnauthorizedError,
     DtoValue,
+    LogApiCallImpl,
     LogManager,
     toError,
-    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
+import {
+    HttpRequest,
+    RequestContext,
+    RequestContextApiCallContext,
+    RequestContextHeaders,
+} from '@webpieces/core-context';
+import { ExpressResponseWriter } from '@webpieces/http-server';
 import { MintedJwt } from '@webpieces/http-routing';
 import {
     MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
@@ -38,11 +46,19 @@ import { McpApiDispatcher } from './McpApiDispatcher';
 import { McpBindOptions } from './McpBindOptions';
 import { McpInvocationContext, McpProgressReporter } from './McpInvocationContext';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
-import { McpFailureScope, WpMcpErrorTranslator } from './WpMcpErrorTranslator';
+import { McpCorrelation, WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 
 const log = LogManager.getLogger('WpMcpServer');
 
 type AuthenticatedExpressRequest = Request & { auth?: AuthInfo };
+
+/**
+ * The request DTO the edge `LogApiCall` lines report. These boundaries run BEFORE (or outside) any
+ * API dispatch, so there is no contract DTO to log; the step name is the fact worth having.
+ */
+class McpEdgeRequest {
+    constructor(public readonly step: string) {}
+}
 
 /** Body of the 405 answered for every non-POST method at the bound MCP endpoint path. */
 class McpMethodNotAllowedBody {
@@ -82,13 +98,22 @@ class WpSdkMcpServer extends McpServer {
  * Modern-only MCP 2026-07-28 adapter around the official SDK's request-scoped HTTP handler.
  *
  * Error boundary: every failure is mapped by the one `WpMcpErrorTranslator`, and each entry point
- * has exactly one catch that only delegates to it: the bind HTTP handler (`toHttp`), tools/list
- * (`toProtocolError`) and tools/call (`toToolResult`). `subscriptions/listen` is served entirely by
- * the SDK's listen router, so Webpieces has no handler (and no catch) there. The external bearer is
- * verified exactly once per POST, at the HTTP boundary, before the SDK is involved.
+ * has exactly one catch that only delegates to it: the bind HTTP handler
+ * (`toBearerBoundaryResponse`), tools/list (`toListError`) and tools/call (`toToolCallResult`).
+ * `subscriptions/listen` is served entirely by the SDK's listen router, so Webpieces has no handler
+ * (and no catch) there. The external bearer is verified exactly once per POST, at the HTTP
+ * boundary, before the SDK is involved.
  */
 export class WpMcpServer<TGrant, TMintRequest> {
     private readonly dispatcher = new McpApiDispatcher();
+    /**
+     * These edges have NO filter chain above them — `LogApiFilter` never sees a rejected bearer, a
+     * bad `Origin`, a body express could not parse, or a `tools/list` the SDK renders itself.
+     * Wrapping each in `LogApiCall` is this repo's one line on logging, and it is why
+     * `ApiErrorBoundary` no longer writes a second, barer line of its own.
+     */
+    private readonly logApiCall = new LogApiCallImpl(new RequestContextApiCallContext());
+    private readonly responseWriter = new ExpressResponseWriter();
     /** tools/call gives the app's translators first refusal; every other reply stays framework-owned. */
     private readonly translator: WpMcpErrorTranslator;
     private registry?: McpToolRegistry;
@@ -99,7 +124,10 @@ export class WpMcpServer<TGrant, TMintRequest> {
     private revision?: string;
 
     constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {
-        this.translator = new WpMcpErrorTranslator(config.errorTranslator);
+        this.translator = new WpMcpErrorTranslator(
+            (): string => this.challenge(),
+            config.errorTranslator,
+        );
     }
 
     /**
@@ -150,16 +178,9 @@ export class WpMcpServer<TGrant, TMintRequest> {
             async (req: Request, res: Response): Promise<void> =>
                 this.handleHttp(req, res, options),
             // Express routes body-parser failures (bad JSON, body too large) to an error handler.
-            (err: Error, req: Request, res: Response, _next: NextFunction): void =>
-                RequestContext.run(() => {
-                    new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
-                    this.translator.toHttpBodyFailure(
-                        err,
-                        res,
-                        this.httpScope(req),
-                        this.challenge(),
-                    );
-                }),
+            (bodyError: Error, req: Request, res: Response, _next: NextFunction): void => {
+                void this.handleBodyFailure(bodyError, req, res);
+            },
         );
         // Registered AFTER the POST route so POST still wins. MCP 2026-07-28 has no session GET
         // (`subscriptions/listen` is a POST method), so every other method is a method error — and a
@@ -207,14 +228,62 @@ export class WpMcpServer<TGrant, TMintRequest> {
         res.setHeader('X-Accel-Buffering', 'no');
         await RequestContext.run(async () => {
             new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
+            McpCorrelation.stamp(this.correlationOf(req));
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP HTTP entry point; delegates only to WpMcpErrorTranslator
             try {
-                await this.serveExpress(req, res, options);
+                await this.logEdge('serve', () => this.serveExpress(req, res, options));
             } catch (err: unknown) {
                 const error = toError(err);
-                this.translator.toHttp(error, res, this.httpScope(req), this.challenge());
+                this.writeBoundaryError(res, error);
             }
         });
+    }
+
+    /** Express hands body-parser failures (bad JSON, body too large) here, outside every filter. */
+    private async handleBodyFailure(cause: Error, req: Request, res: Response): Promise<void> {
+        await RequestContext.run(async () => {
+            new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
+            McpCorrelation.stamp(this.correlationOf(req));
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP body entry point; delegates only to WpMcpErrorTranslator
+            try {
+                await this.logEdge('body', () => this.rejectBody(cause));
+            } catch (err: unknown) {
+                const error = toError(err);
+                this.writeBoundaryError(res, error);
+            }
+        });
+    }
+
+    /** A body express could not parse is a caller input error, reported through the same edge. */
+    private async rejectBody(cause: Error): Promise<never> {
+        throw new ApiBadRequestError(
+            `MCP request body rejected: ${cause.message}`,
+            undefined,
+            undefined,
+            cause,
+        );
+    }
+
+    /**
+     * The pre-SDK boundary owns the socket, so it produces a VALUE and writes it through the SAME
+     * express writer `ExpressWrapper` uses. A failure after headers were sent can only end the
+     * stream.
+     */
+    private writeBoundaryError(res: Response, error: Error): void {
+        if (res.headersSent) {
+            res.end();
+            return;
+        }
+        this.responseWriter.write(res, this.translator.toBearerBoundaryResponse(error));
+    }
+
+    /** Run one un-filtered edge step under `LogApiCall`, so its failure gets exactly one log line. */
+    private async logEdge<R>(step: string, work: () => Promise<R>): Promise<R> {
+        return this.logApiCall.execute(
+            new ApiMethodInfo('server', 'McpEndpoint', step),
+            new McpEdgeRequest(step),
+            work,
+        );
     }
 
     private async serveExpress(
@@ -287,8 +356,8 @@ export class WpMcpServer<TGrant, TMintRequest> {
         server.server.removeRequestHandler('tools/call');
         server.server.setRequestHandler(
             'tools/list',
-            async (_request: object, sdkContext: ServerContext): Promise<ListToolsResult> =>
-                this.handleListTools(authentication, sdkContext),
+            async (_request: object): Promise<ListToolsResult> =>
+                this.handleListTools(authentication),
         );
         server.server.setRequestHandler(
             'tools/call',
@@ -299,16 +368,15 @@ export class WpMcpServer<TGrant, TMintRequest> {
     }
 
     /** Entry point #2: tools/list has no tool-result channel, so failures are JSON-RPC errors. */
-    private async handleListTools(
-        authentication: McpPostAuthentication,
-        sdkContext: ServerContext,
-    ): Promise<ListToolsResult> {
+    private async handleListTools(authentication: McpPostAuthentication): Promise<ListToolsResult> {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP tools/list entry point; delegates only to WpMcpErrorTranslator
         try {
-            return this.listTools(authentication.credential);
+            return await this.logEdge('tools/list', async () =>
+                this.listTools(authentication.credential),
+            );
         } catch (err: unknown) {
             const error = toError(err);
-            throw this.translator.toProtocolError(error, this.sdkScope(sdkContext, 'tools/list'));
+            this.translator.toListError(error);
         }
     }
 
@@ -342,20 +410,20 @@ export class WpMcpServer<TGrant, TMintRequest> {
         sdkContext: ServerContext,
     ): Promise<CallToolResult> {
         const name = request.params.name;
-        const scope = this.sdkScope(sdkContext, 'tools/call', name);
+        McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, name));
         const tool = this.requireRegistry().find(name);
-        if (!tool) throw this.translator.unknownTool(name, scope);
+        if (!tool) throw this.translator.unknownTool(name);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP tools/call entry point; delegates only to WpMcpErrorTranslator
         try {
             const result = await this.callTool(tool, request, authentication, sdkContext);
-            result._meta = this.translator.resultMeta(scope.requestId);
+            result._meta = this.translator.resultMeta(McpCorrelation.requestId());
             return server.server.projectCallToolResult(
                 result,
                 tool.outputSchema as Record<string, DtoValue>,
             );
         } catch (err: unknown) {
             const error = toError(err);
-            return this.translator.toToolResult(error, scope);
+            return this.translator.toToolCallResult(error);
         }
     }
 
@@ -500,24 +568,14 @@ export class WpMcpServer<TGrant, TMintRequest> {
         return params;
     }
 
-    private requestId(): string {
-        return RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
-    }
-
-    private sdkScope(context: ServerContext, method: string, toolName?: string): McpFailureScope {
-        return new McpFailureScope(this.requestId(), context.mcpReq.id, method, toolName);
-    }
-
-    private httpScope(req: Request): McpFailureScope {
+    /** What the raw POST body tells us before the SDK has parsed anything: the id, and the tool. */
+    private correlationOf(req: Request): McpCorrelation {
         const body = this.bodyObject(req.body);
         const id = body?.['id'];
-        const method = body?.['method'];
         const params = this.bodyObject(body?.['params']);
         const name = params?.['name'];
-        return new McpFailureScope(
-            this.requestId(),
+        return new McpCorrelation(
             typeof id === 'string' || typeof id === 'number' ? id : null,
-            typeof method === 'string' ? method : 'unknown',
             typeof name === 'string' ? name : undefined,
         );
     }
