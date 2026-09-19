@@ -164,9 +164,11 @@ hour and MCP access tokens at 30 days.
 
 `WpMcpErrorTranslator` is the one place a failure becomes an MCP reply, mirroring
 `ApiErrorHttpMapper`. Each entry point has exactly one catch that only delegates to it; the dispatcher
-and the local/remote invokers have none. Normalization is the shared `ApiErrorBoundary` rule (a
-non-`ApiError`, or an `ApiConnectionError`, becomes `ApiImplementationError`), and each failure is
-logged once at the same per-kind level as HTTP, with `requestId`, JSON-RPC id and tool name.
+and the local/remote invokers have none. Classification is the shared `ApiErrorBoundary` rule (a
+non-`ApiError`, or a caller-local `ApiConnectionError`, publishes as kind `implementation`), and each
+failure is logged once at the same per-kind level as HTTP, with `requestId`, JSON-RPC id and tool
+name. The boundary never substitutes an object for the thrown error, so the operator line names the
+class that actually failed and an app's `McpErrorTranslators` can `instanceof` its own error classes.
 
 | Where | Reply |
 |---|---|
@@ -209,7 +211,8 @@ class LangMcpErrorTranslators implements McpErrorTranslators {
 }
 ```
 
-- `error` is the RAW thrown value, NOT normalized, so `instanceof` on the app's own classes works.
+- `error` is the thrown value itself — webpieces never substitutes another object for it, so
+  `instanceof` on the app's own classes works.
 - Returning `undefined` means "not mine" and the webpieces default renders, unchanged.
 - A claimed error owns the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`.
 - webpieces default-fills `_meta["webpieces/requestId"]` only when the returned result has no

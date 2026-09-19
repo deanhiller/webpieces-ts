@@ -3,7 +3,6 @@ import { Response } from 'express';
 import {
     ApiBadRequestError,
     ApiErrorBoundary,
-    ApiErrorCodec,
     ApiErrorPayload,
     ApiImplementationError,
     DtoValue,
@@ -46,9 +45,9 @@ export class McpFailureScope {
  * claimed error yields the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`, the lot.
  *
  * Contract:
- * - `error` is the RAW thrown value, NOT normalized: an app must be able to `instanceof` its own
- *   error classes, which `ApiErrorBoundary.normalize` would have collapsed to
- *   `ApiImplementationError`.
+ * - `error` is the RAW thrown value: an app must be able to `instanceof` its own error classes.
+ *   `ApiErrorBoundary` never substitutes an object for the thrown error, so there is exactly one
+ *   error value on this path.
  * - return `undefined` for "not mine" — webpieces then renders its own default, unchanged.
  * - webpieces default-fills `_meta['webpieces/requestId']` only when the returned result has NO
  *   `_meta`. An app that sets `_meta` owns it untouched.
@@ -96,8 +95,8 @@ export class McpHttpErrorDetail {
 /**
  * The ONE place every MCP failure is mapped to a reply, mirroring `ApiErrorHttpMapper` for HTTP.
  * Each MCP entry point (the bind HTTP handler, tools/list, tools/call) has exactly one catch that
- * only delegates here. Normalization and per-kind log levels are the shared `ApiErrorBoundary`
- * rules, and published text comes only from `ApiErrorCodec.encode`: this class never puts an
+ * only delegates here. Classification and per-kind log levels are the shared `ApiErrorBoundary`
+ * rules, and published text comes only from `ApiErrorBoundary.encode`: this class never puts an
  * error's own message on the wire unless it is an `ApiEndUserError`.
  */
 export class WpMcpErrorTranslator {
@@ -111,14 +110,14 @@ export class WpMcpErrorTranslator {
      * A failure after response headers were sent can only end the stream.
      */
     toHttp(thrown: Error, res: Response, scope: McpFailureScope, wwwAuthenticate: string): void {
-        const error = this.boundary.normalize(thrown);
-        this.boundary.logOperatorDetail(error, scope.describe());
+        this.boundary.logOperatorDetail(thrown, scope.describe());
         if (res.headersSent) {
             res.end();
             return;
         }
-        const generic = ApiErrorCodec.encode(error).message;
-        switch (error.kind) {
+        const payload = this.boundary.encode(thrown);
+        const generic = payload.message;
+        switch (payload.kind) {
             case 'unauthorized':
                 res.setHeader('WWW-Authenticate', wwwAuthenticate);
                 this.writeHttp(res, 401, -32_000, generic, scope);
@@ -151,17 +150,16 @@ export class WpMcpErrorTranslator {
 
     /** tools/list and other result-less methods: bad-request → -32602, anything else → -32603. */
     toProtocolError(thrown: Error, scope: McpFailureScope): ProtocolError {
-        const error = this.boundary.normalize(thrown);
-        this.boundary.logOperatorDetail(error, scope.describe());
-        const payload = ApiErrorCodec.encode(error);
-        if (error.kind === 'bad-request') {
+        this.boundary.logOperatorDetail(thrown, scope.describe());
+        const payload = this.boundary.encode(thrown);
+        if (payload.kind === 'bad-request') {
             return new ProtocolError(
                 ProtocolErrorCode.InvalidParams,
                 payload.callerMessage ?? payload.message,
                 new McpErrorData(scope.requestId),
             );
         }
-        const message = error.kind === 'end-user' ? payload.message : 'Internal Error';
+        const message = payload.kind === 'end-user' ? payload.message : 'Internal Error';
         return new ProtocolError(
             ProtocolErrorCode.InternalError,
             message,
@@ -188,11 +186,10 @@ export class WpMcpErrorTranslator {
      * whoever renders the reply.
      */
     toToolResult(thrown: Error, scope: McpFailureScope): CallToolResult {
-        const error = this.boundary.normalize(thrown);
-        this.boundary.logOperatorDetail(error, scope.describe());
+        this.boundary.logOperatorDetail(thrown, scope.describe());
         const claimed = this.appToolResult(thrown, scope);
         if (claimed) return this.withDefaultMeta(claimed, scope.requestId);
-        const visible = this.modelVisible(ApiErrorCodec.encode(error), scope);
+        const visible = this.modelVisible(this.boundary.encode(thrown), scope);
         const text = JSON.stringify(visible as DtoValue);
         return {
             content: [{ type: 'text', text }],
