@@ -21,8 +21,9 @@ export { McpApiDispatcher } from './McpApiDispatcher';
 export { WpMcpServer } from './WpMcpServer';
 export {
     MCP_REQUEST_ID_META_KEY,
+    McpCorrelation,
+    McpDefaultToolCallRenderer,
     McpErrorData,
-    McpFailureScope,
     McpHttpErrorBody,
     McpHttpErrorDetail,
     ModelVisibleToolError,

@@ -35,7 +35,7 @@ import {
     WRONG_LOGIN,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
-import { EndUserStatus } from '../ApiErrorHttpMapper';
+import { ApiErrorHttpMapper, EndUserStatus } from '../ApiErrorHttpMapper';
 
 /**
  * The wire is the ONE place operator prose must not appear. These specs drive the real
@@ -110,9 +110,11 @@ class VendorPortalPayload {
 }
 
 class VendorPortalTranslators implements ErrorTranslators {
-    toWire(error: Error): HttpResponseDto | undefined {
+    private readonly fallback = new ApiErrorHttpMapper('gui');
+
+    toWire(error: Error): HttpResponseDto {
         if (!(error instanceof VendorPortalError)) {
-            return undefined;
+            return this.fallback.toResponse(error);
         }
         const pe = new VendorPortalPayload(error.message, error.name);
         return new HttpResponseDto(
@@ -321,8 +323,6 @@ describe('handleError — only ApiEndUserError message reaches the wire', () => 
             expect(res.statusCode).toBe(status);
             expect(pe.message).toBe(generic);
             expect(res.body).not.toContain(error.message);
-            // The operator text is not lost — it moved to the log.
-            expect(capturing.lines.join('\n')).toContain(error.message);
         });
     }
 
@@ -333,8 +333,6 @@ describe('handleError — only ApiEndUserError message reaches the wire', () => 
         expect(res.statusCode).toBe(404);
         expect(harness.bodyOf(res)).not.toHaveProperty('name');
         expect(res.body).not.toContain('ApiEndpointNotFoundError');
-        // ...but it is in the log, so nothing that was previously wire-only is lost.
-        expect(capturing.lines.join('\n')).toContain('ApiEndpointNotFoundError');
     });
 
     it('keeps subType — an app passes it on purpose and the client branches on it', () => {
@@ -358,7 +356,7 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
         'returned HTTP 404 with content-type "text/html; charset=utf-8" — this response did not come ' +
         'from the webpieces server. body="<pre>Cannot POST /db-stores/fetch-stores</pre>"';
 
-    it('sends none of it to the caller, and all of it to the log', () => {
+    it('sends none of it to the caller', () => {
         const res = harness.send(new ApiImplementationError(diagnostic));
 
         expect(res.statusCode).toBe(500);
@@ -369,19 +367,14 @@ describe('handleError — the PR #709 downstream-diagnostic leak', () => {
         expect(body).not.toContain('Cannot POST /db-stores/fetch-stores');
         expect(body).not.toContain('text/html');
         expect(body).not.toContain('DbStoresApi');
-
-        const logged = capturing.lines.join('\n');
-        expect(logged).toContain('Cannot POST /db-stores/fetch-stores');
-        expect(logged).toContain('pg-dataaccess.internal:8443');
     });
 
-    it('logs the cause chain too, since only the log carries it now', () => {
+    it('not even through the cause chain, which is encoded but generically', () => {
         const cause = new ApiNotFoundError('<pre>Cannot POST /db-stores/fetch-stores</pre>');
-        harness.send(new ApiImplementationError('downstream call failed', cause));
+        const res = harness.send(new ApiImplementationError('downstream call failed', cause));
 
-        expect(capturing.lines.join('\n')).toContain(
-            'cause=<pre>Cannot POST /db-stores/fetch-stores</pre>',
-        );
+        expect(res.body).not.toContain('Cannot POST /db-stores/fetch-stores');
+        expect(harness.bodyOf(res).cause).toMatchObject({ kind: 'not-found' });
     });
 });
 
@@ -437,11 +430,6 @@ describe('handleError — what still goes out on purpose', () => {
         });
         expect(res.body).not.toContain('connection');
         expect(res.body).not.toContain('private-host');
-        // The operator STILL sees which class failed — the substitution used to erase exactly this.
-        expect(capturing.lines.join('\n')).toContain(
-            '[name=ApiConnectionError kind=implementation subType=none] ' +
-                'ECONNREFUSED private-host:8443',
-        );
     });
 
     it('keeps a non-ApiError class name in the operator log while publishing nothing of it', () => {
@@ -453,14 +441,21 @@ describe('handleError — what still goes out on purpose', () => {
             message: 'Internal Error',
         });
         expect(res.body).not.toContain('tenant_7');
-        const logged = capturing.lines.join('\n');
-        expect(logged).toContain(
-            '[name=LangPassageLockedError kind=implementation subType=none] ' +
-                'passage 7 locked for tenant_7',
-        );
-        expect(logged).not.toContain('name=ApiImplementationError');
-        // The wrapper used to copy the message in and keep the original as `cause`, printing it twice.
-        expect(logged).not.toContain('cause=passage 7 locked');
+    });
+
+    /**
+     * The one operator line per failure is LogApiFilter's, ABOVE this: `handleError` renders a
+     * response and logs nothing at all now that `ApiErrorBoundary.logOperatorDetail` is gone. That
+     * is the whole of issue #961's item 5, and it is asserted here so a line sneaking back in — the
+     * second-line defect `ErrorLogFilter` was deleted for — turns this red.
+     * `LogApiCall.spec.ts` pins the line that DOES carry the operator text.
+     */
+    it('writes NO log line of its own: the operator line belongs to LogApiCall above it', () => {
+        harness.send(new ApiImplementationError('ECONNREFUSED 10.4.0.9:5432'));
+        harness.send(new ApiBadRequestError('column users.ssn failed CHECK'));
+        harness.send(new LangPassageLockedError('passage 7 locked'));
+
+        expect(capturing.lines).toEqual([]);
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {

@@ -28,7 +28,7 @@ import { MethodMeta } from '../MethodMeta';
  * - [API-server-req] Class.method request={...}
  * - [API-server-resp-SUCCESS] Class.method response={...}
  * - [API-server-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
- * - [API-server-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
+ * - [API-server-resp-OTHER] Class.method errorType=... error=... (user errors: 400, 401, 403, 404, 266)
  *
  * User errors (ApiUnauthorizedError, ApiBadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective. LogApiCall re-throws the

@@ -28,7 +28,10 @@ import { UnexpectedApiResponseError } from './UnexpectedApiResponseError';
 export class ClientErrorTranslator {
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
     static translateError(response: HttpResponseDto): TranslatedFailure {
-        const custom = ClientRegistry.tryTranslateFromWire(response);
+        // `undefined` here is PROVENANCE, not a fallback: `TranslatedFailure.appRegistered` is what
+        // `NodeProxyClient.adaptDownstreamFailure` reads to tell an app's deliberate claim on a
+        // status apart from the framework's generic default for it.
+        const custom = ClientRegistry.getErrorTranslators()?.fromWire(response);
         if (custom !== undefined) return new TranslatedFailure(custom, true, response.status.code);
         return new TranslatedFailure(this.builtInError(response), false, response.status.code);
     }
@@ -38,9 +41,13 @@ export class ClientErrorTranslator {
     static builtInError(response: HttpResponseDto): Error {
         if (ApiErrorCodec.isPayload(response.body)) {
             const decoded = ApiErrorCodec.decode(response.body);
+            // `statusCode` is the 'coded' kind's own status, the one thing the shared table cannot
+            // know. This side legitimately holds an `ApiError` — it just decoded one — which is why
+            // `hasCode` stays: it narrows the kind to the published subset `codeFor` accepts.
+            const statusCode = decoded instanceof ApiCodedError ? decoded.statusCode : undefined;
             if (
                 ApiErrorHttpStatus.hasCode(decoded) &&
-                ApiErrorHttpStatus.code(decoded) === response.status.code
+                ApiErrorHttpStatus.codeFor(decoded.kind, statusCode) === response.status.code
             )
                 return decoded;
             return new ApiImplementationError('Internal Error', undefined, true);

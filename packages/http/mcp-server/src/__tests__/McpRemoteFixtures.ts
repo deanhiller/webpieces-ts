@@ -10,7 +10,6 @@ import {
     ApiDependencyTimeoutError,
     ApiEndpointNotFoundError,
     ApiEndUserError,
-    ApiError,
     ApiErrorCodec,
     ApiErrorHttpStatus,
     ApiForbiddenError,
@@ -44,6 +43,7 @@ import {
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
+import { ApiErrorHttpMapper } from '@webpieces/http-server';
 
 /** Contracts, controllers and test doubles for McpRemoteBinding.integration.spec.ts. */
 
@@ -219,33 +219,40 @@ export abstract class RemoteThrowApi {
     }
 }
 
-/** One named throw, run identically behind the local and the remote binding. */
+/**
+ * One named throw, run identically behind the local and the remote binding.
+ *
+ * `expectedServerLevel` is the level of the ONE operator line the failure now produces on the server
+ * that raised it — `LogApiCall`'s, at `warn` for `[API-server-resp-OTHER]` (a healthy rejection of
+ * the caller's mistake) and `error` for `[API-server-resp-FAIL]`. `ApiErrorBoundary` no longer
+ * writes a second line of its own (#961).
+ */
 export class ThrowCase {
     constructor(
         public readonly name: string,
         public readonly expectedKind: string,
-        public readonly expectedLevel: LogLevel,
+        public readonly expectedServerLevel: LogLevel,
         public readonly raise: () => never,
     ) {}
 }
 
 export const THROW_CASES: readonly ThrowCase[] = [
-    new ThrowCase('end-user', 'end-user', 'info', () => {
+    new ThrowCase('end-user', 'end-user', 'warn', () => {
         throw new ApiEndUserError('The two passwords you entered do not match.', 'PW_MISMATCH');
     }),
-    new ThrowCase('bad-request', 'bad-request', 'info', () => {
+    new ThrowCase('bad-request', 'bad-request', 'warn', () => {
         throw new ApiBadRequestError('internal column name', '$.query', 'query must be a word');
     }),
-    new ThrowCase('unauthorized', 'unauthorized', 'info', () => {
+    new ThrowCase('unauthorized', 'unauthorized', 'warn', () => {
         throw new ApiUnauthorizedError('session internals');
     }),
-    new ThrowCase('forbidden', 'forbidden', 'info', () => {
+    new ThrowCase('forbidden', 'forbidden', 'warn', () => {
         throw new ApiForbiddenError('acl internals');
     }),
-    new ThrowCase('not-found', 'not-found', 'info', () => {
+    new ThrowCase('not-found', 'not-found', 'warn', () => {
         throw new ApiNotFoundError('row 7 missing');
     }),
-    new ThrowCase('endpoint-not-found', 'endpoint-not-found', 'info', () => {
+    new ThrowCase('endpoint-not-found', 'endpoint-not-found', 'warn', () => {
         throw new ApiEndpointNotFoundError('route internals');
     }),
     new ThrowCase('request-timeout', 'request-timeout', 'error', () => {
@@ -254,22 +261,22 @@ export const THROW_CASES: readonly ThrowCase[] = [
     new ThrowCase('rate-limited', 'rate-limited', 'error', () => {
         throw new ApiRateLimitedError('quota internals');
     }),
-    new ThrowCase('conflict', 'conflict', 'info', () => {
+    new ThrowCase('conflict', 'conflict', 'warn', () => {
         throw new ApiConflictError('version internals');
     }),
-    new ThrowCase('unprocessable', 'unprocessable', 'info', () => {
+    new ThrowCase('unprocessable', 'unprocessable', 'warn', () => {
         throw new ApiUnprocessableError('rule internals');
     }),
-    new ThrowCase('precondition-failed', 'precondition-failed', 'info', () => {
+    new ThrowCase('precondition-failed', 'precondition-failed', 'warn', () => {
         throw new ApiPreconditionFailedError('etag internals');
     }),
-    new ThrowCase('unsupported-media-type', 'unsupported-media-type', 'info', () => {
+    new ThrowCase('unsupported-media-type', 'unsupported-media-type', 'warn', () => {
         throw new ApiUnsupportedMediaTypeError('parser internals');
     }),
     new ThrowCase('not-implemented', 'not-implemented', 'error', () => {
         throw new ApiNotImplementedError('feature internals');
     }),
-    new ThrowCase('coded-4xx', 'coded', 'info', () => {
+    new ThrowCase('coded-4xx', 'coded', 'warn', () => {
         throw new ApiCodedError('quota internals', 460, 'QUOTA');
     }),
     new ThrowCase('coded-5xx', 'coded', 'error', () => {
@@ -394,14 +401,17 @@ export class BoundaryProbeFilter extends Filter<MethodMeta, WpResponse<unknown>>
 export class RelayWebpiecesPeerErrors implements ErrorTranslators {
     relay = true;
 
-    toWire(_error: Error): HttpResponseDto | undefined {
-        return undefined;
+    toWire(error: Error): HttpResponseDto {
+        return new ApiErrorHttpMapper('gui').toResponse(error);
     }
 
-    fromWire(response: HttpResponseDto): ApiError | undefined {
+    fromWire(response: HttpResponseDto): Error | undefined {
         if (!this.relay || !ApiErrorCodec.isPayload(response.body)) return undefined;
         const decoded = ApiErrorCodec.decode(response.body);
         if (!ApiErrorHttpStatus.hasCode(decoded)) return undefined;
-        return ApiErrorHttpStatus.code(decoded) === response.status.code ? decoded : undefined;
+        const statusCode = decoded instanceof ApiCodedError ? decoded.statusCode : undefined;
+        return ApiErrorHttpStatus.codeFor(decoded.kind, statusCode) === response.status.code
+            ? decoded
+            : undefined;
     }
 }

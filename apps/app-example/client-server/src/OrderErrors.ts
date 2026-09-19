@@ -6,6 +6,7 @@ import {
     HttpResponseStatus,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
+import { ApiErrorHttpMapper } from '@webpieces/http-server';
 
 /**
  * An app's OWN error type, at its OWN status code — the thing the built-in webpieces ladder cannot
@@ -48,11 +49,18 @@ export class OrderErrorPayload {
  * empty scope and it could only step aside. `ErrorTranslationSymmetry.spec.ts` pins both halves.
  */
 export class OrderErrorTranslators implements ErrorTranslators {
-    /** SERVER: exception -> the whole response. `undefined` => not mine, use webpieces' default. */
-    toWire(error: Error): HttpResponseDto | undefined {
+    /**
+     * The webpieces DEFAULT, which this translator REPLACES. Declining is a call to it, not an
+     * `undefined` — so an error this app does not claim comes out byte-identical to registering no
+     * translator at all. `'gui'` because this router did not opt into `setEndUserStatus('edge')`.
+     */
+    private readonly fallback = new ApiErrorHttpMapper('gui');
+
+    /** SERVER: exception -> the whole response. Not mine => delegate to webpieces' default. */
+    toWire(error: Error): HttpResponseDto {
         const path = RequestContext.getRequest()?.path;
         if (path === undefined || !path.startsWith('/public')) {
-            return undefined;
+            return this.fallback.toResponse(error);
         }
 
         const body = new OrderErrorPayload(error.message);

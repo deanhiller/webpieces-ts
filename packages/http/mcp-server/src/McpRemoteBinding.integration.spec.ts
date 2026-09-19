@@ -306,11 +306,23 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         return JSON.parse(normalized) as Record<string, unknown>;
     }
 
-    function translatorLine(toolName: string): RecordedLogLine {
-        const lines = logs.lines.filter(
+    /**
+     * The operator lines one API call produced, counted across ALL loggers rather than filtered to
+     * one — which is what #961 item 5 is about: `ApiErrorBoundary.logOperatorDetail` used to add a
+     * second, barer line beside `LogApiCall`'s, and filtering by logger name is exactly how that
+     * stayed invisible.
+     */
+    function failureLines(apiClass: string, side: 'server' | 'client'): RecordedLogLine[] {
+        return logs.lines.filter(
             (line: RecordedLogLine) =>
-                line.logger === 'WpMcpErrorTranslator' && line.message.includes(`tool=${toolName}`),
+                line.message.includes(`[API-${side}-resp-`) &&
+                !line.message.includes('SUCCESS') &&
+                line.message.includes(`] ${apiClass}.`),
         );
+    }
+
+    function oneFailureLine(apiClass: string, side: 'server' | 'client'): RecordedLogLine {
+        const lines = failureLines(apiClass, side);
         expect(lines).toHaveLength(1);
         return lines[0];
     }
@@ -404,8 +416,16 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             expect(remote).toEqual(local);
             expect(local['kind']).toBe(throwCase.expectedKind);
             expect(JSON.stringify(local)).not.toContain('internals');
-            expect(translatorLine('local_throw').level).toBe(throwCase.expectedLevel);
-            expect(translatorLine('remote_throw').level).toBe(throwCase.expectedLevel);
+            // ONE line for the in-process binding: the filter's, and nothing from the MCP edge.
+            expect(oneFailureLine('LocalThrowApi', 'server').level).toBe(
+                throwCase.expectedServerLevel,
+            );
+            // The remote binding is TWO calls, so it has one line per HOP and still none from the
+            // MCP edge: the remote server's own, plus the gateway client's report of its call.
+            expect(oneFailureLine('RemoteThrowApi', 'server').level).toBe(
+                throwCase.expectedServerLevel,
+            );
+            expect(failureLines('RemoteThrowApi', 'client')).toHaveLength(1);
         },
     );
 
@@ -455,14 +475,13 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         ['an OIDC token-mint failure', 'oidc_fail_remote'],
         ['a remote endpoint missing', 'missing_remote_integration_search'],
     ])(
-        'turns %s into an implementation isError result logged at error',
+        'turns %s into an implementation isError result, disclosing nothing',
         async (_label: string, toolName: string) => {
             logs.lines.length = 0;
             const visible = modelVisible(await callGateway(toolName, 'anything'), toolName);
             expect(visible['kind']).toBe('implementation');
             expect(visible['message']).toContain('bug in the tool, not in your arguments');
             expect(JSON.stringify(visible)).not.toContain('SECRET');
-            expect(translatorLine(toolName).level).toBe('error');
         },
     );
 });

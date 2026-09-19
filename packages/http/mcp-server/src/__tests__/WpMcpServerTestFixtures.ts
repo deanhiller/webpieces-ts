@@ -122,7 +122,7 @@ export class SearchController extends SearchApi {
     override async search(request: SearchRequest): Promise<SearchResponse> {
         if (request.query === 'internal') throw new Error('database password appeared here');
         // A DOWNSTREAM call of ours failed. From the model's seat that is OUR bug, never a kind of
-        // its own on the wire — see #959 and ApiErrorBoundary.apiOutcome.
+        // its own on the wire — see #959 and ApiErrorBoundary.encode.
         if (request.query === 'downstream') {
             throw new ApiConnectionError('ECONNREFUSED private-host:8443');
         }

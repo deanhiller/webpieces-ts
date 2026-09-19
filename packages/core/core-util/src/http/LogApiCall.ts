@@ -40,7 +40,7 @@ const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
  * Logging format patterns:
  * - [API-{side}-req] ClassName.methodName request={...}
  * - [API-{side}-resp-SUCCESS] ClassName.methodName response={...}
- * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...}  (user errors)
+ * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...} error={...}  (user errors)
  * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (server errors)
  */
 export class LogApiCallImpl {
@@ -225,6 +225,10 @@ export class LogApiCallImpl {
         const side = methodInfo.side;
         const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
         const errorType = error.constructor.name;
+        // The MESSAGE is on BOTH branches, and that is load-bearing: this is the ONLY operator line
+        // per failure now that `ApiErrorBoundary` writes none. An operator error message is never
+        // published to a caller (see `ApiErrorCodec.publicMessage`), so the log is the one place it
+        // exists at all — dropping it on the caller-error branch would lose it outright.
         // Pluggable classification (ClientRegistry): a per-apiClass EXTERNAL-client classifier wins,
         // else the app default, else the webpieces built-in — which is side-dependent (a 4xx the SERVER
         // raised is a handled non-failure; the same 4xx a CLIENT receives means its call FAILED; 266 is
@@ -241,7 +245,9 @@ export class LogApiCallImpl {
             ),
             () =>
                 isUser
-                    ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
+                    ? log.warn(
+                          `[API-${side}-resp-OTHER] ${id} errorType=${errorType} error=${error.message}`,
+                      )
                     : log.error(
                           `[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${error.message}`,
                       ),

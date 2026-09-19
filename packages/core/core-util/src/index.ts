@@ -322,3 +322,4 @@ export {
 } from './errors';
 export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';
+export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus';

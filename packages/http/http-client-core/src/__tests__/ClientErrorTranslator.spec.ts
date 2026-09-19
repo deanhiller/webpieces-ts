@@ -43,9 +43,15 @@ class AiBadRequestError extends Error {
 
 /** Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. */
 class AiErrorTranslators implements ErrorTranslators {
-    toWire(error: Error): HttpResponseDto | undefined {
+    toWire(error: Error): HttpResponseDto {
         if (!(error instanceof AiBadRequestError)) {
-            return undefined;
+            // "Not mine" on the server half; this spec exercises fromWire, and http-client-core has
+            // no server mapper, so the shape is what matters: always a response, never undefined.
+            return new HttpResponseDto(
+                new HttpResponseStatus(500, 'Internal Server Error'),
+                [],
+                new ApiErrorPayload('implementation', 'Internal Error'),
+            );
         }
         const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.message = error.message;
@@ -53,7 +59,7 @@ class AiErrorTranslators implements ErrorTranslators {
     }
     fromWire(response: HttpResponseDto): Error | undefined {
         if (response.status.code !== 460) {
-            return undefined;
+            return undefined; // not claimed -> webpieces' built-in mapping
         }
         return new AiBadRequestError(
             (response.body as ApiErrorPayload).message ?? 'AI bad request',
@@ -80,9 +86,10 @@ function translate(
 }
 
 /**
- * ClientErrorTranslator consults ClientRegistry.tryTranslateFromWire() BEFORE its built-in switch,
- * so an app both ADDS custom types and OVERRIDES built-ins — while unclaimed codes fall through to
- * the exact same generic mapping as before. This is the CLIENT half of the wire symmetry.
+ * An installed ErrorTranslators is consulted for every response, so an app both ADDS custom types
+ * and OVERRIDES built-ins — while a status it does not CLAIM (`undefined`) falls through to the same
+ * generic mapping as before AND is marked not-app-registered, which is what the 4xx-to-500 wrap in
+ * NodeProxyClient keys off. This is the CLIENT half of the wire symmetry.
  */
 describe('ClientErrorTranslator registry integration', () => {
     beforeEach(() => {
@@ -105,18 +112,26 @@ describe('ClientErrorTranslator registry integration', () => {
         expect(err.message).toBe('bad ai input');
     });
 
-    it('an unclaimed status still uses the built-in mapping (400 -> ApiBadRequestError)', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims 460
-
+    it('a DECLINED status is identical to registering no translator at all', () => {
         const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.field = 'email';
-        const err = translate(400, pe);
-        expect(err).toBeInstanceOf(ApiBadRequestError);
+        const withNone = translate(400, pe);
+
+        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims 460
+        const withTranslator = translate(400, pe);
+
+        expect(withTranslator).toBeInstanceOf(ApiBadRequestError);
+        expect(withTranslator).toEqual(withNone);
     });
 
     it('installed translators OVERRIDE a built-in status (400 -> custom type wins)', () => {
         const override: ErrorTranslators = {
-            toWire: () => undefined,
+            toWire: (error: Error) =>
+                new HttpResponseDto(
+                    new HttpResponseStatus(500, 'Internal Server Error'),
+                    [],
+                    new ApiErrorPayload('implementation', error.name),
+                ),
             fromWire: (response: HttpResponseDto) =>
                 response.status.code === 400
                     ? new AiBadRequestError(

@@ -9,6 +9,7 @@ import {
     HttpResponseStatus,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
+import { ApiErrorHttpMapper } from '../ApiErrorHttpMapper';
 
 /** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's AiBadRequestError). */
 class AiBadRequestError extends Error {
@@ -28,9 +29,12 @@ class AiErrorPayload {
 
 /** Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. */
 class AiErrorTranslators implements ErrorTranslators {
-    toWire(error: Error): HttpResponseDto | undefined {
+    /** "Not mine" is a DELEGATION to the webpieces default now, never an `undefined`. */
+    private readonly fallback = new ApiErrorHttpMapper('gui');
+
+    toWire(error: Error): HttpResponseDto {
         if (!(error instanceof AiBadRequestError)) {
-            return undefined;
+            return this.fallback.toResponse(error);
         }
         const pe = new AiErrorPayload(error.message, error.name);
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
@@ -87,9 +91,9 @@ function newWrapper(): ExpressWrapper {
 }
 
 /**
- * ExpressWrapper.handleError consults ClientRegistry.tryTranslateToWire() BEFORE the webpieces
- * default, so an app both ADDS custom types and OVERRIDES built-ins — while unclaimed errors fall
- * through to the exact same generic mapping as before. SERVER half of the wire symmetry with
+ * A registered ErrorTranslators REPLACES the webpieces default in ExpressWrapper.handleError, so an
+ * app both ADDS custom types and OVERRIDES built-ins — while an error it declines is handed to
+ * `ApiErrorHttpMapper` by the app itself and comes out byte-identical to registering nothing. SERVER half of the wire symmetry with
  * ClientErrorTranslator (the round-trip itself is proven in core-util's ClientRegistry.spec.ts,
  * using the same AiErrorTranslators both directions).
  */
@@ -113,14 +117,20 @@ describe('ExpressWrapper.handleError registry integration', () => {
         expect(pe.name).toBe('AiBadRequest');
     });
 
-    it('an unclaimed error still uses the built-in ladder (ApiBadRequestError -> 400)', () => {
+    it('a DECLINED error is byte-identical to registering no translator at all', () => {
+        const declined = new ApiBadRequestError('bad field', 'email');
+
+        const withNone = new FakeResponse();
+        newWrapper().handleError(asResponse(withNone), declined);
+
         ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
+        const withTranslator = new FakeResponse();
+        newWrapper().handleError(asResponse(withTranslator), declined);
 
-        const res = new FakeResponse();
-        newWrapper().handleError(asResponse(res), new ApiBadRequestError('bad field', 'email'));
-
-        expect(res.statusCode).toBe(400);
-        const pe = JSON.parse(res.body ?? '{}') as ApiErrorPayload;
+        expect(withTranslator.statusCode).toBe(400);
+        expect(withNone.statusCode).toBe(400);
+        expect(withTranslator.body).toBe(withNone.body);
+        const pe = JSON.parse(withTranslator.body ?? '{}') as ApiErrorPayload;
         expect(pe.field).toBe('email');
         // ...and the built-in ladder genericizes, unlike the app path above.
         expect(pe.message).toBe('Bad Request');

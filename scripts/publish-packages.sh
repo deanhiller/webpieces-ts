@@ -112,10 +112,6 @@ ORDER=(
     packages/logging/winston
     packages/logging/bunyan
     packages/http/http-routing
-    # mcp-server was bootstrapped manually at 0.4.765 because trusted publishing cannot create a
-    # new scoped package. Its npm Trusted Publisher is now configured, so CI owns every later release.
-    # It follows core-util, core-context and http-routing, which are all of its @webpieces dependencies.
-    packages/http/mcp-server
     # http-client-core is browser+node and depends only on core-util; its two environment
     # packages depend on it (and http-client-node also on gcp-identity + core-context).
     packages/http/http-client-core
@@ -123,6 +119,11 @@ ORDER=(
     packages/http/http-client-node
     packages/cloud/cloudtasks-client
     packages/http/http-server
+    # mcp-server was bootstrapped manually at 0.4.765 because trusted publishing cannot create a
+    # new scoped package. Its npm Trusted Publisher is now configured, so CI owns every later release.
+    # It goes LAST: it depends on core-util, core-context, http-routing AND http-server — the pre-SDK
+    # MCP boundary writes its HttpResponseDto through http-server's shared ExpressResponseWriter (#961).
+    packages/http/mcp-server
 )
 
 # Publishable in package.json, but deliberately never released. Each needs a reason.

@@ -1,5 +1,4 @@
 import {
-    ApiError,
     ApiErrorCodec,
     DtoValue,
     RequestStream,
@@ -44,8 +43,13 @@ export class NdjsonRequestStream implements RequestStream<DtoValue> {
         await this.write(new StreamEnvelope('event', value, undefined, correlation));
     }
 
+    /**
+     * Takes `Error`: webpieces never demands its own `ApiError` taxonomy from an application. The
+     * faithful codec encode, for the reason {@link ResponseStream.fail} documents — a
+     * `StreamTransportError` must reach the peer as kind `connection`.
+     */
     async fail(
-        error: ApiError,
+        error: Error,
         correlation?: StreamCorrelation,
         options?: StreamFailureOptions,
     ): Promise<void> {

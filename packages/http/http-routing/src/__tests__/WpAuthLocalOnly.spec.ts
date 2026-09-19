@@ -157,7 +157,9 @@ describe('AuthFilter enforces @WpAuthLocalOnly', () => {
         await expect(runFilter(next)).rejects.toThrow(ApiEndpointNotFoundError);
         // 404 on the wire — the SAME answer an unregistered route gives, which is the whole point.
         await expect(
-            runFilter(next).catch((err: ApiEndpointNotFoundError) => ApiErrorHttpStatus.code(err)),
+            runFilter(next).catch((err: ApiEndpointNotFoundError) =>
+                ApiErrorHttpStatus.codeFor(err.kind),
+            ),
         ).resolves.toBe(404);
         expect(next.invoked).toBe(false);
     });
