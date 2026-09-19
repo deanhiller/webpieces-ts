@@ -12,7 +12,7 @@ import { validatePrGateSection } from './validate-config';
 
 // A pr-gate section that is valid except for whatever `checklists` value the test is probing.
 function validPrGate(checklists: unknown): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
+    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, gates: [], checklists };
 }
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
@@ -124,7 +124,7 @@ describe('validatePrGateSection rejects the retired per-checklist "subagent" key
  * with the edit that fixes it.
  */
 describe('validatePrGateSection — overrideReviewerAgent, reviewerAgentName and reviewerAgents', () => {
-    const noName = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO' };
+    const noName = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1 };
 
     it('accepts a gate that names no reviewer agent at all (the webpieces default)', () => {
         expect(validatePrGateSection(noName)).toEqual([]);

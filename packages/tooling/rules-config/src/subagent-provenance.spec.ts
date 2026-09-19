@@ -15,7 +15,7 @@ const svc = new SubagentProvenanceService();
 // to it. These helpers express exactly that: each type is its own checklist id, verified as DISTINCT runs.
 // The shared-type cases (issue #938) are at the bottom and call verifyReviewers directly.
 function verifyDistinct(service: SubagentProvenanceService, types: readonly string[], context: ReviewerContext): ProvenanceResult {
-    return service.verifyReviewers(types.map((t: string): ExpectedReviewer => new ExpectedReviewer(t, t)), context, false);
+    return service.verifyReviewers(types.map((t: string): ExpectedReviewer => new ExpectedReviewer(t, t)), context);
 }
 function evidenceFor(service: SubagentProvenanceService, context: ReviewerContext, agentIds: Record<string, string>): ReviewerEvidence[] {
     const expected = Object.keys(agentIds).map((t: string): ExpectedReviewer => new ExpectedReviewer(t, t));
@@ -505,48 +505,56 @@ function sharedTypeHarness(sessionId: string, touched: readonly string[], branch
 
 /**
  * Issue #938: every checklist is reviewed by ONE agent type (webpieces-reviewer, or the override), so a run is matched on the
- * type and CREDITED to a checklist id. Without `reviewerAgents` each checklist still needs its own run; with
- * it, one run may cover several — that grouping is what the repo configured.
+ * type and CREDITED to a checklist id. One run may cover SEVERAL checklists — `reviewerAgents` is a required
+ * CAP, so grouping under it is always what the repo configured.
+ *
+ * The `sharedRuns: false` mode these tests used to cover is GONE with the optional key. It demanded a
+ * DISTINCT run per checklist, and it could never have been right for a cap: a cap is a MAXIMUM, so even a
+ * consumer who sets it to their checklist count may legitimately group everything into one subagent.
  */
 describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agent type', () => {
     const three = ['a', 'b', 'c'].map((id: string): ExpectedReviewer => new ExpectedReviewer(id, 'webpieces-reviewer'));
     const verdicts = { a: `${WT}/review-a.json`, b: `${WT}/review-b.json`, c: `${WT}/review-c.json` };
 
-    it('DISTINCT mode: one run cannot stand in for three checklists', () => {
-        process.env['HOME'] = sharedTypeHarness('sess-s1', [''], 'dean/feat');
-        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s1';
-        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), false);
-        expect(res.status).toBe(PROVENANCE_MISSING);
-        expect(res.missing).toEqual(['b', 'c']);
-    });
-
-    it('DISTINCT mode: three runs of the same type satisfy three checklists', () => {
-        process.env['HOME'] = sharedTypeHarness('sess-s2', ['', '', ''], 'dean/feat');
+    // Three runs, each having NAMED its own verdict file, credit one-to-one: grouping is permitted, never
+    // forced, and the verdict file is what tells the three apart. Without that evidence three
+    // indistinguishable runs of the same type all credit to the first — which is correct, because nothing
+    // in the transcripts says otherwise and the cap never promised a run per checklist.
+    it('three runs that each NAMED their own verdict file credit one-to-one', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s2', [verdicts.a, verdicts.b, verdicts.c], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s2';
-        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), false);
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat', '', {}, verdicts));
         expect(res.status).toBe(PROVENANCE_OK);
-        expect(new Set(Object.values(res.agentIds)).size).toBe(3);
+        expect(res.agentIds).toEqual({ a: 's0', b: 's1', c: 's2' });
     });
 
-    it('SHARED mode (reviewerAgents set): one run may cover every checklist', () => {
+    it('three indistinguishable runs all credit to the first — the cap never promised one run per checklist', () => {
+        process.env['HOME'] = sharedTypeHarness('sess-s2b', ['', '', ''], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s2b';
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'));
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(new Set(Object.values(res.agentIds)).size).toBe(1);
+    });
+
+    it('one run may cover every checklist', () => {
         process.env['HOME'] = sharedTypeHarness('sess-s3', [''], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s3';
-        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'), true);
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat'));
         expect(res.status).toBe(PROVENANCE_OK);
         expect(res.agentIds).toEqual({ a: 's0', b: 's0', c: 's0' });
         expect(res.detail).toContain('3 checklist(s) were reviewed by 1 reviewer subagent run(s)');
     });
 
-    it('SHARED mode still refuses when no run of the type exists', () => {
+    it('still refuses when no run of the type exists', () => {
         process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-none-'));
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s4';
-        expect(svc.verifyReviewers(three, new ReviewerContext('dean/feat'), true).missing).toEqual(['a', 'b', 'c']);
+        expect(svc.verifyReviewers(three, new ReviewerContext('dean/feat')).missing).toEqual(['a', 'b', 'c']);
     });
 
     it('credits each checklist to the run that NAMED its verdict file, when one did', () => {
         process.env['HOME'] = sharedTypeHarness('sess-s5', ['', verdicts.c, verdicts.a], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s5';
-        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat', '', {}, verdicts), true);
+        const res = svc.verifyReviewers(three, new ReviewerContext('dean/feat', '', {}, verdicts));
         expect(res.agentIds['a']).toBe('s2');
         expect(res.agentIds['c']).toBe('s1');
         expect(res.agentIds['b']).toBe('s0');
@@ -556,7 +564,7 @@ describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agen
         process.env['HOME'] = sharedTypeHarness('sess-s6', [verdicts.a], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s6';
         const context = new ReviewerContext('dean/feat', '', {}, verdicts);
-        const res = svc.verifyReviewers(three, context, true);
+        const res = svc.verifyReviewers(three, context);
         const evidence = svc.evidenceFor(context, three, res.agentIds);
         expect(evidence.map((e: ReviewerEvidence): string => e.checklistId)).toEqual(['a', 'b', 'c']);
         expect(evidence.every((e: ReviewerEvidence): boolean => e.agentType === 'webpieces-reviewer')).toBe(true);

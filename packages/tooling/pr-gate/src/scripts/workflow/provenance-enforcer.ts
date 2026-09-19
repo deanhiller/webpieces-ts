@@ -67,9 +67,9 @@ export class ProvenanceEnforcer {
     }
 
     // Enforce that EACH matched checklist was reviewed by a subagent of the repo's reviewer agent type — the
-    // coding agent may not self-certify. Without `reviewerAgents` each checklist needs a DISTINCT run (one
-    // reviewer may not stand in for several); with it, one run may cover several checklists, because that
-    // grouping is what the repo configured. A verified set passes silently; no session id warns but passes;
+    // coding agent may not self-certify. One run may cover several checklists, because `reviewerAgents` is a
+    // required CAP and grouping under it is what the repo configured. A verified set passes silently; no
+    // session id warns but passes;
     // any missing reviewer throws so the PR does not open.
     // eslint-disable-next-line @typescript-eslint/max-params
     enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
@@ -80,7 +80,7 @@ export class ProvenanceEnforcer {
         const context = this.contextFor(repoRoot, required, branch);
         // verifyReviewers short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
         // checklists still gets a provenance record naming the session and the main agent's own transcript.
-        const result = this.provenance.verifyReviewers(expected, context, config.reviewer.grouped());
+        const result = this.provenance.verifyReviewers(expected, context);
         report.verified = result.status === PROVENANCE_OK;
         if (result.status === PROVENANCE_SKIPPED) process.stderr.write(`⚠️  ${result.detail}\n`);
         report.evidence = this.provenance.evidenceFor(context, expected, result.agentIds);

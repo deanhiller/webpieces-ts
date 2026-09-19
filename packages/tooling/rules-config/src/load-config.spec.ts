@@ -108,7 +108,7 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 function validPrGate(): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO' };
+    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1 };
 }
 
 // `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required

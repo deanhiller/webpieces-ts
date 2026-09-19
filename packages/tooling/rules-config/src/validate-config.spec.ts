@@ -361,6 +361,7 @@ describe('validatePrGateSection', () => {
             mode: 'ON',
             buildCommand: 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)',
             mergeMode: 'AUTO',
+            reviewerAgents: 1,
             gates: [
                 { name: 'API', patterns: ['**/*Api.ts'], warningColor: 'yellow' },
                 { name: 'DB Schema', patterns: ['**/schema.prisma'], warningColor: 'red', disabled: true },
@@ -404,12 +405,12 @@ describe('validatePrGateSection — mergeMode (required policy)', () => {
 
     it('accepts every valid mergeMode', () => {
         for (const mergeMode of ['AUTO', 'NONE']) {
-            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode })).toEqual([]);
+            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode, reviewerAgents: 1 })).toEqual([]);
         }
     });
 
     it('rejects an unknown mergeMode and explains what each mode costs', () => {
-        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'DETECT' });
+        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'DETECT', reviewerAgents: 1 });
         expect(bad.some(e => e.includes('"mergeMode" = "DETECT" is not valid'))).toBe(true);
         expect(bad.some(e => e.includes('allow_auto_merge'))).toBe(true);
         expect(bad.some(e => e.includes('squash_merge_commit_title'))).toBe(true);
@@ -564,7 +565,7 @@ describe('rule registry consistency', () => {
 
 // webpieces-disable no-any-unknown -- a raw pr-gate section from a test
 function validPrGate(checklists: unknown): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
+    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, gates: [], checklists };
 }
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
@@ -581,13 +582,13 @@ function repoWith(docs: string[] = [], agents: string[] = []): string {
 
 describe('validatePrGateSection rejects gateSaltWhy', () => {
     it('tells the consumer to delete it, so the next validate on upgrade forces removal', () => {
-        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gateSalt: 's', gateSaltWhy: 'it works like this...' };
+        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, gateSalt: 's', gateSaltWhy: 'it works like this...' };
         const errors = validatePrGateSection(section);
         expect(errors.some((e: string): boolean => /DELETE the "gateSaltWhy" key/.test(e))).toBe(true);
     });
 
     it('leaves every other *Why rationale key alone', () => {
-        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', buildCommandWhy: 'because', gatesWhy: 'because' };
+        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, buildCommandWhy: 'because', gatesWhy: 'because' };
         expect(validatePrGateSection(section)).toEqual([]);
     });
 });
@@ -655,7 +656,7 @@ describe('seedEntryForRule', () => {
  * because these two values are concatenated into a ref that a command then force-pushes.
  */
 describe('validatePrGateSection — devDeploy', () => {
-    const base = { mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO' };
+    const base = { mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents: 1 };
 
     it('accepts a config that omits it entirely', () => {
         expect(validatePrGateSection(base)).toEqual([]);

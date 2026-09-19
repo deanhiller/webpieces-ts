@@ -1,6 +1,6 @@
 import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
 import {
-    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
+    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, toChecklist,
 } from './checklist-config';
 
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
@@ -176,9 +176,11 @@ export class PrGateConfig {
      * `overrideReviewerAgent` is true, in which case `reviewerAgentName` — and `reviewerAgents`, the most such
      * subagents a round may use. The same instance is bound into every {@link checklists} entry, so a caller
      * holding only a checklist still knows what to spawn. Field-with-default because the constructor is at
-     * max-params; the default is the webpieces reviewer, exactly what a config that says nothing gets.
+     * max-params; the agent name defaults to the webpieces reviewer, exactly what a config that says nothing
+     * gets, while the CAP is a required field, so the placeholder here is only ever overwritten by the real
+     * number buildPrGateConfig reads.
      */
-    reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy(DEFAULT_REVIEWER_AGENT_NAME, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+    reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy(DEFAULT_REVIEWER_AGENT_NAME, REVIEWER_AGENTS_PLACEHOLDER);
     // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
@@ -338,9 +340,11 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const agentName = raw.overrideReviewerAgent === true
         ? (raw.reviewerAgentName ?? '').trim()
         : DEFAULT_REVIEWER_AGENT_NAME;
+    // `reviewerAgents` is REQUIRED and validated as a positive integer before this runs, so the fallback is
+    // unreachable in a loaded config and exists only to keep this total for a structure-only caller.
     const reviewer = new ReviewerAgentPolicy(
         agentName,
-        typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+        typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_PLACEHOLDER);
     const checklists = Array.isArray(raw.checklists)
         ? raw.checklists.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, reviewer))
         : defaults.checklists;

@@ -35,13 +35,26 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
   your own instead: set `"overrideReviewerAgent": true` and `"reviewerAgentName": "my-reviewer"`. The two go
   together — a `reviewerAgentName` without the override, or the override without a name, fails config
   validation naming the edit.
-- **`reviewerAgents`** (optional positive integer) caps how many reviewer subagents one round may use.
-  - **Absent** — one SEPARATE subagent per checklist, and `wp-finish` requires a distinct run for each.
-  - **Present (N)** — `wp-review-upsert-pr` tells you to use AT MOST N subagents for the owed checklists and
-    to group them as you judge best (one for all of them, or e.g. two with four each). Each subagent is
-    handed the instructions file of every checklist it covers and still writes ONE verdict file per
-    checklist, so the verdict gate and the PR dashboard behave exactly as before. A re-run after a red
-    verdict re-reviews only the checklists still owed, under the same cap.
+- **`reviewerAgents`** (**REQUIRED** positive integer) caps how many reviewer subagents one round may use.
+  `wp-review-upsert-pr` tells you to use AT MOST N subagents for the owed checklists and to group them as
+  you judge best (one for all of them, or e.g. two with four each). Each subagent is handed the instructions
+  file of every checklist it covers and still writes ONE verdict file per checklist, so the verdict gate and
+  the PR dashboard behave identically however you grouped them. A re-run after a red verdict re-reviews only
+  the checklists still owed, under the same cap.
+
+  **Picking the number.** `1` is the cheapest: one reviewer reads the diff once holding every owed
+  checklist. Setting it to your checklist count buys independent readers — no cross-checklist contamination,
+  deeper per-checklist attention — at that many times the tokens per PR. Note it is a MAXIMUM, not a quota:
+  at N the AI may still group everything into one subagent if that is the sensible read.
+
+  > **`reviewerAgents` used to be optional, and is now required — config validation fails naming the edit.**
+  > Absent used to mean one SEPARATE subagent per checklist, which is why a repo with four required
+  > checklists silently charged a one-line typo fix four full reviewer spawns re-reading the same diff. That
+  > is a price nobody was ever asked to agree to, and a gate that expensive is one people stop running. The
+  > absent branch is DELETED rather than kept as a fallback, per the no-backwards-compat policy: the number
+  > IS the decision this key exists to record, so there is nothing sensible to default it to.
+  >
+  > **To keep the old behaviour exactly, set it to your checklist count.** To make reviews cheap, set `1`.
 
 ## `required` — which reviews block, and which are offered
 

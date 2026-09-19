@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER,
     ReviewerAgentPolicy, ReviewJsonService, toError,
 } from '@webpieces/rules-config';
 import { ChecklistRoster } from './checklist-detector';
@@ -17,7 +17,7 @@ const gate = new ReviewerVerdictGate(svc, new ChecklistInstructionsService(svc))
 // obeys, which is what re-spawned an already-refused reviewer and cost a full subagent run per loop.
 const SPAWN_IMPERATIVE = 'You MUST run these';
 
-const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 const DB = new RequiredChecklist('db-reviewer', REVIEWER, '', ['db/001.sql'], ['**/*.sql']);
 const OPS = new RequiredChecklist('ops-reviewer', REVIEWER, '', ['Dockerfile'], ['**/Dockerfile']);
 
@@ -216,7 +216,7 @@ describe('one refused + one never-ran ⇒ two sections, each listing only its ow
         expect(spawnSection).toContain('ops-reviewer');
         expect(spawnSection).not.toContain('db-reviewer');
         expect(spawnSection).toContain('You MUST run these 1 checklist review(s)');
-        expect(spawnSection).toContain('a SEPARATE `webpieces-reviewer` subagent for each');
+        expect(spawnSection).toContain('using AT MOST 1 `webpieces-reviewer` subagent(s)');
     });
 
     it('lists ONLY the refused checklist under the refusal section', () => {

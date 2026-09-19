@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, DisableCounts } from './dashboard';
 import { ChecklistCommentRow } from './checklist-comment-row';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
@@ -24,7 +24,7 @@ function files(): string {
     return dir;
 }
 
-const required = [new RequiredChecklist('api', new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST), '', ['api.ts'])];
+const required = [new RequiredChecklist('api', new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER), '', ['api.ts'])];
 const service = new ReviewJsonService();
 
 describe('review identity from JSON to PR comments', () => {

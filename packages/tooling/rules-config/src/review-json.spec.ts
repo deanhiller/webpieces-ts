@@ -9,8 +9,8 @@ import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
-import { REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy } from './checklist-config';
-const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
+const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 
 function tmpFile(contents: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-'));

@@ -1,0 +1,20 @@
+{
+    "api": "SaveApi",
+    "owner": "client-server-api",
+    "apiKind": "rpc",
+    "basePath": "/search",
+    "methods": [
+        {
+            "name": "save",
+            "path": "/item",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}

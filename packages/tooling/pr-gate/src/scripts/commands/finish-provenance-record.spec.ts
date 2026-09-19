@@ -3,13 +3,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
+    PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
     ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING,
 } from '@webpieces/rules-config';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 
-const agent = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const agent = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 
 /**
  * The guarantee under test: `wp-finish-upsert-pr` writes the transcript-provenance record BEFORE it refuses
@@ -147,14 +147,16 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
         expect(reviewers.every((r: Record<string, unknown>): boolean => r['agentType'] === 'webpieces-reviewer')).toBe(true);
     });
 
-    it('refuses the second checklist when reviewerAgents is absent — one run per checklist', () => {
+    // The mirror of the test above, at a cap HIGH enough to have used one subagent per checklist. It still
+    // passes on a single run: the cap is a MAXIMUM, so grouping is permitted at every value of it. This is
+    // the behaviour change that came with making `reviewerAgents` required — absent used to demand a
+    // DISTINCT run per checklist, and no cap can express that, so the demand went with the key.
+    it('credits one run for every checklist even at a cap that would have allowed one each', () => {
         process.env['HOME'] = fakeHarness('sess-g2', 'webpieces-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g2';
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
 
-        expect(() => enforcerUnderTest().enforce(
-            shared(REVIEWER_AGENTS_ONE_PER_CHECKLIST), 'dean/feat', repoRoot, configWith(REVIEWER_AGENTS_ONE_PER_CHECKLIST)))
-            .toThrow(/^1 checklist\(s\) failed[\s\S]*: b/);
+        expect(enforcerUnderTest().enforce(shared(2), 'dean/feat', repoRoot, configWith(2)).verified).toBe(true);
     });
 });
 

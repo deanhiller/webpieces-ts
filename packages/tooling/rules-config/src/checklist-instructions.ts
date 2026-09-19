@@ -41,21 +41,15 @@ export class ChecklistInstructionsService {
     }
 
     /**
-     * HOW MANY subagents, of WHICH type. Without `reviewerAgents` that is one separate subagent per checklist;
-     * with it, at most N subagents with the checklists grouped across them as the AI judges best. Either way
-     * every subagent is the repo's ONE reviewer agent type, and every checklist still gets its own verdict.
+     * HOW MANY subagents, of WHICH type: at most `reviewerAgents` of them, with the owed checklists grouped
+     * across them as the AI judges best. Every subagent is the repo's ONE reviewer agent type, and every
+     * checklist still gets its own verdict file no matter how they were grouped.
      */
     spawnRule(pending: readonly RequiredChecklist[]): string[] {
         const reviewer = pending[0].reviewer;
         const own = [
             'You may NOT review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
         ];
-        if (!reviewer.grouped()) {
-            return [
-                `You MUST run these ${pending.length} checklist review(s) — a SEPARATE \`${reviewer.agentName}\` subagent for each.`,
-                ...own,
-            ];
-        }
         const cap = Math.min(reviewer.maxAgents, pending.length);
         return [
             `You MUST run these ${pending.length} checklist review(s) using AT MOST ${cap} \`${reviewer.agentName}\` subagent(s)`,

@@ -6,7 +6,7 @@ import {
 } from './branch-archiver';
 import { ChecklistValidator } from './checklist-validator';
 import {
-    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_PLACEHOLDER,
     ReviewerAgentPolicy, toChecklist,
 } from './checklist-config';
 import { UPGRADE_SHIM_COMMAND } from './constants';
@@ -185,7 +185,7 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
         });
     });
     // The reviewer policy plays no part in these checks (ids and docs), so a placeholder is bound here.
-    const placeholder = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+    const placeholder = new ReviewerAgentPolicy('', REVIEWER_AGENTS_PLACEHOLDER);
     const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, placeholder));
     return [...errors, ...new ChecklistValidator().validate(repoRoot, defs)];
 }
@@ -204,8 +204,12 @@ export const REVIEWER_AGENTS_KEY = 'reviewerAgents';
  * `reviewerAgentName`. A name WITHOUT the override is rejected rather than silently ignored: a key that looks
  * meaningful but controls nothing is a second spelling of a decision (.claude/rules/no-backwards-compat.md).
  *
- * `reviewerAgents` absent is the documented "one subagent per checklist" contract — the count every repo had
- * before the key existed, so it widens nothing; present, it CAPS the subagents one round may use.
+ * `reviewerAgents` is REQUIRED while the gate is active, for the same reason `required` and `mergeMode` have
+ * no default: it sets the PRICE of every review round, and a price nobody chose is the one that stops the
+ * gate being run. It used to be optional, and absent meant one SEPARATE subagent per checklist — so a repo
+ * with four required checklists charged a one-line typo fix four full reviewer spawns re-reading the same
+ * diff, silently, having never been asked. The absent branch is GONE rather than kept as a fallback: an
+ * accepted shape is never migrated, and the number is the whole decision the key exists to record.
  */
 // webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; three keys are read
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
@@ -236,19 +240,44 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
             `  • set "${OVERRIDE_REVIEWER_AGENT_KEY}": true beside it to review with your own agent.`);
     }
     const agentKeysValid = errors.length === 0;
-    const max = s[REVIEWER_AGENTS_KEY];
-    if (REVIEWER_AGENTS_KEY in s && !(typeof max === 'number' && Number.isInteger(max) && max >= 1)) {
-        errors.push(
-            `[pr-gate] "${REVIEWER_AGENTS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a positive integer: the MOST ` +
-            `reviewer subagents one review round may use, with the checklists grouped across them (1 = a single ` +
-            `subagent reviews every checklist). Delete the key to keep one subagent per checklist.`);
-    }
+    errors.push(...reviewerAgentsErrors(s));
     if (repoRoot !== undefined && agentKeysValid) {
         const agentName = override === true ? (name as string).trim() : DEFAULT_REVIEWER_AGENT_NAME;
         errors.push(...new ChecklistValidator().validateReviewerAgent(
-            repoRoot, new ReviewerAgentPolicy(agentName, REVIEWER_AGENTS_ONE_PER_CHECKLIST)));
+            repoRoot, new ReviewerAgentPolicy(agentName, REVIEWER_AGENTS_PLACEHOLDER)));
     }
     return errors;
+}
+
+/**
+ * `reviewerAgents`: present, and a positive integer. Missing and wrong-typed get DIFFERENT messages — the
+ * missing one has to teach a reader what the number means and what to weigh when picking it, because they
+ * have never seen the key; the wrong-typed one only has to name the constraint they just broke.
+ */
+// webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; one key is read
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function reviewerAgentsErrors(s: Record<string, unknown>): string[] {
+    const max = s[REVIEWER_AGENTS_KEY];
+    if (!(REVIEWER_AGENTS_KEY in s)) {
+        return [
+            `[pr-gate] Missing required field "${REVIEWER_AGENTS_KEY}" — the MOST reviewer subagents one review ` +
+            `round may use. Add this line to commands.pr-gate in webpieces.config.json:\n` +
+            `    "${REVIEWER_AGENTS_KEY}": 1,\n` +
+            `  1 = ONE subagent reviews every owed checklist (cheapest; it is handed each checklist's instructions ` +
+            `file and still writes one verdict file per checklist). A HIGHER number buys independent readers — ` +
+            `set it to your checklist count for one subagent each — at that many times the tokens per PR. There is ` +
+            `deliberately no default: this sets the price of every review round, and an unchosen price is what ` +
+            `makes a gate expensive enough that people stop running it.`,
+        ];
+    }
+    if (!(typeof max === 'number' && Number.isInteger(max) && max >= 1)) {
+        return [
+            `[pr-gate] "${REVIEWER_AGENTS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a positive integer: ` +
+            `the MOST reviewer subagents one review round may use, with the owed checklists grouped across them ` +
+            `(1 = a single subagent reviews every checklist).`,
+        ];
+    }
+    return [];
 }
 
 // The `landPr` block: what happens to the LOCAL branch once its PR is in main. Optional — omitted
