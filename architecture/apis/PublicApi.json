@@ -1,0 +1,20 @@
+{
+    "api": "PublicApi",
+    "owner": "client-server-api",
+    "apiKind": "rpc",
+    "basePath": "/public",
+    "methods": [
+        {
+            "name": "getInfo",
+            "path": "/info",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}

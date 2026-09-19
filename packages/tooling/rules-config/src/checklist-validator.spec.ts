@@ -4,13 +4,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { ChecklistValidator } from './checklist-validator';
 import {
-    ChecklistDefinition, RawChecklistItem, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, toChecklist,
+    ChecklistDefinition, RawChecklistItem, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, toChecklist,
 } from './checklist-config';
 import { CONFIG_FILENAME } from './config-file';
 import { validateChecklistDocs } from './checklist-docs-validator';
 
 const svc = new ChecklistValidator();
-const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 
 /**
  * A scratch repo. `docs` are written under `.claude/review/`; `agents` become `.claude/agents/<name>.md`.
@@ -92,7 +92,7 @@ describe('ChecklistValidator.validateReviewerAgent — the reviewer agent must a
 
     it('tells a repo-owned agent name to create the file instead', () => {
         const errors = svc.validateReviewerAgent(
-            repoWith([], ['other']), new ReviewerAgentPolicy('typo-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST));
+            repoWith([], ['other']), new ReviewerAgentPolicy('typo-reviewer', REVIEWER_AGENTS_PLACEHOLDER));
         expect(errors.join('\n')).toContain('typo-reviewer.md');
         expect(errors.join('\n')).toContain('Create that agent file');
         expect(errors.join('\n')).not.toContain('wp-upgrade-shim');
@@ -131,7 +131,7 @@ describe('validateChecklistDocs validates a repo wired to files that exist', () 
             ['backwards-compatibility.md', 'error-output.md', 'experiment-lifecycle.md', 'ticket-required.md'],
             ['webpieces-reviewer']);
         fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
-            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', checklists } },
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', reviewerAgents: 1, checklists } },
         }));
         return dir;
     }

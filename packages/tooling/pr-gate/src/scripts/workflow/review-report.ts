@@ -2,7 +2,7 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, reviewJsonSchemaHint,
-    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy,
+    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy,
     ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
@@ -94,7 +94,7 @@ export class ReviewReportInput {
         this.singleRoundReview = false;
         this.singleRoundRepeat = false;
         this.singleRoundReviewers = [];
-        this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+        this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_PLACEHOLDER);
     }
 }
 
@@ -443,9 +443,6 @@ export class ReviewReport {
         const required = this.requiredOwed(input).length;
         // The Codex pointer is printed once per report: by the required step when there is one.
         const codex = required > 0 ? [] : [this.agentDefinitionLine(input)];
-        if (!reviewer.grouped()) {
-            return [`         Each picked checklist gets its own \`${reviewer.agentName}\` subagent, spawned as its block shows.`, ...codex, ''];
-        }
         const scope = required > 0 ? `, COUNTING the ${required} required checklist(s) above — fold picked ones into those subagents` : '';
         return [
             `         Review what they picked with \`${reviewer.agentName}\` subagents: at most ${reviewer.maxAgents} IN TOTAL`,
@@ -523,35 +520,22 @@ export class ReviewReport {
      */
     private oneSpawnBlock(input: ReviewReportInput, b: ReviewerBriefing): string[] {
         const instructionsFile = this.reviewerInstructions.pathFor(input.repoRoot, input.featureName, b.checklistId);
-        if (input.reviewer.grouped()) {
-            // Grouped: the subagent_type is stated once, above; each block is one checklist's file to hand
-            // to whichever subagent covers it.
-            return [...this.leadIn(input, b), `      instructions:  ${instructionsFile}`, ''];
-        }
-        return [
-            ...this.leadIn(input, b),
-            `      subagent_type: ${b.agentName}`,
-            '      prompt:        Read your instructions file FIRST and follow it exactly:',
-            `                     ${instructionsFile}`,
-            '',
-        ];
+        // The subagent_type is stated once, above; each block is one checklist's file to hand to
+        // whichever subagent covers it.
+        return [...this.leadIn(input, b), `      instructions:  ${instructionsFile}`, ''];
     }
 
     /**
      * HOW MANY subagents, of WHICH type — the one place this report states it, shared by the required and
      * the optional step so the two cannot disagree.
      *
-     * Without `commands.pr-gate.reviewerAgents` it is one separate subagent per checklist, as it always was.
-     * With it, the main AI gets a CAP and the grouping decision: the point of the key is to stop paying for
-     * N agents re-reading the same diff, and the AI is the one that can see which checklists belong together.
-     * The cap is per ROUND, so a re-run after a red verdict re-reviews only the owed checklists — the only
-     * ones listed — under the same cap.
+     * `commands.pr-gate.reviewerAgents` is a REQUIRED config field, so the main AI always gets a CAP and the
+     * grouping decision: the point of the key is to stop paying for N agents re-reading the same diff, and
+     * the AI is the one that can see which checklists belong together. The cap is per ROUND, so a re-run
+     * after a red verdict re-reviews only the owed checklists — the only ones listed — under the same cap.
      */
     private howManyAgents(input: ReviewReportInput, count: number): string[] {
         const reviewer = input.reviewer;
-        if (!reviewer.grouped()) {
-            return [`         a SEPARATE \`${reviewer.agentName}\` subagent for each.`, this.agentDefinitionLine(input)];
-        }
         const cap = Math.min(reviewer.maxAgents, count);
         return [
             `         AT MOST ${cap} subagent(s) of type \`${reviewer.agentName}\` (commands.pr-gate.reviewerAgents = ${reviewer.maxAgents}).`,

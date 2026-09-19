@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewerBriefing,
+    ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewerBriefing,
     ReviewerInstructionsService, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-report';
 
-const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/review.json';
 const report = new ReviewReport(
     new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
@@ -19,8 +19,13 @@ const inputWith = (definedCount: number, applicableCount: number): ReviewReportI
     return input;
 };
 
+// The repo-wide reviewer agent type, which is what the report states ONCE above the spawn blocks now that
+// `reviewerAgents` is a required cap and there is no per-checklist spawn block to name it in.
+const DB_POLICY = new ReviewerAgentPolicy('db-migration-reviewer', 1);
+
 const withOneOwedReviewer = (): ReviewReportInput => {
     const input = inputWith(1, 1);
+    input.reviewer = DB_POLICY;
     const briefing = new ReviewerBriefing('db-migration-reviewer', 'db-migration-reviewer', '/repo');
     briefing.matchedPatterns = ['**/*.sql'];
     input.briefings = [briefing];
@@ -30,6 +35,7 @@ const withOneOwedReviewer = (): ReviewReportInput => {
 /** One REQUIRED + one OPTIONAL reviewer, both owed — the shape the whole `required` feature turns on. */
 const withMixedReviewers = (): ReviewReportInput => {
     const input = inputWith(2, 2);
+    input.reviewer = DB_POLICY;
     const req = new ReviewerBriefing('db-migration-reviewer', 'db-migration-reviewer', '/repo');
     req.matchedPatterns = ['**/*.sql'];
     const opt = new ReviewerBriefing('frontend-reviewer', 'frontend-reviewer', '/repo');
@@ -170,11 +176,14 @@ describe('reviewerAgents — how many reviewer subagents stage ② asks for', ()
         return input;
     };
 
-    it('without it: a SEPARATE webpieces-reviewer per checklist, a spawn block each', () => {
-        const text = report.render(owed(REVIEWER_AGENTS_ONE_PER_CHECKLIST, ['a', 'b', 'c']));
-        expect(text).toContain('a SEPARATE `webpieces-reviewer` subagent for each');
-        expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(3);
-        expect(text).not.toContain('AT MOST');
+    // `reviewerAgents` is REQUIRED, so every report states a cap. A cap at the checklist count is the
+    // closest thing to the deleted un-capped mode, and it must still read as a cap: one stated
+    // subagent_type, an AT MOST line, and none of the old "a SEPARATE subagent for each" prose.
+    it('a cap equal to the checklist count still renders as a cap, not the deleted per-checklist mode', () => {
+        const text = report.render(owed(3, ['a', 'b', 'c']));
+        expect(text).toContain('AT MOST 3 subagent(s) of type `webpieces-reviewer` (commands.pr-gate.reviewerAgents = 3)');
+        expect(text).not.toContain('a SEPARATE `webpieces-reviewer` subagent for each');
+        expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(1);
         expect(text).toContain('/repo/.webpieces/pr-review/dean-feature/instructions/b.instructions.md');
     });
 
@@ -215,7 +224,7 @@ describe('reviewerAgents — how many reviewer subagents stage ② asks for', ()
     });
 
     it('points Codex at the one canonical agent definition, once', () => {
-        for (const max of [REVIEWER_AGENTS_ONE_PER_CHECKLIST, 1]) {
+        for (const max of [1, 2]) {
             const text = report.render(owed(max, ['a', 'b']));
             expect(text.split('/repo/.claude/agents/webpieces-reviewer.md').length - 1).toBe(1);
             expect(text).toContain('Codex (no agent types)');
@@ -310,7 +319,7 @@ describe('a reviewer that already REFUSED is not re-instructed as one that never
 
     it('conditions the re-spawn on fixing the finding FIRST, and says so before the coordinates', () => {
         const text = report.render(withRefusal());
-        expect(text.indexOf('FIX THE FINDING FIRST')).toBeLessThan(text.indexOf('subagent_type:'));
+        expect(text.indexOf('FIX THE FINDING FIRST')).toBeLessThan(text.indexOf('instructions:  '));
     });
 
     it('warns at the top of the step, before an agent starts spawning everything listed', () => {
@@ -320,7 +329,9 @@ describe('a reviewer that already REFUSED is not re-instructed as one that never
 
     // It still owes a FRESH verdict, so dropping its spawn block would leave nothing saying how to get one.
     it('keeps the spawn coordinates, for after the fix', () => {
-        expect(report.render(withRefusal())).toContain('subagent_type: db-migration-reviewer');
+        const text = report.render(withRefusal());
+        expect(text).toContain('subagent_type: db-migration-reviewer');
+        expect(text).toContain('db-migration-reviewer.instructions.md');
     });
 
     // Stage ② enforces nothing and must therefore destroy nothing: retiring the verdict is finish's act on

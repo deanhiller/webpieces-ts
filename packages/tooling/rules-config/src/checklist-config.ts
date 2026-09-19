@@ -1,7 +1,12 @@
 import * as path from 'path';
 
-/** The {@link ReviewerAgentPolicy.maxAgents} value meaning "`reviewerAgents` is not configured". */
-export const REVIEWER_AGENTS_ONE_PER_CHECKLIST = 0;
+/**
+ * The {@link ReviewerAgentPolicy.maxAgents} stand-in for the code paths that build a policy where the CAP
+ * plays no part — the structure-only checklist validation, and the agent-file existence check. It is NOT a
+ * default and never reaches a loaded config: `reviewerAgents` is required, so a real config's cap is always
+ * the number the consumer wrote. 1 rather than 0 so the value is a legal cap even if one ever leaked.
+ */
+export const REVIEWER_AGENTS_PLACEHOLDER = 1;
 
 /** The generic reviewer agent webpieces ships, and the reviewer every repo gets unless it sets `overrideReviewerAgent`. */
 export const DEFAULT_REVIEWER_AGENT_NAME = 'webpieces-reviewer';
@@ -25,21 +30,20 @@ export class ReviewerAgentPolicy {
      */
     agentName: string;
     /**
-     * The most reviewer subagents one stage-② round may use, or {@link REVIEWER_AGENTS_ONE_PER_CHECKLIST}
-     * when `reviewerAgents` is not configured — which keeps the original contract: one separate subagent per
-     * checklist. When set, the main AI groups the owed checklists across at most this many subagents, and
+     * The most reviewer subagents one stage-② round may use — always >= 1, because `reviewerAgents` is a
+     * REQUIRED config field. The main AI groups the owed checklists across at most this many subagents, and
      * each subagent still writes one verdict file per checklist it covers.
+     *
+     * There is no "unset" value and no second mode. This used to carry a 0 sentinel meaning "not configured",
+     * which selected a separate one-subagent-per-checklist code path; making the key required deleted that
+     * branch rather than leaving it reachable, because a consumer who sets the cap to their checklist count
+     * gets the identical behaviour from the one path that is left.
      */
     maxAgents: number;
 
     constructor(agentName: string, maxAgents: number) {
         this.agentName = agentName;
         this.maxAgents = maxAgents;
-    }
-
-    /** true when `reviewerAgents` is configured, i.e. one subagent may cover several checklists. */
-    grouped(): boolean {
-        return this.maxAgents !== REVIEWER_AGENTS_ONE_PER_CHECKLIST;
     }
 }
 

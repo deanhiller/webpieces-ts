@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
     ChecklistDefinition, ChecklistOverride, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig,
-    HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService, toChecklist,
+    HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, toChecklist,
 } from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
@@ -37,7 +37,7 @@ function repoOnBranch(): string {
 }
 
 /** One raw config entry as a fixture. `required` is omitted by most tests — see {@link defs}. */
-const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_ONE_PER_CHECKLIST);
+const REVIEWER = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 
 interface RawItem { id?: string; doc?: string; patterns?: string[]; required?: boolean }
 

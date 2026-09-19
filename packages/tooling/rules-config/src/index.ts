@@ -351,7 +351,7 @@ export {
 export {
     ChecklistDefinition,
     ReviewerAgentPolicy,
-    REVIEWER_AGENTS_ONE_PER_CHECKLIST,
+    REVIEWER_AGENTS_PLACEHOLDER,
     DEFAULT_REVIEWER_AGENT_NAME,
     toChecklist,
     normalizeChecklistDoc,

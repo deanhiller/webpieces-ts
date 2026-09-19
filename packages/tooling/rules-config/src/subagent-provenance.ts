@@ -213,10 +213,14 @@ export class SubagentProvenanceService {
     // Verify EVERY expected checklist was reviewed by a reviewer subagent that ran on `context.branch` — the
     // coding agent may not self-certify. SKIPPED (pass) without a session id.
     //
-    // `sharedRuns` false (no `reviewerAgents` configured): each checklist needs a DISTINCT run, so one
-    // reviewer may not stand in for several. `sharedRuns` true (`reviewerAgents` set): one run may cover
-    // several checklists, because that grouping is exactly what the repo asked for; a run is still only
-    // credited when it is a real subagent of the right type on this branch.
+    // ONE run may cover SEVERAL checklists: `reviewerAgents` is a required config field and is a CAP, so
+    // grouping is always something the repo asked for. A run is still only credited when it is a real
+    // subagent of the right type that ran on this branch.
+    //
+    // There used to be a `sharedRuns` parameter, false when `reviewerAgents` was absent, which demanded a
+    // DISTINCT run per checklist. It went with the absent branch, and nothing was lost: a cap is a MAXIMUM,
+    // so even a consumer setting it to their checklist count may legitimately group — the old flag could
+    // never have enforced distinctness from the cap alone.
     //
     // Either way a run that NAMED this checklist's verdict file is preferred over one that merely ran on the
     // branch, so each checklist is credited to the reviewer that actually wrote it whenever that is knowable.
@@ -225,7 +229,7 @@ export class SubagentProvenanceService {
     // any session, a later re-push in a NEW session still finds it, so the review is NOT forced to re-run.
     // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
     // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
-    verifyReviewers(expected: readonly ExpectedReviewer[], context: ReviewerContext, sharedRuns: boolean): ProvenanceResult {
+    verifyReviewers(expected: readonly ExpectedReviewer[], context: ReviewerContext): ProvenanceResult {
         if (expected.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required', {}, []);
         if (!this.inClaudeSession()) return this.skipped('reviewer subagents');
         const dirs = this.allSubagentsDirs();
@@ -233,8 +237,7 @@ export class SubagentProvenanceService {
         const usedAgentIds = new Set<string>();
         const credited: Record<string, string> = {};
         for (const want of expected) {
-            const exclude = sharedRuns ? new Set<string>() : usedAgentIds;
-            const agentId = this.findMatchingAgentId(dirs, want, context, exclude);
+            const agentId = this.findMatchingAgentId(dirs, want, context, new Set<string>());
             if (agentId === '') missing.push(want.checklistId);
             else {
                 usedAgentIds.add(agentId);

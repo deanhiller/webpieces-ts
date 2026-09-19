@@ -1,0 +1,20 @@
+{
+    "api": "Server2Api",
+    "owner": "server2-api",
+    "apiKind": "rpc",
+    "basePath": "/server2",
+    "methods": [
+        {
+            "name": "fetchValue",
+            "path": "/fetchValue",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}

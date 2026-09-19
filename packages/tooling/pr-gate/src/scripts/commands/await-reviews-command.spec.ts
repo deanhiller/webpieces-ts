@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { RequiredChecklist, REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
 
 import { ReviewerWaitProbe } from './await-reviews-command';
 import { WaitOutcome } from '../workflow/await-loop';
@@ -16,7 +16,7 @@ beforeEach((): void => {
 });
 
 function checklist(id: string, required = true): RequiredChecklist {
-    return new RequiredChecklist(id, new ReviewerAgentPolicy(`${id}-agent`, REVIEWER_AGENTS_ONE_PER_CHECKLIST), `.claude/review/${id}.md`, [], [], required);
+    return new RequiredChecklist(id, new ReviewerAgentPolicy(`${id}-agent`, REVIEWER_AGENTS_PLACEHOLDER), `.claude/review/${id}.md`, [], [], required);
 }
 
 function writeVerdict(id: string, status: string, output: string): void {

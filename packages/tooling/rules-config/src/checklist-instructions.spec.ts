@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { ChecklistReviewContext, RequiredChecklist, ReviewJsonService } from './review-json';
-import { REVIEWER_AGENTS_ONE_PER_CHECKLIST, ReviewerAgentPolicy } from './checklist-config';
+import { ReviewerAgentPolicy } from './checklist-config';
 
 const inst = new ChecklistInstructionsService(new ReviewJsonService());
 const CTX = new ChecklistReviewContext('abc1234', '', 'git diff abc1234 -- <file>');
@@ -15,20 +15,23 @@ function owed(max: number, n: number): RequiredChecklist[] {
 
 describe('ChecklistInstructionsService.names', () => {
     it('gives the checklist ids on one line for a fail-fast headline — not the shared agent type', () => {
-        expect(inst.names(owed(REVIEWER_AGENTS_ONE_PER_CHECKLIST, 2))).toBe('c0, c1');
+        expect(inst.names(owed(1, 2))).toBe('c0, c1');
     });
 });
 
 /**
- * `commands.pr-gate.reviewerAgents` (issue #938): absent keeps one subagent per checklist; present caps the
- * subagents for the round and hands the grouping decision to the main AI.
+ * `commands.pr-gate.reviewerAgents` (issue #938): a REQUIRED cap on the subagents for the round, with the
+ * grouping decision handed to the main AI.
  */
 describe('ChecklistInstructionsService — reviewerAgents grouping', () => {
-    it('without reviewerAgents: a SEPARATE subagent per checklist, no grouping talk', () => {
-        const text = inst.render(owed(REVIEWER_AGENTS_ONE_PER_CHECKLIST, 3), REVIEW, CTX);
-        expect(text).toContain('You MUST run these 3 checklist review(s) — a SEPARATE `webpieces-reviewer` subagent for each.');
-        expect(text).not.toContain('AT MOST');
-        expect(text).not.toContain('reviewerAgents');
+    // `reviewerAgents` is required, so there is no un-capped mode left to render. A cap at or above the
+    // checklist count still states the cap — it never reverts to the deleted "a SEPARATE subagent for each"
+    // prose, which is what a surviving fallback branch would have looked like from here.
+    it('a cap equal to the checklist count still speaks in caps, never the deleted SEPARATE wording', () => {
+        const text = inst.render(owed(3, 3), REVIEW, CTX);
+        expect(text).toContain('using AT MOST 3 `webpieces-reviewer` subagent(s)');
+        expect(text).toContain('reviewerAgents = 3');
+        expect(text).not.toContain('a SEPARATE `webpieces-reviewer` subagent for each');
     });
 
     it('with reviewerAgents = 1: at most one subagent, which covers every checklist', () => {

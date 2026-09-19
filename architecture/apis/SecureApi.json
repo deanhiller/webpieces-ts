@@ -1,0 +1,68 @@
+{
+    "api": "SecureApi",
+    "owner": "client-server-api",
+    "apiKind": "rpc",
+    "basePath": "/secure",
+    "methods": [
+        {
+            "name": "userOp",
+            "path": "/user",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "adminOp",
+            "path": "/admin",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "orgOp",
+            "path": "/org",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "internalOp",
+            "path": "/internal",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "serviceOp",
+            "path": "/service",
+            "kind": "rpc",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}
