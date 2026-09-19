@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { StaleBinRemoval, StaleBinSweeper } from './stale-bin-sweep';
 import { TemplateWriter } from './load-template';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * The sweep exists because pnpm never removes a `.bin` entry for a bin an EARLIER version of the same
@@ -12,7 +12,7 @@ import { TemplateWriter } from './load-template';
  * would go stale exactly the way the symlinks did.
  */
 function binDirWith(entries: Record<string, string>): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-stalebin-'));
+    const root = specTempDirs.make('wp-stalebin-');
     const bin = path.join(root, 'node_modules', '.bin');
     fs.mkdirSync(bin, { recursive: true });
     for (const [name, target] of Object.entries(entries)) {
@@ -89,7 +89,7 @@ describe('StaleBinSweeper', () => {
     });
 
     it('is a no-op with no node_modules/.bin at all — the linked-worktree case', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-stalebin-empty-'));
+        const root = specTempDirs.make('wp-stalebin-empty-');
         expect(new StaleBinSweeper().sweep(root)).toEqual([]);
     });
 

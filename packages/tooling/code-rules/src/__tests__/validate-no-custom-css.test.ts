@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { NoCustomCssConfig } from '@webpieces/rules-config';
+import { NoCustomCssConfig, specTempDirs } from '@webpieces/rules-config';
 import { NoCustomCssValidator } from '../validate-no-custom-css';
 
 let tmpDir: string;
 
 beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-css-'));
+    tmpDir = specTempDirs.make('no-css-');
 });
 
 afterEach(() => {

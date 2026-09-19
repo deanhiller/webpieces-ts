@@ -1,8 +1,7 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { CONFIG_FILENAME, ConfigFile } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, ConfigFile, specTempDirs } from '@webpieces/rules-config';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ActiveHatch, ActiveHatchReport } from './active-hatches';
@@ -14,7 +13,7 @@ describe('ActiveHatchReport', () => {
     let report = new ActiveHatchReport(new ConfigFile());
 
     beforeEach(() => {
-        repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-hatch-'));
+        repoRoot = specTempDirs.make('wp-hatch-');
         report = new ActiveHatchReport(new ConfigFile());
     });
 

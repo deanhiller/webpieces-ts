@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 
-import { ExcludePaths, RuleFailError, Option } from '@webpieces/rules-config';
+import { ExcludePaths, RuleFailError, Option, specTempDirs } from '@webpieces/rules-config';
 
 import { migrate } from '../bin/setup-config';
 import { effectiveBashCwd, isGitOrGhCommand, runRuleCheck, runBash, run } from './runner';
@@ -154,7 +154,7 @@ describe('runBash installer bypass (deadlock escape: installs pass even with no/
     // CONFIG_MISSING report. Installer commands must slip past that (and past config validation) so
     // `pnpm install` can re-enable the guards when the config is ahead of the installed validator.
     function tmpDirOutsideRepo(): string {
-        return fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-ai-hook-'));
+        return specTempDirs.make('wp-ai-hook-');
     }
 
     it('lets `pnpm install` / `npm i` through (null = allow) where a normal command is blocked', () => {
@@ -289,7 +289,7 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
         // realpathSync so the dir matches `git rev-parse --show-toplevel` — on macOS os.tmpdir() is
         // /var/... which git reports as its /private/var/... target; without this the foreign-repo
         // check (path.resolve gitRoot vs workspaceRoot) sees a spurious mismatch and allows everything.
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-outer-')));
+        outer = specTempDirs.makeReal('wp-outer-');
         initRepo(outer);
         nestedClone = nodePath.join(outer, 'repositories', 'acme-ai-manager');
         initRepo(nestedClone);       // its OWN git repo → a different toplevel than `outer`
@@ -354,7 +354,7 @@ describe('runBash — trailing-cd does not bypass the guards (defect A)', () => 
     let outer: string;
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-a-')));
+        outer = specTempDirs.makeReal('wp-a-');
         initRepo(outer);
         fs.mkdirSync(nodePath.join(outer, 'repositories', 'plain'), { recursive: true });
         writeGuardConfig(outer, ['repositories/**']);
@@ -387,7 +387,7 @@ describe('runBash — force-to-root uses the effective cwd (defect C)', () => {
     let governedSubdir: string;
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-c-')));
+        outer = specTempDirs.makeReal('wp-c-');
         initRepo(outer);
         nestedClone = nodePath.join(outer, 'repositories', 'clone');
         initRepo(nestedClone);
@@ -434,7 +434,7 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
     let outer: string;
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-b-')));
+        outer = specTempDirs.makeReal('wp-b-');
         initRepo(outer);
     });
 
@@ -471,7 +471,7 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     let outer: string;
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-esc-')));
+        outer = specTempDirs.makeReal('wp-esc-');
         initRepo(outer);
         fs.mkdirSync(nodePath.join(outer, '.webpieces'), { recursive: true });
         fs.mkdirSync(nodePath.join(outer, 'repositories', 'plain'), { recursive: true });
@@ -520,7 +520,7 @@ describe('runBash — a `cd` must come first, with a literal path (misplacedCdBl
     let outer: string;
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-cd-')));
+        outer = specTempDirs.makeReal('wp-cd-');
         initRepo(outer);
         writeGuardConfig(outer, ['repositories/**']);
     });
@@ -609,7 +609,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
     let root: string;
 
     beforeAll(() => {
-        root = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-cfgbroken-')));
+        root = specTempDirs.makeReal('wp-cfgbroken-');
         initRepo(root);
     });
 
@@ -674,7 +674,7 @@ describe('run — the ~/.webpieces/config.json carve-out', () => {
     let homeRoot = '';
 
     beforeAll(() => {
-        homeRoot = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-homepass-')));
+        homeRoot = specTempDirs.makeReal('wp-homepass-');
         initRepo(homeRoot);
         writeGuardConfig(homeRoot, []);
     });

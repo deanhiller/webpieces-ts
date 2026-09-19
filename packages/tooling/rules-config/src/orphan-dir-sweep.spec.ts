@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +7,7 @@ import { OrphanCandidate, OrphanDirScanner } from './orphan-dir-scan';
 import { OrphanDirArchiver, TRASH_MANIFEST_FILE } from './orphan-dir-archive';
 import { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
 import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from './home-config';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * A throwaway git repository on disk, because this feature's entire correctness claim is "git's own
@@ -21,7 +21,7 @@ class RepoFixture {
     readonly root: string;
 
     constructor() {
-        this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-orphan-'));
+        this.root = specTempDirs.make('wp-orphan-');
         this.git(['init', '-q', '-b', 'main']);
         this.git(['config', 'user.email', 'spec@example.com']);
         this.git(['config', 'user.name', 'spec']);
@@ -149,7 +149,7 @@ describe('OrphanDirScanner — what counts as a corpse', () => {
     });
 
     it('returns nothing, rather than throwing, when the directory is not a git repository at all', () => {
-        const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-orphan-bare-'));
+        const notARepo = specTempDirs.make('wp-orphan-bare-');
         expect(new OrphanDirScanner().scan(notARepo)).toEqual([]);
     });
 });

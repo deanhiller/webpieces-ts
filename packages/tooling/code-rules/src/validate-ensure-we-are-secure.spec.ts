@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     auditSecurityContracts,
@@ -9,12 +8,12 @@ import {
     securityContractsError,
     SecurityContractViolation,
 } from './validate-ensure-we-are-secure';
-import { InformAiError, RuleFailError } from '@webpieces/rules-config';
+import { InformAiError, RuleFailError, specTempDirs } from '@webpieces/rules-config';
 
 let root: string;
 
 beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'secure-rule-'));
+    root = specTempDirs.make('secure-rule-');
 });
 
 afterEach(() => {

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { renderShim, shimPath } from './shim';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * The shim's PreToolUse deny payload, as it prints it on stdout. Named (not an inline literal on the
@@ -55,7 +55,7 @@ export class ShimRun {
 export class ShimTestkit {
     /** A throwaway repo root under the OS temp dir. */
     mktmp(): string {
-        return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-setup-'));
+        return specTempDirs.make('wp-setup-');
     }
 
     /**

@@ -1,9 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { BuildTermination } from '@webpieces/rules-config';
+import { BuildTermination, specTempDirs } from '@webpieces/rules-config';
 import {
     BuildGateLog, BuildLogHeartbeat, BUILD_STAGE, FINISH_STAGE, REVIEW_STAGE, HEARTBEAT_MS, FAILURE_TAIL_LINES,
 } from './build-gate-log';
@@ -32,7 +31,7 @@ function git(cwd: string, ...args: string[]): string {
 
 /** A real git repo — the log path is derived from git's own branch/sha, so a fake directory proves nothing. */
 function repo(branch: string): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-buildlog-')));
+    const dir = specTempDirs.makeReal('wp-buildlog-');
     dirs.push(dir);
     git(dir, 'init', '-q', '-b', 'main');
     git(dir, 'config', 'core.hooksPath', '/dev/null');

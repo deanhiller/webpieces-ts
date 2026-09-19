@@ -1,9 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DotWebpieces, PUSH_DEV_STATE_FILE, toError } from '@webpieces/rules-config';
+import { CliExitError, DotWebpieces, PUSH_DEV_STATE_FILE, toError, specTempDirs } from '@webpieces/rules-config';
 
 import { PushDevState, PushDevStateStore } from './push-dev-state';
 
@@ -38,7 +37,7 @@ function refusal(fn: () => void): string {
 }
 
 beforeEach((): void => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-push-dev-state-'));
+    repo = specTempDirs.make('wp-push-dev-state-');
     fs.mkdirSync(path.join(repo, '.webpieces'), { recursive: true });
 });
 

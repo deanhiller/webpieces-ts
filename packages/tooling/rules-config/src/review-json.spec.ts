@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { DotWebpieces } from './state-dir';
 import { prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistOverride, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
@@ -10,10 +9,11 @@ import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
+import { specTempDirs } from './spec-temp-dirs';
 const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 
 function tmpFile(contents: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-'));
+    const dir = specTempDirs.make('wp-review-');
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, contents);
     return file;
@@ -39,7 +39,7 @@ describe('reviewJsonPath', () => {
  */
 describe('reviewJsonPath in a LINKED worktree', () => {
     it('lands inside the worktree, not in the primary clone', () => {
-        const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-wt-')));
+        const tmp = specTempDirs.makeReal('wp-review-wt-');
         const primary = path.join(tmp, 'primary');
         const worktree = path.join(tmp, 'wt-feature');
         fs.mkdirSync(primary, { recursive: true });
@@ -212,7 +212,7 @@ const REQ = (id: string): RequiredChecklist =>
 
 // Write review.json + optional per-checklist files into one shared dir; return the review.json path.
 function tmpReviewWith(results: Record<string, unknown>): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-pf-'));
+    const dir = specTempDirs.make('wp-review-pf-');
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, validReview());
     for (const [id, body] of Object.entries(results)) {
@@ -224,7 +224,7 @@ function tmpReviewWith(results: Record<string, unknown>): string {
 describe('writePrContext', () => {
     it('writes base/head/changedFiles JSON to pr-context.json and round-trips', () => {
         const svc = new ReviewJsonService();
-        const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prctx-'));
+        const repo = specTempDirs.make('wp-prctx-');
         const p = svc.writePrContext(repo, 'feat', new PrContext(
             'base123', 'head456', ['a.ts', 'db/1.sql'],
             true, ['a.ts'], 'git diff base123', '/repo/diff', '2026-07-30T00:00:00.000Z'));
@@ -323,7 +323,7 @@ describe('loadReviewJson — the removed `success` field', () => {
     // Unparseable bytes stay tolerant: a half-written file degrades to the same message as an absent one,
     // which is honest — there is nothing readable there — and never wedges the branch.
     it('still degrades unparseable JSON to the missing-verdict message', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-bad-'));
+        const dir = specTempDirs.make('wp-review-bad-');
         const file = path.join(dir, 'review.json');
         fs.writeFileSync(file, validReview());
         fs.writeFileSync(path.join(dir, 'review-migrations.json'), '{ not json');

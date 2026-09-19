@@ -1,8 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { ReviewJsonService } from '@webpieces/rules-config';
+import { ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
 import { ReviewStageReceipt, ReviewStageReceiptService } from './review-stage-receipt';
 
 const dirs: string[] = [];
@@ -12,7 +11,7 @@ afterEach(() => {
 });
 
 function tmpRepo(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-receipt-'));
+    const dir = specTempDirs.make('wp-receipt-');
     dirs.push(dir);
     return dir;
 }

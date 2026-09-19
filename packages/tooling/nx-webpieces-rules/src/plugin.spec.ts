@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { isInsideNestedGitRepo, createCiTarget } from './plugin';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function tmpRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-plugin-'));
+    return specTempDirs.make('wp-plugin-');
 }
 
 describe('isInsideNestedGitRepo', () => {

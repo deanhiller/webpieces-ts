@@ -9,12 +9,12 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
 import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
 import { DiDesign, DiGraph, DiEdge, DiNode } from '../di-graph/model';
+import { specTempDirs } from '@webpieces/rules-config';
 
 export const TSCONFIG = JSON.stringify({
     compilerOptions: {
@@ -32,7 +32,7 @@ export class Fixture {
     projectRoot = 'proj';
 
     constructor(files: Record<string, string>) {
-        this.workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'di-graph-spec-'));
+        this.workspaceRoot = specTempDirs.make('di-graph-spec-');
         const projDir = path.join(this.workspaceRoot, this.projectRoot);
         fs.mkdirSync(path.join(projDir, 'src'), { recursive: true });
         fs.writeFileSync(path.join(projDir, 'tsconfig.json'), TSCONFIG);

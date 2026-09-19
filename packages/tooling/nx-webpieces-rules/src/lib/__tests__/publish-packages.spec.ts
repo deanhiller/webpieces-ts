@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * RELEASE RESILIENCE — scripts/publish-packages.sh, tested by RUNNING IT.
@@ -165,7 +165,7 @@ class FakeRelease {
     private readonly logFile: string;
 
     constructor() {
-        this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-publish-'));
+        this.root = specTempDirs.make('wp-publish-');
         this.binDir = path.join(this.root, 'fakebin');
         this.planDir = path.join(this.root, 'plan');
         this.logFile = path.join(this.root, 'npm-calls.log');

@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
 import { ApiUsageScanner, buildApiContracts, describeMismatchedEndpointKinds } from '../api-usage/api-scanner';
 import { ApiRelation } from '../api-usage/api-relations';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let root = '';
 
@@ -118,7 +119,7 @@ function projects(): Map<string, ProjectInfo> {
 const EXTERNAL_PATHS = ['libraries/apis/external/**'];
 
 beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-external-scan-'));
+    root = specTempDirs.make('wp-external-scan-');
     writeVendorLib();
     writeService();
     writeFakeLib();

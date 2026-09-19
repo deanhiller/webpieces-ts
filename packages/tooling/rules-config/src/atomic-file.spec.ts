@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { AtomicFile } from './atomic-file';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * A separate OS PROCESS that hammers the file with reads and reports how many times it caught the file
@@ -110,7 +110,7 @@ function writeFor(millis: number, write: (iteration: number) => void): number {
 
 describe('AtomicFile under a genuinely concurrent reader', () => {
     beforeEach(() => {
-        dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atomic-')));
+        dir = specTempDirs.makeReal('atomic-');
         target = path.join(dir, 'merged-branches.json');
         stopFile = path.join(dir, 'STOP');
         readerScript = path.join(dir, 'reader.js');
@@ -159,7 +159,7 @@ describe('AtomicFile under a genuinely concurrent reader', () => {
 });
 
 describe('AtomicFile bookkeeping', () => {
-    beforeEach(() => { dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atomic-io-'))); });
+    beforeEach(() => { dir = specTempDirs.makeReal('atomic-io-'); });
     afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
     it('leaves no temp files behind, and writeIfChanged skips an identical rewrite', () => {

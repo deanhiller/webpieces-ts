@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { applyHook, applyChoice, installTargets, hasHook, RULES_HOOK, GUARDS_HOOK, InstallTarget } from './setup';

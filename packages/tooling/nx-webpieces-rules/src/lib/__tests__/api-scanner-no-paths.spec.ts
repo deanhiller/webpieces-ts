@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
 import { ApiUsageScanner, describeUnresolvedApiCalls } from '../api-usage/api-scanner';
 import { ApiRelation } from '../api-usage/api-relations';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let root = '';
 
@@ -111,7 +112,7 @@ function projectsWithoutApiLib(): Map<string, ProjectInfo> {
 
 describe('ApiUsageScanner — api-lib with no tsconfig paths entry', () => {
     beforeAll(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-api-scan-')));
+        root = specTempDirs.makeReal('wp-api-scan-');
         writeApiLibSource();
         writeApiLibDist();
         writeService();

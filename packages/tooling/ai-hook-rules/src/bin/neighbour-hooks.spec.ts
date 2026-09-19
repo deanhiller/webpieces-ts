@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -12,6 +11,7 @@ import { NeighbourHookAnchor, anchorNeighbourHooks, neighbourHooksStale } from '
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { renderShim, shimPath } from './shim';
 import { writeReviewerAgent } from './reviewer-agent';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * NEIGHBOUR HOOKS — the consumer's own hook entries in the settings file webpieces manages.
@@ -31,7 +31,7 @@ import { writeReviewerAgent } from './reviewer-agent';
  */
 
 function mktmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-neighbour-'));
+    return specTempDirs.make('wp-neighbour-');
 }
 
 /** A repo whose settings.json is fully current EXCEPT for the neighbour hooks the caller adds. */

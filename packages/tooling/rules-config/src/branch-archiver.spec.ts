@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ARCHIVE_TAG_PREFIX, BranchArchiver } from './branch-archiver';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * REAL git, not a fake. The entire claim of Part 1 is that a tag preserves the branch's objects
@@ -27,7 +27,7 @@ function commit(file: string, body: string, message: string): void {
 }
 
 beforeEach(() => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-archive-'));
+    repo = specTempDirs.make('wp-archive-');
     git('init', '--initial-branch=main');
     git('config', 'user.email', 'test@example.com');
     git('config', 'user.name', 'Test');

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames, specTempDirs } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
@@ -21,12 +20,12 @@ function ctx(command: string, workspaceRoot: string): BashContext {
 // A real temp root: a blocking guard now WRITES the git-workflow doc it links to, so the root must be
 // a directory we own rather than a made-up path.
 function tempRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guards-'));
+    return specTempDirs.make('wp-guards-');
 }
 
 // A workspace root carrying a merge marker, so merge-in-progress-guard sees a merge in flight.
 function withMarkerRoot(validated: boolean): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
+    const root = specTempDirs.make('wp-guard-');
     const dir = path.join(root, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, 'feat');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, MERGE_IN_PROGRESS_FILE), JSON.stringify({ validated }));
@@ -117,7 +116,7 @@ describe('merge-in-progress-guard', () => {
     });
 
     it('allows everything when no merge is in progress', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
+        const root = specTempDirs.make('wp-guard-');
         expect(mergeInProgressGuard.check(ctx('git commit -m x', root)).length).toBe(0);
     });
 });

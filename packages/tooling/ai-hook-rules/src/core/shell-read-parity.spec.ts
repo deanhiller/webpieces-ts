@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ShellReadParity } from './shell-read-parity';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const parity = new ShellReadParity();
 let root = '';
@@ -11,7 +11,7 @@ let fileA = '';
 let fileB = '';
 
 beforeAll(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-read-parity-')));
+    root = specTempDirs.makeReal('wp-read-parity-');
     fs.mkdirSync(path.join(root, 'src'));
     fileA = path.join(root, 'src', 'a.ts');
     fileB = path.join(root, 'src', 'b.ts');

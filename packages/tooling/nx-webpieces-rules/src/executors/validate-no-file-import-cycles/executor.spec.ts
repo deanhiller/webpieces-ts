@@ -19,9 +19,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { buildMadgeOptions } from './executor';
+import { specTempDirs } from '@webpieces/rules-config';
 
 // madge ships no types; require it the same way the executor's loadMadge does.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -49,7 +49,7 @@ class Workspace {
     svcRoot!: string;
 
     setup(): void {
-        this.root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nofic-exclude-')));
+        this.root = specTempDirs.makeReal('nofic-exclude-');
         this.svcRoot = path.join(this.root, 'packages', 'svc');
 
         this.write(
@@ -138,7 +138,7 @@ class InternalCycleWorkspace {
     projRoot!: string;
 
     setup(): void {
-        this.root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nofic-exclude-regexp-')));
+        this.root = specTempDirs.makeReal('nofic-exclude-regexp-');
         this.projRoot = path.join(this.root, 'packages', 'proj');
 
         // A genuine, deliberate a↔b cycle inside the project's own generated tree.

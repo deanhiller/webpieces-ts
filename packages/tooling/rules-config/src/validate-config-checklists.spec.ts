@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { validatePrGateSection } from './validate-config';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * `pr-gate.checklists` validation, split out of validate-config.spec.ts when that file hit the
@@ -17,7 +17,7 @@ function validPrGate(checklists: unknown): Record<string, unknown> {
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
 function repoWith(docs: string[] = [], agents: string[] = []): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklists-'));
+    const dir = specTempDirs.make('wp-checklists-');
     fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
     for (const d of docs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
     if (agents.length > 0) {

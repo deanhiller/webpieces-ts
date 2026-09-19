@@ -609,6 +609,14 @@
                     "level": 6
                 },
                 {
+                    "id": "RepoScratchDirs",
+                    "className": "RepoScratchDirs",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/repo-scratch-dirs.ts",
+                    "level": 4
+                },
+                {
                     "id": "ReviewJsonService",
                     "className": "ReviewJsonService",
                     "kind": "class",
@@ -735,6 +743,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/sync-main-command.ts",
                     "level": 1
+                },
+                {
+                    "id": "TmpScratchSweeper",
+                    "className": "TmpScratchSweeper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/tmp-scratch-sweep.ts",
+                    "level": 5
                 },
                 {
                     "id": "WorkingTreeGate",
@@ -1146,6 +1162,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "CleanTmp",
+                    "to": "TmpScratchSweeper",
+                    "injection": "type",
+                    "token": "TmpScratchSweeper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/tmp-scratch-sweep.ts#TmpScratchSweeper",
+                    "paramName": "tmpSweeper",
+                    "paramType": "TmpScratchSweeper"
                 },
                 {
                     "from": "CleanupCommand",
@@ -1625,6 +1650,15 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "GeneratedArtifactRegistry",
+                    "to": "RepoScratchDirs",
+                    "injection": "type",
+                    "token": "RepoScratchDirs",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-scratch-dirs.ts#RepoScratchDirs",
+                    "paramName": "scratchDirs",
+                    "paramType": "RepoScratchDirs"
+                },
+                {
                     "from": "GitExec",
                     "to": "GitStatusParser",
                     "injection": "type",
@@ -1758,6 +1792,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "MergeBodyTempFile",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "MergeBodyTempFile",
+                    "to": "RepoScratchDirs",
+                    "injection": "type",
+                    "token": "RepoScratchDirs",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-scratch-dirs.ts#RepoScratchDirs",
+                    "paramName": "scratchDirs",
+                    "paramType": "RepoScratchDirs"
                 },
                 {
                     "from": "MergeEnd",
@@ -2247,6 +2299,15 @@
                 },
                 {
                     "from": "RepoRootFinder",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "RepoScratchDirs",
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",

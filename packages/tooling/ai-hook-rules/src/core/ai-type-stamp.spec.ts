@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MATRIX_L2_UNROWED } from './decision-log';
@@ -12,6 +11,7 @@ import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 import { L0_FAULT_NONE } from './l0-fault-codes';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
 import { SHIM_LOG_FIELDS, ShimLogField } from '../bin/shim';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * `ai=` MUST SPAN THE WHOLE TRAIL, or it answers nothing.
@@ -25,7 +25,7 @@ import { SHIM_LOG_FIELDS, ShimLogField } from '../bin/shim';
  * in each.
  */
 function tmpRoot(): string {
-    return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-aistamp-')));
+    return specTempDirs.makeReal('wp-aistamp-');
 }
 
 function readLog(root: string, stream: string): string {

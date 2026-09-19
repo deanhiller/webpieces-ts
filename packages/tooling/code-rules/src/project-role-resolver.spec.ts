@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ProjectRoleResolver } from './project-role-resolver';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function writeFile(root: string, relPath: string, content: string): void {
     const fullPath = path.join(root, relPath);
@@ -16,7 +16,7 @@ describe('ProjectRoleResolver', () => {
     const resolver = new ProjectRoleResolver();
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'role-resolver-')));
+        root = specTempDirs.makeReal('role-resolver-');
     });
     afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 

@@ -5,10 +5,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findUntaggedProjects } from '../validate-framework-tag';
 import { findProjectsWithInvalidTagValues } from '../tag-rule';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /** The atomic env values the framework-tag rule allows (mirrors DEFAULT_KNOWN_TYPES). */
 const KNOWN_FRAMEWORKS = ['browser', 'react', 'angular', 'node', 'express', 'react-native'];
@@ -23,7 +23,7 @@ function writeProjectJson(projectDir: string, content: unknown): void {
 
 describe('findUntaggedProjects', () => {
     beforeEach(() => {
-        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fwtag-'));
+        root = specTempDirs.make('wp-fwtag-');
     });
 
     afterEach(() => {
@@ -83,7 +83,7 @@ describe('findUntaggedProjects', () => {
 
 describe('findProjectsWithInvalidTagValues (framework-tag value validation)', () => {
     beforeEach(() => {
-        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fwval-'));
+        root = specTempDirs.make('wp-fwval-');
     });
 
     afterEach(() => {

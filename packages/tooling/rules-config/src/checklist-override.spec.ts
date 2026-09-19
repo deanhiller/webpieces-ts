@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { ChecklistOverride, ChecklistOverrideService } from './checklist-override';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * `override-<id>.json` is the file that gave the human's ship-anyway decision a REACHABLE WRITER. While it
@@ -11,7 +11,7 @@ import { ChecklistOverride, ChecklistOverrideService } from './checklist-overrid
  * reviewer subagent refuses to write its own override, correctly. So a human hand-edited JSON.
  */
 function dirWithOverride(id: string, body: unknown): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-override-'));
+    const dir = specTempDirs.make('wp-override-');
     fs.writeFileSync(path.join(dir, `override-${id}.json`), JSON.stringify(body));
     return path.join(dir, 'review.json');
 }
@@ -30,7 +30,7 @@ describe('ChecklistOverrideService.load', () => {
     });
 
     it('is null when no authorization exists — the gate then refuses, which is the safe direction', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-override-none-'));
+        const dir = specTempDirs.make('wp-override-none-');
         expect(SVC.load(path.join(dir, 'review.json'), 'db-reviewer')).toBeNull();
     });
 
@@ -44,7 +44,7 @@ describe('ChecklistOverrideService.load', () => {
         expect(notAnObject?.problem).toContain('not a JSON object');
         expect(notAnObject?.problem).toContain('override-db-reviewer.json');
 
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-override-bad-'));
+        const dir = specTempDirs.make('wp-override-bad-');
         fs.writeFileSync(path.join(dir, 'override-db-reviewer.json'), '{ not json');
         const unparseable = SVC.load(path.join(dir, 'review.json'), 'db-reviewer');
         expect(unparseable?.problem).toContain('cannot be read');

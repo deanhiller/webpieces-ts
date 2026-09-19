@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { MainSyncLock, MainSyncStatusService } from '@webpieces/rules-config';
+import { MainSyncLock, MainSyncStatusService, specTempDirs } from '@webpieces/rules-config';
 
 import { refreshMainSync } from './sync-main';
 
@@ -35,7 +34,7 @@ function asyncLog(): string {
 }
 
 beforeEach(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'syncmain-')));
+    root = specTempDirs.makeReal('syncmain-');
 });
 
 afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });

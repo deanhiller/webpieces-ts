@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { CONFIG_FILENAME } from './config-file';
@@ -9,9 +8,10 @@ import { toError } from './to-error';
 import { defaultRules } from './default-rules';
 import { RULE_SCHEMAS } from './rule-schemas';
 import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';
+import { specTempDirs } from './spec-temp-dirs';
 
 function mktmp(contents: Record<string, string>): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-config-'));
+    const dir = specTempDirs.make('wp-config-');
     for (const [name, body] of Object.entries(contents)) {
         fs.writeFileSync(path.join(dir, name), body);
     }

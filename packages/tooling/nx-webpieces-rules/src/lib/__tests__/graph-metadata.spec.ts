@@ -19,6 +19,7 @@ import {
 import { enrichGraph, MetadataValidationError, validateLibraryTypesMatch, validateRoleDependencies } from '../graph-metadata';
 import { resolveRole } from '../role-resolver';
 import { toError } from '../../toError';
+import { specTempDirs } from '@webpieces/rules-config';
 
 describe('extractShortDescription', () => {
     it('takes the first paragraph after the heading', () => {
@@ -65,7 +66,7 @@ describe('validateShortDescription', () => {
 let tmpRoot: string;
 
 beforeAll(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-framework-'));
+    tmpRoot = specTempDirs.make('wp-framework-');
 });
 
 afterAll(() => {
@@ -387,7 +388,7 @@ function enrichAndCatch(graph: EnhancedGraph, infos: Map<string, ProjectInfo>): 
 
 describe('enrichGraph', () => {
     beforeAll(() => {
-        enrichTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-enrich-'));
+        enrichTmpRoot = specTempDirs.make('wp-enrich-');
     });
 
     afterAll(() => {
@@ -483,7 +484,7 @@ describe('enrichGraph', () => {
 
 describe('enrichGraph designFile gating', () => {
     beforeAll(() => {
-        enrichTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-enrich-gate-'));
+        enrichTmpRoot = specTempDirs.make('wp-enrich-gate-');
     });
     afterAll(() => {
         fs.rmSync(enrichTmpRoot, { recursive: true, force: true });

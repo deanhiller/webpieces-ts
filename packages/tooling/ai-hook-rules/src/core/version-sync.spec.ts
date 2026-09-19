@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { EffectiveTree } from './effective-tree';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * L1 row 8 — the guard that replaced CoordinatorWorktreeGuard.
@@ -23,7 +23,7 @@ import { WebpiecesVersions } from './webpieces-versions';
 const PKG = '@webpieces/nx-webpieces-rules';
 
 function tmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-vsync-'));
+    return specTempDirs.make('wp-vsync-');
 }
 
 function writePin(root: string, version: string): void {

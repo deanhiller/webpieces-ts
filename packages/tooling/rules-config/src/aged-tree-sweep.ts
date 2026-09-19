@@ -4,7 +4,10 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 /**
  * How long a file survives an AGED-TREE SWEEP without being rewritten — the policy `cleanTmp` applies
- * to `{repo}/.webpieces`, which is the only root webpieces writes state under.
+ * to `{repo}/.webpieces`.
+ *
+ * It is NOT the only root webpieces writes under, though this comment used to say so: scratch trees go
+ * to `os.tmpdir()` as well, on a much shorter cutoff and through `TmpScratchSweeper`. See that file.
  *
  * NOT the same knob as `DEFAULT_RETENTION_DAYS` in review-provenance.ts, which happens to be 30 as well.
  * That one is a CONFIGURABLE ceiling on reviewer transcripts, overridable per repo in settings; this one

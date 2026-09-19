@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findSymbolViolationsInFile } from '../validate-no-symbol-di-tokens';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmpDir: string;
 
 beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-sym-'));
+    tmpDir = specTempDirs.make('no-sym-');
 });
 
 afterEach(() => {

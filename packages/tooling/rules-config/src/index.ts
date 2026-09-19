@@ -514,3 +514,6 @@ export {
     DEFAULT_MERGE_COMPLETE_COMMAND,
 } from './commands-config';
 export { StaleBinRemoval, StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';
+export { SpecTempDirs, specTempDirs } from './spec-temp-dirs';
+export { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
+export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } from './tmp-scratch-sweep';

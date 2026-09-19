@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { ChecklistValidator } from './checklist-validator';
 import {
@@ -8,6 +7,7 @@ import {
 } from './checklist-config';
 import { CONFIG_FILENAME } from './config-file';
 import { validateChecklistDocs } from './checklist-docs-validator';
+import { specTempDirs } from './spec-temp-dirs';
 
 const svc = new ChecklistValidator();
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
@@ -18,7 +18,7 @@ const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLA
  * reviewer-agent existence check must stay off.
  */
 function repoWith(docs: string[] = [], agents: string[] = []): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cklv-'));
+    const dir = specTempDirs.make('wp-cklv-');
     fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
     for (const d of docs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
     if (agents.length > 0) {

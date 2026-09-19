@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { CONFLICTS_FILE, MERGED_DIR, MergeMarker, MergeState, STAGED_DIR } from './merge-state';
-import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
+import { MERGE_EXPLANATION_FILE, specTempDirs } from '@webpieces/rules-config';
 
 const ms = new MergeState();
 const scanConflictMarkers = (r: string, f: string[]): ReturnType<MergeState['scanConflictMarkers']> => ms.scanConflictMarkers(r, f);
@@ -19,7 +18,7 @@ const nextMergeSlotNumber = (h: string): number => ms.nextMergeSlotNumber(h);
 const recordCleanMerge = (d: string, a: string, b: string, c: string): void => ms.recordCleanMerge(d, a, b, c);
 
 function tmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-'));
+    return specTempDirs.make('wp-merge-');
 }
 
 describe('scanConflictMarkers', () => {

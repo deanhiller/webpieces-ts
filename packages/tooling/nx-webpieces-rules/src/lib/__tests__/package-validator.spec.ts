@@ -1,6 +1,5 @@
 import { vi } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 type DevkitType = typeof import('@nx/devkit');
@@ -20,6 +19,7 @@ import {
     ProjectValidationResult,
     validatePackageJsonDependencies,
 } from '../package-validator';
+import { specTempDirs } from '@webpieces/rules-config';
 
 class PackageJsonSpec {
     name: string;
@@ -75,7 +75,7 @@ function writeProject(tmpDir: string, cfg: ProjectConfig): void {
 }
 
 function setupFixture(projects: ProjectConfig[]): Fixture {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkgvalidator-'));
+    const tmpDir = specTempDirs.make('pkgvalidator-');
     for (const p of projects) writeProject(tmpDir, p);
 
     const projectsConfig = {

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
 import { StageOutputLog, REVIEW_CONSOLE_LOG, FINISH_CONSOLE_LOG } from './stage-output-log';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmp = '';
 let primary = '';
@@ -31,7 +31,7 @@ function watchTerminal(): void {
 }
 
 beforeEach(() => {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-stagelog-')));
+    tmp = specTempDirs.makeReal('wp-stagelog-');
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-feature');
     fs.mkdirSync(primary, { recursive: true });

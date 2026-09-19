@@ -10,7 +10,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { ProjectInfo } from '../project-info';
 import {
@@ -18,11 +17,12 @@ import {
     printAutoHiddenServers,
     WEBPIECES_RUNTIME_MARKERS,
 } from '../runtime-participant-resolver';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmpRoot: string;
 
 beforeAll(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-participant-'));
+    tmpRoot = specTempDirs.make('wp-participant-');
 });
 
 afterAll(() => {

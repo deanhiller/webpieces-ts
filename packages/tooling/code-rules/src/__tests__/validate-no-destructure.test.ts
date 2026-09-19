@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { findDestructuringInFile } from '../validate-no-destructure';
+import { specTempDirs } from '@webpieces/rules-config';
 
 // allowedPaths is the ONLY escape when disableAllowed is false — that setting deliberately converts a
 // disabled violation back into a reported one — so every case below runs with disableAllowed: false.
@@ -21,7 +21,7 @@ describe('findDestructuringInFile — allowedPaths', () => {
     let tmpDir: string;
 
     beforeEach(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-destructure-'));
+        tmpDir = specTempDirs.make('no-destructure-');
     });
 
     afterEach(() => {

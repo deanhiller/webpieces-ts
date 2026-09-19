@@ -1,13 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     BuildsLog, BuildTicket, BuildTermination, BUILDS_LOG_GENERATIONS, BUILD_START,
     MAX_BUILDS_LOG_BYTES, MAX_ROW_BYTES,
 } from './builds-log';
 import { DotWebpieces } from './state-dir';
+import { specTempDirs } from './spec-temp-dirs';
 
 const dirs: string[] = [];
 
@@ -21,7 +21,7 @@ afterEach(() => {
  * and make its own assertions depend on whatever else the box happened to be building.
  */
 function fakeHome(): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-buildslog-')));
+    const dir = specTempDirs.makeReal('wp-buildslog-');
     dirs.push(dir);
     return dir;
 }

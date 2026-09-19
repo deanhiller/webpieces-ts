@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -51,8 +50,7 @@ import {
     RepoRootFinder,
     WorktreeReaper,
     WorktreeService,
-    branchMutationLogPath,
-} from '@webpieces/rules-config';
+    branchMutationLogPath, specTempDirs } from '@webpieces/rules-config';
 
 import {
     ReapOutcomeSignal,
@@ -134,7 +132,7 @@ function destructiveCalls(): string[] {
 }
 
 beforeEach(() => {
-    primary = fs.mkdtempSync(path.join(os.tmpdir(), 'wpr-'));
+    primary = specTempDirs.make('wpr-');
     linked = path.join(path.dirname(primary), `${path.basename(primary)}-feature`);
     world.porcelain = `worktree ${primary}\nHEAD aaa\nbranch refs/heads/main\n\n`
         + `worktree ${linked}\nHEAD bbb\nbranch refs/heads/${BRANCH}\n`;

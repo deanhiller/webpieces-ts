@@ -19,7 +19,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { ExecutorContext } from '@nx/devkit';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 type RulesConfigModule = typeof import('@webpieces/rules-config');
@@ -55,6 +54,7 @@ vi.mock('@nx/devkit', () => ({
 import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../lib/runtime-config';
 import runTsInSrcExecutor from './validate-ts-in-src/executor';
 import runCyclesExecutor from './validate-no-file-import-cycles/executor';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const HATCH_BRANCH = 'dean/some-huge-refactor';
 // 3 days out: a FUTURE epoch that is also comfortably inside the one-week cap the config validator
@@ -168,7 +168,7 @@ describe('escape hatches reach the skip decision', () => {
         beforeAll(() => {
             // A real, genuinely circular project — the gate runs REAL madge over it, so "the hatch
             // worked" means the executor saw the cycle and still returned success.
-            workspaceRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hatch-cycles-')));
+            workspaceRoot = specTempDirs.makeReal('hatch-cycles-');
             const srcDir = path.join(workspaceRoot, 'src');
             fs.mkdirSync(srcDir, { recursive: true });
             fs.writeFileSync(path.join(srcDir, 'a.ts'), `import './b';\nexport const a = 1;\n`);

@@ -13,9 +13,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
+import { NoCustomCssConfig, NoCustomCssScope, specTempDirs } from '@webpieces/rules-config';
 
 import { NoCustomCssValidator } from './validate-no-custom-css';
 
@@ -51,7 +50,7 @@ describe('NoCustomCssValidator allowGlobs', () => {
     let root: string;
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'no-css-globs-')));
+        root = specTempDirs.makeReal('no-css-globs-');
         git(root, 'init -q -b main');
         git(root, 'config user.email test@test.com');
         git(root, 'config user.name test');

@@ -7,6 +7,7 @@ import {
     ProvenanceWriteRequest, DEFAULT_RETENTION_DAYS,
 } from './review-provenance';
 import { ReviewerEvidence } from './subagent-provenance';
+import { specTempDirs } from './spec-temp-dirs';
 
 const svc = new ReviewProvenanceService();
 const savedHome = process.env['HOME'];
@@ -19,7 +20,7 @@ afterEach(() => {
 
 // A fake ~/.claude with the main session transcript and, optionally, a settings.json retention setting.
 function fakeHome(sessionId: string, cleanupPeriodDays = 0): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prov-home-'));
+    const home = specTempDirs.make('wp-prov-home-');
     const projects = path.join(home, '.claude', 'projects', '-Some-Slug');
     fs.mkdirSync(projects, { recursive: true });
     fs.writeFileSync(path.join(projects, `${sessionId}.jsonl`), JSON.stringify({ sessionId }) + '\n');
@@ -30,7 +31,7 @@ function fakeHome(sessionId: string, cleanupPeriodDays = 0): string {
 }
 
 function tmpPrDir(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prdir-'));
+    return specTempDirs.make('wp-prdir-');
 }
 
 // webpieces-disable no-any-unknown -- opaque parsed JSON in a test assertion

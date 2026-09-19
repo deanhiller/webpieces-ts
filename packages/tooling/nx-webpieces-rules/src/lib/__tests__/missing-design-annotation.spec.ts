@@ -8,11 +8,11 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
 import { DiGraph } from '../di-graph/model';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const TSCONFIG = JSON.stringify({
     compilerOptions: {
@@ -40,7 +40,7 @@ export class LonelyService {}
 let workspaceRoot = '';
 
 function buildGraph(rootMode: 'controller' | 'apiImplementation'): DiGraph {
-    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'missing-design-spec-'));
+    workspaceRoot = specTempDirs.make('missing-design-spec-');
     const projectRoot = 'proj';
     const projDir = path.join(workspaceRoot, projectRoot);
     fs.mkdirSync(path.join(projDir, 'src'), { recursive: true });

@@ -1,13 +1,13 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /** Run the real release stamper against disposable manifests, never the working tree. */
 describe('release version stamping', () => {
     it('stamps source and dist runtime/dev workspace dependencies while preserving unrelated specs', () => {
-        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-set-version-'));
+        const scratch = specTempDirs.make('wp-set-version-');
         try {
             fs.writeFileSync(path.join(scratch, 'VERSION'), '0.4\n');
             const manifests = [

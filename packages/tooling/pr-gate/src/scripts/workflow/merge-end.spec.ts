@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { AgedTreeSweeper, RepoRootFinder } from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder, specTempDirs, TmpScratchSweeper } from '@webpieces/rules-config';
 import { MergeEnd, MergeEndOptions } from './merge-end';
 import { MergeContext } from './merge-start';
 import { MergeState } from './merge-state';
@@ -32,7 +31,7 @@ class TestMergeEnd extends MergeEnd {
         super(
             new BranchNaming(),
             // One root only: `{repo}/.webpieces`. There is no machine-global state left to sweep.
-            new CleanTmp(new RepoRootFinder(), new AgedTreeSweeper()),
+            new CleanTmp(new RepoRootFinder(), new AgedTreeSweeper(), new TmpScratchSweeper()),
             fakeGit,
             new MergeState());
     }
@@ -50,7 +49,7 @@ class TestMergeEnd extends MergeEnd {
 let repoRoot = '';
 
 beforeEach((): void => {
-    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-end-'));
+    repoRoot = specTempDirs.make('wp-merge-end-');
 });
 
 afterEach((): void => {

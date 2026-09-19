@@ -13,11 +13,11 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { removeDesignFiles, writeDesignFiles } from '../../executors/di-graph-generate/executor';
 import { DiDesign, DiGraph } from '../di-graph/model';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const DESIGN_FILES = ['design.json', 'design.md', 'design.html'];
 const PROJECT_ROOT = 'services/legacy-thing';
@@ -46,7 +46,7 @@ function writeStaleDesignFiles(): void {
 }
 
 beforeEach((): void => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'design-emission-'));
+    const root = specTempDirs.make('design-emission-');
     projectRootAbs = path.join(root, PROJECT_ROOT);
     fs.mkdirSync(projectRootAbs, { recursive: true });
 });

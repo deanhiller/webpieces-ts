@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 
@@ -7,12 +6,13 @@ import { InstructAiDocSet } from './instruct-ai-docs';
 import { loadTemplate, writeTemplate, writeTemplateIfMissing } from './load-template';
 import { MERGE_PROCESS_DOC } from './merge-process-doc';
 import { BUILD_LOG_DOC } from './build-log-doc';
+import { specTempDirs } from './spec-temp-dirs';
 
 const GIT_WORKFLOW_DOC = 'webpieces.git-workflow.md';
 const LOCATION_MATRIX_DOC = 'webpieces.location-matrix.md';
 
 function tempRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-instruct-ai-'));
+    return specTempDirs.make('wp-instruct-ai-');
 }
 
 function deliveredDir(root: string): string {

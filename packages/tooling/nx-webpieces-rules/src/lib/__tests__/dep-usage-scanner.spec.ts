@@ -1,10 +1,10 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { DepUsageScanner } from '../dep-usage-scanner';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function writeTree(files: Record<string, string>): string {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'depusage-'));
+    const tmpDir = specTempDirs.make('depusage-');
     for (const relPath of Object.keys(files)) {
         const absPath = path.join(tmpDir, relPath);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });

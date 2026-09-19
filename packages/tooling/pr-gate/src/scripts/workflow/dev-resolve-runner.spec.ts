@@ -1,9 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder, toError, specTempDirs } from '@webpieces/rules-config';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';
@@ -21,7 +20,7 @@ import { GitStatusParser } from './git-status';
  * would ship unreviewed work to production.
  */
 
-const REPO = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-resolve-spec-'));
+const REPO = specTempDirs.make('wp-resolve-spec-');
 const MINE = 'dev-include/dean/ONE-2275';
 const FEATURE = 'dean/ONE-2275';
 const TMP = 'dean/ONE-2275DevResolve';

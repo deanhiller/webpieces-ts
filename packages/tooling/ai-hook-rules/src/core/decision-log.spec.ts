@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from '@webpieces/rules-config';
+import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET, specTempDirs } from '@webpieces/rules-config';
 
 import { InvocationLog, logGuardDecision, GuardDecision, Verdict , MATRIX_L2_UNROWED } from './decision-log';
 
@@ -20,7 +19,7 @@ function streamName(stream: string, suffix: string = '.log'): string {
 
 
 function tmpRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guardinv-'));
+    return specTempDirs.make('wp-guardinv-');
 }
 
 // One invocation, begin-to-end, the way the hook does it: capture on entry, flush at the terminal

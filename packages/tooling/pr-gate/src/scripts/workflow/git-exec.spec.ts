@@ -1,9 +1,8 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
 import { GitExec } from './git-exec';
 import { GitStatusEntry, GitStatusParser } from './git-status';
 
@@ -16,7 +15,7 @@ const assertNoUntracked = (d: string): void => git.assertNoUntracked(d);
 // Build a throwaway git repo with one committed tracked file and a .gitignore. core.hooksPath=/dev/null
 // so the ambient webpieces hooks never fire on these scaffolding commits.
 function initRepo(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-gitexec-'));
+    const dir = specTempDirs.make('wp-gitexec-');
     const run = (args: string): void => { execSync(`git ${args}`, { cwd: dir, stdio: 'ignore' }); };
     run('init -q');
     run('config core.hooksPath /dev/null');

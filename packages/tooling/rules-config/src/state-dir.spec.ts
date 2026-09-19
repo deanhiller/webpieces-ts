@@ -10,6 +10,7 @@ import { MainSyncStatusService } from './main-sync-status';
 import { BranchMutationLog, BranchMutationEvent } from './branch-mutation-log';
 import { RepoRootFinder } from './repo-root';
 import { findConfigFile } from './config-file';
+import { specTempDirs } from './spec-temp-dirs';
 
 // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repos.
 function git(cwd: string, cmd: string): string {
@@ -40,7 +41,7 @@ let dot: DotWebpieces;
 function makeRepoWithWorktree(prefix: string, worktreeDirName: string): void {
         // realpathSync: macOS os.tmpdir() is a symlink; git returns the real path, so paths must be
         // compared against the resolved form.
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+    tmp = specTempDirs.makeReal(prefix);
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, worktreeDirName);
     fs.mkdirSync(primary, { recursive: true });

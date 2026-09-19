@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -8,9 +7,10 @@ import {
     branchMutationLogPath,
     logBranchMutation,
 } from './branch-mutation-log';
+import { specTempDirs } from './spec-temp-dirs';
 
 function tmpRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'bml-'));
+    return specTempDirs.make('bml-');
 }
 
 describe('branch-mutation-log', () => {

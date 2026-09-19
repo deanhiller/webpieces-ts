@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces, specTempDirs } from '@webpieces/rules-config';
 
 import { CALLS_STREAM } from './log-streams';
 import { logStream, StreamIdentity } from './log-stream';
@@ -12,7 +12,7 @@ import { SessionCallHistory } from './session-call-history';
 let root = '';
 
 beforeEach((): void => {
-    root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'call-history-'));
+    root = specTempDirs.makeReal('call-history-');
     logStream.identify(new StreamIdentity('sess-1', 'agent-1', 'guards'));
 });
 

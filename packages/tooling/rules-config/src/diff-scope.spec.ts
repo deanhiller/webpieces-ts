@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ChangedFilesOptions, getChangedFiles } from './diff-scope';
+import { specTempDirs } from './spec-temp-dirs';
 
 function git(root: string, cmd: string): string {
     // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repo.
@@ -31,7 +31,7 @@ describe('getChangedFiles ghost paths (deleted/renamed old paths)', () => {
     let base: string;
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'diff-scope-')));
+        root = specTempDirs.makeReal('diff-scope-');
         git(root, 'init -q -b main');
         git(root, 'config user.email test@test.com');
         git(root, 'config user.name test');
@@ -98,7 +98,7 @@ describe('getChangedFiles — deletions are opt-in', () => {
     let base: string;
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'diff-scope-')));
+        root = specTempDirs.makeReal('diff-scope-');
         git(root, 'init -q -b main');
         git(root, 'config user.email test@test.com');
         git(root, 'config user.name test');

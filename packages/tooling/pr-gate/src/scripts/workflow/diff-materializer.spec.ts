@@ -1,9 +1,8 @@
 import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { ReviewJsonService } from '@webpieces/rules-config';
+import { ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { DiffManifestEntry, DiffMaterializer, FILE_DIFF_MAX_BYTES } from './diff-materializer';
 import { ForkPoint } from './git-findForkPoint';
@@ -37,7 +36,7 @@ function git(cwd: string, cmd: string): void {
 let template = '';
 
 beforeAll(() => {
-    template = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-tpl-'));
+    template = specTempDirs.make('wp-mat-tpl-');
     git(template, 'git init -q -b main');
     git(template, 'git config core.hooksPath /dev/null');
     git(template, 'git config user.email t@t.t && git config user.name t');
@@ -52,7 +51,7 @@ afterAll(() => {
 });
 
 function repoOnFeatureBranch(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-'));
+    const dir = specTempDirs.make('wp-mat-');
     dirs.push(dir);
     fs.cpSync(template, dir, { recursive: true });
     return dir;
@@ -240,7 +239,7 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
     // No fork point ⇒ nothing to extract, but a manifest is still written so a reader can tell the
     // difference between "never run" and "run, found nothing".
     it('writes an empty manifest rather than nothing when the base is unresolvable', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-nomain-'));
+        const dir = specTempDirs.make('wp-mat-nomain-');
         dirs.push(dir);
         git(dir, 'git init -q -b solo');
         git(dir, 'git config core.hooksPath /dev/null');

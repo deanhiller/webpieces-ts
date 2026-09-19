@@ -1,9 +1,8 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, DisableCounts } from './dashboard';
 import { ChecklistCommentRow } from './checklist-comment-row';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
@@ -13,7 +12,7 @@ const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
 
 function files(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-identity-'));
+    const dir = specTempDirs.make('review-identity-');
     dirs.push(dir);
     fs.writeFileSync(path.join(dir, 'review.json'), JSON.stringify({
         title: 'Record review identity', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green',

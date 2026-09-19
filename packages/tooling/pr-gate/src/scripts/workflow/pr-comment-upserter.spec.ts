@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PrCommentRequest, PrCommentUpserter } from './pr-comment-upserter';
+import { specTempDirs } from '@webpieces/rules-config';
 
 // A PrCommentUpserter with both gh seams stubbed, so the upsert runs with no gh, no network and no PR.
 class FakeUpserter extends PrCommentUpserter {
@@ -35,7 +35,7 @@ function request(): PrCommentRequest {
 }
 
 beforeEach((): void => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-comment-upsert-'));
+    dir = specTempDirs.make('wp-comment-upsert-');
 });
 
 afterEach((): void => {

@@ -5,11 +5,11 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
 import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from '../service-name-resolver';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let workspaceRoot = '';
 
@@ -22,7 +22,7 @@ function project(name: string, contents: string | null): ProjectInfo {
 }
 
 beforeAll(() => {
-    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-service-name-'));
+    workspaceRoot = specTempDirs.make('wp-service-name-');
 });
 
 afterAll(() => {

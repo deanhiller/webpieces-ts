@@ -1,9 +1,8 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BranchArchiver, InformAiError, RepoRootFinder, WorktreeService, toError } from '@webpieces/rules-config';
+import { BranchArchiver, InformAiError, RepoRootFinder, WorktreeService, toError, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';
@@ -164,7 +163,7 @@ function build(): LandPrCommand {
         new BranchArchiver(),
         new MergeInfoIndex(new MergeState()),
         new LandedWorktreeReaper(new WorktreeService(), new ReapOutcomeSignal()),
-        new MergeBodyTempFile(),
+        new MergeBodyTempFile(new RepoRootFinder(), new RepoScratchDirs()),
         new LandedTreeResolver(new WorktreeService()),
     );
 }
@@ -218,7 +217,7 @@ function landedBody(): string {
 
 beforeEach((): void => {
     savedCwd = process.cwd();
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-land-pr-'));
+    tmp = specTempDirs.make('wp-land-pr-');
     ghLog = path.join(tmp, 'gh.log');
     ghBodyCapture = path.join(tmp, 'landed-body.md');
     installFakeGh();

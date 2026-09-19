@@ -1,9 +1,9 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ConfigFile, CONFIG_PARSE_ATTEMPTS } from './config-file';
 import { InformAiError } from './inform-ai-error';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * A ConfigFile whose reads are scripted, so "another process was mid-write" is DETERMINISTIC instead
@@ -86,7 +86,7 @@ describe('ConfigFile.readRawConfig — transient vs genuine parse failure', () =
 describe('ConfigFile.readRawConfig — against a real file on disk', () => {
     let dir: string;
 
-    beforeAll(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cfgparse-')); });
+    beforeAll(() => { dir = specTempDirs.make('wp-cfgparse-'); });
     afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
     it('reads and parses a real valid config', () => {

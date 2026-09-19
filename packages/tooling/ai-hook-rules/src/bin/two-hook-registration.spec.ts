@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { applyHook, installTargets, GUARDS_HOOK, RULES_HOOK, InstallTarget } from './setup';
@@ -13,6 +12,7 @@ import type { ClaudeSettings, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { SHIM_MARKER, renderShim, shimPath } from './shim';
 import { runUpgradeShim } from './upgrade-shim';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * THE TWO-HOOK ABSOLUTE REGISTRATION, end to end.
@@ -33,7 +33,7 @@ import { runUpgradeShim } from './upgrade-shim';
  */
 
 function mktmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-2hook-'));
+    return specTempDirs.make('wp-2hook-');
 }
 
 function targetsIn(root: string): InstallTarget[] {
