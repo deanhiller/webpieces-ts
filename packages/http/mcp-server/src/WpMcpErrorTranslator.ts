@@ -5,8 +5,10 @@ import {
     ApiErrorBoundary,
     ApiErrorCodec,
     ApiErrorPayload,
+    ApiImplementationError,
     DtoValue,
     LogManager,
+    toError,
 } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WpMcpErrorTranslator');
@@ -32,6 +34,32 @@ export class McpFailureScope {
         const tool = this.toolName ? ` tool=${this.toolName}` : '';
         return `requestId=${this.requestId} jsonRpcId=${String(this.jsonRpcId)} method=${this.method}${tool}`;
     }
+}
+
+/**
+ * The application's own `tools/call` error translation — the MCP twin of the `ErrorTranslators` that
+ * `ExpressWrapper.handleError` consults through `ClientRegistry.tryTranslateToWire` on the HTTP path.
+ * Register one with `WpMcpServerConfig.setErrorTranslator(...)`; it is NOT a global, because
+ * `WpMcpServer` is constructed by app code and two servers may run in one process.
+ *
+ * An app owns its error taxonomy and owns how those errors should be explained to a model, so a
+ * claimed error yields the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`, the lot.
+ *
+ * Contract:
+ * - `error` is the RAW thrown value, NOT normalized: an app must be able to `instanceof` its own
+ *   error classes, which `ApiErrorBoundary.normalize` would have collapsed to
+ *   `ApiImplementationError`.
+ * - return `undefined` for "not mine" — webpieces then renders its own default, unchanged.
+ * - webpieces default-fills `_meta['webpieces/requestId']` only when the returned result has NO
+ *   `_meta`. An app that sets `_meta` owns it untouched.
+ * - operator-detail logging has ALREADY happened when this is called, so claiming an error can never
+ *   silently kill observability.
+ * - scope is `tools/call` ONLY. The pre-SDK HTTP boundary and `tools/list` stay framework-owned:
+ *   that boundary emits the `401 + WWW-Authenticate: Bearer resource_metadata=...` MCP clients
+ *   depend on for OAuth discovery, and an app rewriting it breaks connector onboarding.
+ */
+export interface McpErrorTranslators {
+    toToolResult(error: Error, scope: McpFailureScope): CallToolResult | undefined;
 }
 
 /** The only error shape rendered into model-visible MCP tool content. */
@@ -74,6 +102,9 @@ export class McpHttpErrorDetail {
  */
 export class WpMcpErrorTranslator {
     private readonly boundary = new ApiErrorBoundary(log);
+
+    /** `appTranslators` is the app's `tools/call` seam; `undefined` means webpieces renders all. */
+    constructor(private readonly appTranslators?: McpErrorTranslators) {}
 
     /**
      * Pre-SDK failures: 401 + WWW-Authenticate, 403, 400 (-32700), anything else 500 (-32603).
@@ -148,10 +179,19 @@ export class WpMcpErrorTranslator {
         );
     }
 
-    /** Every tools/call failure after the tool is found: an `isError: true` result the model sees. */
+    /**
+     * Every tools/call failure after the tool is found: an `isError: true` result the model sees.
+     *
+     * The app's {@link McpErrorTranslators} gets FIRST REFUSAL — the same convention
+     * `ExpressWrapper.handleError` applies on the HTTP path — and owns the entire result it claims.
+     * Operator-detail logging runs BEFORE it, so exactly one operator line is written per failure
+     * whoever renders the reply.
+     */
     toToolResult(thrown: Error, scope: McpFailureScope): CallToolResult {
         const error = this.boundary.normalize(thrown);
         this.boundary.logOperatorDetail(error, scope.describe());
+        const claimed = this.appToolResult(thrown, scope);
+        if (claimed) return this.withDefaultMeta(claimed, scope.requestId);
         const visible = this.modelVisible(ApiErrorCodec.encode(error), scope);
         const text = JSON.stringify(visible as DtoValue);
         return {
@@ -164,6 +204,38 @@ export class WpMcpErrorTranslator {
     /** The `_meta` every tools/call result carries so a user can quote its requestId. */
     resultMeta(requestId: string): Record<string, string> {
         return { [MCP_REQUEST_ID_META_KEY]: requestId };
+    }
+
+    /**
+     * The app's first refusal. A translator that THROWS must not replace the failure being reported:
+     * the throw is reported through the same boundary as its own implementation failure and the
+     * ORIGINAL error still renders through the webpieces default, so the model still gets a reply
+     * carrying the requestId.
+     */
+    private appToolResult(thrown: Error, scope: McpFailureScope): CallToolResult | undefined {
+        if (!this.appTranslators) return undefined;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an app translator's own bug must not replace the failure it was asked to render
+        try {
+            return this.appTranslators.toToolResult(thrown, scope);
+        } catch (err: unknown) {
+            const error = toError(err);
+            const failure = new ApiImplementationError(
+                'Application McpErrorTranslators.toToolResult threw; rendering the webpieces default.',
+                error,
+            );
+            this.boundary.logOperatorDetail(failure, scope.describe());
+            return undefined;
+        }
+    }
+
+    /**
+     * webpieces fills `_meta` only when the app left it off, keeping the README's "every reply
+     * carries the requestId" promise a DEFAULT rather than a restriction: an app that set `_meta`
+     * keeps it byte-for-byte.
+     */
+    private withDefaultMeta(result: CallToolResult, requestId: string): CallToolResult {
+        if (result._meta !== undefined) return result;
+        return { ...result, _meta: this.resultMeta(requestId) };
     }
 
     private modelVisible(payload: ApiErrorPayload, scope: McpFailureScope): ModelVisibleToolError {

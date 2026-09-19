@@ -124,16 +124,15 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         router.addRoutes(PassageApi, PassageController);
         authority = new TestTokenAuthority();
         bridge = new WpMcpServer(
-            new WpMcpServerConfig(
-                'boundary-server',
-                '1.0.0',
-                'https://api.example.test/mcp',
-                authority,
-                jwtHook,
-                (credential: VerifiedMcpCredential) => credential.subject,
-                ['https://login.example.test'],
-                ['tools'],
-            ),
+            new WpMcpServerConfig<string, string>()
+                .setName('boundary-server')
+                .setVersion('1.0.0')
+                .setResource('https://api.example.test/mcp')
+                .setAccessTokenAuthority(authority)
+                .setEndpointJwtAuthority(jwtHook)
+                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationServers(['https://login.example.test'])
+                .setRequiredScopes(['tools']),
         );
         const app: Express = express();
         bridge.bind(

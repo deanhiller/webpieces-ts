@@ -117,16 +117,15 @@ describe('WpMcpServer modern HTTP bridge', () => {
     });
 
     function serverConfig(): WpMcpServerConfig<string, string> {
-        return new WpMcpServerConfig(
-            'test-server',
-            '1.0.0',
-            'https://api.example.test/mcp',
-            authority,
-            jwtHook,
-            (credential: VerifiedMcpCredential) => credential.subject,
-            ['https://login.example.test'],
-            ['tools'],
-        );
+        return new WpMcpServerConfig<string, string>()
+            .setName('test-server')
+            .setVersion('1.0.0')
+            .setResource('https://api.example.test/mcp')
+            .setAccessTokenAuthority(authority)
+            .setEndpointJwtAuthority(jwtHook)
+            .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+            .setAuthorizationServers(['https://login.example.test'])
+            .setRequiredScopes(['tools']);
     }
 
     async function bindTestBridge(

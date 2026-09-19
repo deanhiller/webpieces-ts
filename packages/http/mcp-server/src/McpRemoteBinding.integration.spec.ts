@@ -195,16 +195,15 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             new RecordingOidcMinter(new Error('SECRET-oidc-metadata-server-down')),
         );
         gateway = new WpMcpServer(
-            new WpMcpServerConfig(
-                'gateway',
-                '1.0.0',
-                'https://gateway.example.test/mcp',
-                new TestTokenAuthority(),
-                jwtHook,
-                (credential: VerifiedMcpCredential) => credential.subject,
-                ['https://login.example.test'],
-                ['tools'],
-            ),
+            new WpMcpServerConfig<string, string>()
+                .setName('gateway')
+                .setVersion('1.0.0')
+                .setResource('https://gateway.example.test/mcp')
+                .setAccessTokenAuthority(new TestTokenAuthority())
+                .setEndpointJwtAuthority(jwtHook)
+                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationServers(['https://login.example.test'])
+                .setRequiredScopes(['tools']),
         );
         const gatewayApp: Express = express();
         gateway.bind(
