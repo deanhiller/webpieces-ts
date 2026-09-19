@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -7,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RuleFailError } from './rule-fail-error';
 import { shouldSkipRule, SkipRuleResult } from './skip-rule';
 import { toError } from './to-error';
+import { specTempDirs } from './spec-temp-dirs';
 
 // What `git rev-parse --abbrev-ref HEAD` reports. "HEAD" is what a real detached CI checkout of
 // refs/pull/<N>/merge returns — the exact condition this suite pins.
@@ -118,7 +118,7 @@ describe('shouldSkipRule refuses to honor a hatch on a fork pull request', () =>
         process.env.GITHUB_HEAD_REF = HATCH;
         process.env.GITHUB_REPOSITORY = 'ctoteachings/monorepo';
         process.env.GITHUB_EVENT_NAME = 'pull_request';
-        eventPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-event-')), 'event.json');
+        eventPath = path.join(specTempDirs.make('wp-event-'), 'event.json');
         process.env.GITHUB_EVENT_PATH = eventPath;
     });
 

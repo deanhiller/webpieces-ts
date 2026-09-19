@@ -1,8 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { toError } from '@webpieces/rules-config';
+import { RepoScratchDirs, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
@@ -65,6 +64,8 @@ export class GeneratedArtifactRegistry {
     // Resolved once per process: the graph does not change while one PR-gate command runs.
     private cached: GeneratedArtifacts | null = null;
 
+    constructor(private readonly scratchDirs: RepoScratchDirs) {}
+
     /** The declared build outputs for this repo, from nx when readable and the fallback table otherwise. */
     resolve(repoRoot: string): GeneratedArtifacts {
         if (this.cached !== null) return this.cached;
@@ -88,7 +89,7 @@ export class GeneratedArtifactRegistry {
     private readNxOutputs(repoRoot: string): string[] | null {
         const nxBin = path.join(repoRoot, 'node_modules', '.bin', 'nx');
         if (!fs.existsSync(nxBin)) return null;
-        const outFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nxgraph-')), 'graph.json');
+        const outFile = path.join(this.scratchDirs.make(repoRoot, 'wp-nxgraph-'), 'graph.json');
         const run = spawnSync(nxBin, ['graph', '--file', outFile], { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' });
         if (run.status !== 0 || !fs.existsSync(outFile)) return null;
         return this.parseGraph(outFile);

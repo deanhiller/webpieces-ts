@@ -1,12 +1,12 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { isBrokenTreeError, recoveryNotice } from './install-entry';
 import { renderShim, shimPath, healShim, findShimRoot, RECOVERY_CMD } from './shim';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function mktmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-install-'));
+    return specTempDirs.make('wp-install-');
 }
 
 // Stage a repo whose committed shim is STALE (an old fail-open body), which is exactly the state a

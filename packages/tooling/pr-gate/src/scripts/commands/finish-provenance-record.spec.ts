@@ -1,11 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
-    ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING,
-} from '@webpieces/rules-config';
+    ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 
@@ -35,7 +33,7 @@ afterEach(() => {
 
 // A ~/.claude holding the main session transcript and one subagent run of `agentType` on `branch`.
 function fakeHarness(sessionId: string, agentType: string, branch: string): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-home-'));
+    const home = specTempDirs.make('wp-fin-home-');
     const projects = path.join(home, '.claude', 'projects', '-Slug');
     const subagents = path.join(projects, sessionId, 'subagents');
     fs.mkdirSync(subagents, { recursive: true });
@@ -77,7 +75,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
     it('writes the record BEFORE refusing for a reviewer that never ran', () => {
         process.env['HOME'] = fakeHarness('sess-f1', 'some-other-agent', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f1';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         expect(() => enforce(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]))
             .toThrow(/: envvars/);
@@ -91,7 +89,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
     it('links each reviewer that DID run to its own transcript', () => {
         process.env['HOME'] = fakeHarness('sess-f2', 'envvars-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f2';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', agent('envvars-reviewer'), 'docs/env.md', [])]);
 
@@ -110,7 +108,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
     it('records the session even for a repo with no checklists at all', () => {
         process.env['HOME'] = fakeHarness('sess-f3', 'unused', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f3';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         enforce(repoRoot, []);
 
@@ -136,7 +134,7 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
     it('passes when reviewerAgents lets one run cover both checklists, and records a row per checklist', () => {
         process.env['HOME'] = fakeHarness('sess-g1', 'webpieces-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g1';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         enforcerUnderTest().enforce(shared(1), 'dean/feat', repoRoot, configWith(1));
 
@@ -154,7 +152,7 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
     it('credits one run for every checklist even at a cap that would have allowed one each', () => {
         process.env['HOME'] = fakeHarness('sess-g2', 'webpieces-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g2';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         expect(enforcerUnderTest().enforce(shared(2), 'dean/feat', repoRoot, configWith(2)).verified).toBe(true);
     });
@@ -199,7 +197,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
     it('never says "spawn each as its OWN subagent" for a checklist whose verdict already exists', () => {
         process.env['HOME'] = unattributableHarness('sess-u1', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u1';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
         const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
@@ -213,7 +211,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
     it('still says "spawn each as its OWN subagent" when there is no verdict file — that one really did not run', () => {
         process.env['HOME'] = unattributableHarness('sess-u2', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u2';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
         expect(message).toMatch(/no reviewer subagent ran on this branch/);
@@ -225,7 +223,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
     it('counts CHECKLISTS at fault, not message paragraphs', () => {
         process.env['HOME'] = unattributableHarness('sess-u3', 'nobody');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u3';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         const message = refusalFor(repoRoot, [
             new RequiredChecklist('envvars', agent('envvars-reviewer'), '', []),
@@ -239,7 +237,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
     it('splits a mixed round so neither checklist gets the other one’s instruction', () => {
         process.env['HOME'] = unattributableHarness('sess-u4', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u4';
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
         const message = refusalFor(repoRoot, [
@@ -270,7 +268,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
         );
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         expect(() => enforcer.enforce(
             [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])], 'dean/feat', repoRoot, new PrGateConfig()))
@@ -287,7 +285,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
         );
-        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fin-repo-'));
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         expect(() => enforcer.enforce([], 'dean/feat', repoRoot, new PrGateConfig())).toThrow(/^1 checklist\(s\) failed/);
     });

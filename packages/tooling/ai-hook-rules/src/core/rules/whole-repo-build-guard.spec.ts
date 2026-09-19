@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 // The guard shells out ONLY to expand `$(git …)` inside the configured build command. Pin it so the
@@ -20,7 +19,7 @@ vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>
     };
 });
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, InformAiError, specTempDirs } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 
@@ -353,7 +352,7 @@ describe('whole-repo-build-guard honours the machine-local opt-in', () => {
      * read — let alone write — the developer's real ~/.webpieces/config.json.
      */
     it('is OFF end-to-end for a machine with NO ~/.webpieces/config.json, through the real loader', () => {
-        const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-home-'));
+        const tmpHome = specTempDirs.make('wp-guard-home-');
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the temp HOME is removed either way
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {

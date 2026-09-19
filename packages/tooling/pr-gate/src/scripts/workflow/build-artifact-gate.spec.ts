@@ -1,9 +1,8 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { BuildsLog, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
+import { BuildsLog, DotWebpieces, RepoRootFinder, toError, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
 import { BuildAffected } from './build-affected';
 import { BuildGateLog } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -20,7 +19,7 @@ const KNOWN = new GeneratedArtifacts(
 );
 
 function newGate(): BuildArtifactGate {
-    const registry = new GeneratedArtifactRegistry();
+    const registry = new GeneratedArtifactRegistry(new RepoScratchDirs());
     registry.seed(KNOWN);
     return new BuildArtifactGate(
         new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, buildAffected());
@@ -73,7 +72,7 @@ function gateMessage(dir: string): string {
 let repo = '';
 
 function initRepo(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-artifactgate-'));
+    const dir = specTempDirs.make('wp-artifactgate-');
     const run = (args: string): void => { execSync(`git ${args}`, { cwd: dir, stdio: 'ignore' }); };
     run('init -q');
     run('config core.hooksPath /dev/null');

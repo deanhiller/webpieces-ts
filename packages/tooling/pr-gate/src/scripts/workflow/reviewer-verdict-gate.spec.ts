@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER,
-    ReviewerAgentPolicy, ReviewJsonService, toError,
-} from '@webpieces/rules-config';
+    ReviewerAgentPolicy, ReviewJsonService, toError, specTempDirs } from '@webpieces/rules-config';
 import { ChecklistRoster } from './checklist-detector';
 import { ChecklistScan } from './checklist-scanner';
 import { ReviewerVerdictGate } from './reviewer-verdict-gate';
@@ -22,7 +20,7 @@ const DB = new RequiredChecklist('db-reviewer', REVIEWER, '', ['db/001.sql'], ['
 const OPS = new RequiredChecklist('ops-reviewer', REVIEWER, '', ['Dockerfile'], ['**/Dockerfile']);
 
 function reviewDir(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-verdict-'));
+    return specTempDirs.make('wp-verdict-');
 }
 
 function reviewPathIn(dir: string): string {

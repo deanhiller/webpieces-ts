@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
 import { spawnerIdentity } from './sync-main';
-import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
+import { DEFAULT_HANG_TIMEOUT_MINUTES, specTempDirs } from '@webpieces/rules-config';
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.
@@ -37,7 +36,7 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
     let root: string;
 
     beforeEach(() => {
-        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-refresh-'));
+        root = specTempDirs.make('wp-refresh-');
         resetMainSyncRefreshLatchForTest();
     });
 

@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
-import { ExcludePaths, MainSyncStatus, BranchStateGuardConfig, writeMainSyncStatus } from '@webpieces/rules-config';
+import { ExcludePaths, MainSyncStatus, BranchStateGuardConfig, writeMainSyncStatus, specTempDirs } from '@webpieces/rules-config';
 
 import type { FileContext, Rule } from './types';
 
@@ -43,7 +43,7 @@ beforeAll((): void => {
     // `/private/var/folders/...`, and git answers in resolved paths — so an unresolved fixture root
     // compares unequal to every path the code under test produces, and the assertions would be about
     // macOS's `/var` symlink rather than about tree identity.
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-851-')));
+    root = specTempDirs.makeReal('wp-851-');
     primary = path.join(root, 'primary');
     fs.mkdirSync(primary);
 

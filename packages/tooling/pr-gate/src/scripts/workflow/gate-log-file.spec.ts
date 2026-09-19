@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmp = '';
 let primary = '';
@@ -20,7 +20,7 @@ function git(cwd: string, args: string): void {
  * agents in N worktrees never write one another's log, and that a reaped worktree's history survives.
  */
 beforeEach(() => {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-gatelog-')));
+    tmp = specTempDirs.makeReal('wp-gatelog-');
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-feature');
     fs.mkdirSync(primary, { recursive: true });

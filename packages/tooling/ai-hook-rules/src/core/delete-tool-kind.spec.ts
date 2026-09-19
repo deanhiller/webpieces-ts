@@ -7,6 +7,7 @@ import * as nodePath from 'path';
 import { migrate } from '../bin/setup-config';
 import { run } from './runner';
 import { BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * `ToolKind` gained 'Delete' for Codex's `*** Delete File:` directive, and EVERY existing rule defaults
@@ -22,7 +23,7 @@ function gitIn(dir: string, ...args: readonly string[]): void {
 }
 
 beforeAll(() => {
-    root = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-delete-kind-')));
+    root = specTempDirs.makeReal('wp-delete-kind-');
     fs.mkdirSync(root, { recursive: true });
     gitIn(root, 'init', '-b', 'main');
     // Temp repos must not run this machine's global hooks.

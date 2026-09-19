@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { MainSyncStatusService } from './main-sync-status';
 import { MAIN_SYNC_STATUS_VERSION } from './main-sync-file';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * The refresher is single-flight across the whole repo — one `.git`, one `origin/main`, one lock — but
@@ -40,7 +40,7 @@ function stubGh(binDir: string, logFile: string): void {
 // A primary clone on `deanhiller/a` plus a linked worktree on `deanhiller/b`. NOTHING is on `main`,
 // which is the shape that proves the synthesized main entry is needed.
 function makeRepo(): void {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'msmb-')));
+    tmp = specTempDirs.makeReal('msmb-');
     primary = path.join(tmp, 'primary');
     treeB = path.join(tmp, 'tree-b');
     ghLog = path.join(tmp, 'gh-calls.log');

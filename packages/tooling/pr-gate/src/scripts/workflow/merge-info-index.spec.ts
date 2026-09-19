@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { ArchiveRecord, MergeInfoIndex, MergeInfoIndexFile } from './merge-info-index';
 import { MergeState } from './merge-state';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const mergeState = new MergeState();
 const index = new MergeInfoIndex(mergeState);
 let repo = '';
 
 beforeEach(() => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-index-'));
+    repo = specTempDirs.make('wp-index-');
 });
 
 // Stage merge slot `n` for a feature: clean merges get hashes only, 3-point merges also get conflicts.md.

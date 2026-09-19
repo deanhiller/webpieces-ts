@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { shimStaleRecoveryDecision } from './hook-core';
 import { INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD } from '../bin/shim';
 import { CONFIG_FILENAME } from '../core/load-config';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * shimStaleRecoveryDecision — what a STALE committed shim lets through. The carve-out is the whole
@@ -44,7 +44,7 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
     it('passes an edit to a tree ROOT\'s pnpm-workspace.yaml / package.json through (the version pin)', () => {
         // A REAL root, because the entry is scoped by the sibling webpieces.config.json — the one test
         // that admits the main clone AND every worktree while excluding every project manifest.
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-shim-stale-'));
+        const root = specTempDirs.make('wp-shim-stale-');
         fs.writeFileSync(path.join(root, CONFIG_FILENAME), '{}\n');
         for (const tool of ['Write', 'Edit', 'MultiEdit']) {
             for (const name of ['pnpm-workspace.yaml', 'package.json']) {

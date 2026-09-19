@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/rules-config';
+import { DotWebpieces, WORKTREE_STATE_DIR, specTempDirs } from '@webpieces/rules-config';
 
 import {
     renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, ShimLogVerdict, RESOLVE_LOG_DIR_SH,
@@ -36,7 +36,7 @@ export class TwoTreeRepo {
     private readonly tmp: string;
 
     constructor(worktreeDirName: string) {
-        this.tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-shimlog-')));
+        this.tmp = specTempDirs.makeReal('wp-shimlog-');
         this.primary = path.join(this.tmp, 'primary');
         this.worktree = path.join(this.tmp, worktreeDirName);
         fs.mkdirSync(this.primary, { recursive: true });
@@ -116,7 +116,7 @@ describe('sh ↔ TS twin: the worktree name and the state dir must be the SAME a
     });
 
     it('fails SOFT to <cwd>/.webpieces/logs when the directory is not a git repo at all', () => {
-        const plain = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nogit-')));
+        const plain = specTempDirs.makeReal('wp-nogit-');
         const answer = shResolve(plain);
         expect(answer.tree).toBe('primary');
         expect(answer.logDir).toBe(path.join(plain, '.webpieces', 'logs'));

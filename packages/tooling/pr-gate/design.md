@@ -87,6 +87,7 @@ graph TD
     ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
+    RepoScratchDirs["RepoScratchDirs"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
@@ -103,6 +104,7 @@ graph TD
     StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
     SyncMainCommand["SyncMainCommand"]
+    TmpScratchSweeper["TmpScratchSweeper"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeLockVerdicts["WorktreeLockVerdicts"]
@@ -149,6 +151,7 @@ graph TD
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
+    CleanTmp --> TmpScratchSweeper
     CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchMutationLog
     CleanupCommand --> BranchReaper
@@ -202,6 +205,7 @@ graph TD
     GatherInfo --> GitExec
     GatherInfo --> MergeState
     GatherInfo --> RepoRootFinder
+    GeneratedArtifactRegistry --> RepoScratchDirs
     GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
     HomeConfigService --> HomeDocKeys
@@ -217,6 +221,8 @@ graph TD
     LandedTreeResolver --> WorktreeService
     LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
+    MergeBodyTempFile --> RepoRootFinder
+    MergeBodyTempFile --> RepoScratchDirs
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -272,6 +278,7 @@ graph TD
     ReapWorktreeCommand --> WorktreeCleanupSection
     ReapWorktreeCommand --> WorktreeService
     RepoRootFinder --> DotWebpieces
+    RepoScratchDirs --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistInstructionsService

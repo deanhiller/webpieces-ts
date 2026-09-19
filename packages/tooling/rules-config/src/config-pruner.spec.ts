@@ -1,6 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { AtomicFile } from './atomic-file';
@@ -13,6 +12,7 @@ import { loadTemplate } from './load-template';
 import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
 import { toError } from './to-error';
 import { validateWebpiecesConfig } from './validate-config';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * THE INCIDENT THIS FILE PINS DOWN.
@@ -39,7 +39,7 @@ afterEach(() => {
 
 /** A throwaway repo dir holding one webpieces.config.json. Returns the dir. */
 function repoWith(config: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prune-'));
+    const dir = specTempDirs.make('wp-prune-');
     dirs.push(dir);
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), config);
     return dir;
@@ -172,7 +172,7 @@ describe('case 2 — retired key, validator too old to know it (generic fallback
  */
 describe('case 3 — the machine-local file is the one that is wrong', () => {
     function homeError(contents: string): string {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-'));
+        const home = specTempDirs.make('wp-home-');
         dirs.push(home);
         const file = path.join(home, '.webpieces', 'config.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });

@@ -1,6 +1,5 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
@@ -12,7 +11,7 @@ import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { MissingDirectoryGuard } from './missing-directory';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { isGitOrGhCommand, runBash } from './runner';
-import { loadTemplate } from '@webpieces/rules-config';
+import { loadTemplate, specTempDirs } from '@webpieces/rules-config';
 
 import { renderL1Doc } from './l1-doc';
 import { LOCATION_MATRIX_DOC, locationMatrixPointer } from './l1-matrix-doc';
@@ -62,7 +61,7 @@ function label(c: L1Classification): string {
  * path would silently read nothing, come back "in sync", and make every assertion here vacuous.
  */
 function stageSkew(worktreeVersion = '0.4.612'): { main: string; worktree: string } {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-skew-'));
+    const base = specTempDirs.make('wp-skew-');
     const main = path.join(base, 'main');
     const worktree = path.join(base, 'wt');
     for (const dir of [main, worktree]) fs.mkdirSync(dir, { recursive: true });
@@ -423,7 +422,7 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
     }
 
     beforeAll(() => {
-        const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1-e2e-')));
+        const home = specTempDirs.makeReal('wp-l1-e2e-');
         primary = path.join(home, 'primary');
         initRepo(primary);
         agentTree = path.join(primary, '.claude', 'worktrees', 'agent-e2e');
@@ -614,7 +613,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
     }
 
     beforeAll(() => {
-        outer = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1ptr-')));
+        outer = specTempDirs.makeReal('wp-l1ptr-');
         initTempRepo(outer);
         writeGuardConfig(outer);
         matrixPath = path.join(outer, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC);
@@ -638,7 +637,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
     // Lazy: the doc is written on a BLOCK and nowhere else, so an agent that was never blocked never
     // pays for a file it will not read.
     it('writes the matrix only on a block', () => {
-        const clean = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-l1ptr-ok-')));
+        const clean = specTempDirs.makeReal('wp-l1ptr-ok-');
         initTempRepo(clean);
         writeGuardConfig(clean);
         expect(runBash('pnpm build && pnpm test', clean, 'guards', 'claude-code')).toBeNull();

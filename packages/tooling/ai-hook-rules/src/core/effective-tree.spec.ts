@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as nodePath from 'path';
 import { vi, afterEach } from 'vitest';
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs } from '@webpieces/rules-config';
 import { migrate } from '../bin/setup-config';
 import { buildBashContext } from './build-context';
 import { isAllowed } from '../bin/shim';
@@ -67,7 +67,7 @@ let outside: string;
 
 beforeAll(() => {
     // realpathSync so paths match `git rev-parse --show-toplevel` (macOS /var → /private/var).
-    const home = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-tree-')));
+    const home = specTempDirs.makeReal('wp-tree-');
     primary = nodePath.join(home, 'primary');
     initRepo(primary);
     worktree = nodePath.join(home, 'wt-feature');
@@ -388,7 +388,7 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
     let e2eAgentWorktree: string;
 
     beforeAll(() => {
-        const home = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-tree-e2e-')));
+        const home = specTempDirs.makeReal('wp-tree-e2e-');
         e2ePrimary = nodePath.join(home, 'primary');
         initRepo(e2ePrimary);
         writeGuardConfig(e2ePrimary);
@@ -533,7 +533,7 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
      * out its own copy of both — which is the whole reason `governedRoot` is the worktree.
      */
     function stage(worktreeVersion: string): { main: string; resident: string } {
-        const home = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-resident-')));
+        const home = specTempDirs.makeReal('wp-resident-');
         const main = nodePath.join(home, 'primary');
         initRepo(main);
         writeGuardConfig(main);

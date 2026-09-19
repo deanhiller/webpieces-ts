@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy } from '@webpieces/rules-config';
+import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy, specTempDirs } from '@webpieces/rules-config';
 import { ChecklistDetector } from './checklist-detector';
 
 const detector = new ChecklistDetector(new DiffScope());
@@ -118,7 +117,7 @@ describe('ChecklistDetector.detectForRepo (git integration)', () => {
     it('sees non-.ts changes (tsOnly:false) and matches by path', () => {
         delete process.env['NX_BASE'];
         delete process.env['NX_HEAD'];
-        const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-detect-'));
+        const repo = specTempDirs.make('wp-detect-');
         git(repo, 'git init -b main -q');
         git(repo, 'git config core.hooksPath /dev/null');
         git(repo, 'git config user.email t@t.co');

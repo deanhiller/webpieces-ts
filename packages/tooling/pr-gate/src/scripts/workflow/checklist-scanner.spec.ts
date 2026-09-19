@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     ChecklistDefinition, ChecklistOverride, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig,
-    HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, toChecklist,
-} from '@webpieces/rules-config';
+    HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, toChecklist, specTempDirs } from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
@@ -25,7 +23,7 @@ function git(cwd: string, cmd: string): void {
  * tests are precisely about which git plumbing gets invoked — a mock would only re-assert the mock.
  */
 function repoOnBranch(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-scan-'));
+    const dir = specTempDirs.make('wp-scan-');
     git(dir, 'git init -q -b main');
     git(dir, 'git config user.email t@t.co');
     git(dir, 'git config user.name T');
@@ -303,7 +301,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
     });
 
     it("returns '' rather than throwing when neither origin/main nor main resolves", () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nomain-'));
+        const dir = specTempDirs.make('wp-nomain-');
         git(dir, 'git init -q -b other');
         git(dir, 'git config user.email t@t.co');
         git(dir, 'git config user.name T');
@@ -315,7 +313,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
     });
 
     it('a scan with no fork point yields no checklists instead of blowing up', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nomain2-'));
+        const dir = specTempDirs.make('wp-nomain2-');
         git(dir, 'git init -q -b other');
         git(dir, 'git config user.email t@t.co');
         git(dir, 'git config user.name T');
@@ -376,7 +374,7 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
     // The false-all-clear guard. With no fork point NOTHING matches — not even a patternless checklist — so
     // an "all skipped ✅" roll-up would attest to a review that never happened.
     it('flags an unresolvable diff base rather than letting zero matches read as all-clear', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nobase-'));
+        const dir = specTempDirs.make('wp-nobase-');
         git(dir, 'git init -q -b other');
         git(dir, 'git config user.email t@t.co');
         git(dir, 'git config user.name T');

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -19,9 +18,10 @@ import {
     computeMainSyncStatus,
     squashRecoverySteps,
 } from './main-sync-status';
+import { specTempDirs } from './spec-temp-dirs';
 
 function tmpRepoRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'mss-'));
+    return specTempDirs.make('mss-');
 }
 
 describe('main-sync lock state machine', () => {
@@ -226,7 +226,7 @@ function repoTemplate(mainEdits: string[], featureEdits: string[]): string {
     const key = `${mainEdits.join(',')}|${featureEdits.join(',')}`;
     const cached = repoTemplates.get(key);
     if (cached !== undefined) return cached;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-tpl-'));
+    const dir = specTempDirs.make('mss-tpl-');
     buildRepo(dir, mainEdits, featureEdits);
     repoTemplates.set(key, dir);
     templateRoots.push(dir);
@@ -244,7 +244,7 @@ function stageRepo(work: string, mainEdits: string[], featureEdits: string[]): v
 // the developer's gh state, a network round trip. A stub on PATH gives the SAME answer (non-zero =>
 // no PR) instantly, so these tests neither require gh to be installed nor inherit its latency.
 function stubGhOnPath(): string {
-    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-bin-'));
+    const binDir = specTempDirs.make('mss-bin-');
     fs.writeFileSync(path.join(binDir, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
     const previous = process.env['PATH'] ?? '';
     process.env['PATH'] = `${binDir}${path.delimiter}${previous}`;
@@ -268,7 +268,7 @@ describe('computeMainSyncStatus (integration)', () => {
     let work: string;
 
     beforeEach(() => {
-        work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-work-'));
+        work = specTempDirs.make('mss-work-');
     });
 
     afterEach(() => {
@@ -368,8 +368,8 @@ describe('computeMainSyncStatus — must not write .git/FETCH_HEAD', () => {
     let work: string;
 
     beforeEach(() => {
-        origin = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-origin-'));
-        work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-fh-'));
+        origin = specTempDirs.make('mss-origin-');
+        work = specTempDirs.make('mss-fh-');
         fs.rmSync(work, { recursive: true, force: true });  // git init makes it
         buildRepoWithRemote(origin, work);
     });
@@ -418,7 +418,7 @@ describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
     let work: string;
 
     beforeEach(() => {
-        work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-wt-'));
+        work = specTempDirs.make('mss-wt-');
     });
 
     afterEach(() => {

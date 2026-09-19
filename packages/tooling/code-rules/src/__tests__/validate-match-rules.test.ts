@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { MatchRuleConfig } from '@webpieces/rules-config';
+import { MatchRuleConfig, specTempDirs } from '@webpieces/rules-config';
 import { MatchRulesChecker } from '../validate-match-rules';
 
 const checker = new MatchRulesChecker();
 let tmpDir: string;
 
 beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'match-rules-'));
+    tmpDir = specTempDirs.make('match-rules-');
 });
 
 afterEach(() => {

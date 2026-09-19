@@ -1,11 +1,11 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { RepoRootFinder } from './repo-root';
 import { DotWebpieces } from './state-dir';
 import { WorktreeService } from './worktrees';
+import { specTempDirs } from './spec-temp-dirs';
 
 /**
  * TWO named questions, and this file is what stops them being "helpfully" collapsed into one. Real git
@@ -50,7 +50,7 @@ let siblingWorktree: string;
 let nestedClone: string;
 
 beforeAll(() => {
-    const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-identity-')));
+    const home = specTempDirs.makeReal('wp-identity-');
     primary = path.join(home, 'primary');
     initRepo(primary);
     fs.writeFileSync(path.join(primary, 'webpieces.config.json'), '{}');

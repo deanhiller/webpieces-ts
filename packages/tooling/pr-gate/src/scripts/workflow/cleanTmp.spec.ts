@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { AgedTreeSweeper, RepoRootFinder, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder, WEBPIECES_TMP_DIR, specTempDirs, TmpScratchSweeper } from '@webpieces/rules-config';
 import { CleanTmp } from './cleanTmp';
 
 // Pin the repo root to our temp dir so cleanTmp() sweeps a tree we fully control.
@@ -31,11 +30,11 @@ const writeAged = (relPath: string, ageDays: number): string => {
 };
 
 const run = async (): Promise<void> => {
-    await new CleanTmp(new FixedRepoRootFinder(repoRoot), new AgedTreeSweeper()).cleanTmp();
+    await new CleanTmp(new FixedRepoRootFinder(repoRoot), new AgedTreeSweeper(), new TmpScratchSweeper()).cleanTmp();
 };
 
 beforeEach((): void => {
-    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cleantmp-'));
+    repoRoot = specTempDirs.make('wp-cleantmp-');
     tmpBase = path.join(repoRoot, WEBPIECES_TMP_DIR);
     fs.mkdirSync(tmpBase, { recursive: true });
 });
@@ -110,7 +109,7 @@ describe('CleanTmp.cleanTmp — 30-day whole-tree GC', () => {
      * assertion fail rather than quietly resurrect a machine-global directory.
      */
     it('sweeps ONLY {repo}/.webpieces — nothing outside the repo', async (): Promise<void> => {
-        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-cleantmp-outside-'));
+        const outside = specTempDirs.make('wp-cleantmp-outside-');
         const stale = path.join(outside, 'prs', 'github.com', 'acme', 'widgets', '41', 'merge-commit-body.md');
         fs.mkdirSync(path.dirname(stale), { recursive: true });
         fs.writeFileSync(stale, 'x');

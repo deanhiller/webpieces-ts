@@ -1,4 +1,5 @@
-import { expect, vi } from 'vitest';
+import { afterAll, expect, vi } from 'vitest';
+import { specTempDirs } from './packages/tooling/rules-config/src/spec-temp-dirs';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -98,4 +99,30 @@ if (testPath.includes(TOOLING_PATH)) {
     process.env['HOME'] = isolatedHome;
     // Windows' os.homedir() reads USERPROFILE; set both so the isolation is not platform-conditional.
     process.env['USERPROFILE'] = isolatedHome;
+
+    /**
+     * Reap it when this test FILE finishes.
+     *
+     * One isolated `$HOME` per test file per run, and nothing removed it: a measured 64,828
+     * `wp-vitest-home-` husks in one developer's `$TMPDIR`, the largest single contributor to 270,200
+     * abandoned `wp-*` directories there.
+     *
+     * ─── Why `afterAll` and NOT `process.on('exit')`, which was tried first ────────────────────────
+     * This repo runs `pool: 'forks'` (see vitest.config.mts). Vitest KILLS its worker processes rather
+     * than letting them exit, so an `exit` handler never runs. Measured, not reasoned: with the exit
+     * handler in place, a 145-file tooling run left exactly 145 `wp-vitest-home-` directories behind —
+     * a 100% miss. `afterAll` is vitest's own lifecycle and runs inside the worker while it is still
+     * alive, which is the only window that exists here.
+     *
+     * The same call reaps everything `specTempDirs` handed out to this file's specs, so the ~212
+     * migrated fixture call sites need no cleanup line of their own.
+     */
+    afterAll(() => {
+        specTempDirs.reapAll();
+        try {
+            fs.rmSync(isolatedHome, { recursive: true, force: true });
+        } catch {
+            // A scratch dir that will not delete is a leak, not a test failure; never change the exit code.
+        }
+    });
 }

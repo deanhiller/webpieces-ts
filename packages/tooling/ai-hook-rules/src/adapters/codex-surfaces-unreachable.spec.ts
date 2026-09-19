@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { AgentAdapters } from './agent-adapters';
@@ -9,6 +8,7 @@ import { CodexAdapter } from './codex-adapter';
 import { CodexSubagentSharedTreeGuard } from './codex-subagent-guard';
 import { AgentHookEvent, FileOperation } from '../core/agent-event';
 import { NormalizedToolInput } from '../core/types';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * CLAUDE CODE MUST NOT BE ABLE TO REACH THE CODEX SURFACES.
@@ -22,7 +22,7 @@ let root = '';
 let file = '';
 
 beforeAll(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-codex-gate-')));
+    root = specTempDirs.makeReal('wp-codex-gate-');
     file = path.join(root, 'a.ts');
     fs.writeFileSync(file, 'a\n');
 });

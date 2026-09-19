@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME, specTempDirs } from '@webpieces/rules-config';
 import { RuleGate } from './rule-gate';
 
 // A webpieces.config.json that VALIDATES: every built-in present in its correct section (all OFF),
@@ -22,7 +21,7 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
         // required turnOffRuleWhileOnBranch (and autoReapMergedBranches) from the base.
         target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
     }
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-rule-gate-'));
+    const dir = specTempDirs.make('wp-rule-gate-');
     fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
         rules,
         hookGuards,

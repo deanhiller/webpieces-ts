@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { HookMode } from '../core/types';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * THE WIRE BYTES the golden tests drive, and the throwaway repo they are judged against.
@@ -148,7 +149,7 @@ export class GoldenRepoBuilder {
     }
 
     build(fixture: GoldenFixture): PreparedFixture {
-        const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-hook-golden-')));
+        const root = specTempDirs.makeReal('wp-hook-golden-');
         const repo = path.join(root, 'repo');
         fs.mkdirSync(repo);
         this.git(repo, 'init -q -b main');

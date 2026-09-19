@@ -1,8 +1,7 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
-import { matchesAnyGlob } from '@webpieces/rules-config';
+import { matchesAnyGlob, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
 import {
     GeneratedArtifactRegistry, GeneratedArtifacts,
     ARTIFACT_SOURCE_FALLBACK, ARTIFACT_SOURCE_NX, FALLBACK_GENERATED_PATHS,
@@ -10,7 +9,7 @@ import {
 
 // A repo root with NO node_modules/.bin/nx — the "nx unavailable" path.
 function emptyRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-registry-'));
+    return specTempDirs.make('wp-registry-');
 }
 
 /**
@@ -57,19 +56,19 @@ const GRAPH_FIXTURE = JSON.stringify({
 
 describe('GeneratedArtifactRegistry', () => {
     it('falls back to the built-in table when nx is not installed', () => {
-        const resolved = new GeneratedArtifactRegistry().resolve(emptyRoot());
+        const resolved = new GeneratedArtifactRegistry(new RepoScratchDirs()).resolve(emptyRoot());
         expect(resolved.source).toBe(ARTIFACT_SOURCE_FALLBACK);
         expect(resolved.paths).toEqual(FALLBACK_GENERATED_PATHS.slice());
     });
 
     it('caches — a second resolve does not re-shell out', () => {
-        const registry = new GeneratedArtifactRegistry();
+        const registry = new GeneratedArtifactRegistry(new RepoScratchDirs());
         const root = emptyRoot();
         expect(registry.resolve(root)).toBe(registry.resolve(root));
     });
 
     it('reads every target\'s `outputs` from the nx graph, expanding {projectRoot} and {workspaceRoot}', () => {
-        const resolved = new GeneratedArtifactRegistry().resolve(rootWithStubNx(GRAPH_FIXTURE));
+        const resolved = new GeneratedArtifactRegistry(new RepoScratchDirs()).resolve(rootWithStubNx(GRAPH_FIXTURE));
         expect(resolved.source).toBe(ARTIFACT_SOURCE_NX);
         expect(resolved.paths).toEqual([
             'architecture/dependencies.json',
@@ -79,17 +78,17 @@ describe('GeneratedArtifactRegistry', () => {
     });
 
     it('drops outputs still holding a per-invocation token ({options.*} — those are dist/, gitignored)', () => {
-        const resolved = new GeneratedArtifactRegistry().resolve(rootWithStubNx(GRAPH_FIXTURE));
+        const resolved = new GeneratedArtifactRegistry(new RepoScratchDirs()).resolve(rootWithStubNx(GRAPH_FIXTURE));
         expect(resolved.paths.some((p: string): boolean => p.includes('{'))).toBe(false);
     });
 
     it('falls back rather than throwing when the graph dump is corrupt', () => {
-        const resolved = new GeneratedArtifactRegistry().resolve(rootWithStubNx('not json at all'));
+        const resolved = new GeneratedArtifactRegistry(new RepoScratchDirs()).resolve(rootWithStubNx('not json at all'));
         expect(resolved.source).toBe(ARTIFACT_SOURCE_FALLBACK);
     });
 
     it('seed() replaces the resolved set (the spec seam)', () => {
-        const registry = new GeneratedArtifactRegistry();
+        const registry = new GeneratedArtifactRegistry(new RepoScratchDirs());
         registry.seed(new GeneratedArtifacts(['x/y.json'], ARTIFACT_SOURCE_NX));
         expect(registry.resolve(emptyRoot()).paths).toEqual(['x/y.json']);
     });

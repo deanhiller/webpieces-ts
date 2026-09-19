@@ -1,9 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
 
 import { PushDevCommand, PushDevOptions } from './push-dev-command';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
@@ -22,7 +21,7 @@ import { GitStatusParser } from '../workflow/git-status';
 
 // A real (empty) directory, because every wp-* command opens by refreshing the AI-facing workflow doc
 // into `<repoRoot>/.webpieces/instruct-ai/` — a fictional path would fail before any decision is made.
-const REPO = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-push-dev-spec-'));
+const REPO = specTempDirs.make('wp-push-dev-spec-');
 const MY_COPY = 'dev-include/dean/ONE-2275';
 
 class Harness {

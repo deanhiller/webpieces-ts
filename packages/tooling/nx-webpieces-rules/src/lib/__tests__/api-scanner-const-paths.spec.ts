@@ -27,6 +27,7 @@ import {
     MissingBasePathError,
     UnresolvedEndpointPathError,
 } from '../api-usage/api-contract-errors';
+import { specTempDirs } from '@webpieces/rules-config';
 import { ApiMethodMeta } from '../api-usage/api-relations';
 
 let root = '';
@@ -297,7 +298,7 @@ function methodNames(methods: ApiMethodMeta[]): string[] {
 
 // File-level so BOTH describe blocks below share the one mini-workspace.
 beforeAll(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-api-const-')));
+    root = specTempDirs.makeReal('wp-api-const-');
     writeApiLib();
     writeCrossModuleApiLib();
     writeMultiOffenderApiLib();

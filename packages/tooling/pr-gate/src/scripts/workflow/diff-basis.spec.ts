@@ -1,12 +1,12 @@
 import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { BranchNaming } from './branch-naming';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { ForkPoint } from './git-findForkPoint';
 import { GitStatusParser } from './git-status';
+import { specTempDirs } from '@webpieces/rules-config';
 
 const dirs: string[] = [];
 
@@ -32,7 +32,7 @@ function git(cwd: string, cmd: string): void {
 let template = '';
 
 beforeAll(() => {
-    template = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-tpl-'));
+    template = specTempDirs.make('wp-basis-tpl-');
     git(template, 'git init -q -b main');
     // core.hooksPath=/dev/null: this developer has a GLOBAL core.hooksPath, so every `git commit` in a
     // throwaway repo fires their real hooks — measured at 460ms vs 13ms, 35x, and almost all of it spent
@@ -50,7 +50,7 @@ afterAll(() => {
 });
 
 function repoOnFeatureBranch(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-'));
+    const dir = specTempDirs.make('wp-basis-');
     dirs.push(dir);
     fs.cpSync(template, dir, { recursive: true });
     return dir;
@@ -133,7 +133,7 @@ describe('DiffBasisResolver — dirtiness and degenerate repos', () => {
 
     // No fork point is a VALUE, never an exception — wp-review-upsert-pr must still be able to report.
     it('reports an unresolvable base rather than throwing', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-nomain-'));
+        const dir = specTempDirs.make('wp-basis-nomain-');
         dirs.push(dir);
         git(dir, 'git init -q -b solo');
         git(dir, 'git config core.hooksPath /dev/null');

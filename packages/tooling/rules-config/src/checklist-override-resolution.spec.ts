@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { ChecklistOverride, ChecklistResult, RequiredChecklist, ReviewJsonService } from './review-json';
 import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
+import { specTempDirs } from './spec-temp-dirs';
 
 const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 
@@ -28,7 +28,7 @@ const VALID_REVIEW = JSON.stringify({
 // review.json + one verdict + (optionally) the human's authorization, in one dir. The authorization is a
 // SEPARATE file because it is a different act by a different writer — see ChecklistOverride.
 function tmpDirWith(id: string, verdict: unknown, override: unknown = null): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-override-res-'));
+    const dir = specTempDirs.make('wp-override-res-');
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, VALID_REVIEW);
     fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(verdict as object) }));

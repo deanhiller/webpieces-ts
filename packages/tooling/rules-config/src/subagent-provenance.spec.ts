@@ -7,6 +7,7 @@ import {
     SubagentProvenanceService, ReviewerContext, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ExpectedReviewer, ProvenanceResult, ReviewerEvidence,
 } from './subagent-provenance';
+import { specTempDirs } from './spec-temp-dirs';
 
 const svc = new SubagentProvenanceService();
 
@@ -38,7 +39,7 @@ afterEach(() => {
 
 // Build a fake ~/.claude/projects/<slug>/<sessionId>/subagents dir with one agent's artifacts.
 function fakeHarness(sessionId: string, agentType: string, branch: string, spawnDepth = 1, isSidechain = true): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-'));
+    const home = specTempDirs.make('wp-home-');
     const dir = path.join(home, '.claude', 'projects', '-Some-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType, spawnDepth }));
@@ -84,7 +85,7 @@ describe('SubagentProvenanceService', () => {
     });
 
     it('is MISSING when the session has no subagents dir at all', () => {
-        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-empty-'));
+        process.env['HOME'] = specTempDirs.make('wp-home-empty-');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-none';
         expect(verifyDistinct(svc, ['checklist-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_MISSING);
     });
@@ -92,7 +93,7 @@ describe('SubagentProvenanceService', () => {
 
 // A harness dir with N distinct agents (each its own agentType + agentId) on one branch.
 function fakeHarnessMulti(sessionId: string, agentTypes: string[], branch: string): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-multi-'));
+    const home = specTempDirs.make('wp-home-multi-');
     const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     agentTypes.forEach((t: string, i: number): void => {
@@ -155,7 +156,7 @@ function clone(): string {
 // A real git repo (a PRIMARY CLONE) on `branch`. Real rather than mocked because the whole point of the
 // fix is that we ask GIT, not the transcript.
 function cloneOnBranch(branch: string): string {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-repo-'));
+    const repo = specTempDirs.make('wp-repo-');
     git(repo, 'init', '-q', '-b', branch);
     git(repo, 'config', 'user.email', 't@t.t');
     git(repo, 'config', 'user.name', 'T');
@@ -168,7 +169,7 @@ function cloneOnBranch(branch: string): string {
 // A LINKED WORKTREE of the shared clone, on a new branch — the shape a reviewer subagent actually runs
 // in, and the only cwd shape the fix will derive a branch from.
 function worktreeOn(branch: string): string {
-    const wt = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-wt-')), 'tree');
+    const wt = path.join(specTempDirs.make('wp-wt-'), 'tree');
     git(clone(), 'worktree', 'add', '-q', '-b', branch, wt);
     return wt;
 }
@@ -181,7 +182,7 @@ function git(cwd: string, ...args: string[]): void {
 // One agent whose record-0 carries an explicit `gitBranch` AND an explicit `cwd` — the two fields the
 // harness writes and which were observed to CONTRADICT each other.
 function harnessWithCwd(sessionId: string, agentType: string, gitBranch: string, cwd: string): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-cwd-'));
+    const home = specTempDirs.make('wp-home-cwd-');
     const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType, spawnDepth: 2 }));
@@ -229,13 +230,13 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
     });
 
     it('still BLOCKS when gitBranch is wrong and the cwd is not a git repo at all', () => {
-        const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-not-a-repo-'));
+        const notARepo = specTempDirs.make('wp-not-a-repo-');
         expect(statusFor('sess-c5', 'checklist-reviewer', 'worktree-agent-aaaa', notARepo, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
 
     it('still BLOCKS when gitBranch is wrong and record-0 carries no cwd to fall back on', () => {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-nocwd-'));
+        const home = specTempDirs.make('wp-home-nocwd-');
         const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-c6', 'subagents');
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'r', spawnDepth: 1 }));
@@ -379,7 +380,7 @@ describe('SubagentProvenanceService.evidenceFor — which model actually reviewe
 // One reviewer stamped with the PRIMARY CLONE's cwd and a non-matching gitBranch — the unfixable stamp —
 // whose transcript names `touched` in a tool input.
 function clonesStampWithTouch(sessionId: string, agentType: string, touched: string): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-touch-'));
+    const home = specTempDirs.make('wp-home-touch-');
     const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType, spawnDepth: 1 }));
@@ -412,7 +413,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
     // A `cat > <path>` heredoc names the path just as a Write does. The signal is that the path was NAMED,
     // not which tool named it — inputs are matched as JSON-stringified substrings for exactly this reason.
     it('credits a verdict written through Bash, not only through the Write tool', () => {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-bash-'));
+        const home = specTempDirs.make('wp-home-bash-');
         const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-t2', 'subagents');
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'checklist-reviewer', spawnDepth: 1 }));
@@ -457,7 +458,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
     // Independence is unchanged: the main loop's own transcript is not a sidechain, so touching the verdict
     // path from the coding agent still cannot self-certify.
     it('does NOT credit the main loop even when it names the verdict path', () => {
-        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-main-'));
+        const home = specTempDirs.make('wp-home-main-');
         const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-t7', 'subagents');
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'checklist-reviewer', spawnDepth: 1 }));
@@ -492,7 +493,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
 
 // N runs of ONE agent type on one branch; run i names `touched[i]` in a tool input ('' = names nothing).
 function sharedTypeHarness(sessionId: string, touched: readonly string[], branch: string): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-shared-'));
+    const home = specTempDirs.make('wp-home-shared-');
     const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
     fs.mkdirSync(dir, { recursive: true });
     touched.forEach((file: string, i: number): void => {
@@ -546,7 +547,7 @@ describe('SubagentProvenanceService.verifyReviewers — one shared reviewer agen
     });
 
     it('still refuses when no run of the type exists', () => {
-        process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-none-'));
+        process.env['HOME'] = specTempDirs.make('wp-home-none-');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-s4';
         expect(svc.verifyReviewers(three, new ReviewerContext('dean/feat')).missing).toEqual(['a', 'b', 'c']);
     });

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -9,6 +8,7 @@ import {
     MainSyncStatus,
     MainSyncStatusFile,
 } from './main-sync-file';
+import { specTempDirs } from './spec-temp-dirs';
 
 // The cache used to be ONE status for ONE branch, shared by every worktree of the repo — so at most
 // one worktree's guards were ever armed and the rest logged `stale-cross-branch-cache (fail-open)`.
@@ -27,7 +27,7 @@ function status(branch: string, merged: boolean = false): MainSyncStatus {
 }
 
 beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'msf-'));
+    dir = specTempDirs.make('msf-');
     file = path.join(dir, 'main-sync-status.json');
 });
 

@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig } from '@webpieces/rules-config';
+import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig, specTempDirs } from '@webpieces/rules-config';
 
 import { findViolations, exemptPathsFor, violationsError } from '../validate-modified-files';
 
@@ -42,7 +41,7 @@ function offenders(files: string[], cfg: MaxFileLinesConfig): string[] {
 }
 
 beforeAll((): void => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-modified-files-'));
+    root = specTempDirs.make('wp-modified-files-');
     // 43,000 lines — the real size class of the codegen output that started this.
     write(GENERATED, 43_000);
     write(DOT_GENERATED, 43_000);

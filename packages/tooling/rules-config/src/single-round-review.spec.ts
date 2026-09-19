@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import {
     HOME_KEY_SINGLE_ROUND_REVIEW, HomeConfigService, ReviewJsonService,
     SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, reviewJsonSchemaHint,
 } from './index';
+import { specTempDirs } from './spec-temp-dirs';
 
 const dirs: string[] = [];
 
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function homeWith(value: unknown): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-single-round-home-'));
+    const home = specTempDirs.make('wp-single-round-home-');
     dirs.push(home);
     fs.mkdirSync(path.join(home, '.webpieces'));
     fs.writeFileSync(path.join(home, '.webpieces', 'config.json'), JSON.stringify({
@@ -24,7 +24,7 @@ function homeWith(value: unknown): string {
 }
 
 function reviewWith(instructions?: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-single-round-review-'));
+    const dir = specTempDirs.make('wp-single-round-review-');
     dirs.push(dir);
     const file = path.join(dir, 'review.json');
     fs.writeFileSync(file, JSON.stringify({
@@ -37,7 +37,7 @@ function reviewWith(instructions?: string): string {
 
 describe('singleRoundReview home config', () => {
     it('is false when absent or explicitly false, and true only for the top-level opt-in', () => {
-        const absent = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-single-round-absent-'));
+        const absent = specTempDirs.make('wp-single-round-absent-');
         dirs.push(absent);
         expect(new HomeConfigService().load(absent).singleRoundReview).toBe(false);
         expect(new HomeConfigService().load(homeWith(false)).singleRoundReview).toBe(false);

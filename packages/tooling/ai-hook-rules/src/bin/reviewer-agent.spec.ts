@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -12,9 +11,10 @@ import { renderShim, shimPath } from './shim';
 import { shimStaleDenyReason } from './shim-deny-reason';
 import { UPGRADE_SHIM_CMD } from './l0-allowlist';
 import { runUpgradeShim } from './upgrade-shim';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function mktmp(): string {
-    return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-reviewer-agent-')));
+    return specTempDirs.makeReal('wp-reviewer-agent-');
 }
 
 // A webpieces-hooked tree: the committed shim exists (which is what makes the reviewer agent a managed file).

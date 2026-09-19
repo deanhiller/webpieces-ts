@@ -1,15 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {
     BranchCreationGuardConfig,
     DeletableWorktree,
     MergedBranchesService,
-    WorktreeService,
-} from '@webpieces/rules-config';
+    WorktreeService, specTempDirs } from '@webpieces/rules-config';
 
 import { BashContext } from '../types';
 import { BranchCreationGuardRule } from './branch-creation-guard';
@@ -65,7 +63,7 @@ const merged = new MergedBranchesService(worktrees);
  * vitest.setup.mts for the whole class or not at all.
  */
 beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-worktree-cap-'));
+    root = specTempDirs.make('wp-worktree-cap-');
     repo = path.join(root, 'repo');
     fs.mkdirSync(repo);
 

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { runUpgradeShim } from './upgrade-shim';
 import { renderShim, shimPath } from './shim';
 import { GUARDS_BIN, readSettings, writeSettings, CLAUDE_REGISTRATION } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * wp-upgrade-shim — the cure the committed-shim self-guard allows through. It must rewrite an existing
@@ -21,7 +21,7 @@ describe('runUpgradeShim', () => {
     let savedProjectDir: string | undefined;
 
     beforeEach(() => {
-        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-upgrade-'));
+        root = specTempDirs.make('wp-upgrade-');
         logs.length = 0;
         // findShimRoot falls back to $CLAUDE_PROJECT_DIR — under Claude Code that points at the REAL repo,
         // whose committed shim the "no managed shim" case would otherwise find (and rewrite). Clear it so
@@ -130,7 +130,7 @@ describe('runUpgradeShim', () => {
     // the raw strings would emit the notice on every ordinary run there.
     it('treats a symlinked-but-equivalent path as the same tree', () => {
         stageRepairable();
-        const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-link-')), 'tree');
+        const link = path.join(specTempDirs.make('wp-link-'), 'tree');
         fs.symlinkSync(root, link, 'dir');
         process.env['CLAUDE_PROJECT_DIR'] = link;   // same tree, a different spelling of it
         expect(runUpgradeShim(root)).toBe(0);
@@ -139,7 +139,7 @@ describe('runUpgradeShim', () => {
 
     it('names BOTH trees, prescribes the primary-tree repair, and still exits 0 when they diverge', () => {
         stageRepairable();
-        const primary = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-primary-'));
+        const primary = specTempDirs.make('wp-primary-');
         process.env['CLAUDE_PROJECT_DIR'] = primary;
 
         expect(runUpgradeShim(root)).toBe(0);   // advisory only — a verified repair stays a success

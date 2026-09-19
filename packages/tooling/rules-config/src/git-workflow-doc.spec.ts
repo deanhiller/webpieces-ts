@@ -20,6 +20,7 @@ import * as path from 'path';
 import { BranchMutationLog } from './branch-mutation-log';
 import { GIT_WORKFLOW_DOC } from './instruct-ai-docs';
 import { TemplateWriter, loadTemplate } from './load-template';
+import { specTempDirs } from './spec-temp-dirs';
 
 function git(cwd: string, cmd: string): string {
     return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
@@ -34,7 +35,7 @@ let worktree = '';
 describe('webpieces.git-workflow.md — the branch-mutation log path it delivers', () => {
     beforeEach(() => {
         // realpathSync: macOS os.tmpdir() is a symlink and git answers with the real path.
-        tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gitworkflow-doc-')));
+        tmp = specTempDirs.makeReal('gitworkflow-doc-');
         primary = path.join(tmp, 'primary');
         worktree = path.join(tmp, 'wt-a');
         fs.mkdirSync(primary, { recursive: true });

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { InvocationLog, logGuardDecision, GuardDecision , MATRIX_L2_UNROWED } from './decision-log';
@@ -12,9 +11,10 @@ import { run } from './runner';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 import { SHIM_LOG_FAULTS, renderShim } from '../bin/shim';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function tmpRoot(): string {
-    return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-faultstamp-')));
+    return specTempDirs.makeReal('wp-faultstamp-');
 }
 
 // The three STREAM DIRECTORIES this fault stamp must reach. `fault=` spans them all — that is the

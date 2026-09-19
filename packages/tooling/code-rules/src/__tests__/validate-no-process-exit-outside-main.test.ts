@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findExitViolationsInFile } from '../validate-no-process-exit-outside-main';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmpDir: string;
 
 beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-exit-'));
+    tmpDir = specTempDirs.make('no-exit-');
 });
 
 afterEach(() => {

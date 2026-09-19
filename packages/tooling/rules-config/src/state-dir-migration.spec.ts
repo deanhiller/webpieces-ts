@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from './state-dir';
 import { StateDirMigrator } from './state-dir-migration';
 import { MainSyncStatusService, MainSyncLock } from './main-sync-status';
+import { specTempDirs } from './spec-temp-dirs';
 
 function git(cwd: string, cmd: string): string {
     return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
@@ -32,7 +32,7 @@ let worktree: string;
 let namespace: string;
 
 function makeMigrationRepo(): void {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dotwp-mig-')));
+    tmp = specTempDirs.makeReal('dotwp-mig-');
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-inflight');
     fs.mkdirSync(primary, { recursive: true });
@@ -161,7 +161,7 @@ let worktreeB: string;
 let service: MainSyncStatusService;
 
 function makeTwoWorktreeRepo(): void {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dotwp-lock-')));
+    tmp = specTempDirs.makeReal('dotwp-lock-');
     primary = path.join(tmp, 'primary');
     worktreeA = path.join(tmp, 'wt-a');
     worktreeB = path.join(tmp, 'wt-b');

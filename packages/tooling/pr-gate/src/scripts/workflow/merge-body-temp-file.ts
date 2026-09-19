@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
+import { RepoRootFinder, RepoScratchDirs } from '@webpieces/rules-config';
 
 /** The filename inside the temp dir. Named, because it is what a human sees in a `gh` error. */
 export const MERGE_BODY_FILE = 'merge-commit-body.md';
@@ -25,9 +25,15 @@ export const MERGE_BODY_FILE = 'merge-commit-body.md';
  */
 @injectable(bindingScopeValues.Singleton)
 export class MergeBodyTempFile {
+    constructor(
+        private readonly repoRootFinder: RepoRootFinder,
+        private readonly scratchDirs: RepoScratchDirs,
+    ) {}
+
     /** @returns an absolute path to a file holding exactly `body`. Never ''. */
     write(body: string): string {
-        const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-body-')), MERGE_BODY_FILE);
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
+        const file = path.join(this.scratchDirs.make(repoRoot, 'wp-merge-body-'), MERGE_BODY_FILE);
         fs.writeFileSync(file, body);
         return file;
     }

@@ -5,9 +5,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findDesignFiles, resolveSelections, DesignFileRef } from '../di-graph/design-finder';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let tmpRoot: string;
 
@@ -22,7 +22,7 @@ function writeDesign(relDir: string, project: string): void {
 }
 
 beforeAll(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-finder-'));
+    tmpRoot = specTempDirs.make('wp-finder-');
     writeDesign('services/helper-portal-svr', 'helper-portal-svr');
     writeDesign('services/lang-server', 'lang-server');
     writeDesign('libraries/server-auth', 'server-auth');

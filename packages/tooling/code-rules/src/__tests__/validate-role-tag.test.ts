@@ -5,9 +5,9 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findRoleUntaggedProjects } from '../validate-role-tag';
+import { specTempDirs } from '@webpieces/rules-config';
 
 let root: string;
 
@@ -19,7 +19,7 @@ function writeProjectJson(projectDir: string, content: unknown): void {
 
 describe('findRoleUntaggedProjects', () => {
     beforeEach(() => {
-        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-roletag-'));
+        root = specTempDirs.make('wp-roletag-');
     });
 
     afterEach(() => {

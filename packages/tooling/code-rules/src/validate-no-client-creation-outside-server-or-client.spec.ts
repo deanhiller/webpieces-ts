@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { NoClientCreationOutsideServerOrClientConfig } from '@webpieces/rules-config';
+import { NoClientCreationOutsideServerOrClientConfig, specTempDirs } from '@webpieces/rules-config';
 
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { ProjectRoleResolver } from './project-role-resolver';
@@ -42,7 +41,7 @@ describe('NoClientCreationOutsideServerOrClientValidator', () => {
         new NoClientCreationOutsideServerOrClientValidator(c, new ProjectRoleResolver());
 
     beforeEach(() => {
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'no-client-creation-')));
+        root = specTempDirs.makeReal('no-client-creation-');
         git(root, 'init -q -b main');
         git(root, 'config user.email test@test.com');
         git(root, 'config user.name test');

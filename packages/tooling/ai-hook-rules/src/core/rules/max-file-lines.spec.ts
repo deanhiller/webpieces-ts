@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig } from '@webpieces/rules-config';
+import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig, specTempDirs } from '@webpieces/rules-config';
 
 import { FileContext } from '../types';
 import { MaxFileLinesRule } from './max-file-lines';
@@ -15,7 +14,7 @@ const GENERATED_LINES = 43_000;
 const HANDWRITTEN_LINES = 1_500;
 
 // A real (empty) directory: a violation makes the rule write its instruct-ai doc under the workspace root.
-const WORKSPACE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-max-file-lines-'));
+const WORKSPACE_ROOT = specTempDirs.make('wp-max-file-lines-');
 
 function ctx(relativePath: string, projectedLines: number): FileContext {
     return new FileContext(

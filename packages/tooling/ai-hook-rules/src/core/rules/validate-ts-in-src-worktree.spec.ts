@@ -1,11 +1,11 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { migrate } from '../../bin/setup-config';
 import { run } from '../runner';
 import { BlockedResult, NormalizedEdit, NormalizedToolInput } from '../types';
+import { specTempDirs } from '@webpieces/rules-config';
 
 function gitIn(cwd: string, ...args: string[]): void {
     execFileSync('git', args, { cwd, stdio: 'pipe' });
@@ -36,7 +36,7 @@ describe('validate-ts-in-src — target tree identity for linked-worktree writes
     let nested = '';
 
     beforeAll(() => {
-        sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-ts-worktree-')));
+        sandbox = specTempDirs.makeReal('wp-ts-worktree-');
         primary = path.join(sandbox, 'primary');
         sibling = path.join(sandbox, 'wt-sibling');
         nested = path.join(primary, '.claude', 'worktrees', 'agent-898');

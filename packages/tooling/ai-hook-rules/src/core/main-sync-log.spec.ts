@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 
@@ -8,6 +7,7 @@ import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+import { specTempDirs } from '@webpieces/rules-config';
 // One writer's path inside a STREAM DIRECTORY — `<stream>/<sessionId>-<agent>-<hook><suffix>`, the
 // real layout production builds. Takes the stream CONSTANT, so no dead filename survives in a fixture.
 function streamName(stream: string, suffix: string = '.log'): string {
@@ -16,7 +16,7 @@ function streamName(stream: string, suffix: string = '.log'): string {
 
 
 function tmpRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-synclog-'));
+    return specTempDirs.make('wp-synclog-');
 }
 
 const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;

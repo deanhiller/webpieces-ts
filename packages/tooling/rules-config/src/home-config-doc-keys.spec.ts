@@ -1,6 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
@@ -11,6 +10,7 @@ import {
 } from './home-config';
 import { DOCUMENTATION_KEYS, HOME_KEY_DOC, HOME_KEY_AI_DOC } from './home-config-doc-keys';
 import { ENDED_EXPERIMENTS } from './home-config-retired-keys';
+import { specTempDirs } from './spec-temp-dirs';
 
 const dirs: string[] = [];
 
@@ -20,7 +20,7 @@ afterEach(() => {
 
 /** A fake HOME. Nothing in this suite may touch the real `~/.webpieces/config.json`. */
 function fakeHome(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-dockeys-'));
+    const dir = specTempDirs.make('wp-dockeys-');
     dirs.push(dir);
     return dir;
 }

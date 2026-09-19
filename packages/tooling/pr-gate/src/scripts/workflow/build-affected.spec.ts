@@ -4,8 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    BuildsLog, BuildTicket, BuildTermination, CliExitError, DotWebpieces, toError,
-} from '@webpieces/rules-config';
+    BuildsLog, BuildTicket, BuildTermination, CliExitError, DotWebpieces, toError, specTempDirs } from '@webpieces/rules-config';
 import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -22,7 +21,7 @@ afterEach(() => {
 
 /** A HOME with no `.webpieces` in it at all — where the throwaway build ledger is pointed. */
 function tempHome(): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-nohome-')));
+    const dir = specTempDirs.makeReal('wp-nohome-');
     dirs.push(dir);
     return dir;
 }
@@ -37,7 +36,7 @@ function git(cwd: string, ...args: string[]): string {
  * the tool really faces.
  */
 function repoWithBuild(command: string): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-buildgate-')));
+    const dir = specTempDirs.makeReal('wp-buildgate-');
     dirs.push(dir);
     const fixture = new RepoConfigFixture();
     const config = fixture.load();

@@ -1,9 +1,9 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
+import { specTempDirs } from './spec-temp-dirs';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.
 function validMatchRule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -570,7 +570,7 @@ function validPrGate(checklists: unknown): Record<string, unknown> {
 
 // A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
 function repoWith(docs: string[] = [], agents: string[] = []): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklists-'));
+    const dir = specTempDirs.make('wp-checklists-');
     fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
     for (const d of docs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
     if (agents.length > 0) {

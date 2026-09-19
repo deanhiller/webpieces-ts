@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile, BranchStateGuardConfig } from '@webpieces/rules-config';
+import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile, BranchStateGuardConfig, specTempDirs } from '@webpieces/rules-config';
 
 import { BashContext, FileContext } from '../types';
 
@@ -115,7 +114,7 @@ function armedBashConfig(): BranchStateGuardConfig {
 let dir = '';
 
 beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bksc-'));
+    dir = specTempDirs.make('bksc-');
     state.cacheFile = path.join(dir, 'main-sync-status.json');
     writeCache(twoWorktreeCache());
     log.reasons = [];

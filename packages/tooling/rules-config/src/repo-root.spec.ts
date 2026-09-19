@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { RepoRootFinder } from './repo-root';
+import { specTempDirs } from './spec-temp-dirs';
 
 // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repos.
 function git(cwd: string, cmd: string): string {
@@ -31,7 +32,7 @@ describe('RepoRootFinder.resolveRepoRoot', () => {
     beforeEach(() => {
         // realpathSync: macOS os.tmpdir() is a symlink; git rev-parse returns the real path, so we
         // must compare against the resolved path.
-        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'repo-root-')));
+        root = specTempDirs.makeReal('repo-root-');
     });
 
     afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });

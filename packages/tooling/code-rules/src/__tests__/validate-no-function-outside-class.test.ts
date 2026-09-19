@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { findFunctionsOutsideClassInSource, findFunctionsOutsideClassInFile } from '../validate-no-function-outside-class';
+import { specTempDirs } from '@webpieces/rules-config';
 
 // The AST detector is pure over (content, filePath, disableAllowed) — no git/disk needed. These tests
 // pin the module-scope predicate (parent === SourceFile) that keeps inline callbacks and nested
@@ -127,7 +127,7 @@ describe('findFunctionsOutsideClassInFile — allowedPaths', () => {
     let tmpDir: string;
 
     beforeEach(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-fn-'));
+        tmpDir = specTempDirs.make('no-fn-');
     });
 
     afterEach(() => {

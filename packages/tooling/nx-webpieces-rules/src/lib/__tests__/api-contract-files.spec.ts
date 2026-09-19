@@ -9,9 +9,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import { RuleFailError, renderRuleFailForHuman, specTempDirs } from '@webpieces/rules-config';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { ApiContracts } from '../api-usage/api-relations';
 import { saveGraph, loadBlessedGraph, DEFAULT_GRAPH_PATH, AI_INSTRUCTIONS } from '../graph-loader';
@@ -26,7 +25,7 @@ import {
 let root: string;
 
 beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-apifiles-'));
+    root = specTempDirs.make('wp-apifiles-');
 });
 
 afterEach(() => {

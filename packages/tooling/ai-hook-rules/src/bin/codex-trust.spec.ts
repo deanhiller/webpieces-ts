@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { CodexTrustProbe, CodexTrustStatus } from './codex-trust';
 import { CODEX_REGISTRATION, GUARDS_BIN, RULES_BIN, writeSettings } from './hook-registration';
+import { specTempDirs } from '@webpieces/rules-config';
 
 /**
  * CODEX TRUST IS READ, NEVER WRITTEN — and the second half of that sentence is the one worth testing.
@@ -18,7 +18,7 @@ let home = '';
 let repo = '';
 
 beforeEach(() => {
-    const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-codex-trust-')));
+    const tmp = specTempDirs.makeReal('wp-codex-trust-');
     home = path.join(tmp, 'home');
     repo = path.join(tmp, 'repo');
     fs.mkdirSync(home, { recursive: true });

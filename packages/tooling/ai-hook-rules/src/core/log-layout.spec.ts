@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { LOGS_STATE_DIR } from '@webpieces/rules-config';
+import { LOGS_STATE_DIR, specTempDirs } from '@webpieces/rules-config';
 
 import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef , MATRIX_L2_UNROWED } from './decision-log';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
@@ -36,7 +35,7 @@ const UNIDENTIFIED = new StreamIdentity('unknown', '', 'hook');
  * `logs/` and nothing else. A newly-added writer that invents a second state directory turns this red.
  */
 function tmpRoot(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-loglayout-'));
+    return specTempDirs.make('wp-loglayout-');
 }
 
 // Every log file under `logs/`, named RELATIVE to it — so `calls/<writer>.log`, not `<writer>.log`.

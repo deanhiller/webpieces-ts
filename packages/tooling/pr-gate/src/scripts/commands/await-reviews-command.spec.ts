@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
 
 import { ReviewerWaitProbe } from './await-reviews-command';
 import { WaitOutcome } from '../workflow/await-loop';
@@ -11,7 +11,7 @@ let dir = '';
 let reviewPath = '';
 
 beforeEach((): void => {
-    dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'await-reviews-'));
+    dir = specTempDirs.makeReal('await-reviews-');
     reviewPath = path.join(dir, 'review.json');
 });
 
