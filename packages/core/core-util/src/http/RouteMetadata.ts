@@ -39,6 +39,18 @@ export class RouteMetadata {
      * the body from the ROUTE, without knowing the apiClass/methodName.
      */
     readonly rawBody: boolean;
+    /**
+     * True when @Endpoint(..., { background: true }): this route is plumbing the user did not ask
+     * for (a log shipper, a heartbeat, a telemetry flush). Rides the route metadata for the same
+     * reason {@link formPost} and {@link rawBody} do — each consumer branches on the ROUTE, without
+     * knowing the apiClass/methodName.
+     *
+     * Read by {@link LogApiCallImpl} (via ApiMethodInfo, exactly as {@link mask} is) so no
+     * `[API-*-req]`/`[API-*-resp-*]` line is emitted for the call, and readable from an app's
+     * `RequestLifecycleListener.onRequestStart/onRequestEnd` so a progress bar and any app-level RPC
+     * instrumentation can skip it too. Default false = an ordinary, fully-logged route.
+     */
+    readonly background: boolean;
 
     constructor(
         httpMethod: string,
@@ -58,6 +70,7 @@ export class RouteMetadata {
         readonly responseType: EndpointResponseType = 'body',
         /** Present only for `(ResponseStream) => Promise<RequestStream>` contracts. */
         readonly streaming?: StreamingEndpointMetadata,
+        background: boolean = false,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -72,5 +85,6 @@ export class RouteMetadata {
         this.bodyParameterIndex = bodyParameterIndex;
         this.responseType = responseType;
         this.streaming = streaming;
+        this.background = background;
     }
 }

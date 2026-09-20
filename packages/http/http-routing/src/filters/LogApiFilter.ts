@@ -87,6 +87,9 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             rm.methodName,
             rm.controllerClassName,
             rm.mask,
+            // The server half of the same self-reference: `[API-server-req]` for a log-INGEST
+            // endpoint is the shipped line arriving one hop later. Same flag, same reader.
+            rm.background,
         );
         const response = await this.logApiCall.execute(info, meta.requestDto, method);
         return new WpResponse(response);

@@ -145,6 +145,7 @@ export abstract class ProxyClient {
             route.methodName,
             undefined,
             route.mask,
+            route.background,
         );
         return this.logApiCall.execute(info, requestDto, method);
     }

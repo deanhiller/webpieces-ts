@@ -90,6 +90,7 @@ export class RouteMetadataFactory {
             bodyParameterIndex,
             this.responseType(options.responseType, apiClass, methodName),
             streaming,
+            options.background === true,
         );
     }
 
