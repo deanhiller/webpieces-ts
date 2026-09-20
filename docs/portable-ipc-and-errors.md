@@ -23,10 +23,11 @@ The backoff form also emits `Retry-After`.
 
 `ApiEndUserError(message, errorCode?, edgeHttpStatus?, cause?)` also carries an optional
 `edgeHttpStatus` (`EdgeHttpStatus`: 400, 404, 409 or 422). `ApiErrorCodec` keeps it across every
-remote hop like `errorCode`; a peer that does not send it decodes as `undefined`. GUI edges ignore
-it and answer 266. A partner-facing REST edge calls
-`WebpiecesExpressRouter.setEndUserStatus('edge')` and answers `edgeHttpStatus`, or 400 when it is
-absent. `edgeHttpStatus` was inserted before `cause` (issue #948), so a call that passed `cause`
+remote hop like `errorCode`; a peer that does not send it decodes as `undefined`. Whether it is USED is a
+property of the CALLER, not of the router: `AuthFilter` stamps `WebpiecesCoreHeaders.SURFACE` from
+the auth mode that matched, and a `public-api` caller (`@WpAuthApiKey`) is answered
+`edgeHttpStatus`, or 400 when it is absent. `gui`, `llm` and a caller whose auth established no
+surface are all answered 266, because each is a webpieces client that decodes the body itself. `edgeHttpStatus` was inserted before `cause` (issue #948), so a call that passed `cause`
 third must now pass it fourth.
 
 Any other status uses the catch-all `ApiCodedError(message, statusCode, errorCode?, cause?)`. Its
@@ -37,9 +38,16 @@ hop (the message stays generic), and the HTTP client rebuilds an `ApiCodedError`
 status it has no named class for. Below 500 it is classified as a caller error (except 408 and 429,
 which mirror `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above is a server fault.
 
-There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status use
-`ErrorTranslators`; a response whose status is outside 100-599 becomes the HTTP-client-local
-`UnexpectedApiResponseError`.
+There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status
+register an `ErrorTranslator` on `ClientRegistry` and THROW it from `fromWire`.
+
+The webpieces DEFAULT does not rebuild the peer's type, and that is deliberate. A status a peer
+answered describes OUR request to it, so a received 4xx is `ApiImplementationError` (my bug: wrong
+path, wrong base URL, an undeployed dependency, bad credentials) and a received 5xx is
+`ApiDependencyError` (their bug, so this service's failure metrics stay clean). An incoming
+`ApiDependencyError` is rethrown as-is — already attributed downstream — and 266 keeps its
+`ApiEndUserError` with the message published verbatim. The rule is identical in node and in the
+browser, and identical over IPC (`ReceivedApiErrorRule`).
 
 `ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`. Existing local `ApiCallTimeoutError(timeoutMs, CallContext)` remains distinct from a remote request timeout. `ApiConnectionError` remains available for actual offline classification; IPC disconnection uses the local `IpcTransportError`, distinct from a remote implementation throwing `ApiUnavailableError`.
 

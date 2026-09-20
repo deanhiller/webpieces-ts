@@ -6,7 +6,7 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 
 - `ClientHttpBrowserFactory` — a plain class the app provides through whatever DI it already has (Angular `useFactory`, a React context, a module-level `const`)
 - `ClientConfig` — per-client state: the base URL, plus an optional logging name
-- Rethrowing a downstream failure EXACTLY as translated (`BrowserProxyClient.adaptDownstreamFailure`). Here the client is the end user's agent and the "downstream" is the app's own backend, so a 404/401/403 is a real answer the UI must act on. This is the deliberate opposite of `http-client-node`, which owns a downstream 4xx as its own 500
+- Applying the SAME received-status rule as `http-client-node` — one `WebpiecesDefaultErrorTranslator`, no browser-specific branch. A browser that received a 404 called a path that does not exist, which is the CLIENT's bug (`ApiImplementationError`), not an answer to show a user; a 5xx is the server's (`ApiDependencyError`). The one genuinely user-facing outcome has its own channel and always did: 266 / `ApiEndUserError`
 - `MutableContextStore` — the browser `ContextReader`. Browsers have no ambient request scope, so the app sets context values (login token, tenant) as they become known and every outbound call transfers them as headers
 - Exposing the core client's typed GET/POST, explicit path/query, JSON/form, and full-response behavior without a Node-only dependency; manual redirects remain subject to native browser CORS/opaque-response rules
 

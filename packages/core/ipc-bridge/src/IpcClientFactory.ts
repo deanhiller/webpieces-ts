@@ -1,6 +1,7 @@
-import { ApiErrorCodec, ApiImplementationError } from '@webpieces/core-util/errors';
+import { ApiImplementationError } from '@webpieces/core-util/errors';
 import {
     IpcCallContext,
+    IpcClientErrorTranslator,
     IpcConnection,
     IpcApiType,
     IpcLogging,
@@ -50,7 +51,10 @@ export class IpcClientFactory {
                         const reply = await this.connection.request(
                             new IpcRequest(apiId, methodId, context, request),
                         );
-                        if (reply.type === 'failure') throw ApiErrorCodec.decode(reply.error);
+                        // EVERY reply passes the seam, success included, so an app can turn an
+                        // apparently-successful reply into a throw. `asserts reply is IpcSuccess`
+                        // is what leaves no `type === 'failure'` branch behind here.
+                        IpcClientErrorTranslator.throwIfFailure(reply);
                         return reply.body === null ? undefined : reply.body;
                     },
                 );

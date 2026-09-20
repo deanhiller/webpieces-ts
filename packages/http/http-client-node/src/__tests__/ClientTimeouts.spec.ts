@@ -95,7 +95,7 @@ beforeEach(() => {
     vi.useFakeTimers();
     HeaderRegistry.configure([], true);
     CallRegistry.clear();
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('timeout-test', 'https://timeout.example');
 });
 
@@ -103,7 +103,7 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     CallRegistry.clear();
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
 });
 
 describe('node generated client deadlines', () => {
@@ -255,7 +255,7 @@ describe('node generated client deadlines', () => {
 
     it('bounds hung URL resolution and never sends after it resolves late', async () => {
         const h = new Harness();
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         let resolveUrl!: (url: string) => void;
         ClientRegistry.setDeriver(
             () =>

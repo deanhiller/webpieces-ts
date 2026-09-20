@@ -1,203 +1,27 @@
 import { CallToolResult, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import {
     ApiErrorBoundary,
-    ApiErrorPayload,
-    ContextKey,
-    DtoValue,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
     LogManager,
     toError,
-    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { McpRegistry } from './McpRegistry';
+import {
+    McpCorrelation,
+    McpDefaultToolCallRenderer,
+    McpErrorData,
+    McpErrorTranslator,
+    McpHttpErrorBody,
+    McpHttpErrorDetail,
+    MCP_REQUEST_ID_META_KEY,
+} from './McpToolCallRendering';
 
 const log = LogManager.getLogger('WpMcpErrorTranslator');
 
-/** `_meta` key carrying the Webpieces requestId on every tools/call result, success or failure. */
-export const MCP_REQUEST_ID_META_KEY = 'webpieces/requestId';
-
-/** JSON-RPC error `data` so a user can quote the requestId of any protocol-level failure. */
-export class McpErrorData {
-    constructor(public readonly requestId: string) {}
-}
-
 /**
- * The two per-request facts a renderer needs that are NOT the error: the JSON-RPC `id` it must echo,
- * and the tool being called. They are stamped into the request scope by `WpMcpServer` rather than
- * threaded through every renderer signature, because `requestId` already travels that way
- * ({@link WebpiecesCoreHeaders.REQUEST_ID}) and a second, parallel correlation parameter was a COPY
- * of the context — which is what the deleted `McpFailureScope` was.
- *
- * Context-only and never logged: the logging backends read `RequestContext` for correlation on every
- * record already, and this object exists purely so the renderers can be one-argument functions.
- */
-export class McpCorrelation {
-    // webpieces-disable no-any-unknown -- ContextKey value types are per-key; this one is context-only
-    static readonly KEY = ContextKey.untrusted<McpCorrelation>(
-        'webpieces-mcp-correlation',
-        undefined,
-        false,
-        /*isLogged*/ false,
-    );
-
-    constructor(
-        public readonly jsonRpcId: string | number | null,
-        public readonly toolName?: string,
-    ) {}
-
-    /** Stamp what this request knows so far; `WpMcpServer` re-stamps once the tool name is known. */
-    // webpieces-disable no-function-outside-class -- static accessor trio for one context key
-    static stamp(correlation: McpCorrelation): void {
-        RequestContext.putUntrusted(McpCorrelation.KEY, correlation);
-    }
-
-    /** A renderer reached before anything stamped (a failure with no parseable body) still renders. */
-    // webpieces-disable no-function-outside-class -- static accessor trio for one context key
-    static current(): McpCorrelation {
-        return RequestContext.getUntrusted(McpCorrelation.KEY) ?? new McpCorrelation(null);
-    }
-
-    /** The webpieces requestId of the request being served, as every MCP reply reports it. */
-    // webpieces-disable no-function-outside-class -- static accessor trio for one context key
-    static requestId(): string {
-        return RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID) ?? 'missing-request-id';
-    }
-}
-
-/** The only error shape rendered into model-visible MCP tool content. */
-export class ModelVisibleToolError {
-    constructor(
-        public readonly kind: string,
-        public readonly message: string,
-        public readonly requestId: string,
-        public readonly field?: string,
-        public readonly callerMessage?: string,
-        public readonly errorCode?: string,
-        public readonly retryAfterSeconds?: number,
-        public readonly statusCode?: number,
-    ) {}
-}
-
-/** JSON-RPC error body written by the HTTP boundary before the SDK is involved. */
-export class McpHttpErrorBody {
-    readonly jsonrpc = '2.0';
-    constructor(
-        public readonly error: McpHttpErrorDetail,
-        public readonly id: string | number | null,
-    ) {}
-}
-
-export class McpHttpErrorDetail {
-    constructor(
-        public readonly code: number,
-        public readonly message: string,
-        public readonly data: McpErrorData,
-    ) {}
-}
-
-/**
- * The application's own `tools/call` error translation — the MCP twin of the `ErrorTranslators` an
- * app registers on `ClientRegistry` for the HTTP path. Register one with
- * `WpMcpServerConfig.setErrorTranslator(...)`; it is NOT a global, because `WpMcpServer` is
- * constructed by app code and two servers may run in one process.
- *
- * An app owns its error taxonomy and owns how those errors should be explained to a model, so a
- * claimed error yields the ENTIRE `CallToolResult` — content, `structuredContent`, `isError`, the lot.
- *
- * Contract:
- * - `error` is the RAW thrown value: an app must be able to `instanceof` its own error classes.
- *   `ApiErrorBoundary` never substitutes an object for the thrown error, so there is exactly one
- *   error value on this path.
- * - There is no "not mine" return. A registered translator REPLACES the webpieces default and
- *   declines by DELEGATING to it: `new McpDefaultToolCallRenderer().toToolCallResult(error)`.
- * - webpieces default-fills `_meta['webpieces/requestId']` only when the returned result has NO
- *   `_meta`. An app that sets `_meta` owns it untouched.
- * - scope is `tools/call` ONLY. The pre-SDK HTTP boundary and `tools/list` stay framework-owned:
- *   that boundary emits the `401 + WWW-Authenticate: Bearer resource_metadata=...` MCP clients
- *   depend on for OAuth discovery, and an app rewriting it breaks connector onboarding.
- */
-export interface McpErrorTranslators {
-    toToolCallResult(error: Error): CallToolResult;
-}
-
-/**
- * webpieces' DEFAULT `tools/call` rendering, as a public class so an app's own
- * {@link McpErrorTranslators} can DECLINE an error by delegating to it — the MCP twin of
- * `ApiErrorHttpMapper.toResponse` on the HTTP side.
- *
- * Published text comes only from {@link ApiErrorBoundary.encode}: this never puts an error's own
- * message in front of a model unless it is an `ApiEndUserError`.
- */
-export class McpDefaultToolCallRenderer implements McpErrorTranslators {
-    private readonly boundary = new ApiErrorBoundary();
-
-    toToolCallResult(error: Error): CallToolResult {
-        const requestId = McpCorrelation.requestId();
-        const visible = this.modelVisible(this.boundary.encode(error), requestId);
-        const text = JSON.stringify(visible as DtoValue);
-        return {
-            content: [{ type: 'text', text }],
-            isError: true,
-            _meta: { [MCP_REQUEST_ID_META_KEY]: requestId },
-        };
-    }
-
-    private modelVisible(payload: ApiErrorPayload, requestId: string): ModelVisibleToolError {
-        switch (payload.kind) {
-            case 'end-user':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
-                    requestId,
-                    undefined,
-                    undefined,
-                    payload.errorCode,
-                );
-            case 'bad-request':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.callerMessage ?? payload.message,
-                    requestId,
-                    payload.field,
-                    payload.callerMessage,
-                );
-            case 'coded':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
-                    requestId,
-                    undefined,
-                    undefined,
-                    payload.errorCode,
-                    undefined,
-                    payload.statusCode,
-                );
-            case 'implementation':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    `Internal error in tool ${McpCorrelation.current().toolName ?? 'unknown'} ` +
-                        `(requestId ${requestId}). This is a bug in the tool, not in your ` +
-                        'arguments; retrying with different arguments will not help.',
-                    requestId,
-                );
-            default:
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
-                    requestId,
-                    undefined,
-                    undefined,
-                    undefined,
-                    payload.retryAfterSeconds,
-                );
-        }
-    }
-}
-
-/**
- * The ONE place every MCP failure becomes a reply, mirroring `ApiErrorHttpMapper` for HTTP: an error
+ * The ONE place every MCP failure becomes a reply, mirroring `WebpiecesDefaultErrorTranslator` for HTTP: an error
  * in, the exact wire shape out. There is one method per BOUNDARY, and the MCP spec is what makes
  * them three rather than one:
  *
@@ -218,12 +42,8 @@ export class WpMcpErrorTranslator {
     /**
      * @param challenge - the `WWW-Authenticate` value for a 401, read lazily because
      *   `WpMcpServerConfig` is only fully validated at `bind(...)` time.
-     * @param appTranslators - the app's `tools/call` seam; `undefined` means webpieces renders all.
      */
-    constructor(
-        private readonly challenge: () => string,
-        private readonly appTranslators?: McpErrorTranslators,
-    ) {}
+    constructor(private readonly challenge: () => string) {}
 
     /**
      * Boundary #1: everything webpieces itself rejects before the SDK is involved — bearer
@@ -293,14 +113,13 @@ export class WpMcpErrorTranslator {
      * Boundary #3: every tools/call failure after the tool is found — an `isError: true` result the
      * model sees.
      *
-     * A registered {@link McpErrorTranslators} REPLACES the default and declines by delegating to
-     * {@link McpDefaultToolCallRenderer}, so "no translator registered" and "a translator that does
-     * not claim this error" produce byte-identical results.
+     * ONE unconditional line: {@link McpRegistry.getErrorTranslator} is never undefined, so there is
+     * no "was one registered" branch. A registered {@link McpErrorTranslator} REPLACES the default and
+     * declines by delegating to {@link McpDefaultToolCallRenderer}, so "no translator registered" and
+     * "a translator that does not claim this error" produce byte-identical results.
      */
     toToolCallResult(failure: Error): CallToolResult {
-        const renderer = this.appTranslators;
-        if (!renderer) return this.defaultToolCall.toToolCallResult(failure);
-        return this.withDefaultMeta(this.appOrDefault(renderer, failure));
+        return this.withDefaultMeta(this.appOrDefault(McpRegistry.getErrorTranslator(), failure));
     }
 
     /** The `_meta` every tools/call result carries so a user can quote its requestId. */
@@ -312,18 +131,21 @@ export class WpMcpErrorTranslator {
      * An app translator that THROWS must not replace the failure being reported: its own bug is
      * logged here and the ORIGINAL error still renders through the webpieces default, so the model
      * still gets a reply carrying the requestId.
+     *
+     * This is BUG CONTAINMENT, not a "did anyone register one" branch — the same shape as
+     * `ClientErrorTranslator.throwIfFailure` on the HTTP side.
      */
-    private appOrDefault(renderer: McpErrorTranslators, failure: Error): CallToolResult {
+    private appOrDefault(renderer: McpErrorTranslator, failure: Error): CallToolResult {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an app translator's own bug must not replace the failure it was asked to render
         try {
-            return renderer.toToolCallResult(failure);
+            return renderer.toWire(failure);
         } catch (err: unknown) {
             const error = toError(err);
             log.error(
-                'Application McpErrorTranslators.toToolCallResult threw; rendering the webpieces default.',
+                'Application McpErrorTranslator.toWire threw; rendering the webpieces default.',
                 error,
             );
-            return this.defaultToolCall.toToolCallResult(failure);
+            return this.defaultToolCall.toWire(failure);
         }
     }
 

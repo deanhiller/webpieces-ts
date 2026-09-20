@@ -79,7 +79,7 @@ beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
     // Off-GCP the callee's base URL is resolved from the service name via the local registry —
     // this is exactly how a local multi-service run points a svcName at a port.
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('email-svc', 'http://localhost:18299');
     invoker = new CapturingTaskInvoker();
     emailTasks = clientFor(new TaskClientConfig('email-svc'));

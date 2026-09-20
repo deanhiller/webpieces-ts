@@ -90,7 +90,7 @@ export class ServiceInfo {
         return ServiceInfo.svcVersion;
     }
 
-    /** Reset — for tests, mirroring {@link ClientRegistry.clear}. */
+    /** Reset — for tests, mirroring {@link ClientRegistry.resetForTests}. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
     static clear(): void {
         ServiceInfo.svcName = undefined;

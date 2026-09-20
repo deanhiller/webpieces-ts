@@ -59,7 +59,7 @@ export { InternalAddressRules } from './InternalAddressRules';
 export { AddressResolver, DnsAddressResolver } from './AddressResolver';
 
 // The isomorphic engine, re-exported so a server app needs one import.
-export { ProxyClient, ClientErrorTranslator, TranslatedFailure } from '@webpieces/http-client-core';
+export { ProxyClient, ClientErrorTranslator } from '@webpieces/http-client-core';
 export { ClientRequest, ClientFilterDefinition } from '@webpieces/http-client-core';
 export type { ClientFilter } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';

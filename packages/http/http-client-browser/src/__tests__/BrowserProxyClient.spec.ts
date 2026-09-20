@@ -10,11 +10,8 @@ import {
     Endpoint,
     HeaderRegistry,
     ApiDependencyError,
-    ApiBadRequestError,
-    ApiForbiddenError,
-    ApiNotFoundError,
-    ApiUnavailableError,
-    ApiUnauthorizedError,
+    ApiEndUserError,
+    ApiImplementationError,
     LogManager,
     ApiConnectionError,
     WpAuthPublic,
@@ -84,12 +81,12 @@ let factory: ClientHttpBrowserFactory;
 
 beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     factory = new ClientHttpBrowserFactory(new MutableContextStore());
 });
 
 afterEach(() => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     vi.unstubAllGlobals();
 });
 
@@ -119,9 +116,10 @@ function stubFetchWithHeaders(status: number, headers: Record<string, string>): 
 }
 
 /** Stub fetch with a webpieces ApiErrorPayload body at the given status — the ordinary error path. */
-function stubFetchApiErrorPayload(status: number, message: string): void {
+function stubFetchApiErrorPayload(status: number, message: string, kindOverride?: string): void {
     const kind =
-        status === 400
+        kindOverride ??
+        (status === 400
             ? 'bad-request'
             : status === 401
               ? 'unauthorized'
@@ -129,7 +127,7 @@ function stubFetchApiErrorPayload(status: number, message: string): void {
                 ? 'forbidden'
                 : status === 404
                   ? 'not-found'
-                  : 'implementation';
+                  : 'implementation');
     const fetchMock = vi.fn(() =>
         Promise.resolve(
             new Response(JSON.stringify({ kind, message }), {
@@ -403,7 +401,7 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
         expect((error as Error).message).toContain('text/html');
     });
 
-    it('a 503 cold start rejects with ApiUnavailableError — the "retry, it is waking" signal', async () => {
+    it('a 503 cold start rejects with ApiDependencyError — the peer is the one that is broken', async () => {
         stubFetchNonJsonBody(503);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -411,7 +409,7 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(ApiUnavailableError);
+        expect(error).toBeInstanceOf(ApiDependencyError);
         expect(error).not.toHaveProperty('code');
     });
 
@@ -431,19 +429,25 @@ describe('BrowserProxyClient gives the caller a STATUS-typed error for an infra 
 });
 
 /**
- * THE ASYMMETRY, browser half. `ProxyClient.adaptDownstreamFailure` is the seam where the two
- * environments part company, and this is the side that must NOT change:
+ * THE UNIFORM RULE, browser half — and the ASYMMETRY this spec used to assert is GONE (issue #968).
  *
- *   In a browser the client IS the end user's agent, and the "downstream" is the app's own backend.
- *   A 404 really does mean "that thing does not exist", a 401 really does mean "sign in again", a 403
- *   really does mean "you may not". Each is a real answer to the user, and rewriting any of them to a
- *   500 would delete the only signal the UI has to act on.
+ * It used to read: "in a browser the client IS the end user's agent, so a 404 really does mean that
+ * thing does not exist". That reasoning was wrong, and the wrongness is worth keeping written down.
+ * A webpieces client does not browse; it calls a typed endpoint it was generated against. If it
+ * received a 404 it called a path that does not exist — which is the CLIENT's bug, not an answer to
+ * show a user. The one genuinely user-facing outcome has its own channel and always did: 266 /
+ * `ApiEndUserError`, whose message is the only one published verbatim.
  *
- * The server twin does the OPPOSITE for the same reason — there the downstream is a dependency, and
- * its 4xx describes the caller's own broken request. See NodeProxyClient's spec.
+ * So node and browser now share ONE class and ONE rule (`WebpiecesDefaultErrorTranslator`), and
+ * `ProxyClient.adaptDownstreamFailure` — the seam that existed only to hold the two apart — is
+ * deleted. Read in a browser it says exactly what it should: `ApiImplementationError` means the
+ * client has a bug, `ApiDependencyError` means the server does.
+ *
+ * An app that genuinely wants a status relayed as its own type says so, greppably, in its registered
+ * translator's `fromWire`.
  */
-describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', () => {
-    it('404 stays ApiNotFoundError — the resource genuinely does not exist for this user', async () => {
+describe('BrowserProxyClient applies the SAME received-status rule as node', () => {
+    it('404 becomes ApiImplementationError — this client called a path that does not exist', async () => {
         stubFetchApiErrorPayload(404, 'no such order');
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -451,38 +455,22 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(ApiNotFoundError);
-        expect(error).not.toHaveProperty('code');
-        expect((error as Error).message).toBe('no such order');
+        expect(error).toBeInstanceOf(ApiImplementationError);
+        expect((error as Error).message).toContain('404');
     });
 
-    it('400 / 401 / 403 each stay their own type, with their own status and message', async () => {
-        stubFetchApiErrorPayload(400, 'email is required');
-        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const badRequest = await client()
-            .save(new SaveRequest('q'))
-            .catch((err: unknown) => err);
-        expect(badRequest).toBeInstanceOf(ApiBadRequestError);
-        expect(badRequest).not.toHaveProperty('code');
-
-        stubFetchApiErrorPayload(401, 'token expired');
-        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const unauthorized = await client()
-            .save(new SaveRequest('q'))
-            .catch((err: unknown) => err);
-        expect(unauthorized).toBeInstanceOf(ApiUnauthorizedError);
-        expect(unauthorized).not.toHaveProperty('code');
-
-        stubFetchApiErrorPayload(403, 'not your org');
-        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
-        const forbidden = await client()
-            .save(new SaveRequest('q'))
-            .catch((err: unknown) => err);
-        expect(forbidden).toBeInstanceOf(ApiForbiddenError);
-        expect(forbidden).not.toHaveProperty('code');
+    it('400 / 401 / 403 are all caller-side defects on this hop, so all three are MY bug', async () => {
+        for (const status of [400, 401, 403]) {
+            stubFetchApiErrorPayload(status, 'nope');
+            // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+            const error = await client()
+                .save(new SaveRequest('q'))
+                .catch((err: unknown) => err);
+            expect(error, `HTTP ${status}`).toBeInstanceOf(ApiImplementationError);
+        }
     });
 
-    it('an HTML 404 from misrouted infra also arrives unchanged — a browser has no caller to protect', async () => {
+    it('an HTML 404 from misrouted infra keeps the diagnostic text in the message', async () => {
         stubFetchNonJsonBody(404);
 
         // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
@@ -490,9 +478,21 @@ describe('BrowserProxyClient rethrows a downstream 4xx EXACTLY as translated', (
             .save(new SaveRequest('q'))
             .catch((err: unknown) => err);
 
-        expect(error).toBeInstanceOf(ApiNotFoundError);
+        expect(error).toBeInstanceOf(ApiImplementationError);
         expect((error as Error).message).toContain('PublicApi.save');
         expect((error as Error).message).toContain('text/html');
+    });
+
+    it('266 is still the end user answer, with the message published verbatim', async () => {
+        stubFetchApiErrorPayload(266, 'Those passwords do not match', 'end-user');
+
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
+
+        expect(error).toBeInstanceOf(ApiEndUserError);
+        expect((error as Error).message).toBe('Those passwords do not match');
     });
 
     it('the lifecycle listener sees the SAME error the caller does', async () => {

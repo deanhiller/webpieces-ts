@@ -29,7 +29,6 @@ import {
     ClientRequest,
     ClientFilterDefinition,
     ProxyClient,
-    TranslatedFailure,
 } from '@webpieces/http-client-core';
 import { AddressResolver } from './AddressResolver';
 import { ClientConfig } from './ClientConfig';
@@ -302,68 +301,6 @@ export class NodeProxyClient extends ProxyClient {
         }
     }
 
-    /**
-     * SERVER-TO-SERVER: a 4xx received from a dependency becomes THIS server's own 500.
-     *
-     * THE INVARIANT:
-     *
-     *   A status received from a downstream dependency describes OUR request to it. It is never the
-     *   status we return to OUR caller. The server that answered 404 is correct; the server that
-     *   asked for a route that does not exist is broken, and must say so as a 500.
-     *
-     * Every 4xx is a CALLER-side defect on this hop: 404 = wrong path / wrong base URL / a dependency
-     * that is not deployed yet, 400 = we sent a malformed request, 401/403 = our service credentials
-     * or the callee's caller allow-list are wrong. None of them is an answer for whoever called US, and
-     * relaying one lets an internal misconfiguration impersonate a legitimate response. That is not
-     * hypothetical: a partner-facing Management API reported an EMPTY store estate for an org with six
-     * live storefronts, because its dependency had not been promoted and Express served an HTML 404
-     * which arrived here as `ApiNotFoundError` and went straight back out. A 500 would have been
-     * loud, correct, and attributable to the one server that actually had the bug — which is the whole
-     * point: only ONE server should be paged for this.
-     *
-     * DELIBERATELY 4xx ONLY. 5xx (502/503/504) already mean "the dependency is unavailable", which is
-     * honest and useful outward, and 500 is already a 500. `ApiEndUserError` (266, a 2xx code carrying
-     * user validation) and `ApiDependencyBackoffError` are not statuses about our request at all. All of
-     * them pass through untouched.
-     *
-     * THE OPT-OUT IS `appRegistered`, not a config key. A thin proxy or gateway that genuinely wants to
-     * relay a downstream status as its own registers a `ClientRegistry` error translation for it at
-     * startup — one greppable line saying so out loud — and that translation wins here. Only the
-     * framework's built-in default mapping gets wrapped. There is no flag, because a flag would make
-     * the dangerous choice invisible in the code that suffers from it.
-     *
-     * The downstream diagnostic is NOT lost: the original error (which for the incident above names the
-     * method, the status, the `text/html` content-type and a snippet of the body) is both quoted in the
-     * message and kept as `cause`.
-     *
-     * How much "Downstream said:" is worth depends on WHO answered, and both halves are by design:
-     * - a NON-webpieces answer (an lb's html 404, a proxy's plain-text 502) is described CLIENT-side by
-     *   `ResponseBodyReader.describeForeignBody`, so the full diagnostic is ours to quote — this is the
-     *   mealco incident's exact shape, and it is the case that mattered.
-     * - a WEBPIECES peer deliberately sends only the generic reason phrase for its status (see
-     *   `ApiErrorHttpMapper` in http-server — only `ApiEndUserError`'s message is caller-facing), so this
-     *   reads "Downstream said: Not Found". That is correct and not a regression: the peer's real
-     *   message is in the PEER's log, correlated by request id, which is the only place it was ever
-     *   safe to read it.
-     *
-     * This whole string is an operator-facing message on an `ApiImplementationError`, so when THIS
-     * server answers its own caller none of it goes on the wire — it goes to this server's log.
-     */
-    protected override adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error {
-        if (failure.appRegistered) {
-            return failure.error;
-        }
-        if (failure.statusCode < 400 || failure.statusCode >= 500) {
-            return failure.error;
-        }
-        return new ApiImplementationError(
-            `${callId}: dependency answered HTTP ${failure.statusCode}. That status describes OUR ` +
-                `request to it, not an answer for our caller, so this server owns it as a 500 — check the ` +
-                `path, the base URL, whether the dependency is deployed, and our service credentials. ` +
-                `Downstream said: ${failure.error.message}`,
-            failure.error,
-        );
-    }
 }
 
 /**

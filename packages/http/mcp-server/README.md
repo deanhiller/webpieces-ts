@@ -91,8 +91,10 @@ const config = new WpMcpServerConfig<MyGrant, MyMintRequest>()
     .setEndpointMintRequest((credential) => new MyMintRequest(credential.subject))
     .setAuthorizationServers(['https://login.example.com'])
     .setRequiredScopes(['tools'])
-    .setErrorTranslator(new MyMcpErrorTranslators())
     .setMaxAccountValidationAgeSeconds(15 * 60);
+
+// The tools/call error translator is a PROCESS-GLOBAL, not a member of this config:
+McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
 ```
 
 Each setter validates its own value immediately and names itself in the failure: `setResource(...)`
@@ -179,11 +181,11 @@ hour and MCP access tokens at 30 days.
 ## Error boundary
 
 `WpMcpErrorTranslator` is the one place a failure becomes an MCP reply, mirroring
-`ApiErrorHttpMapper`: an error in, the exact wire shape out. Each entry point has exactly one catch
+`WebpiecesDefaultErrorTranslator`: an error in, the exact wire shape out. Each entry point has exactly one catch
 that only delegates to it; the dispatcher and the local/remote invokers have none. Classification is
 the shared `ApiErrorBoundary.encode` rule (a non-`ApiError`, or a caller-local `ApiConnectionError`,
 publishes as kind `implementation`). The boundary never substitutes an object for the thrown error,
-so an app's `McpErrorTranslators` can `instanceof` its own error classes.
+so an app's `McpErrorTranslator` can `instanceof` its own error classes.
 
 There is ONE method per BOUNDARY, named for the boundary it guards. They cannot be one shape — the
 MCP spec fixes each — so the three-ness is made obvious rather than accidental:
@@ -192,7 +194,7 @@ MCP spec fixes each — so the three-ness is made obvious rather than accidental
 |---|---|---|
 | before the SDK: bearer, `Origin`, malformed body | `toBearerBoundaryResponse(error): HttpResponseDto<McpHttpErrorBody>` | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500 |
 | `tools/list` | `toListError(error): never` | throws JSON-RPC `-32602` (bad request) or `-32603` `Internal Error` |
-| `tools/call`, tool found: bad arguments, `@WpMcpAuthJwt` denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` | `isError: true` result |
+| `tools/call`, tool found: bad arguments, `@WpMcpAuthJwt` denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` (delegates to `McpRegistry.getErrorTranslator().toWire`) | `isError: true` result |
 | `tools/call`, unknown tool name | `unknownTool(name)` | JSON-RPC `-32602` `Unknown tool: <name>` |
 
 The pre-SDK boundary produces a VALUE like every other API in the framework and `WpMcpServer` writes
@@ -234,16 +236,18 @@ Every reply carries the requestId so a user can quote it: `_meta["webpieces/requ
 An app owns its error taxonomy and owns how those errors should be explained to a model, so a
 registered translator REPLACES the webpieces default for every `tools/call` failure — the same
 convention `ExpressWrapper.handleError` applies on the HTTP path. Register one with
-`WpMcpServerConfig.setErrorTranslator(...)`; it is a setter and not a global, because `WpMcpServer` is
-constructed by app code and two servers may run in one process.
+`McpRegistry.setErrorTranslator(...)`: ONE process-global per protocol, mirroring `ClientRegistry`
+for HTTP and `IpcRegistry` for IPC, so every call site is one unconditional line. (Two MCP servers in
+one process therefore share one translator, and registration order matters rather than being fixed at
+construction — the trade taken deliberately in issue #968 to make all three protocols read alike.)
 
 ```ts
-class LangMcpErrorTranslators implements McpErrorTranslators {
+class LangMcpErrorTranslator implements McpErrorTranslator {
     private readonly fallback = new McpDefaultToolCallRenderer();
 
-    toToolCallResult(error: Error): CallToolResult {
+    toWire(error: Error): CallToolResult {
         if (!(error instanceof LangPassageLockedError)) {
-            return this.fallback.toToolCallResult(error); // not mine -> webpieces default
+            return this.fallback.toWire(error); // not mine -> webpieces default
         }
         return {
             content: [{ type: 'text', text: `Passage ${error.passageId} is locked.` }],
@@ -270,10 +274,16 @@ class LangMcpErrorTranslators implements McpErrorTranslators {
   extremely hard to debug.
 
 A remote binding's generated Node client turns a dependency's 4xx into the gateway's own
-`ApiImplementationError` (see `NodeProxyClient.adaptDownstreamFailure`). A gateway that wants the model
-to see the peer's typed 4xx instead registers an `ErrorTranslators` via
-`ClientRegistry.setErrorTranslators(...)` whose `fromWire` relays decoded Webpieces payloads; with it,
-local and remote bindings produce identical tool results.
+`ApiImplementationError`, and a 5xx into an `ApiDependencyError` (the uniform rule in core-util's
+`ReceivedApiErrorRule`). A gateway that wants the model to see the peer's typed failure instead
+registers an `ErrorTranslator` via `ClientRegistry.setErrorTranslator(...)` whose `fromWire` THROWS
+the decoded Webpieces payload; with it, local and remote bindings produce identical tool results.
+
+### Why there is no `fromWire` on `McpErrorTranslator`
+
+The HTTP and IPC translators have two halves because webpieces sits on both ends of those wires.
+**webpieces is never the MCP client** — Claude is — so there is no return path for webpieces to
+translate. The pair is one-directional by nature, not by omission.
 
 The verifier's `accountValidatedAtEpochSeconds` must represent an authoritative enabled/revoked and
 role/scope read. The bridge enforces a maximum one-hour decision age; per-request reads are preferred so

@@ -16,7 +16,9 @@ import {
     JwtRequirement,
     LogManager,
     RuntimeLocality,
+    Surface,
     toError,
+    WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
@@ -159,9 +161,67 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 this.enforceLocalOnly(meta);
                 break;
         }
+        this.applySurface(mode);
         this.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
         this.rethrowDeferredBodyError();
         return nextFilter.invoke(meta);
+    }
+
+    /**
+     * Stamp WHICH KIND OF CALLER this is, from the auth mode that matched — `@WpAuthJwt` is a browser
+     * GUI, `@WpAuthApiKey` is an external partner. See {@link Surface}.
+     *
+     * SET AT THE EDGE ONLY. The surface belongs to the ORIGINAL caller, so a hop that already has one
+     * INHERITS it unchanged and this returns immediately. Two different callers put a value there
+     * before this runs, and neither may be overwritten:
+     *
+     * - the MCP bridge, which stamps `llm` before invoking a `@WpMcpAuthJwt` tool through `ApiFactory`
+     *   — that in-process hop still runs this filter, and its HTTP auth mode says nothing about the
+     *   model on the other end;
+     * - a `@WpAuthOidc` service-to-service hop, whose caller's surface arrived on the wire. OIDC is an
+     *   internal hop, NOT a surface of its own, so it deliberately maps to `undefined` below and the
+     *   propagated value survives.
+     *
+     * Running BEFORE {@link reconcileWireTrust} is what makes the trusted-header rule work for this
+     * key: on a `@WpAuthJwt` edge a caller who also SENDS `x-wp-surface` must match the value the
+     * framework just derived, and on a public route nothing vouches for it at all, so it is a 401.
+     */
+    private applySurface(mode: AuthMode): void {
+        if (RequestContext.getTrusted(WebpiecesCoreHeaders.SURFACE) !== undefined) {
+            return;
+        }
+        const surface = AuthFilter.surfaceFor(mode);
+        if (surface !== undefined) {
+            RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, surface);
+        }
+    }
+
+    /**
+     * The auth mode -> {@link Surface} table, and the ONE place it is written down.
+     *
+     * `undefined` means "this mode is not a surface", which is a different statement from "unknown":
+     * `oidc` and `shared-secret` are internal hops that RELAY somebody else's surface, `webhook`'s
+     * sender is a vendor with no webpieces surface at all, and `local-only` is a developer's own box.
+     *
+     * An exhaustive switch with NO `default`, like {@link verifiesCaller} and
+     * `DestinationTrust.forAuthMode`: a new AuthMode kind must fail to compile here rather than
+     * silently landing on `gui` (which would publish 266 to a partner) or on `public-api` (which would
+     * publish a real 4xx to a GUI).
+     */
+    // webpieces-disable no-function-outside-class -- static pure mapping from the AuthMode union, kept beside its only caller (mirrors verifiesCaller)
+    private static surfaceFor(mode: AuthMode): Surface | undefined {
+        switch (mode.kind) {
+            case 'jwt':
+                return 'gui';
+            case 'apikey':
+                return 'public-api';
+            case 'oidc':
+            case 'shared-secret':
+            case 'webhook':
+            case 'local-only':
+            case 'public':
+                return undefined;
+        }
     }
 
     /**

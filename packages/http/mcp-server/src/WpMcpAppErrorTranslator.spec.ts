@@ -24,7 +24,8 @@ import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
-import { McpDefaultToolCallRenderer, McpErrorTranslators } from './WpMcpErrorTranslator';
+import { McpDefaultToolCallRenderer, McpErrorTranslator } from './McpToolCallRendering';
+import { McpRegistry } from './McpRegistry';
 import { McpHttpTestHarness, RpcResponse, TestServers } from './__tests__/McpHttpTestHarness';
 import {
     ENDPOINT_PATH,
@@ -90,13 +91,13 @@ class LockController extends LockApi {
  * What an application registers: it claims its own taxonomy and DELEGATES everything else to the
  * webpieces default, which is a public class it already has. There is no "not mine" return value.
  */
-class LockErrorTranslators implements McpErrorTranslators {
+class LockErrorTranslator implements McpErrorTranslator {
     calls = 0;
     private readonly fallback = new McpDefaultToolCallRenderer();
 
-    toToolCallResult(error: Error): CallToolResult {
+    toWire(error: Error): CallToolResult {
         this.calls += 1;
-        if (!(error instanceof PassageLockedError)) return this.fallback.toToolCallResult(error);
+        if (!(error instanceof PassageLockedError)) return this.fallback.toWire(error);
         if (error.passageId === 'translator-bug') throw new Error('SECRET-translator-bug');
         const structured = { passageId: error.passageId, action: 'ask_the_user_to_unlock' };
         const result: CallToolResult = {
@@ -113,7 +114,7 @@ describe('application-owned tools/call error translation', () => {
     let bridge: WpMcpServer<string, string>;
     let httpServer: Server;
     let harness: McpHttpTestHarness;
-    let translators: LockErrorTranslators;
+    let translators: LockErrorTranslator;
     let authority: TestTokenAuthority;
     let logs: RecordingLoggerFactory;
     let originalLoggerFactory: LoggerFactory;
@@ -131,7 +132,7 @@ describe('application-owned tools/call error translation', () => {
         router.addRoutes(LockApi, LockController);
         router.addRoutes(SearchApi, SearchController);
         authority = new TestTokenAuthority();
-        translators = new LockErrorTranslators();
+        translators = new LockErrorTranslator();
         bridge = new WpMcpServer(
             new WpMcpServerConfig<string, string>()
                 .setName('translator-server')
@@ -141,9 +142,11 @@ describe('application-owned tools/call error translation', () => {
                 .setEndpointJwtAuthority(jwtHook)
                 .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
                 .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools'])
-                .setErrorTranslator(translators),
+                .setRequiredScopes(['tools']),
         );
+        // The translator is a PROCESS-GLOBAL now (issue #968 R4), mirroring ClientRegistry and
+        // IpcRegistry, not a member of WpMcpServerConfig.
+        McpRegistry.setErrorTranslator(translators);
         const app: Express = express();
         bridge.bind(
             app,
@@ -158,6 +161,7 @@ describe('application-owned tools/call error translation', () => {
     });
 
     afterAll(async () => {
+        McpRegistry.resetForTests();
         LogManager.setFactory(originalLoggerFactory);
         await bridge.close();
         await TestServers.close(httpServer);
@@ -228,7 +232,7 @@ describe('application-owned tools/call error translation', () => {
         expect(visible['kind']).toBe('implementation');
         expect(JSON.stringify(payload)).not.toContain('SECRET-translator-bug');
         // The app's OWN bug is a second, different failure, so it gets its own single line.
-        expect(allLines('Application McpErrorTranslators.toToolCallResult threw')).toHaveLength(1);
+        expect(allLines('Application McpErrorTranslator.toWire threw')).toHaveLength(1);
         // ...and the original failure is still reported exactly once, by the filter above.
         expect(allLines('passage translator-bug is locked')).toHaveLength(1);
     });

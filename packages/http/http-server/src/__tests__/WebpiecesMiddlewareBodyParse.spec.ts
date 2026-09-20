@@ -75,7 +75,7 @@ class CapturingWrapper {
      * Drive executeImpl the way the real `execute()` does — INSIDE `RequestContext.run(...)`.
      *
      * executeImpl now publishes the transport-neutral request before it reads the body (issue #862),
-     * so that an app's ErrorTranslators can tell which request a parse failure belongs to. Publishing
+     * so that an app's ErrorTranslator can tell which request a parse failure belongs to. Publishing
      * needs the ambient scope, so a spec calling executeImpl bare was never exercising the real
      * ordering — it only got away with it because the stub `fillFromRequest` no-ops the one call that
      * used to need a context.

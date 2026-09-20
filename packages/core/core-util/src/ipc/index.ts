@@ -15,6 +15,13 @@ export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './IpcDecor
 export { IpcCallContext, IpcRequest, IpcSuccess, IpcFailure, IpcProtocol } from './IpcProtocol';
 export type { IpcReply, IpcMessage } from './IpcProtocol';
 export { IpcConnection, IpcConnectionOptions, IpcTransportError, IpcErrors } from './IpcConnection';
+export { IpcRegistry, IpcClientErrorTranslator } from './IpcRegistry';
+export type { IpcErrorTranslator } from './IpcErrorTranslator';
+export {
+    WebpiecesDefaultIpcErrorTranslator,
+    WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR,
+} from './WebpiecesDefaultIpcErrorTranslator';
+export { ApiErrorPayload } from '../errors/ApiErrorCodec';
 export type { IpcTransport, IpcScheduler, IpcErrorOwner } from './IpcConnection';
 export { IpcCallLogger } from './IpcLogging';
 export type { IpcLogging } from './IpcLogging';

@@ -46,7 +46,8 @@ import { McpApiDispatcher } from './McpApiDispatcher';
 import { McpBindOptions } from './McpBindOptions';
 import { McpInvocationContext, McpProgressReporter } from './McpInvocationContext';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
-import { McpCorrelation, WpMcpErrorTranslator } from './WpMcpErrorTranslator';
+import { McpCorrelation } from './McpToolCallRendering';
+import { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 
 const log = LogManager.getLogger('WpMcpServer');
 
@@ -119,7 +120,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
      */
     private readonly logApiCall = new LogApiCallImpl(new RequestContextApiCallContext());
     private readonly responseWriter = new ExpressResponseWriter();
-    /** tools/call gives the app's translators first refusal; every other reply stays framework-owned. */
+    /** tools/call reads `McpRegistry`; every other reply stays framework-owned. See McpErrorTranslator. */
     private readonly translator: WpMcpErrorTranslator;
     private registry?: McpToolRegistry;
     private handler?: McpHttpHandler;
@@ -129,10 +130,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
     private revision?: string;
 
     constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {
-        this.translator = new WpMcpErrorTranslator(
-            (): string => this.challenge(),
-            config.errorTranslator,
-        );
+        this.translator = new WpMcpErrorTranslator((): string => this.challenge());
     }
 
     /**

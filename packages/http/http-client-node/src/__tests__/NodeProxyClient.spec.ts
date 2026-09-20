@@ -5,10 +5,11 @@ import {
     ClientRegistry,
     DestinationTrust,
     Endpoint,
-    ErrorTranslators,
+    ErrorTranslator,
     HttpResponseDto,
     ApiDependencyError,
     ApiEndUserError,
+    WebpiecesDefaultErrorTranslator,
     ApiImplementationError,
     ApiNotFoundError,
     ApiUnavailableError,
@@ -167,17 +168,18 @@ async function callAndCatch(): Promise<unknown> {
 }
 
 beforeEach(() => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('pg-dataaccess', 'https://pg-dataaccess.example.com');
 });
 
 afterEach(() => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     vi.unstubAllGlobals();
 });
 
 /**
- * THE ASYMMETRY, server half — the whole point of this suite.
+ * THE UNIFORM RULE, server half — the whole point of this suite, and since #968 the BROWSER applies
+ * the identical rule (see `BrowserProxyClient.spec.ts`).
  *
  *   A status received from a downstream dependency describes OUR request to it. It is never the
  *   status we return to OUR caller. The server that answered 404 is correct; the server that asked
@@ -200,7 +202,7 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
         expect(error).not.toHaveProperty('code');
     });
 
-    it('THE INCIDENT: an HTML 404 from an undeployed dependency, with the diagnostic kept as the cause', async () => {
+    it('THE INCIDENT: an HTML 404 from an undeployed dependency, with the diagnostic in the message', async () => {
         stubExpressHtml404();
 
         const error = await callAndCatch();
@@ -208,18 +210,12 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
         expect(error).toBeInstanceOf(ApiImplementationError);
         expect(error).not.toHaveProperty('code');
 
-        // The 500's own message names the call and the status it is answering FOR.
+        // The 500's own message names the call and the status it is answering FOR, and quotes the
+        // client-side diagnostic — the text that made this findable in one read.
         expect((error as Error).message).toContain('DbStoresApi.fetchStores');
         expect((error as Error).message).toContain('404');
-
-        // The original client-side diagnostic — the text that made this findable in one read — is
-        // reachable as the cause, and quoted in the message too.
-        const cause = (error as Error).cause as Error;
-        expect(cause).toBeInstanceOf(ApiNotFoundError);
-        expect(cause.message).toContain('DbStoresApi.fetchStores');
-        expect(cause.message).toContain('text/html');
-        expect(cause.message).toContain('did not come from the webpieces server');
-        expect(cause.message).toContain('Cannot POST /db-stores/fetch-stores');
+        expect((error as Error).message).toContain('text/html');
+        expect((error as Error).message).toContain('did not come from the webpieces server');
         expect((error as Error).message).toContain('Cannot POST /db-stores/fetch-stores');
     });
 
@@ -231,7 +227,8 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
 
             expect(error).not.toHaveProperty('code');
             expect(error).toBeInstanceOf(ApiImplementationError);
-            expect((error as Error).message).toContain(`HTTP ${status}`);
+            expect((error as Error).message).toContain(String(status));
+            // The peer's DECODED error travels as the cause, so the original type is still readable.
             expect(((error as Error).cause as Error).message).toBe(`downstream said ${status}`);
         }
     });
@@ -253,36 +250,48 @@ describe("NodeProxyClient turns a downstream 4xx into THIS server's own 500", ()
 });
 
 /**
- * The scope line. 5xx already means "the dependency is unavailable" — honest and useful outward —
- * and 500 is already a 500. 266 (ApiEndUserError, a 2xx code carrying user validation) and
- * ApiDependencyBackoffError are not failures caused by this client request. None is rewritten.
+ * The other half of the uniform rule (#968): a 5xx says the PEER broke, so this hop reports an
+ * `ApiDependencyError` and its own failure metrics stay clean. An `ApiDependencyError` that ALREADY
+ * came back that way is rethrown untouched — the fault is attributed further downstream and
+ * re-wrapping it once per hop would bury the original message a `cause` deeper each time. 266 is the
+ * one 2xx that carries an error, and it keeps its typed `ApiEndUserError`.
  */
-describe('NodeProxyClient passes everything that is not a 4xx through unchanged', () => {
-    it('502 / 503 keep their type — "the dependency is waking / unavailable" is the right signal', async () => {
+describe('NodeProxyClient reports a 5xx as the DEPENDENCY failing, not as its own bug', () => {
+    it('502 / 503 are the DEPENDENCY failing, so both become ApiDependencyError on this hop', async () => {
         stubApiErrorPayload(502, 'upstream refused');
         expect(await callAndCatch()).toBeInstanceOf(ApiDependencyError);
 
         stubApiErrorPayload(503, 'cold start');
-        expect(await callAndCatch()).toBeInstanceOf(ApiUnavailableError);
+        expect(await callAndCatch()).toBeInstanceOf(ApiDependencyError);
     });
 
-    it('a downstream 500 stays a 500 (and is NOT double-wrapped)', async () => {
+    it('a 502 that ALREADY says ApiDependencyError is rethrown AS-IS, never double-wrapped', async () => {
+        stubApiErrorPayload(502, 'upstream refused');
+
+        const error = await callAndCatch();
+
+        expect(error).toBeInstanceOf(ApiDependencyError);
+        expect((error as Error).message).toBe('upstream refused');
+        expect((error as Error).message).not.toContain('dependency answered');
+    });
+
+    it('a downstream 500 is the PEER broken, so THIS hop reports a dependency failure', async () => {
         stubApiErrorPayload(500, 'dependency blew up');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(ApiImplementationError);
-        expect((error as Error).message).toBe('dependency blew up');
-        expect((error as Error).cause).toBeUndefined();
+        expect(error).toBeInstanceOf(ApiDependencyError);
+        expect((error as Error).message).toContain('dependency blew up');
+        expect(((error as Error).cause as Error).message).toBe('dependency blew up');
     });
 
-    it('503 ApiDependencyBackoffError is untouched — it is not a status about OUR request', async () => {
+    it('503 ApiDependencyBackoffError is still the peer failing, and its text survives', async () => {
         stubApiErrorPayload(503, 'dependency is rate limiting us', 'dependency-backoff');
 
         const error = await callAndCatch();
 
-        expect(error).toBeInstanceOf(ApiDependencyBackoffError);
-        expect((error as Error).message).toBe('dependency is rate limiting us');
+        expect(error).toBeInstanceOf(ApiDependencyError);
+        expect((error as Error).message).toContain('dependency is rate limiting us');
     });
 
     /**
@@ -342,7 +351,7 @@ describe('NodeProxyClient and ApiEndUserError.edgeHttpStatus', () => {
         expect((result as ApiEndUserError).edgeHttpStatus).toBeUndefined();
     });
 
-    it('a real 404 on a hop (route missing) is still our 500 — unchanged', async () => {
+    it('a real 404 on a hop (route missing) is still our own bug — unchanged', async () => {
         stubExpressHtml404();
 
         const error = await callAndCatch();
@@ -353,24 +362,31 @@ describe('NodeProxyClient and ApiEndUserError.edgeHttpStatus', () => {
 });
 
 /**
- * THE OPT-OUT, and there is only one: the app's `ErrorTranslators`, installed on `ClientRegistry` at
+ * THE OPT-OUT, and there is only one: the app's `ErrorTranslator`, installed on `ClientRegistry` at
  * startup. A thin proxy or gateway that genuinely wants to relay a downstream status as its own says
  * so in one greppable line, and that decision wins here. There is deliberately NO ClientConfig flag
  * and NO webpieces.config.json key — a flag would make the dangerous choice invisible in the code
- * that suffers from it, whereas `grep -rn setErrorTranslators` lists every app that opted out.
+ * that suffers from it, whereas `grep -rn setErrorTranslator` lists every app that opted out.
  */
-describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
+describe('an app-installed fromWire WINS over the uniform rule', () => {
+    class RelayNotFound implements ErrorTranslator {
+        private readonly fallback = new WebpiecesDefaultErrorTranslator();
+
+        toWire(error: Error): HttpResponseDto {
+            return this.fallback.toWire(error);
+        }
+
+        fromWire(response: HttpResponseDto): void {
+            if (response.status.code !== 404) {
+                this.fallback.fromWire(response); // not mine -> the webpieces default answers
+                return;
+            }
+            throw new ApiNotFoundError((response.body as ApiErrorPayload).message ?? 'relayed 404');
+        }
+    }
+
     it('a 404 the app claims relays the downstream status as the app chose', async () => {
-        const relay: ErrorTranslators = {
-            toWire: () => undefined,
-            fromWire: (response: HttpResponseDto) =>
-                response.status.code === 404
-                    ? new ApiNotFoundError(
-                          (response.body as ApiErrorPayload).message ?? 'relayed 404',
-                      )
-                    : undefined,
-        };
-        ClientRegistry.setErrorTranslators(relay);
+        ClientRegistry.setErrorTranslator(new RelayNotFound());
         stubApiErrorPayload(404, 'no such store');
 
         const error = await callAndCatch();
@@ -380,17 +396,8 @@ describe('an app-installed fromWire WINS over the node 4xx-to-500 wrap', () => {
         expect((error as Error).message).toBe('no such store');
     });
 
-    it('a status the translators do NOT claim still gets wrapped', async () => {
-        const relay: ErrorTranslators = {
-            toWire: () => undefined,
-            fromWire: (response: HttpResponseDto) =>
-                response.status.code === 404
-                    ? new ApiNotFoundError(
-                          (response.body as ApiErrorPayload).message ?? 'relayed 404',
-                      )
-                    : undefined,
-        };
-        ClientRegistry.setErrorTranslators(relay);
+    it('a status the translator does NOT claim falls to the webpieces default', async () => {
+        ClientRegistry.setErrorTranslator(new RelayNotFound());
         stubApiErrorPayload(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();

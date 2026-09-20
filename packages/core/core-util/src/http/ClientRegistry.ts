@@ -1,6 +1,7 @@
-import { ErrorTranslators } from './ErrorTranslators';
+import { ErrorTranslator } from './ErrorTranslator';
 import { FailureClassifier } from './FailureClassifier';
 import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
+import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { ApiMethodInfo } from './ApiMethodInfo';
 
 /**
@@ -59,23 +60,30 @@ export class ClientRegistry {
     private static deriver: ServiceUrlDeriver | undefined;
 
     /**
-     * The app's ONE {@link ErrorTranslators}, consulted BEFORE webpieces' built-in error mapping in
-     * BOTH directions. Process-global, set once at startup on the SERVER and in the BROWSER — the
-     * same no-DI pattern as {@link ClientRegistry.mappings} above.
+     * The process's ONE {@link ErrorTranslator}. NEVER undefined — it starts life holding
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}, and {@link ClientRegistry.setErrorTranslator}
+     * REPLACES it. Process-global, set once at startup on the SERVER and in the BROWSER — the same
+     * no-DI pattern as {@link ClientRegistry.mappings} above.
+     *
+     * There is no "did anyone register one" question anywhere in the framework because this field
+     * cannot be empty: every caller makes ONE unconditional call, and an app translator declines an
+     * error by DELEGATING to {@link WebpiecesDefaultErrorTranslator}.
      *
      * ONE, not a list, on purpose: an app that has several layers of error policy composes them
      * INSIDE its own `toWire`, where the precedence is written down, instead of leaving it implicit
      * in the order two unrelated startup paths happened to register.
      */
-    private static errorTranslators: ErrorTranslators | undefined;
+    private static errorTranslator: ErrorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
 
     /**
      * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
-     * so a single strategy covers the server router AND all internal clients. Undefined = use the
-     * webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}). Populated once at startup on the
+     * so a single strategy covers the server router AND all internal clients. NEVER undefined: it
+     * starts life holding the webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}) and
+     * {@link ClientRegistry.setDefaultFailureClassifier} replaces it. Populated once at startup on the
      * SERVER and in the BROWSER — same no-DI pattern as {@link ClientRegistry.mappings}.
      */
-    private static appDefaultFailureClassifier: FailureClassifier | undefined;
+    private static appDefaultFailureClassifier: FailureClassifier =
+        WEBPIECES_DEFAULT_FAILURE_CLASSIFIER;
 
     /**
      * Per-EXTERNAL-client {@link FailureClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
@@ -177,7 +185,7 @@ export class ClientRegistry {
     }
 
     /**
-     * Install the app's {@link ErrorTranslators} — the ONE symmetric owner of error translation for
+     * Install the app's {@link ErrorTranslator} — the ONE symmetric owner of error translation for
      * this process, server side AND every client side. Consulted BEFORE webpieces' built-in mapping
      * in both directions. Call ONCE at startup, on the server AND in the browser, mirroring
      * {@link ClientRegistry.addMapping}.
@@ -185,21 +193,21 @@ export class ClientRegistry {
      * `set`, not `add`: see the field doc above for why a registry LIST is not wanted.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static setErrorTranslators(translators: ErrorTranslators): void {
-        ClientRegistry.errorTranslators = translators;
+    static setErrorTranslator(translator: ErrorTranslator): void {
+        ClientRegistry.errorTranslator = translator;
     }
 
     /**
-     * The app's installed {@link ErrorTranslators}, or `undefined` when this process installed none.
+     * THE {@link ErrorTranslator} for this process — never `undefined`, so a caller never branches.
      *
-     * The `undefined` here is "nobody registered", which is a fact about the PROCESS — it is not a
-     * per-error "not mine". A registered translator answers EVERY error and EVERY response, declining
-     * by delegating to the webpieces default (see {@link ErrorTranslators}), so a caller asks this
-     * question exactly once and then makes one unconditional call.
+     * Until an app calls {@link ClientRegistry.setErrorTranslator} this is
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}. A registered translator answers EVERY error and
+     * EVERY response, declining by delegating to the webpieces default (see {@link ErrorTranslator}),
+     * so every call site in the framework is one unconditional line.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static getErrorTranslators(): ErrorTranslators | undefined {
-        return ClientRegistry.errorTranslators;
+    static getErrorTranslator(): ErrorTranslator {
+        return ClientRegistry.errorTranslator;
     }
 
     /**
@@ -240,25 +248,28 @@ export class ClientRegistry {
                 return verdict;
             }
         }
-        if (ClientRegistry.appDefaultFailureClassifier !== undefined) {
-            const verdict = ClientRegistry.appDefaultFailureClassifier.isFailure(error, methodInfo);
-            if (verdict !== undefined) {
-                return verdict;
-            }
+        const verdict = ClientRegistry.appDefaultFailureClassifier.isFailure(error, methodInfo);
+        if (verdict !== undefined) {
+            return verdict;
         }
         return WEBPIECES_DEFAULT_FAILURE_CLASSIFIER.isFailure(error, methodInfo) ?? true;
     }
 
     /**
-     * Reset mappings, the deriver, the error translators, AND failure classifiers. For tests, so
-     * the process-globals do not leak across specs.
+     * Put the process-globals back to the state a fresh process starts in. For TESTS, so one spec
+     * cannot leak its registrations into the next.
+     *
+     * It RESTORES the webpieces defaults rather than emptying the pluggable slots, which is the whole
+     * reason it is not called `clear()` any more: `getErrorTranslator()` and the default failure
+     * classifier are non-optional now, so "cleared" is not a state they have. A spec that wants
+     * webpieces' own behaviour back asks for exactly that.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static clear(): void {
+    static resetForTests(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.errorTranslators = undefined;
-        ClientRegistry.appDefaultFailureClassifier = undefined;
+        ClientRegistry.errorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
+        ClientRegistry.appDefaultFailureClassifier = WEBPIECES_DEFAULT_FAILURE_CLASSIFIER;
         ClientRegistry.failureClassifiersByApiClass.clear();
     }
 }

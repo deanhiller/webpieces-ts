@@ -23,13 +23,13 @@ function setOnGcp(kService: string | undefined): void {
 }
 
 beforeEach(() => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     setOnGcp(undefined);
 });
 
 afterEach(() => {
     setOnGcp(undefined);
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
 });
 
 /**

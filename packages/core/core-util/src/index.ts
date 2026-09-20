@@ -224,11 +224,23 @@ export { ServiceInfo } from './http/ServiceInfo';
 export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
 // The ENTIRE HTTP response as pure data — the ONE form both transports (express, fetch) are
-// normalised into, so an ErrorTranslators implementation is written once and serves both.
+// normalised into, so an ErrorTranslator implementation is written once and serves both.
 export { HttpHeader, HttpResponseStatus, HttpResponseDto } from './http/HttpResponseDto';
 // Pluggable, bidirectional error translation (app exception <-> the WHOLE response). Set on
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
-export type { ErrorTranslators } from './http/ErrorTranslators';
+export type { ErrorTranslator } from './http/ErrorTranslator';
+// THE webpieces default translator — always installed, and what an app's own translator delegates to
+// in order to decline an error. ONE class, both halves, node and browser alike.
+export {
+    WebpiecesDefaultErrorTranslator,
+    WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
+} from './http/WebpiecesDefaultErrorTranslator';
+// WHICH KIND OF CALLER drove this request (gui / llm / public-api), and the per-request end-user
+// status derived from it — the replacement for the deleted per-router EndUserStatus.
+export { SurfaceEndUserStatus } from './http/Surface';
+export type { Surface } from './http/Surface';
+// The ONE rule for an error RECEIVED from another process, shared verbatim by HTTP and IPC.
+export { ReceivedApiErrorRule } from './errors/ReceivedApiErrorRule';
 // Pluggable per-client failure classification (is a thrown API-call error a real failure or an
 // expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
 export type { FailureClassifier } from './http/FailureClassifier';

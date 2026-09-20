@@ -47,7 +47,7 @@ async function bootBothServers(): Promise<void> {
     process.env['INTERNAL_API_SECRET'] = TEST_SHARED_SECRET;
 
     // client-server's outbound Server2Api client resolves 'server2' via the local registry (off-GCP).
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('server2', `http://localhost:${server2Port}`);
 
     // One process, one global HeaderRegistry serving TWO servers. Build server2 FIRST (no
@@ -84,7 +84,7 @@ async function bootBothServers(): Promise<void> {
 async function stopBothServers(): Promise<void> {
     delete process.env['INTERNAL_API_SECRET'];
     logSpy.mockRestore();
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     await new Promise<void>((resolve: () => void) => clientServerHttp.close(() => resolve()));
     await new Promise<void>((resolve: () => void) => server2Http.close(() => resolve()));
 }

@@ -3,13 +3,13 @@ import {
     ClientRegistry,
     ApiErrorPayload,
     ApiBadRequestError,
-    ErrorTranslators,
+    ErrorTranslator,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
+    WebpiecesDefaultErrorTranslator,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
-import { ApiErrorHttpMapper } from '../ApiErrorHttpMapper';
 
 /** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's AiBadRequestError). */
 class AiBadRequestError extends Error {
@@ -28,22 +28,23 @@ class AiErrorPayload {
 }
 
 /** Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. */
-class AiErrorTranslators implements ErrorTranslators {
+class AiErrorTranslator implements ErrorTranslator {
     /** "Not mine" is a DELEGATION to the webpieces default now, never an `undefined`. */
-    private readonly fallback = new ApiErrorHttpMapper('gui');
+    private readonly fallback = new WebpiecesDefaultErrorTranslator();
 
     toWire(error: Error): HttpResponseDto {
         if (!(error instanceof AiBadRequestError)) {
-            return this.fallback.toResponse(error);
+            return this.fallback.toWire(error);
         }
         const pe = new AiErrorPayload(error.message, error.name);
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
-    fromWire(response: HttpResponseDto): Error | undefined {
+    fromWire(response: HttpResponseDto): void {
         if (response.status.code !== 460) {
-            return undefined;
+            this.fallback.fromWire(response);
+            return;
         }
-        return new AiBadRequestError((response.body as AiErrorPayload).message ?? 'AI bad request');
+        throw new AiBadRequestError((response.body as AiErrorPayload).message ?? 'AI bad request');
     }
 }
 
@@ -91,19 +92,19 @@ function newWrapper(): ExpressWrapper {
 }
 
 /**
- * A registered ErrorTranslators REPLACES the webpieces default in ExpressWrapper.handleError, so an
+ * A registered ErrorTranslator REPLACES the webpieces default in ExpressWrapper.handleError, so an
  * app both ADDS custom types and OVERRIDES built-ins — while an error it declines is handed to
- * `ApiErrorHttpMapper` by the app itself and comes out byte-identical to registering nothing. SERVER half of the wire symmetry with
+ * `WebpiecesDefaultErrorTranslator` by the app itself and comes out byte-identical to registering nothing. SERVER half of the wire symmetry with
  * ClientErrorTranslator (the round-trip itself is proven in core-util's ClientRegistry.spec.ts,
- * using the same AiErrorTranslators both directions).
+ * using the same AiErrorTranslator both directions).
  */
 describe('ExpressWrapper.handleError registry integration', () => {
     beforeEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
     it('serializes an installed custom type (460) the built-in ladder cannot, VERBATIM', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new AiBadRequestError('bad ai input'));
@@ -123,7 +124,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
         const withNone = new FakeResponse();
         newWrapper().handleError(asResponse(withNone), declined);
 
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators()); // only claims AiBadRequestError
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator()); // only claims AiBadRequestError
         const withTranslator = new FakeResponse();
         newWrapper().handleError(asResponse(withTranslator), declined);
 
@@ -138,7 +139,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('does nothing once headers are already sent', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
 
         const res = new FakeResponse();
         res.headersSent = true;

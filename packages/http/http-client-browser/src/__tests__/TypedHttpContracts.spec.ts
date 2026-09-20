@@ -56,7 +56,7 @@ describe('browser generated typed HTTP contracts', () => {
 
     beforeEach(() => {
         HeaderRegistry.configure([], true);
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         ClientRegistry.addUrlMapping('oauth', 'https://api.example.test');
         client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             BrowserTypedApi,
@@ -65,7 +65,7 @@ describe('browser generated typed HTTP contracts', () => {
     });
 
     afterEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         vi.unstubAllGlobals();
     });
 

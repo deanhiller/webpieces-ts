@@ -26,7 +26,6 @@ import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 import { RequestOutcome } from './RequestOutcome';
 import { ResponseBodyReader } from './ResponseBodyReader';
-import { TranslatedFailure } from './TranslatedFailure';
 import { NdjsonRequestStream } from './NdjsonRequestStream';
 import { SseResponseStream } from './SseResponseStream';
 import { StreamingCapabilityError } from './StreamingCapabilityError';
@@ -88,7 +87,7 @@ export abstract class ProxyClient {
     private readonly bodyReader = new ResponseBodyReader();
 
     /**
-     * fetch `Response` -> the transport-neutral {@link HttpResponseDto} an app's `ErrorTranslators`
+     * fetch `Response` -> the transport-neutral {@link HttpResponseDto} the registered `ErrorTranslator`
      * sees. Normalising HERE is what makes `fromWire` receive the identical shape in node and in the
      * browser: both environments share this class, and this is the only place either builds a DTO.
      */
@@ -172,33 +171,6 @@ export abstract class ProxyClient {
     protected clientFilters(): ClientFilterDefinition[] {
         return [];
     }
-
-    /**
-     * Adapt a translated downstream failure into the error THIS environment's caller should see.
-     *
-     * THE INVARIANT, and the reason this hook exists at all:
-     *
-     *   A status received from a downstream dependency describes OUR request to it. It is never the
-     *   status we return to OUR caller. The server that answered 404 is correct; the server that
-     *   asked for a route that does not exist is broken, and must say so as a 500.
-     *
-     * That invariant reads differently in the two environments, which is exactly why the ISOMORPHIC
-     * {@link ClientErrorTranslator} cannot settle it:
-     * - BROWSER: the client IS the end user's agent, so the downstream IS the answer. Pass it through
-     *   unchanged.
-     * - NODE: server-to-server. A 4xx from a dependency is a caller-side defect (wrong path, wrong
-     *   base URL, an undeployed dependency, bad service credentials), so the caller owns it as a 500.
-     *
-     * ABSTRACT, not a defaulted pass-through, for the same reason
-     * {@link outboundContextHeaders} takes a required `destination`: a permissive default puts the
-     * wrong answer one keystroke away. A new environment subclass must SAY which of the two it is,
-     * and there are exactly two subclasses in the repo, so the compile error is the migration.
-     *
-     * @param failure - the translated error, its provenance (app-registered vs built-in), and the
-     *                  downstream status
-     * @param callId  - `ApiName.methodName`, so a rewritten message can still name the call
-     */
-    protected abstract adaptDownstreamFailure(failure: TranslatedFailure, callId: string): Error;
 
     /** Whether fetch can read the response while its streaming request body remains open. */
     protected abstract supportsConcurrentDuplexFetch(): boolean;
@@ -674,13 +646,23 @@ export abstract class ProxyClient {
                     this.bodyReader.describeForeignBody(response, callId, await response.text()),
                 );
             }
-            return response.json();
+            // webpieces-disable no-any-unknown -- a success body is the caller's own DTO, erased here
+            const body: unknown = await response.json();
+            // EVERY response passes the seam, 2xx included: an app whose 200 body signals failure
+            // turns it into a throw here. The webpieces default returns silently, so the success
+            // path is unchanged — and the body is parsed ONCE, because a fetch body reads once.
+            ClientErrorTranslator.throwIfFailure(
+                this.responseDtoFactory.fromFetch(response, body),
+            );
+            return body;
         }
         const protocolError = await this.bodyReader.readErrorBody(response, callId);
-        const translated = ClientErrorTranslator.translateError(
+        // The mirror of what the SERVER's `toWire` wrote. `fromWire` throws, so this method cannot
+        // return for a failure response — `throwIfFailure` puts the webpieces default behind an app
+        // translator that forgets to, so the guarantee does not depend on app code being correct.
+        ClientErrorTranslator.throwFailure(
             this.responseDtoFactory.fromFetch(response, protocolError),
         );
-        throw this.adaptDownstreamFailure(translated, callId);
     }
 
     /** Preserve empty, JSON, and protocol text bodies for caller-owned full responses. */

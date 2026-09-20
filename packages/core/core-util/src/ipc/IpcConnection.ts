@@ -1,7 +1,8 @@
 import { toError } from '../lib/errorUtils';
 import { ApiCallTimeoutError } from '../http/ApiCallTimeoutError';
 import { CallContext } from '../http/CallStrategy';
-import { ApiErrorBoundary, ApiEndpointNotFoundError, ApiImplementationError } from '../errors';
+import { ApiEndpointNotFoundError, ApiImplementationError } from '../errors';
+import { IpcRegistry } from './IpcRegistry';
 import {
     IpcCallContext,
     IpcFailure,
@@ -10,14 +11,6 @@ import {
     IpcRequest,
     IpcProtocol,
 } from './IpcProtocol';
-
-/**
- * The publication rule this OWNING boundary applies before an error crosses the IPC wire — the same
- * one the HTTP server and MCP edges use. It matters here and not only there: an `ApiConnectionError`
- * is OUR outbound call failing, so to the peer this process is what is broken, and it must read
- * `implementation` rather than `connection`.
- */
-const IPC_ERROR_BOUNDARY = new ApiErrorBoundary();
 
 /** A local connection failed, distinct from a remote implementation's semantic ApiError. */
 export class IpcTransportError extends Error {
@@ -206,7 +199,11 @@ export class IpcConnection {
                 throw new ApiImplementationError('IPC handler reply correlation mismatch');
         } catch (err: unknown) {
             const error = toError(err);
-            reply = new IpcFailure(request.context, IPC_ERROR_BOUNDARY.encode(error));
+            // The ONE app-reachable seam for an outbound IPC failure. The webpieces default applies the
+            // same `ApiErrorBoundary` publication rule this used to call inline — notably that an
+            // `ApiConnectionError` publishes as `implementation`, because to the PEER this process is
+            // what is broken.
+            reply = new IpcFailure(request.context, IpcRegistry.getErrorTranslator().toWire(error));
         } finally {
             this.activeRequests.delete(request.context.callId);
         }

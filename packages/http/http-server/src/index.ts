@@ -12,13 +12,10 @@ export { PreConsumedBodyReader } from './body/PreConsumedBodyReader';
 export { RecordingFilter } from './filters/RecordingFilter';
 
 // The webpieces DEFAULT error response, exported as a DELEGABLE object: it returns the same
-// HttpResponseDto an app's ErrorTranslators.toWire returns, so an app wraps it ("webpieces' answer,
+// HttpResponseDto an app's ErrorTranslator.toWire returns, so an app wraps it ("webpieces' answer,
 // plus one header") rather than copying its status-to-message table.
-export { ApiErrorHttpMapper } from './ApiErrorHttpMapper';
 export { ExpressResponseWriter } from './ExpressResponseWriter';
 // How ApiEndUserError is answered: 'gui' (266, default) or 'edge' (its edgeHttpStatus, else 400).
-// Chosen via WebpiecesExpressRouter.setEndUserStatus(...) before bindExpress(app) (issue #948).
-export type { EndUserStatus } from './ApiErrorHttpMapper';
 
 // Test-case recording (contract lives in @webpieces/core-util)
 export { TestCaseRecorderImpl } from './recorder/TestCaseRecorderImpl';

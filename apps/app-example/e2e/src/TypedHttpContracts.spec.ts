@@ -226,7 +226,7 @@ describe('real server + browser/node typed HTTP transports', () => {
 
     beforeAll(async () => {
         HeaderRegistry.configure([AUTHORIZATION], true);
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         ClientRegistry.addUrlMapping('typed-http-test', `http://localhost:${PORT}`);
 
         const contextController = new ContextProbeController();
@@ -252,7 +252,7 @@ describe('real server + browser/node typed HTTP transports', () => {
     });
 
     afterAll(async () => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         await new Promise<void>((resolve: () => void) => server.close(() => resolve()));
     });
 

@@ -1,16 +1,16 @@
 import {
     ClientRegistry,
-    ErrorTranslators,
+    ErrorTranslator,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
+    WebpiecesDefaultErrorTranslator,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { ApiErrorHttpMapper } from '@webpieces/http-server';
 
 /**
  * An app's OWN error type, at its OWN status code — the thing the built-in webpieces ladder cannot
- * know about, and the reason {@link ErrorTranslators} exists.
+ * know about, and the reason {@link ErrorTranslator} exists.
  */
 export class OrderNotFoundError extends Error {
     constructor(public readonly orderId: string) {
@@ -36,10 +36,10 @@ export class OrderErrorPayload {
  * `RequestContext`, which is node-only, and `client-server-api` is tagged [browser, node] so
  * `enforce-architecture` (rightly) refuses that import. A browser app that wants the same symmetry
  * ships its own `fromWire` half against the same status codes — which is exactly the seam
- * `ErrorTranslators` is: one interface, two independently-installable halves.
+ * `ErrorTranslator` is: one interface, two independently-installable halves.
  *
  * `toWire` runs on the server (`ExpressWrapper.handleError`); `fromWire` runs on every client in the
- * process (`ClientErrorTranslator.translateError`). The payoff is type symmetry across the wire: the
+ * process (`ClientErrorTranslator.throwIfFailure`). The payoff is type symmetry across the wire: the
  * server throws {@link OrderNotFoundError} and the caller CATCHES {@link OrderNotFoundError},
  * instead of every call site decoding 460 by hand.
  *
@@ -48,19 +48,21 @@ export class OrderErrorPayload {
  * the request was published AFTER the body parse, so a malformed body reached the translator with an
  * empty scope and it could only step aside. `ErrorTranslationSymmetry.spec.ts` pins both halves.
  */
-export class OrderErrorTranslators implements ErrorTranslators {
+export class OrderErrorTranslator implements ErrorTranslator {
     /**
      * The webpieces DEFAULT, which this translator REPLACES. Declining is a call to it, not an
      * `undefined` — so an error this app does not claim comes out byte-identical to registering no
-     * translator at all. `'gui'` because this router did not opt into `setEndUserStatus('edge')`.
+     * translator at all, in BOTH directions. It takes no argument: whether an end-user answer is
+     * republished as a real 4xx is a property of the CALLER now (`WebpiecesCoreHeaders.SURFACE`), so
+     * a delegating app translator can no longer get its router's mode wrong.
      */
-    private readonly fallback = new ApiErrorHttpMapper('gui');
+    private readonly fallback = new WebpiecesDefaultErrorTranslator();
 
     /** SERVER: exception -> the whole response. Not mine => delegate to webpieces' default. */
     toWire(error: Error): HttpResponseDto {
         const path = RequestContext.getRequest()?.path;
         if (path === undefined || !path.startsWith('/public')) {
-            return this.fallback.toResponse(error);
+            return this.fallback.toWire(error);
         }
 
         const body = new OrderErrorPayload(error.message);
@@ -75,13 +77,20 @@ export class OrderErrorTranslators implements ErrorTranslators {
         return new HttpResponseDto(status, [new HttpHeader(ORDER_SURFACE_HEADER, path)], body);
     }
 
-    /** CLIENT: the whole response -> a typed exception. Same shape `toWire` produced. */
-    fromWire(response: HttpResponseDto): Error | undefined {
+    /**
+     * CLIENT: the whole response -> a THROW. Same shape `toWire` produced.
+     *
+     * Note the mirror: `toWire` RETURNS the wire shape because it is called inside a catch, and this
+     * THROWS because its whole job is to stop a failure response reaching a typed caller. Declining
+     * is a call to the default, which throws for anything that is not an ordinary 2xx.
+     */
+    fromWire(response: HttpResponseDto): void {
         if (response.status.code !== 460) {
-            return undefined;
+            this.fallback.fromWire(response);
+            return;
         }
         const body = response.body as OrderErrorPayload;
-        return new OrderNotFoundError(body.field ?? 'unknown');
+        throw new OrderNotFoundError(body.field ?? 'unknown');
     }
 }
 
@@ -90,6 +99,6 @@ export class OrderErrorTranslators implements ErrorTranslators {
  * startup; the example calls it from its tests so nothing else in the example changes behaviour.
  */
 // webpieces-disable no-function-outside-class -- one-line startup registration, mirroring ClientRegistry's own static API
-export function installOrderErrorTranslators(): void {
-    ClientRegistry.setErrorTranslators(new OrderErrorTranslators());
+export function installOrderErrorTranslator(): void {
+    ClientRegistry.setErrorTranslator(new OrderErrorTranslator());
 }
