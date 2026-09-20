@@ -39,5 +39,11 @@ export class ApiMethodInfo {
          *  id-token JWT) is masked in the log while the REAL value still travels on the wire untouched.
          *  Rides the call identity so the spec travels with the api definition, not a global app config. */
         readonly mask?: MaskSpec,
+        /** OPTIONAL — true when the route declared `@Endpoint(..., { background: true })`: this call is
+         *  plumbing the user did not ask for (a log shipper, a heartbeat, a telemetry flush), so
+         *  {@link LogApiCallImpl} emits NO `[API-*-req]`/`[API-*-resp-*]` line and stamps no
+         *  {@link ApiCallInfo} tag for it. Read once at route-build time and handed here, exactly as
+         *  {@link mask} is. Default (absent/false) = the ordinary, fully-logged call. */
+        readonly background: boolean = false,
     ) {}
 }

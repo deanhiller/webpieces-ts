@@ -72,21 +72,12 @@ export class LogApiCallImpl {
         method: (dto: Q) => Promise<R>,
         responseCount?: (response: R) => number | undefined,
     ): Promise<R> {
-        const ctx = this.activeContext();
-        const key = WebpiecesCoreHeaders.API_CALL_INFO;
+        if (methodInfo.background) {
+            return this.executeUnlogged(methodInfo, requestDto, method);
+        }
         const side = methodInfo.side;
         const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
-        // set → emit → remove, as ONE synchronous span: the tag is live only while the logger reads it,
-        // never across an await, so a single browser global slot can never be clobbered by a concurrent call.
-        const stamp = (info: ApiCallInfo, emit: () => void): void => {
-            ctx.set(key, info);
-            // webpieces-disable no-unmanaged-exceptions -- cleanup must run when a logging backend throws
-            try {
-                emit();
-            } finally {
-                ctx.remove(key);
-            }
-        };
+        const stamp = this.stamper(this.activeContext());
 
         // Stringify ONCE and reuse for both the log text and the size — a second JSON.stringify of a
         // large DTO purely to measure it would double the cost of the thing we are measuring.
@@ -133,6 +124,57 @@ export class LogApiCallImpl {
             this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
             throw err;
         }
+    }
+
+    /**
+     * Build the tag-and-emit span used around every `[API-*]` line.
+     *
+     * set → emit → remove, as ONE synchronous span: the tag is live only while the logger reads it,
+     * never across an await, so a single browser global slot can never be clobbered by a concurrent
+     * call. `ctx` is passed in (rather than read from `this`) so the caller has already proven it is
+     * ACTIVE before anything is stamped.
+     */
+    private stamper(ctx: ApiCallContext): (info: ApiCallInfo, emit: () => void) => void {
+        const key = WebpiecesCoreHeaders.API_CALL_INFO;
+        return (info: ApiCallInfo, emit: () => void): void => {
+            ctx.set(key, info);
+            // webpieces-disable no-unmanaged-exceptions -- cleanup must run when a logging backend throws
+            try {
+                emit();
+            } finally {
+                ctx.remove(key);
+            }
+        };
+    }
+
+    /**
+     * The `@Endpoint(..., { background: true })` path: run the call and say NOTHING about it.
+     *
+     * No `[API-*]` line, no {@link ApiCallInfo} stamp, and no serialization of either DTO — a
+     * background route is a log shipper or a heartbeat, so a line describing the call IS the thing
+     * being shipped, and emitting it feeds the next batch its own payload (#976).
+     *
+     * It deliberately does NOT call {@link activeContext}: that guard exists because a call with
+     * nowhere to STAMP a tag is a bug, and this path stamps nothing. A background call is therefore
+     * legal outside a RequestContext scope, which is exactly where a flusher tends to run.
+     *
+     * The null-request check is kept, because it is a contract error and not observability — a
+     * background route deserves the same error as any other, and the throw propagates to the caller
+     * unlogged here, exactly as the logged path re-throws.
+     *
+     * `responseCount` is not taken: it feeds only the `api.responseCount` tag, which is not emitted.
+     */
+    private async executeUnlogged<Q, R>(
+        methodInfo: ApiMethodInfo,
+        requestDto: Q,
+        method: (dto: Q) => Promise<R>,
+    ): Promise<R> {
+        if (!requestDto) {
+            throw new Error(
+                `Request cannot be null and was from ${methodInfo.apiClass}.${methodInfo.methodName}`,
+            );
+        }
+        return method(requestDto);
     }
 
     /**

@@ -538,3 +538,124 @@ describe('LogApiCall.isUserError (side-dependent)', () => {
         expect(LogApiCall.isUserError(new Error('x'), false)).toBe(false);
     });
 });
+
+/**
+ * `@Endpoint(..., { background: true })` — the log-shipper case (#976).
+ *
+ * Pinned in BOTH directions on purpose: asserting only that the background route is silent would
+ * still pass if `execute` stopped logging entirely, so every silence assertion is paired with the
+ * SAME call on a normal route proving the line is still emitted.
+ */
+describe('LogApiCall.execute — background routes are not api-logged', () => {
+    const capturing = new CapturingLoggerFactory();
+    const previousFactory = LogManager.getFactory();
+
+    beforeAll(() => {
+        if (!HeaderRegistry.isConfigured()) {
+            HeaderRegistry.configure([API], /*platformHeaders*/ false);
+        }
+        LogManager.setFactory(capturing);
+    });
+
+    afterAll(() => {
+        LogManager.setFactory(previousFactory);
+    });
+
+    /** The log-shipping endpoint: a real call identity, declared background. */
+    const backgroundInfo = (side: ApiSide): ApiMethodInfo =>
+        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, true);
+
+    /** True when any captured line carries `marker` — the "it still logs" half of each pair. */
+    const logged = (marker: string): boolean =>
+        capturing.lines.some((line: string) => line.includes(marker));
+
+    it('emits NO [API-client-req]/[API-client-resp-SUCCESS] line for a background route, while a normal route emits both', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+
+        await ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => ({
+            accepted: 1,
+        }));
+
+        expect(capturing.lines).toEqual([]);
+        // ...and no ApiCallInfo tag either: there is nothing to stamp when nothing is emitted.
+        expect(ctx.sets).toEqual([]);
+        expect(ctx.removes).toEqual([]);
+
+        // The other direction, same call shape: a normal route still logs both lines.
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
+        expect(logged('[API-client-req]')).toBe(true);
+        expect(logged('[API-client-resp-SUCCESS]')).toBe(true);
+    });
+
+    it('emits NO [API-server-req] line for a background route (the log-INGEST endpoint), while a normal route does', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+
+        await ctx.logApiCall.execute(backgroundInfo('server'), { lines: ['a'] }, async () => ({
+            accepted: 1,
+        }));
+        expect(capturing.lines).toEqual([]);
+
+        await ctx.logApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
+        expect(logged('[API-server-req]')).toBe(true);
+    });
+
+    it('stays silent on the FAILURE path too, where a normal route logs [API-client-resp-FAIL]', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+
+        await expect(
+            ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => {
+                throw new Error('ingest down');
+            }),
+        ).rejects.toThrow('ingest down');
+        expect(capturing.lines).toEqual([]);
+
+        await expect(
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => {
+                throw new Error('ingest down');
+            }),
+        ).rejects.toThrow('ingest down');
+        expect(logged('[API-client-resp-FAIL]')).toBe(true);
+    });
+
+    it('still returns the response and still rejects a null request, exactly as a logged call does', async () => {
+        const ctx = new RecordingApiCallContext();
+
+        const response = await ctx.logApiCall.execute(
+            backgroundInfo('client'),
+            { lines: ['a'] },
+            async () => ({ accepted: 1 }),
+        );
+        expect(response).toEqual({ accepted: 1 });
+
+        await expect(
+            ctx.logApiCall.execute(backgroundInfo('client'), undefined, async () => ({
+                accepted: 0,
+            })),
+        ).rejects.toThrow('Request cannot be null and was from BrowserLogApi.sendBatch');
+    });
+
+    it('runs outside an ACTIVE ApiCallContext, where a logged call throws — a flusher has no request scope', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+        ctx.active = false;
+
+        await expect(
+            ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => ({
+                accepted: 1,
+            })),
+        ).resolves.toEqual({ accepted: 1 });
+
+        await expect(
+            ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true })),
+        ).rejects.toThrow('LogApiCall requires an ACTIVE ApiCallContext');
+    });
+
+    it('defaults to false, so every existing ApiMethodInfo caller keeps logging', () => {
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').background).toBe(false);
+        expect(info('client').background).toBe(false);
+        expect(backgroundInfo('client').background).toBe(true);
+    });
+});
