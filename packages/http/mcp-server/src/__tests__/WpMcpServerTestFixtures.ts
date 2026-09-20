@@ -33,6 +33,12 @@ export const USER_ID = ContextKey.trusted<string>(
 );
 export const ENDPOINT_PATH = '/app-owned/mcp';
 export const MODERN_VERSION = '2026-07-28';
+/** What every shipping MCP client opens with today — the top of the 2025 negotiation table. */
+export const LEGACY_VERSION = '2025-11-25';
+/** An older 2025-era revision the negotiation table still carries. */
+export const OLDER_LEGACY_VERSION = '2025-03-26';
+/** A revision NO era knows: the one case a server is still right to refuse. */
+export const UNKNOWN_VERSION = '1999-01-01';
 
 @WpDto()
 export class SearchRequest {

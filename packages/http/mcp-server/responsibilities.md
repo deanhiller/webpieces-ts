@@ -8,7 +8,8 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Convert `@WpMcpTool` API metadata and DTO metadata into MCP tool definitions.
 - Validate resource-bound access tokens through an application verifier.
 - Enforce explicit `@WpMcpAuthJwt` policy for the verified MCP user principal.
-- Bind the application-selected MCP path through the official MCP 2026 HTTP/JSON-RPC implementation.
+- Bind the application-selected MCP path through the official MCP v2 HTTP/JSON-RPC implementation,
+  serving both the 2026-07-28 and the 2025-era wire from one registry (the revision is negotiated).
 - Invoke local APIs through the ordinary proxy/filter chain with a fresh short-lived application JWT.
 - Invoke remote APIs through generated Node clients using OIDC plus trusted delegated user context.
 - Coordinate bounded list caches, request-scoped subscriptions, shutdown, and a pluggable event bus.

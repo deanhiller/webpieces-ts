@@ -95,7 +95,12 @@ class WpSdkMcpServer extends McpServer {
 }
 
 /**
- * Modern-only MCP 2026-07-28 adapter around the official SDK's request-scoped HTTP handler.
+ * MCP adapter around the official SDK's request-scoped HTTP handler, serving BOTH wire eras from
+ * one tool registry: modern (2026-07-28, per-request `_meta` envelope) and legacy (the 2025-11-25
+ * family, negotiated by `initialize`). The SDK routes each request to the leg its shape selects and
+ * negotiates the revision; only a revision no era knows is refused. Pinning one era instead made
+ * every shipping client unreachable (issue #969), and the MCP lifecycle spec is explicit that a
+ * server answers with a revision it supports rather than erroring.
  *
  * Error boundary: every failure is mapped by the one `WpMcpErrorTranslator`, and each entry point
  * has exactly one catch that only delegates to it: the bind HTTP handler
@@ -182,9 +187,11 @@ export class WpMcpServer<TGrant, TMintRequest> {
                 void this.handleBodyFailure(bodyError, req, res);
             },
         );
-        // Registered AFTER the POST route so POST still wins. MCP 2026-07-28 has no session GET
-        // (`subscriptions/listen` is a POST method), so every other method is a method error — and a
-        // discovery probe gets that instead of Express' bare 404.
+        // Registered AFTER the POST route so POST still wins. NEITHER era served here has a session
+        // GET: 2026-07-28 has none at all (`subscriptions/listen` is a POST method), and the legacy
+        // leg is the SDK's STATELESS fallback, which answers the 2025 session GET/DELETE with the
+        // same 405. So every other method is a method error — and a discovery probe gets that
+        // instead of Express' bare 404.
         app.all(options.endpointPath, (_req: Request, res: Response): void => {
             res.setHeader('Allow', 'POST');
             res.status(405).json(new McpMethodNotAllowedBody());
@@ -213,7 +220,9 @@ export class WpMcpServer<TGrant, TMintRequest> {
         return createMcpHandler(
             (context: McpRequestContext) => this.buildSdkServer(context, options),
             {
-                legacy: 'reject',
+                // Both eras, one factory: `stateless` serves 2025-era traffic through a fresh
+                // instance of the SAME McpServerFactory, so the two eras can never drift apart.
+                legacy: 'stateless',
                 responseMode,
                 bus: options.deployment.bus,
                 maxSubscriptions: options.maxSubscriptions,
@@ -334,10 +343,13 @@ export class WpMcpServer<TGrant, TMintRequest> {
     }
 
     private buildSdkServer(context: McpRequestContext, options: McpBindOptions): McpServer {
+        // The era is the SDK's to decide and BOTH are served; what is not negotiable is that the
+        // request came through `bind`'s HTTP boundary, which is where the external bearer is
+        // verified. A factory call without it is a wiring mistake, never a client's doing.
         const authentication = context.authInfo?.extra?.['webpiecesAuthentication'];
-        if (context.era !== 'modern' || !(authentication instanceof McpPostAuthentication)) {
+        if (!(authentication instanceof McpPostAuthentication)) {
             throw new ApiImplementationError(
-                'WpMcpServer serves only MCP 2026-07-28 requests authenticated by its bind boundary.',
+                'WpMcpServer serves only MCP requests authenticated by its bind boundary.',
             );
         }
         const registry = this.requireRegistry();
