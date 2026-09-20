@@ -26,11 +26,11 @@ export class RequestOutcome {
         public readonly headers?: Headers,
         /**
          * Set on every non-success path: for a non-2xx, the error the CALLER will see — i.e. what
-         * `ClientErrorTranslator` picked AFTER `ProxyClient.adaptDownstreamFailure` had its say, so a
+         * the registered `ErrorTranslator`'s `fromWire` threw, so a
          * listener never disagrees with the thrown exception (on a server that is the 500 wrapping a
          * downstream 4xx, with the original reachable as `cause`). Otherwise the network/parse
          * failure normalized through `toError`. Always a real `Error` — never `unknown`, because
-         * nothing here is untyped: `translateError` RETURNS a typed `TranslatedFailure`, and every
+         * nothing here is untyped: `fromWire` THROWS a typed error, and every
          * rejection reaching this class has been through `toError`.
          */
         public readonly error?: Error,

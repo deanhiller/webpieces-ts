@@ -27,6 +27,8 @@ export {
     McpHttpErrorBody,
     McpHttpErrorDetail,
     ModelVisibleToolError,
-    WpMcpErrorTranslator,
-} from './WpMcpErrorTranslator';
-export type { McpErrorTranslators } from './WpMcpErrorTranslator';
+} from './McpToolCallRendering';
+export { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
+export type { McpErrorTranslator } from './McpToolCallRendering';
+// The process-global home of the ONE MCP translator, mirroring ClientRegistry / IpcRegistry.
+export { McpRegistry } from './McpRegistry';

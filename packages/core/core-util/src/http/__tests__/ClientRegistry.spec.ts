@@ -1,15 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ClientRegistry } from '../ClientRegistry';
-import { ErrorTranslators } from '../ErrorTranslators';
+import { ErrorTranslator } from '../ErrorTranslator';
+import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
 import { FailureClassifier } from '../FailureClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
-import { ApiErrorPayload, ApiNotFoundError, ApiBadRequestError } from '../../errors';
+import {
+    ApiBadRequestError,
+    ApiDependencyError,
+    ApiErrorPayload,
+    ApiNotFoundError,
+} from '../../errors';
 
 describe('ClientRegistry', () => {
     beforeEach(() => {
         // The registry is a process-global; reset it so specs do not leak into one another.
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
     it('addMapping stores http://localhost:<port>', () => {
@@ -42,7 +48,7 @@ describe('ClientRegistry', () => {
 
     it('clear() empties the registry', () => {
         ClientRegistry.addMapping('server2', 8202);
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         expect(ClientRegistry.tryLookup('server2')).toBeUndefined();
     });
 });
@@ -53,7 +59,7 @@ describe('ClientRegistry', () => {
  */
 describe('ClientRegistry resolution chain', () => {
     beforeEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
     it('a mapping WINS over the deriver', async () => {
@@ -109,7 +115,7 @@ describe('ClientRegistry resolution chain', () => {
         ClientRegistry.setDeriver((svc: string) =>
             Promise.resolve(`https://${svc}.derived.example`),
         );
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
 
         expect(await ClientRegistry.tryResolve('helper-fsdb')).toBeUndefined();
     });
@@ -128,29 +134,17 @@ class AiBadRequestError extends Error {
 }
 
 /**
- * The webpieces DEFAULTS an app's translator DELEGATES to when an error is not its own. The real
- * ones live downstream (`ApiErrorHttpMapper.toResponse`, `ClientErrorTranslator.builtInError`) and
- * core-util cannot import them, so these stand in for the shape: a translator ALWAYS answers, and
- * "not mine" is spelled as a call, never as `undefined`.
+ * Bidirectional translator for {@link AiBadRequestError}: exception <-> the WHOLE response. Note the
+ * header — the old (statusCode, protocolError) pair could not carry one at all. NEITHER half returns
+ * a sentinel: an unclaimed error is DELEGATED to the always-present webpieces default, on both
+ * sides, and `fromWire` THROWS rather than returning an error the caller must remember to throw.
  */
-class FrameworkDefault {
-    // webpieces-disable no-function-outside-class -- stand-in for the downstream default
-    static toWire(error: Error): HttpResponseDto {
-        const pe = new ApiErrorPayload();
-        pe.message = error.message;
-        return new HttpResponseDto(new HttpResponseStatus(500, 'Internal Server Error'), [], pe);
-    }
-}
+class AiErrorTranslator implements ErrorTranslator {
+    private readonly fallback = new WebpiecesDefaultErrorTranslator();
 
-/**
- * Bidirectional translators for {@link AiBadRequestError}: exception <-> the WHOLE response. Note
- * the header — the old (statusCode, protocolError) pair could not carry one at all. Neither method
- * returns `undefined`: an unclaimed error is handed to the framework default instead.
- */
-class AiErrorTranslators implements ErrorTranslators {
     toWire(error: Error): HttpResponseDto {
         if (!(error instanceof AiBadRequestError)) {
-            return FrameworkDefault.toWire(error);
+            return this.fallback.toWire(error);
         }
         const pe = new ApiErrorPayload();
         pe.message = error.message;
@@ -160,12 +154,14 @@ class AiErrorTranslators implements ErrorTranslators {
             pe,
         );
     }
-    fromWire(response: HttpResponseDto): Error | undefined {
+
+    fromWire(response: HttpResponseDto): void {
         if (response.status.code !== 460) {
-            return undefined; // not claimed -> the built-in mapping, and not
-        } // marked app-registered
+            this.fallback.fromWire(response); // not mine -> the webpieces default answers
+            return;
+        }
         const pe = response.body as ApiErrorPayload;
-        return new AiBadRequestError(pe.message ?? 'AI bad request');
+        throw new AiBadRequestError(pe.message ?? 'AI bad request');
     }
 }
 
@@ -174,76 +170,85 @@ const wireResponse = (code: number, pe: ApiErrorPayload = new ApiErrorPayload())
     new HttpResponseDto(new HttpResponseStatus(code, ''), [], pe);
 
 /**
- * The app's ONE ErrorTranslators. The registry answers exactly one question — is one installed? —
- * and the translator it hands back answers EVERY error on the SERVER half, declining by delegating
- * to the webpieces default rather than by returning `undefined`. The CLIENT half keeps `undefined`
- * because there it means "I do not CLAIM this status", which is provenance the caller acts on.
+ * The process's ONE ErrorTranslator. The registry answers NO question at all any more — it always
+ * holds one — and the translator it hands back answers EVERY error and EVERY response, declining by
+ * delegating to {@link WebpiecesDefaultErrorTranslator} rather than by returning a sentinel.
  */
-describe('ClientRegistry error translators', () => {
+describe('ClientRegistry error translator', () => {
     beforeEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
-    it('with none installed, the registry reports none — there is no per-error undefined', () => {
-        expect(ClientRegistry.getErrorTranslators()).toBeUndefined();
+    it('is NEVER undefined — a fresh process already has the webpieces default installed', () => {
+        expect(ClientRegistry.getErrorTranslator()).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
     });
 
-    it('round-trips a custom type: toWire then fromWire reproduces the typed error', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
-        const translators = ClientRegistry.getErrorTranslators()!;
+    it('round-trips a custom type: toWire then fromWire throws the typed error back', () => {
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        const translator = ClientRegistry.getErrorTranslator();
 
-        const wire = translators.toWire(new AiBadRequestError('bad ai input'));
+        const wire = translator.toWire(new AiBadRequestError('bad ai input'));
         expect(wire.status.code).toBe(460);
         expect(wire.status.reason).toBe('AI Bad Request');
         expect(wire.headers.map((h: HttpHeader) => h.name)).toEqual(['x-ai-hint']);
 
-        const rebuilt = translators.fromWire(wire);
-        expect(rebuilt).toBeInstanceOf(AiBadRequestError);
-        expect((rebuilt as AiBadRequestError).statusCode).toBe(460);
-        expect(rebuilt.message).toBe('bad ai input');
+        expect(() => translator.fromWire(wire)).toThrowError(
+            expect.objectContaining({ message: 'bad ai input' }),
+        );
     });
 
     it('a translator that does not claim the error/response DELEGATES to the default', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
-        const translators = ClientRegistry.getErrorTranslators()!;
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        const translator = ClientRegistry.getErrorTranslator();
 
-        expect(translators.toWire(new Error('other')).status.code).toBe(500);
-        expect(translators.fromWire(wireResponse(503))).toBeUndefined();
+        expect(translator.toWire(new Error('other')).status.code).toBe(500);
+        // 503 is not claimed, so the webpieces default answers — and its answer for a 5xx is
+        // ApiDependencyError: the peer broke, not us.
+        expect(() => translator.fromWire(wireResponse(503))).toThrow(ApiDependencyError);
+    });
+
+    it('registering a translator that only delegates is byte-identical to registering nothing', () => {
+        const declineEverything: ErrorTranslator = new WebpiecesDefaultErrorTranslator();
+        const withNothing = ClientRegistry.getErrorTranslator().toWire(new ApiNotFoundError('gone'));
+
+        ClientRegistry.setErrorTranslator(declineEverything);
+        const withDelegating = ClientRegistry.getErrorTranslator().toWire(
+            new ApiNotFoundError('gone'),
+        );
+
+        expect(withDelegating).toEqual(withNothing);
     });
 
     it('can OVERRIDE a built-in status (400) — the app replaces webpieces, it is not consulted first', () => {
-        const override: ErrorTranslators = {
-            toWire: (error: Error) => FrameworkDefault.toWire(error),
-            fromWire: (response: HttpResponseDto) =>
-                response.status.code === 400
-                    ? new AiBadRequestError(
-                          (response.body as ApiErrorPayload).message ?? 'overridden 400',
-                      )
-                    : undefined,
+        const override: ErrorTranslator = {
+            toWire: (error: Error) => new WebpiecesDefaultErrorTranslator().toWire(error),
+            fromWire: (response: HttpResponseDto) => {
+                if (response.status.code !== 400) return;
+                throw new AiBadRequestError(
+                    (response.body as ApiErrorPayload).message ?? 'overridden 400',
+                );
+            },
         };
-        ClientRegistry.setErrorTranslators(override);
+        ClientRegistry.setErrorTranslator(override);
 
-        expect(ClientRegistry.getErrorTranslators()!.fromWire(wireResponse(400))).toBeInstanceOf(
+        expect(() => ClientRegistry.getErrorTranslator().fromWire(wireResponse(400))).toThrow(
             AiBadRequestError,
         );
     });
 
     it('SET replaces — a second install is the only one consulted, so precedence is never implicit', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
-        ClientRegistry.setErrorTranslators({
-            toWire: (error: Error) => FrameworkDefault.toWire(error),
-            fromWire: () => undefined,
-        });
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
 
-        expect(
-            ClientRegistry.getErrorTranslators()!.toWire(new AiBadRequestError('x')).status.code,
-        ).toBe(500);
+        expect(ClientRegistry.getErrorTranslator().toWire(new AiBadRequestError('x')).status.code).toBe(
+            500,
+        );
     });
 
-    it('clear() drops the translators too, so they cannot leak into the next spec', () => {
-        ClientRegistry.setErrorTranslators(new AiErrorTranslators());
-        ClientRegistry.clear();
+    it('resetForTests() RESTORES the webpieces default, so nothing leaks into the next spec', () => {
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        ClientRegistry.resetForTests();
 
-        expect(ClientRegistry.getErrorTranslators()).toBeUndefined();
+        expect(ClientRegistry.getErrorTranslator()).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
     });
 });

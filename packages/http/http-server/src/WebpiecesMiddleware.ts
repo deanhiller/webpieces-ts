@@ -7,7 +7,6 @@ import { LogManager } from '@webpieces/core-util';
 import { ExpressWrapper } from './ExpressWrapper';
 import { StreamExpressWrapper } from './StreamExpressWrapper';
 import { RequestBodyReader } from './body/RequestBodyReader';
-import { EndUserStatus } from './ApiErrorHttpMapper';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
 // CORS mount/allow/block lines log under their own name (not [WebpiecesMiddleware]); the backend
@@ -71,7 +70,7 @@ export class WebpiecesMiddleware {
      * (body parsing, unmatched paths, a bug in the wrapper itself).
      *
      * The page carries NO `error.message`. It used to render one into a `<pre>` block, which is the
-     * same leak `ApiErrorHttpMapper` closes on the JSON side and a worse one here: the errors that
+     * same leak `WebpiecesDefaultErrorTranslator` closes on the JSON side and a worse one here: the errors that
      * reach THIS handler are the unhandled ones, whose messages are stack-adjacent internals nobody
      * wrote for a caller to read. The message is logged one line above, which is where it belongs.
      */
@@ -227,8 +226,6 @@ export class WebpiecesMiddleware {
      * @param bodyReader - Where the body bytes come from (the router's choice, see
      *   `WebpiecesExpressRouter.setBodyReader`). Required so the router's choice can never be
      *   silently dropped on the way to the wrapper.
-     * @param endUserStatus - How an `ApiEndUserError` is answered (the router's choice, see
-     *   `WebpiecesExpressRouter.setEndUserStatus`). Required for the same reason as `bodyReader`.
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
@@ -236,7 +233,6 @@ export class WebpiecesMiddleware {
         clientMethod: (...args: unknown[]) => Promise<unknown>,
         route: RouteMetadata,
         bodyReader: RequestBodyReader,
-        endUserStatus: EndUserStatus,
     ): ExpressWrapper {
         return new ExpressWrapper(
             clientMethod,
@@ -247,7 +243,6 @@ export class WebpiecesMiddleware {
             undefined,
             route,
             bodyReader,
-            endUserStatus,
         );
     }
 
@@ -255,8 +250,7 @@ export class WebpiecesMiddleware {
         // webpieces-disable no-any-unknown -- stream DTOs are erased at the routing boundary
         clientMethod: (...args: unknown[]) => Promise<unknown>,
         route: RouteMetadata,
-        endUserStatus: EndUserStatus,
     ): StreamExpressWrapper {
-        return new StreamExpressWrapper(clientMethod, route, this.headers, endUserStatus);
+        return new StreamExpressWrapper(clientMethod, route, this.headers);
     }
 }

@@ -8,7 +8,7 @@
  * # Why a DTO at all, instead of handing an app express's `res` or fetch's `Response`
  *
  * Node/express and browser fetch model a response completely differently, and an
- * {@link ErrorTranslators} implementation is registered ONCE and serves BOTH — the server writing a
+ * {@link ErrorTranslator} implementation is registered ONCE and serves BOTH — the server writing a
  * response and every client in the process reading one. So neither transport's object can be the
  * currency. webpieces normalises both into this DTO at its own boundary, and the app only ever sees
  * this. One form, both transports, both directions.

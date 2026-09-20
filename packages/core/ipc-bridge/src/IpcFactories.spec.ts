@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
 import {
     ApiError,
+    ApiDependencyError,
     ApiUnavailableError,
     ApiEndpointNotFoundError,
     ApiImplementationError,
@@ -200,9 +201,12 @@ describe('portable IPC JSON boundary', () => {
             }
         }
         const remote = new Pair(new Unavailable());
+        // Issue #968: IPC now applies the same uniform rule as HTTP. `unavailable` is a SERVER-side
+        // kind, so the peer broke and this process reports an ApiDependencyError — not the peer type
+        // verbatim, which used to make the caller look like the faulty service in its own metrics.
         await expect(
             remote.clients.createClient(TestApi).echo(new Value('x')),
-        ).rejects.toBeInstanceOf(ApiUnavailableError);
+        ).rejects.toBeInstanceOf(ApiDependencyError);
         const local = new Pair();
         const cause = new Error('native bridge disconnected');
         local.a.sendError = cause;

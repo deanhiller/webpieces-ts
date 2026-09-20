@@ -141,9 +141,9 @@ class StreamingTestServer {
 
 let fixture: StreamingTestServer;
 
-beforeEach(() => ClientRegistry.clear());
+beforeEach(() => ClientRegistry.resetForTests());
 afterEach(async () => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     if (fixture) await fixture.stop();
 });
 

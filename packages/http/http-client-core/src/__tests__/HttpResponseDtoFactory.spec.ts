@@ -12,7 +12,7 @@ const valuesOf = (dto: HttpResponseDto, name: string): string[] =>
         .map((h: HttpHeader) => h.value);
 
 /**
- * The CLIENT-side transport boundary. Everything an app's `ErrorTranslators.fromWire` ever sees is
+ * The CLIENT-side transport boundary. Everything an app's `ErrorTranslator.fromWire` ever sees is
  * built here, in BOTH environments: `http-client-node` and `http-client-browser` share `ProxyClient`,
  * and `ProxyClient` is this class's only production caller. That is why "a node client and a browser
  * client hand fromWire the identical shape" is a structural property rather than a coincidence — and

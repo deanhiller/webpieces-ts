@@ -24,7 +24,7 @@ import {
     ApiUnsupportedMediaTypeError,
     ApiNotImplementedError,
     ApiCodedError,
-    ErrorTranslators,
+    ErrorTranslator,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
@@ -33,14 +33,18 @@ import {
     LoggerFactory,
     Logger,
     WRONG_LOGIN,
+    Surface,
+    WebpiecesCoreHeaders,
+    WebpiecesDefaultErrorTranslator,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
-import { ApiErrorHttpMapper, EndUserStatus } from '../ApiErrorHttpMapper';
+import { RequestContext } from '@webpieces/core-context';
 
 /**
  * The wire is the ONE place operator prose must not appear. These specs drive the real
- * {@link ExpressWrapper.handleError} — not the mapper in isolation — because the leak was a property
- * of the response BODY, so the assertion has to be made on the bytes that are actually sent.
+ * {@link ExpressWrapper.handleError} — not {@link WebpiecesDefaultErrorTranslator} in isolation —
+ * because the leak was a property of the response BODY, so the assertion has to be made on the bytes
+ * that are actually sent.
  *
  * Companion: `WebpiecesMiddlewareErrorTranslation.spec.ts` covers the registry-override path.
  */
@@ -109,12 +113,12 @@ class VendorPortalPayload {
     ) {}
 }
 
-class VendorPortalTranslators implements ErrorTranslators {
-    private readonly fallback = new ApiErrorHttpMapper('gui');
+class VendorPortalTranslator implements ErrorTranslator {
+    private readonly fallback = new WebpiecesDefaultErrorTranslator();
 
     toWire(error: Error): HttpResponseDto {
         if (!(error instanceof VendorPortalError)) {
-            return this.fallback.toResponse(error);
+            return this.fallback.toWire(error);
         }
         const pe = new VendorPortalPayload(error.message, error.name);
         return new HttpResponseDto(
@@ -127,11 +131,12 @@ class VendorPortalTranslators implements ErrorTranslators {
             pe,
         );
     }
-    fromWire(response: HttpResponseDto): Error | undefined {
+    fromWire(response: HttpResponseDto): void {
         if (response.status.code !== 461) {
-            return undefined;
+            this.fallback.fromWire(response);
+            return;
         }
-        return new VendorPortalError((response.body as VendorPortalPayload).message ?? 'portal');
+        throw new VendorPortalError((response.body as VendorPortalPayload).message ?? 'portal');
     }
 }
 
@@ -145,25 +150,30 @@ class WireHarness {
         return fake as unknown as import('express').Response;
     }
 
-    private newWrapper(endUserStatus: EndUserStatus): ExpressWrapper {
+    private newWrapper(): ExpressWrapper {
         return new ExpressWrapper(
             () => Promise.resolve({}),
             '/test',
             // webpieces-disable no-any-unknown -- RequestContextHeaders is unused by handleError
             {} as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
-            false,
-            false,
-            undefined,
-            undefined,
-            undefined,
-            endUserStatus,
         );
     }
 
-    /** Run an error through the REAL handleError and hand back status + parsed body + raw body. */
-    public send(error: unknown, endUserStatus: EndUserStatus = 'gui'): FakeResponse {
+    /**
+     * Run an error through the REAL handleError and hand back status + parsed body + raw body.
+     *
+     * `surface` is WHO CALLED, not a router setting: it is stamped on the request context exactly as
+     * `AuthFilter` stamps it from the auth mode that matched. Omitting it is the "no auth established
+     * a surface" case, which answers 266 like a GUI.
+     */
+    public send(error: unknown, surface?: Surface): FakeResponse {
         const res = new FakeResponse();
-        this.newWrapper(endUserStatus).handleError(this.asResponse(res), error);
+        RequestContext.run(() => {
+            if (surface !== undefined) {
+                RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, surface);
+            }
+            this.newWrapper().handleError(this.asResponse(res), error);
+        });
         return res;
     }
 
@@ -194,7 +204,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     capturing.lines.length = 0;
 });
 
@@ -459,7 +469,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {
-        ClientRegistry.setErrorTranslators(new VendorPortalTranslators());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 
@@ -473,7 +483,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('the app owns HEADERS too — and repeats survive, which a Map would have dropped', () => {
-        ClientRegistry.setErrorTranslators(new VendorPortalTranslators());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
 
         const res = harness.send(new VendorPortalError('suspended'));
 
@@ -558,12 +568,13 @@ describe('the exact wire bytes, so the client half can be pinned against them', 
 });
 
 /**
- * Issue #948: one downstream throw site serves a GUI edge (266) and a partner API edge (a real 4xx).
+ * Issue #948, reworked by #968: one downstream throw site serves a GUI caller (266) and a partner
+ * API caller (a real 4xx) — and WHICH it is now comes from the request's SURFACE, not from a router.
  * Server A throws; each intermediate server is a GUI-mode hop that rethrows what its client decoded;
  * the outermost server answers in the mode its router chose.
  */
 describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
-    it('single hop: B in GUI mode answers 266, B in edge mode answers 422, both with msg + code', () => {
+    it('single hop: B called by a GUI answers 266, called by a partner answers 422, both with msg + code', () => {
         const atB = harness.hop(
             harness.send(
                 new ApiEndUserError('That platform is not supported', 'report_unavailable', 422),
@@ -579,7 +590,7 @@ describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
             edgeHttpStatus: 422,
         });
 
-        const edge = harness.send(atB, 'edge');
+        const edge = harness.send(atB, 'public-api');
         expect(edge.statusCode).toBe(422);
         expect(edge.statusMessage).toBe('Unprocessable Content');
         expect(harness.bodyOf(edge)).toMatchObject({
@@ -595,7 +606,7 @@ describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
         );
         const atC = harness.hop(harness.send(atB));
 
-        const edge = harness.send(atC, 'edge');
+        const edge = harness.send(atC, 'public-api');
         expect(edge.statusCode).toBe(404);
         expect(harness.bodyOf(edge)).toMatchObject({
             message: 'No such report',
@@ -604,12 +615,12 @@ describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
         expect(harness.send(atC, 'gui').statusCode).toBe(266);
     });
 
-    it('an older peer that sends no edgeHttpStatus: edge mode answers 400, GUI mode 266', () => {
+    it('an older peer that sends no edgeHttpStatus: a partner caller gets 400, a GUI caller 266', () => {
         const olderPeerBody = { kind: 'end-user', message: 'Pick a store', errorCode: 'store' };
         const atB = ApiErrorCodec.decode(olderPeerBody) as ApiEndUserError;
         expect(atB.edgeHttpStatus).toBeUndefined();
 
-        const edge = harness.send(atB, 'edge');
+        const edge = harness.send(atB, 'public-api');
         expect(edge.statusCode).toBe(400);
         expect(harness.bodyOf(edge)).toMatchObject({ message: 'Pick a store', errorCode: 'store' });
         expect(harness.bodyOf(edge)).not.toHaveProperty('edgeHttpStatus');
@@ -617,10 +628,10 @@ describe('ApiEndUserError.edgeHttpStatus — GUI edge vs API edge', () => {
     });
 
     it('edge mode changes ONLY end-user errors; every other kind keeps its mapping', () => {
-        expect(harness.send(new ApiNotFoundError('row missing'), 'edge').statusCode).toBe(404);
-        expect(harness.send(new ApiImplementationError('bug'), 'edge').statusCode).toBe(500);
-        expect(harness.send(new ApiUnauthorizedError('jwt'), 'edge').statusCode).toBe(401);
-        const bad = harness.send(new ApiBadRequestError('zod', 'email', 'Enter an email'), 'edge');
+        expect(harness.send(new ApiNotFoundError('row missing'), 'public-api').statusCode).toBe(404);
+        expect(harness.send(new ApiImplementationError('bug'), 'public-api').statusCode).toBe(500);
+        expect(harness.send(new ApiUnauthorizedError('jwt'), 'public-api').statusCode).toBe(401);
+        const bad = harness.send(new ApiBadRequestError('zod', 'email', 'Enter an email'), 'public-api');
         expect(bad.statusCode).toBe(400);
         expect(harness.bodyOf(bad).kind).toBe('bad-request');
     });

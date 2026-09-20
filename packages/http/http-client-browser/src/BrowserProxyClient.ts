@@ -13,7 +13,6 @@ import {
     ClientRequest,
     ProxyClient,
     RequestOutcome,
-    TranslatedFailure,
     StreamingCapabilityError,
 } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
@@ -106,21 +105,6 @@ export class BrowserProxyClient extends ProxyClient {
         this.lifecycleListener?.onRequestEnd(route, outcome);
     }
 
-    /**
-     * Rethrow EXACTLY the exception the translator picked, unchanged.
-     *
-     * This is the browser half of the asymmetry documented on {@link ProxyClient.adaptDownstreamFailure}.
-     * Here the client IS the end user's agent and the "downstream" is the app's own backend, so a 404
-     * really does mean "that thing does not exist", a 401 really does mean "sign in again", and a 403
-     * really does mean "you may not". Rewriting any of those to a 500 would delete the only signal the
-     * UI has to act on.
-     *
-     * The server twin (`NodeProxyClient`) does the opposite for exactly the same reason: there the
-     * downstream is a dependency, not the user's answer.
-     */
-    protected override adaptDownstreamFailure(failure: TranslatedFailure, _callId: string): Error {
-        return failure.error;
-    }
 
     /**
      * Reject a contract this browser cannot satisfy, at bind time rather than on the first call.

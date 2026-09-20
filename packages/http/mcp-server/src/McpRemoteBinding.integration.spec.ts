@@ -136,8 +136,8 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         originalLoggerFactory = LogManager.getFactory();
         logs = new RecordingLoggerFactory();
         LogManager.setFactory(logs);
-        ClientRegistry.clear();
-        ClientRegistry.setErrorTranslators(relay);
+        ClientRegistry.resetForTests();
+        ClientRegistry.setErrorTranslator(relay);
         const jwtHook = new TestJwtHook();
         await startDownstream(jwtHook);
         await startFailureServers();
@@ -244,7 +244,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
 
     afterAll(async () => {
         LogManager.setFactory(originalLoggerFactory);
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         await gateway.close();
         await TestServers.close(gatewayServer);
         await TestServers.close(garbageServer);
@@ -376,7 +376,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             RequestContext.putTrusted(REMOTE_ROLES, 'reader,writer');
             await expect(
                 missingBinding.invoke('search', new RemoteRequest('missing')),
-            ).rejects.toThrow(/dependency answered HTTP 404.*check the path, the base URL/);
+            ).rejects.toThrow(/dependency answered 404.*check the path, the base URL/);
         });
 
         expect(minter.audiences).toHaveLength(mintCount + 1);

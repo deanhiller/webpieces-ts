@@ -14,7 +14,7 @@ interface SetCookieAwareHeaders {
  * form an app is allowed to see.
  *
  * A fetch `Response` and an express `res` model a response completely differently, and an app's
- * `ErrorTranslators` is written ONCE and serves both. So neither is handed to the app: the server
+ * `ErrorTranslator` is written ONCE and serves both. So neither is handed to the app: the server
  * writes an {@link HttpResponseDto} out (`ExpressWrapper`), and this reads one in. One form, both
  * transports, both directions — which is what makes `fromWire` receive the identical shape whether
  * the caller was `http-client-node` or `http-client-browser` (both share `ProxyClient`, and this is

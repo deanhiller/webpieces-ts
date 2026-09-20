@@ -101,7 +101,7 @@ beforeEach(() => {
     vi.useFakeTimers();
     HeaderRegistry.configure([], true);
     CallRegistry.clear();
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('timeout-test', 'https://timeout.example');
 });
 
@@ -109,7 +109,7 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     CallRegistry.clear();
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
 });
 
 describe('browser generated client deadlines', () => {
@@ -130,7 +130,7 @@ describe('browser generated client deadlines', () => {
     it('preserves the typed deadline and performs zero sends after React Native preparation expiry', async () => {
         vi.stubGlobal('AbortController', ReactNativeAbortController);
         const h = new Harness();
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         let resolveUrl!: (url: string) => void;
         ClientRegistry.setDeriver(
             () =>
@@ -334,7 +334,7 @@ describe('browser generated client deadlines', () => {
 
     it('bounds hung URL resolution and never sends after it resolves late', async () => {
         const h = new Harness();
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         let resolveUrl!: (url: string) => void;
         ClientRegistry.setDeriver(
             () =>

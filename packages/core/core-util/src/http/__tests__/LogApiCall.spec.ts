@@ -171,7 +171,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     // The registry is a process-global; clear it so a registered classifier does not leak into the
     // other specs in this file (which assert the built-in behavior).
     afterEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
     it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {

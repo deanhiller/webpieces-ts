@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-    ApiDependencyError,
-    ApiDependencyTimeoutError,
-    ApiUnavailableError,
-} from '@webpieces/core-util';
+import { ApiDependencyError, ApiErrorPayload, toError } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
 import { ResponseBodyReader } from '../ResponseBodyReader';
@@ -27,6 +23,20 @@ function htmlResponse(status: number): Response {
 
 function jsonResponse(status: number, body: string, contentType = 'application/json'): Response {
     return new Response(body, { status, headers: { 'Content-Type': contentType } });
+}
+
+/**
+ * What a caller actually sees: `fromWire` THROWS now, so the spec catches instead of reading a
+ * returned `TranslatedFailure`.
+ */
+function caughtFrom(response: Response, protocolError: ApiErrorPayload): Error {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this helper IS the catch
+    try {
+        ClientErrorTranslator.throwFailure(dtoFactory.fromFetch(response, protocolError));
+    } catch (err: unknown) {
+        const error = toError(err);
+        return error;
+    }
 }
 
 describe('ResponseBodyReader.isJson decides from the DECLARED content-type', () => {
@@ -59,10 +69,9 @@ describe('a non-JSON error body becomes a status-typed API error, never a Syntax
     it('502 HTML → ApiDependencyError carrying the status and a message naming the cause', async () => {
         const response = htmlResponse(502);
         const protocolError = await reader.readErrorBody(response, 'WarmupApi.ping');
-        const translated = ClientErrorTranslator.translateError(
-            dtoFactory.fromFetch(response, protocolError),
-        ).error;
+        const translated = caughtFrom(response, protocolError);
 
+        // 5xx received: the PEER broke, so this hop reports a dependency failure (issue #968).
         expect(translated).toBeInstanceOf(ApiDependencyError);
         expect(translated).not.toHaveProperty('code');
         expect(translated).not.toBeInstanceOf(SyntaxError);
@@ -73,20 +82,16 @@ describe('a non-JSON error body becomes a status-typed API error, never a Syntax
         expect(translated.message).toContain('<html><head><title>502 Bad Gateway');
     });
 
-    it('503 (cold start) → ApiUnavailableError, 504 → ApiDependencyTimeoutError', async () => {
+    it('503 (cold start) and 504 are both the PEER failing, so both are ApiDependencyError', async () => {
         const unavailable = htmlResponse(503);
         expect(
-            ClientErrorTranslator.translateError(
-                dtoFactory.fromFetch(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
-            ).error,
-        ).toBeInstanceOf(ApiUnavailableError);
+            caughtFrom(unavailable, await reader.readErrorBody(unavailable, 'A.b')),
+        ).toBeInstanceOf(ApiDependencyError);
 
         const timeout = htmlResponse(504);
-        expect(
-            ClientErrorTranslator.translateError(
-                dtoFactory.fromFetch(timeout, await reader.readErrorBody(timeout, 'A.b')),
-            ).error,
-        ).toBeInstanceOf(ApiDependencyTimeoutError);
+        expect(caughtFrom(timeout, await reader.readErrorBody(timeout, 'A.b'))).toBeInstanceOf(
+            ApiDependencyError,
+        );
     });
 
     it('quotes only the first 200 chars, on ONE line, so a huge HTML page is not dumped', async () => {
@@ -112,10 +117,9 @@ describe('a body that DECLARED json is still parsed, and still throws when malfo
             502,
             JSON.stringify({ kind: 'dependency', message: 'Dependency Error' }),
         );
-        const translated = ClientErrorTranslator.translateError(
-            dtoFactory.fromFetch(response, await reader.readErrorBody(response, 'A.b')),
-        ).error;
+        const translated = caughtFrom(response, await reader.readErrorBody(response, 'A.b'));
         expect(translated).toBeInstanceOf(ApiDependencyError);
+        // An incoming ApiDependencyError is rethrown AS-IS: already attributed downstream.
         expect(translated.message).toBe('Dependency Error');
     });
 

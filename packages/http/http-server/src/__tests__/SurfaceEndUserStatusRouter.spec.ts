@@ -2,24 +2,43 @@ import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import express from 'express';
 import { AddressInfo } from 'net';
 import { Server as HttpServer } from 'http';
-import { ApiEndUserError, HeaderRegistry, RouteMetadata } from '@webpieces/core-util';
+import {
+    ApiEndUserError,
+    HeaderRegistry,
+    RouteMetadata,
+    Surface,
+    WebpiecesCoreHeaders,
+} from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 import { ApiClient, ApiFactory } from '@webpieces/http-routing';
 import { WebpiecesExpressRouter } from '../WebpiecesExpressRouter';
-import { EndUserStatus } from '../ApiErrorHttpMapper';
 
 /**
- * Issue #948: `WebpiecesExpressRouter.setEndUserStatus` must actually reach every mounted route. The
- * status mapping itself is pinned in `ApiErrorHttpMapper.spec.ts`; this spec proves the router's
- * choice survives the trip through `WebpiecesMiddleware.createExpressWrapper` over real HTTP.
+ * Issue #948, reworked by #968. `WebpiecesExpressRouter.setEndUserStatus` is GONE: the same endpoint
+ * is reached by a GUI, by an LLM through the MCP bridge and by a partner against a published REST
+ * contract, so 266-or-real-4xx was never something a ROUTER could know. It is derived per request
+ * from `WebpiecesCoreHeaders.SURFACE`, which `AuthFilter` stamps from the auth mode that matched.
+ *
+ * This spec proves the DERIVATION reaches every mounted route over real HTTP. `AuthFilter`'s own
+ * stamping and the trusted-header refusal are pinned in http-routing's `SurfaceContextKey.spec.ts`;
+ * the status table itself is pinned in core-util's `WebpiecesDefaultErrorTranslator.spec.ts`.
  */
 class RefusingApi {}
 
 /** One route whose proxy always refuses the end user with the status the throw site chose. */
 class RefusingApiFactory implements ApiFactory {
+    constructor(private readonly surface?: Surface) {}
+
     apiClients(): ApiClient[] {
         // webpieces-disable no-any-unknown -- request DTOs are erased at the routing boundary
-        const refuse = (_dto: unknown): Promise<unknown> =>
-            Promise.reject(new ApiEndUserError('No such report', 'report_not_found', 404));
+        const refuse = (_dto: unknown): Promise<unknown> => {
+            // Stands in for AuthFilter, which is not mounted by this hand-built ApiFactory: it puts
+            // exactly this key, from exactly this kind of decision, before the controller runs.
+            if (this.surface !== undefined) {
+                RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, this.surface);
+            }
+            return Promise.reject(new ApiEndUserError('No such report', 'report_not_found', 404));
+        };
         const routes = [
             new RouteMetadata(
                 'POST',
@@ -46,12 +65,9 @@ class RefusingApiFactory implements ApiFactory {
 class RouterHarness {
     server?: HttpServer;
 
-    async start(endUserStatus?: EndUserStatus): Promise<string> {
+    async start(surface?: Surface): Promise<string> {
         const app = express();
-        const router = new WebpiecesExpressRouter(new RefusingApiFactory());
-        if (endUserStatus !== undefined) {
-            router.setEndUserStatus(endUserStatus);
-        }
+        const router = new WebpiecesExpressRouter(new RefusingApiFactory(surface));
         router.bindExpress(app);
         this.server = await new Promise<HttpServer>((resolve: (s: HttpServer) => void) => {
             const s: HttpServer = app.listen(0, () => resolve(s));
@@ -93,8 +109,8 @@ afterEach(async () => {
     await harness.stop();
 });
 
-describe('WebpiecesExpressRouter.setEndUserStatus', () => {
-    it('defaults to GUI mode: 266 with the message, code and edgeHttpStatus in the body', async () => {
+describe('end-user status is derived from the caller SURFACE, per request', () => {
+    it('NO surface established: 266 with the message, code and edgeHttpStatus in the body', async () => {
         const res = await harness.post(await harness.start());
 
         expect(res.status).toBe(266);
@@ -106,8 +122,22 @@ describe('WebpiecesExpressRouter.setEndUserStatus', () => {
         });
     });
 
-    it("'edge' answers the thrower's edgeHttpStatus", async () => {
-        const res = await harness.post(await harness.start('edge'));
+    it('gui: 266 — the browser client decodes the body and shows the message', async () => {
+        const res = await harness.post(await harness.start('gui'));
+
+        expect(res.status).toBe(266);
+        expect(await res.json()).toMatchObject({ kind: 'end-user', message: 'No such report' });
+    });
+
+    it('llm: 266 — the MCP bridge calls through ApiFactory and renders the result itself', async () => {
+        const res = await harness.post(await harness.start('llm'));
+
+        expect(res.status).toBe(266);
+        expect(await res.json()).toMatchObject({ kind: 'end-user', message: 'No such report' });
+    });
+
+    it("public-api: the thrower's edgeHttpStatus, because a partner contract promises real statuses", async () => {
+        const res = await harness.post(await harness.start('public-api'));
 
         expect(res.status).toBe(404);
         expect(await res.json()).toMatchObject({
@@ -117,12 +147,9 @@ describe('WebpiecesExpressRouter.setEndUserStatus', () => {
         });
     });
 
-    it('refuses a choice made after bindExpress', () => {
+    it('the router has no setEndUserStatus to call any more — the surface decides', () => {
         const router = new WebpiecesExpressRouter(new RefusingApiFactory());
-        router.bindExpress(express());
 
-        expect(() => router.setEndUserStatus('edge')).toThrow(
-            'Call setEndUserStatus() before bindExpress(app)',
-        );
+        expect((router as unknown as Record<string, unknown>)['setEndUserStatus']).toBeUndefined();
     });
 });

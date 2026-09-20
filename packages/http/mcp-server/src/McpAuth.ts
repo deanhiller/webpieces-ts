@@ -1,6 +1,5 @@
 import { JwtHook } from '@webpieces/http-routing';
 import { ContextTuple } from '@webpieces/core-util';
-import { McpErrorTranslators } from './WpMcpErrorTranslator';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
@@ -126,8 +125,10 @@ export class McpProtectedResourceMetadata {
  *     .setEndpointJwtAuthority(jwtHook)
  *     .setEndpointMintRequest((credential) => new MyMintRequest(credential.subject))
  *     .setAuthorizationServers(['https://login.example.com'])
- *     .setRequiredScopes(['tools'])
- *     .setErrorTranslator(new MyMcpErrorTranslators());
+ *     .setRequiredScopes(['tools']);
+ *
+ * // the tools/call error translator is a PROCESS-GLOBAL, not a member of this config:
+ * McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
  * ```
  */
 export class WpMcpServerConfig<TGrant, TMintRequest> {
@@ -139,7 +140,6 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
     private endpointMintRequestValue?: McpEndpointMintRequestFactory<TMintRequest>;
     private authorizationServersValue?: readonly string[];
     private requiredScopesValue?: readonly string[];
-    private errorTranslatorValue?: McpErrorTranslators;
     private maxAccountValidationAgeSecondsValue = MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS;
     private maxEndpointJwtLifetimeSecondsValue = MAX_MCP_ENDPOINT_JWT_LIFETIME_SECONDS;
 
@@ -222,22 +222,6 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         return this;
     }
 
-    /**
-     * OPTIONAL. The application's `tools/call` error translator — it REPLACES the webpieces default
-     * for every tool failure, owning the ENTIRE result, and declines by delegating to
-     * `new McpDefaultToolCallRenderer().toToolCallResult(error)`. See {@link McpErrorTranslators}.
-     */
-    setErrorTranslator(translators: McpErrorTranslators): this {
-        const value = this.requirePresent(translators, 'setErrorTranslator');
-        if (typeof value.toToolCallResult !== 'function') {
-            throw new Error(
-                'WpMcpServerConfig.setErrorTranslator(...) requires a toToolCallResult(error) method.',
-            );
-        }
-        this.errorTranslatorValue = value;
-        return this;
-    }
-
     /** OPTIONAL ceiling, 1 second to 1 hour. Defaults to 1 hour. */
     setMaxAccountValidationAgeSeconds(seconds: number): this {
         this.maxAccountValidationAgeSecondsValue = this.requireSeconds(
@@ -315,11 +299,6 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
 
     get requiredScopes(): readonly string[] {
         return this.read(this.requiredScopesValue, 'setRequiredScopes');
-    }
-
-    /** `undefined` when the app registered none: webpieces then renders every tool failure. */
-    get errorTranslator(): McpErrorTranslators | undefined {
-        return this.errorTranslatorValue;
     }
 
     get maxAccountValidationAgeSeconds(): number {

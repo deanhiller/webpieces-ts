@@ -39,12 +39,12 @@ beforeAll(async () => {
     const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
     // The client resolves 'client-server' via the registry (off-GCP); point it at this test server.
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('client-server', `http://localhost:${PORT}`);
 });
 
 afterAll(async () => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     await new Promise<void>((resolve: () => void) => httpServer.close(() => resolve()));
 });
 

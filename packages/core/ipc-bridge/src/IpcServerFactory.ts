@@ -1,11 +1,8 @@
-import {
-    ApiErrorBoundary,
-    ApiEndpointNotFoundError,
-    ApiImplementationError,
-} from '@webpieces/core-util/errors';
+import { ApiEndpointNotFoundError, ApiImplementationError } from '@webpieces/core-util/errors';
 import {
     IpcCallContext,
     IpcApiType,
+    IpcRegistry,
     IpcFailure,
     IpcLogging,
     IpcReply,
@@ -31,8 +28,6 @@ class IpcRegistration {
 /** One dispatcher hosts multiple explicitly registered APIs and never enumerates controller members. */
 export class IpcServerFactory {
     private readonly registrations = new Map<string, Map<string, IpcRegistration>>();
-    /** This receiver OWNS the reply, so it publishes through the shared boundary rule, not the raw codec. */
-    private readonly boundary = new ApiErrorBoundary();
     constructor(private readonly logging: IpcLogging) {}
 
     create<T extends object>(apiClass: IpcApiType<T>, controller: T): void {
@@ -100,7 +95,9 @@ export class IpcServerFactory {
             return new IpcSuccess(request.context, body === undefined ? null : body);
         } catch (err: unknown) {
             const error = toError(err);
-            return new IpcFailure(request.context, this.boundary.encode(error));
+            // This receiver OWNS the reply, so it publishes through the app-reachable IPC seam. The
+            // webpieces default there is the shared `ApiErrorBoundary` rule, not the raw codec.
+            return new IpcFailure(request.context, IpcRegistry.getErrorTranslator().toWire(error));
         }
     };
 }

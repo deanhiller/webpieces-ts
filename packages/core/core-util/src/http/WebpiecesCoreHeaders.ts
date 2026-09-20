@@ -1,5 +1,6 @@
 import { ContextKey, AnyContextKey } from '../ContextKey';
 import { ApiCallInfo } from './ApiCallInfo';
+import { Surface } from './Surface';
 
 /**
  * Core framework context keys — the minimum the WebPieces framework needs to correlate one
@@ -121,6 +122,28 @@ export class WebpiecesCoreHeaders {
         'roles',
         'derived from a verified credential by an app-bound JwtHook (a ContextTuple in AuthenticatedCaller)',
         'x-webpieces-roles',
+    );
+
+    /**
+     * WHICH KIND OF CALLER is driving this request — `gui`, `llm` or `public-api`. See
+     * {@link Surface} for the table and for why it is a property of the CALLER and not of the server.
+     *
+     * TRUSTED, and that is load-bearing twice over. It is what makes an app safe to branch on it in
+     * its OWN authorization logic ("this endpoint is not exposed to partners"), and it is what makes
+     * the value in {@link SurfaceEndUserStatus} believable: webpieces sets it itself, from the auth
+     * mode that matched, never from caller input. A caller that simply SENDS `x-wp-surface` at an
+     * endpoint whose auth did not establish one is rejected by `AuthFilter.reconcileWireTrust`, like
+     * every other unvouched trusted header.
+     *
+     * It keeps its `httpHeader` because PROPAGATION is the point: the surface belongs to the ORIGINAL
+     * caller, so `GUI -> api1 -> api2` must leave api2 seeing `gui`. An internal `@WpAuthOidc` hop
+     * verifies its caller, so the propagated value is admitted verbatim — and the auth filter only
+     * ever SETS a surface when none arrived, so an inherited one is never overwritten.
+     */
+    static readonly SURFACE = ContextKey.trusted<Surface>(
+        'surface',
+        'set by the webpieces AuthFilter from the auth mode that matched the incoming request, or inherited from the edge hop that did',
+        'x-wp-surface',
     );
 
     /**
@@ -304,6 +327,7 @@ export class WebpiecesCoreHeaders {
         WebpiecesCoreHeaders.USER_ID,
         WebpiecesCoreHeaders.ORG_ID,
         WebpiecesCoreHeaders.USER_ROLES,
+        WebpiecesCoreHeaders.SURFACE,
         WebpiecesCoreHeaders.RECORDING,
         WebpiecesCoreHeaders.API_CALL_INFO,
         WebpiecesCoreHeaders.HTTP_METHOD,

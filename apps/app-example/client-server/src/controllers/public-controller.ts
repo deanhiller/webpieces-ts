@@ -14,7 +14,7 @@ import { OrderNotFoundError } from '../OrderErrors';
 export class PublicController extends PublicApi {
 
     override async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
-        // The app's OWN error type, thrown from ordinary controller code. `OrderErrorTranslators`
+        // The app's OWN error type, thrown from ordinary controller code. `OrderErrorTranslator`
         // turns it into the app's own 460 envelope on the way out, and turns it
         // back into this exact type inside a calling client — see ErrorTranslationSymmetry.spec.ts.
         if (request.name === 'missing-order') {

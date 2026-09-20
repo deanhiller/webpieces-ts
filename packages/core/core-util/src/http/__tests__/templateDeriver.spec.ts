@@ -4,7 +4,7 @@ import { templateDeriver } from '../templateDeriver';
 
 describe('templateDeriver (the non-GCP answer: any predictable DNS)', () => {
     beforeEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
     });
 
     it('substitutes {svc}', async () => {

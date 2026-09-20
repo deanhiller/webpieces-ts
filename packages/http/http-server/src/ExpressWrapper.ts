@@ -9,6 +9,10 @@ import {
     ApiImplementationError,
     toError,
     WebpiecesCoreHeaders,
+    ApiErrorCodec,
+    ApiErrorPayload,
+    SurfaceEndUserStatus,
+    WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
 } from '@webpieces/core-util';
 import {
     RequestContext,
@@ -17,7 +21,6 @@ import {
     RequestContextHeaders,
 } from '@webpieces/core-context';
 import { ExpressResponseWriter } from './ExpressResponseWriter';
-import { ApiErrorHttpMapper, EndUserStatus } from './ApiErrorHttpMapper';
 import { RequestBodyReader } from './body/RequestBodyReader';
 import { StreamBodyReader } from './body/StreamBodyReader';
 
@@ -58,12 +61,6 @@ class ParsedBody {
 }
 
 export class ExpressWrapper {
-    /**
-     * Decides what an outside caller is allowed to see of a thrown {@link API error}. Stateless —
-     * one instance per wrapper is fine, and the class doc there is where the "only ApiEndUserError's
-     * message goes on the wire" rule is stated.
-     */
-    private readonly errorWireMapper: ApiErrorHttpMapper;
     private readonly responseWriter = new ExpressResponseWriter();
 
     constructor(
@@ -104,15 +101,7 @@ export class ExpressWrapper {
          * chosen via `WebpiecesExpressRouter.setBodyReader`. See {@link RequestBodyReader}.
          */
         private readonly bodyReader: RequestBodyReader = new StreamBodyReader(),
-        /**
-         * How an `ApiEndUserError` is answered: 266 for a GUI edge, `edgeHttpStatus` (or 400) for a
-         * partner-facing API edge. Chosen via `WebpiecesExpressRouter.setEndUserStatus`; see
-         * {@link EndUserStatus}.
-         */
-        endUserStatus: EndUserStatus = 'gui',
-    ) {
-        this.errorWireMapper = new ApiErrorHttpMapper(endUserStatus);
-    }
+    ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction): Promise<void> {
         // MOVED: Wrap entire request in RequestContext.run()
@@ -136,7 +125,7 @@ export class ExpressWrapper {
     public async executeImpl(req: Request, res: Response, next: NextFunction): Promise<void> {
         // 0. PUBLISH the transport-neutral request BEFORE anything that can throw.
         //
-        //    This is the ordering bug issue #862 was filed for. An app's ErrorTranslators.toWire has
+        //    This is the ordering bug issue #862 was filed for. An app's ErrorTranslator.toWire has
         //    to be able to tell WHICH request it is answering for — the surface, the route, the
         //    method — and the only place that lives is RequestContext.getRequest(). Publishing it at
         //    step 3 (below) meant a body that failed to parse at step 1 reached handleError with an
@@ -375,49 +364,68 @@ export class ExpressWrapper {
 
     /**
      * Turn a thrown value into the response the caller sees — the SERVER half of webpieces' symmetric
-     * error handling (the CLIENT half is `ClientErrorTranslator.translateError`, and the two speak the
-     * same {@link HttpResponseDto}).
+     * error handling (the CLIENT half is `ClientErrorTranslator.throwIfFailure`, and the two speak
+     * the same {@link HttpResponseDto}).
      *
      * PUBLIC so wrapExpress can call it for symmetric error handling.
      *
-     * Two sources, in this order:
-     *   1. the app's {@link ErrorTranslators}, if it claims the error — it owns the ENTIRE response;
-     *   2. else {@link ApiErrorHttpMapper.toResponse}, the webpieces default, which maps every
-     *      `ApiError` subclass to its status (an `ApiEndUserError` per this wrapper's
-     *      {@link EndUserStatus}) and a CALLER-SAFE body (only `ApiEndUserError`'s message
-     *      is written for a human, so only it goes out verbatim; everything else sends the generic
-     *      reason phrase and logs the real one) and turns anything else into a generic 500.
+     * ONE source, unconditionally: `ClientRegistry.getErrorTranslator()`. It is never undefined — it
+     * holds {@link WebpiecesDefaultErrorTranslator} until an app replaces it, and an app's own
+     * translator declines an error by DELEGATING to that default. So there is no "did this process
+     * install one" branch and no per-error "not mine" branch; the app owns the WHOLE response —
+     * status code, reason phrase, headers and body — which is what lets it publish its own envelope
+     * AND its own `Retry-After` / `WWW-Authenticate` / trace header / cookie.
      *
-     * Nothing status-specific is decided here any more — read `ApiErrorHttpMapper` for the full rule
-     * and the list of statuses, which must stay in step with `ClientErrorTranslator`'s built-in
-     * mapping.
+     * Nothing status-specific is decided here — read `WebpiecesDefaultErrorTranslator` for the full
+     * rule and the list of statuses, which must stay in step with its own `fromWire`.
      */
     // webpieces-disable no-any-unknown -- a thrown value is genuinely unknown until toError narrows it
     public handleError(res: Response, thrown: unknown): void {
         if (res.headersSent) {
             return;
         }
-
         // ONE narrowing, at the top, and every layer below it is honest about holding an `Error`.
-        const error = toError(thrown);
-        // The app's ErrorTranslators own the WHOLE response — status code, reason phrase, headers
-        // and body — so an app can publish its own envelope AND its own `Retry-After` /
-        // `WWW-Authenticate` / trace header / cookie, which the old (statusCode, protocolError) pair
-        // could not express at all. A registered translator REPLACES this default and declines by
-        // delegating back to it, so there is no per-error "not mine" branch here: the only question
-        // is whether this process installed one.
-        const translators = ClientRegistry.getErrorTranslators();
-        this.send(
-            res,
-            translators ? translators.toWire(error) : this.errorWireMapper.toResponse(error),
-        );
+        const wire = ClientRegistry.getErrorTranslator().toWire(toError(thrown));
+        this.send(res, this.publishedForCallerSurface(wire));
     }
 
     /**
-     * Stamp the transaction id and hand the DTO to the shared {@link ExpressResponseWriter} — the
-     * ONE place a response DTO becomes bytes, used by the app's translators, by webpieces' own
-     * default, and by the MCP pre-SDK boundary alike.
+     * Republish an end-user answer at the status THIS CALLER's surface expects — the per-request
+     * replacement for the deleted per-router `setEndUserStatus`.
+     *
+     * The same endpoint is reached by a GUI, by an LLM through the MCP bridge and by a partner
+     * against a published REST contract, so 266-or-real-4xx was never a property the ROUTER could
+     * know. `WebpiecesCoreHeaders.SURFACE` is set at the edge by `AuthFilter` from the auth mode that
+     * matched and propagates unchanged; {@link SurfaceEndUserStatus} turns it into the status.
+     *
+     * It runs over the translator's output rather than inside it, which is deliberate and fixes a
+     * footgun: an app translator that declines by delegating used to have to REPEAT its router's mode
+     * (`new ApiErrorHttpMapper('edge')`) and repeating it wrongly was silent. Now every end-user
+     * answer — webpieces' own and an app's — is republished at the caller's status in one place.
+     *
+     * Only a webpieces `end-user` payload is touched. An app that publishes its OWN 266 body owns it.
      */
+    private publishedForCallerSurface(response: HttpResponseDto): HttpResponseDto {
+        if (response.status.code !== 266 || !ApiErrorCodec.isPayload(response.body)) {
+            return response;
+        }
+        const payload = response.body as ApiErrorPayload;
+        const status = SurfaceEndUserStatus.statusFor(
+            RequestContext.isActive()
+                ? RequestContext.getTrusted(WebpiecesCoreHeaders.SURFACE)
+                : undefined,
+            payload.edgeHttpStatus,
+        );
+        if (status === 266) {
+            return response;
+        }
+        return new HttpResponseDto(
+            new HttpResponseStatus(status, WEBPIECES_DEFAULT_ERROR_TRANSLATOR.genericMessage(status)),
+            response.headers,
+            response.body,
+        );
+    }
+
     private send(res: Response, response: HttpResponseDto): void {
         this.stampTransactionId(res);
         this.responseWriter.write(res, response);
@@ -427,7 +435,7 @@ export class ExpressWrapper {
      * Put the transaction id on EVERY response — success and error, webpieces' default body and an
      * app's own. It is INFRASTRUCTURE, not app policy: an app that overrides what an error looks like
      * must not thereby lose the header its support desk quotes back. That is why this lives here and
-     * not in {@link ApiErrorHttpMapper.toResponse} or in an app's translators.
+     * not in {@link WebpiecesDefaultErrorTranslator.toWire} or in an app's translators.
      *
      * Silently absent when there is no id to send, which is exactly the accepted known issue recorded
      * at step 0 of {@link executeImpl}: a malformed or oversize body fails before `fillFromRequest`

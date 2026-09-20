@@ -62,6 +62,12 @@ export class McpApiDispatcher {
             const request = new HttpRequest('POST', `/__webpieces/mcp/${tool.name}`, headers);
             new RequestContextHeaders().fillFromRequest(request);
             RequestContext.putTrusted(MCP_INVOCATION_CONTEXT, invocation);
+            // THIS hop is the edge, and its caller is a model. Stamped here rather than in
+            // `AuthFilter` because the local binding's HTTP auth mode describes the bridge's own
+            // endpoint JWT, not the LLM on the other end of it — `@WpMcpAuthJwt` is separate
+            // metadata and never reaches an `AuthMode`. `AuthFilter` only ever SETS a surface when
+            // none arrived, so this one survives the filter chain the invocation runs through.
+            RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, 'llm');
             if (tool.binding.topology === 'remote') {
                 for (const tuple of credential.trustedContext)
                     RequestContext.putTrusted(tuple.key, tuple.value);

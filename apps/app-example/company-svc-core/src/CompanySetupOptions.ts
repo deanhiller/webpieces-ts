@@ -1,7 +1,7 @@
 import {
     LoggerFactory,
     ConsoleLoggerFactory,
-    ErrorTranslators,
+    ErrorTranslator,
     FailureClassifier,
     KeyedFailureClassifier,
     Locality,
@@ -29,9 +29,9 @@ export class CompanySetupOptions {
      * @param appOverrides - Single DI module loaded LAST, so tests can rebind bindings
      *   (e.g. a downstream Api) to a mock/simulator.
      * @param config - Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
-     * @param errorTranslators - The app's ONE {@link ErrorTranslators}, installed on ClientRegistry at
+     * @param errorTranslators - The app's ONE {@link ErrorTranslator}, installed on ClientRegistry at
      *   startup. This binds it "only when express is used"; an app may instead call
-     *   ClientRegistry.setErrorTranslators(...) directly at its own startup site (and MUST do the
+     *   ClientRegistry.setErrorTranslator(...) directly at its own startup site (and MUST do the
      *   same on the browser/Angular side, since `fromWire` runs client-side). ONE object, not a
      *   list: an app with several layers of error policy composes them inside its own `toWire`,
      *   where the precedence is written down.
@@ -68,7 +68,7 @@ export class CompanySetupOptions {
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
-        public readonly errorTranslators?: ErrorTranslators,
+        public readonly errorTranslators?: ErrorTranslator,
         public readonly defaultFailureClassifier?: FailureClassifier,
         public readonly failureClassifiers: KeyedFailureClassifier[] = [],
         public readonly svcName: string = 'app-example',

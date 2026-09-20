@@ -1,5 +1,11 @@
 # PLAN — ONE symmetric `setErrorTranslators` owning the WHOLE response
 
+> **HISTORICAL — this plan SHIPPED and has since been superseded by issue #968.** Every API named
+> below is gone: `ErrorTranslators` is now `ErrorTranslator`, `setErrorTranslators` is
+> `ClientRegistry.setErrorTranslator`, `ApiErrorHttpMapper` and `ClientErrorTranslator.builtInError`
+> folded into core-util's `WebpiecesDefaultErrorTranslator`, and `fromWire` returns `void` and THROWS
+> instead of returning an `Error | undefined`. Read it as a record of WHY, never as current API.
+
 Supersedes `PLAN-ERROR-TRANSLATION-REGISTRY.md` (deleted). That plan shipped
 `ClientRegistry.addErrorTranslation` / `ErrorTranslation` / `ErrorWireForm`, and this one **deletes
 all three** rather than deprecating them — see `.claude/rules/no-backwards-compat.md`: the compile

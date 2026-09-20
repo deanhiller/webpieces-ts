@@ -657,7 +657,8 @@ async submitForm(): Promise<void> {
 
 ### `ApiEndUserError` is not a convention — it is the only message that survives the wire
 
-This is a HARD RULE, enforced by `ApiErrorHttpMapper` on the server (`http-server`):
+This is a HARD RULE, enforced by `WebpiecesDefaultErrorTranslator.toWire` (`core-util`), which
+`ExpressWrapper.handleError` calls on the server:
 
 > **Only `ApiEndUserError`'s `message` is sent to the caller.** Every other `ApiError` subclass sends
 > its generic semantic message — `'Not Found'`, `'Internal Error'`, … — and
@@ -672,8 +673,8 @@ external consumer. So:
   text as `ApiBadRequestError`'s `callerMessage`, which IS sent (as `callerMessage`).
 - A client must branch on the error TYPE, on `subType`, on `errorCode` or on `callerMessage` — never
   on the prose of `message`. Against a current webpieces server that prose is a constant per status.
-- An app that deliberately wants to publish richer text installs an `ErrorTranslators` on
-  `ClientRegistry` (`setErrorTranslators`); its `toWire()` response — status, reason phrase, headers
+- An app that deliberately wants to publish richer text installs an `ErrorTranslator` on
+  `ClientRegistry` (`setErrorTranslator`); its `toWire()` response — status, reason phrase, headers
   and body — is sent verbatim. That is the explicit, greppable opt-out.
 
 ## How to Request Approval

@@ -38,24 +38,32 @@ was consumed and there is no `req.rawBody`, it fails fast. It never re-serialize
 mount your own body parser ahead of webpieces, either mount webpieces first or keep the bytes with
 `express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } })`.
 
-## End-user errors on a partner-facing API edge
+## End-user errors, and the caller SURFACE that decides their status
 
 An `ApiEndUserError` is answered with **266** by default: the call succeeded and a GUI (or the next
-webpieces hop) shows its message. A partner or public REST API whose contract promises real 4xx
-statuses opts its router into edge mode before binding the routes:
+webpieces hop) shows its message.
 
-```typescript
-const router = new WebpiecesExpressRouter(apiFactory);
-router.setEndUserStatus('edge');
-router.bindExpress(app);
-```
+A partner or public REST API whose contract promises real 4xx statuses gets them **per request**, not
+per router. The same endpoint is reached by a browser GUI, by an LLM through the MCP bridge and by an
+external partner, so which one it is was never something a router could know. `AuthFilter` stamps
+`WebpiecesCoreHeaders.SURFACE` from the auth mode that matched, and `ExpressWrapper.handleError`
+derives the status from it (`SurfaceEndUserStatus`):
 
-The response then carries the status the throw site chose,
+| how the request authenticated | surface | an `ApiEndUserError` answers |
+|---|---|---|
+| `@WpAuthJwt` | `gui` | 266 |
+| `@WpMcpAuthJwt` (through the MCP bridge) | `llm` | 266 |
+| `@WpAuthApiKey` | `public-api` | `edgeHttpStatus`, else 400 |
+| nothing established one (public, webhook, internal hop) | absent | 266 |
+
+`gui` and `llm` are both webpieces clients that DECODE the body and render the message themselves, so
+a real 4xx would throw away the only thing they are there to show. A partner has no such client.
+
+The published status is the one the throw site chose:
 `new ApiEndUserError(message, errorCode, edgeHttpStatus, cause)` with `edgeHttpStatus` one of
 400/404/409/422, or 400 when it chose none. That field travels in the error body across every
-server-to-server hop, so a service several hops down can set it. Keep internal servers and GUI
-backends in the default `'gui'` mode: a webpieces client only accepts an end-user error at 266, and a
-real 4xx on a hop is still that caller's own 500.
+server-to-server hop, so a service several hops down can set it — and the SURFACE travels with it, so
+the hop that finally answers the partner still knows who asked.
 
 ## Documentation
 

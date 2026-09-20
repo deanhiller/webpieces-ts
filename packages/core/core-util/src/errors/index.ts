@@ -24,6 +24,7 @@ export {
 export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './ApiError';
 export { ApiErrorCodec, ApiErrorPayload } from './ApiErrorCodec';
 export { ApiErrorBoundary } from './ApiErrorBoundary';
+export { ReceivedApiErrorRule } from './ReceivedApiErrorRule';
 export {
     ENTITY_NOT_FOUND,
     WRONG_LOGIN_TYPE,

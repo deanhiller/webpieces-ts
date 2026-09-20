@@ -1,11 +1,12 @@
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
-import { ApiErrorHttpMapper, WebpiecesExpressRouter } from '@webpieces/http-server';
+import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import {
     ClientRegistry,
     ApiErrorPayload,
     Secrets,
+    WebpiecesDefaultErrorTranslator,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
@@ -23,11 +24,11 @@ import {
     ORDER_SURFACE_HEADER,
     OrderErrorPayload,
     OrderNotFoundError,
-    installOrderErrorTranslators,
+    installOrderErrorTranslator,
 } from '../../client-server/src/OrderErrors';
 
 /**
- * Issue #862, end to end over REAL HTTP: ONE `ErrorTranslators` object, installed once, owning the
+ * Issue #862, end to end over REAL HTTP: ONE `ErrorTranslator` object, installed once, owning the
  * WHOLE response on the server and reconstructing the typed error inside a real client.
  *
  * This is the only place in the repo where both halves can meet — `http-server` deliberately does not
@@ -67,30 +68,27 @@ const post = (path: string, body: string): Promise<Response> =>
 beforeAll(async () => {
     const factory = await setupCompanyRuntime(ClientServerAppModules.create());
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('client-server', url(''));
 });
 
 afterAll(async () => {
-    ClientRegistry.clear();
+    ClientRegistry.resetForTests();
     await new Promise<void>((resolve: () => void) => httpServer.close(() => resolve()));
 });
 
 beforeEach(() => {
-    // ClientRegistry.clear() would drop the url mapping the client needs, so only the translators
+    // ClientRegistry.resetForTests() would drop the url mapping the client needs, so only the translators
     // are reset here — each block installs the ones it is about.
-    // `toWire` has no "not mine" any more: a registered translator answers every error, declining
-    // by delegating to the webpieces default. `fromWire`'s `undefined` stays — there it is
-    // PROVENANCE (TranslatedFailure.appRegistered), not a fallback.
-    ClientRegistry.setErrorTranslators({
-        toWire: (error: Error) => new ApiErrorHttpMapper('gui').toResponse(error),
-        fromWire: () => undefined,
-    });
+    // NEITHER half has a "not mine" any more: a registered translator answers every error and every
+    // response, declining by DELEGATING to the webpieces default — which is exactly what installing
+    // the default itself does, so this is the "registered nothing" baseline said out loud.
+    ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
 });
 
 describe('the app owns the WHOLE response: status, reason, headers and body', () => {
     it('a thrown app type becomes the app’s own status + reason + header + body', async () => {
-        installOrderErrorTranslators();
+        installOrderErrorTranslator();
 
         const res = await post('/public/info', JSON.stringify({ name: 'missing-order' }));
 
@@ -119,7 +117,7 @@ describe('the app owns the WHOLE response: status, reason, headers and body', ()
  */
 describe('server throws X -> client catches X', () => {
     it('a real node client reconstructs the app’s own type, not a status code', async () => {
-        installOrderErrorTranslators();
+        installOrderErrorTranslator();
 
         await RequestContext.run(async () => {
             const caught = await publicApiClient()
@@ -133,7 +131,7 @@ describe('server throws X -> client catches X', () => {
     });
 
     it('an ordinary call is untouched — translation is only ever the error path', async () => {
-        installOrderErrorTranslators();
+        installOrderErrorTranslator();
 
         await RequestContext.run(async () => {
             expect((await publicApiClient().getInfo({ name: 'Dean' })).greeting).toBe(
@@ -151,7 +149,7 @@ describe('server throws X -> client catches X', () => {
  */
 describe('a malformed body reaches the translator WITH its request context', () => {
     it('the translator sees the path and claims the error', async () => {
-        installOrderErrorTranslators();
+        installOrderErrorTranslator();
 
         const res = await post('/public/info', '{ this is not json');
 
@@ -189,7 +187,7 @@ describe('the txId response header', () => {
     });
 
     it('is on an app-translated error too — the app never re-emits it', async () => {
-        installOrderErrorTranslators();
+        installOrderErrorTranslator();
 
         const res = await post('/public/info', JSON.stringify({ name: 'missing-order' }));
 

@@ -68,12 +68,12 @@ function client(): NodeTypedApi {
 
 describe('node generated typed HTTP contracts', () => {
     beforeEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         ClientRegistry.addUrlMapping('inventory', 'https://inventory.example.test');
     });
 
     afterEach(() => {
-        ClientRegistry.clear();
+        ClientRegistry.resetForTests();
         vi.unstubAllGlobals();
     });
 

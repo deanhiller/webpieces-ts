@@ -26,8 +26,9 @@ import {
     ApiUnsupportedMediaTypeError,
     ContextKey,
     Endpoint,
-    ErrorTranslators,
+    ErrorTranslator,
     Filter,
+    WebpiecesDefaultErrorTranslator,
     HttpResponseDto,
     LogLevel,
     Service,
@@ -43,7 +44,7 @@ import {
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
-import { ApiErrorHttpMapper } from '@webpieces/http-server';
+
 
 /** Contracts, controllers and test doubles for McpRemoteBinding.integration.spec.ts. */
 
@@ -398,20 +399,26 @@ export class BoundaryProbeFilter extends Filter<MethodMeta, WpResponse<unknown>>
  * an MCP gateway relays a Webpieces peer's typed failure so the model sees the same kind it would see
  * for a local binding. `relay = false` answers "not mine", which is the framework default.
  */
-export class RelayWebpiecesPeerErrors implements ErrorTranslators {
+export class RelayWebpiecesPeerErrors implements ErrorTranslator {
     relay = true;
 
+    private readonly fallback = new WebpiecesDefaultErrorTranslator();
+
     toWire(error: Error): HttpResponseDto {
-        return new ApiErrorHttpMapper('gui').toResponse(error);
+        return this.fallback.toWire(error);
     }
 
-    fromWire(response: HttpResponseDto): Error | undefined {
-        if (!this.relay || !ApiErrorCodec.isPayload(response.body)) return undefined;
-        const decoded = ApiErrorCodec.decode(response.body);
-        if (!ApiErrorHttpStatus.hasCode(decoded)) return undefined;
-        const statusCode = decoded instanceof ApiCodedError ? decoded.statusCode : undefined;
-        return ApiErrorHttpStatus.codeFor(decoded.kind, statusCode) === response.status.code
-            ? decoded
-            : undefined;
+    fromWire(response: HttpResponseDto): void {
+        if (this.relay && ApiErrorCodec.isPayload(response.body)) {
+            const decoded = ApiErrorCodec.decode(response.body);
+            const statusCode = decoded instanceof ApiCodedError ? decoded.statusCode : undefined;
+            if (
+                ApiErrorHttpStatus.hasCode(decoded) &&
+                ApiErrorHttpStatus.codeFor(decoded.kind, statusCode) === response.status.code
+            ) {
+                throw decoded;
+            }
+        }
+        this.fallback.fromWire(response);
     }
 }

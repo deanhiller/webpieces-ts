@@ -16,9 +16,15 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Validate input/output DTO shapes and map every failure through the one `WpMcpErrorTranslator`,
   which has one method per boundary — `toBearerBoundaryResponse`, `toListError`, `toToolCallResult`
   (shared `ApiErrorBoundary.encode` classification and published text, requestId on every reply).
-- Let an application's `McpErrorTranslators` REPLACE the webpieces `tools/call` rendering (declining
-  by delegating to `McpDefaultToolCallRenderer`), and own the reply for `tools/list` and the pre-SDK
-  HTTP boundary outright.
+- Let an application's `McpErrorTranslator`, registered on the process-global `McpRegistry`, REPLACE
+  the webpieces `tools/call` rendering (declining by delegating to `McpDefaultToolCallRenderer`), and
+  own the reply for `tools/list` and the pre-SDK HTTP boundary outright. The registry is never empty,
+  so `toToolCallResult` makes ONE unconditional call — the same shape `ClientRegistry` gives HTTP and
+  `IpcRegistry` gives IPC.
+- Have `toWire` and NO `fromWire`: webpieces is never the MCP client, so there is no return path to
+  translate. Documented on `McpErrorTranslator` so it does not read as an oversight.
+- Keep the pre-SDK boundary OFF the HTTP `ErrorTranslator` even though both return `HttpResponseDto`:
+  its body must stay JSON-RPC shaped or the `401 + WWW-Authenticate` OAuth discovery signal breaks.
 - Wrap the edges with no filter chain above them — bearer, `Origin`, body, `tools/list` — in
   `LogApiCall`, so every failure gets exactly one operator line and the error boundary writes none.
 
