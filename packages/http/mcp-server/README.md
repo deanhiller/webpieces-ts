@@ -120,15 +120,31 @@ mcp.bind(expressApp, new McpBindOptions(
 ));
 ```
 
-`bind(...)` registers POST at that path plus a 405 (`Allow: POST`) for every other method there — MCP
-2026-07-28 has no session GET, so a probe gets a method error rather than a 404. It may be called only
+`bind(...)` registers POST at that path plus a 405 (`Allow: POST`) for every other method there —
+neither served era has a session GET here (2026-07-28 has none at all, and the 2025 leg is the SDK's
+STATELESS fallback, which answers the 2025 session GET/DELETE with the same 405), so a probe gets a
+method error rather than a 404. It may be called only
 once: one server serves exactly one canonical resource URI. `WpMcpServerConfig.resource` is that URI,
 fixed for the process lifetime and never derived from the request `Host` (a host-derived audience would
 make the boundary's own audience check circular — a confused deputy), and its path must equal
 `endpointPath`, which `bind(...)` verifies. A second hostname is a second deployment, not a second
 audience.
 
-The official MCP v2 server and Node adapter own MCP 2026-07-28 JSON-RPC validation, JSON versus
+## Protocol revisions: negotiated, never pinned
+
+One endpoint serves BOTH MCP wire eras from one tool registry — modern (2026-07-28, per-request
+`_meta` envelope) and legacy (the 2025-11-25 family, negotiated by `initialize`). The official SDK
+classifies each request and answers it on the matching leg, calling the SAME server factory for both,
+so the two eras can never drift apart. There is no configuration for this and no way to turn it off:
+a revision an app can pin is a revision an app can pin itself out of reach with, which is exactly what
+happened when this bridge was modern-only and every shipping client (all still on the 2025
+generation) got `-32022 Unsupported protocol version` at `initialize`. Only a revision NO era knows is
+refused, which is what the MCP lifecycle spec asks of a server.
+
+The external bearer is verified identically on both legs, at the `bind(...)` HTTP boundary, before the
+SDK is involved — the era is the SDK's decision, the authentication is not.
+
+The official MCP v2 server and Node adapter own JSON-RPC validation for both eras, JSON versus
 request-scoped SSE responses, backpressure, cancellation, keepalives, and subscriptions. Webpieces
 owns the Express path, root `RequestContext`, authentication boundary, schema-derived tool registry,
 and dispatch through the normal API proxy.
@@ -154,7 +170,7 @@ level-triggered invalidation, and `close()` drains active response streams. A re
 re-listen and refresh its authoritative lists; notifications are not a durable or replayable event log.
 
 The authority verifies issuer, signature/token state, expiry, scopes, the exact resource URI, and
-current account state. MCP 2026-07-28 has no sessions, so the bearer is verified exactly once per POST
+current account state. Neither served era keeps a session here, so the bearer is verified once per POST
 at the `bind(...)` HTTP boundary, before the SDK is involved; tool handlers never re-verify it. A
 rejected token must be thrown as `ApiUnauthorizedError` (answered 401 + `WWW-Authenticate`); any
 other throw from the authority is an implementation failure (500). Endpoint JWTs are capped at one

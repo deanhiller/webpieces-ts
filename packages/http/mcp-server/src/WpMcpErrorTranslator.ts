@@ -278,7 +278,7 @@ export class WpMcpErrorTranslator {
         );
     }
 
-    /** tools/call with a name no binding registered: a JSON-RPC protocol error per MCP 2026-07-28. */
+    /** tools/call with a name no binding registered: a JSON-RPC protocol error in either MCP era. */
     unknownTool(toolName: string): ProtocolError {
         const requestId = McpCorrelation.requestId();
         log.info(`Unknown MCP tool: ${toolName} requestId=${requestId}`);

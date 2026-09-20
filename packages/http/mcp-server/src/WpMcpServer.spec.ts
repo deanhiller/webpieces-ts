@@ -61,7 +61,7 @@ interface BoundTestBridge {
     url: string;
 }
 
-describe('WpMcpServer modern HTTP bridge', () => {
+describe('WpMcpServer HTTP bridge', () => {
     let bridge: WpMcpServer<string, string>;
     let controller: SearchController;
     let authority: TestTokenAuthority;
@@ -496,21 +496,9 @@ describe('WpMcpServer modern HTTP bridge', () => {
         expect(denied.payload.error?.message).toBe('Forbidden');
     });
 
-    it('uses exact HTTP and JSON-RPC errors for legacy, unknown methods, and header mismatches', async () => {
-        // MCP 2026-07-28 has no session GET, so a GET is a method error, not a missing route.
+    it('uses exact HTTP and JSON-RPC errors for unknown methods and header mismatches', async () => {
+        // Neither era has a session GET here, so a GET is a method error, not a missing route.
         expect((await fetch(`${baseUrl}${ENDPOINT_PATH}`)).status).toBe(405);
-        const legacy = await post({
-            jsonrpc: '2.0',
-            id: ++nextId,
-            method: 'initialize',
-            params: {
-                protocolVersion: '2025-03-26',
-                clientInfo: { name: 'old', version: '1' },
-                capabilities: {},
-            },
-        });
-        expect(legacy.response.status).toBe(400);
-        expect(legacy.payload.error).toBeDefined();
         const mismatch = await post(request('tools/list'), 'mcp-user', {
             'mcp-protocol-version': '2025-11-25',
         });
