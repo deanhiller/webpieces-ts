@@ -4,7 +4,7 @@ import * as path from 'path';
  * The {@link ReviewerAgentPolicy.maxAgents} stand-in for the code paths that build a policy where the CAP
  * plays no part — the structure-only checklist validation, and the agent-file existence check. It is NOT a
  * default and never reaches a loaded config: `reviewerAgents` is required, so a real config's cap is always
- * the number the consumer wrote. 1 rather than 0 so the value is a legal cap even if one ever leaked.
+ * the number the consumer wrote. 1 keeps structure-only paths in the enabled-review shape.
  */
 export const REVIEWER_AGENTS_PLACEHOLDER = 1;
 
@@ -30,14 +30,10 @@ export class ReviewerAgentPolicy {
      */
     agentName: string;
     /**
-     * The most reviewer subagents one stage-② round may use — always >= 1, because `reviewerAgents` is a
-     * REQUIRED config field. The main AI groups the owed checklists across at most this many subagents, and
-     * each subagent still writes one verdict file per checklist it covers.
-     *
-     * There is no "unset" value and no second mode. This used to carry a 0 sentinel meaning "not configured",
-     * which selected a separate one-subagent-per-checklist code path; making the key required deleted that
-     * branch rather than leaving it reachable, because a consumer who sets the cap to their checklist count
-     * gets the identical behaviour from the one path that is left.
+     * The most reviewer subagents one stage-② round may use. `0` explicitly disables reviewer-agent
+     * reviews for the project while leaving the build and PR lifecycle active. Positive values cap the
+     * round; the main AI groups owed checklists across at most that many subagents, and each subagent still
+     * writes one verdict file per checklist it covers.
      */
     maxAgents: number;
 

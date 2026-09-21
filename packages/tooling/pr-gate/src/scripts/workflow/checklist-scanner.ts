@@ -89,8 +89,8 @@ export class ChecklistScan {
      */
     optionalNotRun: RequiredChecklist[];
     /**
-     * TRUE when this machine's `~/.webpieces/config.json` carries
-     * `experimental.turnOffAllReviewers: true`, and therefore when `applicable`, `reviewed`,
+     * TRUE when either this machine's `experimental.turnOffAllReviewers` switch is on or the project sets
+     * `commands.pr-gate.reviewerAgents: 0`, and therefore when `applicable`, `reviewed`,
      * `outstanding`, `results`, `optionalNotRun` and `formatErrors` above are ALL EMPTY BY DECREE rather
      * than because nothing matched. Those two states are indistinguishable from the empty lists alone,
      * and telling them apart is the entire reason this field exists: an unreviewed PR must never render
@@ -217,7 +217,7 @@ export class ChecklistScanner {
         const roster = new ChecklistRoster(
             this.checklistDetector.roster(defined, changedFiles), changedFiles.length, base !== '');
         const matched = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
-        // THE ONE CHOKE POINT for `experimental.turnOffAllReviewers`. Suppressing HERE — rather than in
+        // THE ONE CHOKE POINT for both reviewer opt-outs. Suppressing HERE — rather than in
         // `wp-review-upsert-pr` and again in `wp-finish-upsert-pr` — is what keeps the command that LISTS
         // and the command that BLOCKS in agreement by construction, which is this class's whole reason for
         // existing. A second check in either command would be a second answer to one question.
@@ -225,7 +225,8 @@ export class ChecklistScanner {
             ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
             : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles);
         const homeConfig = this.homeConfig.load();
-        if (homeConfig.turnOffAllReviewers) {
+        const projectDisabled = defined.some((d: ChecklistDefinition): boolean => d.reviewer.maxAgents === 0);
+        if (homeConfig.turnOffAllReviewers || projectDisabled) {
             // EMPTY: applicable, reviewed, outstanding, formatErrors, results, optionalNotRun. INTACT:
             // defined, roster, basis, changedFiles, context — so every downstream reader can still say
             // WHAT was suppressed, which is the difference between an honest record and a silent one.

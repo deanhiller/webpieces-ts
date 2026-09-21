@@ -24,6 +24,13 @@ describe('ChecklistInstructionsService.names', () => {
  * grouping decision handed to the main AI.
  */
 describe('ChecklistInstructionsService — reviewerAgents grouping', () => {
+    it('with reviewerAgents = 0: explicitly forbids reviewer subagents and verdict files', () => {
+        const text = inst.render(owed(0, 2), REVIEW, CTX);
+        expect(text).toContain('reviewerAgents = 0');
+        expect(text).toContain('Do not spawn reviewer subagents');
+        expect(text).not.toContain('must write:');
+    });
+
     // `reviewerAgents` is required, so there is no un-capped mode left to render. A cap at or above the
     // checklist count still states the cap — it never reverts to the deleted "a SEPARATE subagent for each"
     // prose, which is what a surviving fallback branch would have looked like from here.

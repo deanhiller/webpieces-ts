@@ -562,6 +562,11 @@ describe('loadAndValidate — every retired key fails the load', () => {
 // Issue #947: which reviewer agent a loaded config resolves to. No repo has to write the webpieces default;
 // an agent of its own takes the override AND the name, and the half-configured shapes fail the load.
 describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', () => {
+    it('loads reviewerAgents zero as the explicit project review opt-out', () => {
+        const loaded = loadAndValidate(writeConfig(allRulesOff(), { ...validPrGate(), reviewerAgents: 0 }));
+        expect(loaded.prGate.reviewer.maxAgents).toBe(0);
+    });
+
     it('resolves to webpieces-reviewer when the config names no agent', () => {
         const loaded = loadAndValidate(writeConfig(allRulesOff()));
         expect(loaded.prGate.reviewer.agentName).toBe('webpieces-reviewer');

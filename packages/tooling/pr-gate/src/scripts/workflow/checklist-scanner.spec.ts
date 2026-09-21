@@ -48,8 +48,8 @@ interface RawItem { id?: string; doc?: string; patterns?: string[]; required?: b
  * is the behavior every one of these tests was written against. A test that cares about the optional path
  * says `required: false` explicitly.
  */
-function defs(items: readonly RawItem[]): ChecklistDefinition[] {
-    return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }, REVIEWER));
+function defs(items: readonly RawItem[], reviewer: ReviewerAgentPolicy = REVIEWER): ChecklistDefinition[] {
+    return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }, reviewer));
 }
 
 function newAiBranchName(): AiBranchName {
@@ -96,6 +96,37 @@ describe('ChecklistScanner — single-round mode', () => {
             dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(true);
         expect(scannerFor(false, false).scan(
             dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(false);
+    });
+});
+
+describe('ChecklistScanner — reviewerAgents zero project policy', () => {
+    it('suppresses matched required reviews while preserving what matched', () => {
+        const dir = repoOnBranch();
+        fs.writeFileSync(path.join(dir, 'change.sql'), 'SELECT 1;\n');
+        const disabled = defs(
+            [{ id: 'db-reviewer', patterns: ['**/*.sql'] }],
+            new ReviewerAgentPolicy('webpieces-reviewer', 0));
+
+        const scan = scannerFor(false).scan(dir, disabled, new ChecklistScanOptions(true));
+
+        expect(scan.reviewersDisabled).toBe(true);
+        expect(scan.applicable).toEqual([]);
+        expect(scan.outstanding).toEqual([]);
+        expect(scan.suppressed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
+    });
+
+    it('leaves positive reviewer caps unchanged', () => {
+        const dir = repoOnBranch();
+        fs.writeFileSync(path.join(dir, 'change.sql'), 'SELECT 1;\n');
+        const enabled = defs(
+            [{ id: 'db-reviewer', patterns: ['**/*.sql'] }],
+            new ReviewerAgentPolicy('webpieces-reviewer', 1));
+
+        const scan = scannerFor(false).scan(dir, enabled, new ChecklistScanOptions(true));
+
+        expect(scan.reviewersDisabled).toBe(false);
+        expect(scan.applicable).toHaveLength(1);
+        expect(scan.outstanding).toHaveLength(1);
     });
 });
 

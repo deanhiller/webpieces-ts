@@ -164,6 +164,18 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
 
         expect(enforcerUnderTest().enforce(shared(2), 'dean/feat', repoRoot, configWith(2)).verified).toBe(true);
     });
+
+    it('requires no reviewer provenance when reviewerAgents is zero', () => {
+        process.env['HOME'] = fakeHarness('sess-g3', 'unrelated-agent', 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g3';
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
+
+        const report = enforcerUnderTest().enforce(shared(0), 'dean/feat', repoRoot, configWith(0));
+
+        expect(report.verified).toBe(true);
+        expect(report.evidence).toEqual([]);
+        expect(provenanceIn(repoRoot)['reviewers']).toEqual([]);
+    });
 });
 
 /**

@@ -567,3 +567,22 @@ describe('turnOffAllReviewers — the suppression is stated, and nothing is offe
         expect(report.render(withOneOwedReviewer())).not.toContain('SUPPRESSED');
     });
 });
+
+describe('reviewerAgents zero — project-level review opt-out reporting', () => {
+    it('names the project config, requires no reviewer or verdict, and preserves the finish flow', () => {
+        const input = inputWith(1, 0);
+        input.reviewer = new ReviewerAgentPolicy('webpieces-reviewer', 0);
+        input.reviewersSuppressed = true;
+        input.suppressed = [new RequiredChecklist('required-review', input.reviewer, '', ['a.ts'], ['**'], true)];
+
+        const text = report.render(input);
+
+        expect(text).toContain('DISABLED FOR THIS PROJECT');
+        expect(text).toContain('commands.pr-gate.reviewerAgents: 0');
+        expect(text).toContain('build and PR gates remain active');
+        expect(text).not.toContain('turnOffAllReviewers');
+        expect(text).not.toContain('subagent_type:');
+        expect(text).not.toContain('must write:');
+        expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
+    });
+});

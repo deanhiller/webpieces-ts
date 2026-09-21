@@ -190,15 +190,21 @@ describe('validatePrGateSection — overrideReviewerAgent, reviewerAgentName and
         expect(validatePrGateSection(validPrGate([]), repoWith())).toEqual([]);
     });
 
-    it('accepts a positive integer reviewerAgents', () => {
-        for (const n of [1, 2, 8]) expect(validatePrGateSection({ ...validPrGate([]), reviewerAgents: n })).toEqual([]);
+    it('accepts a nonnegative integer reviewerAgents', () => {
+        for (const n of [0, 1, 2, 8]) expect(validatePrGateSection({ ...validPrGate([]), reviewerAgents: n })).toEqual([]);
     });
 
-    it('rejects a reviewerAgents that is not a positive integer', () => {
-        for (const bad of [0, -1, 1.5, '2', null]) {
+    it('rejects a reviewerAgents that is not a nonnegative integer', () => {
+        for (const bad of [-1, 1.5, '2', null, true]) {
             const errors = validatePrGateSection({ ...validPrGate([]), reviewerAgents: bad });
-            expect(has(errors, /"reviewerAgents" = .* is not valid — it must be a positive integer/), String(bad)).toBe(true);
+            expect(has(errors, /"reviewerAgents" = .* is not valid — it must be a nonnegative integer/), String(bad)).toBe(true);
         }
+    });
+
+    it('does not require a reviewer-agent file when reviewerAgents is zero', () => {
+        expect(validatePrGateSection(
+            { ...validPrGate([]), reviewerAgents: 0, overrideReviewerAgent: true, reviewerAgentName: 'absent' },
+            repoWith([], ['webpieces-reviewer']))).toEqual([]);
     });
 });
 

@@ -196,7 +196,7 @@ export const REVIEWER_AGENTS_KEY = 'reviewerAgents';
 
 /**
  * `overrideReviewerAgent` (optional boolean, absent == false), `reviewerAgentName` (only with the override)
- * and `reviewerAgents` (optional positive integer).
+ * and `reviewerAgents` (required nonnegative integer; zero disables reviewer-agent reviews).
  *
  * The reviewer agent defaults to {@link DEFAULT_REVIEWER_AGENT_NAME} — the generic reviewer webpieces ships
  * and manages — so a new repo writes NOTHING here (issue #947). Replacing it changes how every PR is
@@ -241,7 +241,8 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
     }
     const agentKeysValid = errors.length === 0;
     errors.push(...reviewerAgentsErrors(s));
-    if (repoRoot !== undefined && agentKeysValid) {
+    // A disabled project never spawns this agent, so requiring its file would make `0` an incomplete opt-out.
+    if (repoRoot !== undefined && agentKeysValid && s[REVIEWER_AGENTS_KEY] !== 0) {
         const agentName = override === true ? (name as string).trim() : DEFAULT_REVIEWER_AGENT_NAME;
         errors.push(...new ChecklistValidator().validateReviewerAgent(
             repoRoot, new ReviewerAgentPolicy(agentName, REVIEWER_AGENTS_PLACEHOLDER)));
@@ -250,7 +251,7 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
 }
 
 /**
- * `reviewerAgents`: present, and a positive integer. Missing and wrong-typed get DIFFERENT messages — the
+ * `reviewerAgents`: present, and a nonnegative integer. Missing and wrong-typed get DIFFERENT messages — the
  * missing one has to teach a reader what the number means and what to weigh when picking it, because they
  * have never seen the key; the wrong-typed one only has to name the constraint they just broke.
  */
@@ -263,18 +264,19 @@ function reviewerAgentsErrors(s: Record<string, unknown>): string[] {
             `[pr-gate] Missing required field "${REVIEWER_AGENTS_KEY}" — the MOST reviewer subagents one review ` +
             `round may use. Add this line to commands.pr-gate in webpieces.config.json:\n` +
             `    "${REVIEWER_AGENTS_KEY}": 1,\n` +
-            `  1 = ONE subagent reviews every owed checklist (cheapest; it is handed each checklist's instructions ` +
-            `file and still writes one verdict file per checklist). A HIGHER number buys independent readers — ` +
+            `  0 = reviewer-agent reviews are disabled for this project while the build and PR gate stay active. ` +
+            `1 = ONE subagent reviews every owed checklist (cheapest enabled setting; it is handed each checklist's ` +
+            `instructions file and still writes one verdict file per checklist). A HIGHER number buys independent readers — ` +
             `set it to your checklist count for one subagent each — at that many times the tokens per PR. There is ` +
             `deliberately no default: this sets the price of every review round, and an unchosen price is what ` +
             `makes a gate expensive enough that people stop running it.`,
         ];
     }
-    if (!(typeof max === 'number' && Number.isInteger(max) && max >= 1)) {
+    if (!(typeof max === 'number' && Number.isInteger(max) && max >= 0)) {
         return [
-            `[pr-gate] "${REVIEWER_AGENTS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a positive integer: ` +
-            `the MOST reviewer subagents one review round may use, with the owed checklists grouped across them ` +
-            `(1 = a single subagent reviews every checklist).`,
+            `[pr-gate] "${REVIEWER_AGENTS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a nonnegative integer: ` +
+            `0 disables reviewer-agent reviews for this project while leaving the build and PR gate active; a positive ` +
+            `value is the MOST reviewer subagents one review round may use, with owed checklists grouped across them.`,
         ];
     }
     return [];

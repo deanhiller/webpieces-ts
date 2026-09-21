@@ -89,7 +89,7 @@ export class ChecklistCommentRenderer {
     }
 
     /**
-     * The whole comment when `experimental.turnOffAllReviewers` killed every reviewer.
+     * The whole comment when the project or machine reviewer policy disabled every reviewer.
      *
      * It REPLACES the ordinary body rather than adding a line to it, because three things in there would
      * each be false here and none of them is fixable in place: the roll-up would count matched checklists
@@ -105,9 +105,10 @@ export class ChecklistCommentRenderer {
         const lines: string[] = [
             CHECKLIST_COMMENT_MARKER,
             `## 🔍 Company review checklists — ⚫ ALL SUPPRESSED (${suppressedCount} of ${rows.length} would have run)`,
-            `_No reviewer subagent ran on this PR. Switched off by \`experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true\` `
-            + `in the machine-local \`~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}\` — a MACHINE setting, not a repo one, so `
-            + `nothing in this branch could have caused it. **This is not an all-clear**, and `
+            `_No reviewer subagent ran on this PR. Reviewer suppression is controlled by `
+            + `\`commands.pr-gate.reviewerAgents: 0\` in \`webpieces.config.json\` or `
+            + `\`experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true\` in the machine-local `
+            + `\`~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}\`. **This is not an all-clear**, and `
             + `${required.length} of the suppressed checklist(s) were REQUIRED._`,
             '',
             `### Checklists (all ${rows.length})`,

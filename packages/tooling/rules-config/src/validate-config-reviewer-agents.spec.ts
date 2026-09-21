@@ -23,22 +23,21 @@ describe('validatePrGateSection — reviewerAgents (required cap)', () => {
         const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO' });
         const msg = bad.find(e => e.includes('"reviewerAgents"')) ?? '';
         expect(msg).toContain('"reviewerAgents": 1,');
+        expect(msg).toContain('0 = reviewer-agent reviews are disabled');
         expect(msg).toContain('ONE subagent reviews every owed checklist');
         expect(msg).toContain('deliberately no default');
     });
 
-    it('accepts any positive integer', () => {
-        for (const reviewerAgents of [1, 2, 7]) {
+    it('accepts zero and positive integers', () => {
+        for (const reviewerAgents of [0, 1, 2, 7]) {
             expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents })).toEqual([]);
         }
     });
 
-    // 0 was the old "not configured" sentinel INSIDE the tooling; it was never a legal config value and must
-    // not become one now that the key is required, or the deleted mode returns through the front door.
-    it('rejects 0, negatives and non-integers — including the retired 0 sentinel', () => {
-        for (const reviewerAgents of [0, -1, 1.5, '1', null, true]) {
+    it('rejects negatives, fractions, strings, null and booleans', () => {
+        for (const reviewerAgents of [-1, 1.5, '1', null, true]) {
             const errors = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents });
-            expect(errors.some(e => e.includes('must be a positive integer'))).toBe(true);
+            expect(errors.some(e => e.includes('must be a nonnegative integer'))).toBe(true);
         }
     });
 });
