@@ -33,6 +33,7 @@ export class ChecklistInstructionsService {
      */
     render(pending: readonly RequiredChecklist[], reviewPath: string, context: ChecklistReviewContext): string {
         if (pending.length === 0) return '';
+        if (pending[0].reviewer.maxAgents === 0) return this.spawnRule(pending).join('\n');
         const lines: string[] = [...this.spawnRule(pending), ''];
         for (const req of pending) lines.push(...this.oneReviewer(req, reviewPath));
         lines.push('', ...this.verdictFormat());
@@ -47,6 +48,12 @@ export class ChecklistInstructionsService {
      */
     spawnRule(pending: readonly RequiredChecklist[]): string[] {
         const reviewer = pending[0].reviewer;
+        if (reviewer.maxAgents === 0) {
+            return [
+                'Reviewer-agent reviews are disabled for this project (commands.pr-gate.reviewerAgents = 0).',
+                'Do not spawn reviewer subagents and do not write checklist verdict files.',
+            ];
+        }
         const own = [
             'You may NOT review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
         ];

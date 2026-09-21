@@ -336,11 +336,11 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     // cannot reach us: validateChecklistsSection has already failed the load.
     // The webpieces reviewer unless `overrideReviewerAgent` is true, in which case `reviewerAgentName` names the
     // agent (validatePrGateSection rejects a name without the override, and the override without a name).
-    // Optional positive integer cap; absent ⇒ one subagent per checklist.
+    // Required nonnegative integer: 0 disables reviewer-agent reviews; positive values cap the round.
     const agentName = raw.overrideReviewerAgent === true
         ? (raw.reviewerAgentName ?? '').trim()
         : DEFAULT_REVIEWER_AGENT_NAME;
-    // `reviewerAgents` is REQUIRED and validated as a positive integer before this runs, so the fallback is
+    // `reviewerAgents` is REQUIRED and validated as a nonnegative integer before this runs, so the fallback is
     // unreachable in a loaded config and exists only to keep this total for a structure-only caller.
     const reviewer = new ReviewerAgentPolicy(
         agentName,
@@ -396,4 +396,3 @@ export function buildLandPrConfig(raw: RawLandPr | undefined): LandPrConfig {
     if (typeof retention !== 'string' || !BRANCH_RETENTIONS.includes(retention)) return defaults;
     return new LandPrConfig(retention);
 }
-

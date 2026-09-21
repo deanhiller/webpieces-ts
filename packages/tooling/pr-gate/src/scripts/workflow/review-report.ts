@@ -202,8 +202,11 @@ export class ReviewReport {
      */
     private suppressionBanner(input: ReviewReportInput): string {
         const required = input.suppressed.filter((r: RequiredChecklist): boolean => r.required);
+        const projectDisabled = input.reviewer.maxAgents === 0;
         const lines: string[] = [
-            '⚫ ALL REVIEWER SUBAGENTS ARE SWITCHED OFF ON THIS MACHINE. Nothing reviewed this branch.',
+            projectDisabled
+                ? '⚫ ALL REVIEWER SUBAGENTS ARE DISABLED FOR THIS PROJECT. Nothing reviewed this branch.'
+                : '⚫ ALL REVIEWER SUBAGENTS ARE SWITCHED OFF ON THIS MACHINE. Nothing reviewed this branch.',
             '',
             `   ${input.suppressed.length} checklist(s) matched this diff and were SUPPRESSED — `
             + `${required.length} of them REQUIRED:`,
@@ -213,8 +216,13 @@ export class ReviewReport {
         }
         lines.push(
             '',
-            `   Switched off by:  experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true`,
-            `   Read from:        ~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}  (machine-local; no repo config can set this)`,
+            ...(projectDisabled ? [
+                '   Switched off by:  commands.pr-gate.reviewerAgents: 0',
+                '   Read from:        webpieces.config.json  (project policy; build and PR gates remain active)',
+            ] : [
+                `   Switched off by:  experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true`,
+                `   Read from:        ~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}  (machine-local; no repo config can set this)`,
+            ]),
             '',
             '   There is NOTHING to spawn — no reviewer was briefed and no instructions file was written,',
             '   so any attempt to spawn one has nothing to read. Do NOT hand-write a verdict file in their',
@@ -222,7 +230,9 @@ export class ReviewReport {
             '',
             '   The dashboard is the whole review product for this PR, and the suppression is carried into',
             '   the PR body — which is the squash-merge commit body — so main\'s history records it.',
-            '   To get the reviewers back, set that key to false (or delete it) and re-run this command.',
+            projectDisabled
+                ? '   To get reviewers back, set reviewerAgents to a positive integer and re-run this command.'
+                : '   To get the reviewers back, set that key to false (or delete it) and re-run this command.',
         );
         return lines.join('\n') + '\n';
     }
@@ -529,7 +539,7 @@ export class ReviewReport {
      * HOW MANY subagents, of WHICH type — the one place this report states it, shared by the required and
      * the optional step so the two cannot disagree.
      *
-     * `commands.pr-gate.reviewerAgents` is a REQUIRED config field, so the main AI always gets a CAP and the
+     * Positive `commands.pr-gate.reviewerAgents` values give the main AI a CAP and the
      * grouping decision: the point of the key is to stop paying for N agents re-reading the same diff, and
      * the AI is the one that can see which checklists belong together. The cap is per ROUND, so a re-run
      * after a red verdict re-reviews only the owed checklists — the only ones listed — under the same cap.

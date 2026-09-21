@@ -75,10 +75,13 @@ export class ProvenanceEnforcer {
     // eslint-disable-next-line @typescript-eslint/max-params
     enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
-        const expected = required
+        // Defense in depth: the scanner normally hands finish an empty set under this project policy, but
+        // provenance must never resurrect a reviewer requirement if a caller still passes matched checklists.
+        const enforced = config.reviewer.maxAgents === 0 ? [] : required;
+        const expected = enforced
             .filter((r: RequiredChecklist): boolean => r.reviewer.agentName.trim() !== '')
             .map((r: RequiredChecklist): ExpectedReviewer => new ExpectedReviewer(r.id, r.reviewer.agentName.trim()));
-        const context = this.contextFor(repoRoot, required, branch);
+        const context = this.contextFor(repoRoot, enforced, branch);
         // verifyReviewers short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
         // checklists still gets a provenance record naming the session and the main agent's own transcript.
         const result = this.provenance.verifyReviewers(expected, context);
@@ -88,7 +91,7 @@ export class ProvenanceEnforcer {
         const blind = this.blindReviewers(report.evidence, config);
         // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
         // that only ever appeared on success could not answer what the reviewers did the time it was refused.
-        this.writeProvenanceRecord(repoRoot, required, result, report.evidence);
+        this.writeProvenanceRecord(repoRoot, enforced, result, report.evidence);
         this.refuse(result, blind, context);
         return report;
     }

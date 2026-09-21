@@ -84,8 +84,8 @@ export class ChecklistNotice {
             '     ] } }\n' +
             '   `id` names the checklist, `doc` is REPO-relative, `patterns` are path globs. Every checklist\n' +
             '   is reviewed by the webpieces-reviewer subagent type (or your own, via\n' +
-            '   `"overrideReviewerAgent": true` + `"reviewerAgentName"`), in its own run\n' +
-            '   unless `commands.pr-gate.reviewerAgents` caps how many subagents one round may use.'
+            '   `"overrideReviewerAgent": true` + `"reviewerAgentName"`). Set `reviewerAgents` to 0\n' +
+            '   to disable reviewer-agent reviews, or to a positive integer to cap each round.'
         );
     }
 

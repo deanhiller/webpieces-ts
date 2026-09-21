@@ -133,10 +133,10 @@ export class DashboardInput {
      */
     buildCommand: string;
     /**
-     * How many checklists WOULD have run but were killed by `experimental.turnOffAllReviewers` in
-     * `~/.webpieces/config.json` — required ones included. `0` means the flag is off and every reviewer
-     * ran normally; it is NOT a way of saying "no checklist matched", which `checklists.length === 0`
-     * already says.
+     * How many checklists WOULD have run but were disabled by either the project policy
+     * (`reviewerAgents: 0`) or the machine kill switch — required ones included. `0` means no matching
+     * checklist was suppressed; it is NOT a way of saying "no checklist matched", which
+     * `checklists.length === 0` already says.
      *
      * The two states are byte-identical in `checklists` (both empty) and that is precisely the defect this
      * field closes: without it, a PR whose four REQUIRED reviewers were switched off is indistinguishable
@@ -536,7 +536,7 @@ export class Dashboard {
      */
     private suppressedChecklistLine(suppressedCount: number): string {
         return `**Checklists:** ${this.suppressedTail(suppressedCount)}`
-            + ' · NO reviewer subagent ran on this PR — set that key to false (or delete it) to get them back';
+            + ' · NO reviewer subagent ran on this PR — use a positive reviewerAgents value and disable the machine kill switch to get them back';
     }
 
     /**
@@ -547,13 +547,14 @@ export class Dashboard {
      *   • the COUNT, because "suppressed 4" and "0 applicable" are different facts and both must be
      *     tellable apart forever — an absent bullet says the second while meaning the first;
      *   • "required included", because otherwise it reads as an optional-only skip, which it is not;
-     *   • the FLAG and the FILE, because they are the only actionable thing a reader of `git log` has.
+     *   • both supported controls, because this compact input carries the count but not the source.
      * ⚫ is deliberately outside the verdict palette (🟢🟡🔴🟠⚪ are all taken by checklistStatusText), so
      * nothing here can be mistaken for a verdict a reviewer actually returned.
      */
     private suppressedTail(suppressedCount: number): string {
         return `⚫ ALL ${suppressedCount} SUPPRESSED (required included) by `
-            + `${HOME_KEY_TURN_OFF_ALL_REVIEWERS} in ~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}`;
+            + `reviewer policy (reviewerAgents: 0 or ${HOME_KEY_TURN_OFF_ALL_REVIEWERS} in `
+            + `~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE})`;
     }
 
     private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {

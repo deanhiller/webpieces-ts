@@ -9,7 +9,7 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
 
 ```jsonc
 "commands": { "pr-gate": {
-  "reviewerAgents": 1,                         // OPTIONAL — see below
+  "reviewerAgents": 1,                         // REQUIRED — 0 disables reviews; see below
   "checklists": [
     { "id": "db-migrations",
       "doc": ".claude/review/db-migrations.md",
@@ -35,14 +35,17 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
   your own instead: set `"overrideReviewerAgent": true` and `"reviewerAgentName": "my-reviewer"`. The two go
   together — a `reviewerAgentName` without the override, or the override without a name, fails config
   validation naming the edit.
-- **`reviewerAgents`** (**REQUIRED** positive integer) caps how many reviewer subagents one round may use.
-  `wp-review-upsert-pr` tells you to use AT MOST N subagents for the owed checklists and to group them as
+- **`reviewerAgents`** (**REQUIRED** nonnegative integer) controls reviewer-agent execution. `0` disables
+  reviewer subagents, checklist verdict requirements and reviewer provenance for this project while keeping
+  the build, PR lifecycle, merge policy, gate token and other gates active. A positive value caps how many
+  reviewer subagents one round may use. `wp-review-upsert-pr` tells you to use AT MOST N subagents and group them as
   you judge best (one for all of them, or e.g. two with four each). Each subagent is handed the instructions
   file of every checklist it covers and still writes ONE verdict file per checklist, so the verdict gate and
   the PR dashboard behave identically however you grouped them. A re-run after a red verdict re-reviews only
   the checklists still owed, under the same cap.
 
-  **Picking the number.** `1` is the cheapest: one reviewer reads the diff once holding every owed
+  **Picking the number.** `0` is the explicit project-level opt-out. `1` is the cheapest enabled setting:
+  one reviewer reads the diff once holding every owed
   checklist. Setting it to your checklist count buys independent readers — no cross-checklist contamination,
   deeper per-checklist attention — at that many times the tokens per PR. Note it is a MAXIMUM, not a quota:
   at N the AI may still group everything into one subagent if that is the sensible read.
@@ -54,7 +57,8 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
   > absent branch is DELETED rather than kept as a fallback, per the no-backwards-compat policy: the number
   > IS the decision this key exists to record, so there is nothing sensible to default it to.
   >
-  > **To keep the old behaviour exactly, set it to your checklist count.** To make reviews cheap, set `1`.
+  > **To keep the old behaviour exactly, set it to your checklist count.** To make reviews cheap, set `1`;
+  > to turn reviewer-agent reviews off for this project, set `0`.
 
 ## `required` — which reviews block, and which are offered
 
@@ -139,12 +143,12 @@ The changed files + the exact base sha the gate uses are in
 { "base": "<merge-base sha>", "head": "<HEAD sha>", "changedFiles": ["path/a.ts", "db/003.sql", ...] }
 ```
 
-For each matched **required** checklist — and each **optional** one the human picked — you must:
+When `reviewerAgents` is positive, for each matched **required** checklist — and each **optional** one the human picked — you must:
 
-1. **Have a reviewer-agent subagent review it** — a SEPARATE one per checklist, unless
-   `reviewerAgents` lets one subagent cover several. The coding agent may **not** review its own work.
+1. **Have a reviewer-agent subagent review it**, grouping checklists under the configured positive cap.
+   The coding agent may **not** review its own work.
    `wp-finish` verifies from the harness's own records that a reviewer subagent actually ran on this branch
-   for each checklist (a distinct run per checklist when `reviewerAgents` is absent).
+   for each checklist.
 2. Have that subagent **read the checklist's doc, then inspect the real diff** of the files in its scope —
    `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
