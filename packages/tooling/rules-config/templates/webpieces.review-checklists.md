@@ -154,7 +154,7 @@ When `reviewerAgents` is positive, for each matched **required** checklist — a
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **submit its verdict** with `pnpm wp-write-review --checklist <id>` (the JSON on stdin, or
-   `--file <path>`). The bin writes `.webpieces/pr-review/<featureSlug>/review-<id>.json` — one file per
+   `--file <path>`). The bin writes `review-<id>.json` beside the branch's `review.json` — one file per
    checklist, so concurrent reviewers never clobber each other — plus `review-<id>.provenance.json`
    recording WHO submitted it (the harness's own session/agent ids, stamped by the PreToolUse hook), the
    commit it was briefed on, and a hash of the checklist's in-scope diff. It is the ONLY way a verdict is
@@ -183,7 +183,7 @@ be spawned, that is a config bug, not your cue to self-certify — report it to 
 
 **From a plain terminal** (no AI harness in the environment, no hook stamp) `wp-write-review` records the
 submitter as `terminal` — a HUMAN reviewer — and finish accepts it. CI never submits or reads verdicts:
-`.webpieces/` is not committed.
+the review state is local and never committed.
 
 ## The verdict each reviewer subagent submits through `wp-write-review`
 
