@@ -21,10 +21,15 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
-import { ApiUsageScanner, buildApiContracts, describeNonLiteralDecoratorArgs } from '../api-usage/api-scanner';
+import {
+    ApiUsageScanner,
+    buildApiContracts,
+    describeNonLiteralDecoratorArgs,
+} from '../api-usage/api-scanner';
 import {
     EmptiedApiContractError,
     MissingBasePathError,
+    UndeclaredEndpointOperationError,
     UnresolvedEndpointPathError,
 } from '../api-usage/api-contract-errors';
 import { specTempDirs } from '@webpieces/rules-config';
@@ -65,23 +70,23 @@ const INBOUND_PATH = '/inbound';
 
 @ApiPath(WHATSAPP_API_PATH)
 export abstract class WhatsAppTestApi {
-    @Endpoint('/test', 'rpc')
+    @Endpoint(POST, '/test', WRITE, RPC)
     abstract test(): Promise<void>;
 
-    @Endpoint('/pg-security-test', 'rpc')
+    @Endpoint(POST, '/pg-security-test', WRITE, RPC)
     abstract pgSecurityTest(): Promise<void>;
 }
 
 @PubSub()
 @ApiPath(WHATSAPP_API_PATH)
 export abstract class WhatsAppApi {
-    @Endpoint(PROCESS_PATH, 'cloudtasks')
+    @Endpoint(POST, PROCESS_PATH, WRITE, CLOUDTASKS)
     abstract process(): Promise<void>;
 
-    @Endpoint(CONTINUE_PATH, 'cloudtasks')
+    @Endpoint(POST, CONTINUE_PATH, WRITE, CLOUDTASKS)
     abstract continueConversation(): Promise<void>;
 
-    @Endpoint(INBOUND_PATH, 'external', { calledBy: 'twilio' })
+    @Endpoint(POST, INBOUND_PATH, WRITE, EXTERNAL, { calledBy: 'twilio' })
     abstract inbound(): Promise<void>;
 }
 `,
@@ -115,7 +120,7 @@ import { CROSS_PATH } from './paths';
 
 @ApiPath('/cross-base')
 export abstract class CrossApi {
-    @Endpoint(CROSS_PATH, 'rpc')
+    @Endpoint(POST, CROSS_PATH, WRITE, RPC)
     abstract go(): Promise<void>;
 }
 `,
@@ -155,16 +160,16 @@ import { A_PATH, B_PATH, C_PATH } from './paths';
 
 @ApiPath('/one')
 export abstract class OneApi {
-    @Endpoint(A_PATH, 'rpc')
+    @Endpoint(POST, A_PATH, WRITE, RPC)
     abstract a(): Promise<void>;
 
-    @Endpoint(B_PATH, 'rpc')
+    @Endpoint(POST, B_PATH, WRITE, RPC)
     abstract b(): Promise<void>;
 }
 
 @ApiPath('/two')
 export abstract class TwoApi {
-    @Endpoint(C_PATH, 'rpc')
+    @Endpoint(POST, C_PATH, WRITE, RPC)
     abstract c(): Promise<void>;
 }
 `,
@@ -202,10 +207,10 @@ import { RPC_KIND } from './kinds';
 
 @ApiPath('/badkind')
 export abstract class BadKindApi {
-    @Endpoint('/one', RPC_KIND)
+    @Endpoint(POST, '/one', WRITE, RPC_KIND)
     abstract one(): Promise<void>;
 
-    @Endpoint('/two', RPC_KIND)
+    @Endpoint(POST, '/two', WRITE, RPC_KIND)
     abstract two(): Promise<void>;
 }
 `,
@@ -243,13 +248,44 @@ import { HIDDEN_API_PATH } from './paths';
 
 @ApiPath(HIDDEN_API_PATH)
 export abstract class HiddenApi {
-    @Endpoint('/test', 'rpc')
+    @Endpoint(POST, '/test', WRITE, RPC)
     abstract test(): Promise<void>;
 }
 `,
     );
     write(
         'libraries/nobase-api/tsconfig.json',
+        JSON.stringify({
+            compilerOptions: { moduleResolution: 'node', experimentalDecorators: true },
+            include: ['src/**/*.ts'],
+        }),
+    );
+}
+
+/** A mixed contract proves one valid method cannot hide another method's missing operation. */
+function writeMissingOperationApiLib(): void {
+    write(
+        'libraries/missing-operation-api/src/decorators.ts',
+        `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
+`,
+    );
+    write(
+        'libraries/missing-operation-api/src/index.ts',
+        `import { ApiPath, Endpoint } from './decorators';
+
+@ApiPath('/operation')
+export abstract class MissingOperationApi {
+    @Endpoint(POST, '/good', READ, RPC)
+    abstract good(): Promise<void>;
+
+    @Endpoint(GET, '/bad', NOT_AN_OPERATION, RPC)
+    abstract bad(): Promise<void>;
+}
+`,
+    );
+    write(
+        'libraries/missing-operation-api/tsconfig.json',
         JSON.stringify({
             compilerOptions: { moduleResolution: 'node', experimentalDecorators: true },
             include: ['src/**/*.ts'],
@@ -264,7 +300,10 @@ export abstract class HiddenApi {
  */
 function projects(): Map<string, ProjectInfo> {
     const infos = new Map<string, ProjectInfo>();
-    infos.set('whatsapp-api', new ProjectInfo('whatsapp-api', 'libraries/whatsapp-api', ['role:lib']));
+    infos.set(
+        'whatsapp-api',
+        new ProjectInfo('whatsapp-api', 'libraries/whatsapp-api', ['role:lib']),
+    );
     return infos;
 }
 
@@ -292,6 +331,15 @@ function noBasePathProjects(): Map<string, ProjectInfo> {
     return infos;
 }
 
+function missingOperationProjects(): Map<string, ProjectInfo> {
+    const infos = new Map<string, ProjectInfo>();
+    infos.set(
+        'missing-operation-api',
+        new ProjectInfo('missing-operation-api', 'libraries/missing-operation-api', ['role:lib']),
+    );
+    return infos;
+}
+
 function methodNames(methods: ApiMethodMeta[]): string[] {
     return methods.map((m: ApiMethodMeta) => m.name);
 }
@@ -304,6 +352,7 @@ beforeAll(() => {
     writeMultiOffenderApiLib();
     writeEmptiedApiLib();
     writeNoBasePathApiLib();
+    writeMissingOperationApiLib();
 });
 
 afterAll(() => {
@@ -332,7 +381,11 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
             '/continue-conversation',
             '/inbound',
         ]);
-        expect(methods.map((m: ApiMethodMeta) => m.kind)).toEqual(['cloudtasks', 'cloudtasks', 'external']);
+        expect(methods.map((m: ApiMethodMeta) => m.kind)).toEqual([
+            'cloudtasks',
+            'cloudtasks',
+            'external',
+        ]);
         // The external method must also name its caller — required by @Endpoint, fatal if unreadable.
         expect(methods[2].caller).toEqual({ kind: 'saas', label: 'twilio' });
     });
@@ -346,7 +399,9 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
 
     it('names a queue only for the queued methods, never for synchronous rpc', () => {
         const contracts = buildApiContracts(new ApiUsageScanner(root, projects()).scan());
-        const queued = contracts['WhatsAppApi'].methods.filter((m: ApiMethodMeta) => m.kind === 'cloudtasks');
+        const queued = contracts['WhatsAppApi'].methods.filter(
+            (m: ApiMethodMeta) => m.kind === 'cloudtasks',
+        );
         expect(queued.map((m: ApiMethodMeta) => m.queueName)).toEqual([
             'WhatsAppApi-process',
             'WhatsAppApi-continueConversation',
@@ -358,7 +413,9 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
 
     it('warns about the cross-module const it genuinely cannot resolve', () => {
         const result = new ApiUsageScanner(root, crossProjects()).scan();
-        const cross = result.nonLiteralDecoratorArgs.filter((a: { api: string }) => a.api === 'CrossApi');
+        const cross = result.nonLiteralDecoratorArgs.filter(
+            (a: { api: string }) => a.api === 'CrossApi',
+        );
         expect(cross).toHaveLength(1);
         expect(cross[0].decorator).toBe('Endpoint');
         expect(cross[0].argument).toBe('CROSS_PATH');
@@ -371,7 +428,9 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
 
     it('reports nothing for the same-module consts it CAN resolve', () => {
         const result = new ApiUsageScanner(root, projects()).scan();
-        const whatsapp = result.nonLiteralDecoratorArgs.filter((a: { api: string }) => a.api.startsWith('WhatsApp'));
+        const whatsapp = result.nonLiteralDecoratorArgs.filter((a: { api: string }) =>
+            a.api.startsWith('WhatsApp'),
+        );
         expect(whatsapp).toEqual([]);
     });
 });
@@ -473,5 +532,24 @@ describe('apiContracts schema — a contract emptied of its methods cannot vanis
         // error: the rule is "declared endpoints and kept none", not "has no endpoints".
         const scan = new ApiUsageScanner(root, projects()).scan();
         expect(scan.emptiedApiContracts).toEqual([]);
+    });
+});
+
+describe('apiContracts schema — every endpoint declares its operation', () => {
+    it('FAILS a mixed contract instead of silently dropping only the invalid method', () => {
+        const scan = new ApiUsageScanner(root, missingOperationProjects()).scan();
+        expect(methodNames(scan.apiIndex.get('MissingOperationApi')!.methods)).toEqual(['good']);
+        expect(scan.undeclaredEndpointOperations).toHaveLength(1);
+        expect(scan.undeclaredEndpointOperations[0]).toMatchObject({
+            api: 'MissingOperationApi',
+            method: 'bad',
+            argument: 'NOT_AN_OPERATION',
+        });
+
+        expect(() => buildApiContracts(scan)).toThrow(UndeclaredEndpointOperationError);
+        expect(() => buildApiContracts(scan)).toThrow(/MissingOperationApi\.bad/);
+        expect(() => buildApiContracts(scan)).toThrow(
+            /Do not infer operation semantics from the HTTP verb/,
+        );
     });
 });

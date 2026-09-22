@@ -10,6 +10,9 @@ import {
     HeaderRegistry,
     ApiCallTimeoutError,
     toError,
+    CLOUDTASKS,
+    POST,
+    WRITE,
 } from '@webpieces/core-util';
 import { PubSub, WpAuthOidc } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
@@ -26,13 +29,13 @@ class Payload {
 @ApiPath('/timeout-task')
 abstract class TaskApi {
     @WpAuthOidc()
-    @Endpoint('/work', 'cloudtasks')
+    @Endpoint(POST, '/work', WRITE, CLOUDTASKS)
     work(_request: Payload): Promise<void> {
         throw new Error('contract only');
     }
 
     @WpAuthOidc()
-    @Endpoint('/other', 'cloudtasks')
+    @Endpoint(POST, '/other', WRITE, CLOUDTASKS)
     other(_request: Payload): Promise<void> {
         throw new Error('contract only');
     }

@@ -10,7 +10,11 @@
  * class would only ever be a shape assertion over a plain object, never a constructed instance.
  */
 
-import type { ApiTransport, ExternalSystemDeclaration, ExternalSystemKind } from './api-usage/api-relations';
+import type {
+    ApiTransport,
+    ExternalSystemDeclaration,
+    ExternalSystemKind,
+} from './api-usage/api-relations';
 
 export interface RuntimeService {
     level: number;
@@ -133,7 +137,7 @@ export interface RuntimeTrigger {
     queueName?: string;
     /**
      * Present for 'external': WHO outside this repo posts to it, declared as
-     * `@Endpoint(p, 'external', { calledBy: 'twilio' })`.
+     * `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy: 'twilio' })`.
      *
      * The SAME `(kind,label)` an OUTBOUND {@link RuntimeExternalSystem} carries, so an inbound
      * `saas twilio` and an outbound `saas twilio` share a node identity and converge on ONE box —

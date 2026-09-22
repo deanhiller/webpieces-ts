@@ -1,7 +1,17 @@
 import { ApiBadRequestError } from '../errors/ApiError';
 
+/** Nominal backing keeps raw string literals out of endpoint declarations. */
+enum HttpMethodValue {
+    GET = 'GET',
+    POST = 'POST',
+}
+
+/** Short, statically importable decorator arguments. Raw strings do not satisfy {@link HttpMethod}. */
+export const GET = HttpMethodValue.GET;
+export const POST = HttpMethodValue.POST;
+
 /** HTTP verbs currently supported by generated Webpieces request/response contracts. */
-export type ContractHttpMethod = 'GET' | 'POST';
+export type HttpMethod = typeof GET | typeof POST;
 
 /** Whether a generated client returns the response body or the whole transport-neutral response. */
 export type EndpointResponseType = 'body' | 'full';

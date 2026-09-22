@@ -1,14 +1,4 @@
-/**
- * API contract AST accessors
- *
- * The pure, stateless half of the api scan: given a TypeScript node, what contract / endpoint /
- * injected type does it describe? Split out of api-scanner.ts, which owns the STATEFUL walk (project
- * programs, the source index, relation accumulation) and had grown past the file-size limit.
- *
- * Everything here is parser-level on purpose. Decorators must be read exactly as written, and a
- * plain parse cannot be diverted to a decorator-erased `.d.ts` by module resolution — the bug
- * api-scanner's source pre-pass exists to guard against.
- */
+/** Parser-only API contract AST accessors; deliberately avoids module resolution and erased d.ts. */
 
 import * as ts from 'typescript';
 import * as fs from 'fs';
@@ -22,15 +12,29 @@ import {
     ApiTransport,
     EmptiedApiContract,
     EndpointKind,
+    EndpointOperation,
     ExternalSystemDeclaration,
     isExternalSystemKind,
     NonLiteralDecoratorArg,
     UndeclaredExternalCaller,
+    UndeclaredEndpointOperation,
     UnresolvedEndpointPath,
 } from './api-relations';
 
-/** Legal `@Endpoint(path, kind)` values; anything else is a source error, not a kind we invent. */
+/** Legal enum-backed `@Endpoint` symbols; tooling reads source without importing application code. */
 const ENDPOINT_KINDS: readonly EndpointKind[] = ['rpc', 'cloudtasks', 'cron', 'external'];
+const ENDPOINT_OPERATIONS: readonly EndpointOperation[] = ['read', 'write-idempotent', 'write'];
+const ENDPOINT_SYMBOLS: Readonly<Record<string, string>> = {
+    GET: 'GET',
+    POST: 'POST',
+    READ: 'read',
+    WRITE_IDEMPOTENT: 'write-idempotent',
+    WRITE: 'write',
+    RPC: 'rpc',
+    CLOUDTASKS: 'cloudtasks',
+    CRON: 'cron',
+    EXTERNAL: 'external',
+};
 
 /**
  * Name suffix that marks an exported type in an `externalApiPaths` project as a vendor CONTRACT
@@ -49,20 +53,7 @@ const EXTERNAL_SYSTEM_TAG = 'externalSystem';
  */
 const CLIENT_CONFIG_SUFFIX = 'ClientConfig';
 
-/**
- * The module-scope `const NAME = '<string literal>'` bindings of ONE source file.
- *
- * A contract that hoists its route to a constant (`@ApiPath(WHATSAPP_API_PATH)`) is good practice —
- * it lets a sibling contract and its callers share the symbol — but a decorator argument is read as
- * TEXT here, with no checker to constant-fold it. Without this table such an argument resolved to
- * nothing: the class lost its basePath, and a class whose every @Endpoint path was a constant
- * resolved to zero methods and was dropped from the graph entirely.
- *
- * Deliberately SAME-MODULE only. Following an import would mean resolving modules, which is exactly
- * what the source pre-pass avoids (it can be diverted to a decorator-erased `.d.ts`). A cross-module
- * constant is therefore still unresolvable — and is REPORTED rather than silently dropped, see
- * DecoratorArgDiagnostics.
- */
+/** Same-module string constants that parser-only decorator scanning can safely resolve. */
 export class ModuleStringConstants {
     constructor(private readonly byName: Map<string, string>) {}
 
@@ -104,14 +95,7 @@ export function stringValueOf(expr: ts.Expression | undefined): string | null {
     return null;
 }
 
-/**
- * ONE decorator argument that had to be a string, and what came of it.
- *
- * `value` is the string when it was a literal or resolved through a same-module constant.
- * `unresolvedName` is the argument as written (`WHATSAPP_API_PATH`) when it is present but could not
- * be reduced — the case that must be reported, never silently dropped. Both are null when the
- * argument is simply absent.
- */
+/** A resolved decorator string, or the source spelling that could not be reduced. */
 export class DecoratorArgValue {
     constructor(
         public readonly value: string | null,
@@ -136,25 +120,26 @@ export function decoratorArgValue(
     return new DecoratorArgValue(null, expr.getText());
 }
 
-/**
- * Collects everything this parser-only pass had to drop: decorator arguments it could not reduce to
- * a string, plus the two of those that are FATAL rather than merely lossy.
- *
- * A same-module constant now resolves, but a cross-module one (`import { PATH } from './paths'`)
- * genuinely cannot — the source pre-pass has no checker by design. That gap used to be invisible:
- * the contract simply came out with no basePath, or with fewer methods, or not at all. Recording it
- * turns a silent drop into a named one, pointing at the exact file, line and identifier.
- *
- * Three sinks, because the consequences differ. `record` is the warning stream (a @Queue name falls
- * back to a derived one, so the graph is degraded, not wrong). `recordUnresolvedPath` and
- * `recordEmptiedContract` are collected so generation can FAIL — one aggregated error naming every
- * offender, because an author fixing five constants wants all five in one run.
- */
+/** Resolve the enum-backed constants intentionally allowed in @Endpoint positional arguments. */
+// webpieces-disable no-function-outside-class -- pure AST accessor for decorator source
+function endpointSymbolArgValue(
+    expr: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+): DecoratorArgValue {
+    if (expr && ts.isIdentifier(expr)) {
+        const builtin = ENDPOINT_SYMBOLS[expr.text];
+        if (builtin !== undefined) return new DecoratorArgValue(builtin, null);
+    }
+    return decoratorArgValue(expr, constants);
+}
+
+/** Aggregates parser-only scan losses so generation can fail loudly instead of dropping routes. */
 export class DecoratorArgDiagnostics {
     private readonly found: NonLiteralDecoratorArg[] = [];
     private readonly unresolvedPaths: UnresolvedEndpointPath[] = [];
     private readonly emptied: EmptiedApiContract[] = [];
     private readonly undeclaredCallers: UndeclaredExternalCaller[] = [];
+    private readonly undeclaredOperations: UndeclaredEndpointOperation[] = [];
 
     constructor(private readonly workspaceRoot: string) {}
 
@@ -190,6 +175,13 @@ export class DecoratorArgDiagnostics {
         );
     }
 
+    /** Record an `@Endpoint` whose required operation is missing or unreadable. */
+    recordUndeclaredOperation(api: string, method: string, argument: string, node: ts.Node): void {
+        this.undeclaredOperations.push(
+            new UndeclaredEndpointOperation(api, method, argument, this.locate(node)),
+        );
+    }
+
     all(): NonLiteralDecoratorArg[] {
         return this.found;
     }
@@ -204,6 +196,10 @@ export class DecoratorArgDiagnostics {
 
     undeclaredExternalCallers(): UndeclaredExternalCaller[] {
         return this.undeclaredCallers;
+    }
+
+    undeclaredEndpointOperations(): UndeclaredEndpointOperation[] {
+        return this.undeclaredOperations;
     }
 
     private locate(node: ts.Node): string {
@@ -242,23 +238,7 @@ export function apiTransport(cls: ts.ClassDeclaration): ApiTransport {
 /** The @Endpoint kinds that are actually DELIVERED through a named queue or schedule. */
 const QUEUED_KINDS: readonly EndpointKind[] = ['cloudtasks', 'cron'];
 
-/**
- * Every `@Endpoint(path, kind)` method on a contract class, in declaration order.
- *
- * `kind` is a REQUIRED argument of the decorator, so a missing/non-literal second argument means the
- * source does not compile (or is mid-edit) — we skip the method rather than defaulting it. Defaulting
- * would put an undeclared cron or webhook into the graph as an ordinary rpc call, which is precisely
- * the blindness the required argument exists to remove.
- *
- * `path` is NOT skippable. It may be a same-module constant; an argument that is present but still
- * cannot be reduced is recorded on `diagnostics` as an UnresolvedEndpointPath, which FAILS generation
- * later. Upstream components need the URL — a client computes its request as `basePath + path` — so
- * dropping the method here shipped a contract missing routing information, and a class whose every
- * path was a constant lost every method and disappeared from the graph entirely.
- *
- * A class that declared endpoints and kept NONE of them is recorded too: `buildApiContracts` skips
- * zero-method classes, which is the door a gutted contract used to leave through unannounced.
- */
+/** Reads required `(method, path, operation, kind, options?)` endpoint declarations in order. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
 export function endpointMethodsOf(
     cls: ts.ClassDeclaration,
@@ -275,76 +255,105 @@ export function endpointMethodsOf(
         declared++;
         const name = member.name.text;
         const args = decoratorArgs(endpoint);
-        const pathArg = decoratorArgValue(args[0], constants);
-        const kindArg = decoratorArgValue(args[1], constants);
+        const methodArg = endpointSymbolArgValue(args[0], constants);
+        const pathArg = decoratorArgValue(args[1], constants);
+        const operationArg = endpointSymbolArgValue(args[2], constants);
+        const kindArg = endpointSymbolArgValue(args[3], constants);
+        reportUnresolved(diagnostics, api, 'Endpoint', name, methodArg, endpoint);
         reportUnresolved(diagnostics, api, 'Endpoint', name, pathArg, endpoint);
+        reportUnresolved(diagnostics, api, 'Endpoint', name, operationArg, endpoint);
         reportUnresolved(diagnostics, api, 'Endpoint', name, kindArg, endpoint);
         if (diagnostics !== null && pathArg.unresolvedName !== null) {
             diagnostics.recordUnresolvedPath(api, name, pathArg.unresolvedName, endpoint);
         }
+        const httpMethod = methodArg.value;
+        const operation = endpointOperationOf(args[2], constants, diagnostics, api, name, endpoint);
         const kind = kindArg.value;
         if (
+            (httpMethod !== 'GET' && httpMethod !== 'POST') ||
             pathArg.value === null ||
+            operation === null ||
             kind === null ||
             !ENDPOINT_KINDS.includes(kind as EndpointKind)
         )
             continue;
-        const httpMethod = httpMethodOf(args[2], constants, diagnostics, api, name, endpoint);
         const method: ApiMethodMeta = {
             name,
             path: pathArg.value,
             kind: kind as EndpointKind,
+            operation,
             httpMethod,
         };
-        const parameters = httpParametersOf(
-            member,
-            httpMethod,
-            constants,
-            diagnostics,
-            api,
-            name,
-        );
+        const parameters = httpParametersOf(member, httpMethod, constants, diagnostics, api, name);
         if (parameters.length > 0) method.parameters = parameters;
-        if (endpointResponseTypeOf(args[2], constants) === 'full') method.responseType = 'full';
-        // Only a queued or scheduled endpoint HAS a queue. Naming one for a synchronous rpc invited a
-        // tool to read `methods.map(m => m.queueName)` as a provisioning list and create queues that
-        // nothing will ever deliver to.
+        if (endpointResponseTypeOf(args[4], constants) === 'full') method.responseType = 'full';
         if (QUEUED_KINDS.includes(method.kind)) {
             method.queueName = queueNameOf(member, api, name, constants, diagnostics);
         }
-        // Only an `external` endpoint HAS an outside caller, mirroring the queue rule above. A
-        // caller recorded on an rpc method would be a fact about nothing, and would put a vendor
-        // box on the graph beside an endpoint no vendor calls.
         if (method.kind === 'external') {
-            const caller = externalCallerOf(args[2], constants);
+            const caller = externalCallerOf(args[4], constants);
             if (caller.declaration !== null) method.caller = caller.declaration;
             else if (diagnostics !== null)
                 diagnostics.recordUndeclaredCaller(api, name, caller.problem!, endpoint);
         }
         methods.push(method);
     }
-    // Declared endpoints, kept none: the class is about to be skipped as "zero methods" and would
-    // leave no trace. Never legitimate — a routeless contract declares no @Endpoint at all.
     if (diagnostics !== null && declared > 0 && methods.length === 0) {
         diagnostics.recordEmptiedContract(api, declared, cls);
     }
     return methods;
 }
 
-/** `@Endpoint(..., { httpMethod: 'GET' })`, defaulting to the runtime's POST default. */
+/** Required side-effect declaration; no inference from GET/POST is permitted. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
-export function httpMethodOf(
-    options: ts.Expression | undefined,
+export function endpointOperationOf(
+    operationArgument: ts.Expression | undefined,
     constants: ModuleStringConstants,
     diagnostics: DecoratorArgDiagnostics | null,
     api: string,
     method: string,
     node: ts.Node,
-): ContractHttpMethod {
-    if (options === undefined || !ts.isObjectLiteralExpression(options)) return 'POST';
-    const declared = objectPropertyValue(options, 'httpMethod', constants);
+): EndpointOperation | null {
+    const declared = endpointSymbolArgValue(operationArgument, constants);
+    if (declared.value === null) {
+        diagnostics?.recordUndeclaredOperation(
+            api,
+            method,
+            declared.unresolvedName ?? '<missing>',
+            node,
+        );
+        return null;
+    }
+    reportUnresolved(diagnostics, api, 'Endpoint.operation', method, declared, node);
+    if (
+        declared.value !== null &&
+        ENDPOINT_OPERATIONS.includes(declared.value as EndpointOperation)
+    ) {
+        return declared.value as EndpointOperation;
+    }
+    diagnostics?.recordUndeclaredOperation(
+        api,
+        method,
+        declared.unresolvedName ?? declared.value ?? '<missing>',
+        node,
+    );
+    return null;
+}
+
+/** Required first positional HTTP method. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function httpMethodOf(
+    methodArgument: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    method: string,
+    node: ts.Node,
+): ContractHttpMethod | null {
+    const declared = endpointSymbolArgValue(methodArgument, constants);
     reportUnresolved(diagnostics, api, 'Endpoint.httpMethod', method, declared, node);
-    return declared.value === 'GET' ? 'GET' : 'POST';
+    if (declared.value === 'GET' || declared.value === 'POST') return declared.value;
+    return null;
 }
 
 /** Only the non-default full-response marker needs an architecture field. */
@@ -391,10 +400,7 @@ export function httpParametersOf(
 /** Default `callerKind` when an `external` endpoint declares `calledBy` alone — mirrors core-util. */
 const DEFAULT_CALLER_KIND = 'saas';
 
-/**
- * The outcome of reading `@Endpoint(path, 'external', { calledBy, callerKind })`'s third argument:
- * either the resolved declaration, or the reason it could not be resolved (never both).
- */
+/** Resolved EXTERNAL caller declaration, or the source problem that prevented resolution. */
 export class ExternalCallerRead {
     constructor(
         public readonly declaration: ExternalSystemDeclaration | null,
@@ -403,15 +409,7 @@ export class ExternalCallerRead {
     ) {}
 }
 
-/**
- * Read the declared caller out of the @Endpoint OPTIONS OBJECT LITERAL — `args[2]`, not a positional
- * argument, because that is where `formPost` already lives and one options bag beats two.
- *
- * Everything unreadable is a PROBLEM, never a default: an unknown `callerKind` draws the wrong shape
- * (which teaches the reader something false), and a missing `calledBy` puts us back at a box that can
- * only name our own contract. The kind default applies ONLY to the case the API deliberately allows —
- * `calledBy` present, `callerKind` absent.
- */
+/** Reads `calledBy` and optional `callerKind` from the fifth positional options argument. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
 export function externalCallerOf(
     arg: ts.Expression | undefined,

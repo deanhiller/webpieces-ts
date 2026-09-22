@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
+    ApiBadGatewayError,
     ApiBadRequestError,
     ApiCodedError,
     ApiDependencyError,
+    ApiDependencyBackoffError,
+    ApiDependencyTimeoutError,
     ApiEndUserError,
     ApiImplementationError,
     ApiNotFoundError,
+    ApiUnavailableError,
 } from '../../errors/ApiError';
 import { ApiErrorCodec, ApiErrorPayload } from '../../errors/ApiErrorCodec';
 import { toError } from '../../lib/errorUtils';
@@ -40,17 +44,56 @@ const caught = (dto: HttpResponseDto): Error => {
  */
 describe('WebpiecesDefaultErrorTranslator.fromWire — the uniform received-status rule', () => {
     it('4xx received -> ApiImplementationError: I sent a bad request, MY bug', () => {
-        for (const code of [400, 401, 403, 404, 409, 415, 422, 429]) {
+        for (const code of [400, 401, 403, 404, 409, 415, 422]) {
             const error = caught(response(code, undefined, 'Nope'));
             expect(error, `HTTP ${code}`).toBeInstanceOf(ApiImplementationError);
         }
     });
 
     it('5xx received -> ApiDependencyError: THEY broke, so this service keeps clean metrics', () => {
-        for (const code of [500, 501, 503, 504]) {
+        for (const code of [500, 501]) {
             const error = caught(response(code, undefined, 'Boom'));
             expect(error, `HTTP ${code}`).toBeInstanceOf(ApiDependencyError);
         }
+    });
+
+    it('preserves timeout, gateway, unavailable and backoff semantics by status', () => {
+        expect(caught(response(408))).toBeInstanceOf(ApiDependencyTimeoutError);
+        expect(caught(response(429))).toBeInstanceOf(ApiDependencyBackoffError);
+        expect(caught(response(502))).toBeInstanceOf(ApiBadGatewayError);
+        expect(caught(response(503))).toBeInstanceOf(ApiUnavailableError);
+        expect(caught(response(504))).toBeInstanceOf(ApiDependencyTimeoutError);
+    });
+
+    it('parses and bounds both Retry-After forms for foreign 429/503 responses', () => {
+        const delta = caught(
+            new HttpResponseDto(
+                new HttpResponseStatus(429, 'Too Many Requests'),
+                [{ name: 'Retry-After', value: '120' }],
+                undefined,
+            ),
+        ) as ApiDependencyBackoffError;
+        expect(delta.retryAfterSeconds).toBe(120);
+
+        const date = new Date(Date.now() + 5_000).toUTCString();
+        const dated = caught(
+            new HttpResponseDto(
+                new HttpResponseStatus(503, 'Service Unavailable'),
+                [{ name: 'retry-after', value: date }],
+                undefined,
+            ),
+        ) as ApiDependencyBackoffError;
+        expect(dated).toBeInstanceOf(ApiDependencyBackoffError);
+        expect(dated.retryAfterSeconds).toBeGreaterThanOrEqual(4);
+
+        const bounded = caught(
+            new HttpResponseDto(
+                new HttpResponseStatus(429, 'Too Many Requests'),
+                [{ name: 'retry-after', value: '999999999' }],
+                undefined,
+            ),
+        ) as ApiDependencyBackoffError;
+        expect(bounded.retryAfterSeconds).toBe(86_400);
     });
 
     it('an incoming ApiDependencyError is rethrown AS-IS — the fault is already attributed', () => {

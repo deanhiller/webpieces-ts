@@ -299,11 +299,13 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         expect(reply.error).toBeUndefined();
         expect(reply.result?.isError).toBe(true);
         const text = reply.result?.content?.[0]?.text ?? '';
-        const payload = JSON.parse(text) as Record<string, unknown>;
+        const envelope = JSON.parse(text) as Record<string, unknown>;
+        expect(Object.keys(envelope)).toEqual(['error']);
+        const payload = envelope['error'] as Record<string, unknown>;
         const requestId = String(payload['requestId']);
         expect(reply.result?._meta?.['webpieces/requestId']).toBe(requestId);
         const normalized = text.split(requestId).join('<requestId>').split(toolName).join('<tool>');
-        return JSON.parse(normalized) as Record<string, unknown>;
+        return (JSON.parse(normalized) as Record<string, Record<string, unknown>>)['error'];
     }
 
     /**
@@ -480,7 +482,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             logs.lines.length = 0;
             const visible = modelVisible(await callGateway(toolName, 'anything'), toolName);
             expect(visible['kind']).toBe('implementation');
-            expect(visible['message']).toContain('bug in the tool, not in your arguments');
+            expect(visible['message']).toContain('internal bug');
             expect(JSON.stringify(visible)).not.toContain('SECRET');
         },
     );

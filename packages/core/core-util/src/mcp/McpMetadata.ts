@@ -1,5 +1,11 @@
 import 'reflect-metadata';
 import { METADATA_KEYS } from '../http/decorators';
+import {
+    EndpointOperation,
+    READ,
+    WRITE_IDEMPOTENT,
+    WRITE,
+} from '../http/HttpEndpointOptions';
 
 /** The immutable hints MCP clients use when deciding whether and how to call a tool. */
 export class WpMcpToolHints {
@@ -16,29 +22,18 @@ type CommonToolOptions = {
     name: string;
     /** Tool-level documentation published verbatim by tools/list. */
     description: string;
-    idempotentHint: boolean;
     openWorldHint: boolean;
 };
 
-type ReadOnlyToolOptions = CommonToolOptions & {
-    readOnlyHint: true;
-    destructiveHint?: never;
-};
-
-type MutatingToolOptions = CommonToolOptions & {
-    readOnlyHint: false;
-    destructiveHint: boolean;
-};
-
-/** Compiler-enforced exposure: a read-only tool cannot also claim to be destructive. */
-export type WpMcpToolOptions = ReadOnlyToolOptions | MutatingToolOptions;
+/** Tool-specific declarations. Side-effect hints come only from the endpoint operation. */
+export type WpMcpToolOptions = CommonToolOptions;
 
 type AsyncObjectMethod = (...args: never[]) => Promise<object>;
 type ExactOneParameter<TMethod extends AsyncObjectMethod> = Parameters<TMethod>['length'] extends 1
     ? object
     : never;
-type ExactOneMethodDescriptor<TMethod extends AsyncObjectMethod> = TypedPropertyDescriptor<TMethod> &
-    ExactOneParameter<TMethod>;
+type ExactOneMethodDescriptor<TMethod extends AsyncObjectMethod> =
+    TypedPropertyDescriptor<TMethod> & ExactOneParameter<TMethod>;
 
 /** Method decorator restricted to one request DTO and one async response DTO. */
 export type WpMcpMethodDecorator = <TMethod extends AsyncObjectMethod>(
@@ -53,12 +48,12 @@ export class WpMcpToolMetadata {
         public readonly methodName: string,
         public readonly name: string,
         public readonly description: string,
-        public readonly hints: WpMcpToolHints,
+        public readonly openWorldHint: boolean,
     ) {}
 }
 
 /**
- * Explicitly publishes an existing `@Endpoint(..., 'rpc')` method as an MCP tool.
+ * Explicitly publishes an existing `@Endpoint(POST, path, WRITE, RPC)` method as an MCP tool.
  *
  * This annotation owns tool-level documentation only. Input/output field documentation and JSON
  * Schema come from the request/response DTO metadata. The endpoint's `@WpAuth*` annotation remains
@@ -83,15 +78,26 @@ export function WpMcpTool(options: WpMcpToolOptions): WpMcpMethodDecorator {
             methodName,
             options.name,
             options.description,
-            new WpMcpToolHints(
-                options.readOnlyHint,
-                options.readOnlyHint ? false : options.destructiveHint,
-                options.idempotentHint,
-                options.openWorldHint,
-            ),
+            options.openWorldHint,
         );
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
+}
+
+/** The one mapping from endpoint side effects to MCP advisory annotations. */
+// webpieces-disable no-function-outside-class -- pure metadata mapping shared by MCP registration
+export function mcpHintsForOperation(
+    operation: EndpointOperation,
+    openWorldHint: boolean,
+): WpMcpToolHints {
+    switch (operation) {
+        case READ:
+            return new WpMcpToolHints(true, false, true, openWorldHint);
+        case WRITE_IDEMPOTENT:
+            return new WpMcpToolHints(false, true, true, openWorldHint);
+        case WRITE:
+            return new WpMcpToolHints(false, true, false, openWorldHint);
+    }
 }
 
 /** Returns only methods explicitly opted in through {@link WpMcpTool}. */

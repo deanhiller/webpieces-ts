@@ -1,6 +1,16 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
-import { ApiPath, Endpoint, PathParam, WpAuthPublic } from '../decorators';
+import {
+    ApiPath,
+    Endpoint,
+    PathParam,
+    WpAuthPublic,
+    GET,
+    POST,
+    READ,
+    RPC,
+    WRITE,
+} from '../decorators';
 import { HttpContractMapper } from '../HttpContract';
 import { RouteMetadataFactory } from '../RouteMetadataFactory';
 
@@ -11,7 +21,7 @@ class Body {
 @ApiPath('')
 abstract class WholeUrlApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     deliver(_body: Body): Promise<object> {
         throw new Error('contract only');
@@ -21,7 +31,7 @@ abstract class WholeUrlApi {
 @ApiPath('')
 abstract class HalfEmptyApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('deliver', 'rpc')
+    @Endpoint(POST, 'deliver', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     deliver(_body: Body): Promise<object> {
         throw new Error('contract only');
@@ -31,14 +41,14 @@ abstract class HalfEmptyApi {
 @ApiPath('')
 abstract class TwoMethodsApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     read(): Promise<object> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('Test fixture')
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     write(_body: Body): Promise<object> {
         throw new Error('contract only');
@@ -48,14 +58,14 @@ abstract class TwoMethodsApi {
 @ApiPath('')
 abstract class DuplicateApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     first(_body: Body): Promise<object> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('Test fixture')
-    @Endpoint('/', 'rpc')
+    @Endpoint(POST, '/', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     second(_body: Body): Promise<object> {
         throw new Error('contract only');
@@ -65,14 +75,14 @@ abstract class DuplicateApi {
 @ApiPath('/items')
 abstract class PlaceholderApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('/{id}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/{id}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     byId(@PathParam('id') _id: string): Promise<object> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('Test fixture')
-    @Endpoint('/{key}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/{key}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     byKey(@PathParam('key') _key: string): Promise<object> {
         throw new Error('contract only');
@@ -80,7 +90,7 @@ abstract class PlaceholderApi {
 }
 
 describe('joinPath: the #926 empty-path regression (#944)', () => {
-    it("joins @ApiPath('') + @Endpoint('') to '' so a base URL is used byte for byte", () => {
+    it("joins @ApiPath('') + @Endpoint(POST, '') to '' so a base URL is used byte for byte", () => {
         const route = RouteMetadataFactory.create(WholeUrlApi, 'deliver');
         // #926 produced '/', which appended a slash to every overridden base URL.
         expect(route.path).toBe('');

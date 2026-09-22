@@ -63,6 +63,7 @@ export class ApiErrorHttpStatus {
                 // this adapter, not a status it may invent.
                 return statusCode ?? 500;
             case 'dependency':
+            case 'bad-gateway':
                 return 502;
             case 'unavailable':
             case 'dependency-backoff':

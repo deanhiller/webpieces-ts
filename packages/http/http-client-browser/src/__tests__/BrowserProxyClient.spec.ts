@@ -17,6 +17,10 @@ import {
     WpAuthPublic,
     Rpc,
     WebpiecesCoreHeaders,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import type { ApiCallInfo, Logger, LoggerFactory } from '@webpieces/core-util';
 import { BrowserApiCallContext } from '../BrowserApiCallContext';
@@ -34,7 +38,7 @@ class SaveRequest {
 @Rpc()
 @ApiPath('/public')
 abstract class PublicApi {
-    @Endpoint('/save', 'rpc')
+    @Endpoint(POST, '/save', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     save(_request: SaveRequest): Promise<void> {
@@ -45,7 +49,7 @@ abstract class PublicApi {
 @Rpc()
 @ApiPath('/secure')
 abstract class OidcApi {
-    @Endpoint('/internalOp', 'rpc')
+    @Endpoint(POST, '/internalOp', WRITE, RPC)
     @WpAuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
@@ -56,7 +60,7 @@ abstract class OidcApi {
 @Rpc()
 @ApiPath('/secret')
 abstract class SharedSecretApi {
-    @Endpoint('/internalOp', 'rpc')
+    @Endpoint(POST, '/internalOp', WRITE, RPC)
     @WpAuthSharedSecret('INTERNAL_API_SECRET')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
@@ -67,7 +71,7 @@ abstract class SharedSecretApi {
 @Rpc()
 @ApiPath('/management/v1')
 abstract class ApiKeyApi {
-    @Endpoint('/orders', 'rpc')
+    @Endpoint(POST, '/orders', READ, RPC)
     @WpAuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     listOrders(_request: SaveRequest): Promise<void> {

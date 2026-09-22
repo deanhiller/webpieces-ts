@@ -1,17 +1,19 @@
 import {
     getApiPath,
     getAuthMeta,
+    getEndpointHttpMethod,
+    getEndpointOperation,
     getEndpointOptions,
     getEndpoints,
     getMaskSpec,
 } from './decorators';
 import { getHttpParameterDeclarations } from './http-parameter-decorators';
 import {
-    ContractHttpMethod,
     EndpointResponseType,
     HttpParameterBinding,
     HttpParameterDeclaration,
     HttpParameterValueType,
+    HttpMethod,
 } from './HttpContract';
 import { RouteMetadata } from './RouteMetadata';
 import { getStreamingEndpoint } from './StreamingContract';
@@ -28,17 +30,12 @@ export class RouteMetadataFactory {
         methodName: string,
         controllerClassName?: string,
     ): RouteMetadata {
-        const endpoints = getEndpoints(apiClass) ?? {};
-        const endpointPath = endpoints[methodName];
-        if (endpointPath === undefined) {
-            throw new Error(
-                `No @Endpoint metadata for ${apiClass.name || 'Unknown'}.${methodName}.`,
-            );
-        }
+        const endpointPath = this.endpointPath(apiClass, methodName);
         const fullPath = this.joinPath(getApiPath(apiClass) ?? '', endpointPath);
         const options = getEndpointOptions(apiClass, methodName);
         const streaming = getStreamingEndpoint(apiClass, methodName);
-        const httpMethod = this.httpMethod(options.httpMethod, apiClass, methodName);
+        const httpMethod = getEndpointHttpMethod(apiClass, methodName);
+        const operation = getEndpointOperation(apiClass, methodName);
         this.validateEndpointOptions(
             apiClass,
             methodName,
@@ -80,6 +77,7 @@ export class RouteMetadataFactory {
             httpMethod,
             fullPath,
             methodName,
+            operation,
             controllerClassName,
             getAuthMeta(apiClass, methodName),
             apiClass.name || 'UnknownApi',
@@ -94,11 +92,18 @@ export class RouteMetadataFactory {
         );
     }
 
+    // webpieces-disable no-function-outside-class -- private pure helper for static route metadata construction
+    private static endpointPath(apiClass: Function, methodName: string): string {
+        const path = (getEndpoints(apiClass) ?? {})[methodName];
+        if (path !== undefined) return path;
+        throw new Error(`No @Endpoint metadata for ${apiClass.name || 'Unknown'}.${methodName}.`);
+    }
+
     // webpieces-disable no-function-outside-class -- private pure helper keeps the existing static metadata factory below the method-size limit
     private static validateEndpointOptions(
         apiClass: Function,
         methodName: string,
-        httpMethod: ContractHttpMethod,
+        httpMethod: HttpMethod,
         formPost?: boolean,
         rawBody?: boolean,
     ): void {
@@ -118,7 +123,7 @@ export class RouteMetadataFactory {
     private static validateStreamingParameters(
         apiClass: Function,
         methodName: string,
-        httpMethod: ContractHttpMethod,
+        httpMethod: HttpMethod,
         parameterTypes: readonly Function[],
         declarations: readonly HttpParameterDeclaration[],
     ): undefined {
@@ -134,7 +139,7 @@ export class RouteMetadataFactory {
     /**
      * Refuse a contract in which two endpoints resolve to the same HTTP method + path.
      *
-     * Empty paths are LEGAL (`@ApiPath('')` + `@Endpoint('', ...)` is how a contract says "the whole
+     * Empty paths are LEGAL (`@ApiPath('')` + `@Endpoint(POST, '', ...)` is how a contract says "the whole
      * destination arrives per call"), so the thing actually worth rejecting is ambiguity: two methods
      * that land on one route. On the server the second registration would silently shadow the first
      * in the route map, and on the client both would dial the same URL — neither is ever what the
@@ -171,7 +176,7 @@ export class RouteMetadataFactory {
     /**
      * Join `@ApiPath` and `@Endpoint` into the route path.
      *
-     * Both empty joins to `''`, NOT `'/'`. A contract declaring `@ApiPath('')` + `@Endpoint('', ...)`
+     * Both empty joins to `''`, NOT `'/'`. A contract declaring `@ApiPath('')` + `@Endpoint(POST, '', ...)`
      * is saying "this route adds nothing to the base URL", and a client whose base URL is a full
      * destination (host + path + query) must send it byte for byte. Before #926 the client joined with
      * plain concatenation (`'' + ''`), and forcing a `/` here broke exactly that (#944).
@@ -181,19 +186,6 @@ export class RouteMetadataFactory {
         if (basePath === '' && endpointPath === '') return '';
         const joined = `${basePath}/${endpointPath}`.replace(/\/{2,}/g, '/');
         return joined.startsWith('/') ? joined : `/${joined}`;
-    }
-
-    // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory
-    private static httpMethod(
-        value: ContractHttpMethod | undefined,
-        apiClass: Function,
-        methodName: string,
-    ): ContractHttpMethod {
-        const method = value ?? 'POST';
-        if (method === 'GET' || method === 'POST') return method;
-        throw new Error(
-            `${apiClass.name}.${methodName} declares unsupported httpMethod '${String(method)}'; use GET or POST.`,
-        );
     }
 
     // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory
@@ -219,7 +211,7 @@ export class RouteMetadataFactory {
         apiClass: Function,
         methodName: string,
         fullPath: string,
-        httpMethod: ContractHttpMethod,
+        httpMethod: HttpMethod,
         parameterTypes: readonly Function[],
         declarations: readonly HttpParameterDeclaration[],
     ): number | undefined {

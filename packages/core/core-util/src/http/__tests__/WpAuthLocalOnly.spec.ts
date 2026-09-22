@@ -9,6 +9,9 @@ import {
     MISSING_AUTH_DECORATOR_FIX,
     getAuthMode,
     assertEveryEndpointHasAuthMode,
+    POST,
+    RPC,
+    WRITE,
 } from '../decorators';
 import { ContextKey } from '../../ContextKey';
 import { DestinationTrust } from '../DestinationTrust';
@@ -31,7 +34,7 @@ const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 @ApiPath('/dev')
 abstract class DevToolsApi {
     @WpAuthLocalOnly()
-    @Endpoint('/logs', 'rpc')
+    @Endpoint(POST, '/logs', WRITE, RPC)
     shipLogs(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -54,12 +57,12 @@ describe('@WpAuthLocalOnly records the local-only mode', () => {
         @ApiPath('/mixed')
         abstract class MixedApi {
             @WpAuthPublic('Mixed API public fixture')
-            @Endpoint('/open', 'rpc')
+            @Endpoint(POST, '/open', WRITE, RPC)
             open(_r: object): Promise<object> {
                 throw new Error('x');
             }
             @WpAuthLocalOnly()
-            @Endpoint('/dev', 'rpc')
+            @Endpoint(POST, '/dev', WRITE, RPC)
             dev(_r: object): Promise<object> {
                 throw new Error('x');
             }
@@ -89,7 +92,7 @@ describe('@WpAuthLocalOnly records the local-only mode', () => {
             abstract class DupApi {
                 @WpAuthLocalOnly()
                 @WpAuthJwt({ roles: ['admin'] })
-                @Endpoint('/a', 'rpc')
+                @Endpoint(POST, '/a', WRITE, RPC)
                 a(_r: object): Promise<object> {
                     throw new Error('x');
                 }

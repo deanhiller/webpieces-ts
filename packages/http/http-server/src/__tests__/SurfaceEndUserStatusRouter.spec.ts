@@ -6,6 +6,7 @@ import {
     ApiEndUserError,
     HeaderRegistry,
     RouteMetadata,
+    READ,
     Surface,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
@@ -44,6 +45,7 @@ class RefusingApiFactory implements ApiFactory {
                 'POST',
                 '/report',
                 'report',
+                READ,
                 undefined,
                 undefined,
                 'RefusingApi',

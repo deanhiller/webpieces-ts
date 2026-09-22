@@ -12,18 +12,18 @@
  *
  * ## MIGRATION (breaking, 0.5.x)
  *
- * `calledBy` is REQUIRED on every `external` endpoint — `@Endpoint(path, 'external', options)` no
+ * `calledBy` is REQUIRED on every `EXTERNAL` endpoint — `@Endpoint(POST, path, WRITE, EXTERNAL, options)` no
  * longer compiles without it. That is the point: a lint rule can be ignored, a compile error cannot,
  * and the alternative was a graph that names our own contract where the vendor belongs. One property
  * per endpoint migrates it:
  *
  * ```ts
  * // before
- * @Endpoint('/inbound', 'external', { formPost: true })
+ * @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true })
  * // after
- * @Endpoint('/inbound', 'external', { formPost: true, calledBy: 'twilio' })
+ * @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
  * // infrastructure rather than a vendor product:
- * @Endpoint('/push', 'external', { calledBy: 'pubsub-push', callerKind: 'system' })
+ * @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
  * ```
  *
  * Nothing else changes: `rpc` / `cloudtasks` / `cron` endpoints keep their exact signature, options
@@ -39,7 +39,14 @@ import 'reflect-metadata';
  * Most inbound webhooks are `saas` (Twilio, Gmail, Stripe). A GCP Pub/Sub push subscription is
  * `system` — it is infrastructure, not a vendor product.
  */
-export const EXTERNAL_SYSTEM_KINDS = ['database', 'cache', 'queue', 'storage', 'saas', 'system'] as const;
+export const EXTERNAL_SYSTEM_KINDS = [
+    'database',
+    'cache',
+    'queue',
+    'storage',
+    'saas',
+    'system',
+] as const;
 
 export type ExternalSystemKind = (typeof EXTERNAL_SYSTEM_KINDS)[number];
 
@@ -78,7 +85,11 @@ export const ENDPOINT_CALLER_KEY = 'webpieces:endpoint-caller';
  * bypassed TS — see `assertEveryExternalEndpointDeclaresCaller`). Mirrors `getEndpointOptions`.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointOptions
-export function getEndpointCaller(apiClass: Function, methodName: string): ExternalCaller | undefined {
-    const callers: Record<string, ExternalCaller> = Reflect.getMetadata(ENDPOINT_CALLER_KEY, apiClass) || {};
+export function getEndpointCaller(
+    apiClass: Function,
+    methodName: string,
+): ExternalCaller | undefined {
+    const callers: Record<string, ExternalCaller> =
+        Reflect.getMetadata(ENDPOINT_CALLER_KEY, apiClass) || {};
     return callers[methodName];
 }

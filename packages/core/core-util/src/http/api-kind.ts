@@ -1,5 +1,15 @@
 import 'reflect-metadata';
-import { EndpointKind, METADATA_KEYS, getEndpoints, getEndpointKinds, isApiPath } from './decorators';
+import {
+    EndpointKind,
+    RPC,
+    CLOUDTASKS,
+    CRON,
+    EXTERNAL,
+    METADATA_KEYS,
+    getEndpoints,
+    getEndpointKinds,
+    isApiPath,
+} from './decorators';
 
 /**
  * API KIND — whether a contract is synchronous RPC or fire-and-forget over a queue — plus the
@@ -83,7 +93,7 @@ export function assertApiKind(apiClass: Function, expected: ApiKind): void {
         const apiName = apiClass.name || 'Unknown';
         throw new Error(
             `API ${apiName} is @${actual === 'pubsub' ? 'PubSub' : 'Rpc'} but a ` +
-            `${expected === 'pubsub' ? '@PubSub (cloud task)' : '@Rpc'} API was required here.`,
+                `${expected === 'pubsub' ? '@PubSub (cloud task)' : '@Rpc'} API was required here.`,
         );
     }
 }
@@ -97,8 +107,8 @@ export function assertApiKind(apiClass: Function, expected: ApiKind): void {
  * Shared so the wiring-time assert below and the build-time architecture scan enforce ONE rule.
  */
 export const ENDPOINT_KINDS_BY_API_KIND: Record<ApiKind, readonly EndpointKind[]> = {
-    rpc: ['rpc', 'external'],
-    pubsub: ['cloudtasks', 'cron', 'external'],
+    rpc: [RPC, EXTERNAL],
+    pubsub: [CLOUDTASKS, CRON, EXTERNAL],
 };
 
 /**
@@ -126,7 +136,7 @@ export function assertPubSubConventions(apiClass: Function): void {
         if (kind !== undefined && allowed.includes(kind)) continue;
         throw new Error(
             `@PubSub API ${apiName}.${methodName} declares @Endpoint(..., '${kind ?? 'missing'}') — a ` +
-            `@PubSub contract is delivered through a queue, so it must be one of: ${allowed.join(' | ')}.`,
+                `@PubSub contract is delivered through a queue, so it must be one of: ${allowed.join(' | ')}.`,
         );
     }
 }

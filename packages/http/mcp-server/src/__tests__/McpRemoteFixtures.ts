@@ -41,10 +41,12 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
     WpResponseDto,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
-
 
 /** Contracts, controllers and test doubles for McpRemoteBinding.integration.spec.ts. */
 
@@ -98,13 +100,11 @@ export class RemoteResponse {
 export abstract class RemoteMcpApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'remote_integration_search',
         description: 'Calls a remote Webpieces API.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -116,13 +116,11 @@ export abstract class RemoteMcpApi {
 export abstract class MissingRemoteMcpApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'missing_remote_integration_search',
         description: 'Intentionally absent route.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -134,13 +132,11 @@ export abstract class MissingRemoteMcpApi {
 export abstract class RefusedRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'refused_remote',
         description: 'Nothing listens on this port.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -152,13 +148,11 @@ export abstract class RefusedRemoteApi {
 export abstract class GarbageRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'garbage_remote',
         description: 'Answers an undecodable body.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -170,13 +164,11 @@ export abstract class GarbageRemoteApi {
 export abstract class OidcFailRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'oidc_fail_remote',
         description: 'Its OIDC token cannot be minted.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -188,13 +180,11 @@ export abstract class OidcFailRemoteApi {
 export abstract class LocalThrowApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/throw', 'rpc')
+    @Endpoint(POST, '/throw', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'local_throw',
         description: 'Throws the requested failure in-process.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
@@ -206,13 +196,11 @@ export abstract class LocalThrowApi {
 export abstract class RemoteThrowApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
-    @Endpoint('/throw', 'rpc')
+    @Endpoint(POST, '/throw', READ, RPC)
     @WpResponseDto(() => RemoteResponse)
     @WpMcpTool({
         name: 'remote_throw',
         description: 'Throws the requested failure remotely.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     fail(_request: RemoteRequest): Promise<RemoteResponse> {

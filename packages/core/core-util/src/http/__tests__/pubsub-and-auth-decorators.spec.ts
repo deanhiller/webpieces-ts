@@ -12,6 +12,12 @@ import {
     rolesRequired,
     MISSING_AUTH_DECORATOR_FIX,
     assertEveryEndpointHasAuthMode,
+    CLOUDTASKS,
+    CRON,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '../decorators';
 import {
     PubSub,
@@ -27,13 +33,13 @@ import {
 @ApiPath('/email')
 abstract class SampleTaskApi {
     @WpAuthOidc()
-    @Endpoint('/send', 'cloudtasks')
+    @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     sendEmail(_req: object): Promise<void> {
         throw new Error('subclass');
     }
 
     @WpAuthOidc()
-    @Endpoint('/report', 'cron')
+    @Endpoint(POST, '/report', WRITE, CRON)
     @Queue('custom-report-queue')
     fireReport(_req: object): Promise<void> {
         throw new Error('subclass');
@@ -43,7 +49,7 @@ abstract class SampleTaskApi {
 @Rpc()
 @ApiPath('/rpc')
 abstract class SampleRpcApi {
-    @Endpoint('/ping', 'rpc')
+    @Endpoint(POST, '/ping', READ, RPC)
     @WpAuthSharedSecret('MY_SECRET_ENV')
     ping(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -89,7 +95,7 @@ describe('@Endpoint trigger kind', () => {
         abstract class BadTaskApi {
             // 'rpc' on a @PubSub contract: nothing calls a queue synchronously.
             @WpAuthOidc()
-            @Endpoint('/nope', 'rpc')
+            @Endpoint(POST, '/nope', WRITE, RPC)
             nope(_r: object): Promise<void> {
                 throw new Error('x');
             }
@@ -133,13 +139,13 @@ describe('auth modes', () => {
         @ApiPath('/x')
         abstract class JwtApi {
             @WpAuthJwt({ roles: ['admin'] })
-            @Endpoint('/a', 'rpc')
+            @Endpoint(POST, '/a', WRITE, RPC)
             a(_r: object): Promise<object> {
                 throw new Error('x');
             }
-            @WpAuthPublic('Anonymous access is intentionally required') @Endpoint('/b', 'rpc') b(
-                _r: object,
-            ): Promise<object> {
+            @WpAuthPublic('Anonymous access is intentionally required')
+            @Endpoint(POST, '/b', WRITE, RPC)
+            b(_r: object): Promise<object> {
                 throw new Error('x');
             }
         }
@@ -160,7 +166,7 @@ describe('auth modes', () => {
         @ApiPath('/wide')
         abstract class WideApi {
             @WpAuthJwt({ allRolesAllowed: true })
-            @Endpoint('/a', 'rpc')
+            @Endpoint(POST, '/a', WRITE, RPC)
             a(_r: object): Promise<object> {
                 throw new Error('x');
             }
@@ -176,12 +182,12 @@ describe('auth modes', () => {
         @ApiPath('/org')
         abstract class OrgApi {
             @WpAuthJwt({ allRolesAllowed: true, inOrg: true })
-            @Endpoint('/a', 'rpc')
+            @Endpoint(POST, '/a', WRITE, RPC)
             a(_r: object): Promise<object> {
                 throw new Error('x');
             }
             @WpAuthJwt({ roles: ['admin'], tenantScoped: true })
-            @Endpoint('/b', 'rpc')
+            @Endpoint(POST, '/b', WRITE, RPC)
             b(_r: object): Promise<object> {
                 throw new Error('x');
             }
@@ -210,7 +216,7 @@ describe('auth modes', () => {
         @ApiPath('/wide2')
         abstract class WideApi2 {
             @WpAuthJwt({ allRolesAllowed: true })
-            @Endpoint('/a', 'rpc')
+            @Endpoint(POST, '/a', WRITE, RPC)
             a(_r: object): Promise<object> {
                 throw new Error('x');
             }
@@ -228,7 +234,7 @@ describe('auth modes', () => {
     it('the missing-auth error names only LIVE decorators, never a removed one', () => {
         @ApiPath('/naked')
         abstract class NakedApi {
-            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> {
+            @Endpoint(POST, '/a', WRITE, RPC) a(_r: object): Promise<object> {
                 throw new Error('x');
             }
         }
@@ -264,7 +270,7 @@ describe('auth modes', () => {
             abstract class DupApi {
                 @WpAuthPublic('Duplicate decorator test')
                 @WpAuthJwt({ roles: ['admin'] })
-                @Endpoint('/a', 'rpc')
+                @Endpoint(POST, '/a', WRITE, RPC)
                 a(_r: object): Promise<object> {
                     throw new Error('x');
                 }

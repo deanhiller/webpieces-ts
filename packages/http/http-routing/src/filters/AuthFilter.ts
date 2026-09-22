@@ -252,7 +252,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         if (!this.hasRawBytes(request)) {
             log.warn(
                 `Refusing @WpAuthWebhook('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
-                    `no raw bytes. Declare @Endpoint(path, 'external', { calledBy: '${name}', rawBody: true }); a ` +
+                    `no raw bytes. Declare @Endpoint(POST, path, WRITE, EXTERNAL, { calledBy: '${name}', rawBody: true }); a ` +
                     `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
             );
             throw new ApiUnauthorizedError(

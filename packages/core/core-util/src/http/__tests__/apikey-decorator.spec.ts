@@ -10,6 +10,10 @@ import {
     WpAuthPublic,
     assertEveryEndpointHasAuthMode,
     getAuthMode,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '../../index';
 import type { ApiKeyCredential, AuthMode } from '../../index';
 
@@ -39,7 +43,7 @@ const MANAGEMENT_CREDENTIALS = [
 @ApiPath('/management/v1')
 abstract class ManagementApi {
     @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
-    @Endpoint('/orders', 'rpc')
+    @Endpoint(POST, '/orders', READ, RPC)
     listOrders(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -51,13 +55,13 @@ abstract class MixedApi {
     @WpAuthApiKey('internal-tooling', [
         { in: 'bearer', description: 'Send the tooling key as a bearer token.' },
     ])
-    @Endpoint('/tooling', 'rpc')
+    @Endpoint(POST, '/tooling', WRITE, RPC)
     tooling(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthPublic('Anonymous access is intentionally required')
-    @Endpoint('/health', 'rpc')
+    @Endpoint(POST, '/health', WRITE, RPC)
     health(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -88,7 +92,7 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
                 @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
-                @Endpoint('/y', 'rpc')
+                @Endpoint(POST, '/y', WRITE, RPC)
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }
@@ -111,7 +115,7 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
                 @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
-                @Endpoint('/y', 'rpc')
+                @Endpoint(POST, '/y', WRITE, RPC)
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }

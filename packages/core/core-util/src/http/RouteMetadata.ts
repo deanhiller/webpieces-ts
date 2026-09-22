@@ -2,6 +2,7 @@ import { MaskSpec } from './LogFieldMask';
 import { AuthMeta } from './auth-mode';
 import { EndpointResponseType, HttpParameterBinding } from './HttpContract';
 import { StreamingEndpointMetadata } from './StreamingContract';
+import { EndpointOperation } from './HttpEndpointOptions';
 
 /**
  * Route metadata stored per-method at runtime.
@@ -56,6 +57,8 @@ export class RouteMetadata {
         httpMethod: string,
         path: string,
         methodName: string,
+        /** Explicit side-effect semantics; deliberately independent of the HTTP verb. */
+        readonly operation: EndpointOperation,
         controllerClassName?: string,
         authMeta?: AuthMeta,
         apiName?: string,

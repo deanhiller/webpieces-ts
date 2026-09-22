@@ -15,6 +15,7 @@ export type ApiErrorKind =
     | 'coded'
     | 'implementation'
     | 'dependency'
+    | 'bad-gateway'
     | 'unavailable'
     | 'dependency-timeout'
     | 'dependency-backoff'
@@ -35,12 +36,16 @@ export class ApiNotFoundError extends ApiError {
     override readonly kind: ApiErrorKind = 'not-found';
 }
 export class ApiDependencyError extends ApiError {
-    override readonly kind = 'dependency' as const;
+    override readonly kind: ApiErrorKind = 'dependency';
 }
-export class ApiUnavailableError extends ApiError {
+/** A retry-eligible HTTP 502/proxy failure, distinct from a generic dependency defect. */
+export class ApiBadGatewayError extends ApiDependencyError {
+    override readonly kind = 'bad-gateway' as const;
+}
+export class ApiUnavailableError extends ApiDependencyError {
     override readonly kind = 'unavailable' as const;
 }
-export class ApiDependencyTimeoutError extends ApiError {
+export class ApiDependencyTimeoutError extends ApiDependencyError {
     override readonly kind = 'dependency-timeout' as const;
 }
 
@@ -145,7 +150,7 @@ export class ApiUnauthorizedError extends ApiError {
     }
 }
 
-export class ApiDependencyBackoffError extends ApiError {
+export class ApiDependencyBackoffError extends ApiDependencyError {
     override readonly kind = 'dependency-backoff' as const;
 
     constructor(

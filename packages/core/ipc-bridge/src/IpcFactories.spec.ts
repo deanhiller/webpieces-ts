@@ -23,7 +23,7 @@ import {
     getIpcMaskSpec,
     ApiCallTimeoutError,
 } from '@webpieces/core-util/ipc';
-import { ApiPath, Endpoint, WpAuthJwt } from '@webpieces/core-util';
+import { ApiPath, Endpoint, WpAuthJwt, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { AnyUntrustedContextKey } from '@webpieces/core-util';
 
 class Value {
@@ -137,7 +137,7 @@ describe('portable IPC JSON boundary', () => {
         @ApiPath('/http')
         abstract class HttpApi {
             @WpAuthJwt({ roles: ['admin'] })
-            @Endpoint('/call', 'rpc')
+            @Endpoint(POST, '/call', WRITE, RPC)
             call(_request: Value): Promise<Value> {
                 throw new Error('contract only');
             }

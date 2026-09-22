@@ -154,6 +154,9 @@ export type ProjectApiRelations = Record<string, ApiRelation>;
  */
 export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
 
+/** Side-effect semantics copied from the required third `@Endpoint` argument. */
+export type EndpointOperation = 'read' | 'write-idempotent' | 'write';
+
 /** HTTP verbs understood by the generated contract runtime. */
 export type ContractHttpMethod = 'GET' | 'POST';
 
@@ -174,7 +177,9 @@ export interface ApiMethodMeta {
     /** The @Endpoint path, relative to the class's @ApiPath basePath. */
     path: string;
     kind: EndpointKind;
-    /** The actual incoming/outgoing verb; POST when @Endpoint omits httpMethod. */
+    /** Retry/idempotency contract; independent of the HTTP verb. */
+    operation: EndpointOperation;
+    /** Required in newly scanned source; optional only when reading older committed graph data. */
     httpMethod?: ContractHttpMethod;
     /** Explicit parameter mappings; absent only when the method has none. */
     parameters?: ApiParameterMeta[];
@@ -191,7 +196,7 @@ export interface ApiMethodMeta {
      */
     queueName?: string;
     /**
-     * WHO outside this repo drives this endpoint, from `@Endpoint(p, 'external', { calledBy })`.
+     * WHO outside this repo drives this endpoint, from `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy })`.
      *
      * ONLY on an `external` method, the same way `queueName` is only on the kinds that HAVE a queue.
      *
@@ -325,6 +330,20 @@ export class UndeclaredExternalCaller {
         /** The method name. */
         public readonly method: string,
         /** What was wrong, as written — `<missing>`, `SOME_CONST`, `callerKind: 'vendor'`. */
+        public readonly argument: string,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
+/** ONE `@Endpoint` whose required side-effect declaration could not be read from source. */
+export class UndeclaredEndpointOperation {
+    constructor(
+        /** The contract class the method is declared on. */
+        public readonly api: string,
+        /** The method name. */
+        public readonly method: string,
+        /** What was wrong, as written — `<missing>`, a constant name, or an invalid literal. */
         public readonly argument: string,
         /** `path/to/file.ts:LINE`, workspace-relative. */
         public readonly at: string,

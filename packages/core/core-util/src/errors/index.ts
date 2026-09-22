@@ -2,6 +2,7 @@ export {
     ApiError,
     ApiNotFoundError,
     ApiDependencyError,
+    ApiBadGatewayError,
     ApiUnavailableError,
     ApiDependencyTimeoutError,
     ApiImplementationError,

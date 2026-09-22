@@ -158,7 +158,9 @@ describe('typed streaming contract', () => {
         expect(values).toEqual(['first', 'second']);
         acknowledgements.shift()?.();
 
-        const failure = await second.catch((error: StreamTransportError) => error);
+        const failure = (await second.catch(
+            (error: unknown) => error as StreamTransportError,
+        )) as StreamTransportError;
         expect(failure).toBeInstanceOf(StreamTransportError);
         expect(failure.cause).toMatchObject({ message: 'socket reset' });
         expect(failure.correlation).toMatchObject({ key: 'second', requestId: 'req-2' });

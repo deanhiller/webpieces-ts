@@ -15,6 +15,9 @@ import {
     PubSub,
     Queue,
     WebpiecesCoreHeaders,
+    CLOUDTASKS,
+    POST,
+    WRITE,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { Provider, RequestContextHeaders } from '@webpieces/core-context';
@@ -37,7 +40,7 @@ class SendEmailRequest {
 @ApiPath('/email')
 abstract class EmailApi {
     @WpAuthOidc()
-    @Endpoint('/send', 'cloudtasks')
+    @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     @Queue('email-send-queue')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     sendEmail(_request: SendEmailRequest): Promise<void> {

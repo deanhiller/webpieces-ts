@@ -2,10 +2,15 @@ import 'reflect-metadata';
 import { injectable } from 'inversify';
 import {
     ApiBadRequestError,
+    ApiBadGatewayError,
     ApiConnectionError,
+    ApiDependencyBackoffError,
+    ApiDependencyError,
+    ApiDependencyTimeoutError,
     ApiEndUserError,
     ApiPath,
     ApiUnauthorizedError,
+    ApiUnavailableError,
     Logger,
     LoggerFactory,
     LogLevel,
@@ -21,6 +26,10 @@ import {
     WpMcpHeader,
     WpMcpTool,
     WpResponseDto,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
@@ -70,13 +79,11 @@ export class SearchResponse {
 export abstract class SearchApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', READ, RPC)
     @WpResponseDto(() => SearchResponse)
     @WpMcpTool({
         name: 'account_search',
         description: 'Search records owned by the authenticated user.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     search(_request: SearchRequest): Promise<SearchResponse> {
@@ -85,14 +92,11 @@ export abstract class SearchApi {
 
     @WpMcpAuthJwt({ roles: ['admin'] })
     @WpAuthJwt({ roles: ['admin'] })
-    @Endpoint('/admin', 'rpc')
+    @Endpoint(POST, '/admin', WRITE, RPC)
     @WpResponseDto(() => SearchResponse)
     @WpMcpTool({
         name: 'admin_search',
         description: 'Administrative search.',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
         openWorldHint: false,
     })
     admin(_request: SearchRequest): Promise<SearchResponse> {
@@ -104,14 +108,11 @@ export abstract class SearchApi {
 export abstract class RemoteSearchApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc()
-    @Endpoint('/search', 'rpc')
+    @Endpoint(POST, '/search', WRITE, RPC)
     @WpResponseDto(() => SearchResponse)
     @WpMcpTool({
         name: 'remote_search',
         description: 'Search a remote binding.',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
         openWorldHint: false,
     })
     search(_request: SearchRequest): Promise<SearchResponse> {
@@ -140,6 +141,13 @@ export class SearchController extends SearchApi {
                 'query is malformed',
             );
         }
+        if (request.query === 'dependency') throw new ApiDependencyError('private upstream');
+        if (request.query === 'bad-gateway') throw new ApiBadGatewayError('private proxy');
+        if (request.query === 'timeout') throw new ApiDependencyTimeoutError('private timeout');
+        if (request.query === 'backoff') {
+            throw new ApiDependencyBackoffError('private throttling detail', 37);
+        }
+        if (request.query === 'unavailable') throw new ApiUnavailableError('private deployment');
         const invocation = RequestContext.getTrusted(MCP_INVOCATION_CONTEXT);
         if (request.query === 'progress') {
             await invocation?.reportProgress?.(1, 2, 'halfway');
@@ -217,7 +225,11 @@ export class TestTokenAuthority implements McpAccessTokenAuthority<string> {
         const now = Math.floor(Date.now() / 1000);
         const actualResource =
             token === 'wrong-resource' ? 'https://attacker.example/mcp' : resource;
-        const subject = token === 'mcp-passthrough' ? 'passthrough' : 'user';
+        const subject = token.startsWith('mcp-admin')
+            ? 'admin'
+            : token === 'mcp-passthrough'
+              ? 'passthrough'
+              : 'user';
         const issuer =
             token === 'wrong-issuer' ? 'https://attacker.example' : 'https://login.example.test';
         const expiresAt = token === 'expired' ? now - 1 : now + 60;

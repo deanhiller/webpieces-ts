@@ -1,8 +1,12 @@
 import {
+    ApiBadGatewayError,
+    ApiDependencyBackoffError,
     ApiDependencyError,
+    ApiDependencyTimeoutError,
     ApiEndUserError,
     ApiError,
     ApiImplementationError,
+    ApiUnavailableError,
 } from './ApiError';
 
 /**
@@ -12,14 +16,16 @@ import {
  * A status a peer answered describes OUR request to it. It is never, by itself, an answer for our
  * own caller, and the two ways it can be wrong have OPPOSITE owners:
  *
- * - **caller-error status (4xx-equivalent) -> {@link ApiImplementationError}.** WE sent a bad request,
+ * - **ordinary caller-error status (4xx-equivalent) -> {@link ApiImplementationError}.** WE sent a bad request,
  *   called a path that does not exist, or presented the wrong credentials. MY bug. The peer that
  *   answered 404 is correct.
- * - **server-error status (5xx-equivalent) -> {@link ApiDependencyError}.** THEY broke. Not my bug,
+ * - **ordinary server-error status (5xx-equivalent) -> {@link ApiDependencyError}.** THEY broke. Not my bug,
  *   so this process's failure metrics stay clean and page the right team.
  * - **an {@link ApiDependencyError} coming back -> rethrown AS-IS.** The fault is already attributed,
  *   somewhere further downstream; this hop adds nothing by re-wrapping it, and re-wrapping would bury
  *   the original message one `cause` deeper on every hop of a chain.
+ * - **408/429/502/503/504 preserve retry-relevant semantics.** Timeout, backoff, bad-gateway and
+ *   unavailable must not collapse into the generic non-retryable dependency bucket.
  * - **266 / `end-user` -> {@link ApiEndUserError}**, the intended user-facing message, published
  *   verbatim. It is the one message the taxonomy lets a peer write for a human.
  *
@@ -46,13 +52,50 @@ export class ReceivedApiErrorRule {
      *   Absent for a foreign responder.
      */
     // webpieces-disable no-function-outside-class -- stateless shared rule, called by both protocol translators
-    static adapt(statusCode: number, message: string, decoded?: ApiError): Error {
+    static adapt(
+        statusCode: number,
+        message: string,
+        decoded?: ApiError,
+        retryAfterSeconds?: number,
+    ): Error {
         // 266 is protocol SUCCESS carrying the actor's own answer — the one message published verbatim.
         if (statusCode === 266) {
             return decoded instanceof ApiEndUserError ? decoded : new ApiEndUserError(message);
         }
-        if (decoded instanceof ApiDependencyError) {
+        if (
+            decoded instanceof ApiDependencyError ||
+            decoded instanceof ApiBadGatewayError ||
+            decoded instanceof ApiUnavailableError ||
+            decoded instanceof ApiDependencyTimeoutError ||
+            decoded instanceof ApiDependencyBackoffError
+        ) {
             return decoded;
+        }
+        if (statusCode === 408 || statusCode === 504) {
+            return new ApiDependencyTimeoutError(
+                `dependency timed out with HTTP ${statusCode}. Downstream said: ${message}`,
+                decoded,
+            );
+        }
+        if (statusCode === 429 || (statusCode === 503 && retryAfterSeconds !== undefined)) {
+            return new ApiDependencyBackoffError(
+                `dependency asked this service to back off after HTTP ${statusCode}. ` +
+                    `Downstream said: ${message}`,
+                retryAfterSeconds,
+                decoded,
+            );
+        }
+        if (statusCode === 502) {
+            return new ApiBadGatewayError(
+                `gateway answered HTTP 502. Downstream said: ${message}`,
+                decoded,
+            );
+        }
+        if (statusCode === 503) {
+            return new ApiUnavailableError(
+                `dependency is unavailable (HTTP 503). Downstream said: ${message}`,
+                decoded,
+            );
         }
         if (statusCode >= 500) {
             return new ApiDependencyError(

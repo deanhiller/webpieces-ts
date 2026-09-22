@@ -18,6 +18,9 @@ import {
     WpAuthPublic,
     Rpc,
     TestCaseRecorder,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
@@ -35,7 +38,7 @@ class FetchStoresRequest {
 @Rpc()
 @ApiPath('/db-stores')
 abstract class DbStoresApi {
-    @Endpoint('/fetch-stores', 'rpc')
+    @Endpoint(POST, '/fetch-stores', READ, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     fetchStores(_request: FetchStoresRequest): Promise<void> {

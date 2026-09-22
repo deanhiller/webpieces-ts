@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, WpAuthPublic } from '@webpieces/core-util';
+import { ApiPath, Endpoint, WpAuthPublic, POST, READ, RPC } from '@webpieces/core-util';
 
 // ============================================================
 // Request DTOs
@@ -37,7 +37,7 @@ export interface PublicInfoResponse {
 @ApiPath('/public')
 export abstract class PublicApi {
     @WpAuthPublic('Example greeting is intentionally available before login')
-    @Endpoint('/info', 'rpc')
+    @Endpoint(POST, '/info', READ, RPC)
     getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         throw new Error('Method getInfo() must be implemented by subclass');
     }

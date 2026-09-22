@@ -4,6 +4,7 @@ import {
     ApiErrorPayload,
     ContextKey,
     DtoValue,
+    EndpointOperation,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
@@ -38,6 +39,7 @@ export class McpCorrelation {
     constructor(
         public readonly jsonRpcId: string | number | null,
         public readonly toolName?: string,
+        public readonly operation?: EndpointOperation,
     ) {}
 
     /** Stamp what this request knows so far; `WpMcpServer` re-stamps once the tool name is known. */
@@ -63,6 +65,13 @@ export class McpCorrelation {
 export class ModelVisibleToolError {
     constructor(
         public readonly kind: string,
+        public readonly category: 'bug' | 'caller' | 'dependency' | 'temporary' | 'access',
+        public readonly retry:
+            | 'never'
+            | 'after-correction'
+            | 'after-delay'
+            | 'safe'
+            | 'unsafe-outcome-unknown',
         public readonly message: string,
         public readonly requestId: string,
         public readonly field?: string,
@@ -71,6 +80,11 @@ export class ModelVisibleToolError {
         public readonly retryAfterSeconds?: number,
         public readonly statusCode?: number,
     ) {}
+}
+
+/** Explicit content-level envelope for clients that hide CallToolResult.isError. */
+export class ModelVisibleToolErrorEnvelope {
+    constructor(public readonly error: ModelVisibleToolError) {}
 }
 
 /** JSON-RPC error body written by the HTTP boundary before the SDK is involved. */
@@ -146,7 +160,9 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
 
     toWire(error: Error): CallToolResult {
         const requestId = McpCorrelation.requestId();
-        const visible = this.modelVisible(this.boundary.encode(error), requestId);
+        const visible = new ModelVisibleToolErrorEnvelope(
+            this.modelVisible(this.boundary.encode(error), requestId),
+        );
         const text = JSON.stringify(visible as DtoValue);
         return {
             content: [{ type: 'text', text }],
@@ -156,53 +172,193 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
     }
 
     private modelVisible(payload: ApiErrorPayload, requestId: string): ModelVisibleToolError {
+        const support = `Give requestId ${requestId} to support so the internal failure can be located and fixed.`;
         switch (payload.kind) {
             case 'end-user':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
+                return this.visible(
+                    payload,
                     requestId,
-                    undefined,
-                    undefined,
-                    payload.errorCode,
+                    'caller',
+                    'after-correction',
+                    payload.message,
                 );
             case 'bad-request':
-                return new ModelVisibleToolError(
-                    payload.kind,
+                return this.visible(
+                    payload,
+                    requestId,
+                    'caller',
+                    'after-correction',
                     payload.callerMessage ?? payload.message,
-                    requestId,
-                    payload.field,
-                    payload.callerMessage,
                 );
-            case 'coded':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
+            case 'unauthorized':
+            case 'forbidden':
+                return this.visible(
+                    payload,
                     requestId,
-                    undefined,
-                    undefined,
-                    payload.errorCode,
-                    undefined,
-                    payload.statusCode,
+                    'access',
+                    'after-correction',
+                    'Access was denied. Retrying unchanged credentials and arguments will not help; correct the credentials or permissions first.',
                 );
-            case 'implementation':
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    `Internal error in tool ${McpCorrelation.current().toolName ?? 'unknown'} ` +
-                        `(requestId ${requestId}). This is a bug in the tool, not in your ` +
-                        'arguments; retrying with different arguments will not help.',
+            case 'not-found':
+            case 'endpoint-not-found':
+            case 'conflict':
+            case 'unprocessable':
+            case 'precondition-failed':
+            case 'unsupported-media-type':
+                return this.visible(
+                    payload,
                     requestId,
+                    'caller',
+                    'after-correction',
+                    `${payload.message}. Correct the request or current resource state before trying again.`,
+                );
+            case 'not-implemented':
+                return this.visible(
+                    payload,
+                    requestId,
+                    'bug',
+                    'never',
+                    `The tool does not implement this operation. Retrying or changing arguments will not help. ${support}`,
+                );
+            case 'dependency':
+                return this.visible(
+                    payload,
+                    requestId,
+                    'dependency',
+                    'never',
+                    `A downstream dependency failed. Retrying or changing arguments will not help. If the failure persists, ${support}`,
                 );
             default:
-                return new ModelVisibleToolError(
-                    payload.kind,
-                    payload.message,
-                    requestId,
-                    undefined,
-                    undefined,
-                    undefined,
-                    payload.retryAfterSeconds,
-                );
+                return this.modelVisibleRuntime(payload, requestId, support);
         }
+    }
+
+    private modelVisibleRuntime(
+        payload: ApiErrorPayload,
+        requestId: string,
+        support: string,
+    ): ModelVisibleToolError {
+        switch (payload.kind) {
+            case 'request-timeout':
+            case 'dependency-timeout':
+                return this.transient(
+                    payload,
+                    requestId,
+                    'The operation timed out; the previous operation may already have completed.',
+                );
+            case 'bad-gateway':
+                return this.transient(
+                    payload,
+                    requestId,
+                    'A gateway returned an invalid upstream response; the previous operation may already have completed.',
+                );
+            case 'unavailable':
+                return this.transient(
+                    payload,
+                    requestId,
+                    'A required service is temporarily unavailable; the previous operation may already have completed.',
+                );
+            case 'rate-limited':
+            case 'dependency-backoff':
+                return this.transient(
+                    payload,
+                    requestId,
+                    payload.retryAfterSeconds === undefined
+                        ? 'The operation was throttled. Do not retry immediately.'
+                        : `The operation was throttled. Wait at least ${payload.retryAfterSeconds} seconds before retrying.`,
+                );
+            case 'coded':
+                return this.coded(payload, requestId, support);
+            case 'implementation':
+            case 'connection':
+                return this.bug(payload, requestId, support);
+            default:
+                return this.bug(payload, requestId, support);
+        }
+    }
+
+    private coded(
+        payload: ApiErrorPayload,
+        requestId: string,
+        support: string,
+    ): ModelVisibleToolError {
+        if (payload.statusCode === 408 || payload.statusCode === 429) {
+            return this.transient(
+                payload,
+                requestId,
+                `The operation failed with HTTP ${payload.statusCode}; the previous operation's outcome may be unknown.`,
+            );
+        }
+        if ((payload.statusCode ?? 500) >= 500) {
+            return this.visible(
+                payload,
+                requestId,
+                'dependency',
+                'never',
+                `A downstream service failed with HTTP ${payload.statusCode ?? 500}. Retrying or changing arguments will not help. ${support}`,
+            );
+        }
+        return this.visible(payload, requestId, 'caller', 'after-correction', payload.message);
+    }
+
+    private bug(
+        payload: ApiErrorPayload,
+        requestId: string,
+        support: string,
+    ): ModelVisibleToolError {
+        return this.visible(
+            payload,
+            requestId,
+            'bug',
+            'never',
+            `The tool ${McpCorrelation.current().toolName ?? 'unknown'} encountered an internal bug. ` +
+                `Retrying or changing the arguments will not help. ${support}`,
+        );
+    }
+
+    private transient(
+        payload: ApiErrorPayload,
+        requestId: string,
+        message: string,
+    ): ModelVisibleToolError {
+        const operation = McpCorrelation.current().operation ?? 'write';
+        if (operation === 'write') {
+            return this.visible(
+                payload,
+                requestId,
+                'temporary',
+                'unsafe-outcome-unknown',
+                `${message} This endpoint is a non-idempotent write, so retrying could duplicate it; verify the outcome before retrying.`,
+            );
+        }
+        const retry = payload.retryAfterSeconds === undefined ? 'safe' : 'after-delay';
+        return this.visible(
+            payload,
+            requestId,
+            'temporary',
+            retry,
+            `${message} This endpoint is ${operation === 'read' ? 'read-only' : 'idempotent'}, so retrying is safe${payload.retryAfterSeconds === undefined ? ' after a delay' : ` after ${payload.retryAfterSeconds} seconds`}.`,
+        );
+    }
+
+    private visible(
+        payload: ApiErrorPayload,
+        requestId: string,
+        category: ModelVisibleToolError['category'],
+        retry: ModelVisibleToolError['retry'],
+        message: string,
+    ): ModelVisibleToolError {
+        return new ModelVisibleToolError(
+            payload.kind,
+            category,
+            retry,
+            message,
+            requestId,
+            payload.field,
+            payload.callerMessage,
+            payload.errorCode,
+            payload.retryAfterSeconds,
+            payload.statusCode,
+        );
     }
 }

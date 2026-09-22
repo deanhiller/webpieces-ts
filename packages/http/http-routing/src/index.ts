@@ -17,6 +17,8 @@ export {
     getApiPath,
     getEndpoints,
     getEndpointOptions,
+    getEndpointHttpMethod,
+    getEndpointOperation,
     getHttpParameterDeclarations,
     isFormPost,
     isRawBody,
@@ -34,6 +36,15 @@ export {
     HttpContractMapper,
     METADATA_KEYS,
     ValidateImplementation,
+    GET,
+    POST,
+    READ,
+    WRITE_IDEMPOTENT,
+    WRITE,
+    RPC,
+    CLOUDTASKS,
+    CRON,
+    EXTERNAL,
     // @DocumentDesign moved to core-util (design-root marker, browser + Node);
     // re-exported here for back-compat.
     DocumentDesign,
@@ -42,8 +53,10 @@ export {
 export type {
     AuthMode,
     ApiKind,
+    HttpMethod,
+    EndpointOperation,
+    EndpointKind,
     EndpointOptions,
-    ContractHttpMethod,
     EndpointResponseType,
 } from '@webpieces/core-util';
 

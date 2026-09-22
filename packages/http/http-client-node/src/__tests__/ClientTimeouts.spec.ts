@@ -9,7 +9,11 @@ import {
     Endpoint,
     HeaderRegistry,
     ApiCallTimeoutError,
+    ApiDependencyTimeoutError,
     toError,
+    POST,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import { WpAuthPublic, Rpc } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
@@ -25,13 +29,13 @@ class Payload {
 @Rpc()
 @ApiPath('/timeout-test')
 abstract class RpcApi {
-    @Endpoint('/work', 'rpc')
+    @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     work(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }
 
-    @Endpoint('/other', 'rpc')
+    @Endpoint(POST, '/other', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     other(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
@@ -114,6 +118,7 @@ describe('node generated client deadlines', () => {
 
         expect(h.transport.signals[0].aborted).toBe(true);
         expect(h.transport.signals[0].reason).toBeInstanceOf(ApiCallTimeoutError);
+        expect(h.transport.signals[0].reason).toBeInstanceOf(ApiDependencyTimeoutError);
     });
 
     it('resolves timeout method -> API -> ALL and removes overrides with undefined', async () => {

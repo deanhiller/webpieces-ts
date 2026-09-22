@@ -1,5 +1,5 @@
 /**
- * WHO calls an `external` endpoint — read from `@Endpoint(p, 'external', { calledBy })`, carried onto
+ * WHO calls an `external` endpoint — read from `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy })`, carried onto
  * the trigger, and drawn as the INBOUND box.
  *
  * The bug this closes: that box named OUR OWN contract (`WhatsAppApi`), which the service box the
@@ -15,7 +15,11 @@
 
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { DecoratorArgDiagnostics, endpointMethodsOf, stringConstantsOf } from '../api-usage/api-ast';
+import {
+    DecoratorArgDiagnostics,
+    endpointMethodsOf,
+    stringConstantsOf,
+} from '../api-usage/api-ast';
 import type { ApiContracts, ApiMethodMeta } from '../api-usage/api-relations';
 import { UndeclaredExternalCallerError } from '../api-usage/api-contract-errors';
 import { deriveRuntimeGraph } from '../runtime-graph';
@@ -33,7 +37,12 @@ class Scanned {
 }
 
 function scan(source: string, api: string = 'HookApi'): Scanned {
-    const file = ts.createSourceFile('/ws/libraries/hook-api/src/index.ts', source, ts.ScriptTarget.Latest, true);
+    const file = ts.createSourceFile(
+        '/ws/libraries/hook-api/src/index.ts',
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+    );
     const diagnostics = new DecoratorArgDiagnostics('/ws');
     let cls: ts.ClassDeclaration | null = null;
     const walk = (node: ts.Node): void => {
@@ -54,10 +63,13 @@ describe('reading calledBy / callerKind out of the @Endpoint options literal', (
         const scanned = scan(`
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint('/inbound', 'external', { formPost: true, calledBy: 'twilio' })
+    @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
     abstract inbound(): Promise<void>;
 }`);
-        expect(byName(scanned.methods, 'inbound').caller).toEqual({ kind: 'saas', label: 'twilio' });
+        expect(byName(scanned.methods, 'inbound').caller).toEqual({
+            kind: 'saas',
+            label: 'twilio',
+        });
         expect(scanned.diagnostics.undeclaredExternalCallers()).toEqual([]);
     });
 
@@ -65,10 +77,13 @@ export abstract class HookApi {
         const scanned = scan(`
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint('/push', 'external', { calledBy: 'pubsub-push', callerKind: 'system' })
+    @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
     abstract push(): Promise<void>;
 }`);
-        expect(byName(scanned.methods, 'push').caller).toEqual({ kind: 'system', label: 'pubsub-push' });
+        expect(byName(scanned.methods, 'push').caller).toEqual({
+            kind: 'system',
+            label: 'pubsub-push',
+        });
     });
 
     it('resolves a SAME-module const, exactly as a path argument does', () => {
@@ -76,10 +91,13 @@ export abstract class HookApi {
 const TWILIO = 'twilio';
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint('/inbound', 'external', { calledBy: TWILIO })
+    @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { calledBy: TWILIO })
     abstract inbound(): Promise<void>;
 }`);
-        expect(byName(scanned.methods, 'inbound').caller).toEqual({ kind: 'saas', label: 'twilio' });
+        expect(byName(scanned.methods, 'inbound').caller).toEqual({
+            kind: 'saas',
+            label: 'twilio',
+        });
     });
 
     it('records NO caller for a non-external endpoint, even when one is written', () => {
@@ -88,10 +106,10 @@ export abstract class HookApi {
         const scanned = scan(`
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint('/rpc', 'rpc', { calledBy: 'twilio' })
+    @Endpoint(POST, '/rpc', WRITE, RPC, { calledBy: 'twilio' })
     abstract go(): Promise<void>;
 
-    @Endpoint('/task', 'cloudtasks', { calledBy: 'twilio' })
+    @Endpoint(POST, '/task', WRITE, CLOUDTASKS, { calledBy: 'twilio' })
     abstract task(): Promise<void>;
 }`);
         expect(byName(scanned.methods, 'go').caller).toBeUndefined();
@@ -103,11 +121,26 @@ export abstract class HookApi {
 describe('an unreadable caller is a FATAL generation diagnostic', () => {
     /** The scan is parser-only, so it sees exactly what a JS caller or an `as any` can smuggle past TS. */
     const cases: [string, string, string][] = [
-        ['no options argument at all', `@Endpoint('/a', 'external')`, '<no options argument>'],
-        ['options without calledBy', `@Endpoint('/a', 'external', { formPost: true })`, '<no calledBy>'],
-        ['a cross-module const', `@Endpoint('/a', 'external', { calledBy: IMPORTED })`, 'IMPORTED'],
-        ['an unknown callerKind', `@Endpoint('/a', 'external', { calledBy: 'x', callerKind: 'vendor' })`, "callerKind: 'vendor'"],
-        ['a non-literal options bag', `@Endpoint('/a', 'external', OPTIONS)`, 'OPTIONS'],
+        [
+            'options without calledBy',
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL)`,
+            '<no options argument>',
+        ],
+        [
+            'options without calledBy',
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { formPost: true })`,
+            '<no calledBy>',
+        ],
+        [
+            'a cross-module const',
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { calledBy: IMPORTED })`,
+            'IMPORTED',
+        ],
+        [
+            'an unknown callerKind',
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { calledBy: 'x', callerKind: 'vendor' })`,
+            "callerKind: 'vendor'",
+        ],
     ];
 
     for (const [name, decorator, expected] of cases) {
@@ -132,8 +165,18 @@ export abstract class HookApi {
 
     it('aggregates every offender into ONE actionable error', () => {
         const error = new UndeclaredExternalCallerError([
-            { api: 'WhatsAppApi', method: 'inbound', argument: '<no calledBy>', at: 'libraries/a/src/index.ts:12' },
-            { api: 'GmailApi', method: 'watch', argument: 'HOOK_CALLER', at: 'libraries/b/src/index.ts:30' },
+            {
+                api: 'WhatsAppApi',
+                method: 'inbound',
+                argument: '<no calledBy>',
+                at: 'libraries/a/src/index.ts:12',
+            },
+            {
+                api: 'GmailApi',
+                method: 'watch',
+                argument: 'HOOK_CALLER',
+                at: 'libraries/b/src/index.ts:30',
+            },
         ]);
         expect(error.message).toContain("2 'external' @Endpoint(s) do not declare WHO calls them");
         expect(error.message).toContain('WhatsAppApi.inbound');
@@ -172,7 +215,9 @@ function chatGraph(): EnhancedGraph {
 }
 
 function contracts(methods: ApiMethodMeta[]): ApiContracts {
-    return { WhatsAppApi: { owner: 'whatsapp-api', apiKind: 'rpc', basePath: '/whatsapp', methods } };
+    return {
+        WhatsAppApi: { owner: 'whatsapp-api', apiKind: 'rpc', basePath: '/whatsapp', methods },
+    };
 }
 
 /** Every `"<id>" [` node STATEMENT in the dot, so a duplicated node is caught rather than assumed away. */
@@ -187,9 +232,19 @@ function arrowsFrom(dot: string, id: string): string[] {
 describe('drawing the inbound caller', () => {
     it('labels the box with the CALLER and leaves the contract on the edge', () => {
         const dot = generateRuntimeDot(
-            deriveRuntimeGraph(chatGraph(), new Set<string>(), contracts([
-                { name: 'inbound', path: '/inbound', kind: 'external', caller: { kind: 'saas', label: 'twilio' } },
-            ])),
+            deriveRuntimeGraph(
+                chatGraph(),
+                new Set<string>(),
+                contracts([
+                    {
+                        name: 'inbound',
+                        path: '/inbound',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'saas', label: 'twilio' },
+                    },
+                ]),
+            ),
         );
         expect(dot).toContain('label="twilio\\n(external caller)"');
         expect(dot).not.toContain('WhatsAppApi\\n(external caller)');
@@ -198,10 +253,26 @@ describe('drawing the inbound caller', () => {
 
     it('converges ONE caller on ONE box however many methods it posts to', () => {
         const dot = generateRuntimeDot(
-            deriveRuntimeGraph(chatGraph(), new Set<string>(), contracts([
-                { name: 'inbound', path: '/in', kind: 'external', caller: { kind: 'saas', label: 'twilio' } },
-                { name: 'status', path: '/status', kind: 'external', caller: { kind: 'saas', label: 'twilio' } },
-            ])),
+            deriveRuntimeGraph(
+                chatGraph(),
+                new Set<string>(),
+                contracts([
+                    {
+                        name: 'inbound',
+                        path: '/in',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'saas', label: 'twilio' },
+                    },
+                    {
+                        name: 'status',
+                        path: '/status',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'saas', label: 'twilio' },
+                    },
+                ]),
+            ),
         );
         expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
         expect(arrowsFrom(dot, 'system__twilio')).toHaveLength(2);
@@ -211,10 +282,26 @@ describe('drawing the inbound caller', () => {
         // The old id was `inbound__${api}`, so two vendors posting to one contract collapsed into a
         // single box labelled with that contract — the diagram asserted they were the same system.
         const dot = generateRuntimeDot(
-            deriveRuntimeGraph(chatGraph(), new Set<string>(), contracts([
-                { name: 'inbound', path: '/in', kind: 'external', caller: { kind: 'saas', label: 'twilio' } },
-                { name: 'watch', path: '/watch', kind: 'external', caller: { kind: 'saas', label: 'gmail' } },
-            ])),
+            deriveRuntimeGraph(
+                chatGraph(),
+                new Set<string>(),
+                contracts([
+                    {
+                        name: 'inbound',
+                        path: '/in',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'saas', label: 'twilio' },
+                    },
+                    {
+                        name: 'watch',
+                        path: '/watch',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'saas', label: 'gmail' },
+                    },
+                ]),
+            ),
         );
         expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
         expect(nodeStatements(dot, 'system__gmail')).toHaveLength(1);
@@ -224,9 +311,19 @@ describe('drawing the inbound caller', () => {
 
     it('draws the shape of the caller KIND, not always a box', () => {
         const dot = generateRuntimeDot(
-            deriveRuntimeGraph(chatGraph(), new Set<string>(), contracts([
-                { name: 'drain', path: '/drain', kind: 'external', caller: { kind: 'queue', label: 'sqs-inbox' } },
-            ])),
+            deriveRuntimeGraph(
+                chatGraph(),
+                new Set<string>(),
+                contracts([
+                    {
+                        name: 'drain',
+                        path: '/drain',
+                        kind: 'external',
+                        operation: 'write',
+                        caller: { kind: 'queue', label: 'sqs-inbox' },
+                    },
+                ]),
+            ),
         );
         expect(dot).toContain('"system__sqs_inbox" [shape=Mrecord');
         expect(dot).toContain('class="wp_queue"');
@@ -236,9 +333,19 @@ describe('drawing the inbound caller', () => {
 describe('inbound and outbound converge on ONE node for the same vendor', () => {
     /** `ai-chat` is POSTED TO by twilio and also CALLS a twilio seam — the same vendor, both ways. */
     function bothWays(showExternalNodes: boolean = true): string {
-        const graph: RuntimeGraph = deriveRuntimeGraph(chatGraph(), new Set<string>(), contracts([
-            { name: 'inbound', path: '/in', kind: 'external', caller: { kind: 'saas', label: 'twilio' } },
-        ]));
+        const graph: RuntimeGraph = deriveRuntimeGraph(
+            chatGraph(),
+            new Set<string>(),
+            contracts([
+                {
+                    name: 'inbound',
+                    path: '/in',
+                    kind: 'external',
+                    operation: 'write',
+                    caller: { kind: 'saas', label: 'twilio' },
+                },
+            ]),
+        );
         graph.services['ai-chat'] = service(['WhatsAppApi']);
         attachExternalSystems(graph, {
             twilio: { kind: 'saas', label: 'twilio', usedBy: ['ai-chat'], apis: ['TwilioSendApi'] },

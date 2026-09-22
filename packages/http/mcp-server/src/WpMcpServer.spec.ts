@@ -18,6 +18,9 @@ import {
     WpAuthJwt,
     WpMcpTool,
     WpResponseDto,
+    POST,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
@@ -459,7 +462,11 @@ describe('WpMcpServer HTTP bridge', () => {
             'admin_search',
         );
         const hidden = await callTool('admin_search', { query: 'all' });
-        expect(modelErrorOf(hidden)).toMatchObject({ kind: 'forbidden', message: 'Forbidden' });
+        expect(modelErrorOf(hidden)).toMatchObject({
+            kind: 'forbidden',
+            category: 'access',
+            retry: 'after-correction',
+        });
         expect(controller.adminInvocations).toBe(0);
         authority.roles = ['admin'];
         const adminTools = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<
@@ -527,7 +534,7 @@ describe('WpMcpServer HTTP bridge', () => {
         @ApiPath('/invalid')
         class MissingMcpAuthApi {
             @WpAuthJwt({ allRolesAllowed: true })
-            @Endpoint('/tool', 'rpc')
+            @Endpoint(POST, '/tool', WRITE, RPC)
             @WpResponseDto(() => SearchResponse)
             @WpMcpTool({ name: 'missing_mcp_auth', description: 'invalid' })
             tool(_request: SearchRequest): Promise<SearchResponse> {
