@@ -67,7 +67,17 @@ Two spec files, both named `no-turn-ending-instructions.spec.ts`:
 - `packages/tooling/pr-gate/src/scripts/workflow/` — renders `FinishBanner` for every merge outcome and
   `ReviewReport` for every variant.
 - `packages/tooling/ai-hook-rules/src/core/rules/` — collects every refusal `wait-spin-guard` can print,
-  for both agent kinds and every spin shape, plus its `description` and `fixHint`.
+  for both agent kinds and every spin shape, plus its `description` and `fixHint`; the version-skew
+  report for every `SkewCase` × both harnesses; every generated guard doc a deny points at (L0 matrix,
+  L0 tooling, L1 location matrix, L2 branch-state, guard index); the rendered L0 shim and fault-S deny;
+  and every built-in and keyless rule's `description` and `fixHint`. The version-skew escalation said
+  "Forwarding that message IS the end of your turn" for a release after #902 because the first cut of
+  this spec rendered `wait-spin-guard` alone (issue #1000).
+
+The guards' detector matches every spelling that has shipped — "end your turn", "the end of your
+turn", "STOP WORKING", "no further tool calls", and a shouted closing "and STOP". What it lets through
+is the legitimate half: refusing the futile RETRY of the same blocked call ("Do NOT retry this call —
+it re-fires this identical deny") refuses one wasteful command and decides nothing about control flow.
 
 Both assert over the **strings actually emitted**, never over source text — a grep of the source is
 satisfied the moment somebody moves the sentence into a constant or builds it from two halves. Both

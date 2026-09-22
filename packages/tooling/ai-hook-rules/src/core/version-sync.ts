@@ -262,9 +262,9 @@ export class VersionSyncGuard {
      * still see it is not their own action. Do not factor it out.
      *
      * The FIX block still prints ABOVE the escalation block, on purpose. Moving it below would split the
-     * numbered steps from the versions they refer to, and the one place caps are spent on ENDING the turn
-     * (STOP WORKING NOW / RETRYING IS THE BUG) has to stay last and stay unique — a second STOP beat
-     * competing with it is exactly the wall-of-text regression the L0 message diet exists to prevent.
+     * numbered steps from the versions they refer to, and the do-not-retry beat has to stay last and stay
+     * unique — a second shouted beat competing with it is exactly the wall-of-text regression the L0
+     * message diet exists to prevent.
      * Labelling carries the "not yours to run" fact instead, which is what the caps header does.
      */
     private fixLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
@@ -423,15 +423,19 @@ export class VersionSyncGuard {
      * text asks for exactly that — and asks to be TOLD WHEN IT IS DONE, because "the work happened" is
      * the event that unblocks this subagent and it has no way to observe it otherwise.
      *
-     * And it has to say STOP, in caps, because forwarding is only half of what the subagent must do. One
+     * And it has to refuse the RETRY, because forwarding is only half of what the subagent must do. One
      * measured subagent transcript re-fired this identical deny 13 TIMES (25 across the whole session,
      * counting two sibling subagents and two parent sessions): the subagent read it, escalated exactly
-     * as asked — and then kept making tool calls, because nothing here said that forwarding ENDS the
-     * turn. Every retry cost a round trip and pushed the one message that mattered further up the
-     * scrollback. The block is not transient and no command from this tree slips past it, so retrying is
-     * never a strategy; it is the bug. The caps are spent ONLY on that beat (STOP WORKING NOW / NO
-     * further tool calls / RETRYING IS THE BUG / WAIT) — shouting the whole report would just restore
-     * the wall of text the L0 message diet exists to prevent.
+     * as asked — and then re-ran the blocked call. Every retry cost a round trip and pushed the one
+     * message that mattered further up the scrollback. The block is not transient and no command from
+     * this tree slips past it, so retrying is never a strategy; it is the bug.
+     *
+     * What it must NOT do is decide the agent's control flow. #679 first wrote this beat as "STOP WORKING
+     * NOW. Forwarding that message IS the end of your turn: make NO further tool calls" — a turn-level
+     * prescription, which `.claude/rules/never-tell-an-ai-to-end-its-turn.md` forbids (#902 deleted every
+     * other one; this one survived because no spec rendered it — issue #1000). Refusing one futile
+     * command is legitimate; ruling on when the turn ends is a judgement the agent is better placed to
+     * make. So the beat names the retry, says why it is futile, and stops talking.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
     private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase, aiType: AiType): readonly string[] {
@@ -441,9 +445,8 @@ export class VersionSyncGuard {
             `     > the main tree ${tree.mainRoot} is on ${this.show(quartet.main.pinned).trim()}.`,
             ...this.askLines(tree, quartet, skew),
             ...this.afterwardLines(aiType),
-            `   THEN STOP WORKING NOW. Forwarding that message IS the end of your turn: make NO further tool`,
-            `   calls and do NOT retry this one — RETRYING IS THE BUG. Every retry re-fires this identical`,
-            `   deny and buries the ask above; one subagent did it 13 times, 25 across that whole session.`,
+            `   Do NOT retry this call — RETRYING IS THE BUG. It re-fires this identical deny and buries the`,
+            `   ask above; one subagent did it 13 times, 25 across that whole session.`,
             ...this.waitLines(aiType),
         ];
     }
@@ -472,9 +475,11 @@ export class VersionSyncGuard {
 
     private waitLines(aiType: AiType): readonly string[] {
         if (aiType === 'codex') {
+            // The three-move wait shape (never-tell-an-ai-to-end-its-turn.md): name the efficient option,
+            // name the wasteful one, and say nothing about when a turn ends.
             return [
-                `   Nothing you can do from this tree clears it. WAIT for the main agent to confirm it is done,`,
-                `   then resume — nothing between.`,
+                `   Nothing you can do from this tree clears it. Be efficient with tokens: wait on the main`,
+                `   agent's confirmation instead of re-running blocked calls to see whether it has cleared.`,
             ];
         }
         return [`   Nothing you can do from this tree clears it; the coordinator redoes it in a fresh worktree.`];

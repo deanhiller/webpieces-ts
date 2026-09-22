@@ -53,7 +53,12 @@ describe('VersionSyncGuard — what happens after the main tree is synced, per h
     it('keeps the Codex wording: the same agent continues in the same checkout', () => {
         const codex = report('codex');
         expect(codex).toContain('Tell me when that is complete so I can continue working');
-        expect(codex).toContain('WAIT for the main agent');
+        // The three-move wait shape (issue #1000): the efficient option, the wasteful one, and nothing
+        // about when a turn ends — "then resume — nothing between" was a control-flow ruling.
+        expect(codex).toContain('Be efficient with tokens');
+        expect(codex).toContain('instead of re-running blocked calls');
+        expect(codex).not.toContain('nothing between');
+        expect(codex).not.toContain('then resume');
         expect(codex).not.toContain('FRESH isolation');
     });
 });

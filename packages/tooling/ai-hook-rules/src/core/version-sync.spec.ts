@@ -92,6 +92,63 @@ export function renderVersionSyncRow8Report(): string {
     return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
 }
 
+/**
+ * The deliberate-bump skew (C'), rendered against a REAL repo: `isDeliberateBump` asks git whether this
+ * branch touched the manifest, so a fabricated path answers "no", takes the generic branch, and makes
+ * every assertion about the bump text vacuous. Exported for the same reason the row-8 render is.
+ */
+export function renderBumpSkewReport(aiType: AiType = 'claude-code'): string {
+    const base = tmp();
+    const main = path.join(base, 'main');
+    writePin(main, '0.4.634');
+    writeInstalled(main, '0.4.634');
+    const wt = path.join(base, 'wt');
+    fs.mkdirSync(wt, { recursive: true });
+    // A real repo with a real uncommitted bump — that dirty manifest IS the signal.
+    run(wt, ['init', '-q']);
+    writePin(wt, '0.4.634');
+    run(wt, ['add', '.']);
+    run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
+    writePin(wt, '0.4.638');
+    return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), aiType) ?? '';
+}
+
+/**
+ * EVERY skew report this guard can print — each of the five `SkewCase`s × both harnesses — keyed
+ * `<case> × <harness>`. Exported for `rules/no-turn-ending-instructions.spec.ts` (issue #1000): the
+ * escalation block told subagents "Forwarding that message IS the end of your turn" for a month after
+ * #902 because the turn-ending detector rendered wait-spin-guard and nothing else. A sweep that renders
+ * one case of one harness is the same hole one level down, so this renders all ten.
+ */
+export function renderEverySkewReport(): Map<string, string> {
+    const reports = new Map<string, string>();
+    const aiTypes: readonly AiType[] = ['claude-code', 'codex'];
+    for (const aiType of aiTypes) {
+        const inconsistent = tmp();
+        writePin(path.join(inconsistent, 'main'), '0.4.616');
+        writeInstalled(path.join(inconsistent, 'main'), '0.4.620');
+        writePin(path.join(inconsistent, 'wt'), '0.4.620');
+        reports.set(`main-inconsistent × ${aiType}`, new VersionSyncGuard().block('pnpm build',
+            worktreeTree(path.join(inconsistent, 'main'), path.join(inconsistent, 'wt')), aiType) ?? '');
+
+        const ahead = pair('0.4.616', '0.4.612');
+        reports.set(`main-ahead × ${aiType}`,
+            new VersionSyncGuard().block('pnpm build', worktreeTree(ahead.main, ahead.wt), aiType) ?? '');
+
+        const behind = pair('0.4.612', '0.4.616');
+        reports.set(`main-behind × ${aiType}`,
+            new VersionSyncGuard().block('pnpm build', worktreeTree(behind.main, behind.wt), aiType) ?? '');
+
+        const stale = pair('0.4.616', '0.4.616');
+        writeInstalled(stale.wt, '0.4.500');
+        reports.set(`worktree-stale × ${aiType}`,
+            new VersionSyncGuard().block('pnpm build', worktreeTree(stale.main, stale.wt), aiType) ?? '');
+
+        reports.set(`bump × ${aiType}`, renderBumpSkewReport(aiType));
+    }
+    return reports;
+}
+
 describe('VersionSyncGuard — when it fires', () => {
     it('BLOCKS real work in a worktree whose pin disagrees with the main tree', () => {
         const dirs = pair('0.4.616', '0.4.612');
@@ -297,7 +354,7 @@ describe('VersionSyncGuard — the decision table', () => {
         // THE OMISSION IS THE DELIVERABLE. An escalation on a cure the reader can perform teaches it to
         // stop and wait for a main agent who has nothing to do — which is what actually happened.
         expect(report).not.toContain('Forward this to your coordinator');
-        expect(report).not.toContain('STOP WORKING NOW');
+        expect(report).not.toContain('Do NOT retry this call');
         expect(report).not.toContain('Tell main agent');
     });
 
@@ -342,7 +399,7 @@ describe('VersionSyncGuard — the decision table', () => {
         const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain(`Tell main agent: \`cd ${dirs.main} && git checkout main && git pull\``);
         expect(report).toContain('Forward this to your coordinator verbatim');
-        expect(report).toContain('STOP WORKING NOW');
+        expect(report).toContain('Do NOT retry this call');
     });
 
     /** D — every pin agrees; only this tree's own node_modules lags. One command, here, no escalation. */
@@ -461,9 +518,13 @@ describe('VersionSyncGuard — the message', () => {
     /**
      * THE 25-FIRING INCIDENT (2026-08-19). The chain worked: guard denied → subagent forwarded the ask
      * verbatim → the coordinator relayed the pull+install. Nothing was lost except turns — the subagent
-     * then KEPT MAKING TOOL CALLS and re-fired this identical deny, because nothing in the message said
-     * that forwarding ENDS the turn. Every retry buried the forwarded ask further up the scrollback. The
-     * block is not transient; no command from this tree slips past it.
+     * then RE-RAN the blocked call and re-fired this identical deny. Every retry buried the forwarded ask
+     * further up the scrollback. The block is not transient; no command from this tree slips past it.
+     *
+     * The cure #679 shipped for it was "STOP WORKING NOW. Forwarding that message IS the end of your
+     * turn: make NO further tool calls" — a turn-level prescription that
+     * `.claude/rules/never-tell-an-ai-to-end-its-turn.md` forbids (issue #1000). What stays is the part
+     * that refuses ONE futile command: do not retry this call. When the turn ends is the agent's call.
      *
      * COUNTED FROM THE TRANSCRIPTS, not remembered: 13 firings in one subagent
      * (agent-ab3cdc82f4e63d7ef), 6 and 2 in two siblings, 2 each in two parent sessions — 25 across the
@@ -471,12 +532,18 @@ describe('VersionSyncGuard — the message', () => {
      * measured and is corrected here, because a wrong number in a comment justifying a design is worse
      * than no number at all.
      */
-    it('tells the subagent to STOP and not retry, because retrying re-fires this identical deny', () => {
-        const report = reportFor();
-        expect(report).toContain('STOP WORKING NOW');
-        expect(report).toContain('NO further tool');
-        expect(report).toContain('RETRYING IS THE BUG');
-        expect(reportFor('codex')).toContain('WAIT for the main agent');
+    it('refuses the futile RETRY, and never rules on when the turn ends, in either harness', () => {
+        const aiTypes: readonly AiType[] = ['claude-code', 'codex'];
+        for (const aiType of aiTypes) {
+            const report = reportFor(aiType);
+            expect(report, aiType).toContain('Do NOT retry this call');
+            expect(report, aiType).toContain('RETRYING IS THE BUG');
+            expect(report, aiType).toContain('re-fires this identical deny');
+            expect(report, aiType).not.toMatch(/STOP WORKING/i);
+            expect(report, aiType).not.toMatch(/end of your turn/i);
+            expect(report, aiType).not.toMatch(/further tool\s+calls/i);
+            expect(report, aiType).not.toContain('nothing between');
+        }
     });
 
     /** The obvious wrong fix: downgrade main so it matches. That breaks every other tree. */
@@ -485,8 +552,8 @@ describe('VersionSyncGuard — the message', () => {
     });
 
     /**
-     * The budget rose from 24 to 30 for the forwardable escalation block, then 30 to 38 for the STOP
-     * beat, and now 38 to 42 for the `Tell main agent:` FIX list. Every one is a trade made with eyes
+     * The budget rose from 24 to 30 for the forwardable escalation block, then 30 to 38 for the
+     * do-not-retry beat (first written as a STOP beat; #1000 cut it to the retry refusal), and now 38 to 42 for the `Tell main agent:` FIX list. Every one is a trade made with eyes
      * open. The 24-line version WAS read and still dead-ended, because the four lines it spent on "report
      * to your coordinator" carried no ask. The 30-line version was forwarded correctly and STILL looped,
      * because it never said that forwarding ends the turn. The 38-line version led with `git -C <main>
@@ -511,21 +578,7 @@ describe('VersionSyncGuard — the message', () => {
  * a fabricated path answers "no", takes the generic branch, and makes every assertion here vacuous.
  */
 describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () => {
-    const bumpReport = (): string => {
-        const base = tmp();
-        const main = path.join(base, 'main');
-        writePin(main, '0.4.634');
-        writeInstalled(main, '0.4.634');
-        const wt = path.join(base, 'wt');
-        fs.mkdirSync(wt, { recursive: true });
-        // A real repo with a real uncommitted bump — that dirty manifest IS the signal.
-        run(wt, ['init', '-q']);
-        writePin(wt, '0.4.634');
-        run(wt, ['add', '.']);
-        run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
-        writePin(wt, '0.4.638');
-        return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code') ?? '';
-    };
+    const bumpReport = (): string => renderBumpSkewReport();
 
     /** `pnpm install` moving a pin is the guess every agent makes here, and it is always wrong. */
     it('says outright that neither tree can be installed out of this', () => {
@@ -566,22 +619,23 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
      * wrong agent for the job. "Only main agents in worktrees can do this" is not derivable from
      * anything on screen; without it the block reads as a missing permission to route around, and
      * routing around is what burns the turn. It is said in the subagent's own words, before the closing
-     * STOP beat, which stays last and unique.
+     * do-not-retry beat, which stays last and unique.
      */
     it('tells a subagent upgrading webpieces that it is the wrong agent for the job', () => {
         const report = bumpReport();
         expect(report).toContain('If you are a subagent upgrading webpieces, STOP — only main agents in worktrees can do');
         expect(report).toContain('main has an earlier version of');
         expect(report).toContain('You MUST tell the main agent to pull main and');
-        // The turn-ending beat still comes AFTER it and is still the last word.
-        expect(report.indexOf('only main agents in worktrees')).toBeLessThan(report.indexOf('STOP WORKING NOW'));
+        // The do-not-retry beat still comes AFTER it.
+        expect(report.indexOf('only main agents in worktrees')).toBeLessThan(report.indexOf('Do NOT retry this call'));
     });
 
     /** The 25-firing incident is branch-independent — a bump-skew subagent loops exactly the same way. */
-    it('carries the same STOP / do-not-retry beat', () => {
+    it('carries the same do-not-retry beat, and no turn-ending one', () => {
         const report = bumpReport();
-        expect(report).toContain('STOP WORKING NOW');
+        expect(report).toContain('Do NOT retry this call');
         expect(report).toContain('RETRYING IS THE BUG');
+        expect(report).not.toMatch(/STOP WORKING|end of your turn/i);
     });
 
     /**
