@@ -161,13 +161,61 @@ export class ApiDocExtractor {
         return this.extract(program, source);
     }
 
+    /**
+     * EVERY `@ApiPath` contract in one file, in declaration order.
+     *
+     * {@link extractFile} answers "what is THE contract in this file", which is the shape a manifest
+     * entry and a generated document have: one contract, one file. This answers a different question
+     * — "what does this file declare" — and it exists because a REPO does not obey that convention.
+     * `McpRemoteFixtures.ts` in `@webpieces/mcp-server` declares seven contracts, and the runtime
+     * registers MCP tools from all seven; a sweep that read only the first would report green while
+     * six contracts' worth of tools had never been looked at, which is the exact shape of silent miss
+     * this epic exists to remove.
+     *
+     * A file with no contract yields an EMPTY list rather than throwing: "this file has none" is an
+     * ordinary answer to this question, where it is a failure to answer {@link extractFile}'s.
+     */
+    extractAll(
+        entryFile: string,
+        compilerOptions: ts.CompilerOptions = {},
+    ): readonly ApiDocModel[] {
+        const program = ts.createProgram([entryFile], compilerOptions);
+        const source = program.getSourceFile(entryFile);
+        if (source === undefined) {
+            throw new ApiDocExtractionError(
+                'entry file is not part of the program',
+                entryFile,
+                'Pass an absolute path to a .ts file that exists.',
+            );
+        }
+        return this.extractAllFrom(program, source);
+    }
+
+    /** {@link extractAll} against a program the caller already built. */
+    extractAllFrom(program: ts.Program, source: ts.SourceFile): readonly ApiDocModel[] {
+        const models: ApiDocModel[] = [];
+        for (const statement of source.statements) {
+            if (
+                ts.isClassDeclaration(statement) &&
+                ApiDocExtractor.decoratorCall(statement, API_PATH) !== undefined
+            ) {
+                models.push(this.extractContract(program, statement));
+            }
+        }
+        return models;
+    }
+
     /** The same extraction against a program the caller already built. */
     extract(program: ts.Program, source: ts.SourceFile): ApiDocModel {
+        return this.extractContract(program, this.findContract(source));
+    }
+
+    /** ONE contract class -> ONE model. The single place the walk actually happens. */
+    private extractContract(program: ts.Program, contract: ts.ClassDeclaration): ApiDocModel {
         const checker = program.getTypeChecker();
         const folder = new ConstantFolder(checker);
         const resolver = new TypeResolver(checker);
 
-        const contract = this.findContract(source);
         const pathDecorator = ApiDocExtractor.decoratorCall(contract, API_PATH)!;
         const basePathArgument = pathDecorator.arguments[0];
         const basePath =

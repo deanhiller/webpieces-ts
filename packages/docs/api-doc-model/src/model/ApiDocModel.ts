@@ -59,6 +59,17 @@ export class DocumentedField {
         readonly min: number | undefined,
         /** `@WpMax(n)` — numeric fields only; anything else is a build failure. */
         readonly max: number | undefined,
+        /**
+         * The `@mcpHeader <token>` JSDoc tag — the MCP 2026 SEP-2243 header this PRIMITIVE field is
+         * mirrored into (`Mcp-Param-{token}`). Undefined for every field that is not mirrored, which
+         * is nearly all of them.
+         *
+         * It is documentation and therefore lives in JSDoc, next to the sentence describing the
+         * field, rather than in a decorator argument. The runtime spells it `WpMcpHeader` inside
+         * `@WpDtoField`; the two are proved identical by the equivalence gate (#983) before #984
+         * deletes the decorator spelling.
+         */
+        readonly mcpHeader: string | undefined,
     ) {}
 }
 

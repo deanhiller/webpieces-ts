@@ -9,6 +9,7 @@ import {
     ApiDependencyTimeoutError,
     ApiEndUserError,
     ApiPath,
+    ApiType,
     ApiUnauthorizedError,
     ApiUnavailableError,
     Logger,
@@ -26,9 +27,11 @@ import {
     WpMcpHeader,
     WpMcpTool,
     WpResponseDto,
+    MCP,
     POST,
     READ,
     RPC,
+    SVC_TO_SVC,
     WRITE,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
@@ -51,6 +54,10 @@ export const UNKNOWN_VERSION = '1999-01-01';
 
 @WpDto()
 export class SearchRequest {
+    /**
+     * Search text
+     * @mcpHeader query
+     */
     @WpDtoField(
         new WpDtoFieldOptions(
             'Search text',
@@ -68,15 +75,19 @@ export class SearchRequest {
 
 @WpDto()
 export class SearchResponse {
+    /** Authenticated user */
     @WpDtoField(new WpDtoFieldOptions('Authenticated user', true))
     userId!: string;
 
+    /** Search result */
     @WpDtoField(new WpDtoFieldOptions('Search result', true))
     result!: string;
 }
 
 @ApiPath('/mcp-spec')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class SearchApi {
+    /** Search records owned by the authenticated user. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/search', READ, RPC)
@@ -90,6 +101,7 @@ export abstract class SearchApi {
         throw new Error('contract only');
     }
 
+    /** Administrative search. */
     @WpMcpAuthJwt({ roles: ['admin'] })
     @WpAuthJwt({ roles: ['admin'] })
     @Endpoint(POST, '/admin', WRITE, RPC)
@@ -105,7 +117,9 @@ export abstract class SearchApi {
 }
 
 @ApiPath('/remote-spec')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteSearchApi {
+    /** Search a remote binding. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc()
     @Endpoint(POST, '/search', WRITE, RPC)

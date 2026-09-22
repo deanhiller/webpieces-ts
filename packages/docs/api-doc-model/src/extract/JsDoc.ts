@@ -27,6 +27,16 @@ export class JsDoc {
          * the human one" are different facts, and only the first is worth trusting.
          */
         readonly mcp: string | undefined,
+        /**
+         * The `@mcpHeader <token>` block tag — the MCP 2026 SEP-2243 header a PRIMITIVE tool
+         * parameter is mirrored into (`Mcp-Param-{token}`).
+         *
+         * It is a JSDoc tag and not a decorator because it is a DOCUMENTATION fact about one field
+         * of one wire document, and this epic's rule is that documentation has one source. The
+         * runtime spells the same fact as `WpMcpHeader` inside `@WpDtoField`; #984 deletes that
+         * spelling, and the equivalence gate (#983) is what proves the two say the same thing first.
+         */
+        readonly mcpHeader: string | undefined,
     ) {}
 
     /** Read the JSDoc attached to one declaration. */
@@ -37,6 +47,7 @@ export class JsDoc {
         const bodies: string[] = [];
         let format: string | undefined;
         let mcp: string | undefined;
+        let mcpHeader: string | undefined;
 
         for (const block of blocks) {
             bodies.push(JsDoc.flatten(block.comment));
@@ -47,11 +58,13 @@ export class JsDoc {
                     format = text;
                 } else if (name === 'mcp' && text !== '') {
                     mcp = text;
+                } else if (name === 'mcpHeader' && text !== '') {
+                    mcpHeader = text;
                 }
             }
         }
 
-        return new JsDoc(bodies.join('\n').trim(), format, mcp);
+        return new JsDoc(bodies.join('\n').trim(), format, mcp, mcpHeader);
     }
 
     /**
