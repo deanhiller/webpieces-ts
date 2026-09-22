@@ -17,6 +17,7 @@ import {
     ApiNotFoundError,
     ApiNotImplementedError,
     ApiPath,
+    ApiType,
     ApiPreconditionFailedError,
     ApiRateLimitedError,
     ApiRequestTimeoutError,
@@ -41,9 +42,11 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
     WpResponseDto,
+    MCP,
     POST,
     READ,
     RPC,
+    SVC_TO_SVC,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
@@ -70,6 +73,7 @@ export const GATEWAY_PATH = '/gateway/mcp';
 
 @WpDto()
 export class RemoteRequest {
+    /** Search text */
     @WpDtoField(new WpDtoFieldOptions('Search text', true))
     query!: string;
 
@@ -80,12 +84,15 @@ export class RemoteRequest {
 
 @WpDto()
 export class RemoteResponse {
+    /** Delegated user */
     @WpDtoField(new WpDtoFieldOptions('Delegated user', true))
     user!: string;
 
+    /** Delegated roles */
     @WpDtoField(new WpDtoFieldOptions('Delegated roles', true))
     roles!: string;
 
+    /** Result */
     @WpDtoField(new WpDtoFieldOptions('Result', true))
     result!: string;
 
@@ -97,7 +104,9 @@ export class RemoteResponse {
 }
 
 @ApiPath('/remote-mcp')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteMcpApi {
+    /** Calls a remote Webpieces API. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
@@ -113,7 +122,9 @@ export abstract class RemoteMcpApi {
 }
 
 @ApiPath('/missing-remote-mcp')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class MissingRemoteMcpApi {
+    /** Intentionally absent route. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
@@ -129,7 +140,9 @@ export abstract class MissingRemoteMcpApi {
 }
 
 @ApiPath('/refused-remote-mcp')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class RefusedRemoteApi {
+    /** Nothing listens on this port. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
@@ -145,7 +158,9 @@ export abstract class RefusedRemoteApi {
 }
 
 @ApiPath('/garbage-remote-mcp')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class GarbageRemoteApi {
+    /** Answers an undecodable body. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
@@ -161,7 +176,9 @@ export abstract class GarbageRemoteApi {
 }
 
 @ApiPath('/oidc-fail-remote-mcp')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class OidcFailRemoteApi {
+    /** Its OIDC token cannot be minted. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
@@ -177,7 +194,9 @@ export abstract class OidcFailRemoteApi {
 }
 
 @ApiPath('/local-throw')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class LocalThrowApi {
+    /** Throws the requested failure in-process. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/throw', READ, RPC)
@@ -193,7 +212,9 @@ export abstract class LocalThrowApi {
 }
 
 @ApiPath('/remote-throw')
+@ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteThrowApi {
+    /** Throws the requested failure remotely. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/throw', READ, RPC)

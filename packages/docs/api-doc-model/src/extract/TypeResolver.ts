@@ -511,6 +511,7 @@ export class TypeResolver {
             doc.format,
             min,
             max,
+            doc.mcpHeader,
         );
     }
 

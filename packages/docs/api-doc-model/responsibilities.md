@@ -6,6 +6,7 @@ It exists because **a DTO field's type is erased at runtime**. Reflection can se
 
 ## In Scope
 
+- EVERY `@ApiPath` contract in one `.ts` file (`extractAll`), because a repo does not obey one-contract-per-file — `McpRemoteFixtures.ts` declares seven and the runtime registers MCP tools from all of them. `extractFile` answers the narrower question a manifest entry asks ("what is THE contract here") and is unchanged
 - ONE contract `.ts` file → the `@ApiPath` class, its `@ApiType(...)` declaration, its `@Endpoint(httpMethod, path, operation, kind, options?)` methods, and their request/response DTO graph
 - ONE named type from a file that holds no contract at all (`extractType`), for the document-wide error body a renderer's manifest names and no contract field points at. The SAME resolver, so there is never a second answer to what a type's shape is
 - **Decorator argument constant-folding** — `@Endpoint(POST, SOME_PATH_CONST, READ, RPC)` records the real path and the real verb, including across an import, and including when the verb/operation/trigger arrive as ENUM MEMBERS rather than string literals (which is how the real decorator is called). A const that cannot be folded is a HARD FAILURE (`ApiDocExtractionError`), never a guess: a published document that is quietly wrong about a URL is the one defect nobody catches by reading it
@@ -17,12 +18,27 @@ It exists because **a DTO field's type is erased at runtime**. Reflection can se
 - **Cycles terminate by construction** — every named type is ONE model entry, reserved before its fields are walked. There is NO depth counter anywhere, so a deep-but-finite graph of 8 or 200 named hops is fully expanded; truncating one would publish a document quietly missing a field. Only a self-referential ANONYMOUS type is cut, and by type identity
 - **A union of named object types becomes a union plus a DERIVED discriminator** when every branch carries the same property typed as a single string literal. No invented discriminator for a union TypeScript itself cannot narrow — that is recorded as an `UnmappedType` instead
 - Prose: JSDoc on the class, the method and every field. `@format` lifts onto a scalar (on an array, onto the ITEM). `{@link Foo.bar}` is flattened HERE so no renderer needs to know the inline-tag grammar
+- `@mcpHeader <token>` captured per field — the MCP 2026 SEP-2243 header a primitive parameter is mirrored into (`Mcp-Param-{token}`). It is a JSDoc tag because it documents one field of one wire document, and this epic's rule is that documentation has one source; the runtime spells the same fact as `WpMcpHeader` inside `@WpDtoField`, and #984 deletes that spelling
 - `@mcp <text>` captured as the OPTIONAL agent-facing override, per method and per field. It is left `undefined` when absent rather than defaulted, because "the author wrote an agent-facing sentence" and "we reused the human one" are different facts
 - Anything unrepresentable is recorded as an explicit `UnmappedType` with the TS type text and a pointer-style location — recorded, not dropped, because #982's guard needs something to name
 
+## The ONE renderer that lives here: `McpSchemaRenderer`
+
+`ApiDocModel` → `McpToolDefinition[]`, in exactly the `ApiJsonSchema` shape `DtoSchemaBuilder` produces at boot from reflect-metadata. It is here and not in a renderer package because the MCP projection is not a DOCUMENT — it is the runtime's own schema type, and the point of producing it is to compare the two.
+
+That comparison is the equivalence gate (#983): `McpEquivalence.spec.ts` builds both schemas for a contract that declares its shape BOTH ways and asserts deep equality, and `McpRepoSweep.spec.ts` asks the same question of every `@WpMcpTool` in the repo. #984 deletes `@WpDtoField`'s erasure-repair arguments on the strength of it, and a tool whose input schema quietly loses a `required` entry fails an agent CALL rather than a build.
+
+The renderer deliberately reproduces `DtoSchemaBuilder` rather than emitting the better schema it could:
+
+- NULLABLE is not rendered — `ApiJsonSchema.type` holds one string, so `type: [T, "null"]` is not expressible in the type the runtime publishes
+- a nested DTO is INLINED with the FIELD's prose on it, because MCP has no `$ref`
+- a bound on an array of numbers lands on the ITEM, where OpenAPI puts it; the runtime cannot express it at all
+
+Relaxing any of those to make the comparison agree would destroy the only thing the gate is for, so each is a documented reproduction and the gate's report names the difference.
+
 ## Out of Scope
 
-- Emitting OpenAPI, MCP tool definitions, or any file at all → #982. Keeping the render out is what stops the two renderers drifting apart about what the contract SAYS
+- Emitting an OpenAPI document, or any FILE at all → #982. Keeping the document render out is what stops the two document renderers drifting apart about what the contract SAYS
 - Any nx API, repo path or app-specific type
 - Runtime / `reflect-metadata` introspection
 
