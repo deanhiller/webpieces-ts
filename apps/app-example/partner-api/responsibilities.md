@@ -1,6 +1,6 @@
 # Responsibilities — partner-api
 
-The WORKED EXAMPLE for `@webpieces/openapi-generator`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, and the COMMITTED OpenAPI documents generated from it.
+The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the COMMITTED OpenAPI documents generated from it, and the markdown prose a docs site publishes alongside them.
 
 It exists so the generator is demonstrated against source somebody could plausibly have written rather than against a fixture. Every feature of `wp-openapi` is exercised here by an ordinary-looking contract: `@ApiType` selection, a hidden operator method, derived api-key security, an outbound webhook, a document-wide error contract, and a response header named by constant.
 
@@ -12,10 +12,13 @@ It exists so the generator is demonstrated against source somebody could plausib
 - `openapi.manifest.json`, `description.md`
 - `generated/` — the committed `full-private-openapi.json`, `public-openapi.json` and `mcp-openapi.json`
 - `src/__tests__/openapi-golden.spec.ts` — regenerates them, diffs them, and checks each YAML parses back to its JSON
+- `docs/` — `docs.manifest.json` and the partner-facing prose it names, IN ITS ORDER, which is the second of a docs site's two ordered sources (the first is the document's own `tags[]`)
+- `src/__tests__/docs-site-golden.spec.ts` — renders `public-openapi.json` plus `docs/` into a site and asserts the properties a reader depends on
 
 ## Out of Scope
 
-- Serving any of it. There is no controller and no server wiring: this is a CONTRACT, and what is under test is the document generated from it
+- Serving any of it. There is no controller and no server wiring: this is a CONTRACT, and what is under test is the document generated from it, and the site rendered from that
+- A COMMITTED docs site. The OpenAPI documents are committed because a moved byte there IS a moved published contract; committing the HTML would instead pin the stylesheet, the class names and the markup, none of which a partner has a contract about
 - Generator behaviour with no customer-facing story. That is covered by `packages/docs/openapi-generator`'s own fixtures
 
 ## Why the documents are COMMITTED

@@ -214,6 +214,14 @@
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
             "dependsOn": []
         },
+        "docs-site": {
+            "level": 0,
+            "framework": ["node"],
+            "role": "lib",
+            "shortDescription": "Render a static, three-pane API reference site from **any** conforming OpenAPI 3.0-or-3.1 document plus a directory of markdown prose, and ship the `wp-docs-site` bin.",
+            "responsibilitiesFile": "packages/docs/docs-site/responsibilities.md",
+            "dependsOn": []
+        },
         "eslint-rules": {
             "level": 1,
             "framework": ["node"],
@@ -377,9 +385,10 @@
             "level": 3,
             "framework": ["node"],
             "role": "api-lib",
-            "shortDescription": "The WORKED EXAMPLE for `@webpieces/openapi-generator`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, and the COMMITTED OpenAPI documents generated from it.",
+            "shortDescription": "The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the COMMITTED OpenAPI documents generated from it, and the markdown prose a docs site publishes alongside them.",
             "responsibilitiesFile": "apps/app-example/partner-api/responsibilities.md",
             "dependsOn": [
+                "docs-site",
                 "openapi-generator"
             ]
         },

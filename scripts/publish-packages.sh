@@ -115,6 +115,11 @@ ORDER=(
     # how 0.4.575 shipped with no bins at all.
     packages/docs/api-doc-model
     packages/docs/openapi-generator
+    # docs-site depends on NOTHING — Node builtins only, deliberately, so adding an API reference to
+    # an upstream project never grows that project's dependency surface. It could therefore sit
+    # anywhere in this list; it goes here to keep the docs family together. It carries the
+    # `wp-docs-site` bin in publishConfig.bin, which this script hoists into the dist manifest below.
+    packages/docs/docs-site
     packages/core/ipc-bridge
     packages/core/core-context
     # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm

@@ -1,0 +1,31 @@
+{
+    "name": "docs-site",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/docs/docs-site/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/docs/docs-site/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/docs/docs-site",
+                "main": "packages/docs/docs-site/src/index.ts",
+                "tsConfig": "packages/docs/docs-site/tsconfig.lib.json",
+                "assets": [
+                    "packages/docs/docs-site/package.json",
+                    "packages/docs/docs-site/README.md"
+                ]
+            }
+        },
+        "ci": {
+            "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}

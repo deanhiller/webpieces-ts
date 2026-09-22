@@ -1,0 +1,28 @@
+{
+    "name": "@webpieces/docs-site",
+    "version": "0.0.0-dev",
+    "description": "Render a static, three-pane API reference site from any OpenAPI 3.0-or-3.1 document plus a directory of markdown prose. Node builtins only. Ships the wp-docs-site bin.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/docs/docs-site"
+    },
+    "keywords": [
+        "webpieces",
+        "openapi",
+        "docs",
+        "static-site",
+        "typescript"
+    ],
+    "publishConfig": {
+        "bin": {
+            "wp-docs-site": "./src/cli/wp-docs-site.js"
+        },
+        "access": "public"
+    }
+}
