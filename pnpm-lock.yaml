@@ -199,6 +199,16 @@ importers:
         specifier: 9.0.2
         version: 9.0.2
 
+  apps/app-example/partner-api:
+    dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../../packages/core/core-util
+    devDependencies:
+      '@webpieces/openapi-generator':
+        specifier: workspace:*
+        version: link:../../../packages/docs/openapi-generator
+
   apps/app-example/server2-api:
     dependencies:
       '@webpieces/core-util':
@@ -274,6 +284,18 @@ importers:
 
   packages/docs/api-doc-model:
     dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/docs/openapi-generator:
+    dependencies:
+      '@webpieces/api-doc-model':
+        specifier: workspace:*
+        version: link:../api-doc-model
       typescript:
         specifier: 5.9.3
         version: 5.9.3

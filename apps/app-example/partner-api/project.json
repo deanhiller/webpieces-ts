@@ -1,0 +1,28 @@
+{
+    "name": "partner-api",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/app-example/partner-api/src",
+    "projectType": "library",
+    "tags": ["framework:node", "role:api-lib"],
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run apps/app-example/partner-api/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/app-example/partner-api",
+                "main": "apps/app-example/partner-api/src/index.ts",
+                "tsConfig": "apps/app-example/partner-api/tsconfig.lib.json",
+                "assets": ["apps/app-example/partner-api/package.json"]
+            }
+        },
+        "ci": {
+            "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
+        }
+    }
+}

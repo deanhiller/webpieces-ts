@@ -102,8 +102,19 @@ ORDER=(
     # and mcp-server before it, the NAME has to be bootstrapped on npm by an authenticated manual
     # publish once — npm trusted publishing (OIDC + --provenance) can publish to an existing scoped
     # name but cannot CREATE one, and the first automated release 404s until somebody has.
-    packages/docs/api-doc-model
     packages/core/core-util
+    # The docs family publishes with the SERVER libs, and BOTH depend on core-util — they read its
+    # decorator symbols so a rename is a compile error rather than a silently empty document — so they
+    # must follow it here. openapi-generator additionally depends on api-doc-model.
+    #
+    # Like core-mock and mcp-server before them, each NAME has to be bootstrapped on npm by an
+    # authenticated manual publish once: npm trusted publishing (OIDC + --provenance) can publish to an
+    # existing scoped name but cannot CREATE one, and the first automated release 404s until somebody
+    # has. openapi-generator also carries the `wp-openapi` bin in publishConfig.bin, which this script
+    # hoists into the dist manifest below — npm (unlike pnpm) leaves publishConfig.bin alone, which is
+    # how 0.4.575 shipped with no bins at all.
+    packages/docs/api-doc-model
+    packages/docs/openapi-generator
     packages/core/ipc-bridge
     packages/core/core-context
     # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm

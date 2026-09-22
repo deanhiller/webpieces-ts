@@ -1,0 +1,39 @@
+{
+    "title": "Widgets API",
+    "version": "2.1.0",
+    "servers": [
+        {
+            "url": "https://widgets.example.com"
+        }
+    ],
+    "apisWhy": "THE ORDER OF THIS ARRAY IS THE PUBLISHED SIDEBAR ORDER. Alphabetising it reorders customer-facing navigation.",
+    "apis": [
+        {
+            "entry": "WidgetsApi.ts",
+            "tag": "Widgets"
+        },
+        {
+            "entry": "EventsApi.ts",
+            "tag": "Events",
+            "kind": "webhook"
+        }
+    ],
+    "securitySchemeNames": ["WidgetKey", "WidgetOrg"],
+    "errors": {
+        "entry": "Errors.ts",
+        "type": "ApiError",
+        "responses": [
+            {
+                "status": "400",
+                "description": "The request failed validation."
+            }
+        ]
+    },
+    "responseHeaders": [
+        {
+            "entry": "Headers.ts",
+            "nameConstant": "TRACE_HEADER",
+            "description": "Correlates this response with our logs."
+        }
+    ]
+}

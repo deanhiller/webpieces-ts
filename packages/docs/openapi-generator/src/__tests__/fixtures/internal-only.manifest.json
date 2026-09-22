@@ -1,0 +1,12 @@
+{
+    "title": "Internal API",
+    "version": "1.0.0",
+    "apisWhy": "One contract declaring no @ApiType, so ONLY the internal document is written.",
+    "apis": [
+        {
+            "entry": "InternalOnlyApi.ts",
+            "tag": "Internal"
+        }
+    ],
+    "securitySchemeNames": []
+}

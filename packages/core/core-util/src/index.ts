@@ -83,6 +83,20 @@ export {
     QueryParam,
     getHttpParameterDeclarations,
 } from './http/http-parameter-decorators';
+export { WpInt, WpMin, WpMax, NUMERIC_METADATA_KEYS } from './http/numeric-field-decorators';
+export type { Integer } from './http/numeric-field-decorators';
+export {
+    ApiType,
+    SVC_TO_SVC,
+    EXTERNAL_CUSTOMER,
+    MCP,
+    API_TYPE_METADATA_KEY,
+    DEFAULT_API_TYPES,
+    getApiTypes,
+    getApiTypeEndpointNames,
+    assertApiTypeMatchesMcpTools,
+} from './http/api-type';
+export type { ApiTypeKind } from './http/api-type';
 export {
     WpInternal,
     WpIpcEndpoint,
@@ -301,7 +315,7 @@ export type { MaskMode } from './http/LogFieldMask';
 // RequestContext-backed impl lives in @webpieces/core-context, the browser one in
 // @webpieces/http-client-browser; each is CONSTRUCTED by its package, never installed globally.
 export { ApiCallInfo } from './http/ApiCallInfo';
-export type { ApiType, ApiResult } from './http/ApiCallInfo';
+export type { ApiCallDirection, ApiResult } from './http/ApiCallInfo';
 // Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
 export {
     ApiCallLogName,

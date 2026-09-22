@@ -1,0 +1,12 @@
+{
+    "title": "Widgets API",
+    "version": "2.1.0",
+    "apisWhy": "The same contract as single.manifest.json, with ONE published scheme name for a regime that declares TWO credentials.",
+    "apis": [
+        {
+            "entry": "WidgetsApi.ts",
+            "tag": "Widgets"
+        }
+    ],
+    "securitySchemeNames": ["WidgetKey"]
+}

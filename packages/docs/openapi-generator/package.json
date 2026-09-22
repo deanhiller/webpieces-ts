@@ -1,0 +1,32 @@
+{
+    "name": "@webpieces/openapi-generator",
+    "version": "0.0.0-dev",
+    "description": "Render an ApiDocModel to OpenAPI 3.1.0 — the canonical internal document and the customer-published one, JSON and YAML, from one generation pass. Ships the wp-openapi bin.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/docs/openapi-generator"
+    },
+    "keywords": [
+        "webpieces",
+        "openapi",
+        "mcp",
+        "docs",
+        "typescript"
+    ],
+    "publishConfig": {
+        "bin": {
+            "wp-openapi": "./src/cli/wp-openapi.js"
+        },
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/api-doc-model": "workspace:*",
+        "typescript": "5.9.3"
+    }
+}

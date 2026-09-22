@@ -1,0 +1,11 @@
+{
+    "title": "Unmapped API",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "UnmappedApi.ts",
+            "tag": "Unmapped"
+        }
+    ],
+    "securitySchemeNames": []
+}

@@ -1,0 +1,21 @@
+{
+    "api": "PartnerDeliveryWebhookApi",
+    "owner": "partner-api",
+    "apiKind": "rpc",
+    "basePath": "/partner-webhooks",
+    "methods": [
+        {
+            "name": "orderStateChanged",
+            "path": "/order.state-changed",
+            "kind": "rpc",
+            "operation": "write",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}

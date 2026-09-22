@@ -7,7 +7,7 @@
  * Its own file, because a hard failure takes the whole model down — which is the behaviour being
  * asserted, and the reason it cannot share a file with anything else.
  */
-import { ApiPath, Endpoint } from './contract-stubs';
+import { ApiPath, Endpoint, POST, READ, RPC, WpAuthPublic } from '@webpieces/core-util';
 
 export function runtimePath(): string {
     return process.env['SOME_PATH'] ?? '/whatever';
@@ -19,7 +19,8 @@ export interface Empty {
 
 @ApiPath('/api/unfoldable')
 export class UnfoldablePathApi {
-    @Endpoint(runtimePath(), 'rpc')
+    @Endpoint(POST, runtimePath(), READ, RPC)
+    @WpAuthPublic('Fixture only.')
     go(request: Empty): Promise<void> {
         throw new Error('contract');
     }

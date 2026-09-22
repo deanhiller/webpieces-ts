@@ -1,0 +1,47 @@
+{
+    "api": "PartnerOrdersApi",
+    "owner": "partner-api",
+    "apiKind": "rpc",
+    "basePath": "/orders",
+    "methods": [
+        {
+            "name": "fetchOrders",
+            "path": "/fetch",
+            "kind": "rpc",
+            "operation": "read",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "cancelOrder",
+            "path": "/cancel",
+            "kind": "rpc",
+            "operation": "write",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        },
+        {
+            "name": "reindex",
+            "path": "/reindex",
+            "kind": "rpc",
+            "operation": "write",
+            "httpMethod": "POST",
+            "parameters": [
+                {
+                    "index": 0,
+                    "source": "body"
+                }
+            ]
+        }
+    ]
+}

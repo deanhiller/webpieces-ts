@@ -18,4 +18,4 @@ model.types; // ReadonlyMap<string, DocumentedType> — a renderer's $ref target
 model.unmapped; // UnmappedType[] — recorded, never dropped
 ```
 
-It depends on `typescript` and nothing else, so it can be pointed at any project's contract. See `responsibilities.md` for what is in and out of scope, why that dependency constraint is the product rather than tidiness, and why both `Integer` and `@WpInt()` are accepted spellings of integer-ness.
+It depends on `typescript` and `@webpieces/core-util`, from which it takes every decorator NAME it matches on — so renaming a decorator is a compile error here rather than a literal that quietly stops matching and empties a generated document. See `responsibilities.md` for what is in and out of scope, why that import is not the coupling it looks like, and why both `Integer` and `@WpInt()` are accepted spellings of integer-ness.

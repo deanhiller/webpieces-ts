@@ -1,0 +1,50 @@
+{
+    "title": "Example Orders API",
+    "version": "1.0.0",
+    "descriptionFile": "description.md",
+    "servers": [
+        {
+            "url": "https://api.example.com",
+            "description": "Production."
+        }
+    ],
+    "apisWhy": "THE ORDER OF THIS ARRAY IS THE PUBLISHED SIDEBAR ORDER, end to end. Alphabetising it is not a cleanup, it reorders partner-facing navigation.",
+    "apis": [
+        {
+            "entry": "src/PartnerOrdersApi.ts",
+            "tag": "Orders"
+        },
+        {
+            "entry": "src/PartnerDeliveryWebhookApi.ts",
+            "tag": "Webhooks",
+            "kind": "webhook"
+        }
+    ],
+    "securitySchemeNamesWhy": "The published scheme KEYS only, one per credential, in the order @WpAuthApiKey declares them. Everything else about the schemes \u2014 the type, the location, the header name, the prose \u2014 is DERIVED from that decorator, because a copy here is a copy the running server never reads.",
+    "securitySchemeNames": ["PartnerApiKey", "PartnerOrganization"],
+    "errors": {
+        "entry": "src/ApiErrors.ts",
+        "type": "ApiErrorResponse",
+        "responses": [
+            {
+                "status": "400",
+                "description": "The request body failed validation. `details` names the fields."
+            },
+            {
+                "status": "401",
+                "description": "The api key or the organization header is missing or not valid."
+            },
+            {
+                "status": "404",
+                "description": "The addressed resource does not exist for this organization."
+            }
+        ]
+    },
+    "responseHeaders": [
+        {
+            "entry": "src/ResponseHeaders.ts",
+            "nameConstant": "REQUEST_ID_HEADER",
+            "description": "Correlates this response with our logs. Quote it in a support request."
+        }
+    ]
+}

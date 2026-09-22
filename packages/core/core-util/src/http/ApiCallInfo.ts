@@ -33,7 +33,15 @@ import { ApiMethodInfo } from './ApiMethodInfo';
  */
 
 /** Which half of the exchange this tag describes: the outgoing 'request' or the returning 'response'. */
-export type ApiType = 'request' | 'response';
+/**
+ * Which HALF of one api call a log line describes.
+ *
+ * Renamed from `ApiType`, which collided with the `@ApiType(...)` CONTRACT decorator and read as if
+ * it were about the kind of API rather than the direction of one line. Per
+ * `.claude/rules/no-backwards-compat.md` the old spelling is deleted rather than aliased, so a caller
+ * on the old name stops compiling and the error names this one.
+ */
+export type ApiCallDirection = 'request' | 'response';
 
 /**
  * Response outcome. 'success' covers 2xx AND user errors (400/401/403/404/266 — a successfully
@@ -49,7 +57,7 @@ export class ApiCallInfo {
         /** The call identity (side, apiClass, methodName, controllerName) — surfaces nested under
          *  `jsonPayload.api.method`. */
         readonly method: ApiMethodInfo,
-        readonly type: ApiType,
+        readonly type: ApiCallDirection,
         /** Response only — undefined on the 'request' tag. */
         readonly result?: ApiResult,
         /**
