@@ -7,6 +7,17 @@ on:
 jobs:
     build-and-test:
         runs-on: ubuntu-latest
+        # A wedged job is worse than a failed one: it reports "pending" forever while holding a
+        # runner, and whoever is waiting cannot tell it apart from a slow build. Run 35722585020
+        # stopped producing output 10 seconds into the CI step and sat there for 95 minutes before a
+        # human killed it, reaping 8 orphan vitest processes on the way out. With no
+        # `timeout-minutes` the job inherits GitHub's default of 360.
+        #
+        # 30 is ~2x the worst honest run measured over the last 15 (3.5-15.9 min, the two most recent
+        # toolchain bumps at 11.9 and 12.6), so a cold Nx cache plus a base-package change that makes
+        # nearly every project affected still fits comfortably. A timed-out job keeps its log, which
+        # is what makes the wedge diagnosable at all.
+        timeout-minutes: 30
 
         steps:
             - name: Checkout code
