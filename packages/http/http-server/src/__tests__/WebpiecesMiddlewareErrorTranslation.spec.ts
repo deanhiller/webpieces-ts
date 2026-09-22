@@ -10,6 +10,7 @@ import {
     WebpiecesDefaultErrorTranslator,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
+import { RequestContextHeaders } from '@webpieces/core-context';
 
 /** A custom app error at HTTP 460 — the concrete driver (mirrors a consumer app's AiBadRequestError). */
 class AiBadRequestError extends Error {
@@ -83,12 +84,9 @@ function asResponse(fake: FakeResponse): import('express').Response {
 
 /** ExpressWrapper never needs its ctor args for handleError; a bare instance suffices. */
 function newWrapper(): ExpressWrapper {
-    return new ExpressWrapper(
-        () => Promise.resolve({}),
-        '/test',
-        // webpieces-disable no-any-unknown -- RequestContextHeaders is unused by handleError
-        {} as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
-    );
+    // A REAL RequestContextHeaders (it is stateless): handleError's response path writes every
+    // context key that declares a `responseHeader`, so the collaborator is genuinely used now.
+    return new ExpressWrapper(() => Promise.resolve({}), '/test', new RequestContextHeaders());
 }
 
 /**

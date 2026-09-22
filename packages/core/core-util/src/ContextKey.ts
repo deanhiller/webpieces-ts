@@ -14,6 +14,13 @@
  *                 this HTTP header name (inbound request -> context, and context ->
  *                 outbound request). e.g. 'x-request-id'. When UNSET, the key is
  *                 context-only and never leaves the process (method-meta, recorder).
+ * - `responseHeader` OPTIONAL, and the exact MIRROR of `httpHeader`. When set, this key is written
+ *                 back onto every RESPONSE under this header name, and a webpieces client reads it
+ *                 off the response into the CALLER's context — so a value travels UP the call tree
+ *                 hop by hop. Independent of `httpHeader`: a key may ride requests, responses,
+ *                 both, or neither.
+ * - `responseMerge` HOW a response value combines with what the caller already holds — `collect`
+ *                 (the default), `first` or `last`. See {@link ResponseMerge}.
  * - `trust`       REQUIRED, and stated by WHICH FACTORY you call. See below.
  * - `maskInLogs`  When true, the value is masked (partially) in logs. This is about
  *                 LOG REDACTION and has NOTHING to do with `trust` — a userId is
@@ -127,6 +134,25 @@ export type AnyUntrustedContextKey = ContextKey<unknown, 'untrusted'>;
  */
 export type AnyContextKey = AnyTrustedContextKey | AnyUntrustedContextKey;
 
+/**
+ * HOW a RESPONSE value merges with whatever the caller's context already holds for the same key.
+ *
+ * Declared per KEY, because fan-out is the normal case and not the exception: one inbound request
+ * that calls five services produces FIVE values for one response key, and a silent last-write-wins
+ * keeps one of them and throws four away without saying so. Naming the policy on the key is what
+ * makes that choice visible at the definition rather than emergent at runtime.
+ *
+ * - `collect`  APPEND to a list (the value type is therefore `string[]`). The default, and the right
+ *              answer for every DIAGNOSTIC key — cache status, backend version, a downstream warning
+ *              — where "all five" is the interesting answer.
+ * - `first`    KEEP what is already there; the first value seen wins. This is the policy for a key
+ *              whose value belongs to THIS hop and must not be replaced by a callee's echo of it —
+ *              {@link WebpiecesCoreHeaders.REQUEST_ID} is exactly that.
+ * - `last`     OVERWRITE. The last response seen wins. Use it only where a single, latest value is
+ *              genuinely meant.
+ */
+export type ResponseMerge = 'collect' | 'first' | 'last';
+
 export class ContextKey<V, T extends Trust = Trust> {
     /**
      * Phantom marker carrying the value type {@link V}. It has no runtime existence (`declare`, never
@@ -151,6 +177,24 @@ export class ContextKey<V, T extends Trust = Trust> {
      * 'x-request-id'). Undefined = context-only, never transferred.
      */
     readonly httpHeader?: string;
+
+    /**
+     * HTTP header name this key is written back on the RESPONSE under (e.g. 'x-request-id').
+     * Undefined = this key never rides a response.
+     *
+     * It is the exact mirror of {@link httpHeader}, and the two are INDEPENDENT: a key may travel
+     * out on requests only, back on responses only, both, or neither. The server writes every key
+     * that sets it onto every response from one choke point; a webpieces client reads it back off
+     * the response into the CALLER's context, which is what lets a value climb the call tree hop by
+     * hop with nothing in between mentioning HTTP.
+     */
+    readonly responseHeader?: string;
+
+    /**
+     * How a response value merges with what the context already holds — see {@link ResponseMerge}.
+     * Only consulted when {@link responseHeader} is set; ignored otherwise.
+     */
+    readonly responseMerge: ResponseMerge;
 
     /** The runtime twin of the phantom {@link __trust}. See the class doc. */
     readonly trust: Trust;
@@ -181,6 +225,8 @@ export class ContextKey<V, T extends Trust = Trust> {
         httpHeader: string | undefined,
         maskInLogs: boolean,
         isLogged: boolean,
+        responseHeader: string | undefined,
+        responseMerge: ResponseMerge,
     ) {
         this.name = name;
         this.trust = trust;
@@ -188,6 +234,8 @@ export class ContextKey<V, T extends Trust = Trust> {
         this.httpHeader = httpHeader;
         this.maskInLogs = maskInLogs;
         this.isLogged = isLogged;
+        this.responseHeader = responseHeader;
+        this.responseMerge = responseMerge;
     }
 
     /**
@@ -206,6 +254,8 @@ export class ContextKey<V, T extends Trust = Trust> {
         httpHeader?: string,
         maskInLogs = false,
         isLogged = true,
+        responseHeader?: string,
+        responseMerge: ResponseMerge = 'collect',
     ): ContextKey<V, 'trusted'> {
         return new ContextKey<V, 'trusted'>(
             name,
@@ -214,6 +264,8 @@ export class ContextKey<V, T extends Trust = Trust> {
             httpHeader,
             maskInLogs,
             isLogged,
+            responseHeader,
+            responseMerge,
         );
     }
 
@@ -231,6 +283,8 @@ export class ContextKey<V, T extends Trust = Trust> {
         httpHeader?: string,
         maskInLogs = false,
         isLogged = true,
+        responseHeader?: string,
+        responseMerge: ResponseMerge = 'collect',
     ): ContextKey<V, 'untrusted'> {
         return new ContextKey<V, 'untrusted'>(
             name,
@@ -239,12 +293,46 @@ export class ContextKey<V, T extends Trust = Trust> {
             httpHeader,
             maskInLogs,
             isLogged,
+            responseHeader,
+            responseMerge,
         );
     }
 
     /** True when this key is transferred over HTTP (has an httpHeader). */
     isTransferred(): boolean {
         return this.httpHeader !== undefined;
+    }
+
+    /** True when this key rides back on the RESPONSE (has a responseHeader). */
+    isResponseTransferred(): boolean {
+        return this.responseHeader !== undefined;
+    }
+
+    /**
+     * The value to STORE for this key given what the context already holds and what one response
+     * just carried, per this key's {@link responseMerge}.
+     *
+     * It lives on the KEY rather than in the two client packages because the policy is a property of
+     * the declaration, and because node and browser must not be able to answer it differently.
+     *
+     * `collect` returns an ARRAY, which is why a collecting key's value type is `string[]`: a
+     * non-array `existing` (somebody put a scalar under a collecting key) is folded in as the first
+     * element rather than thrown away, so the fan-out answer is never silently truncated.
+     */
+    // webpieces-disable no-any-unknown -- the context store is honestly type-erased; the key's own V types the public accessors
+    mergeResponseValue(existing: unknown, incoming: string): unknown {
+        switch (this.responseMerge) {
+            case 'first':
+                return existing === undefined ? incoming : existing;
+            case 'last':
+                return incoming;
+            case 'collect':
+                if (Array.isArray(existing)) {
+                    // webpieces-disable no-any-unknown -- a collect key's accumulated list is honestly type-erased here, exactly like every other key-agnostic serialization read
+                    return [...(existing as unknown[]), incoming];
+                }
+                return existing === undefined ? [incoming] : [existing, incoming];
+        }
     }
 
     /**

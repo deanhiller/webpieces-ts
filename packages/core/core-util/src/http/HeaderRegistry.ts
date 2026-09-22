@@ -21,8 +21,9 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  *
  * Duplicate validation (port of Java checkForDuplicates) runs at configure() time,
  * so conflicting definitions fail fast at startup:
- * - Two keys with the same `name` must agree on httpHeader/trust/maskInLogs/isLogged.
+ * - Two keys with the same `name` must agree on httpHeader/responseHeader/trust/maskInLogs/isLogged.
  * - Two keys with the same `httpHeader` must agree on `name`.
+ * - Two keys with the same `responseHeader` must agree on `name`.
  * - Exact duplicates collapse to one entry.
  */
 export class HeaderRegistry {
@@ -39,9 +40,11 @@ export class HeaderRegistry {
     // instead of re-filtering the full key list on each call. These are reachable
     // only through HeaderRegistry.get(), which throws until configure() has run.
     private readonly transferredKeys: AnyContextKey[];
+    private readonly responseTxfrKeys: AnyContextKey[];
     private readonly securedNames: string[];
     private readonly loggedKeys: AnyContextKey[];
     private readonly byHttpHeader: Map<string, AnyContextKey>;
+    private readonly byResponseHeader: Map<string, AnyContextKey>;
 
     private constructor(keys: AnyContextKey[]) {
         this.keys = this.checkForDuplicates(keys);
@@ -52,6 +55,13 @@ export class HeaderRegistry {
         this.loggedKeys = this.keys.filter((k: AnyContextKey) => k.isLogged);
         this.byHttpHeader = new Map(
             this.transferredKeys.map((k: AnyContextKey): [string, AnyContextKey] => [k.httpHeader!.toLowerCase(), k]),
+        );
+        this.responseTxfrKeys = this.keys.filter((k: AnyContextKey) => k.responseHeader !== undefined);
+        this.byResponseHeader = new Map(
+            this.responseTxfrKeys.map((k: AnyContextKey): [string, AnyContextKey] => [
+                k.responseHeader!.toLowerCase(),
+                k,
+            ]),
         );
     }
 
@@ -97,6 +107,19 @@ export class HeaderRegistry {
         return this.transferredKeys;
     }
 
+    /**
+     * Keys that ride back on the RESPONSE (context -> outbound response on a server, response ->
+     * caller's context in a client): those with a `responseHeader` set. The exact mirror of
+     * {@link getTransferredKeys}, precomputed in the constructor for the same reason — the server
+     * writes them on EVERY response, so this is a hot path.
+     *
+     * This list is the whole reason there is no hard-coded response header anywhere in webpieces:
+     * a key joins it by DECLARING a `responseHeader`, with no framework edit.
+     */
+    getResponseTxfrKeys(): AnyContextKey[] {
+        return this.responseTxfrKeys;
+    }
+
     /** Names (log keys) whose values must be masked in logs. maskInLogs=true. */
     getMaskedNames(): string[] {
         return this.securedNames;
@@ -133,12 +156,22 @@ export class HeaderRegistry {
     }
 
     /**
-     * Collapse exact duplicates, throw on conflicting definitions sharing a `name`
-     * or an `httpHeader`.
+     * Look up a key by its RESPONSE header name (case-insensitive). O(1) via the precomputed map.
+     * This is what a client calls for each header of a response it just received, to decide whether
+     * that header carries a context value at all.
+     */
+    findByResponseHeader(responseHeader: string): AnyContextKey | undefined {
+        return this.byResponseHeader.get(responseHeader.toLowerCase());
+    }
+
+    /**
+     * Collapse exact duplicates, throw on conflicting definitions sharing a `name`,
+     * an `httpHeader` or a `responseHeader`.
      */
     private checkForDuplicates(allKeys: AnyContextKey[]): AnyContextKey[] {
         const byName = new Map<string, AnyContextKey>();
         const byHttpHeader = new Map<string, AnyContextKey>();
+        const byResponseHeader = new Map<string, AnyContextKey>();
 
         for (const key of allKeys) {
             const nameKey = key.name.toLowerCase();
@@ -161,13 +194,26 @@ export class HeaderRegistry {
                 }
                 byHttpHeader.set(headerKey, key);
             }
+
+            if (key.responseHeader !== undefined) {
+                const responseKey = key.responseHeader.toLowerCase();
+                const clash = byResponseHeader.get(responseKey);
+                if (clash) {
+                    throw new Error(
+                        `Duplicate ContextKey responseHeader '${key.responseHeader}': ` +
+                        `defined by key '${clash.name}' AND key '${key.name}'. ` +
+                        `Each HTTP response header must map to exactly one context key.`,
+                    );
+                }
+                byResponseHeader.set(responseKey, key);
+            }
         }
 
         return Array.from(byName.values());
     }
 
     /**
-     * Two keys sharing a `name` must agree on httpHeader/trust/maskInLogs/isLogged,
+     * Two keys sharing a `name` must agree on httpHeader/responseHeader/responseMerge/trust/maskInLogs/isLogged,
      * otherwise the platform would behave differently depending on which module's
      * definition happened to load first.
      */
@@ -175,6 +221,16 @@ export class HeaderRegistry {
         const conflicts: string[] = [];
         if (existing.httpHeader !== duplicate.httpHeader) {
             conflicts.push(`httpHeader ('${existing.httpHeader}' vs '${duplicate.httpHeader}')`);
+        }
+        if (existing.responseHeader !== duplicate.responseHeader) {
+            conflicts.push(
+                `responseHeader ('${existing.responseHeader}' vs '${duplicate.responseHeader}')`,
+            );
+        }
+        if (existing.responseMerge !== duplicate.responseMerge) {
+            conflicts.push(
+                `responseMerge ('${existing.responseMerge}' vs '${duplicate.responseMerge}')`,
+            );
         }
         if (existing.trust !== duplicate.trust) {
             // The most dangerous disagreement of the three: one module says this key is a proven

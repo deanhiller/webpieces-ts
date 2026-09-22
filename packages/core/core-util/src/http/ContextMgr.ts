@@ -1,5 +1,5 @@
 import { ContextKey } from '../ContextKey';
-import { ContextReader } from './ContextReader';
+import { ContextStore } from './ContextWriter';
 import { DestinationTrust } from './DestinationTrust';
 import { HeaderRegistry } from './HeaderRegistry';
 import { ServiceInfo } from './ServiceInfo';
@@ -30,8 +30,8 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  */
 export class ContextMgr {
     constructor(
-        /** The app-held store that provides context-key values. */
-        public readonly contextReader: ContextReader,
+        /** The app-held store context-key values are read from AND written back into. */
+        public readonly contextStore: ContextStore,
     ) {}
 
     /**
@@ -51,7 +51,7 @@ export class ContextMgr {
      * The rule is applied here anyway rather than argued away, because the OTHER guarantee people
      * reach for — "`MutableContextStore.set` only accepts an untrusted key, so a browser store
      * cannot HOLD a trusted value" — is true of that store and NOT of the seam: {@link ContextMgr}
-     * takes any app-supplied {@link ContextReader}, whose `read` is handed an `AnyContextKey`. One
+     * takes any app-supplied {@link ContextStore}, whose `read` is handed an `AnyContextKey`. One
      * enforced rule in both builders beats a browser-only exemption resting on an implementation
      * detail of one implementation.
      *
@@ -64,7 +64,7 @@ export class ContextMgr {
             if (!destination.allows(key)) {
                 continue;
             }
-            const value = this.contextReader.read(key);
+            const value = this.contextStore.read(key);
             if (value !== undefined && value !== null && value !== '') {
                 outbound.set(key.httpHeader!, value);
             }
@@ -82,5 +82,35 @@ export class ContextMgr {
         }
 
         return outbound;
+    }
+
+    /**
+     * RESPONSE -> the store: every key that declares a `responseHeader` and appears on a response
+     * this browser just received, merged into the app-held store per the key's own
+     * {@link ContextKey.responseMerge}.
+     *
+     * The browser twin of `RequestContextHeaders.acceptResponseHeaders`, and the reason a value set
+     * by a server reaches the page without the page naming a header.
+     *
+     * TRUSTED keys are DROPPED here, unconditionally and without consulting `destination`, and the
+     * `if` is what makes that a compile-time fact rather than a convention: {@link ContextWriter.set}
+     * takes an {@link AnyUntrustedContextKey}, so a browser store CANNOT hold a proven value. That is
+     * the same rule as the outbound direction reaches by a different route — every browser
+     * destination is `@WpAuthJwt` or `@WpAuthPublic`, so `destination.allows` would refuse them
+     * anyway — and `destination` is still threaded and still applied, so a future browser destination
+     * that DID authenticate its caller does not silently start believing response headers.
+     */
+    acceptResponseHeaders(headers: Headers, destination: DestinationTrust): void {
+        for (const key of HeaderRegistry.get().getResponseTxfrKeys()) {
+            const value = headers.get(key.responseHeader!);
+            if (value === null || value === '') {
+                continue;
+            }
+            if (!destination.allows(key) || key.isTrusted()) {
+                // DROPPED: a browser proves nothing, so it may never hold a trusted value.
+                continue;
+            }
+            this.contextStore.set(key, key.mergeResponseValue(this.contextStore.readValue?.(key), value));
+        }
     }
 }

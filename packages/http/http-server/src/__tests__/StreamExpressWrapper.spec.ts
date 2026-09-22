@@ -1,22 +1,24 @@
 import 'reflect-metadata';
 import { EventEmitter } from 'node:events';
 import { PassThrough, Readable } from 'node:stream';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeAll } from 'vitest';
 import {
     ApiBadRequestError,
+    HeaderRegistry,
     RequestStream,
     RouteMetadata,
     StreamCorrelation,
     StreamEnvelope,
-    StreamingEndpointMetadata,
     StreamTransportError,
     StreamWriter,
+    StreamingEndpointMetadata,
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
     WRITE,
 } from '@webpieces/core-util';
 import { StreamExpressWrapper } from '../StreamExpressWrapper';
+import { RequestContextHeaders } from '@webpieces/core-context';
 
 @WpDto()
 class InputEvent {
@@ -121,11 +123,20 @@ function response(fake: FakeResponse): import('express').Response {
 }
 
 function headers(): ConstructorParameters<typeof StreamExpressWrapper>[2] {
-    // webpieces-disable no-any-unknown -- context transfer is independently tested; this records that it happens before the method
-    return { fillFromRequest: vi.fn() } as unknown as ConstructorParameters<
-        typeof StreamExpressWrapper
-    >[2];
+    // A REAL RequestContextHeaders with the inbound fill spied on: the response path reads response
+    // context keys off the same collaborator, so a bare object no longer stands in for it.
+    const real = new RequestContextHeaders();
+    real.fillFromRequest = vi.fn();
+    return real;
 }
+
+/**
+ * Every real server calls this at startup. These specs drive the response path, which reads the
+ * registry's response keys, so the registry has to exist here too.
+ */
+beforeAll(() => {
+    HeaderRegistry.configure([], /*platformHeaders*/ true);
+});
 
 describe('StreamExpressWrapper', () => {
     it('runs the handshake before SSE and streams correlated NDJSON events as framed SSE', async () => {

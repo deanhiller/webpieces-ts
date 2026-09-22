@@ -33,6 +33,7 @@ export { ClientErrorTranslator } from './ClientErrorTranslator';
 // The CLIENT-side transport boundary: a fetch Response becomes the ONE HttpResponseDto an app's
 // ErrorTranslator sees, so node and browser hand `fromWire` the identical shape.
 export { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
+export { RequestBodySerializer } from './RequestBodySerializer';
 export { ResponseBodyReader } from './ResponseBodyReader';
 // The OUTBOUND filter chain: the mutable request a filter edits, and one registration of a filter
 // at a priority. The `Filter`/`Service`/`FilterChain` abstraction itself lives in

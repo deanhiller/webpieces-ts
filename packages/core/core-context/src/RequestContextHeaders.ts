@@ -15,8 +15,10 @@ import { RequestContext } from './RequestContext';
 /**
  * RequestContextHeaders - the magic context ↔ the wire, for a SERVER. Both directions live here:
  *
- *   inbound   {@link fillFromRequest}       the published HttpRequest's headers -> the context
- *   outbound  {@link buildOutboundHeaders}  the context -> the next hop's headers
+ *   inbound       {@link fillFromRequest}        the published HttpRequest's headers -> the context
+ *   outbound      {@link buildOutboundHeaders}   the context -> the next hop's request headers
+ *   response-out  {@link buildResponseHeaders}   the context -> THIS hop's response headers
+ *   response-in   {@link acceptResponseHeaders}  a callee's response headers -> the context
  *
  * Reads the AsyncLocalStorage-backed {@link RequestContext} straight through — no ContextReader,
  * no ContextMgr, no abstract base. A server has exactly one place its context lives, and the
@@ -80,6 +82,91 @@ export class RequestContextHeaders {
         }
 
         return headers;
+    }
+
+    /**
+     * OUTBOUND, RESPONSE direction — the mirror of {@link buildOutboundHeaders}: every key that
+     * declares a `responseHeader` and has a value in this context, under its response wire name.
+     *
+     * This is what the server's ONE response choke point writes onto EVERY response (success and
+     * error, webpieces' default body and an app's own). Before it there was a single hard-coded
+     * `res.setHeader('x-request-id', ...)` in `ExpressWrapper.stampTransactionId` that no other key
+     * could join without editing that method; `x-request-id` is now an ordinary registry entry and
+     * the loop is the whole feature.
+     *
+     * Returns an EMPTY map outside a `run(...)` block rather than throwing — deliberately, and unlike
+     * {@link buildOutboundHeaders}. A response is written on paths where the context was never
+     * established: a malformed or oversize body is refused BEFORE `fillFromRequest` mints an id. That
+     * is the accepted known issue the deleted `stampTransactionId` recorded, and throwing here would
+     * turn a 400 into a 500.
+     *
+     * A `collect` key holds a LIST, so it is emitted as the comma-separated list HTTP already has a
+     * grammar for. A value that is neither a string nor a list of strings is skipped: a response
+     * header is text, and an object-valued key (the api tag, the recorder) has no wire form.
+     */
+    buildResponseHeaders(): Map<string, string> {
+        const headers = new Map<string, string>();
+        if (!RequestContext.isActive()) {
+            return headers;
+        }
+        for (const key of HeaderRegistry.get().getResponseTxfrKeys()) {
+            const wire = this.toResponseWireValue(RequestContext.getAny(key));
+            if (wire !== undefined && wire !== '') {
+                headers.set(key.responseHeader!, wire);
+            }
+        }
+        return headers;
+    }
+
+    /** One context value -> its response-header text, or undefined when it has no wire form. */
+    // webpieces-disable no-any-unknown -- the context store is honestly type-erased; the key's own V types the public accessors
+    private toResponseWireValue(value: unknown): string | undefined {
+        if (typeof value === 'string') {
+            return value;
+        }
+        if (Array.isArray(value)) {
+            // webpieces-disable no-any-unknown -- a collect key's list is type-erased here, exactly as every other serialization read is
+            const parts = (value as unknown[]).filter((v: unknown) => typeof v === 'string');
+            return parts.length > 0 ? parts.join(', ') : undefined;
+        }
+        return undefined;
+    }
+
+    /**
+     * INBOUND, RESPONSE direction — the exact inverse of {@link buildResponseHeaders}, and the reason
+     * a value can travel UP the call tree hop by hop: a webpieces client calls this with the response
+     * it just received, and every declared response key lands in the CALLER's context.
+     *
+     * TRUST IS THE MIRROR OF THE INBOUND PROBLEM, and is not hand-waved. A response is another
+     * process's ASSERTION, caller-asserted from our seat. An UNTRUSTED response key is admitted —
+     * nobody was ever going to make a security decision on it. A TRUSTED one is admitted only from a
+     * destination this client AUTHENTICATED TO (the same {@link DestinationTrust} table that decides
+     * what may ride OUT) and is otherwise DROPPED. Without that, a partner's server sets `x-user-id`
+     * on its response and this process believes it.
+     *
+     * MERGE is the key's own declaration, because fan-out is the normal case: one request calling
+     * five services yields five values for one key, and last-write-wins silently keeps one. See
+     * {@link ContextKey.mergeResponseValue}.
+     */
+    acceptResponseHeaders(headers: Headers, destination: DestinationTrust): void {
+        this.requireActiveContext();
+
+        for (const key of HeaderRegistry.get().getResponseTxfrKeys()) {
+            const value = headers.get(key.responseHeader!);
+            if (value === null || value === '') {
+                continue;
+            }
+            if (!destination.allows(key)) {
+                // DROPPED: a trusted key asserted by a destination we did not authenticate to.
+                continue;
+            }
+            const merged = key.mergeResponseValue(RequestContext.getAny(key), value);
+            if (key.isTrusted()) {
+                RequestContext.putTrusted(key, merged);
+            } else {
+                RequestContext.putUntrusted(key, merged);
+            }
+        }
     }
 
     /**

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     AnyContextKey,
     AuthMode,
+    AnyUntrustedContextKey,
     ContextKey,
-    ContextReader,
+    ContextStore,
     DestinationTrust,
     HeaderRegistry,
     ServiceInfo,
@@ -80,23 +81,27 @@ describe('ContextMgr.buildOutboundHeaders', () => {
  * rather than argued away:
  *
  *  1. `MutableContextStore.set` only accepts an untrusted key, so THAT store cannot hold one. But
- *     {@link ContextMgr} takes any app-supplied {@link ContextReader}, and `read` is handed an
+ *     {@link ContextMgr} takes any app-supplied {@link ContextStore}, and `read` is handed an
  *     `AnyContextKey` — so this guarantee belongs to one implementation, not to the seam.
  *  2. `BrowserProxyClient.assertEndpointSupported` refuses to bind an @WpAuthOidc/@WpAuthSharedSecret
  *     contract, so every browser destination is @WpAuthPublic or @WpAuthJwt — the un-verifying kind.
  *
  * The rogue reader below is reason 1 defeated; the assertions are reason 2 holding anyway.
  */
-class RogueTrustedReader implements ContextReader {
+class RogueTrustedReader implements ContextStore {
     read(key: AnyContextKey): string | undefined {
         return key.isTrusted() ? 'forged-user' : undefined;
     }
+
+    /** Never reached by these assertions; the seam is read+write now, so the rogue implements both. */
+    // webpieces-disable no-any-unknown -- mirrors the ContextWriter seam it is standing in for
+    set(_key: AnyUntrustedContextKey, _value: unknown): void {}
 }
 
 describe('a browser never sends a TRUSTED key', () => {
     beforeEach(configureRegistry);
 
-    it('drops a trusted value even when the app-supplied ContextReader hands one over', () => {
+    it('drops a trusted value even when the app-supplied ContextStore hands one over', () => {
         const contextMgr = new ContextMgr(new RogueTrustedReader());
 
         for (const mode of [PUBLIC, JWT]) {

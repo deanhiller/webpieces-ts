@@ -94,6 +94,21 @@ export class BrowserProxyClient extends ProxyClient {
     }
 
     /**
+     * Into the app-held store, via the same {@link ContextMgr} that owns the outbound direction — so
+     * a value a server set reaches the page without the page naming a header.
+     *
+     * TRUSTED response keys are dropped there, by type: a browser store holds only untrusted values.
+     * `destination` is threaded anyway rather than short-circuited here, for the reason the outbound
+     * direction gives — the rule lives in ContextMgr, one place, for both environments.
+     */
+    protected override acceptResponseContext(
+        headers: Headers,
+        destination: DestinationTrust,
+    ): void {
+        this.contextMgr.acceptResponseHeaders(headers, destination);
+    }
+
+    /**
      * Forward the call's lifecycle to the app's listener, if one was registered on the factory. The
      * optional chain makes both a no-op when no listener is present — the default browser case.
      */

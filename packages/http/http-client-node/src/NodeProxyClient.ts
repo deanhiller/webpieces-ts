@@ -237,6 +237,23 @@ export class NodeProxyClient extends ProxyClient {
     }
 
     /**
+     * Straight into the ambient RequestContext — the reason a value a callee set climbs the call
+     * tree: after this returns, the CALLER's context holds it, and the caller's own response (and its
+     * own outbound calls) carry it onward.
+     *
+     * `destination` is the trust gate, and it is the mirror of the inbound problem rather than a
+     * restatement of it: a response is another process's ASSERTION. Untrusted response keys are
+     * admitted; a TRUSTED one is admitted only from a destination this client authenticated to, and
+     * is otherwise dropped — see `RequestContextHeaders.acceptResponseHeaders`.
+     */
+    protected override acceptResponseContext(
+        headers: Headers,
+        destination: DestinationTrust,
+    ): void {
+        this.headers.acceptResponseHeaders(headers, destination);
+    }
+
+    /**
      * Test-case recording hook (mirror of Java HttpsJsonClientInvokeHandler): if a recorder is
      * travelling in the magic context, capture this outbound call + its result so it becomes a mock
      * in the generated test. Absent a recorder this is exactly the base behavior.

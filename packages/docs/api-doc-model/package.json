@@ -1,0 +1,28 @@
+{
+    "name": "@webpieces/api-doc-model",
+    "version": "0.0.0-dev",
+    "description": "TypeScript-compiler-API extractor producing one in-memory ApiDocModel from a webpieces API contract. No renderer, no runtime, no app-specific import.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/docs/api-doc-model"
+    },
+    "keywords": [
+        "webpieces",
+        "openapi",
+        "mcp",
+        "docs",
+        "typescript"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "typescript": "5.9.3"
+    }
+}
