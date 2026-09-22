@@ -61,7 +61,9 @@ export {
     MaskLog,
     getApiPath,
     getEndpoints,
+    getEndpointHttpMethod,
     getEndpointOptions,
+    getEndpointOperation,
     getEndpointKind,
     getEndpointKinds,
     getMaskSpec,
@@ -120,13 +122,34 @@ export type {
     StreamFailureOptions,
 } from './http/StreamingContract';
 export type {
-    ContractHttpMethod,
     EndpointResponseType,
+    HttpMethod,
     HttpParameterSource,
     HttpParameterValueType,
 } from './http/HttpContract';
-export type { EndpointKind, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
-export { WpMcpTool, WpMcpToolHints, WpMcpToolMetadata, getWpMcpTools } from './mcp/McpMetadata';
+export { GET, POST } from './http/HttpContract';
+export type {
+    EndpointKind,
+    EndpointOperation,
+    EndpointOptions,
+    ExternalEndpointOptions,
+} from './http/decorators';
+export {
+    RPC,
+    CLOUDTASKS,
+    CRON,
+    EXTERNAL,
+    READ,
+    WRITE_IDEMPOTENT,
+    WRITE,
+} from './http/decorators';
+export {
+    WpMcpTool,
+    WpMcpToolHints,
+    WpMcpToolMetadata,
+    getWpMcpTools,
+    mcpHintsForOperation,
+} from './mcp/McpMetadata';
 export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
 export { WpMcpAuthJwt, WpMcpJwtAuthMetadata, getWpMcpAuthJwt } from './mcp/McpAuthMetadata';
 export {
@@ -164,7 +187,8 @@ export {
     getQueueName,
 } from './http/api-kind';
 export type { ApiKind } from './http/api-kind';
-// WHO calls an `external` endpoint — the caller declaration @Endpoint(..., 'external', {calledBy})
+// WHO calls an `external` endpoint — the caller declaration
+// @Endpoint(POST, ..., WRITE, EXTERNAL, { calledBy })
 // requires, and the reader for it.
 export {
     EXTERNAL_SYSTEM_KINDS,
@@ -310,6 +334,7 @@ export {
     ApiError,
     ApiNotFoundError,
     ApiDependencyError,
+    ApiBadGatewayError,
     ApiUnavailableError,
     ApiDependencyTimeoutError,
     ApiImplementationError,

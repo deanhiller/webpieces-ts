@@ -158,7 +158,11 @@ export class McpHttpTestHarness {
         expect(result['isError']).toBe(true);
         if (!Array.isArray(content) || typeof content[0]?.text !== 'string')
             throw new Error('missing error content');
-        return JSON.parse(content[0].text) as Record<string, unknown>;
+        const envelope = JSON.parse(content[0].text) as Record<string, unknown>;
+        const error = envelope['error'];
+        return error && typeof error === 'object' && !Array.isArray(error)
+            ? (error as Record<string, unknown>)
+            : envelope;
     }
 
     private mirrorToolHeaders(params: unknown, headers: Record<string, string>): void {

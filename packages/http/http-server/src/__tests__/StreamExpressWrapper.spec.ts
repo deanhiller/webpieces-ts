@@ -14,6 +14,7 @@ import {
     WpDto,
     WpDtoField,
     WpDtoFieldOptions,
+    WRITE,
 } from '@webpieces/core-util';
 import { StreamExpressWrapper } from '../StreamExpressWrapper';
 
@@ -83,6 +84,7 @@ function route(): RouteMetadata {
         'POST',
         '/stream',
         'exchange',
+        WRITE,
         'StreamController',
         undefined,
         'StreamApi',

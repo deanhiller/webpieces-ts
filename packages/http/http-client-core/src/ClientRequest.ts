@@ -75,7 +75,7 @@ export class ClientRequest {
         public readonly requestDto: unknown,
         /**
          * Encoded route path + query for this call, resolved from its typed arguments. May be `''`
-         * for a contract declaring `@ApiPath('')` + `@Endpoint('', ...)`, in which case the url is
+         * for a contract declaring `@ApiPath('')` + `@Endpoint(POST, '', ...)`, in which case the url is
          * the base URL byte for byte.
          */
         public readonly resolvedPath: string = route.path,

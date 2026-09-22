@@ -8,7 +8,7 @@ where it runs through the full server filter chain.
 ```ts
 // one shared contract
 @PubSub() @WpAuthOidc() @ApiPath('/email')
-abstract class EmailApi { @Endpoint('/send') sendEmail(r: SendEmailRequest): Promise<void> {…} }
+abstract class EmailApi { @Endpoint(POST, '/send', WRITE, CLOUDTASKS) sendEmail(r: SendEmailRequest): Promise<void> {…} }
 
 // build the client once (sync); 'email-svc' is the callee's Cloud Run service name
 const emailTasks = factory.createPubSubClient(EmailApi, new TaskClientConfig('email-svc'));

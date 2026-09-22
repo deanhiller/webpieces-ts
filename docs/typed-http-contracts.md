@@ -7,8 +7,8 @@ mode. Every transport reads the same metadata and uses the same argument mapper.
 
 ## GET, path, and query parameters
 
-`POST` remains the default. Opt into `GET`, and name every path/query parameter explicitly so a
-TypeScript variable rename can never change the public wire contract:
+Every endpoint names `GET` or `POST` explicitly; there is no method default. Name every path/query
+parameter explicitly so a TypeScript variable rename can never change the public wire contract:
 
 ```typescript
 import {
@@ -16,6 +16,11 @@ import {
     Endpoint,
     PathParam,
     QueryParam,
+    GET,
+    POST,
+    READ,
+    WRITE,
+    RPC,
     Rpc,
     WpAuthPublic,
 } from '@webpieces/core-util';
@@ -24,7 +29,7 @@ import {
 @ApiPath('/catalog')
 abstract class CatalogApi {
     @WpAuthPublic('Public catalog lookup')
-    @Endpoint('/owners/{owner}/items/{item}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/owners/{owner}/items/{item}', READ, RPC)
     find(
         @PathParam('owner') owner: string,
         @PathParam('item') item: number,
@@ -59,7 +64,7 @@ query parameters can sit beside it:
 
 ```typescript
 @WpAuthJwt({ allRolesAllowed: true })
-@Endpoint('/owners/{owner}/items', 'rpc')
+@Endpoint(POST, '/owners/{owner}/items', WRITE, RPC)
 create(
     @PathParam('owner') owner: string,
     request: CreateItemRequest,
@@ -74,7 +79,7 @@ the existing `formPost` option:
 
 ```typescript
 @WpAuthPublic('OAuth token exchange validates the code and PKCE verifier in its payload')
-@Endpoint('/token', 'rpc', { formPost: true, responseType: 'full' })
+@Endpoint(POST, '/token', WRITE, RPC, { formPost: true, responseType: 'full' })
 token(request: TokenRequest): Promise<HttpResponseDto<TokenResponse | OAuthError>> {
     throw new Error('contract only');
 }
@@ -91,7 +96,7 @@ code needs the status, repeated headers, or an intentionally empty body:
 
 ```typescript
 @WpAuthPublic('OAuth authorization request validates its protocol inputs')
-@Endpoint('/authorize', 'rpc', { httpMethod: 'GET', responseType: 'full' })
+@Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
 authorize(
     @QueryParam('client_id') clientId: string,
 ): Promise<HttpResponseDto<undefined>> {

@@ -17,6 +17,9 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
     WpResponseDto,
+    POST,
+    RPC,
+    WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
@@ -61,14 +64,11 @@ class LockResponse {
 abstract class LockApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/open', 'rpc')
+    @Endpoint(POST, '/open', WRITE_IDEMPOTENT, RPC)
     @WpResponseDto(() => LockResponse)
     @WpMcpTool({
         name: 'passage_open',
         description: 'Open a passage for editing.',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
         openWorldHint: false,
     })
     open(_request: LockRequest): Promise<LockResponse> {

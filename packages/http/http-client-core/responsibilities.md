@@ -17,7 +17,7 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - The `Filter` / `Service` / `FilterChain` abstraction the outbound chain is built from → `core-util`, shared with the server's inbound chain so the two are ONE concept
 - Any filter that must read a `RequestContext` or resolve DNS (the runtime base-URL override, the SSRF guard) → `http-client-node`. Neither can live here: a browser bundle must contain neither
 
-- NOT deciding what a downstream status means: that is ONE uniform rule now (`ReceivedApiErrorRule`, core-util), identical in node and in the browser — 4xx is MY bug, 5xx is THEIRS, an incoming `ApiDependencyError` passes through, 266 is the end user's own answer. The per-environment `ProxyClient.adaptDownstreamFailure` hook that used to hold node and browser apart is deleted
+- NOT deciding what a downstream status means: core-util's one `ReceivedApiErrorRule` preserves the retry-relevant 408/429/502/503/504 kinds, treats other 4xx as MY bug and other 5xx as THEIRS, and passes through already-attributed dependency errors. The rule is identical in node and browser.
 - Reading the magic context → the abstract `ProxyClient.outboundContextHeaders(destination)` hook, answered by `RequestContextHeaders` (node, via `core-context`) and `ContextMgr` (browser, in `core-util`). This package only DERIVES the `DestinationTrust` from the route's `AuthMode` and passes it down, so trusted context keys never ride to an endpoint that cannot authenticate the caller
 - Deciding a base URL from a Cloud Run service name → `gcp-identity`, used by `http-client-node`
 - Minting OIDC tokens → `gcp-identity`; this package only accepts an `IdTokenMinter` seam

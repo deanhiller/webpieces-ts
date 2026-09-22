@@ -13,6 +13,11 @@ import {
     getAuthMode,
     isFormPost,
     isRawBody,
+    EXTERNAL,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '../../index';
 
 /**
@@ -28,7 +33,7 @@ import {
 @ApiPath('/hook')
 abstract class SentryHookApi {
     @WpAuthWebhook('sentry')
-    @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -38,7 +43,11 @@ abstract class SentryHookApi {
 @ApiPath('/hook')
 abstract class TwilioHookApi {
     @WpAuthWebhook('twilio')
-    @Endpoint('/twilio/sms', 'external', { calledBy: 'twilio', formPost: true, rawBody: true })
+    @Endpoint(POST, '/twilio/sms', WRITE, EXTERNAL, {
+        calledBy: 'twilio',
+        formPost: true,
+        rawBody: true,
+    })
     inbound(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -48,7 +57,7 @@ abstract class TwilioHookApi {
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
     @WpAuthWebhook('sentry')
-    @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry' })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -74,7 +83,7 @@ describe('@WpAuthWebhook declares a verified external caller on the contract', (
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
                 @WpAuthWebhook('sentry')
-                @Endpoint('/y', 'external', { calledBy: 'sentry', rawBody: true })
+                @Endpoint(POST, '/y', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
                 hook(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }
@@ -98,7 +107,7 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
         @ApiPath('/api')
         abstract class PlainApi {
             @WpAuthPublic('Anonymous access is intentionally required')
-            @Endpoint('/ping', 'rpc')
+            @Endpoint(POST, '/ping', READ, RPC)
             ping(_r: object): Promise<object> {
                 throw new Error('subclass');
             }
@@ -129,7 +138,7 @@ describe('assertEveryWebhookEndpointRetainsRawBody', () => {
         @ApiPath('/api')
         abstract class JwtApi {
             @WpAuthJwt({ roles: ['admin'] })
-            @Endpoint('/thing', 'rpc')
+            @Endpoint(POST, '/thing', WRITE, RPC)
             thing(_r: object): Promise<object> {
                 throw new Error('subclass');
             }

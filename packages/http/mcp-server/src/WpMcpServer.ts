@@ -423,6 +423,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
         McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, name));
         const tool = this.requireRegistry().find(name);
         if (!tool) throw this.translator.unknownTool(name);
+        McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, name, tool.operation));
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- MCP tools/call entry point; delegates only to WpMcpErrorTranslator
         try {
             const result = await this.callTool(tool, request, authentication, sdkContext);

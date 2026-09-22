@@ -12,6 +12,9 @@ import {
     WpDtoField,
     WpDtoFieldOptions,
     WpStream,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { StreamingCapabilityError } from '@webpieces/http-client-core';
 import { ClientConfig } from '../ClientConfig';
@@ -33,7 +36,7 @@ class BrowserOutput {
 @Rpc()
 @ApiPath('/stream')
 abstract class BrowserStreamingApi {
-    @Endpoint('/exchange', 'rpc')
+    @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('test stream')
     @WpStream(() => BrowserInput, () => BrowserOutput)
     exchange(_response: ResponseStream<BrowserOutput>): Promise<RequestStream<BrowserInput>> {

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import { ApiPath, Endpoint, WpAuthPublic } from '@webpieces/core-util';
+import { ApiPath, Endpoint, WpAuthPublic, POST, RPC, WRITE } from '@webpieces/core-util';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
 import { FilterDefinition, RouteBuilder, RouteDefinition } from '../WebAppMeta';
 
@@ -13,7 +13,7 @@ import { FilterDefinition, RouteBuilder, RouteDefinition } from '../WebAppMeta';
 @ApiPath('')
 abstract class EmptyPathApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     deliver(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -28,13 +28,13 @@ class EmptyPathController extends EmptyPathApi {
 @ApiPath('/hooks')
 abstract class DuplicateApi {
     @WpAuthPublic('Test fixture')
-    @Endpoint('/in', 'rpc')
+    @Endpoint(POST, '/in', WRITE, RPC)
     first(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthPublic('Test fixture')
-    @Endpoint('in', 'rpc')
+    @Endpoint(POST, 'in', WRITE, RPC)
     second(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -74,7 +74,9 @@ describe('ApiRoutingFactory route validation (#944)', () => {
     it('refuses two endpoints on one HTTP method + path, naming both, and registers nothing', () => {
         const builder = new CollectingRouteBuilder();
 
-        expect(() => new ApiRoutingFactory(DuplicateApi, DuplicateController).configure(builder)).toThrow(
+        expect(() =>
+            new ApiRoutingFactory(DuplicateApi, DuplicateController).configure(builder),
+        ).toThrow(
             /DuplicateApi\.first and DuplicateApi\.second both resolve to POST '\/hooks\/in'/,
         );
         expect(builder.paths).toEqual([]);

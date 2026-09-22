@@ -24,7 +24,7 @@ import { SsrfPolicy } from './SsrfPolicy';
  * }
  * ```
  *
- * The contract can therefore declare an honest path (`@ApiPath('/webhook')` + `@Endpoint('/deliver')`)
+ * The contract can therefore declare an honest path (`@ApiPath('/webhook')` + `@Endpoint(POST, '/deliver', ...)`)
  * for documentation and the architecture graph, knowing it is replaced per call.
  *
  * ## Why a SEPARATE filter from ContextBaseUrlFilter
@@ -57,7 +57,10 @@ export class ContextFullUrlFilter extends Filter<ClientRequest, Response> {
         super();
     }
 
-    override async filter(request: ClientRequest, nextFilter: Service<ClientRequest, Response>): Promise<Response> {
+    override async filter(
+        request: ClientRequest,
+        nextFilter: Service<ClientRequest, Response>,
+    ): Promise<Response> {
         const override = RequestContext.getUntrusted(WebpiecesCoreHeaders.OVERRIDE_FULL_URL);
         if (override === undefined || override === '') {
             throw new MissingRuntimeBaseUrlError(

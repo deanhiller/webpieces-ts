@@ -12,6 +12,7 @@ import {
     Service,
     Surface,
     WebpiecesCoreHeaders,
+    WRITE,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultJwtHook } from '../DefaultJwtHook';
@@ -55,14 +56,25 @@ class PassingOidcHook extends OidcHook {
 }
 
 class OrgApiKeyHook extends ApiKeyHook {
-    override async verifyApiKey(_regime: string, _request: HttpRequest): Promise<AuthenticatedCaller> {
+    override async verifyApiKey(
+        _regime: string,
+        _request: HttpRequest,
+    ): Promise<AuthenticatedCaller> {
         await Promise.resolve();
         return new AuthenticatedCaller('partner-1', []);
     }
 }
 
 const routeFor = (mode: AuthMode): RouteMetadata =>
-    new RouteMetadata('POST', '/thing', 'thing', 'ThingController', new AuthMeta(mode), 'ThingApi');
+    new RouteMetadata(
+        'POST',
+        '/thing',
+        'thing',
+        WRITE,
+        'ThingController',
+        new AuthMeta(mode),
+        'ThingApi',
+    );
 
 const newAuthFilter = (): AuthFilter =>
     new AuthFilter(
@@ -194,12 +206,9 @@ describe('a CALLER cannot set its own surface', () => {
         const next = new RecordingNext();
 
         await expect(
-            runFilter(
-                next,
-                { kind: 'jwt', requirement: { allRolesAllowed: true } },
-                jwtHeader(),
-                [new ContextTuple(WebpiecesCoreHeaders.SURFACE, 'public-api')],
-            ),
+            runFilter(next, { kind: 'jwt', requirement: { allRolesAllowed: true } }, jwtHeader(), [
+                new ContextTuple(WebpiecesCoreHeaders.SURFACE, 'public-api'),
+            ]),
         ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });

@@ -9,6 +9,7 @@ import {
     DestinationTrust,
     ApiUnauthorizedError,
     RouteMetadata,
+    READ,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
@@ -41,6 +42,7 @@ const API_KEY_ROUTE = new RouteMetadata(
     'POST',
     '/management/v1/orders',
     'listOrders',
+    READ,
     'ManagementController',
     new AuthMeta({
         kind: 'apikey',

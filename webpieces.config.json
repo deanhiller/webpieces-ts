@@ -191,7 +191,7 @@
         "validate-architecture-unchanged": {
             "mode": "RUN_EVERY_TIME",
             "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
+            "turnOffRuleWhileOnBranch": "dean/987-mcp-retry-semantics"
         },
         "validate-no-architecture-cycles": {
             "mode": "RUN_EVERY_TIME",

@@ -152,6 +152,7 @@ describe('buildApiContracts — the per-method trigger table committed to depend
                 name: 'fetchValue',
                 path: '/fetchValue',
                 kind: 'rpc',
+                operation: 'read',
                 httpMethod: 'POST',
                 parameters: [{ index: 0, source: 'body' }],
             },

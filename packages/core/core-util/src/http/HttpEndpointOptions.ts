@@ -1,10 +1,23 @@
 import { ExternalSystemKind } from './external-caller';
-import { ContractHttpMethod, EndpointResponseType } from './HttpContract';
+import { EndpointResponseType } from './HttpContract';
+
+/** Nominal backing keeps raw string literals out of endpoint declarations. */
+enum EndpointOperationValue {
+    READ = 'read',
+    WRITE_IDEMPOTENT = 'write-idempotent',
+    WRITE = 'write',
+}
+
+/** Short, statically importable decorator arguments. */
+export const READ = EndpointOperationValue.READ;
+export const WRITE_IDEMPOTENT = EndpointOperationValue.WRITE_IDEMPOTENT;
+export const WRITE = EndpointOperationValue.WRITE;
+
+/** The side-effect contract callers use to decide whether repeating an operation is safe. */
+export type EndpointOperation = typeof READ | typeof WRITE_IDEMPOTENT | typeof WRITE;
 
 /** Options for one `@Endpoint`, stored parallel to the method-to-path metadata. */
 export interface EndpointOptions {
-    /** HTTP verb for this route. Defaults to POST. */
-    httpMethod?: ContractHttpMethod;
     /** Return only a JSON body (default), or the full transport-neutral status/header/body value. */
     responseType?: EndpointResponseType;
     /**

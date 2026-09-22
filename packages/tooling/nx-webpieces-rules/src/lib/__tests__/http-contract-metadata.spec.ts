@@ -33,7 +33,7 @@ describe('architecture HTTP contract metadata', () => {
         const method = scan(`
 @ApiPath('/widgets')
 abstract class WidgetApi {
-    @Endpoint('/{owner}/{id}', 'rpc', { httpMethod: 'GET', responseType: 'full' })
+    @Endpoint(GET, '/{owner}/{id}', READ, RPC, { responseType: 'full' })
     abstract get(
         @PathParam('owner') owner: string,
         @PathParam('id') id: number,
@@ -45,6 +45,7 @@ abstract class WidgetApi {
             name: 'get',
             path: '/{owner}/{id}',
             kind: 'rpc',
+            operation: 'read',
             httpMethod: 'GET',
             responseType: 'full',
             parameters: [
@@ -55,11 +56,11 @@ abstract class WidgetApi {
         });
     });
 
-    it('makes the historical endpoint shape explicit as POST in generated output', () => {
+    it('emits an explicitly declared POST in generated output', () => {
         const method = scan(`
 @ApiPath('/widgets')
 abstract class WidgetApi {
-    @Endpoint('/save', 'rpc')
+    @Endpoint(POST, '/save', WRITE, RPC)
     abstract save(request: SaveRequest): Promise<SaveResponse>;
 }`);
 

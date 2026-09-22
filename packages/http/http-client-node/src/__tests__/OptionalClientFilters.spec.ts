@@ -11,6 +11,9 @@ import {
     Secrets,
     Service,
     TestCaseRecorder,
+    POST,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { Provider, RequestContext } from '@webpieces/core-context';
@@ -39,7 +42,7 @@ class WorkRequest {
 @Rpc()
 @ApiPath('/svc')
 abstract class SvcApi {
-    @Endpoint('/work', 'rpc')
+    @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: WorkRequest): Promise<void> {

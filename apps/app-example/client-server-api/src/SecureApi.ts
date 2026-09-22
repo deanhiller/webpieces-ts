@@ -1,4 +1,13 @@
-import { ApiPath, Endpoint, WpAuthJwt, WpAuthOidc, WpAuthSharedSecret } from '@webpieces/core-util';
+import {
+    ApiPath,
+    Endpoint,
+    WpAuthJwt,
+    WpAuthOidc,
+    WpAuthSharedSecret,
+    POST,
+    READ,
+    RPC,
+} from '@webpieces/core-util';
 
 export interface SecureRequest {
     note?: string;
@@ -20,35 +29,35 @@ export interface SecureResponse {
 @ApiPath('/secure')
 export abstract class SecureApi {
     /** Requires ANY logged-in user — a valid JWT, no particular role. The wide grant, named. */
-    @Endpoint('/user', 'rpc')
+    @Endpoint(POST, '/user', READ, RPC)
     @WpAuthJwt({ allRolesAllowed: true })
     userOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method userOp() must be implemented by subclass');
     }
 
     /** Requires a user JWT carrying the 'admin' role. */
-    @Endpoint('/admin', 'rpc')
+    @Endpoint(POST, '/admin', READ, RPC)
     @WpAuthJwt({ roles: ['admin'] })
     adminOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method adminOp() must be implemented by subclass');
     }
 
     /** Custom app requirement: a logged-in user WHO belongs to an org — app field on the SAME decorator. */
-    @Endpoint('/org', 'rpc')
+    @Endpoint(POST, '/org', READ, RPC)
     @WpAuthJwt({ allRolesAllowed: true, inOrg: true })
     orgOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method orgOp() must be implemented by subclass');
     }
 
     /** Requires the INTERNAL_API_SECRET shared-secret header. */
-    @Endpoint('/internal', 'rpc')
+    @Endpoint(POST, '/internal', READ, RPC)
     @WpAuthSharedSecret('INTERNAL_API_SECRET')
     internalOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method internalOp() must be implemented by subclass');
     }
 
     /** Requires a genuine Google OIDC token; @WpAuthOidc() (no callers) trusts the edge for WHO (run.invoker IAM). */
-    @Endpoint('/service', 'rpc')
+    @Endpoint(POST, '/service', READ, RPC)
     @WpAuthOidc()
     serviceOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method serviceOp() must be implemented by subclass');

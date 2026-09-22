@@ -12,6 +12,9 @@ import {
     WebpiecesCoreHeaders,
     WpAuthOidc,
     WpAuthPublic,
+    POST,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
@@ -35,14 +38,14 @@ class DeliverRequest {
 @Rpc()
 @ApiPath('/webhook')
 abstract class HonestWebhookApi {
-    @Endpoint('/deliver', 'rpc')
+    @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
     }
 
-    @Endpoint('/deliver-tagged', 'rpc')
+    @Endpoint(POST, '/deliver-tagged', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliverTagged(@QueryParam('tag') _tag: string, _request: DeliverRequest): Promise<void> {
@@ -54,7 +57,7 @@ abstract class HonestWebhookApi {
 @Rpc()
 @ApiPath('')
 abstract class EmptyPathWebhookApi {
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
@@ -65,7 +68,7 @@ abstract class EmptyPathWebhookApi {
 @Rpc()
 @ApiPath('/internal')
 abstract class OidcWebhookApi {
-    @Endpoint('/work', 'rpc')
+    @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
@@ -77,14 +80,14 @@ abstract class OidcWebhookApi {
 @Rpc()
 @ApiPath('')
 abstract class DuplicateRouteApi {
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Test fixture')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
     }
 
-    @Endpoint('', 'rpc')
+    @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Test fixture')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     redeliver(_request: DeliverRequest): Promise<void> {
@@ -178,7 +181,10 @@ beforeEach(() => {
         vi.fn((url: string) => {
             sentUrls.push(url);
             return Promise.resolve(
-                new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+                new Response(JSON.stringify({}), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }),
             );
         }),
     );
@@ -204,8 +210,10 @@ describe('ContextFullUrlFilter + OVERRIDE_FULL_URL', () => {
     it('does not add a separator or the contract query to a url with no path', async () => {
         const partner = client(HonestWebhookApi, fullUrlFilter());
 
-        await withContext(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, 'https://api.partner.example', () =>
-            partner.deliverTagged('blue', new DeliverRequest('e1')),
+        await withContext(
+            WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
+            'https://api.partner.example',
+            () => partner.deliverTagged('blue', new DeliverRequest('e1')),
         );
 
         expect(sentUrls).toEqual(['https://api.partner.example']);
@@ -228,12 +236,12 @@ describe('ContextFullUrlFilter + OVERRIDE_FULL_URL', () => {
     it('REFUSES with no override in scope, naming OVERRIDE_FULL_URL, and never uses the configured url', async () => {
         const partner = client(HonestWebhookApi, fullUrlFilter());
 
-        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e1')))).rejects.toBeInstanceOf(
-            MissingRuntimeBaseUrlError,
-        );
-        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e1')))).rejects.toThrow(
-            /OVERRIDE_FULL_URL/,
-        );
+        await expect(
+            RequestContext.run(() => partner.deliver(new DeliverRequest('e1'))),
+        ).rejects.toBeInstanceOf(MissingRuntimeBaseUrlError);
+        await expect(
+            RequestContext.run(() => partner.deliver(new DeliverRequest('e1'))),
+        ).rejects.toThrow(/OVERRIDE_FULL_URL/);
         expect(sentUrls).toEqual([]);
     });
 
@@ -242,7 +250,10 @@ describe('ContextFullUrlFilter + OVERRIDE_FULL_URL', () => {
 
         await expect(
             RequestContext.run(() => {
-                RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, 'https://api.partner.example');
+                RequestContext.putUntrusted(
+                    WebpiecesCoreHeaders.OVERRIDE_BASE_URL,
+                    'https://api.partner.example',
+                );
                 return partner.deliver(new DeliverRequest('e1'));
             }),
         ).rejects.toBeInstanceOf(MissingRuntimeBaseUrlError);
@@ -278,13 +289,17 @@ describe('ContextFullUrlFilter arms the SSRF guard', () => {
         const partner = client(HonestWebhookApi, fullUrlFilter());
 
         await expect(
-            withContext(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, 'https://169.254.169.254/computeMetadata/v1/', () =>
-                partner.deliver(new DeliverRequest('e1')),
+            withContext(
+                WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
+                'https://169.254.169.254/computeMetadata/v1/',
+                () => partner.deliver(new DeliverRequest('e1')),
             ),
         ).rejects.toBeInstanceOf(SsrfRefusedError);
         await expect(
-            withContext(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, 'https://internal.partner.example/in?x=1', () =>
-                partner.deliver(new DeliverRequest('e1')),
+            withContext(
+                WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
+                'https://internal.partner.example/in?x=1',
+                () => partner.deliver(new DeliverRequest('e1')),
             ),
         ).rejects.toThrow(/10\.0\.0\.5/);
         expect(sentUrls).toEqual([]);
@@ -294,8 +309,10 @@ describe('ContextFullUrlFilter arms the SSRF guard', () => {
         const partner = client(HonestWebhookApi, fullUrlFilter());
 
         await expect(
-            withContext(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, 'http://api.partner.example/in', () =>
-                partner.deliver(new DeliverRequest('e1')),
+            withContext(
+                WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
+                'http://api.partner.example/in',
+                () => partner.deliver(new DeliverRequest('e1')),
             ),
         ).rejects.toThrow(/scheme 'http:' is not allowed/);
     });
@@ -304,12 +321,16 @@ describe('ContextFullUrlFilter arms the SSRF guard', () => {
         const local = client(HonestWebhookApi, [
             new ClientFilterDefinition(
                 1000,
-                new ContextFullUrlFilter(new SsrfTestingPolicy('exercising the partner path against a local fake')),
+                new ContextFullUrlFilter(
+                    new SsrfTestingPolicy('exercising the partner path against a local fake'),
+                ),
             ),
         ]);
 
-        await withContext(WebpiecesCoreHeaders.OVERRIDE_FULL_URL, 'http://127.0.0.1:9123/in?x=1', () =>
-            local.deliver(new DeliverRequest('e1')),
+        await withContext(
+            WebpiecesCoreHeaders.OVERRIDE_FULL_URL,
+            'http://127.0.0.1:9123/in?x=1',
+            () => local.deliver(new DeliverRequest('e1')),
         );
 
         expect(sentUrls).toEqual(['http://127.0.0.1:9123/in?x=1']);
@@ -329,8 +350,10 @@ describe('ContextFullUrlFilter arms the SSRF guard', () => {
 });
 
 describe('empty contract paths with ContextBaseUrlFilter (#926 regression)', () => {
-    it("@ApiPath('') + @Endpoint('') sends to OVERRIDE_BASE_URL byte for byte", async () => {
-        const partner = client(EmptyPathWebhookApi, [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())]);
+    it("@ApiPath('') + @Endpoint(POST, '') sends to OVERRIDE_BASE_URL byte for byte", async () => {
+        const partner = client(EmptyPathWebhookApi, [
+            new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
+        ]);
 
         await RequestContext.run(() => {
             RequestContext.putUntrusted(WebpiecesCoreHeaders.OVERRIDE_BASE_URL, STORED_URL);

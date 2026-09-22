@@ -57,14 +57,14 @@ describe('ensure-we-are-secure project scope', () => {
             'packages/api/src/unchanged.ts',
             `
             import { ApiPath, Endpoint } from '@webpieces/core-util';
-            @ApiPath('/x') class Api { @Endpoint('/x', 'rpc') x(v: object): Promise<object> { throw 0; } }
+            @ApiPath('/x') class Api { @Endpoint(POST, '/x', WRITE, RPC) x(v: object): Promise<object> { throw 0; } }
         `,
         );
         write(
             'packages/api/nested/src/bad.ts',
             `
             import { ApiPath, Endpoint } from '@webpieces/core-util';
-            @ApiPath('/nested') class Nested { @Endpoint('/x', 'rpc') x(v: object): Promise<object> { throw 0; } }
+            @ApiPath('/nested') class Nested { @Endpoint(POST, '/x', WRITE, RPC) x(v: object): Promise<object> { throw 0; } }
         `,
         );
         expect(codes()).toEqual(['HTTP_AUTH_COUNT']);
@@ -81,13 +81,13 @@ describe('ensure-we-are-secure HTTP contracts', () => {
             import { ApiPath, Endpoint, WpAuthJwt, WpAuthOidc, WpAuthWebhook,
                 WpAuthSharedSecret, WpAuthApiKey, WpAuthLocalOnly, WpAuthPublic } from '@webpieces/core-util';
             @ApiPath('/x') class Api {
-                @Endpoint('/jwt', 'rpc') @WpAuthJwt({ allRolesAllowed: true }) jwt(v: object): Promise<object> { throw 0; }
-                @Endpoint('/oidc', 'rpc') @WpAuthOidc() oidc(v: object): Promise<object> { throw 0; }
-                @Endpoint('/webhook', 'rpc') @WpAuthWebhook('x') webhook(v: object): Promise<object> { throw 0; }
-                @Endpoint('/secret', 'rpc') @WpAuthSharedSecret('x') secret(v: object): Promise<object> { throw 0; }
-                @Endpoint('/key', 'rpc') @WpAuthApiKey('x') key(v: object): Promise<object> { throw 0; }
-                @Endpoint('/local', 'rpc') @WpAuthLocalOnly() local(v: object): Promise<object> { throw 0; }
-                @Endpoint('/public', 'rpc') @WpAuthPublic('health probe') public(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/jwt', WRITE, RPC) @WpAuthJwt({ allRolesAllowed: true }) jwt(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/oidc', WRITE, RPC) @WpAuthOidc() oidc(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/webhook', WRITE, RPC) @WpAuthWebhook('x') webhook(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/secret', WRITE, RPC) @WpAuthSharedSecret('x') secret(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/key', WRITE, RPC) @WpAuthApiKey('x') key(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/local', WRITE, RPC) @WpAuthLocalOnly() local(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/public', WRITE, RPC) @WpAuthPublic('health probe') public(v: object): Promise<object> { throw 0; }
             }
         `,
         );
@@ -113,7 +113,7 @@ describe('ensure-we-are-secure HTTP contracts', () => {
             `
             import { ApiPath, Endpoint } from '@webpieces/core-util';
             function WpAuthJwt(): MethodDecorator { return () => undefined; }
-            @ApiPath('/x') class Api { @Endpoint('/x', 'rpc') @WpAuthJwt() x(v: object): Promise<object> { throw 0; } }
+            @ApiPath('/x') class Api { @Endpoint(POST, '/x', WRITE, RPC) @WpAuthJwt() x(v: object): Promise<object> { throw 0; } }
         `,
         );
         expect(codes()).toEqual(['HTTP_AUTH_COUNT']);
@@ -124,7 +124,7 @@ describe('ensure-we-are-secure HTTP contracts', () => {
             'packages/api/src/Bad.spec.ts',
             `
             import { ApiPath, Endpoint } from '@webpieces/core-util';
-            @ApiPath('/test') class TestApi { @Endpoint('/x', 'rpc') x(v: object): Promise<object> { throw 0; } }
+            @ApiPath('/test') class TestApi { @Endpoint(POST, '/x', WRITE, RPC) x(v: object): Promise<object> { throw 0; } }
         `,
         );
         expect(codes()).toEqual([]);
@@ -136,9 +136,9 @@ describe('ensure-we-are-secure HTTP contracts', () => {
             `
             import { ApiPath, Endpoint, WpAuthJwt, WpAuthOidc, WpAuthPublic } from '@webpieces/core-util';
             @WpAuthJwt({ allRolesAllowed: true }) @ApiPath('/x') class Api {
-                @Endpoint('/missing', 'rpc') missing(v: object): Promise<object> { throw 0; }
-                @Endpoint('/many', 'rpc') @WpAuthJwt({ allRolesAllowed: true }) @WpAuthOidc() many(v: object): Promise<object> { throw 0; }
-                @Endpoint('/public', 'rpc') @WpAuthPublic('   ') public(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/missing', WRITE, RPC) missing(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/many', WRITE, RPC) @WpAuthJwt({ allRolesAllowed: true }) @WpAuthOidc() many(v: object): Promise<object> { throw 0; }
+                @Endpoint(POST, '/public', WRITE, RPC) @WpAuthPublic('   ') public(v: object): Promise<object> { throw 0; }
                 @WpAuthOidc() orphan(v: object): Promise<object> { throw 0; }
             }
         `,
@@ -178,7 +178,7 @@ describe('ensure-we-are-secure IPC contracts', () => {
             import { ApiPath, Endpoint, WpAuthJwt } from '@webpieces/core-util';
             @WpInternal('native') @ApiPath('/bad') class Bad {
                 @WpIpcEndpoint('same') one(): object { throw 0; }
-                @WpIpcEndpoint('same') @Endpoint('/x', 'rpc') @WpAuthJwt({ allRolesAllowed: true }) two(a: object, b: object): Promise<object> { throw 0; }
+                @WpIpcEndpoint('same') @Endpoint(POST, '/x', WRITE, RPC) @WpAuthJwt({ allRolesAllowed: true }) two(a: object, b: object): Promise<object> { throw 0; }
                 three(v: object): Promise<object> { throw 0; }
             }
             class Orphan { @WpIpcEndpoint('x') x(v: object): Promise<object> { throw 0; } }

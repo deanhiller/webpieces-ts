@@ -18,7 +18,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
-import { ApiUsageScanner, buildApiContracts, describeMismatchedEndpointKinds } from '../api-usage/api-scanner';
+import {
+    ApiUsageScanner,
+    buildApiContracts,
+    describeMismatchedEndpointKinds,
+} from '../api-usage/api-scanner';
 import { ApiRelation } from '../api-usage/api-relations';
 import { specTempDirs } from '@webpieces/rules-config';
 
@@ -110,9 +114,15 @@ export class InMemoryGmail implements GmailApi {
 
 function projects(): Map<string, ProjectInfo> {
     const infos = new Map<string, ProjectInfo>();
-    infos.set('lib-gmail', new ProjectInfo('lib-gmail', 'libraries/apis/external/gmail', ['role:lib']));
+    infos.set(
+        'lib-gmail',
+        new ProjectInfo('lib-gmail', 'libraries/apis/external/gmail', ['role:lib']),
+    );
     infos.set('mail-svr', new ProjectInfo('mail-svr', 'services/mail-svr', ['role:server']));
-    infos.set('test-support', new ProjectInfo('test-support', 'libraries/test-support', ['role:lib']));
+    infos.set(
+        'test-support',
+        new ProjectInfo('test-support', 'libraries/test-support', ['role:lib']),
+    );
     return infos;
 }
 
@@ -163,7 +173,9 @@ describe('external api detection', () => {
     });
 
     it('emits no apiContracts entry for a vendor seam (it has no endpoints)', () => {
-        const contracts = buildApiContracts(new ApiUsageScanner(root, projects(), EXTERNAL_PATHS).scan());
+        const contracts = buildApiContracts(
+            new ApiUsageScanner(root, projects(), EXTERNAL_PATHS).scan(),
+        );
         expect(contracts['GmailApi']).toBeUndefined();
     });
 });
@@ -175,13 +187,21 @@ describe('describeMismatchedEndpointKinds', () => {
                 owner: 'task-api',
                 apiKind: 'pubsub',
                 basePath: '/task',
-                methods: [{ name: 'nope', path: '/nope', kind: 'rpc' }],
+                methods: [{ name: 'nope', path: '/nope', kind: 'rpc', operation: 'write' }],
             },
             WebApi: {
                 owner: 'web-api',
                 apiKind: 'rpc',
                 basePath: '/web',
-                methods: [{ name: 'sweep', path: '/sweep', kind: 'cron', queueName: 'WebApi-sweep' }],
+                methods: [
+                    {
+                        name: 'sweep',
+                        path: '/sweep',
+                        kind: 'cron',
+                        operation: 'write',
+                        queueName: 'WebApi-sweep',
+                    },
+                ],
             },
         });
         expect(problems).toHaveLength(2);
@@ -198,13 +218,15 @@ describe('describeMismatchedEndpointKinds', () => {
                     owner: 'a',
                     apiKind: 'rpc',
                     basePath: '/a',
-                    methods: [{ name: 'inbound', path: '/in', kind: 'external' }],
+                    methods: [
+                        { name: 'inbound', path: '/in', kind: 'external', operation: 'write' },
+                    ],
                 },
                 Push: {
                     owner: 'b',
                     apiKind: 'pubsub',
                     basePath: '/b',
-                    methods: [{ name: 'notify', path: '/n', kind: 'external' }],
+                    methods: [{ name: 'notify', path: '/n', kind: 'external', operation: 'write' }],
                 },
             }),
         ).toEqual([]);

@@ -16,6 +16,11 @@ import {
     Rpc,
     WpAuthJwt,
     WpAuthPublic,
+    GET,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import {
     AuthenticatedCaller,
@@ -74,7 +79,7 @@ class TokenRequest {
 @ApiPath('/typed/context')
 abstract class ContextProbeApi {
     @WpAuthPublic('Internal context test endpoint')
-    @Endpoint('/active', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/active', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     active(): Promise<object> {
         throw new Error('contract only');
@@ -85,7 +90,7 @@ abstract class ContextProbeApi {
 @ApiPath('/typed')
 abstract class TypedTransportApi {
     @WpAuthPublic('Public metadata lookup')
-    @Endpoint('/lookup/{owner}/{item}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/lookup/{owner}/{item}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     lookup(
         @PathParam('owner') _owner: string,
@@ -97,28 +102,28 @@ abstract class TypedTransportApi {
     }
 
     @WpAuthPublic('Dynamic client registration is public by OAuth protocol')
-    @Endpoint('/register', 'rpc', { responseType: 'full' })
+    @Endpoint(POST, '/register', WRITE, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     register(_request: RegisterRequest): Promise<HttpResponseDto<object>> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('Authorization request validates signed protocol parameters')
-    @Endpoint('/authorize', 'rpc', { httpMethod: 'GET', responseType: 'full' })
+    @Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     authorize(@QueryParam('client_id') _clientId: string): Promise<HttpResponseDto<undefined>> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('Token exchange authenticates the one-time code and PKCE verifier')
-    @Endpoint('/token', 'rpc', { formPost: true, responseType: 'full' })
+    @Endpoint(POST, '/token', WRITE, RPC, { formPost: true, responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     token(_request: TokenRequest): Promise<HttpResponseDto<object>> {
         throw new Error('contract only');
     }
 
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/secure/{id}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/secure/{id}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     secure(@PathParam('id') _id: number): Promise<object> {
         throw new Error('contract only');

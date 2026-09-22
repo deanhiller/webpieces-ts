@@ -17,7 +17,7 @@ defaults are `ApiEndUserError` 266, `ApiBadRequestError` 400, `ApiUnauthorizedEr
 `ApiForbiddenError` 403, `ApiNotFoundError`/`ApiEndpointNotFoundError` 404,
 `ApiRequestTimeoutError` 408, `ApiConflictError` 409, `ApiPreconditionFailedError` 412,
 `ApiUnsupportedMediaTypeError` 415, `ApiUnprocessableError` 422, `ApiRateLimitedError` 429,
-`ApiNotImplementedError` 501, `ApiDependencyError` 502,
+`ApiNotImplementedError` 501, `ApiDependencyError`/`ApiBadGatewayError` 502,
 `ApiUnavailableError`/`ApiDependencyBackoffError` 503, and `ApiDependencyTimeoutError` 504.
 The backoff form also emits `Retry-After`.
 
@@ -41,15 +41,17 @@ which mirror `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above 
 There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status
 register an `ErrorTranslator` on `ClientRegistry` and THROW it from `fromWire`.
 
-The webpieces DEFAULT does not rebuild the peer's type, and that is deliberate. A status a peer
-answered describes OUR request to it, so a received 4xx is `ApiImplementationError` (my bug: wrong
-path, wrong base URL, an undeployed dependency, bad credentials) and a received 5xx is
-`ApiDependencyError` (their bug, so this service's failure metrics stay clean). An incoming
-`ApiDependencyError` is rethrown as-is — already attributed downstream — and 266 keeps its
-`ApiEndUserError` with the message published verbatim. The rule is identical in node and in the
-browser, and identical over IPC (`ReceivedApiErrorRule`).
+The webpieces default preserves retry-relevant dependency semantics: received 408/504 becomes
+`ApiDependencyTimeoutError`, 429 becomes `ApiDependencyBackoffError`, 502 becomes
+`ApiBadGatewayError`, and 503 becomes `ApiUnavailableError` (or backoff when `Retry-After` is
+present). Typed Webpieces dependency errors pass through unchanged. Other received 4xx is
+`ApiImplementationError` (my bug), other 5xx is generic `ApiDependencyError` (their bug), and 266
+keeps its `ApiEndUserError` verbatim. The rule is shared by node, browser, and IPC.
 
-`ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`. Existing local `ApiCallTimeoutError(timeoutMs, CallContext)` remains distinct from a remote request timeout. `ApiConnectionError` remains available for actual offline classification; IPC disconnection uses the local `IpcTransportError`, distinct from a remote implementation throwing `ApiUnavailableError`.
+`ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`.
+`ApiCallTimeoutError(timeoutMs, CallContext)` is a subtype of `ApiDependencyTimeoutError` while
+retaining its local deadline and call context. `ApiConnectionError` remains available for actual
+offline classification; IPC disconnection uses the local `IpcTransportError`.
 
 `ApiErrorCodec` uses a fixed allowlist of semantic kinds, not a remote JavaScript class name. End-user messages and explicitly safe `callerMessage` validation text are bounded; implementation messages become generic. Semantic causes cross the boundary up to three levels deep using the same safe field policy; cycles are bounded. Stack traces and arbitrary error object properties never cross the boundary. A locally constructed `ApiImplementationError` has `serverError === false`; a remote decoder sets it to `true`. Browser and native global reporters can therefore distinguish server failures from local website/mobile code failures without trusting a wire flag.
 

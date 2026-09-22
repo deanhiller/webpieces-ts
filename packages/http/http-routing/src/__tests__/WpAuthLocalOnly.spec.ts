@@ -15,6 +15,10 @@ import {
     RouteMetadata,
     RuntimeLocality,
     AuthMeta,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
@@ -37,7 +41,7 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 @ApiPath('/dev')
 abstract class DevToolsApi {
     @WpAuthLocalOnly()
-    @Endpoint('/logs', 'rpc')
+    @Endpoint(POST, '/logs', WRITE, RPC)
     shipLogs(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -52,13 +56,13 @@ class DevToolsController extends DevToolsApi {
 @ApiPath('/open')
 abstract class OpenApi {
     @WpAuthPublic('Open route fixture')
-    @Endpoint('/ping', 'rpc')
+    @Endpoint(POST, '/ping', READ, RPC)
     ping(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthLocalOnly()
-    @Endpoint('/debug', 'rpc')
+    @Endpoint(POST, '/debug', READ, RPC)
     debug(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -107,6 +111,7 @@ const LOCAL_ONLY_ROUTE = new RouteMetadata(
     'POST',
     '/dev/logs',
     'shipLogs',
+    WRITE,
     'DevToolsController',
     new AuthMeta({ kind: 'local-only' }),
     'DevToolsApi',

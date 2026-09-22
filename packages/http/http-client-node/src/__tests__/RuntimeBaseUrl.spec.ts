@@ -15,6 +15,9 @@ import {
     Service,
     TestCaseRecorder,
     WebpiecesCoreHeaders,
+    POST,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
@@ -41,7 +44,7 @@ class DeliverRequest {
 @Rpc()
 @ApiPath('/webhooks')
 abstract class PartnerWebhookApi {
-    @Endpoint('/deliver', 'rpc')
+    @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
@@ -57,7 +60,7 @@ abstract class PartnerWebhookApi {
 @Rpc()
 @ApiPath('/internal')
 abstract class OidcApi {
-    @Endpoint('/work', 'rpc')
+    @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
@@ -68,7 +71,7 @@ abstract class OidcApi {
 @Rpc()
 @ApiPath('/internal')
 abstract class SharedSecretApi {
-    @Endpoint('/work', 'rpc')
+    @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthSharedSecret('partner-secret')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
@@ -80,7 +83,7 @@ abstract class SharedSecretApi {
 @Rpc()
 @ApiPath('/ot-webhook')
 abstract class SignedWebhookApi {
-    @Endpoint('/deliver', 'rpc')
+    @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthWebhook('partner-hmac')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
@@ -182,7 +185,10 @@ function stubTransport(responses: Response[]): void {
 }
 
 function ok(): Response {
-    return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+    });
 }
 
 function redirectTo(location: string): Response {
@@ -203,12 +209,7 @@ class Doubles {
 }
 
 /** A real NodeProxyClient bound to a contract, behind the same Proxy the factory would build. */
-function client<T extends object>(
-    api: ApiPrototype<T>,
-    config: ClientConfig,
-    filters: ClientFilterDefinition[],
-    doubles: Doubles = new Doubles(),
-): T {
+function client<T extends object>(api: ApiPrototype<T>, config: ClientConfig, filters: ClientFilterDefinition[], doubles: Doubles = new Doubles()): T {
     const proxyClient = new NodeProxyClient(
         // webpieces-disable no-any-unknown -- test double: only buildOutboundHeaders/findRecorder are reached
         new StubHeaders() as unknown as RequestContextHeaders,
@@ -225,12 +226,7 @@ function client<T extends object>(
 
 /** The target shape: one filter, no second ClientConfig argument, nothing else. */
 function partnerClient(filters: ClientFilterDefinition[] = [], doubles: Doubles = new Doubles()): PartnerWebhookApi {
-    return client(
-        PartnerWebhookApi,
-        new ClientConfig('partner-webhooks'),
-        [new ClientFilterDefinition(1000, new ContextBaseUrlFilter()), ...filters],
-        doubles,
-    );
+    return client(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter()), ...filters], doubles);
 }
 
 /** Run `fn` with an OVERRIDE_BASE_URL in scope, exactly as a fan-out loop would. */
@@ -284,12 +280,8 @@ describe('the runtime base-URL override, as ONE app filter', () => {
         // must not fall back to this client's own registry URL either. Its OWN type, not a bare
         // Error: a delivery worker must tell "we were misconfigured" from "the partner's URL was
         // hostile" (SsrfRefusedError) — different owners, different cures.
-        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e2')))).rejects.toBeInstanceOf(
-            MissingRuntimeBaseUrlError,
-        );
-        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e2')))).rejects.toThrow(
-            /OVERRIDE_BASE_URL/,
-        );
+        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e2')))).rejects.toBeInstanceOf(MissingRuntimeBaseUrlError);
+        await expect(RequestContext.run(() => partner.deliver(new DeliverRequest('e2')))).rejects.toThrow(/OVERRIDE_BASE_URL/);
         expect(sent).toHaveLength(1);
     });
 });
@@ -350,24 +342,20 @@ describe('the SSRF policy, armed by the ACT of re-pointing', () => {
 
     for (const row of blocked) {
         it(`refuses ${row[0]}`, async () => {
-            await expect(
-                withOverride(row[1], () => partnerClient().deliver(new DeliverRequest('e1'))),
-            ).rejects.toBeInstanceOf(SsrfRefusedError);
+            await expect(withOverride(row[1], () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toBeInstanceOf(SsrfRefusedError);
             expect(sent).toHaveLength(0);
         });
     }
 
     it('refuses plaintext http even to a public host', async () => {
-        await expect(
-            withOverride('http://api.partner.example', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/scheme 'http:' is not allowed/);
+        await expect(withOverride('http://api.partner.example', () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toThrow(
+            /scheme 'http:' is not allowed/,
+        );
         expect(sent).toHaveLength(0);
     });
 
     it('refuses a host that resolves to BOTH a public and a private address (DNS rebinding)', async () => {
-        await expect(
-            withOverride('https://rebind.partner.example', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/10\.0\.0\.5/);
+        await expect(withOverride('https://rebind.partner.example', () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toThrow(/10\.0\.0\.5/);
         expect(sent).toHaveLength(0);
     });
 
@@ -377,17 +365,12 @@ describe('the SSRF policy, armed by the ACT of re-pointing', () => {
     });
 
     it('names the ONE opt-out in its refusal, so a reader does not have to go looking', async () => {
-        await expect(
-            withOverride('https://127.0.0.1', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/SsrfTestingPolicy/);
+        await expect(withOverride('https://127.0.0.1', () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toThrow(/SsrfTestingPolicy/);
     });
 
     it('the named opt-out reaches an internal address, and only when named', async () => {
         const local = client(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
-            new ClientFilterDefinition(
-                1000,
-                new ContextBaseUrlFilter(new SsrfTestingPolicy('exercising the partner path against a local fake')),
-            ),
+            new ClientFilterDefinition(1000, new ContextBaseUrlFilter(new SsrfTestingPolicy('exercising the partner path against a local fake'))),
         ]);
 
         await withOverride('http://127.0.0.1:9123', () => local.deliver(new DeliverRequest('e1')));
@@ -400,9 +383,9 @@ describe('the SSRF policy and redirects', () => {
     it('refuses a redirect INTO an internal address, having sent nothing further', async () => {
         stubTransport([redirectTo('http://169.254.169.254/computeMetadata/v1/'), ok()]);
 
-        await expect(
-            withOverride('https://redirector.partner.example', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toBeInstanceOf(SsrfRefusedError);
+        await expect(withOverride('https://redirector.partner.example', () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toBeInstanceOf(
+            SsrfRefusedError,
+        );
 
         // The first hop went out; the metadata hop did NOT.
         expect(sentUrls()).toEqual(['https://redirector.partner.example/webhooks/deliver']);
@@ -418,22 +401,17 @@ describe('the SSRF policy and redirects', () => {
     it('follows ONE redirect to a public host, re-judged under the same policy', async () => {
         stubTransport([redirectTo('https://api.partner.example/moved'), ok()]);
 
-        await withOverride('https://redirector.partner.example', () =>
-            partnerClient().deliver(new DeliverRequest('e1')),
-        );
+        await withOverride('https://redirector.partner.example', () => partnerClient().deliver(new DeliverRequest('e1')));
 
-        expect(sentUrls()).toEqual([
-            'https://redirector.partner.example/webhooks/deliver',
-            'https://api.partner.example/moved',
-        ]);
+        expect(sentUrls()).toEqual(['https://redirector.partner.example/webhooks/deliver', 'https://api.partner.example/moved']);
     });
 
     it('refuses a redirect chain longer than the policy allows', async () => {
         stubTransport([redirectTo('https://api.partner.example/one'), redirectTo('https://api.partner.example/two')]);
 
-        await expect(
-            withOverride('https://redirector.partner.example', () => partnerClient().deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/refused to follow more than 1 redirect/);
+        await expect(withOverride('https://redirector.partner.example', () => partnerClient().deliver(new DeliverRequest('e1')))).rejects.toThrow(
+            /refused to follow more than 1 redirect/,
+        );
     });
 });
 
@@ -444,12 +422,7 @@ describe('outbound auth against a re-pointed URL', () => {
         // the audience has to be the url we are ACTUALLY talking to, which is why the minter moved
         // into the chain.
         const doubles = new Doubles();
-        const oidcClient = client(
-            OidcApi,
-            new ClientConfig('partner-webhooks'),
-            [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
-            doubles,
-        );
+        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
 
         await withOverride('https://api.partner.example', () => oidcClient.work(new DeliverRequest('e1')));
 
@@ -458,9 +431,7 @@ describe('outbound auth against a re-pointed URL', () => {
     });
 
     it('@WpAuthSharedSecret WORKS — N services behind ONE agreed secret is a real topology', async () => {
-        const secretClient = client(SharedSecretApi, new ClientConfig('partner-webhooks'), [
-            new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
-        ]);
+        const secretClient = client(SharedSecretApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())]);
 
         await withOverride('https://api.partner.example', () => secretClient.work(new DeliverRequest('e1')));
 
@@ -470,16 +441,9 @@ describe('outbound auth against a re-pointed URL', () => {
 
     it('mints AFTER the SSRF guard has judged the destination, so a refused url never gets a token', async () => {
         const doubles = new Doubles();
-        const oidcClient = client(
-            OidcApi,
-            new ClientConfig('partner-webhooks'),
-            [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
-            doubles,
-        );
+        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
 
-        await expect(
-            withOverride('https://169.254.169.254', () => oidcClient.work(new DeliverRequest('e1'))),
-        ).rejects.toBeInstanceOf(SsrfRefusedError);
+        await expect(withOverride('https://169.254.169.254', () => oidcClient.work(new DeliverRequest('e1')))).rejects.toBeInstanceOf(SsrfRefusedError);
 
         // No credential was ever created for the metadata server.
         expect(doubles.oidc.audiences).toEqual([]);
@@ -507,9 +471,7 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
         // would sign one sequence and send another, and the failure would be silent.
         expect(signer.signed?.body).toBe(JSON.stringify(new DeliverRequest('e1')));
         expect(sent[0].body).toBe(signer.signed?.body);
-        expect(sent[0].headers['x-partner-signature']).toBe(
-            `v1=${signer.signed?.body?.length}:https://api.partner.example/ot-webhook/deliver`,
-        );
+        expect(sent[0].headers['x-partner-signature']).toBe(`v1=${signer.signed?.body?.length}:https://api.partner.example/ot-webhook/deliver`);
     });
 
     it('FAILS CLOSED with no signer bound — it does not deliver unsigned', async () => {
@@ -520,21 +482,14 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
             new Doubles(undefined),
         );
 
-        await expect(
-            withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1'))),
-        ).rejects.toThrow(/no WebhookSignerCallback is bound/);
+        await expect(withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1')))).rejects.toThrow(
+            /no WebhookSignerCallback is bound/,
+        );
         expect(sent).toHaveLength(0);
     });
 
     it('is callable at all — binding the client no longer throws for @WpAuthWebhook', () => {
-        expect(() =>
-            client(
-                SignedWebhookApi,
-                new ClientConfig('partner-webhooks'),
-                [],
-                new Doubles(new RecordingWebhookSigner()),
-            ),
-        ).not.toThrow();
+        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks'), [], new Doubles(new RecordingWebhookSigner()))).not.toThrow();
     });
 });
 
@@ -591,9 +546,7 @@ class LateRePointingFilter extends Filter<ClientRequest, Response> {
 describe('app filters', () => {
     it('a signing filter sees the EXACT bytes that are transmitted', async () => {
         const signer = new RecordingSigningFilter();
-        await withOverride('https://api.partner.example', () =>
-            partnerClient([new ClientFilterDefinition(500, signer)]).deliver(new DeliverRequest('e1')),
-        );
+        await withOverride('https://api.partner.example', () => partnerClient([new ClientFilterDefinition(500, signer)]).deliver(new DeliverRequest('e1')));
 
         expect(signer.signedBytes).toBe(JSON.stringify(new DeliverRequest('e1')));
         expect(sent[0].body).toBe(signer.signedBytes);
@@ -610,9 +563,7 @@ describe('app filters', () => {
 
     it('a filter sees the host the call ACTUALLY goes to', async () => {
         const signer = new RecordingSigningFilter();
-        await withOverride('https://api.partner.example', () =>
-            partnerClient([new ClientFilterDefinition(500, signer)]).deliver(new DeliverRequest('e1')),
-        );
+        await withOverride('https://api.partner.example', () => partnerClient([new ClientFilterDefinition(500, signer)]).deliver(new DeliverRequest('e1')));
         expect(signer.signedUrl).toBe('https://api.partner.example/webhooks/deliver');
     });
 
@@ -644,9 +595,7 @@ describe('app filters', () => {
             doubles,
         );
 
-        await expect(
-            withOverride('https://api.partner.example', () => rewriter.work(new DeliverRequest('e1'))),
-        ).rejects.toBeInstanceOf(SsrfRefusedError);
+        await expect(withOverride('https://api.partner.example', () => rewriter.work(new DeliverRequest('e1')))).rejects.toBeInstanceOf(SsrfRefusedError);
         expect(sent).toHaveLength(0);
         expect(doubles.oidc.audiences).toEqual([]);
     });

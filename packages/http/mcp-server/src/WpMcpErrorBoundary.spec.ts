@@ -17,6 +17,9 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
     WpResponseDto,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
@@ -68,13 +71,11 @@ class PassageResponse {
 abstract class PassageApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/passages', 'rpc')
+    @Endpoint(POST, '/passages', READ, RPC)
     @WpResponseDto(() => PassageResponse)
     @WpMcpTool({
         name: 'passages_find',
         description: 'Find passages with their translations keyed by locale.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     passages(_request: PassageRequest): Promise<PassageResponse> {
@@ -167,8 +168,12 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         return harness.post(body, token);
     }
 
-    async function callTool(name: string, args: Record<string, unknown>): Promise<RpcResponse> {
-        return harness.callTool(name, args);
+    async function callTool(
+        name: string,
+        args: Record<string, unknown>,
+        token = 'mcp-user',
+    ): Promise<RpcResponse> {
+        return harness.callTool(name, args, token);
     }
 
     function resultOf(payload: RpcResponse): Record<string, unknown> {
@@ -189,11 +194,16 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(JSON.stringify(internal)).not.toContain('database password');
         const implementation = modelErrorOf(internal);
         expect(implementation['kind']).toBe('implementation');
-        expect(implementation['message']).toContain('Internal error in tool account_search');
+        expect(implementation).toMatchObject({ category: 'bug', retry: 'never' });
+        expect(implementation['message']).toContain('tool account_search');
         expect(implementation['message']).toContain(
             `requestId ${String(implementation['requestId'])}`,
         );
-        expect(implementation['message']).toContain('bug in the tool, not in your arguments');
+        expect(implementation['message']).toContain('internal bug');
+        const content = resultOf(internal)['content'] as Array<{ text: string }>;
+        const envelope = JSON.parse(content[0].text) as Record<string, unknown>;
+        expect(Object.keys(envelope)).toEqual(['error']);
+        expect((envelope['error'] as Record<string, unknown>)['isError']).toBeUndefined();
         expect(modelErrorOf(human)).toMatchObject({
             kind: 'end-user',
             message: 'Safe human message',
@@ -214,8 +224,8 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
 
         const visible = modelErrorOf(reply);
         expect(visible['kind']).toBe('implementation');
-        expect(visible['message']).toContain('Internal error in tool account_search');
-        expect(visible['message']).toContain('bug in the tool, not in your arguments');
+        expect(visible['message']).toContain('tool account_search');
+        expect(visible['message']).toContain('internal bug');
         expect(JSON.stringify(reply)).not.toContain('private-host');
         expect(JSON.stringify(reply)).not.toContain('connection');
         // Exactly one boundary line, and it still names the class that actually failed.
@@ -300,12 +310,59 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         const reply = await callTool('account_search', { query: 'malformed' });
         expect(modelErrorOf(reply)).toMatchObject({
             kind: 'bad-request',
-            message: 'query is malformed',
+            message: expect.stringContaining('query is malformed'),
             callerMessage: 'query is malformed',
             field: '$.query',
         });
         expect(JSON.stringify(reply)).not.toContain('operator-only');
         expect(JSON.stringify(reply)).not.toContain('tenant_7');
+    });
+
+    it('renders dependency ownership and operation-aware transient retry guidance', async () => {
+        expect(
+            modelErrorOf(await callTool('account_search', { query: 'dependency' })),
+        ).toMatchObject({
+            kind: 'dependency',
+            category: 'dependency',
+            retry: 'never',
+        });
+        expect(
+            modelErrorOf(await callTool('account_search', { query: 'bad-gateway' })),
+        ).toMatchObject({
+            kind: 'bad-gateway',
+            category: 'temporary',
+            retry: 'safe',
+        });
+        expect(modelErrorOf(await callTool('account_search', { query: 'timeout' }))).toMatchObject({
+            kind: 'dependency-timeout',
+            category: 'temporary',
+            retry: 'safe',
+        });
+        expect(modelErrorOf(await callTool('account_search', { query: 'backoff' }))).toMatchObject({
+            kind: 'dependency-backoff',
+            category: 'temporary',
+            retry: 'after-delay',
+            retryAfterSeconds: 37,
+        });
+        expect(
+            modelErrorOf(await callTool('account_search', { query: 'unavailable' })),
+        ).toMatchObject({
+            kind: 'unavailable',
+            category: 'temporary',
+            retry: 'safe',
+        });
+
+        authority.roles = ['admin'];
+        const unsafe = modelErrorOf(
+            await callTool('admin_search', { query: 'timeout' }, 'mcp-admin-for-retry'),
+        );
+        authority.roles = [];
+        expect(unsafe).toMatchObject({
+            kind: 'dependency-timeout',
+            category: 'temporary',
+            retry: 'unsafe-outcome-unknown',
+        });
+        expect(unsafe['message']).toContain('could duplicate');
     });
 
     it('attaches the requestId to success, end-user, bad-request and implementation results', async () => {

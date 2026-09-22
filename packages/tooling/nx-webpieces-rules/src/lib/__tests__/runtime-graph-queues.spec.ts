@@ -86,8 +86,20 @@ const TASK_CONTRACTS: ApiContracts = {
         apiKind: 'pubsub',
         basePath: '/api/tasks',
         methods: [
-            { name: 'send', path: '/send', kind: 'cloudtasks', queueName: 'TaskApi-send' },
-            { name: 'nightly', path: '/nightly', kind: 'cron', queueName: 'TaskApi-nightly' },
+            {
+                name: 'send',
+                path: '/send',
+                kind: 'cloudtasks',
+                operation: 'write',
+                queueName: 'TaskApi-send',
+            },
+            {
+                name: 'nightly',
+                path: '/nightly',
+                kind: 'cron',
+                operation: 'write',
+                queueName: 'TaskApi-nightly',
+            },
         ],
     },
 };
@@ -98,7 +110,13 @@ describe('queues + triggers from the api contract tables', () => {
     it('keeps a service that enqueues to ITSELF, as an edge through its own queue', () => {
         const queued = derived.runtimeEdges.filter((e: RuntimeEdge) => e.type === 'pubsub');
         expect(queued).toEqual([
-            { from: 'worker', to: 'worker', via: ['TaskApi'], type: 'pubsub', queue: 'TaskApi.send' },
+            {
+                from: 'worker',
+                to: 'worker',
+                via: ['TaskApi'],
+                type: 'pubsub',
+                queue: 'TaskApi.send',
+            },
         ]);
     });
 
@@ -118,7 +136,13 @@ describe('queues + triggers from the api contract tables', () => {
 
     it('records the cron method as a trigger pointing at its implementer', () => {
         expect(derived.triggers).toEqual([
-            { kind: 'cron', api: 'TaskApi', method: 'nightly', service: 'worker', queueName: 'TaskApi-nightly' },
+            {
+                kind: 'cron',
+                api: 'TaskApi',
+                method: 'nightly',
+                service: 'worker',
+                queueName: 'TaskApi-nightly',
+            },
         ]);
     });
 
@@ -136,7 +160,9 @@ describe('queues + triggers from the api contract tables', () => {
 });
 
 describe('generateRuntimeDot — per-method queues, clocks, inbound external', () => {
-    const dot = generateRuntimeDot(deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), TASK_CONTRACTS));
+    const dot = generateRuntimeDot(
+        deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), TASK_CONTRACTS),
+    );
 
     it('names the queue node after the METHOD so producers/consumers converge on one box', () => {
         // Mrecord + an empty leading field = a cylinder on its side; the upright cylinder now means
@@ -152,7 +178,9 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
 
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
         expect(dot).toContain('"cron__TaskApi_nightly" [shape=circle');
-        expect(dot).toContain('"cron__TaskApi_nightly" -> "worker" [label="TaskApi.nightly\\nTaskApi-nightly"');
+        expect(dot).toContain(
+            '"cron__TaskApi_nightly" -> "worker" [label="TaskApi.nightly\\nTaskApi-nightly"',
+        );
     });
 });
 
@@ -166,9 +194,27 @@ const MERGE_CONTRACTS: ApiContracts = {
         apiKind: 'pubsub',
         basePath: '/api/tasks',
         methods: [
-            { name: 'send', path: '/send', kind: 'cloudtasks', queueName: 'TaskApi-send' },
-            { name: 'retry', path: '/retry', kind: 'cloudtasks', queueName: 'TaskApi-retry' },
-            { name: 'blast', path: '/blast', kind: 'cloudtasks', queueName: 'custom-blast' },
+            {
+                name: 'send',
+                path: '/send',
+                kind: 'cloudtasks',
+                operation: 'write',
+                queueName: 'TaskApi-send',
+            },
+            {
+                name: 'retry',
+                path: '/retry',
+                kind: 'cloudtasks',
+                operation: 'write',
+                queueName: 'TaskApi-retry',
+            },
+            {
+                name: 'blast',
+                path: '/blast',
+                kind: 'cloudtasks',
+                operation: 'write',
+                queueName: 'custom-blast',
+            },
         ],
     },
 };
@@ -179,7 +225,9 @@ function countLines(dot: string, text: string): number {
 }
 
 describe('generateRuntimeDot — merging queues of one contract into one box', () => {
-    const dot = generateRuntimeDot(deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS));
+    const dot = generateRuntimeDot(
+        deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS),
+    );
 
     it('draws ONE box listing every queue, with one enqueue and one deliver arrow', () => {
         // Node id comes from the group's FIRST member by sorted key — TaskApi.blast.
@@ -191,8 +239,12 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
         expect(label).toContain('TaskApi.send');
         expect(countLines(dot, '[label="enqueue"')).toBe(1);
         expect(countLines(dot, '[label="deliver"')).toBe(1);
-        expect(dot).toContain('"worker" -> "queue__TaskApi_blast" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"queue__TaskApi_blast" -> "worker" [label="deliver", style=dashed];');
+        expect(dot).toContain(
+            '"worker" -> "queue__TaskApi_blast" [label="enqueue", style=dashed];',
+        );
+        expect(dot).toContain(
+            '"queue__TaskApi_blast" -> "worker" [label="deliver", style=dashed];',
+        );
     });
 
     it('keeps a @Queue(...) OVERRIDE name and drops the derived ones', () => {
@@ -205,13 +257,24 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
     it('leaves runtime-dependencies.json at ONE entry per method', () => {
         // RENDER-ONLY: the merge is a drawing decision, never a change to the committed data.
         const derived = deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS);
-        expect(Object.keys(derived.queues).sort()).toEqual(['TaskApi.blast', 'TaskApi.retry', 'TaskApi.send']);
-        expect(derived.runtimeEdges.filter((e: RuntimeEdge) => e.type === 'pubsub')).toHaveLength(3);
+        expect(Object.keys(derived.queues).sort()).toEqual([
+            'TaskApi.blast',
+            'TaskApi.retry',
+            'TaskApi.send',
+        ]);
+        expect(derived.runtimeEdges.filter((e: RuntimeEdge) => e.type === 'pubsub')).toHaveLength(
+            3,
+        );
     });
 });
 
 /** A queue entry for the hand-built graphs below. */
-function queue(api: string, method: string, producedBy: string[], consumedBy: string[]): RuntimeQueue {
+function queue(
+    api: string,
+    method: string,
+    producedBy: string[],
+    consumedBy: string[],
+): RuntimeQueue {
     return { api, method, queueName: `${api}-${method}`, producedBy, consumedBy };
 }
 
@@ -291,7 +354,13 @@ const PUSH_CONTRACTS: ApiContracts = {
         apiKind: 'rpc',
         basePath: '/api/push',
         methods: [
-            { name: 'notify', path: '/notify', kind: 'external', caller: { kind: 'system', label: 'pubsub-push' } },
+            {
+                name: 'notify',
+                path: '/notify',
+                kind: 'external',
+                operation: 'write',
+                caller: { kind: 'system', label: 'pubsub-push' },
+            },
         ],
     },
 };
@@ -302,7 +371,7 @@ const LEGACY_PUSH_CONTRACTS: ApiContracts = {
         owner: 'shared-api',
         apiKind: 'rpc',
         basePath: '/api/push',
-        methods: [{ name: 'notify', path: '/notify', kind: 'external' }],
+        methods: [{ name: 'notify', path: '/notify', kind: 'external', operation: 'write' }],
     },
 };
 
@@ -328,13 +397,19 @@ describe('external (outside-driven) endpoints', () => {
         expect(dot).toContain('"system__pubsub_push" [shape=box');
         expect(dot).toContain('label="pubsub-push\\n(external caller)"');
         expect(dot).not.toContain('inbound__RpcApi');
-        expect(dot).toContain('"system__pubsub_push" -> "consumer" [label="RpcApi.notify", style=dashed');
+        expect(dot).toContain(
+            '"system__pubsub_push" -> "consumer" [label="RpcApi.notify", style=dashed',
+        );
     });
 
     it('still renders an UNDECLARED caller, visibly distinct as a dotted unknown', () => {
-        const dot = generateRuntimeDot(deriveRuntimeGraph(graph(), new Set<string>(), LEGACY_PUSH_CONTRACTS));
+        const dot = generateRuntimeDot(
+            deriveRuntimeGraph(graph(), new Set<string>(), LEGACY_PUSH_CONTRACTS),
+        );
         expect(dot).toContain('"inbound__RpcApi" [shape=box, style="dotted,filled"');
         expect(dot).toContain('label="RpcApi\\n? unknown caller"');
-        expect(dot).toContain('"inbound__RpcApi" -> "consumer" [label="RpcApi.notify", style=dashed');
+        expect(dot).toContain(
+            '"inbound__RpcApi" -> "consumer" [label="RpcApi.notify", style=dashed',
+        );
     });
 });

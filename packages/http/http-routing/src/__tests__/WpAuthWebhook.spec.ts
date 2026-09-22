@@ -18,6 +18,9 @@ import {
     ApiBadRequestError,
     ApiUnauthorizedError,
     RouteMetadata,
+    EXTERNAL,
+    POST,
+    WRITE,
 } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
@@ -40,7 +43,7 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 @ApiPath('/hook')
 abstract class SentryHookApi {
     @WpAuthWebhook('sentry')
-    @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -55,7 +58,7 @@ class SentryHookController extends SentryHookApi {
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
     @WpAuthWebhook('sentry')
-    @Endpoint('/sentry/issue', 'external', { calledBy: 'sentry' })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -71,6 +74,7 @@ const WEBHOOK_ROUTE = new RouteMetadata(
     'POST',
     '/hook/sentry/issue',
     'notify',
+    WRITE,
     'SentryHookController',
     new AuthMeta({ kind: 'webhook', name: 'sentry' }),
     'SentryHookApi',

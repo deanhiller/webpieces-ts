@@ -8,6 +8,7 @@
             "name": "getInfo",
             "path": "/info",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {

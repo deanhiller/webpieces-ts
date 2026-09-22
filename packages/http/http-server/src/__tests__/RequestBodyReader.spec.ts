@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import express, { Express, NextFunction, Request, Response } from 'express';
 import { AddressInfo } from 'net';
-import { ApiBadRequestError, HeaderRegistry, RouteMetadata } from '@webpieces/core-util';
+import { ApiBadRequestError, HeaderRegistry, RouteMetadata, WRITE } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { ApiClient, ApiFactory } from '@webpieces/http-routing';
 import { WebpiecesExpressRouter } from '../WebpiecesExpressRouter';
@@ -38,8 +38,34 @@ class StubApiFactory implements ApiFactory {
             return Promise.resolve({ ok: true });
         };
         const routes = [
-            new RouteMetadata('POST', '/save', 'save', undefined, undefined, 'BodyApi', false, undefined, false, [], 0),
-            new RouteMetadata('POST', '/hook', 'hook', undefined, undefined, 'BodyApi', false, undefined, true, [], 0),
+            new RouteMetadata(
+                'POST',
+                '/save',
+                'save',
+                WRITE,
+                undefined,
+                undefined,
+                'BodyApi',
+                false,
+                undefined,
+                false,
+                [],
+                0,
+            ),
+            new RouteMetadata(
+                'POST',
+                '/hook',
+                'hook',
+                WRITE,
+                undefined,
+                undefined,
+                'BodyApi',
+                false,
+                undefined,
+                true,
+                [],
+                0,
+            ),
         ];
         return [new ApiClient(BodyApi, { save: record, hook: record }, routes)];
     }

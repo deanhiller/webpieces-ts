@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, WpAuthJwt } from '@webpieces/core-util';
+import { ApiPath, Endpoint, WpAuthJwt, POST, RPC, WRITE } from '@webpieces/core-util';
 
 // ============================================================
 // Request DTOs
@@ -99,7 +99,7 @@ export interface SaveResponse {
 @ApiPath('/search')
 export abstract class SaveApi {
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/item', 'rpc')
+    @Endpoint(POST, '/item', WRITE, RPC)
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('Method save() must be implemented by subclass');
     }

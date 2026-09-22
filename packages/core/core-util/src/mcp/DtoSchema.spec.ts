@@ -54,8 +54,6 @@ abstract class SearchApi {
     @WpMcpTool({
         name: 'search',
         description: 'Search the signed-in user account.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     @WpResponseDto(() => SearchResponse)

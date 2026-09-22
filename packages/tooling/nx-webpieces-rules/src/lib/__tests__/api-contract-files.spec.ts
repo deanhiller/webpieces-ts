@@ -55,15 +55,28 @@ function contracts(): ApiContracts {
             apiKind: 'pubsub',
             basePath: '/api/tasks',
             methods: [
-                { name: 'send', path: '/send', kind: 'cloudtasks', httpMethod: 'POST', queueName: 'TaskApi-send' },
-                { name: 'nightly', path: '/nightly', kind: 'cron', queueName: 'TaskApi-nightly' },
+                {
+                    name: 'send',
+                    path: '/send',
+                    kind: 'cloudtasks',
+                    operation: 'write',
+                    httpMethod: 'POST',
+                    queueName: 'TaskApi-send',
+                },
+                {
+                    name: 'nightly',
+                    path: '/nightly',
+                    kind: 'cron',
+                    operation: 'write',
+                    queueName: 'TaskApi-nightly',
+                },
             ],
         },
         OtherApi: {
             owner: 'task-api',
             apiKind: 'rpc',
             basePath: '/api/other',
-            methods: [{ name: 'get', path: '/get', kind: 'rpc' }],
+            methods: [{ name: 'get', path: '/get', kind: 'rpc', operation: 'write' }],
         },
     };
 }
@@ -96,13 +109,16 @@ describe('architecture/apis/<Api>.json', () => {
         generate(contracts());
         const deps = JSON.parse(read('dependencies.json'));
         expect(deps.apiContracts).toBeUndefined();
-        expect(deps.apiContractFiles).toEqual({ OtherApi: 'apis/OtherApi.json', TaskApi: 'apis/TaskApi.json' });
+        expect(deps.apiContractFiles).toEqual({
+            OtherApi: 'apis/OtherApi.json',
+            TaskApi: 'apis/TaskApi.json',
+        });
 
         const task = JSON.parse(read('apis/TaskApi.json'));
         expect(task).toEqual({ api: 'TaskApi', ...contracts().TaskApi });
     });
 
-    it('tells agents where an api\'s endpoints live', () => {
+    it("tells agents where an api's endpoints live", () => {
         generate(contracts());
         expect(AI_INSTRUCTIONS).toContain('apis/<ApiName>.json');
         expect(JSON.parse(read('dependencies.json')).aiInstructions).toContain('apiContractFiles');
@@ -115,7 +131,12 @@ describe('architecture/apis/<Api>.json', () => {
         const taskBefore = read('apis/TaskApi.json');
 
         const grown = contracts();
-        grown.TaskApi.methods.push({ name: 'listRuns', path: '/list-runs', kind: 'rpc' });
+        grown.TaskApi.methods.push({
+            name: 'listRuns',
+            path: '/list-runs',
+            kind: 'rpc',
+            operation: 'write',
+        });
         generate(grown);
 
         expect(read('dependencies.json')).toBe(depsBefore);
@@ -151,7 +172,11 @@ describe('the runtime graph reads the per-api files', () => {
     it('derives the same queues and triggers from the loaded files as from the in-memory table', () => {
         generate(contracts());
         const loaded = loadBlessedGraph(root)!;
-        const fromFiles = new ApiContractFiles().load(root, DEFAULT_GRAPH_PATH, loaded.apiContractFiles);
+        const fromFiles = new ApiContractFiles().load(
+            root,
+            DEFAULT_GRAPH_PATH,
+            loaded.apiContractFiles,
+        );
         expect(fromFiles).toEqual(contracts());
 
         const derived = deriveRuntimeGraph(loaded.projects, new Set<string>(), fromFiles);
@@ -159,7 +184,13 @@ describe('the runtime graph reads the per-api files', () => {
         expect(Object.keys(derived.queues)).toEqual(['TaskApi.send']);
         expect(derived.queues['TaskApi.send'].queueName).toBe('TaskApi-send');
         expect(derived.triggers).toEqual([
-            { kind: 'cron', api: 'TaskApi', method: 'nightly', service: 'worker', queueName: 'TaskApi-nightly' },
+            {
+                kind: 'cron',
+                api: 'TaskApi',
+                method: 'nightly',
+                service: 'worker',
+                queueName: 'TaskApi-nightly',
+            },
         ]);
     });
 
@@ -198,7 +229,12 @@ describe('validate-architecture-unchanged ignores endpoint changes', () => {
         generate(contracts());
         const saved = loadBlessedGraph(root)!;
         const grown = contracts();
-        grown.TaskApi.methods.push({ name: 'listRuns', path: '/list-runs', kind: 'rpc' });
+        grown.TaskApi.methods.push({
+            name: 'listRuns',
+            path: '/list-runs',
+            kind: 'rpc',
+            operation: 'write',
+        });
 
         const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {});
         expect(describeTableDrift(current, saved)).toBeNull();

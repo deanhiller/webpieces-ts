@@ -19,6 +19,9 @@ import {
     WpDtoField,
     WpDtoFieldOptions,
     WpStream,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { ApiClientFactory } from '../ApiClientFactory';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
@@ -51,7 +54,7 @@ class ServerEvent {
 abstract class TypedStreamApi {
     @WpAuthPublic('Typed stream test fixture')
     @WpStream(() => ClientEvent, () => ServerEvent)
-    @Endpoint('/stream', 'rpc')
+    @Endpoint(POST, '/stream', READ, RPC)
     stream(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
         throw new Error('subclass');
     }

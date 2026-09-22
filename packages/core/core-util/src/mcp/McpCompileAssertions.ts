@@ -31,16 +31,14 @@ const noEighthFieldArgument = new WpDtoFieldOptions(
 );
 
 abstract class InvalidMcpContract {
-    // @ts-expect-error read-only tools cannot also claim to be destructive
     @WpMcpTool({
         name: 'invalid',
         description: 'This declaration must never compile.',
+        // @ts-expect-error side-effect claims belong on @Endpoint.operation, never @WpMcpTool
         readOnlyHint: true,
-        destructiveHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
-    invalid(): Promise<void> {
+    invalid(_request: object): Promise<object> {
         throw new Error('contract only');
     }
 }
@@ -50,8 +48,6 @@ abstract class InvalidMcpArities {
     @WpMcpTool({
         name: 'zero-arity',
         description: 'This declaration must never compile.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     zero(): Promise<object> {
@@ -62,8 +58,6 @@ abstract class InvalidMcpArities {
     @WpMcpTool({
         name: 'multi-arity',
         description: 'This declaration must never compile.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     multi(_first: object, _second: object): Promise<object> {

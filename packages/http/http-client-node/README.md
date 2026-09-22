@@ -72,7 +72,7 @@ It is not a different kind of client. It is ONE filter:
 /** @externalSystem runtime partner-webhooks */
 @ApiPath('/ot-webhook')
 export class PartnerWebhookApi {
-    @Endpoint('/deliver')
+    @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthWebhook('partner-hmac')
     deliver(envelope: WebhookEnvelope): Promise<DeliveryAck>;
 }

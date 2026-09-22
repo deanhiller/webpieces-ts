@@ -18,6 +18,9 @@ import {
     WpDtoField,
     WpDtoFieldOptions,
     WpStream,
+    POST,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import type { RequestContextHeaders } from '@webpieces/core-context';
@@ -42,7 +45,7 @@ class ServerEvent {
 @Rpc()
 @ApiPath('/stream')
 abstract class StreamingApi {
-    @Endpoint('/exchange', 'rpc')
+    @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('integration test')
     @WpStream(() => ClientEvent, () => ServerEvent)
     exchange(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {

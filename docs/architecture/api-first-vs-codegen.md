@@ -59,7 +59,7 @@ runtime** — there is no intermediate spec and nothing is generated.
 //   3. Controllers implement this class to get compile-time enforcement
 @ApiPath('/search')
 export abstract class SaveApi {
-    @Endpoint('/item')
+    @Endpoint(POST, '/item', WRITE, RPC)
     ...
 }
 ```

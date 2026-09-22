@@ -180,7 +180,7 @@ export class WebpiecesExpressRouter {
 
     /**
      * Contract `{name}` placeholders -> Express 5 `:name` route syntax. An EMPTY contract path
-     * (`@ApiPath('')` + `@Endpoint('')`, legal since #944) is served at the root, because every
+     * (`@ApiPath('')` + `@Endpoint(POST, '', ...)`, legal since #944) is served at the root, because every
      * request path Express sees starts with `/` and an empty route could never match.
      */
     private expressPath(route: RouteMetadata): string {

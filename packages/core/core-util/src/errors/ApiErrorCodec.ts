@@ -1,5 +1,6 @@
 import {
     ApiBadRequestError,
+    ApiBadGatewayError,
     ApiCodedError,
     ApiConflictError,
     ApiConnectionError,
@@ -168,6 +169,8 @@ export class ApiErrorCodec {
                 return this.coded(message, field('statusCode'), field('errorCode'));
             case 'dependency':
                 return new ApiDependencyError(message);
+            case 'bad-gateway':
+                return new ApiBadGatewayError(message);
             case 'unavailable':
                 return new ApiUnavailableError(message);
             case 'dependency-timeout':
@@ -254,6 +257,8 @@ export class ApiErrorCodec {
                 return 'Request Failed';
             case 'dependency':
                 return 'Dependency Error';
+            case 'bad-gateway':
+                return 'Bad Gateway';
             case 'unavailable':
                 return 'Service Unavailable';
             case 'dependency-timeout':
@@ -284,6 +289,7 @@ export class ApiErrorCodec {
         'coded',
         'implementation',
         'dependency',
+        'bad-gateway',
         'unavailable',
         'dependency-timeout',
         'dependency-backoff',

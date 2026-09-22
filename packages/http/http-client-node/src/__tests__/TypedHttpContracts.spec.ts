@@ -10,6 +10,9 @@ import {
     Rpc,
     TestCaseRecorder,
     WpAuthPublic,
+    GET,
+    READ,
+    RPC,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import type { RequestContextHeaders } from '@webpieces/core-context';
@@ -23,7 +26,7 @@ import { NodeProxyClient } from '../NodeProxyClient';
 @ApiPath('/inventory')
 abstract class NodeTypedApi {
     @WpAuthPublic('Inventory metadata is public')
-    @Endpoint('/{owner}/{item}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/{owner}/{item}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     get(
         @PathParam('owner') _owner: string,

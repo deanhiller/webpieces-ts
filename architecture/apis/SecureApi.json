@@ -8,6 +8,7 @@
             "name": "userOp",
             "path": "/user",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {
@@ -20,6 +21,7 @@
             "name": "adminOp",
             "path": "/admin",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {
@@ -32,6 +34,7 @@
             "name": "orgOp",
             "path": "/org",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {
@@ -44,6 +47,7 @@
             "name": "internalOp",
             "path": "/internal",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {
@@ -56,6 +60,7 @@
             "name": "serviceOp",
             "path": "/service",
             "kind": "rpc",
+            "operation": "read",
             "httpMethod": "POST",
             "parameters": [
                 {

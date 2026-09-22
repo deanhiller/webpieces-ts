@@ -1,5 +1,14 @@
 import 'reflect-metadata';
-import { ApiPath, Endpoint, WpAuthPublic, getEndpointOptions } from '../decorators';
+import {
+    ApiPath,
+    Endpoint,
+    WpAuthPublic,
+    getEndpointOptions,
+    POST,
+    READ,
+    RPC,
+    WRITE,
+} from '../decorators';
 import { RouteMetadataFactory } from '../RouteMetadataFactory';
 
 /**
@@ -14,14 +23,14 @@ import { RouteMetadataFactory } from '../RouteMetadataFactory';
 abstract class SampleDevLogApi {
     /** The log shipper itself: its own request/response lines would be the next batch's payload. */
     @WpAuthPublic('Browser log shipping fixture')
-    @Endpoint('/batch', 'rpc', { background: true })
+    @Endpoint(POST, '/batch', WRITE, RPC, { background: true })
     sendBatch(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
     /** An ordinary route on the same contract — the control for every assertion below. */
     @WpAuthPublic('Ordinary route fixture')
-    @Endpoint('/ping', 'rpc')
+    @Endpoint(POST, '/ping', READ, RPC)
     ping(_req: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -29,7 +38,9 @@ abstract class SampleDevLogApi {
 
 describe('@Endpoint background option', () => {
     it('round-trips in the parallel endpoint-options metadata, and is absent when undeclared', () => {
-        expect(getEndpointOptions(SampleDevLogApi, 'sendBatch')).toEqual({ background: true });
+        expect(getEndpointOptions(SampleDevLogApi, 'sendBatch')).toEqual({
+            background: true,
+        });
         expect(getEndpointOptions(SampleDevLogApi, 'ping')).toEqual({});
     });
 

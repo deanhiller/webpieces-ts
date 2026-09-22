@@ -47,6 +47,7 @@ import {
     NonLiteralDecoratorArg,
     ProjectApiRelations,
     UndeclaredExternalCaller,
+    UndeclaredEndpointOperation,
     UnresolvedEndpointPath,
     apiRefKey,
     deriveApiRelationKind,
@@ -56,6 +57,7 @@ import {
     EmptiedApiContractError,
     MissingBasePathError,
     UndeclaredExternalCallerError,
+    UndeclaredEndpointOperationError,
     UnresolvedEndpointPathError,
 } from './api-contract-errors';
 import {
@@ -137,6 +139,8 @@ export interface ApiScanResult {
      * graph exists to name that system, and with nothing to name it restates our own contract name.
      */
     undeclaredExternalCallers: UndeclaredExternalCaller[];
+    /** Endpoints lacking the explicit side-effect contract used for retry safety and MCP hints. */
+    undeclaredEndpointOperations: UndeclaredEndpointOperation[];
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -156,7 +160,8 @@ class ProjectLocator {
     projectOf(absFile: string): string | null {
         const normalized = path.resolve(absFile);
         for (const root of this.roots) {
-            if (normalized === root.abs || normalized.startsWith(root.abs + path.sep)) return root.name;
+            if (normalized === root.abs || normalized.startsWith(root.abs + path.sep))
+                return root.name;
         }
         return null;
     }
@@ -257,10 +262,15 @@ class RelationAccumulator {
 
     /** Build the deterministic { owner -> relation } record, owners in sorted order. */
     toRelations(): ProjectApiRelations {
-        const owners = new Set<string>([...this.implementsByOwner.keys(), ...this.usesByOwner.keys()]);
+        const owners = new Set<string>([
+            ...this.implementsByOwner.keys(),
+            ...this.usesByOwner.keys(),
+        ]);
         const relations: ProjectApiRelations = {};
         for (const owner of [...owners].sort()) {
-            const implementsRefs = sortApiRefs([...(this.implementsByOwner.get(owner)?.values() ?? [])]);
+            const implementsRefs = sortApiRefs([
+                ...(this.implementsByOwner.get(owner)?.values() ?? []),
+            ]);
             const usesRefs = sortApiRefs([...(this.usesByOwner.get(owner)?.values() ?? [])]);
             const relation: ApiRelation = {
                 kind: deriveApiRelationKind(implementsRefs, usesRefs),
@@ -329,6 +339,8 @@ export class ApiUsageScanner {
             unresolvedEndpointPaths: this.decoratorArgDiagnostics.unresolvedEndpointPaths(),
             emptiedApiContracts: this.decoratorArgDiagnostics.emptiedContracts(),
             undeclaredExternalCallers: this.decoratorArgDiagnostics.undeclaredExternalCallers(),
+            undeclaredEndpointOperations:
+                this.decoratorArgDiagnostics.undeclaredEndpointOperations(),
         };
     }
 
@@ -340,7 +352,8 @@ export class ApiUsageScanner {
         let scannedProductionFile = false;
 
         for (const sourceFile of program.getSourceFiles()) {
-            if (sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/')) continue;
+            if (sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/'))
+                continue;
             if (isTestFile(sourceFile.fileName)) continue; // tests are not production topology
             // Only this project's OWN files — imported api-lib source is in the program too.
             if (this.locator.projectOf(sourceFile.fileName) !== info.name) continue;
@@ -351,10 +364,16 @@ export class ApiUsageScanner {
         // Record coverage only when we actually saw production source — an all-test project (e2e)
         // stays absent so the validator won't wrongly flag its api-lib deps as unused.
         if (scannedProductionFile) this.scannedProjects.add(info.name);
-        if (!accumulator.isEmpty()) this.relationsByProject.set(info.name, accumulator.toRelations());
+        if (!accumulator.isEmpty())
+            this.relationsByProject.set(info.name, accumulator.toRelations());
     }
 
-    private visit(node: ts.Node, checker: ts.TypeChecker, project: string, acc: RelationAccumulator): void {
+    private visit(
+        node: ts.Node,
+        checker: ts.TypeChecker,
+        project: string,
+        acc: RelationAccumulator,
+    ): void {
         // In-repo contract classes are indexed by the source pre-pass, so only calls matter for them.
         if (ts.isCallExpression(node)) this.recordCall(node, checker, project, acc);
         // A VENDOR contract has no client-factory call site to key off — it arrives by injection —
@@ -414,7 +433,11 @@ export class ApiUsageScanner {
     }
 
     /** Resolve an expression to the API contract it names, or null if it is not one. */
-    private apiInfoFromExpr(expr: ts.Expression, checker: ts.TypeChecker, project: string): ApiClassInfo | null {
+    private apiInfoFromExpr(
+        expr: ts.Expression,
+        checker: ts.TypeChecker,
+        project: string,
+    ): ApiClassInfo | null {
         const decl = resolveClassDeclaration(expr, checker);
         if (!decl) return null;
         const fromSource = this.apiClassInfoFor(decl);
@@ -434,7 +457,8 @@ export class ApiUsageScanner {
         project: string,
     ): ApiClassInfo | null {
         // An abstract class is the shape of a contract; a non-abstract argument is genuinely not one.
-        if (!decl.getSourceFile().isDeclarationFile || !isAbstractClass(decl) || !decl.name) return null;
+        if (!decl.getSourceFile().isDeclarationFile || !isAbstractClass(decl) || !decl.name)
+            return null;
         const recovered = this.sourceIndex.lookup(decl.name.text);
         if (recovered) return recovered;
         // Abstract, in a .d.ts, yet no workspace source owns it — the scan is blind here. Say so.
@@ -503,14 +527,15 @@ export function scanAndAttachApiRelations(
  * would be an empty shell, and its identity is already carried by the `external` refs in
  * apiRelations. Sorted by api name, methods left in declaration order, so the file is deterministic.
  *
- * THROWS on the four ways an entry can be wrong-but-green, checked root cause first (the fourth is
- * an `external` method that never said WHO calls it — UndeclaredExternalCallerError):
+ * THROWS on the ways an entry can be wrong-but-green, checked root cause first:
  *   1. an `@Endpoint` path the scan could not read (UnresolvedEndpointPathError) — the other half of
  *      the URL a consumer computes, and the cause of most emptied contracts;
  *   2. a class that declared endpoints and kept none (EmptiedApiContractError), which would otherwise
  *      leave silently through the zero-method skip above;
- *   3. a routed contract with no basePath (MissingBasePathError).
- * All three are worse than an absent entry: a consumer joining `basePath + path` computes a
+ *   3. a method without an explicit operation (UndeclaredEndpointOperationError);
+ *   4. an `external` method that never said WHO calls it (UndeclaredExternalCallerError);
+ *   5. a routed contract with no basePath (MissingBasePathError).
+ * All are worse than an absent entry: a consumer joining `basePath + path` computes a
  * confidently wrong URL with no signal that anything is off, because every other entry is complete.
  * Each error aggregates EVERY offender, so a developer fixing five constants sees five in one run.
  */
@@ -518,8 +543,13 @@ export function scanAndAttachApiRelations(
 export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     // Root cause before symptom: an unreadable path is what empties a contract, so naming the paths
     // is what the author can actually act on.
-    if (scan.unresolvedEndpointPaths.length > 0) throw new UnresolvedEndpointPathError(scan.unresolvedEndpointPaths);
-    if (scan.emptiedApiContracts.length > 0) throw new EmptiedApiContractError(scan.emptiedApiContracts);
+    if (scan.unresolvedEndpointPaths.length > 0)
+        throw new UnresolvedEndpointPathError(scan.unresolvedEndpointPaths);
+    if (scan.emptiedApiContracts.length > 0)
+        throw new EmptiedApiContractError(scan.emptiedApiContracts);
+    if (scan.undeclaredEndpointOperations.length > 0) {
+        throw new UndeclaredEndpointOperationError(scan.undeclaredEndpointOperations);
+    }
     // After the two above: an unreadable path is what empties a contract, and a contract that lost
     // every method has no external endpoint left to complain about.
     if (scan.undeclaredExternalCallers.length > 0) {
@@ -545,7 +575,6 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     if (missing.length > 0) throw new MissingBasePathError(missing);
     return contracts;
 }
-
 
 /**
  * Loud, actionable report for decorator arguments the scan could not reduce to a string.
@@ -593,7 +622,7 @@ export function describeMismatchedEndpointKinds(contracts: ApiContracts): string
         for (const method of contract.methods) {
             if (allowed.includes(method.kind)) continue;
             problems.push(
-                `${api}.${method.name} declares @Endpoint('${method.path}', '${method.kind}') but ${api} is ` +
+                `${api}.${method.name} declares @Endpoint(${method.httpMethod ?? 'POST'}, '${method.path}', ${method.operation}, ${method.kind}) but ${api} is ` +
                     `@${contract.apiKind === 'pubsub' ? 'PubSub' : 'Rpc'} — allowed kinds are ${allowed.join(' | ')}.`,
             );
         }
@@ -613,7 +642,9 @@ export function describeUnresolvedApiCalls(calls: UnresolvedApiCall[]): string {
         `   Decorators (@ApiPath) are ERASED in .d.ts output, so these relations are MISSING from the graph:`,
     ];
     for (const call of calls) {
-        lines.push(`     • ${call.api} at ${call.at} (${call.project}) → resolved to ${call.declaredIn}`);
+        lines.push(
+            `     • ${call.api} at ${call.at} (${call.project}) → resolved to ${call.declaredIn}`,
+        );
     }
     lines.push(
         `   If the api-lib IS in this workspace, add a tsconfig.base.json 'paths' entry mapping it to its`,
@@ -647,7 +678,10 @@ function createScanProgram(projectRootAbs: string): ts.Program | null {
 }
 
 // webpieces-disable no-function-outside-class -- ts Program factory helper, mirrors di-graph/program.ts
-function buildProgramFromSrc(projectRootAbs: string, options: ts.CompilerOptions): ts.Program | null {
+function buildProgramFromSrc(
+    projectRootAbs: string,
+    options: ts.CompilerOptions,
+): ts.Program | null {
     const srcDir = path.join(projectRootAbs, 'src');
     if (!fs.existsSync(srcDir)) return null;
     const files = collectTsFiles(srcDir);

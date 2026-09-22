@@ -92,9 +92,9 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
      * gets its DTO. Everything else throws, which is what lets `ProxyClient` call this and then simply
      * stop — a failure response can never fall through to a typed caller.
      *
-     * The rule applied is {@link ReceivedApiErrorRule}, shared verbatim with IPC: 4xx is MY bug, 5xx
-     * is THEIRS, an `ApiDependencyError` is already attributed and passes through, 266 is the end
-     * user's own answer.
+     * The rule applied is {@link ReceivedApiErrorRule}, shared verbatim with IPC: ordinary 4xx is MY
+     * bug, ordinary 5xx is THEIRS, retry-relevant statuses retain their specific timeout/gateway/
+     * backoff/unavailable meaning, and 266 is the end user's own answer.
      */
     fromWire(response: HttpResponseDto): void {
         const code = response.status.code;
@@ -102,8 +102,14 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
             return;
         }
         const decoded = this.decodeBody(response);
-        const message = decoded?.message ?? this.fallbackMessage(response.body, response.status.reason);
-        throw ReceivedApiErrorRule.adapt(code, message, decoded);
+        const message =
+            decoded?.message ?? this.fallbackMessage(response.body, response.status.reason);
+        throw ReceivedApiErrorRule.adapt(
+            code,
+            message,
+            decoded,
+            this.retryAfterSeconds(response.headers),
+        );
     }
 
     /** The reason phrase webpieces writes beside a status it chose itself. */
@@ -137,6 +143,19 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
             if (typeof message === 'string' && message.length > 0) return message.slice(0, 4096);
         }
         return reason || 'Request Failed';
+    }
+
+    /** Parse either legal Retry-After form and bound untrusted guidance to one day. */
+    private retryAfterSeconds(headers: readonly HttpHeader[]): number | undefined {
+        const raw = headers.find(
+            (header: HttpHeader) => header.name.toLowerCase() === 'retry-after',
+        )?.value;
+        if (raw === undefined) return undefined;
+        const seconds = Number(raw.trim());
+        if (Number.isFinite(seconds) && seconds >= 0) return Math.min(Math.ceil(seconds), 86_400);
+        const at = Date.parse(raw);
+        if (!Number.isFinite(at)) return undefined;
+        return Math.min(Math.max(Math.ceil((at - Date.now()) / 1_000), 0), 86_400);
     }
 }
 

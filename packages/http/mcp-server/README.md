@@ -25,13 +25,11 @@ class FindOrderResponse {
 abstract class OrdersApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
-    @Endpoint('/find', 'rpc')
+    @Endpoint(POST, '/find', READ, RPC)
     @WpResponseDto(() => FindOrderResponse)
     @WpMcpTool({
         name: 'orders_find',
         description: 'Find one order owned by the signed-in user.',
-        readOnlyHint: true,
-        idempotentHint: true,
         openWorldHint: false,
     })
     find(request: FindOrderRequest): Promise<FindOrderResponse> {
@@ -43,6 +41,12 @@ abstract class OrdersApi {
 The `@WpMcpTool.description` becomes the tool description returned by `tools/list`. The request and
 response classes generate `inputSchema` and `outputSchema`; `@WpDtoField` supplies property
 descriptions and the facts TypeScript erases, such as optionality and array element types.
+
+Every `@Endpoint` declares one enum-backed operation: `READ`, `WRITE_IDEMPOTENT`, or `WRITE`.
+This is independent of its required `GET` or `POST` argument: a GET may deliberately write and a
+POST may be a read. MCP derives
+`readOnlyHint`, `idempotentHint`, and `destructiveHint` from that one declaration; `@WpMcpTool`
+owns only the stable name, description, and `openWorldHint`.
 
 ### Typed maps
 
@@ -220,12 +224,18 @@ the request, the identity and the timing on it, and none of the barer second lin
 so none of the three methods takes a correlation parameter — the deleted `McpFailureScope` was a copy
 of context the renderers can already read.
 
-What the model reads inside an `isError` result: an `ApiEndUserError` message verbatim plus
-`errorCode` (it survives the remote hop byte-for-byte); an `ApiBadRequestError`'s `callerMessage` and
-`field`, never its operator `message`; for an implementation failure, generic text naming the tool and
-requestId and saying it is a bug in the tool, not in the arguments; for every other kind, that kind's
-generic message plus `retryAfterSeconds` where present, and for an `ApiCodedError` its
-`statusCode` and `errorCode`.
+The default `content[0].text` is JSON with an explicit `{ "error": { ... } }` envelope, because some
+clients display only content and hide the top-level MCP `isError`. The nested error carries the
+precise `kind`, a small ownership `category`, explicit `retry` guidance, a safe message, and the
+`requestId`. It may also carry safe fields such as `field`, `callerMessage`, `errorCode`,
+`retryAfterSeconds`, and `statusCode`. It never repeats `isError` inside the content.
+
+Implementation failures are `category: "bug", retry: "never"` and tell the caller to give the
+request ID to support; operator details remain redacted. Generic dependency failures are also
+non-retryable. Specific gateway, timeout, unavailable, throttling, and backoff failures are
+temporary, but a retry is described as safe only for a `read` or `write-idempotent` endpoint. A
+`write` reports `retry: "unsafe-outcome-unknown"`, because a lost response does not prove the write
+failed to commit.
 
 Every reply carries the requestId so a user can quote it: `_meta["webpieces/requestId"]` on every
 `tools/call` result (success or `isError`), `requestId` in the `isError` payload, and
@@ -273,11 +283,10 @@ class LangMcpErrorTranslator implements McpErrorTranslator {
   on for OAuth discovery, and an app rewriting it breaks connector onboarding in a way that is
   extremely hard to debug.
 
-A remote binding's generated Node client turns a dependency's 4xx into the gateway's own
-`ApiImplementationError`, and a 5xx into an `ApiDependencyError` (the uniform rule in core-util's
-`ReceivedApiErrorRule`). A gateway that wants the model to see the peer's typed failure instead
-registers an `ErrorTranslator` via `ClientRegistry.setErrorTranslator(...)` whose `fromWire` THROWS
-the decoded Webpieces payload; with it, local and remote bindings produce identical tool results.
+A remote binding's generated client preserves typed dependency gateway, unavailable, timeout, and
+backoff failures. Foreign/bodyless responses are classified by status: 408/504 timeout, 429 backoff,
+502 bad gateway, and 503 unavailable (or backoff when `Retry-After` is present). Other 4xx remains
+the caller service's `ApiImplementationError`; other 5xx remains generic `ApiDependencyError`.
 
 ### Why there is no `fromWire` on `McpErrorTranslator`
 

@@ -8,10 +8,22 @@ import {
 } from './external-caller';
 // The TYPE layer these decorators attach — split out for file size only (see auth-mode.ts).
 import { ApiKeyCredentials, AuthMeta, AuthMode, JwtRequirement } from './auth-mode';
-import { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
+import {
+    EndpointOperation,
+    EndpointOptions,
+    ExternalEndpointOptions,
+    READ,
+    WRITE_IDEMPOTENT,
+    WRITE,
+} from './HttpEndpointOptions';
+import { GET, HttpMethod, POST } from './HttpContract';
 import { HTTP_PARAMETERS_METADATA_KEY } from './http-parameter-decorators';
 
 export type { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
+export type { EndpointOperation } from './HttpEndpointOptions';
+export { READ, WRITE_IDEMPOTENT, WRITE } from './HttpEndpointOptions';
+export type { HttpMethod } from './HttpContract';
+export { GET, POST } from './HttpContract';
 export { PathParam, QueryParam, getHttpParameterDeclarations } from './http-parameter-decorators';
 
 /**
@@ -30,6 +42,10 @@ export const METADATA_KEYS = {
     QUEUE_OVERRIDE: 'webpieces:queue-override',
     /** Per-method @Endpoint options (e.g. formPost), parallel to ENDPOINTS. */
     ENDPOINT_OPTIONS: 'webpieces:endpoint-options',
+    /** Per-method required HTTP method, parallel to ENDPOINTS. */
+    ENDPOINT_HTTP_METHOD: 'webpieces:endpoint-http-method',
+    /** Per-method required read/write semantics, parallel to ENDPOINTS. */
+    ENDPOINT_OPERATION: 'webpieces:endpoint-operation',
     /** Per-method @Endpoint trigger kind (rpc | cloudtasks | cron | external), parallel to ENDPOINTS. */
     ENDPOINT_KIND: 'webpieces:endpoint-kind',
     /** Per-method declared external CALLER (only for kind 'external'), parallel to ENDPOINTS. */
@@ -46,43 +62,24 @@ export const METADATA_KEYS = {
     HTTP_PARAMETERS: HTTP_PARAMETERS_METADATA_KEY,
 };
 
-/**
- * WHAT TRIGGERS an endpoint at runtime — the single fact that decides how the runtime architecture
- * graph draws it, and which Terraform resource must exist for it to ever fire:
- *
- *  - `rpc`        — a caller in this repo (or a browser) calls it synchronously. A direct arrow.
- *  - `cloudtasks` — a producer ENQUEUES it; Cloud Tasks delivers it later. Drawn producer → queue →
- *                   consumer, one queue node per METHOD (see {@link Queue}). Producer and consumer
- *                   being the SAME service is legal and common — the queue decouples them.
- *  - `cron`       — a scheduler fires it on a clock. Nothing in-repo calls it; drawn hanging off a
- *                   clock symbol. Backed by a Cloud Scheduler job.
- *  - `external`   — a system OUTSIDE this repo drives it (a GCP Pub/Sub push subscription, a Twilio
- *                   or Gmail webhook). Drawn as an inbound dashed arrow from that system.
- *
- * Declared PER METHOD, because one api class routinely mixes them: an admin contract can have
- * caller-driven endpoints AND a nightly cron sweep. A class-level marker cannot express that, which
- * is exactly why the graph could not tell these apart before.
- */
-export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
+/** Nominal backing keeps raw string literals out of endpoint declarations. */
+enum EndpointKindValue {
+    RPC = 'rpc',
+    CLOUDTASKS = 'cloudtasks',
+    CRON = 'cron',
+    EXTERNAL = 'external',
+}
 
-/**
- * Options for a single @Endpoint. Kept in a metadata map PARALLEL to ENDPOINTS so the existing
- * `Record<methodName, path>` shape every consumer iterates stays unchanged.
- */
-/**
- * @ApiPath(basePath) - Class decorator that marks a class as an API definition
- * and sets the base path for all endpoints.
- *
- * Usage:
- * ```typescript
- * @ApiPath('/api/save')
- * abstract class SaveApi {
- *   @WpAuthJwt({ roles: ['admin'] })
- *   @Endpoint('/item', 'rpc')
- *   save(request: SaveRequest): Promise<SaveResponse> { ... }
- * }
- * ```
- */
+/** Short, statically importable decorator arguments. */
+export const RPC = EndpointKindValue.RPC;
+export const CLOUDTASKS = EndpointKindValue.CLOUDTASKS;
+export const CRON = EndpointKindValue.CRON;
+export const EXTERNAL = EndpointKindValue.EXTERNAL;
+
+/** Runtime trigger/delivery owner used by validation, architecture, and infrastructure tooling. */
+export type EndpointKind = typeof RPC | typeof CLOUDTASKS | typeof CRON | typeof EXTERNAL;
+
+/** Class decorator that sets the shared base path for all endpoints. */
 export function ApiPath(basePath: string): ClassDecorator {
     return (target: Function) => {
         if (Reflect.hasMetadata('webpieces:ipc-api-id', target)) {
@@ -100,117 +97,127 @@ export function ApiPath(basePath: string): ClassDecorator {
 }
 
 /**
- * @Endpoint(path, kind, options?) - Method decorator that registers an HTTP endpoint at the given
- * path and declares WHAT TRIGGERS it. POST is the default; GET is explicit in `httpMethod`.
- *
- * Usage:
- * ```typescript
- * @Endpoint('/item', 'rpc')
- * save(request: SaveRequest): Promise<SaveResponse> { ... }
- *
- * // enqueued by a producer, delivered later by Cloud Tasks:
- * @Endpoint('/send', 'cloudtasks')
- * send(request: SendRequest): Promise<void> { ... }
- *
- * // fired by Cloud Scheduler on a clock, called by nobody in this repo:
- * @Endpoint('/nightly', 'cron')
- * nightly(request: NightlyRequest): Promise<void> { ... }
- *
- * // EXTERNAL webhook posting application/x-www-form-urlencoded (e.g. Twilio):
- * @Endpoint('/hook', 'external', { formPost: true, calledBy: 'twilio' })
- * inbound(request: InboundRequest): Promise<InboundResponse> { ... }
- * ```
- *
- * `kind` is REQUIRED and deliberately positional: it makes every pre-existing single-argument
- * `@Endpoint('/x')` a COMPILE error rather than something a lint rule has to chase, so no endpoint
- * can slip into the runtime architecture graph with its trigger left to guesswork. See
- * {@link EndpointKind} for what each value draws and which Terraform resource backs it.
- *
- * `calledBy` is REQUIRED for `external` FOR EXACTLY THE SAME REASON, enforced by the overloads below:
- * the one box on the runtime graph whose whole job is to say who calls us from outside could only
- * restate OUR OWN contract name, because nothing in the source ever said who the caller was. This is
- * BREAKING for published consumers, intentionally — an existing `@Endpoint(p, 'external', {...})`
- * stops compiling until it names its caller. Migration is one property; see the migration note in
- * `external-caller.ts`. Non-`external` endpoints are completely unaffected.
- *
- * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); kind,
- * options and caller ride PARALLEL ENDPOINT_KIND / ENDPOINT_OPTIONS / ENDPOINT_CALLER maps.
+ * Registers `@Endpoint(POST, path, WRITE, RPC)`. Method, operation, and trigger are required enum
+ * values. Operation is independent of the HTTP verb. EXTERNAL additionally requires `calledBy`.
+ * Each classification rides a parallel metadata map while ENDPOINTS remains method-name -> path.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function Endpoint(
+    httpMethod: HttpMethod,
     path: string,
-    kind: 'external',
+    operation: EndpointOperation,
+    kind: typeof EXTERNAL,
     options: ExternalEndpointOptions,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function Endpoint(
+    httpMethod: HttpMethod,
     path: string,
-    kind: Exclude<EndpointKind, 'external'>,
+    operation: EndpointOperation,
+    kind: Exclude<EndpointKind, typeof EXTERNAL>,
     options?: EndpointOptions,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function Endpoint(
+    httpMethod: HttpMethod,
     path: string,
+    operation: EndpointOperation,
     kind: EndpointKind,
     options: EndpointOptions = {},
 ): MethodDecorator {
+    validateEndpointClassification(httpMethod, operation, kind);
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
         const metadataTarget = typeof target === 'function' ? target : target.constructor;
-
-        const endpoints: Record<string, string> =
-            Reflect.getMetadata(METADATA_KEYS.ENDPOINTS, metadataTarget) || {};
-
-        endpoints[propertyKey as string] = path;
-
-        Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, endpoints, metadataTarget);
-
-        const kinds: Record<string, EndpointKind> =
-            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_KIND, metadataTarget) || {};
-        kinds[propertyKey as string] = kind;
-        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_KIND, kinds, metadataTarget);
-
-        const opts: Record<string, EndpointOptions> =
-            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, metadataTarget) || {};
-        opts[propertyKey as string] = options;
-        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, opts, metadataTarget);
-
-        // ONLY for 'external', mirroring how a queue name is recorded only for the kinds that HAVE
-        // a queue: a caller on an rpc endpoint would be a fact about nothing.
-        const declared = options as ExternalEndpointOptions;
-        if (
-            kind !== 'external' ||
-            typeof declared.calledBy !== 'string' ||
-            declared.calledBy === ''
-        )
-            return;
-        const callers: Record<string, ExternalCaller> =
-            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_CALLER, metadataTarget) || {};
-        callers[propertyKey as string] = new ExternalCaller(
-            declared.callerKind ?? DEFAULT_CALLER_KIND,
-            declared.calledBy,
+        recordEndpointMetadata(
+            metadataTarget,
+            propertyKey as string,
+            httpMethod,
+            path,
+            operation,
+            kind,
+            options,
         );
-        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_CALLER, callers, metadataTarget);
     };
 }
 
-/**
- * @MaskLog(fields) - declare which fields of THIS method's request/response DTOs the
- * {@link LogApiCallImpl} logging path must mask, so a secret riding on a DTO (an OAuth refresh token, an
- * id-token JWT) is never written to the logs in cleartext. The REAL value still travels on the wire
- * untouched — masking lives in the logging path only.
- *
- * ```typescript
- * @Endpoint('/account', 'rpc')
- * @MaskLog({ refreshToken: 'full', accessToken: 'last4', credential: 'full' })
- * getEmailAccount(request: GetEmailAccountRequest): Promise<GetEmailAccountResponse> { ... }
- * ```
- *
- * Matching is by field NAME at any depth (nested objects + array elements), so
- * `response.account.refreshToken` is masked. Declared on the SHARED api contract, so BOTH the client
- * `[API-client-*]` and server `[API-server-*]` lines mask it. The spec is read ONCE at route-build
- * time and rides {@link RouteMetadata.mask}, so an unmasked method pays nothing at call time.
- */
+// webpieces-disable no-function-outside-class -- runtime validation backs up nominal TS enums
+function validateEndpointClassification(
+    httpMethod: HttpMethod,
+    operation: EndpointOperation,
+    kind: EndpointKind,
+): void {
+    if (!isHttpMethod(httpMethod)) {
+        throw new Error(
+            `@Endpoint httpMethod must be GET or POST, received '${String(httpMethod)}'.`,
+        );
+    }
+    if (!isEndpointOperation(operation)) {
+        throw new Error(
+            `@Endpoint operation must be READ, WRITE_IDEMPOTENT, or WRITE, received '${String(operation)}'.`,
+        );
+    }
+    if (!isEndpointKind(kind)) {
+        throw new Error(
+            `@Endpoint trigger must be RPC, CLOUDTASKS, CRON, or EXTERNAL, received '${String(kind)}'.`,
+        );
+    }
+}
+
+// webpieces-disable no-function-outside-class -- one metadata write shared by the decorator overloads
+function recordEndpointMetadata(
+    metadataTarget: Function,
+    propertyKey: string,
+    httpMethod: HttpMethod,
+    path: string,
+    operation: EndpointOperation,
+    kind: EndpointKind,
+    options: EndpointOptions,
+): void {
+    const endpoints: Record<string, string> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINTS, metadataTarget) || {};
+
+    endpoints[propertyKey] = path;
+
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, endpoints, metadataTarget);
+
+    const methods: Record<string, HttpMethod> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_HTTP_METHOD, metadataTarget) || {};
+    methods[propertyKey] = httpMethod;
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_HTTP_METHOD, methods, metadataTarget);
+
+    const operations: Record<string, EndpointOperation> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPERATION, metadataTarget) || {};
+    operations[propertyKey] = operation;
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPERATION, operations, metadataTarget);
+
+    const kinds: Record<string, EndpointKind> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_KIND, metadataTarget) || {};
+    kinds[propertyKey] = kind;
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_KIND, kinds, metadataTarget);
+
+    const opts: Record<string, EndpointOptions> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, metadataTarget) || {};
+    opts[propertyKey] = options;
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, opts, metadataTarget);
+
+    const declared = options as ExternalEndpointOptions;
+    if (
+        kind !== EXTERNAL ||
+        typeof declared.calledBy !== 'string' ||
+        declared.calledBy === ''
+    )
+        return;
+    const callers: Record<string, ExternalCaller> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_CALLER, metadataTarget) || {};
+    callers[propertyKey] = new ExternalCaller(
+        declared.callerKind ?? DEFAULT_CALLER_KIND,
+        declared.calledBy,
+    );
+    Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_CALLER, callers, metadataTarget);
+}
+
+/** Declares request/response DTO field names that API logging must mask at any depth. */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function MaskLog(fields: Record<string, MaskMode>): MethodDecorator {
     const spec = new MaskSpec(fields);
@@ -343,7 +350,7 @@ export function WpAuthSharedSecret(key: string): MethodDecorator {
  *
  * ```typescript
  * @WpAuthWebhook('sentry')
- * @Endpoint('/hook/sentry/issue', 'external', { calledBy: 'sentry', rawBody: true })
+ * @Endpoint(POST, '/hook/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
  * abstract notify(request: SentryIssueHook): Promise<HookAck>;
  * ```
  *
@@ -369,56 +376,10 @@ export function WpAuthWebhook(name: string): MethodDecorator {
 }
 
 /**
- * @WpAuthApiKey(regime, credentials) - a CUSTOMER holds the credential. The app's bound `ApiKeyHook`
- * authenticates the inbound request against its own datastore and returns the `ContextTuple` entries
- * the framework seeds into `RequestContext`. THE mode for a partner-facing contract consumed by other
- * companies' codebases (POS vendors, back-office platforms, ETL pipelines).
- *
- * ```typescript
- * @WpAuthApiKey('onetablet-partner', [
- *     { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
- *     { in: 'header', name: 'x-organization-id', description: 'Which of your organizations to act on.' },
- * ])
- * @ApiPath('/management/v1')
- * abstract class ManagementApi { ... }
- * ```
- *
- * `regime` is a bare STRING selecting WHICH key regime this route belongs to, exactly as
- * `@WpAuthSharedSecret(key)` and `@WpAuthWebhook(vendor)` already are — one hook serves several regimes,
- * and an api contract is level 0, so it never references a verifier directly.
- *
- * `credentials` DECLARES where the credential rides ({@link ApiKeyCredential}), so a spec generator
- * reading route auth metadata can emit `components.securitySchemes` instead of a human hand-writing
- * them into a manifest. It is a NON-EMPTY, ORDERED list rather than one credential because a real
- * regime authenticates a PAIR — the key names a customer, a second header names which of that
- * customer's organizations the request acts on, and a mismatch is a 401. Its OpenAPI form is two
- * schemes plus ONE security-requirement object holding BOTH keys (an AND); a LIST of two objects
- * would mean "either alone suffices", which is a load-bearing difference a single-credential shape
- * cannot even express. ORDER IS SIGNIFICANT and preserved: it is the order the credentials are
- * presented in the published document.
- *
- * The list can never be EMPTY — a contract that declares a key regime and then names no credential
- * would generate a document with no security block, which is the exact silent failure this argument
- * exists to remove. That is a compile error, not a runtime throw (see {@link JwtRoles}'s non-empty
- * tuple, the same device for the same reason).
- *
- * WHY IT IS NOT `@WpAuthSharedSecret`. Shared-secret declares that AN INTERNAL SERVICE is on the other
- * end, so the framework BELIEVES the trusted context headers that caller forwarded (see
- * `DestinationTrust.forAuthMode` and `AuthFilter.verifiesCaller`). A customer is not an internal
- * service: declaring a partner endpoint `@WpAuthSharedSecret` would let that partner assert someone
- * else's org id on the wire and have it admitted — a privilege escalation. `apikey` therefore sits
- * with `jwt` on the caller-NOT-verified side, where an inbound trusted header is admitted only when
- * the hook independently derived the SAME value.
- *
- * WHY THE HOOK SEES THE REQUEST, NOT ONE TOKEN. A real key regime checks the key TOGETHER WITH a
- * second header (the organization it is acting for), and `JwtHook.parseJwt` — handed one pre-extracted
- * token from one header — physically cannot. `ApiKeyHook.verifyApiKey(regime, request)` gets the whole
- * inbound request instead, so the app owns which headers carry the credential and validates them as a
- * PAIR. `credentials` does NOT change that: the framework reads no header from it and performs no
- * extraction. It is DECLARATION for readers of the contract, and enforcement stays entirely the hook's.
- *
- * FAILS CLOSED: with no `ApiKeyHook` bound, every `@WpAuthApiKey` endpoint 401s, matching `JwtHook` and
- * `WebhookAuthCallback`.
+ * Declares a customer-held API-key regime and its non-empty ordered credential locations. The app's
+ * `ApiKeyHook` validates the whole request and supplies trusted context; the declaration only drives
+ * contract/spec metadata. Unlike shared-secret auth, partner callers cannot assert trusted context.
+ * Missing hooks fail closed with 401.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function WpAuthApiKey(regime: string, credentials: ApiKeyCredentials): MethodDecorator {
@@ -432,7 +393,7 @@ export function WpAuthApiKey(regime: string, credentials: ApiKeyCredentials): Me
  *
  * ```typescript
  * @WpAuthLocalOnly()
- * @Endpoint('/logs', 'rpc')
+ * @Endpoint(POST, '/logs', WRITE, RPC)
  * sendBatch(request: SendLogBatchRequest): Promise<SendLogBatchResponse> { ... }
  * ```
  *
@@ -498,6 +459,20 @@ export function getEndpointKind(apiClass: Function, methodName: string): Endpoin
     return getEndpointKinds(apiClass)[methodName];
 }
 
+/** The required HTTP method for one endpoint. */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointKind
+export function getEndpointHttpMethod(apiClass: Function, methodName: string): HttpMethod {
+    const methods: Record<string, HttpMethod> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_HTTP_METHOD, apiClass) || {};
+    const method = methods[methodName];
+    if (!isHttpMethod(method)) {
+        throw new Error(
+            `@Endpoint ${apiClass.name || 'Unknown'}.${methodName} must declare GET or POST.`,
+        );
+    }
+    return method;
+}
+
 /**
  * Get the @Endpoint options for one method (empty object if the method had no options).
  */
@@ -505,7 +480,51 @@ export function getEndpointKind(apiClass: Function, methodName: string): Endpoin
 export function getEndpointOptions(apiClass: Function, methodName: string): EndpointOptions {
     const opts: Record<string, EndpointOptions> =
         Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, apiClass) || {};
-    return opts[methodName] ?? {};
+    const options = opts[methodName];
+    if (!options && getEndpoints(apiClass)?.[methodName] === undefined) {
+        // Preserve the historical helper behavior for a method that is not an endpoint at all.
+        return {} as EndpointOptions;
+    }
+    return options ?? {};
+}
+
+/** Read one endpoint's required side-effect semantics. */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointOptions
+export function getEndpointOperation(apiClass: Function, methodName: string): EndpointOperation {
+    const operations: Record<string, EndpointOperation> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPERATION, apiClass) || {};
+    const operation = operations[methodName];
+    if (!isEndpointOperation(operation)) {
+        throw new Error(
+            `@Endpoint ${apiClass.name || 'Unknown'}.${methodName} must declare READ, ` +
+                'WRITE_IDEMPOTENT, or WRITE.',
+        );
+    }
+    return operation;
+}
+
+// webpieces-disable no-function-outside-class -- runtime backstop for JavaScript and `as any` callers; webpieces-disable no-any-unknown -- untrusted runtime value is narrowed to an endpoint operation
+function isEndpointOperation(value: unknown): value is EndpointOperation {
+    return (
+        value === READ ||
+        value === WRITE_IDEMPOTENT ||
+        value === WRITE
+    );
+}
+
+// webpieces-disable no-function-outside-class -- runtime backstop for JavaScript and `as any` callers; webpieces-disable no-any-unknown -- untrusted runtime value is narrowed to an HTTP method
+function isHttpMethod(value: unknown): value is HttpMethod {
+    return value === GET || value === POST;
+}
+
+// webpieces-disable no-function-outside-class -- runtime backstop for JavaScript and `as any` callers; webpieces-disable no-any-unknown -- untrusted runtime value is narrowed to an endpoint kind
+function isEndpointKind(value: unknown): value is EndpointKind {
+    return (
+        value === RPC ||
+        value === CLOUDTASKS ||
+        value === CRON ||
+        value === EXTERNAL
+    );
 }
 
 /**
@@ -525,7 +544,7 @@ export function assertEveryExternalEndpointDeclaresCaller(apiClass: Function): v
             continue;
         throw new Error(
             `External endpoint '${methodName}' in ${apiClass.name || 'Unknown'} declares no caller. Say WHO ` +
-                `posts to it: @Endpoint(path, 'external', { calledBy: '<vendor>' }) — the runtime architecture ` +
+                `posts to it: @Endpoint(POST, path, WRITE, EXTERNAL, { calledBy: '<vendor>' }) — the runtime architecture ` +
                 `graph cannot name an inbound caller it was never told about.`,
         );
     }

@@ -8,6 +8,7 @@
             "name": "save",
             "path": "/item",
             "kind": "rpc",
+            "operation": "write",
             "httpMethod": "POST",
             "parameters": [
                 {

@@ -1,13 +1,24 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
-import { ApiPath, Endpoint, PathParam, QueryParam, WpAuthPublic } from '../decorators';
+import {
+    ApiPath,
+    Endpoint,
+    PathParam,
+    QueryParam,
+    WpAuthPublic,
+    GET,
+    POST,
+    READ,
+    RPC,
+    WRITE,
+} from '../decorators';
 import { HttpContractMapper, HttpParameterBinding } from '../HttpContract';
 import { RouteMetadataFactory } from '../RouteMetadataFactory';
 
 @ApiPath('/widgets/')
 abstract class WidgetApi {
     @WpAuthPublic('Public catalog lookup')
-    @Endpoint('/{ownerId}/{widgetId}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/{ownerId}/{widgetId}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     get(
         @PathParam('ownerId') _ownerId: string,
@@ -22,9 +33,24 @@ abstract class WidgetApi {
 @ApiPath('/widgets')
 abstract class UpdateApi {
     @WpAuthPublic('Test update')
-    @Endpoint('/{id}', 'rpc')
+    @Endpoint(POST, '/{id}', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     update(@PathParam('id') _id: number, _body: object): Promise<object> {
+        throw new Error('contract only');
+    }
+}
+
+@ApiPath('/semantic-verbs')
+abstract class SemanticVerbApi {
+    @WpAuthPublic('GET with deliberate side effects')
+    @Endpoint(GET, '/write-over-get', WRITE, RPC)
+    writeOverGet(): Promise<object> {
+        throw new Error('contract only');
+    }
+
+    @WpAuthPublic('POST used as a read/query transport')
+    @Endpoint(POST, '/read-over-post', READ, RPC)
+    readOverPost(_request: object): Promise<object> {
         throw new Error('contract only');
     }
 }
@@ -34,6 +60,7 @@ describe('typed HTTP contract metadata and mapping', () => {
         const route = RouteMetadataFactory.create(WidgetApi, 'get');
 
         expect(route.httpMethod).toBe('GET');
+        expect(route.operation).toBe('read');
         expect(route.path).toBe('/widgets/{ownerId}/{widgetId}');
         expect(route.bodyParameterIndex).toBeUndefined();
         expect(
@@ -72,11 +99,11 @@ describe('typed HTTP contract metadata and mapping', () => {
             route.parameterBindings,
             route.bodyParameterIndex,
             undefined,
-            new Map([
+            new Map<string, string | readonly string[]>([
                 ['ownerId', 'Jöhn / team'],
                 ['widgetId', '42'],
             ]),
-            new Map([
+            new Map<string, string | readonly string[]>([
                 ['include_archived', 'true'],
                 ['tag', ['red & blue', '✓']],
             ]),
@@ -96,9 +123,18 @@ describe('typed HTTP contract metadata and mapping', () => {
         );
 
         expect(route.httpMethod).toBe('POST');
+        expect(route.operation).toBe('write');
         expect(route.bodyParameterIndex).toBe(1);
         expect(request.path).toBe('/widgets/17');
         expect(request.body).toBe(body);
+    });
+
+    it('keeps operation independent from HTTP verb in both directions', () => {
+        const getWrite = RouteMetadataFactory.create(SemanticVerbApi, 'writeOverGet');
+        const postRead = RouteMetadataFactory.create(SemanticVerbApi, 'readOverPost');
+
+        expect([getWrite.httpMethod, getWrite.operation]).toEqual(['GET', 'write']);
+        expect([postRead.httpMethod, postRead.operation]).toEqual(['POST', 'read']);
     });
 
     it('rejects missing and malformed path/query values as caller errors', () => {
@@ -131,7 +167,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class BrokenApi {
             @WpAuthPublic('Test fixture')
-            @Endpoint('/get', 'rpc', { httpMethod: 'GET' })
+            @Endpoint(GET, '/get', READ, RPC)
             get(_value: string): Promise<object> {
                 return Promise.resolve({});
             }
@@ -146,7 +182,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class BrokenPathApi {
             @WpAuthPublic('Test fixture')
-            @Endpoint('/{id}', 'rpc', { httpMethod: 'GET' })
+            @Endpoint(GET, '/{id}', READ, RPC)
             get(@QueryParam('id') _id: string): Promise<object> {
                 return Promise.resolve({});
             }
@@ -155,7 +191,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class DuplicateQueryApi {
             @WpAuthPublic('Test fixture')
-            @Endpoint('/get', 'rpc', { httpMethod: 'GET' })
+            @Endpoint(GET, '/get', READ, RPC)
             get(@QueryParam('q') _one: string, @QueryParam('q') _two: string): Promise<object> {
                 return Promise.resolve({});
             }

@@ -10,6 +10,11 @@ import {
     QueryParam,
     Rpc,
     WpAuthPublic,
+    GET,
+    POST,
+    READ,
+    RPC,
+    WRITE,
 } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
@@ -27,7 +32,7 @@ class TokenRequest {
 @ApiPath('/oauth')
 abstract class BrowserTypedApi {
     @WpAuthPublic('OAuth metadata is public by protocol')
-    @Endpoint('/resource/{resourceId}', 'rpc', { httpMethod: 'GET' })
+    @Endpoint(GET, '/resource/{resourceId}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     resource(
         @PathParam('resourceId') _resourceId: string,
@@ -37,14 +42,14 @@ abstract class BrowserTypedApi {
     }
 
     @WpAuthPublic('OAuth token exchanges authenticate their grant payload')
-    @Endpoint('/token', 'rpc', { formPost: true, responseType: 'full' })
+    @Endpoint(POST, '/token', WRITE, RPC, { formPost: true, responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     token(_request: TokenRequest): Promise<HttpResponseDto<object>> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('OAuth authorization redirects are protocol responses')
-    @Endpoint('/authorize', 'rpc', { httpMethod: 'GET', responseType: 'full' })
+    @Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     authorize(@QueryParam('client_id') _clientId: string): Promise<HttpResponseDto<undefined>> {
         throw new Error('contract only');

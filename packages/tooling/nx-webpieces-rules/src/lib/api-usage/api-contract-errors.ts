@@ -1,7 +1,7 @@
 /**
- * The three ways `buildApiContracts` refuses to emit a green, wrong api contract table.
+ * The ways `buildApiContracts` refuses to emit a green, wrong api contract table.
  *
- * All three share one rule: an entry that is PRESENT but incomplete is worse than an absent one.
+ * They share one rule: an entry that is PRESENT but incomplete is worse than an absent one.
  * Every other entry in the table is complete, so a consumer has no reason to suspect the one that
  * lost a field — it just computes a confidently wrong URL, or draws a service with no queues.
  *
@@ -11,7 +11,31 @@
  * Split out of api-scanner.ts, which owns the scan itself and is at its file-size limit.
  */
 
-import { EmptiedApiContract, UndeclaredExternalCaller, UnresolvedEndpointPath } from './api-relations';
+import {
+    EmptiedApiContract,
+    UndeclaredEndpointOperation,
+    UndeclaredExternalCaller,
+    UnresolvedEndpointPath,
+} from './api-relations';
+
+/** Endpoints missing the operation declaration that drives retry safety and MCP annotations. */
+export class UndeclaredEndpointOperationError extends Error {
+    constructor(public readonly endpoints: readonly UndeclaredEndpointOperation[]) {
+        super(
+            `${endpoints.length} @Endpoint(s) do not declare a readable operation:\n` +
+                endpoints
+                    .map(
+                        (e: UndeclaredEndpointOperation) =>
+                            `     • ${e.api}.${e.method} — ${e.argument} at ${e.at}`,
+                    )
+                    .join('\n') +
+                `\n   operation is REQUIRED because it controls retry safety and generated MCP hints.\n` +
+                `   Pass exactly one of READ, WRITE_IDEMPOTENT, or WRITE as the third argument.\n` +
+                `   Do not infer operation semantics from the HTTP verb.`,
+        );
+        this.name = 'UndeclaredEndpointOperationError';
+    }
+}
 
 /**
  * A routed contract whose `@ApiPath` argument the scan could not read. Fatal on purpose: shipping the
@@ -81,10 +105,10 @@ export class UndeclaredExternalCallerError extends Error {
                     .join('\n') +
                 `\n   An 'external' endpoint is driven by a system OUTSIDE this repo, and the runtime\n` +
                 `   architecture graph draws that system as an inbound box. Name it:\n` +
-                `     @Endpoint('/hook', 'external', { calledBy: 'twilio' })\n` +
+                `     @Endpoint(POST, '/hook', WRITE, EXTERNAL, { calledBy: 'twilio' })\n` +
                 `   Add callerKind for anything that is not a vendor SaaS — database | cache | queue |\n` +
                 `   storage | saas | system — e.g. a GCP Pub/Sub push subscription:\n` +
-                `     @Endpoint('/push', 'external', { calledBy: 'pubsub-push', callerKind: 'system' })\n` +
+                `     @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })\n` +
                 `   Use a string LITERAL or a SAME-module const: this scan is parser-only by design.`,
         );
         this.name = 'UndeclaredExternalCallerError';
@@ -110,9 +134,9 @@ export class EmptiedApiContractError extends Error {
                     .join('\n') +
                 `\n   A contract with zero usable methods is DROPPED from the api contracts, so the class,\n` +
                 `   its queues and its triggers disappear from the architecture graph with no error.\n` +
-                `   Both @Endpoint arguments must be readable: the path as a string literal or a\n` +
-                `   SAME-module const, and the kind as a literal 'rpc' | 'cloudtasks' | 'cron' |\n` +
-                `   'external'. Fix the arguments above, or remove the @Endpoint decorators if the\n` +
+                `   Every @Endpoint argument must be readable: the path as a string literal or a\n` +
+                `   SAME-module const, the kind as 'rpc' | 'cloudtasks' | 'cron' | 'external', and\n` +
+                `   the options must declare operation. Fix the arguments above, or remove the decorators if the\n` +
                 `   class is genuinely not routed.`,
         );
         this.name = 'EmptiedApiContractError';

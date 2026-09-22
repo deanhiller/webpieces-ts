@@ -5,11 +5,15 @@ import {
     DtoSchemaBuilder,
     getAuthMeta,
     getEndpointKind,
+    getEndpointOperation,
     getEndpoints,
     getWpMcpTools,
     getWpMcpAuthJwt,
     rolesRequired,
+    mcpHintsForOperation,
+    EndpointOperation,
     WpMcpJwtAuthMetadata,
+    WpMcpToolHints,
     WpMcpToolMetadata,
 } from '@webpieces/core-util';
 import { ClassType } from '@webpieces/http-routing';
@@ -22,7 +26,8 @@ export class RegisteredMcpTool {
         public readonly methodName: string,
         public readonly name: string,
         public readonly description: string,
-        public readonly annotations: WpMcpToolMetadata['hints'],
+        public readonly annotations: WpMcpToolHints,
+        public readonly operation: EndpointOperation,
         public readonly authMeta: AuthMeta,
         public readonly mcpAuth: WpMcpJwtAuthMetadata,
         public readonly binding: McpApiBinding,
@@ -96,12 +101,14 @@ export class McpToolRegistry {
         binding.validateMethod(metadata.methodName);
         const requestClass = this.schemaBuilder.requestClassOf(apiClass, metadata.methodName);
         const responseClass = this.schemaBuilder.responseClassOf(apiClass, metadata.methodName);
+        const operation = getEndpointOperation(apiClass, metadata.methodName);
         return new RegisteredMcpTool(
             apiClass,
             metadata.methodName,
             metadata.name,
             metadata.description,
-            metadata.hints,
+            mcpHintsForOperation(operation, metadata.openWorldHint),
+            operation,
             authMeta,
             mcpAuth,
             binding,
