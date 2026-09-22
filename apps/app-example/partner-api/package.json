@@ -10,6 +10,7 @@
         "@webpieces/core-util": "workspace:*"
     },
     "devDependencies": {
+        "@webpieces/docs-site": "workspace:*",
         "@webpieces/openapi-generator": "workspace:*"
     }
 }

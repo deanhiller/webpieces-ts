@@ -24,6 +24,9 @@
             "@webpieces/api-doc-model": [
                 "packages/docs/api-doc-model/src/index.ts"
             ],
+            "@webpieces/docs-site": [
+                "packages/docs/docs-site/src/index.ts"
+            ],
             "@webpieces/openapi-generator": [
                 "packages/docs/openapi-generator/src/index.ts"
             ],

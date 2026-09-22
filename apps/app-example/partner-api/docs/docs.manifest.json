@@ -1,0 +1,9 @@
+{
+    "title": "Example Orders API",
+    "pagesWhy": "THE ORDER OF THIS ARRAY IS THE PUBLISHED PROSE ORDER, end to end, and it is the second of the site's two ordered sources — the first is the OpenAPI document's own tags[]. Neither is sorted. Alphabetising this array is not a cleanup: it decides which page a partner reads first, and 'Authentication' sorting above 'Getting started' would hand somebody the credential rules before they know what the product does.",
+    "pages": [
+        { "file": "getting-started.md", "title": "Getting started" },
+        { "file": "authentication.md", "title": "Authentication" },
+        { "file": "webhooks.md", "title": "Receiving webhooks" }
+    ]
+}

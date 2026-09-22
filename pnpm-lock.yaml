@@ -205,6 +205,9 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/core/core-util
     devDependencies:
+      '@webpieces/docs-site':
+        specifier: workspace:*
+        version: link:../../../packages/docs/docs-site
       '@webpieces/openapi-generator':
         specifier: workspace:*
         version: link:../../../packages/docs/openapi-generator
@@ -290,6 +293,8 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/docs/docs-site: {}
 
   packages/docs/openapi-generator:
     dependencies:

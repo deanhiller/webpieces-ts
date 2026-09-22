@@ -40,6 +40,7 @@ export default defineConfig({
     resolve: {
         alias: {
             '@webpieces/api-doc-model': path.resolve(__dirname, 'packages/docs/api-doc-model/src/index.ts'),
+            '@webpieces/docs-site': path.resolve(__dirname, 'packages/docs/docs-site/src/index.ts'),
             '@webpieces/openapi-generator': path.resolve(__dirname, 'packages/docs/openapi-generator/src/index.ts'),
             '@webpieces/partner-api': path.resolve(__dirname, 'apps/app-example/partner-api/src/index.ts'),
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),
