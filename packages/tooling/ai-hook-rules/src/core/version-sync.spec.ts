@@ -7,6 +7,7 @@ import { EffectiveTree } from './effective-tree';
 import { AiType } from './agent-event';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
+import { renderBumpSkewReport } from './version-sync-harness.spec';
 import { specTempDirs } from '@webpieces/rules-config';
 
 /**
@@ -90,63 +91,6 @@ function residentTree(main: string, wt: string): EffectiveTree {
 export function renderVersionSyncRow8Report(): string {
     const dirs = pair('0.4.612', '0.4.616');
     return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
-}
-
-/**
- * The deliberate-bump skew (C'), rendered against a REAL repo: `isDeliberateBump` asks git whether this
- * branch touched the manifest, so a fabricated path answers "no", takes the generic branch, and makes
- * every assertion about the bump text vacuous. Exported for the same reason the row-8 render is.
- */
-export function renderBumpSkewReport(aiType: AiType = 'claude-code'): string {
-    const base = tmp();
-    const main = path.join(base, 'main');
-    writePin(main, '0.4.634');
-    writeInstalled(main, '0.4.634');
-    const wt = path.join(base, 'wt');
-    fs.mkdirSync(wt, { recursive: true });
-    // A real repo with a real uncommitted bump — that dirty manifest IS the signal.
-    run(wt, ['init', '-q']);
-    writePin(wt, '0.4.634');
-    run(wt, ['add', '.']);
-    run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
-    writePin(wt, '0.4.638');
-    return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), aiType) ?? '';
-}
-
-/**
- * EVERY skew report this guard can print — each of the five `SkewCase`s × both harnesses — keyed
- * `<case> × <harness>`. Exported for `rules/no-turn-ending-instructions.spec.ts` (issue #1000): the
- * escalation block told subagents "Forwarding that message IS the end of your turn" for a month after
- * #902 because the turn-ending detector rendered wait-spin-guard and nothing else. A sweep that renders
- * one case of one harness is the same hole one level down, so this renders all ten.
- */
-export function renderEverySkewReport(): Map<string, string> {
-    const reports = new Map<string, string>();
-    const aiTypes: readonly AiType[] = ['claude-code', 'codex'];
-    for (const aiType of aiTypes) {
-        const inconsistent = tmp();
-        writePin(path.join(inconsistent, 'main'), '0.4.616');
-        writeInstalled(path.join(inconsistent, 'main'), '0.4.620');
-        writePin(path.join(inconsistent, 'wt'), '0.4.620');
-        reports.set(`main-inconsistent × ${aiType}`, new VersionSyncGuard().block('pnpm build',
-            worktreeTree(path.join(inconsistent, 'main'), path.join(inconsistent, 'wt')), aiType) ?? '');
-
-        const ahead = pair('0.4.616', '0.4.612');
-        reports.set(`main-ahead × ${aiType}`,
-            new VersionSyncGuard().block('pnpm build', worktreeTree(ahead.main, ahead.wt), aiType) ?? '');
-
-        const behind = pair('0.4.612', '0.4.616');
-        reports.set(`main-behind × ${aiType}`,
-            new VersionSyncGuard().block('pnpm build', worktreeTree(behind.main, behind.wt), aiType) ?? '');
-
-        const stale = pair('0.4.616', '0.4.616');
-        writeInstalled(stale.wt, '0.4.500');
-        reports.set(`worktree-stale × ${aiType}`,
-            new VersionSyncGuard().block('pnpm build', worktreeTree(stale.main, stale.wt), aiType) ?? '');
-
-        reports.set(`bump × ${aiType}`, renderBumpSkewReport(aiType));
-    }
-    return reports;
 }
 
 describe('VersionSyncGuard — when it fires', () => {

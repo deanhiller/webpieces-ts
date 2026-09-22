@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Option, WebpiecesRulesConfig } from '@webpieces/rules-config';
 import { BashContext, Rule } from '../types';
 import { WaitSpinGuardRule } from './wait-spin-guard';
-import { renderEverySkewReport } from '../version-sync.spec';
+import { renderEverySkewReport } from '../version-sync-harness.spec';
 import { renderL1Doc } from '../l1-doc';
 import { renderL2Doc } from '../l2-doc';
 import { renderGuardMatrixDoc } from '../l0-matrix';
