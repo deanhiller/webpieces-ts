@@ -5,6 +5,7 @@ import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { ApiDocExtractionError } from '../extract/ApiDocExtractionError';
 import {
     ApiDocModel,
+    DocumentedApiKeyCredential,
     DocumentedEndpoint,
     DocumentedField,
     DocumentedType,
@@ -20,14 +21,25 @@ import { TypeRef } from '../model/TypeRef';
  * source somebody actually wrote, and a synthetic tree would quietly stop resembling that.
  */
 
-/** Decorators are legal in the fixtures, so the program has to be built with them enabled. */
+/**
+ * Decorators are legal in the fixtures, so the program has to be built with them enabled — and
+ * `@webpieces/core-util` has to RESOLVE, because the fixtures import the real decorators and the
+ * folder asks the checker what `POST` and `RPC` denote. Without the mapping the checker sees an
+ * unresolved identifier, the folder refuses (correctly) rather than guessing a verb, and every test
+ * fails for a reason that has nothing to do with what it is testing.
+ */
+const CORE_UTIL = path.resolve(__dirname, '..', '..', '..', '..', 'core', 'core-util');
 const COMPILER_OPTIONS: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
     experimentalDecorators: true,
+    emitDecoratorMetadata: true,
     strict: true,
     noEmit: true,
     skipLibCheck: true,
+    baseUrl: CORE_UTIL,
+    paths: { '@webpieces/core-util': [path.join(CORE_UTIL, 'src', 'index.ts')] },
 };
 
 class Harness {
@@ -100,25 +112,98 @@ describe('the contract itself', () => {
         expect(harness.endpoint(model, 'hook').kind).toBe('external');
     });
 
-    it('records `hidden`, and leaves it false where it was not declared', () => {
+    it('FOLDS the verb and the operation, which arrive as ENUM MEMBERS and not literals', () => {
+        // `@Endpoint(POST, path, WRITE, RPC)` — a document that printed `POST` as the identifier
+        // text, or dropped the verb, would hang every operation under the wrong key in `paths`.
+        const save = harness.endpoint(model, 'save');
+        expect(save.httpMethod).toBe('POST');
+        expect(save.operation).toBe('write');
+
+        // The side-effect contract is INDEPENDENT of the verb: webpieces POSTs a read.
+        const limitDecorator = harness.endpoint(model, 'limitDecorator');
+        expect(limitDecorator.httpMethod).toBe('POST');
+        expect(limitDecorator.operation).toBe('read');
+
+        expect(harness.endpoint(model, 'limitAlias').httpMethod).toBe('GET');
+    });
+
+    it('PARSES @WpAuthApiKey into a regime and its ordered credentials', () => {
+        const auth = harness.endpoint(model, 'lookup').auth;
+        expect(auth?.decorator).toBe('WpAuthApiKey');
+        const apiKey = auth?.apiKey;
+        expect(apiKey?.regime).toBe('partner');
+        // ORDER is the order a published document lists them in, so it is asserted.
+        expect(apiKey?.credentials.map((c: DocumentedApiKeyCredential) => c.location)).toEqual([
+            'header',
+            'bearer',
+        ]);
+        expect(apiKey?.credentials[0]?.name).toBe('x-api-key');
+        expect(apiKey?.credentials[0]?.description).toBe('Your partner key.');
+        // `bearer` has no header name — its location IS `Authorization`, and a name there is a lie.
+        expect(apiKey?.credentials[1]?.name).toBeUndefined();
+    });
+
+    it('leaves `apiKey` unset for every other credential kind', () => {
+        const jwt = harness.endpoint(model, 'save').auth;
+        expect(jwt?.decorator).toBe('WpAuthJwt');
+        expect(jwt?.apiKey).toBeUndefined();
+        expect(jwt?.argumentTexts).toHaveLength(1);
+    });
+
+    it('extracts ONE named type from a file, for a type no contract field points at', () => {
+        // The document-wide error body a manifest names is reachable from nothing in the contract,
+        // and reading it with the SAME resolver is what stops two answers about one type's shape.
+        const only = new ApiDocExtractor().extractType(
+            harness.fixture('ExampleApi.ts'),
+            'Customer',
+            COMPILER_OPTIONS,
+        );
+        expect(only.endpoints).toHaveLength(0);
+        expect(harness.field(harness.type(only, 'Customer'), 'email').type.primitive).toBe(
+            'string',
+        );
+        // It followed the field's own named type, exactly as the contract walk would have.
+        expect(only.types.has('Color')).toBe(true);
+    });
+
+    it('refuses a type name the file does not declare, rather than emitting an empty schema', () => {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the assertion
+        expect(() =>
+            new ApiDocExtractor().extractType(
+                harness.fixture('ExampleApi.ts'),
+                'NoSuchType',
+                COMPILER_OPTIONS,
+            ),
+        ).toThrow(ApiDocExtractionError);
+    });
+
+    it('records `hidden` and `openWorld`, and leaves both false where they were not declared', () => {
         expect(harness.endpoint(model, 'internal').hidden).toBe(true);
         expect(harness.endpoint(model, 'save').hidden).toBe(false);
+        expect(harness.endpoint(model, 'hook').openWorld).toBe(true);
+        expect(harness.endpoint(model, 'save').openWorld).toBe(false);
+    });
+
+    it('records the contract-level @ApiType, and defaults to SVC_TO_SVC alone', () => {
+        expect(model.apiTypes).toEqual(['svc-to-svc', 'external-customer', 'mcp']);
+        // FAIL-CLOSED: a contract that declares nothing feeds only the internal document.
+        expect(harness.extract('NoApiTypeApi.ts').apiTypes).toEqual(['svc-to-svc']);
     });
 
     it('records EndpointOptions — formPost, calledBy, callerKind', () => {
         const hook = harness.endpoint(model, 'hook');
         expect(hook.options.formPost).toBe(true);
         expect(hook.options.calledBy).toBe('twilio');
-        expect(hook.options.callerKind).toBe('vendor');
+        expect(hook.options.callerKind).toBe('saas');
         expect(harness.endpoint(model, 'save').options.formPost).toBe(false);
     });
 
     it('records the @WpAuth* declaration, the @WpMcpTool, the @WpMcpAuthJwt and the @MaskLog', () => {
         const save = harness.endpoint(model, 'save');
         expect(save.auth?.decorator).toBe('WpAuthJwt');
+        // The NAME is all the model takes from @WpMcpTool: `description` duplicates the JSDoc, and
+        // the three side-effect hints are computed from `operation` by mcpHintsForOperation.
         expect(save.mcpTool?.name).toBe('save_customer');
-        expect(save.mcpTool?.hints.get('readOnly')).toBe(false);
-        expect(save.mcpTool?.hints.get('idempotent')).toBe(true);
         expect(save.mcpAuthText).toContain('admin');
         expect(save.maskLog.get('secretToken')).toBe('full');
 
@@ -291,7 +376,7 @@ describe('what FAILS the build rather than being guessed at', () => {
     });
 
     it('a file with no @ApiPath class', () => {
-        const failure = harness.failureOf('contract-stubs.ts');
+        const failure = harness.failureOf('contract-constants.ts');
         expect(failure?.message).toContain('no @ApiPath class');
     });
 });

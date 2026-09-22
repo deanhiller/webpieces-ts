@@ -1,0 +1,31 @@
+{
+    "name": "openapi-generator",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/docs/openapi-generator/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/docs/openapi-generator/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/docs/openapi-generator",
+                "main": "packages/docs/openapi-generator/src/index.ts",
+                "tsConfig": "packages/docs/openapi-generator/tsconfig.lib.json",
+                "assets": [
+                    "packages/docs/openapi-generator/package.json",
+                    "packages/docs/openapi-generator/README.md"
+                ]
+            }
+        },
+        "ci": {
+            "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}

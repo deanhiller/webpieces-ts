@@ -39,6 +39,9 @@ export default defineConfig({
     esbuild: false,
     resolve: {
         alias: {
+            '@webpieces/api-doc-model': path.resolve(__dirname, 'packages/docs/api-doc-model/src/index.ts'),
+            '@webpieces/openapi-generator': path.resolve(__dirname, 'packages/docs/openapi-generator/src/index.ts'),
+            '@webpieces/partner-api': path.resolve(__dirname, 'apps/app-example/partner-api/src/index.ts'),
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),
             '@webpieces/core-mock': path.resolve(__dirname, 'packages/core/core-mock/src/index.ts'),
             '@webpieces/core-util/errors': path.resolve(__dirname, 'packages/core/core-util/src/errors/index.ts'),

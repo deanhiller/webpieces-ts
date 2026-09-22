@@ -3,14 +3,17 @@
  * produce ONE in-memory {@link ApiDocModel}.
  *
  * This is the single extraction pass both the OpenAPI documents and the MCP tool list (#982) are
- * rendered from. It emits nothing itself, and it depends on `typescript` and nothing else, so it can
- * be pointed at any upstream project's contract — see `responsibilities.md` for why that constraint
- * is worth stating rather than leaving to be discovered.
+ * rendered from. It emits nothing itself, and it takes every decorator NAME it matches on from the
+ * real `@webpieces/core-util` symbol — so renaming a decorator is a compile error here rather than a
+ * literal that quietly stops matching and empties a document (issue #1001). See
+ * `responsibilities.md` for why that import is not the coupling it looks like.
  */
 export { ApiDocExtractor } from './extract/ApiDocExtractor';
 export { ApiDocExtractionError } from './extract/ApiDocExtractionError';
 export {
     ApiDocModel,
+    DocumentedApiKey,
+    DocumentedApiKeyCredential,
     DocumentedAuth,
     DocumentedEndpoint,
     DocumentedEndpointOptions,

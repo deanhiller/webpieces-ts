@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import { WpInt, WpMax, WpMin } from '@webpieces/core-util';
 import {
     DocumentedField,
     DocumentedType,
@@ -10,12 +11,25 @@ import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
 
-/** The decorators this resolver reads off a DTO property, by NAME — it imports none of them. */
-const INT_DECORATOR = 'WpInt';
-const MIN_DECORATOR = 'WpMin';
-const MAX_DECORATOR = 'WpMax';
+/**
+ * The decorators this resolver reads off a DTO property, named from the REAL SYMBOLS — a rename in
+ * `core-util` is a compile error here rather than a literal that quietly stops matching. See
+ * {@link ApiDocExtractor}'s constants for the full argument (issue #1001).
+ */
+const INT_DECORATOR = WpInt.name;
+const MIN_DECORATOR = WpMin.name;
+const MAX_DECORATOR = WpMax.name;
 
-/** The type-alias name that DECLARES integer-ness. See the class doc and `responsibilities.md`. */
+/**
+ * The type-alias name that DECLARES integer-ness.
+ *
+ * This one is a LITERAL and cannot be anything else: `Integer` is a TYPE ALIAS, so there is no
+ * runtime symbol whose `.name` could be read — `.name` is a property of a function, and a type has
+ * erased by then. It is the one name in this package that a rename in `core-util` would not break at
+ * compile time; the cure if that ever bites is to make integer-ness a decorator here too, not to
+ * pretend a type has a runtime identity. See {@link ApiDocExtractor}'s constants for the argument
+ * everywhere else (issue #1001).
+ */
 const INTEGER_ALIAS = 'Integer';
 
 /**
@@ -287,6 +301,18 @@ export class TypeResolver {
         if (declaration === undefined) {
             return this.recordUnmapped(node, `no declaration found for '${name}'`);
         }
+        return this.resolveDeclaration(name, declaration, ownerName);
+    }
+
+    /**
+     * Resolve a type by its DECLARATION rather than by a reference to it.
+     *
+     * The reference path above is the normal one — a field says `Customer` and the resolver follows
+     * it. This entry point exists for a type that is named from OUTSIDE the source: a manifest naming
+     * the document-wide error body, which no field in the contract points at. Same registration, same
+     * cycle story, so the two cannot disagree about what a type IS.
+     */
+    resolveDeclaration(name: string, declaration: ts.Declaration, ownerName: string): TypeRef {
         if (ts.isInterfaceDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
             return this.registerNamedObject(name, declaration);
         }
@@ -297,7 +323,7 @@ export class TypeResolver {
             return this.registerStringEnum(name, declaration);
         }
         return this.recordUnmapped(
-            node,
+            declaration,
             `'${name}' is declared as something with no document shape`,
         );
     }

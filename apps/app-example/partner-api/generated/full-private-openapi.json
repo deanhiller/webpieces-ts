@@ -1,0 +1,545 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Example Orders API",
+        "version": "1.0.0",
+        "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\n# Orders API\n\nThis is the example contract that ships with webpieces. It exists so `wp-openapi` has something real\nto read: every feature of the generator — derived api-key security, a hidden endpoint, an outbound\nwebhook, a document-wide error contract and a folded response-header constant — is demonstrated by a\ncontract somebody could plausibly have written, not by a fixture.\n\nAuthenticate every call with both the `x-api-key` header and the `x-organization-id` header. They are\npresented together; neither alone is sufficient.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+    },
+    "servers": [
+        {
+            "url": "https://api.example.com",
+            "description": "Production."
+        }
+    ],
+    "tags": [
+        {
+            "name": "Orders",
+            "description": "Orders placed at a store.\n\nEvery endpoint here authenticates with the `partner` api-key regime, which requires BOTH the key\nand the organization it acts for. The published document derives its `securitySchemes` and its\nsingle AND-ed `security` requirement from that declaration, so this contract and the document\ncannot disagree about which headers are needed."
+        },
+        {
+            "name": "Webhooks",
+            "description": "The events this service SENDS to a partner's own endpoint.\n\n## Why a webhook is declared in the manifest and never sniffed from a filename\n\n`openapi.manifest.json` marks this entry `\"kind\": \"webhook\"`, which is what moves it into the\ndocument's top-level `webhooks:` block. A `*WebhookApi` NAME convention would have done the same\njob with no file to review — and would then hide a partner-visible decision inside a rename, which\nis the one edit nobody reviews for contract impact.\n\n## What the generator does differently for these, and why\n\n- The event is keyed by its NAME with the `@ApiPath` base NOT prepended. The partner hosts the\n  endpoint at whatever path they choose; there is no url of ours to publish.\n- It carries `x-webpieces-webhook: true` and neither the trigger nor the auth extension, because\n  neither is true of it.\n- It contributes NOTHING to the derived security requirement. Publishing our api key as a guard on\n  somebody else's server would be nonsense at best and an instruction to leak it at worst.\n- The `void` return is documented as \"return any 2xx to acknowledge\"."
+        }
+    ],
+    "security": [
+        {
+            "PartnerApiKey": [],
+            "PartnerOrganization": []
+        }
+    ],
+    "paths": {
+        "/orders/fetch": {
+            "post": {
+                "operationId": "PartnerOrdersApi_fetchOrders",
+                "summary": "fetchOrders",
+                "description": "Returns every order placed at one store inside a time window, newest first.\n\nPaginate by passing the previous response's `nextFrom` until it is absent.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Orders"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FetchOrdersRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FetchOrdersResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "The request body failed validation. `details` names the fields.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "The api key or the organization header is missing or not valid.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The addressed resource does not exist for this organization.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/orders/cancel": {
+            "post": {
+                "operationId": "PartnerOrdersApi_cancelOrder",
+                "summary": "cancelOrder",
+                "description": "Cancels one order, if the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Orders"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelOrderRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CancelOrderResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "The request body failed validation. `details` names the fields.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "The api key or the organization header is missing or not valid.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The addressed resource does not exist for this organization.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/orders/reindex": {
+            "post": {
+                "operationId": "PartnerOrdersApi_reindex",
+                "summary": "reindex",
+                "description": "Rebuilds a store's menu cache from the source of truth.\n\nNot published: this is an operator tool, and the partner contract has no concept of our cache.\nIt is still served and still demands the `partner` credential — `hidden` is a documentation\ndecision and authorizes nobody.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Orders"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReindexRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReindexResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "The request body failed validation. `details` names the fields.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "The api key or the organization header is missing or not valid.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The addressed resource does not exist for this organization.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "webhooks": {
+        "order.state-changed": {
+            "post": {
+                "operationId": "PartnerDeliveryWebhookApi_orderStateChanged",
+                "summary": "orderStateChanged",
+                "description": "Sent whenever an order's state changes.\n\nDeliveries are at-least-once and may arrive out of order; treat `state` as the state at `at`\nand ignore an event older than one you have already applied.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Webhooks"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OrderStateChangedEvent"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Return any 2xx to acknowledge delivery. The body is ignored."
+                    }
+                },
+                "x-webpieces-webhook": true
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ApiErrorResponse": {
+                "type": "object",
+                "description": "The DOCUMENT-WIDE failure body.\n\n`openapi.manifest.json` names this TYPE and `wp-openapi` reads its shape with the compiler, so the\npublished error schema is the one on the wire rather than a hand-written copy of it. That is the\nwhole reason the manifest names a type instead of carrying a schema: a schema in JSON is a second\ndeclaration, and nothing could contradict it.",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "A stable, machine-readable code. Branch on this, never on `message`."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "What went wrong, for a human reading a log. Wording is not part of the contract."
+                    },
+                    "details": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "Field name -> what is wrong with it. Present on validation failures only."
+                    }
+                },
+                "required": [
+                    "code",
+                    "message"
+                ]
+            },
+            "AsapWindow": {
+                "type": "object",
+                "description": "A delivery that goes out as soon as it is ready.",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "asap"
+                        ]
+                    },
+                    "estimateMinutes": {
+                        "type": "number",
+                        "description": "Roughly how long the kitchen said it needs, in minutes."
+                    }
+                },
+                "required": [
+                    "kind",
+                    "estimateMinutes"
+                ]
+            },
+            "CancelOrderRequest": {
+                "type": "object",
+                "properties": {
+                    "orderId": {
+                        "type": "string",
+                        "description": "The order to cancel."
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why, for the store's records."
+                    }
+                },
+                "required": [
+                    "orderId",
+                    "reason"
+                ]
+            },
+            "CancelOrderResponse": {
+                "type": "object",
+                "properties": {
+                    "state": {
+                        "$ref": "#/components/schemas/OrderState",
+                        "description": "The order's state after the attempt."
+                    }
+                },
+                "required": [
+                    "state"
+                ]
+            },
+            "DeliveryWindow": {
+                "description": "When the order is meant to arrive.\n\nA DISCRIMINATED union: every branch carries `kind` as one string literal, so the published\ndocument can narrow it exactly as TypeScript does. A union TypeScript itself could not narrow\nwould be published without a discriminator rather than with an invented one.",
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/ScheduledWindow"
+                    },
+                    {
+                        "$ref": "#/components/schemas/AsapWindow"
+                    }
+                ],
+                "discriminator": {
+                    "propertyName": "kind",
+                    "mapping": {
+                        "scheduled": "#/components/schemas/ScheduledWindow",
+                        "asap": "#/components/schemas/AsapWindow"
+                    }
+                }
+            },
+            "FetchOrdersRequest": {
+                "type": "object",
+                "properties": {
+                    "storeId": {
+                        "type": "string",
+                        "description": "The store to read."
+                    },
+                    "from": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely."
+                    },
+                    "states": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OrderState"
+                        },
+                        "description": "Only these states. Omit for every state."
+                    }
+                },
+                "required": [
+                    "storeId"
+                ]
+            },
+            "FetchOrdersResponse": {
+                "type": "object",
+                "properties": {
+                    "orders": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Order"
+                        },
+                        "description": "The matching orders, newest first."
+                    },
+                    "nextFrom": {
+                        "type": "string",
+                        "description": "Pass as `from` on the next call; absent when the window is exhausted."
+                    }
+                },
+                "required": [
+                    "orders"
+                ]
+            },
+            "Order": {
+                "type": "object",
+                "description": "One order.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Our identifier for it. Stable for the life of the order."
+                    },
+                    "state": {
+                        "$ref": "#/components/schemas/OrderState",
+                        "description": "Where it is in its lifecycle."
+                    },
+                    "externalId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Your own identifier, echoed back. PRESENT and possibly null — an order placed through our own\nUI has none, which is a different wire document from one where you did not send the field."
+                    },
+                    "placedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When it was placed."
+                    },
+                    "window": {
+                        "$ref": "#/components/schemas/DeliveryWindow",
+                        "description": "When it is meant to arrive."
+                    },
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "Free-form labels you attached at placement."
+                    }
+                },
+                "required": [
+                    "id",
+                    "state",
+                    "externalId",
+                    "placedAt",
+                    "window",
+                    "labels"
+                ]
+            },
+            "OrderState": {
+                "type": "string",
+                "description": "The states an order moves through. A named literal union becomes one published enum.",
+                "enum": [
+                    "placed",
+                    "accepted",
+                    "delivered",
+                    "cancelled"
+                ]
+            },
+            "OrderStateChangedEvent": {
+                "type": "object",
+                "properties": {
+                    "orderId": {
+                        "type": "string",
+                        "description": "The order whose state moved."
+                    },
+                    "state": {
+                        "$ref": "#/components/schemas/OrderState",
+                        "description": "What it moved to."
+                    },
+                    "at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the move happened, on our clock."
+                    }
+                },
+                "required": [
+                    "orderId",
+                    "state",
+                    "at"
+                ]
+            },
+            "ReindexRequest": {
+                "type": "object",
+                "properties": {
+                    "storeId": {
+                        "type": "string",
+                        "description": "The store whose cache to rebuild."
+                    }
+                },
+                "required": [
+                    "storeId"
+                ]
+            },
+            "ReindexResponse": {
+                "type": "object",
+                "properties": {
+                    "itemsRead": {
+                        "type": "number",
+                        "description": "How many menu items were re-read."
+                    }
+                },
+                "required": [
+                    "itemsRead"
+                ]
+            },
+            "ScheduledWindow": {
+                "type": "object",
+                "description": "A delivery window given as a clock time.",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "scheduled"
+                        ]
+                    },
+                    "from": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the window opens."
+                    }
+                },
+                "required": [
+                    "kind",
+                    "from"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "PartnerApiKey": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "x-api-key",
+                "description": "Your partner key."
+            },
+            "PartnerOrganization": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "x-organization-id",
+                "description": "The organization the key acts for."
+            }
+        },
+        "headers": {
+            "x-request-id": {
+                "description": "Correlates this response with our logs. Quote it in a support request.",
+                "schema": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

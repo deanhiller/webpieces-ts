@@ -80,7 +80,7 @@ export class DocumentedType {
     ) {}
 }
 
-/** `@Endpoint(path, kind, options?)`'s third argument, as far as a document cares. */
+/** `@Endpoint(httpMethod, path, operation, kind, options?)`'s LAST argument, as a document sees it. */
 export class DocumentedEndpointOptions {
     constructor(
         readonly formPost: boolean,
@@ -90,12 +90,62 @@ export class DocumentedEndpointOptions {
     ) {}
 }
 
-/** The `@WpMcpTool(...)` declaration, when the method carries one. */
+/**
+ * The `@WpMcpTool(...)` declaration, when the method carries one — the TWO facts the source cannot
+ * otherwise state, and nothing else.
+ *
+ * `description` is deliberately NOT read off the decorator. The method's JSDoc is the description, for
+ * the agent and for the partner alike, byte-identical: two authored copies of one paragraph is the
+ * two-spellings shim, and its failure mode is concrete — the partner reads the JSDoc in the OpenAPI
+ * document while the agent reads the decorator string in `tools/list`, and they drift the first time
+ * somebody edits one. (The field still exists on the decorator; #984 deletes it across its 29 call
+ * sites. Nothing here reads it, so nothing here depends on a field that is about to disappear.)
+ *
+ * The three side-effect hints are not read either: they are COMPUTED from the endpoint's `operation`
+ * by `mcpHintsForOperation` in `@webpieces/core-util`, which is the one place that mapping lives.
+ * `READ | WRITE_IDEMPOTENT | WRITE` already says whether repeating a call is safe, so a hand-declared
+ * hint would be a second answer to a question the contract has answered.
+ */
 export class DocumentedMcpTool {
     constructor(
+        /**
+         * The STABLE protocol name. Deliberately independent of the method name, because renaming a
+         * method must not break a saved agent workflow.
+         */
         readonly name: string,
-        /** The tool hints an agent reads — `readOnly`, `destructive`, `idempotent`, `openWorld`. */
-        readonly hints: ReadonlyMap<string, boolean>,
+    ) {}
+}
+
+/**
+ * ONE credential of an api-key regime, PARSED — `{ in: 'header', name: 'x-api-key' }` or
+ * `{ in: 'bearer' }`.
+ *
+ * Parsed rather than left as source text because it is the one auth argument a renderer must turn
+ * into a STRUCTURE: an OpenAPI `securityScheme` is `{type: apiKey, in, name}` or
+ * `{type: http, scheme: bearer}`, and those are different documents. A renderer handed the string
+ * `"{ in: 'header', name: 'x-api-key' }"` would have to parse TypeScript to emit either one, which
+ * is this package's job and not a renderer's.
+ */
+export class DocumentedApiKeyCredential {
+    constructor(
+        /** `header` or `bearer`, verbatim from the declaration. */
+        readonly location: string,
+        /** The header name. Undefined for `bearer`, whose location IS `Authorization`. */
+        readonly name: string | undefined,
+        /** The prose a docs site renders on its authorization card. */
+        readonly description: string | undefined,
+    ) {}
+}
+
+/** `@WpAuthApiKey(regime, credentials)`, parsed. See {@link DocumentedApiKeyCredential}. */
+export class DocumentedApiKey {
+    constructor(
+        readonly regime: string,
+        /**
+         * Every credential the regime requires, IN DECLARATION ORDER. They are an AND — all of them
+         * are presented together — and the order is the order a published document lists them in.
+         */
+        readonly credentials: readonly DocumentedApiKeyCredential[],
     ) {}
 }
 
@@ -104,8 +154,15 @@ export class DocumentedAuth {
     constructor(
         /** The decorator name as written, e.g. `WpAuthJwt`. */
         readonly decorator: string,
-        /** Its argument text, verbatim, when it took one. Undefined for `@WpAuthPublic()`. */
-        readonly argumentText: string | undefined,
+        /** Every argument's text, verbatim and in order. Empty for `@WpAuthPublic()`. */
+        readonly argumentTexts: readonly string[],
+        /**
+         * The PARSED api-key declaration, set only for `@WpAuthApiKey`. Every other decorator's
+         * argument is prose or a role list that a document quotes rather than restructures, so
+         * {@link argumentTexts} is all they need — see {@link DocumentedApiKeyCredential} for why
+         * this one is different.
+         */
+        readonly apiKey: DocumentedApiKey | undefined,
     ) {}
 }
 
@@ -113,11 +170,29 @@ export class DocumentedAuth {
 export class DocumentedEndpoint {
     constructor(
         readonly methodName: string,
+        /**
+         * `GET` or `POST`, constant-folded from `@Endpoint`'s FIRST argument. A document cannot be
+         * written without it — the verb is the key an operation hangs under in `paths`.
+         */
+        readonly httpMethod: string,
         /** The path, constant-folded. A const that cannot be folded is a HARD FAILURE, never a guess. */
         readonly path: string,
+        /**
+         * `read` | `write-idempotent` | `write`, verbatim. The SIDE-EFFECT contract, which is
+         * independent of the verb: webpieces POSTs a read. A renderer publishes it rather than
+         * inferring safety from the verb, which for this framework would be wrong.
+         */
+        readonly operation: string,
         /** `rpc` | `cloudtasks` | `cron` | `external`, verbatim — this package invents no taxonomy. */
         readonly kind: string,
+        /**
+         * `{ hidden: true }` — this method is absent from the CUSTOMER document. It stays in the
+         * private one, and in the MCP one when it is a tool. WHICH documents the CONTRACT feeds at
+         * all is a different, class-level decision; see {@link ApiDocModel.apiTypes}.
+         */
         readonly hidden: boolean,
+        /** `{ openWorld: true }` — this operation may touch systems outside this service. */
+        readonly openWorld: boolean,
         readonly options: DocumentedEndpointOptions,
         readonly auth: DocumentedAuth | undefined,
         readonly mcpTool: DocumentedMcpTool | undefined,
@@ -138,6 +213,14 @@ export class ApiDocModel {
     constructor(
         /** The contract class name, e.g. `SaveApi`. */
         readonly contractName: string,
+        /**
+         * WHICH generated documents this contract feeds — `svc-to-svc`, `external-customer`, `mcp`,
+         * verbatim from `@ApiType(...)`, defaulting to `svc-to-svc` alone when it declares nothing.
+         *
+         * A named list rather than a falsy default, because the grant has to be the TOKEN: a default
+         * that reached customers would publish a contract whose author typed nothing about it.
+         */
+        readonly apiTypes: readonly string[],
         /** `@ApiPath(...)`, constant-folded. */
         readonly basePath: string,
         /** The JSDoc on the contract class, links flattened. */

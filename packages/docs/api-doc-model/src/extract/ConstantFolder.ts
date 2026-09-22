@@ -3,9 +3,9 @@ import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { SourceLocation } from './SourceLocation';
 
 /**
- * Decorator arguments are constants as often as they are literals — `@Endpoint(SAVE_PATH, 'rpc')`,
- * `@ApiPath(PATHS.SAVE)` — and a document that printed `SAVE_PATH` as the path would be worse than
- * no document.
+ * Decorator arguments are constants as often as they are literals — `@Endpoint(POST, SAVE_PATH, READ,
+ * RPC)`, `@ApiPath(PATHS.SAVE)` — and a document that printed `SAVE_PATH` as the path, or `RPC` as the
+ * trigger, would be worse than no document.
  *
  * So the folder resolves them, and where it CANNOT it FAILS. There is deliberately no fallback to
  * the source text and no "best effort" path: a partner-grade document that is quietly wrong about a
@@ -40,6 +40,48 @@ export class ConstantFolder {
     /** The string this expression denotes, or undefined. No throw — for optional arguments. */
     tryFoldString(expression: ts.Expression): string | undefined {
         return this.tryFold(expression, new Set<ts.Node>());
+    }
+
+    /**
+     * The expression a name ultimately DENOTES, following `const` declarations through imports.
+     *
+     * A decorator argument is a constant as often as it is a literal, and that is true of structures
+     * too: a credential list shared by every method of a contract is written once as a `const` and
+     * named five times, which is better source than five copies. A reader that only understood a
+     * literal would force the copies — so the copies would happen, and one of them would drift.
+     *
+     * Returns the expression unchanged when it is not a name, so a caller can follow first and then
+     * ask what shape it is.
+     */
+    follow(expression: ts.Expression): ts.Expression {
+        return this.followThrough(expression, new Set<ts.Node>());
+    }
+
+    private followThrough(expression: ts.Expression, seen: Set<ts.Node>): ts.Expression {
+        if (seen.has(expression)) {
+            return expression;
+        }
+        seen.add(expression);
+        if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression)) {
+            return this.followThrough(expression.expression, seen);
+        }
+        if (!ts.isIdentifier(expression) && !ts.isPropertyAccessExpression(expression)) {
+            return expression;
+        }
+        const symbol = this.checker.getSymbolAtLocation(expression);
+        const resolved =
+            symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
+                ? this.checker.getAliasedSymbol(symbol)
+                : symbol;
+        for (const declaration of resolved?.declarations ?? []) {
+            if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+                return this.followThrough(declaration.initializer, seen);
+            }
+            if (ts.isPropertyAssignment(declaration) && ts.isExpression(declaration.initializer)) {
+                return this.followThrough(declaration.initializer, seen);
+            }
+        }
+        return expression;
     }
 
     private tryFold(expression: ts.Expression, seen: Set<ts.Node>): string | undefined {

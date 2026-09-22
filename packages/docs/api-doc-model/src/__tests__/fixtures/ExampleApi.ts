@@ -2,14 +2,27 @@
 /**
  * The MAIN fixture contract. Every row of the vitest matrix in issue #981 is written here rather
  * than assembled in the spec, so what the extractor reads is ordinary TypeScript somebody could
- * plausibly have written, not a synthetic AST.
+ * plausibly have written, not a synthetic AST — and it uses the REAL decorators, so it cannot drift
+ * from the signatures it exists to exercise.
  */
 import {
     ApiPath,
+    ApiType,
+    CLOUDTASKS,
+    CRON,
     Endpoint,
+    EXTERNAL,
+    EXTERNAL_CUSTOMER,
+    GET,
     Integer,
     MaskLog,
-    SAVE_PATH,
+    MCP,
+    POST,
+    READ,
+    RPC,
+    SVC_TO_SVC,
+    WRITE,
+    WpAuthApiKey,
     WpAuthJwt,
     WpAuthPublic,
     WpInt,
@@ -17,7 +30,8 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
     WpMin,
-} from './contract-stubs';
+} from '@webpieces/core-util';
+import { SAVE_PATH } from './contract-constants';
 
 /** A string-literal union with a NAME — becomes one enum entry a renderer can `$ref`. */
 export type Color = 'red' | 'green' | 'blue';
@@ -141,6 +155,10 @@ export interface InternalRequest {
     reason: string;
 }
 
+export interface LookupRequest {
+    key: string;
+}
+
 /** Integer-ness by the PREFERRED spelling: the type composes. */
 export interface LimitByAlias {
     limit?: Integer;
@@ -174,15 +192,20 @@ export class BoundedRequest {
  * renderer ever has to know the JSDoc inline-tag grammar.
  */
 @ApiPath('/api/example')
+@ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER, MCP)
 export class ExampleApi {
     /**
      * Save a customer.
      *
      * @mcp Create or update one customer record. Safe to retry.
      */
-    @Endpoint(SAVE_PATH, 'rpc')
+    @Endpoint(POST, SAVE_PATH, WRITE, RPC)
     @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpTool({ name: 'save_customer', readOnly: false, idempotent: true })
+    @WpMcpTool({
+        name: 'save_customer',
+        description: 'Create or update one customer.',
+        openWorldHint: false,
+    })
     @WpMcpAuthJwt({ roles: ['admin'] })
     @MaskLog({ secretToken: 'full' })
     save(request: SaveRequest): Promise<SaveResponse> {
@@ -190,44 +213,74 @@ export class ExampleApi {
     }
 
     /** Enqueued by a producer, delivered later. */
-    @Endpoint('/enqueue', 'cloudtasks')
+    @Endpoint(POST, '/enqueue', WRITE, CLOUDTASKS)
+    @WpAuthJwt({ allRolesAllowed: true })
     enqueue(request: EnqueueRequest): Promise<void> {
         throw new Error('contract');
     }
 
     /** Fired by a scheduler on a clock. */
-    @Endpoint('/nightly', 'cron')
+    @Endpoint(POST, '/nightly', WRITE, CRON)
+    @WpAuthJwt({ allRolesAllowed: true })
     nightly(request: NightlyRequest): Promise<void> {
         throw new Error('contract');
     }
 
     /** Posted by a vendor. */
-    @Endpoint('/hook', 'external', { formPost: true, calledBy: 'twilio', callerKind: 'vendor' })
-    @WpAuthPublic()
+    @Endpoint(POST, '/hook', WRITE, EXTERNAL, {
+        formPost: true,
+        calledBy: 'twilio',
+        callerKind: 'saas',
+        openWorld: true,
+    })
+    @WpAuthPublic('Twilio signs its own payload; the webhook callback verifies it.')
     hook(request: WebhookRequest): Promise<void> {
         throw new Error('contract');
     }
 
-    /** Plumbing nobody should see in a published document. */
-    @Endpoint('/internal', 'rpc', { hidden: true })
+    /**
+     * Plumbing nobody should see in the customer document.
+     *
+     * Not published: an operator tool, and the customer contract has no concept of our internals.
+     */
+    @Endpoint(POST, '/internal', WRITE, RPC, { hidden: true })
+    @WpAuthJwt({ allRolesAllowed: true })
     internal(request: InternalRequest): Promise<void> {
         throw new Error('contract');
     }
 
+    /**
+     * Look one customer up by key.
+     *
+     * An api-key regime authenticates a PAIR, which is why both credentials are declared here and
+     * why a renderer must AND them into one requirement rather than list them separately.
+     */
+    @Endpoint(POST, '/lookup', READ, RPC)
+    @WpAuthApiKey('partner', [
+        { in: 'header', name: 'x-api-key', description: 'Your partner key.' },
+        { in: 'bearer', description: 'The organization the key acts for.' },
+    ])
+    lookup(request: LookupRequest): Promise<void> {
+        throw new Error('contract');
+    }
+
     /** Integer-ness, the preferred spelling. */
-    @Endpoint('/limit-alias', 'rpc')
+    @Endpoint(GET, '/limit-alias', READ, RPC)
+    @WpAuthJwt({ allRolesAllowed: true })
     limitAlias(request: LimitByAlias): Promise<void> {
         throw new Error('contract');
     }
 
     /** Integer-ness, the decorator spelling. */
-    @Endpoint('/limit-decorator', 'rpc')
+    @Endpoint(POST, '/limit-decorator', READ, RPC)
+    @WpAuthJwt({ allRolesAllowed: true })
     limitDecorator(request: LimitByDecorator): Promise<void> {
         throw new Error('contract');
     }
 
     /** Numeric bounds. */
-    @Endpoint('/bounded', 'rpc')
+    @Endpoint(POST, '/bounded', READ, RPC)
+    @WpAuthJwt({ allRolesAllowed: true })
     bounded(request: BoundedRequest): Promise<void> {
         throw new Error('contract');
     }

@@ -8,6 +8,8 @@
         "visualizeDesign": "pnpm wp-design-visualize <project> — opens a project's DI designs (its designFile) as HTML, one graph per controller with the controller at the top; no args = interactive picker"
     },
     "apiContractFiles": {
+        "PartnerDeliveryWebhookApi": "apis/PartnerDeliveryWebhookApi.json",
+        "PartnerOrdersApi": "apis/PartnerOrdersApi.json",
         "PublicApi": "apis/PublicApi.json",
         "SaveApi": "apis/SaveApi.json",
         "SecureApi": "apis/SecureApi.json",
@@ -54,12 +56,14 @@
             ]
         },
         "api-doc-model": {
-            "level": 0,
+            "level": 1,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Read a webpieces API contract with the **TypeScript compiler API** and produce ONE in-memory `ApiDocModel`. It is the single extraction pass both the OpenAPI documents and the MCP tool list are rendered from (#982), and it renders nothing itself.",
             "responsibilitiesFile": "packages/docs/api-doc-model/responsibilities.md",
-            "dependsOn": []
+            "dependsOn": [
+                "core-util"
+            ]
         },
         "app-example-e2e": {
             "level": 7,
@@ -357,6 +361,26 @@
                 "code-rules",
                 "eslint-rules",
                 "pr-gate"
+            ]
+        },
+        "openapi-generator": {
+            "level": 2,
+            "framework": ["node"],
+            "role": "lib",
+            "shortDescription": "Render an `ApiDocModel` (from `@webpieces/api-doc-model`) to **OpenAPI 3.1.0**, and ship the `wp-openapi` bin. ONE render function produces every generated document.",
+            "responsibilitiesFile": "packages/docs/openapi-generator/responsibilities.md",
+            "dependsOn": [
+                "api-doc-model"
+            ]
+        },
+        "partner-api": {
+            "level": 3,
+            "framework": ["node"],
+            "role": "api-lib",
+            "shortDescription": "The WORKED EXAMPLE for `@webpieces/openapi-generator`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, and the COMMITTED OpenAPI documents generated from it.",
+            "responsibilitiesFile": "apps/app-example/partner-api/responsibilities.md",
+            "dependsOn": [
+                "openapi-generator"
             ]
         },
         "pr-gate": {
