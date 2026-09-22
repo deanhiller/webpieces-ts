@@ -20,6 +20,7 @@ import {
     ApiBadRequestError,
     ApiForbiddenError,
     ApiImplementationError,
+    ApiJsonSchemaValidator,
     ApiMethodInfo,
     ApiUnauthorizedError,
     DtoValue,
@@ -112,6 +113,7 @@ class WpSdkMcpServer extends McpServer {
  */
 export class WpMcpServer<TGrant, TMintRequest> {
     private readonly dispatcher = new McpApiDispatcher();
+    private readonly outputSchemas = new ApiJsonSchemaValidator();
     /**
      * These edges have NO filter chain above them — `LogApiFilter` never sees a rejected bearer, a
      * bad `Origin`, a body express could not parse, or a `tools/list` the SDK renders itself.
@@ -165,7 +167,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
                     `'${this.config.resource}' and the bound route are the same endpoint.`,
             );
         }
-        this.registry = new McpToolRegistry(options.bindings);
+        this.registry = new McpToolRegistry(options.bindings, options.toolCatalog);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
         this.streamingHandler = this.createHandler(options, 'sse');
@@ -466,10 +468,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
             invocation,
             endpointJwt?.token,
         );
-        const outputFailure = this.requireRegistry().schemaBuilder.validate(
-            tool.responseClass,
-            value,
-        );
+        const outputFailure = this.outputSchemas.validate(tool.outputSchema, value);
         if (outputFailure) {
             throw new ApiImplementationError(
                 `MCP output schema violation for ${tool.apiClass.name}.${tool.methodName}: ${outputFailure.message}`,

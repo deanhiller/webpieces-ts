@@ -5,20 +5,24 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+    ApiJsonSchema,
     ApiPath,
+    ApiType,
     Endpoint,
     HeaderRegistry,
     LoggerFactory,
     LogManager,
+    McpToolCatalog,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
     WpAuthJwt,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WpMcpAuthJwt,
     WpMcpTool,
-    WpResponseDto,
+    WpMcpToolHints,
+    MCP,
     POST,
     RPC,
+    SVC_TO_SVC,
     WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
@@ -35,6 +39,7 @@ import {
     RecordedLogLine,
     RecordingLoggerFactory,
     SearchApi,
+    SPEC_TOOL_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
@@ -48,33 +53,51 @@ class PassageLockedError extends Error {
     }
 }
 
-@WpDto()
 class LockRequest {
-    @WpDtoField(new WpDtoFieldOptions('Passage identifier', true))
+    /** Passage identifier */
     passageId!: string;
 }
 
-@WpDto()
 class LockResponse {
-    @WpDtoField(new WpDtoFieldOptions('Whether the passage is open', true))
+    /** Whether the passage is open */
     open!: boolean;
 }
 
 @ApiPath('/lock-spec')
+@ApiType(SVC_TO_SVC, MCP)
 abstract class LockApi {
+    /** Open a passage for editing. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/open', WRITE_IDEMPOTENT, RPC)
-    @WpResponseDto(() => LockResponse)
-    @WpMcpTool({
-        name: 'passage_open',
-        description: 'Open a passage for editing.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('passage_open')
     open(_request: LockRequest): Promise<LockResponse> {
         throw new Error('contract only');
     }
 }
+
+/** The generated catalog entry for `passage_open`, plus the shared search tools. */
+function described(type: 'string' | 'boolean', description: string): ApiJsonSchema {
+    const schema = new ApiJsonSchema(type);
+    schema.description = description;
+    return schema;
+}
+
+const LOCK_CATALOG = new McpToolCatalog([
+    new McpToolDefinition(
+        'passage_open',
+        'open',
+        'Open a passage for editing.',
+        new WpMcpToolHints(false, true, true, false),
+        new ObjectSchemaBuilder()
+            .required('passageId', described('string', 'Passage identifier'))
+            .build(),
+        new ObjectSchemaBuilder()
+            .required('open', described('boolean', 'Whether the passage is open'))
+            .build(),
+    ),
+    ...SPEC_TOOL_CATALOG.tools,
+]);
 
 @injectable()
 class LockController extends LockApi {
@@ -153,6 +176,7 @@ describe('application-owned tools/call error translation', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(LockApi, router), McpApiBinding.local(SearchApi, router)],
+                LOCK_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );
@@ -298,6 +322,7 @@ describe('no application translator registered', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(LockApi, router)],
+                LOCK_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );

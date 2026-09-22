@@ -18,23 +18,23 @@ It exists because **a DTO field's type is erased at runtime**. Reflection can se
 - **Cycles terminate by construction** — every named type is ONE model entry, reserved before its fields are walked. There is NO depth counter anywhere, so a deep-but-finite graph of 8 or 200 named hops is fully expanded; truncating one would publish a document quietly missing a field. Only a self-referential ANONYMOUS type is cut, and by type identity
 - **A union of named object types becomes a union plus a DERIVED discriminator** when every branch carries the same property typed as a single string literal. No invented discriminator for a union TypeScript itself cannot narrow — that is recorded as an `UnmappedType` instead
 - Prose: JSDoc on the class, the method and every field. `@format` lifts onto a scalar (on an array, onto the ITEM). `{@link Foo.bar}` is flattened HERE so no renderer needs to know the inline-tag grammar
-- `@mcpHeader <token>` captured per field — the MCP 2026 SEP-2243 header a primitive parameter is mirrored into (`Mcp-Param-{token}`). It is a JSDoc tag because it documents one field of one wire document, and this epic's rule is that documentation has one source; the runtime spells the same fact as `WpMcpHeader` inside `@WpDtoField`, and #984 deletes that spelling
+- `@mcpHeader <token>` captured per field — the MCP 2026 SEP-2243 header a primitive parameter is mirrored into (`Mcp-Param-{token}`). It is a JSDoc tag because it documents one field of one wire document, and this epic's rule is that documentation has one source; the runtime's `WpMcpHeader` argument spelled the same fact and #984 deleted it
 - `@mcp <text>` captured as the OPTIONAL agent-facing override, per method and per field. It is left `undefined` when absent rather than defaulted, because "the author wrote an agent-facing sentence" and "we reused the human one" are different facts
 - Anything unrepresentable is recorded as an explicit `UnmappedType` with the TS type text and a pointer-style location — recorded, not dropped, because #982's guard needs something to name
 
 ## The ONE renderer that lives here: `McpSchemaRenderer`
 
-`ApiDocModel` → `McpToolDefinition[]`, in exactly the `ApiJsonSchema` shape `DtoSchemaBuilder` produces at boot from reflect-metadata. It is here and not in a renderer package because the MCP projection is not a DOCUMENT — it is the runtime's own schema type, and the point of producing it is to compare the two.
+`ApiDocModel` → `McpToolDefinition[]`, and `McpSchemaRenderer.catalogOf(models)` → the `McpToolCatalog` that `wp-openapi` writes as `mcp-tools.json`. It is here and not in a renderer package because the MCP projection is not a DOCUMENT — it is the runtime's own `ApiJsonSchema`, published verbatim by `tools/list`.
 
-That comparison is the equivalence gate (#983): `McpEquivalence.spec.ts` builds both schemas for a contract that declares its shape BOTH ways and asserts deep equality, and `McpRepoSweep.spec.ts` asks the same question of every `@WpMcpTool` in the repo. #984 deletes `@WpDtoField`'s erasure-repair arguments on the strength of it, and a tool whose input schema quietly loses a `required` entry fails an agent CALL rather than a build.
+It is the SOLE source of that schema. Until #984 an MCP server built one at boot from `@WpDtoField` reflect-metadata, so the document a partner read and the schema a server accepted were two derivations of one contract. The equivalence gate (#983) measured them against each other and found the compiler reproduces every erasure-repair argument byte for byte; #984 deleted the runtime half, and the gate became `McpSchemaGolden.spec.ts` — a COMMITTED golden catalog, so a change that moves a live tool's published schema is a diff a human reads in the PR that caused it. `McpRepoSweep.spec.ts` asks whether every `@WpMcpTool` in the repo renders at all, and asserts the blocked list exactly, in both directions.
 
-The renderer deliberately reproduces `DtoSchemaBuilder` rather than emitting the better schema it could:
+Three things the renderer emits that the deleted runtime could not:
 
-- NULLABLE is not rendered — `ApiJsonSchema.type` holds one string, so `type: [T, "null"]` is not expressible in the type the runtime publishes
-- a nested DTO is INLINED with the FIELD's prose on it, because MCP has no `$ref`
-- a bound on an array of numbers lands on the ITEM, where OpenAPI puts it; the runtime cannot express it at all
+- NULLABLE, as `type: [T, "null"]` — `ApiJsonSchema.type` used to hold a single string, and `{}` and `{x: null}` are different wire documents
+- `Integer` and any other NAMED TYPE ALIAS — `design:type` resolved to `Object` under SWC and to `String`/`Number` under `tsc`, so an aliased field's runtime shape depended on the transpiler
+- a bound on an array of numbers, on the ITEM where OpenAPI puts it — `@WpDtoField` rejected numeric constraints on a non-`Number` field
 
-Relaxing any of those to make the comparison agree would destroy the only thing the gate is for, so each is a documented reproduction and the gate's report names the difference.
+A nested DTO is INLINED with the FIELD's prose on it: not a gap but the protocol, since MCP tool schemas have no `$ref`. A recursive DTO and a union therefore have no MCP shape at all, and the renderer THROWS rather than publishing a truncated one.
 
 ## Out of Scope
 
@@ -74,7 +74,7 @@ limit?: Integer;                 // PREFERRED — it composes: Integer[], Record
 Two things recorded honestly, because a reviewer will raise both:
 
 1. This is a deliberate exception to `.claude/rules/no-backwards-compat.md` shim shape #1 ("two spellings of one thing"), **authorized by Dean in design review on 2026-09-22**; issue #981's body records the decision. `backwards-compat-reviewer` is a REQUIRED checklist and will flag it — the answer is to cite that authorization, not to remove a spelling.
-2. It is NOT justified by an existing release. Nothing has ever shipped `@WpInt`; what shipped is `WpDtoFieldOptions`' positional `integer` argument, which #984 deletes. The reason for two spellings is **ergonomic**, not compatibility.
+2. It is NOT justified by an existing release. Nothing has ever shipped `@WpInt`; what shipped was `WpDtoFieldOptions`' positional `integer` argument, which #984 deleted. The reason for two spellings is **ergonomic**, not compatibility.
 
 `@WpMin(n)` / `@WpMax(n)` on a non-numeric field is a build failure, for the same reason an unfoldable path is: dropping it silently would publish a contract weaker than the one its author wrote down.
 

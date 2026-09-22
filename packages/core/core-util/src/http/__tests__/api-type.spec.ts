@@ -61,7 +61,7 @@ class ClaimsMcpWithoutToolApi {
 class ToolWithoutMcpApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
-    @WpMcpTool({ name: 'go', description: 'Go.', openWorldHint: false })
+    @WpMcpTool('go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -72,7 +72,7 @@ class ToolWithoutMcpApi {
 class AgreesApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
-    @WpMcpTool({ name: 'go', description: 'Go.', openWorldHint: false })
+    @WpMcpTool('go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }

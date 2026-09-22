@@ -12,6 +12,7 @@ import { WpMcpServer } from './WpMcpServer';
 import {
     ENDPOINT_PATH,
     SearchApi,
+    SPEC_TOOL_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
@@ -62,6 +63,7 @@ describe('WpMcpServerConfig fluent setters', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(SearchApi, router)],
+                SPEC_TOOL_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );

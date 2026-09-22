@@ -301,6 +301,9 @@ importers:
       '@webpieces/api-doc-model':
         specifier: workspace:*
         version: link:../api-doc-model
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
       typescript:
         specifier: 5.9.3
         version: 5.9.3

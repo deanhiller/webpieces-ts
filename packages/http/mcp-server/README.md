@@ -1,83 +1,91 @@
 # @webpieces/mcp-server
 
-Publishes explicitly annotated Webpieces RPC endpoints as MCP tools. The bridge generates input and
-output JSON Schema from DTO metadata, invokes the normal Webpieces filter/controller path, and turns
-exceptions into safe model-visible MCP results.
+Publishes explicitly annotated Webpieces RPC endpoints as MCP tools. The bridge is HANDED the input
+and output JSON Schema — the build extracts them from the contract source and writes `mcp-tools.json`
+— invokes the normal Webpieces filter/controller path, and turns exceptions into safe model-visible
+MCP results.
 
 `@WpMcpTool` is an opt-in and every tool must also declare `@WpMcpAuthJwt`. MCP user
 authorization and endpoint transport authentication are deliberately separate. The MCP adapter
 never accepts trusted context values from tool arguments or unverified headers.
 
 ```ts
-@WpDto()
-class FindOrderRequest {
-    @WpDtoField(new WpDtoFieldOptions('Order identifier', true))
-    orderId!: string;
+interface FindOrderRequest {
+    /** Order identifier */
+    orderId: string;
 }
 
-@WpDto()
-class FindOrderResponse {
-    @WpDtoField(new WpDtoFieldOptions('Current order state', true))
-    state!: string;
+interface FindOrderResponse {
+    /** Current order state */
+    state: string;
 }
 
 @ApiPath('/orders')
+@ApiType(SVC_TO_SVC, MCP)
 abstract class OrdersApi {
+    /** Find one order owned by the signed-in user. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/find', READ, RPC)
-    @WpResponseDto(() => FindOrderResponse)
-    @WpMcpTool({
-        name: 'orders_find',
-        description: 'Find one order owned by the signed-in user.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('orders_find')
     find(request: FindOrderRequest): Promise<FindOrderResponse> {
         throw new Error('contract only');
     }
 }
 ```
 
-The `@WpMcpTool.description` becomes the tool description returned by `tools/list`. The request and
-response classes generate `inputSchema` and `outputSchema`; `@WpDtoField` supplies property
-descriptions and the facts TypeScript erases, such as optionality and array element types.
+## Everything but the tool NAME comes from the source
 
-Every `@Endpoint` declares one enum-backed operation: `READ`, `WRITE_IDEMPOTENT`, or `WRITE`.
-This is independent of its required `GET` or `POST` argument: a GET may deliberately write and a
-POST may be a read. MCP derives
-`readOnlyHint`, `idempotentHint`, and `destructiveHint` from that one declaration; `@WpMcpTool`
-owns only the stable name, description, and `openWorldHint`.
+`@WpMcpTool` takes one argument, the stable protocol name, because that is the only fact the source
+cannot state. Everything else is read off the contract by `@webpieces/api-doc-model` at BUILD time:
+
+| fact | source |
+|---|---|
+| `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads in OpenAPI |
+| `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description |
+| `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |
+| `openWorldHint` | `@Endpoint`'s `openWorld` option |
+| `x-mcp-header` | the field's `@mcpHeader <token>` JSDoc tag |
+
+Every `@Endpoint` declares one enum-backed operation, independent of its required `GET` or `POST`
+argument: a GET may deliberately write and a POST may be a read. A tool therefore cannot claim to be
+read-only while its endpoint declares `WRITE` — the contradiction is unrepresentable.
+
+## Booting: the server is constructed with the generated catalog
+
+```bash
+wp-openapi --manifest openapi.manifest.json --out dist
+```
+
+writes `mcp-tools.json` beside the OpenAPI documents. Hand it to `McpBindOptions`:
+
+```ts
+const catalog = McpToolCatalog.fromJsonText(fs.readFileSync('dist/mcp-tools.json', 'utf8'));
+server.bind(app, new McpBindOptions(path, bindings, catalog, McpDeployment.singleProcess()));
+```
+
+`McpToolRegistry` FAILS FAST at boot when a registered `@WpMcpTool` is absent from the catalog: a tool
+the build never saw is a tool whose schema nobody checked. Tool arguments and structured output are
+validated against those same schemas by `ApiJsonSchemaValidator`, so the shape an agent is shown and
+the shape the server accepts are the same bytes rather than two derivations of one contract.
+
+Before #984 the schemas were instead built at boot from `@WpDtoField` reflect-metadata. That spelling,
+`@WpDto`, `WpDtoFieldOptions`, `WpDtoMapFieldOptions`, `WpMcpHeader`, `@WpResponseDto` and
+`DtoSchemaBuilder` are all DELETED — see the migration note in `responsibilities.md`.
 
 ### Typed maps
 
-A `Record<string, V>` reflects as plain `Object`, so its value type must be declared — the same reason
-`arrayItems` exists for arrays. Use `WpDtoMapFieldOptions(description, required, mapValues)`, where
-`mapValues` is `'string' | 'number' | 'integer' | 'boolean'` or a `@WpDto` class:
+A `Record<string, V>` is read straight off the declared type and emits
+`{ type: 'object', additionalProperties: <value schema> }`. Validation checks every value
+(`$.translations.es must be a string`). A map is still a CLOSED schema: no key can carry an unspecified
+value, and `ApiJsonSchema.isClosed(schema)` answers that for both forms — use it rather than
+`schema.additionalProperties === false`, which wrongly rejects typed maps.
 
-```ts
-@WpDto()
-class PassageSentenceItem {
-    @WpDtoField(new WpDtoFieldOptions('Sentence text', true))
-    text!: string;
+### Nullable
 
-    @WpDtoField(new WpDtoMapFieldOptions('ISO 639-1 -> sentence', false, 'string'))
-    translations?: Record<string, string>;
-}
-
-@WpDto()
-class PassageResponse {
-    @WpDtoField(new WpDtoMapFieldOptions('Sentences by locale', true, PassageSentenceItem))
-    sentencesByLocale!: Record<string, PassageSentenceItem>;
-}
-```
-
-The field emits `{ type: 'object', additionalProperties: <value schema> }`, and validation checks every
-value (`$.translations.es must be string`). An `Object`-typed field without map options — an interface or
-an undeclared `Record` — fails at startup, because an interface can never carry `@WpDto`.
-
-A map is still a closed schema: no key can carry an unspecified value. Check closure with
-`new DtoSchemaBuilder().isClosedSchema(schema)`, not `schema.additionalProperties === false`, which wrongly
-rejects typed maps.
+`externalId: string | null` publishes as `type: ["string", "null"]`, which is a different wire document
+from omitting the key. OPTIONAL (`externalId?: string`) is the absence of the field from `required`.
+The two are kept apart.
 
 ## Configuration
 

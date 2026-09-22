@@ -74,7 +74,7 @@ export class SseResponseStream {
             if (event.event !== undefined && event.event !== 'message') continue;
             const envelope = StreamEnvelopeCodec.decode(event.data);
             if (envelope.kind === 'event') {
-                this.validator.validate(metadata.responseEventClass, envelope.value, 'response');
+                this.validator.validate(metadata.responseSchema, envelope.value, 'response');
                 await destination.event(envelope.value as DtoValue, envelope.correlation);
                 continue;
             }

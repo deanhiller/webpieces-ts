@@ -1,5 +1,8 @@
 import * as path from 'node:path';
+import { MCP } from '@webpieces/core-util';
+import { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from '@webpieces/api-doc-model';
 import { ArtifactWriter, GeneratedArtifact, OutputFormat } from '../emit/ArtifactWriter';
+import { ContractModel, GenerationInputs } from '../generate/GenerationInputs';
 import { OpenApiGenerator } from '../generate/OpenApiGenerator';
 import { InputsLoader } from '../load/InputsLoader';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
@@ -22,6 +25,9 @@ export const USAGE = [
     '  public-openapi         contracts declaring EXTERNAL_CUSTOMER, minus every { hidden: true } method',
     '  mcp-openapi            contracts declaring MCP, carrying the x-mcp-* extensions',
     '',
+    'Alongside them, mcp-tools.json is written whenever some contract declares MCP: the RUNTIME',
+    'artifact WpMcpServer is constructed with. It is not a document, so --format does not apply.',
+    '',
     'A document no contract asked for is not written. --format chooses the serialization of',
     'whichever documents were written, and defaults to both.',
     '',
@@ -34,6 +40,16 @@ export class CliResult {
     constructor(
         readonly written: readonly string[],
         readonly artifacts: readonly GeneratedArtifact[],
+        /** `@WpMcpTool`s the MCP catalog could not carry, with the reason. Never silent. */
+        readonly skippedMcpTools: readonly SkippedMcpTool[] = [],
+    ) {}
+}
+
+/** The MCP half of one run: the artifact to write, if any, and what it could not carry. */
+class McpArtifacts {
+    constructor(
+        readonly artifacts: readonly GeneratedArtifact[],
+        readonly skipped: readonly SkippedMcpTool[],
     ) {}
 }
 
@@ -64,12 +80,47 @@ export class OpenApiCli {
         }
         const inputs = this.loader.load(path.resolve(cwd, manifest));
         const documents = this.generator.generate(inputs);
-        const artifacts = this.writer.artifacts(documents, this.formatOf(argv));
-        return new CliResult(this.writer.write(path.resolve(cwd, out), artifacts), artifacts);
+        const mcp = OpenApiCli.mcpCatalog(inputs);
+        const artifacts = [
+            ...this.writer.artifacts(documents, this.formatOf(argv)),
+            ...mcp.artifacts,
+        ];
+        return new CliResult(
+            this.writer.write(path.resolve(cwd, out), artifacts),
+            artifacts,
+            mcp.skipped,
+        );
     }
 
     wantsHelp(argv: readonly string[]): boolean {
         return argv.includes(HELP);
+    }
+
+    /**
+     * `mcp-tools.json` — the RUNTIME artifact, beside the three documents.
+     *
+     * It is not a document and is not serialized by `--format`: `WpMcpServer` is constructed with it,
+     * and `McpToolRegistry` fails fast at boot when a registered `@WpMcpTool` is missing from it. That
+     * is what took the MCP runtime off reflect-metadata (#984) — the schema an agent is shown and the
+     * schema the server accepts are now the same bytes, rather than two derivations of one contract.
+     *
+     * Written only when some contract declares `MCP`, which is the same rule `mcp-openapi.json`
+     * follows, for the same reason: an empty file is a claim that there are no tools.
+     */
+    // webpieces-disable no-function-outside-class -- private static composition step of this class
+    private static mcpCatalog(inputs: GenerationInputs): McpArtifacts {
+        const models = inputs.contracts
+            .filter((contract: ContractModel) => contract.model.apiTypes.includes(MCP))
+            .map((contract: ContractModel) => contract.model);
+        if (models.length === 0) {
+            return new McpArtifacts([], []);
+        }
+        const rendered: McpCatalogRender = McpSchemaRenderer.catalogOf(models);
+        const artifacts =
+            rendered.catalog.tools.length === 0
+                ? []
+                : [new GeneratedArtifact('mcp-tools.json', rendered.catalog.toJsonText())];
+        return new McpArtifacts(artifacts, rendered.skipped);
     }
 
     /** `both` unless told otherwise: the second serialization comes free from the same document. */

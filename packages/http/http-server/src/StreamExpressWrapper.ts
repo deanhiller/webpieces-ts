@@ -42,7 +42,7 @@ class SseResponseChannel {
         this.writer = new StreamWriter<DtoValue>(
             (envelope: StreamEnvelope<DtoValue>): Promise<void> => this.deliver(envelope),
             (value: DtoValue): void =>
-                validator.validate(route.streaming!.responseEventClass, value, 'response'),
+                validator.validate(route.streaming!.responseSchema, value, 'response'),
             route.streaming?.supportsNonTerminalFailures,
         );
     }
@@ -267,11 +267,7 @@ export class StreamExpressWrapper {
         }
         const envelope = this.parseEnvelope(value);
         if (envelope.kind === 'event') {
-            this.validator.validate(
-                this.route.streaming!.requestEventClass,
-                envelope.value,
-                'request',
-            );
+            this.validator.validate(this.route.streaming!.requestSchema, envelope.value, 'request');
             await writer.event(envelope.value!, envelope.correlation);
         } else if (envelope.kind === 'failure') {
             await writer.fail(ApiErrorCodec.decode(envelope.error), envelope.correlation, {

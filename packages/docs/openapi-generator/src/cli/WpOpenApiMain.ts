@@ -35,6 +35,12 @@ export class WpOpenApiMain {
             for (const file of result.written) {
                 out.write(`wrote ${file}\n`);
             }
+            // NAMED, never silent. A tool with no MCP schema is one no server can carry, and
+            // `McpToolRegistry` refuses to boot while it is still declared — see
+            // `McpSchemaRenderer.catalogOf` for why that is the right place for the failure.
+            for (const skipped of result.skippedMcpTools) {
+                out.write(`no MCP schema, left out of mcp-tools.json: ${skipped}\n`);
+            }
             return 0;
             // webpieces-disable no-any-unknown -- the catch binding, which TypeScript types for us
         } catch (err: unknown) {

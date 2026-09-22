@@ -3,40 +3,33 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as ts from 'typescript';
 import { ApiDocExtractor } from '../extract/ApiDocExtractor';
-import { ApiDocModel, DocumentedEndpoint, DocumentedField } from '../model/ApiDocModel';
-import { TypeRef } from '../model/TypeRef';
+import { ApiDocModel, DocumentedEndpoint } from '../model/ApiDocModel';
 import { McpRenderError } from '../render/McpRenderError';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
 
 /**
- * THE REPO SWEEP half of the equivalence gate (#983).
+ * THE REPO SWEEP: every `@WpMcpTool` under `packages/**` and `apps/**`, rendered.
  *
- * `McpEquivalence.spec.ts` proves the two readers agree, field for field, on a contract that declares
- * its shape BOTH ways. This file asks the other half of the question — *does that result generalise
- * to the contracts this repo actually has?* — over EVERY `@WpMcpTool` under `packages/**` and
- * `apps/**`.
+ * `McpSchemaGolden.spec.ts` pins the exact bytes of ONE contract's catalog. This file asks the wider
+ * question — *can the compiler render the schemas of the contracts this repo actually has?* — and
+ * answers it for all of them at once.
  *
- * It is compiler-side only, deliberately. Running `DtoSchemaBuilder` against another package's
- * fixtures would mean importing `@webpieces/mcp-server` from a docs package, which puts the
- * TypeScript compiler in the dependency closure of every app that runs an MCP server. Everything this
- * file needs is in the SOURCE: the declared types on one side and the `@WpDtoField` arguments on the
- * other, both read with the same compiler. A `@WpDtoField` argument that lies about its field's type
- * is therefore caught here WITHOUT executing anything.
+ * It was born (#983) carrying two more lists: a LIE DETECTOR comparing each `@WpDtoField` argument
+ * against its field's declared type, and a MIGRATION list of every place `@WpMcpTool({description})`
+ * and the source prose differed. Both measured a SECOND declaration, and #984 deleted it, so both
+ * are gone with it: there is nothing left for a contract to lie to, and one source of prose cannot
+ * disagree with itself.
  *
- * ## It reports in three lists, and only one of them is a failure
+ * ## The blocked list is asserted, not merely recorded
  *
- * - **lies** — a `@WpDtoField` argument that contradicts the declared TypeScript type. These are real
- *   defects nothing else in the repo can see, and the list is asserted EMPTY.
- * - **blocked** — a tool whose schema the compiler cannot render today, with the reason. Asserted
- *   against an explicit list, so a new one shows up as a failure and a fixed one does too.
- * - **migration** — where the decorator's prose and the source's prose differ, or the source has
- *   none. Recorded, never failed: deleting the decorator's copy is #984's job, and this list IS that
- *   job, named file by file and field by field.
+ * A tool the compiler cannot render is named with its reason, and the whole list is compared exactly.
+ * A NEW blocked tool fails here, and so does a fixed one — the second direction is the point: a
+ * contract quietly becoming publishable should be noticed by whoever made it so.
  *
  * ## Why a spec under a repo-agnostic package walks repo paths
  *
  * `responsibilities.md` keeps repo paths out of this package's `src`, and that constraint is about
- * the published SURFACE — `tsconfig.lib.json` excludes specs, so nothing here ships. The gate being
+ * the published SURFACE — `tsconfig.lib.json` excludes specs, so nothing here ships. The fact being
  * measured is a fact about THIS repo's contracts, so the measurement lives where the renderer does.
  */
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
@@ -58,54 +51,8 @@ class ToolOutcome {
     }
 }
 
-/** ONE place the decorator's prose and the source's prose are not the same string. */
-class MigrationItem {
-    constructor(
-        readonly where: string,
-        readonly decorator: string,
-        readonly source: string,
-    ) {}
-
-    toString(): string {
-        return `${this.where}: decorator=${JSON.stringify(this.decorator)} source=${JSON.stringify(this.source)}`;
-    }
-}
-
-/** ONE `@WpDtoField` argument that contradicts the field's declared TypeScript type. */
-class ContractLie {
-    constructor(
-        readonly where: string,
-        readonly argument: string,
-        readonly decorator: string,
-        readonly compiler: string,
-    ) {}
-
-    toString(): string {
-        return `${this.where} ${this.argument}: decorator=${this.decorator} compiler=${this.compiler}`;
-    }
-}
-
-/** The `@WpDtoField` arguments of ONE field, as written in the source. */
-class DeclaredField {
-    constructor(
-        readonly dto: string,
-        readonly name: string,
-        readonly description: string,
-        readonly required: boolean | undefined,
-        readonly arrayItems: string | undefined,
-        readonly mapValues: string | undefined,
-        readonly integer: boolean,
-        readonly minimum: number | undefined,
-        readonly maximum: number | undefined,
-        readonly enumValues: readonly string[] | undefined,
-        readonly mcpHeader: string | undefined,
-    ) {}
-}
-
 class Sweep {
     readonly tools: ToolOutcome[] = [];
-    readonly migration: MigrationItem[] = [];
-    readonly lies: ContractLie[] = [];
     readonly files: string[] = [];
 
     run(): void {
@@ -118,21 +65,18 @@ class Sweep {
             if (source === undefined) {
                 throw new Error(`swept file is not in the program: ${file}`);
             }
-            const models = extractor.extractAllFrom(program, source);
-            for (const model of models) {
-                this.sweepContract(model, source);
+            for (const model of extractor.extractAllFrom(program, source)) {
+                this.sweepContract(model);
             }
-            this.sweepDtos(models, source);
         }
     }
 
-    /** Every tool of one contract: its prose, and whether its schemas render. */
-    private sweepContract(model: ApiDocModel, source: ts.SourceFile): void {
+    /** Every tool of one contract, and whether its schemas render. */
+    private sweepContract(model: ApiDocModel): void {
         for (const endpoint of model.endpoints) {
             if (endpoint.mcpTool === undefined) {
                 continue;
             }
-            this.recordToolProse(model, endpoint, source);
             this.tools.push(
                 new ToolOutcome(
                     model.contractName,
@@ -170,208 +114,6 @@ class Sweep {
         } catch (err: unknown) {
             //const error = toError(err);
             return err instanceof McpRenderError ? err.message : String(err);
-        }
-    }
-
-    /** `@WpMcpTool({description})` against the method's JSDoc — the tool-level migration item. */
-    private recordToolProse(
-        model: ApiDocModel,
-        endpoint: DocumentedEndpoint,
-        source: ts.SourceFile,
-    ): void {
-        const declared = Sweep.toolDescriptionOf(source, model.contractName, endpoint.methodName);
-        const compiled = endpoint.mcpDescription ?? endpoint.description;
-        if (declared !== undefined && declared !== compiled) {
-            this.migration.push(
-                new MigrationItem(
-                    `${model.contractName}.${endpoint.methodName}`,
-                    declared,
-                    compiled,
-                ),
-            );
-        }
-    }
-
-    /** Every `@WpDto` class in the file, compared argument by argument with the compiler's view. */
-    private sweepDtos(models: readonly ApiDocModel[], source: ts.SourceFile): void {
-        for (const declaration of source.statements) {
-            if (!ts.isClassDeclaration(declaration) || declaration.name === undefined) {
-                continue;
-            }
-            if (Sweep.decoratorCall(declaration, 'WpDto') === undefined) {
-                continue;
-            }
-            const dto = declaration.name.text;
-            for (const model of models) {
-                const type = model.types.get(dto);
-                if (type === undefined) {
-                    continue;
-                }
-                for (const declared of Sweep.declaredFieldsOf(declaration, dto)) {
-                    const field = type.fields.find(
-                        (each: DocumentedField) => each.name === declared.name,
-                    );
-                    if (field === undefined) {
-                        this.lies.push(
-                            new ContractLie(
-                                `${dto}.${declared.name}`,
-                                'field',
-                                'declared',
-                                'absent from the compiler view',
-                            ),
-                        );
-                        continue;
-                    }
-                    this.compareField(declared, field);
-                }
-                break;
-            }
-        }
-    }
-
-    private compareField(declared: DeclaredField, field: DocumentedField): void {
-        const where = `${declared.dto}.${declared.name}`;
-        if (declared.description !== field.description) {
-            this.migration.push(new MigrationItem(where, declared.description, field.description));
-        }
-        if (declared.required !== undefined && declared.required === field.optional) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'required',
-                    String(declared.required),
-                    field.optional ? 'optional (`?`)' : 'required',
-                ),
-            );
-        }
-        this.compareArray(declared, field, where);
-        this.compareMap(declared, field, where);
-        this.compareNumeric(declared, field, where);
-        this.compareEnum(declared, field, where);
-        if (declared.mcpHeader !== field.mcpHeader) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'mcpHeader',
-                    declared.mcpHeader ?? 'absent',
-                    field.mcpHeader ?? 'absent',
-                ),
-            );
-        }
-    }
-
-    private compareArray(declared: DeclaredField, field: DocumentedField, where: string): void {
-        const isArray = field.type.kind === 'array';
-        if (declared.arrayItems === undefined) {
-            if (isArray) {
-                this.lies.push(new ContractLie(where, 'arrayItems', 'absent', 'an array type'));
-            }
-            return;
-        }
-        if (!isArray) {
-            this.lies.push(
-                new ContractLie(where, 'arrayItems', declared.arrayItems, `a ${field.type.kind}`),
-            );
-            return;
-        }
-        this.compareElement(declared.arrayItems, field.type.items!, where, 'arrayItems');
-    }
-
-    private compareMap(declared: DeclaredField, field: DocumentedField, where: string): void {
-        const isMap = field.type.kind === 'openMap';
-        if (declared.mapValues === undefined) {
-            if (isMap) {
-                this.lies.push(new ContractLie(where, 'mapValues', 'absent', 'a Record type'));
-            }
-            return;
-        }
-        if (!isMap) {
-            this.lies.push(
-                new ContractLie(where, 'mapValues', declared.mapValues, `a ${field.type.kind}`),
-            );
-            return;
-        }
-        this.compareElement(declared.mapValues, field.type.values!, where, 'mapValues');
-    }
-
-    /** `'string' | 'number' | 'integer' | 'boolean' | SomeDto` against the resolved element type. */
-    private compareElement(
-        element: string,
-        resolved: TypeRef,
-        where: string,
-        argument: string,
-    ): void {
-        const actual = Sweep.elementName(resolved);
-        if (element !== actual) {
-            this.lies.push(new ContractLie(where, argument, element, actual));
-        }
-    }
-
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static elementName(ref: TypeRef): string {
-        if (ref.kind === 'ref') {
-            return ref.refName!;
-        }
-        if (ref.kind === 'primitive' && ref.primitive === 'number') {
-            return ref.integer ? 'integer' : 'number';
-        }
-        if (ref.kind === 'primitive') {
-            return ref.primitive!;
-        }
-        return ref.kind;
-    }
-
-    private compareNumeric(declared: DeclaredField, field: DocumentedField, where: string): void {
-        const leaf = field.type;
-        const integer = leaf.kind === 'primitive' && leaf.primitive === 'number' && leaf.integer;
-        // An ARRAY's integer-ness is carried by `arrayItems: 'integer'`, not by this flag — the
-        // runtime rejects `integer: true` on a non-Number field — so `compareArray` owns that case.
-        if (field.type.kind !== 'array' && declared.integer !== integer) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'integer',
-                    String(declared.integer),
-                    integer ? 'Integer / @WpInt()' : 'a plain number',
-                ),
-            );
-        }
-        if (declared.minimum !== field.min) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'minimum',
-                    String(declared.minimum),
-                    String(field.min ?? 'absent'),
-                ),
-            );
-        }
-        if (declared.maximum !== field.max) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'maximum',
-                    String(declared.maximum),
-                    String(field.max ?? 'absent'),
-                ),
-            );
-        }
-    }
-
-    private compareEnum(declared: DeclaredField, field: DocumentedField, where: string): void {
-        if (declared.enumValues === undefined) {
-            return;
-        }
-        const resolved = field.type.kind === 'enum' ? field.type.enumValues : [];
-        if (declared.enumValues.join(',') !== resolved.join(',')) {
-            this.lies.push(
-                new ContractLie(
-                    where,
-                    'enumValues',
-                    declared.enumValues.join('|'),
-                    resolved.length === 0 ? 'not a string-literal union' : resolved.join('|'),
-                ),
-            );
         }
     }
 
@@ -418,172 +160,6 @@ class Sweep {
         const parsed = ts.parseJsonConfigFileContent(base.config, ts.sys, REPO_ROOT);
         return { ...parsed.options, noEmit: true, skipLibCheck: true, types: [] };
     }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static toolDescriptionOf(
-        source: ts.SourceFile,
-        contractName: string,
-        methodName: string,
-    ): string | undefined {
-        for (const statement of source.statements) {
-            if (!ts.isClassDeclaration(statement) || statement.name?.text !== contractName) {
-                continue;
-            }
-            for (const member of statement.members) {
-                if (
-                    !ts.isMethodDeclaration(member) ||
-                    !ts.isIdentifier(member.name) ||
-                    member.name.text !== methodName
-                ) {
-                    continue;
-                }
-                const argument = Sweep.decoratorCall(member, 'WpMcpTool')?.arguments[0];
-                if (argument !== undefined && ts.isObjectLiteralExpression(argument)) {
-                    return Sweep.stringProperty(argument, 'description');
-                }
-            }
-        }
-        return undefined;
-    }
-
-    /** Every `@WpDtoField(new Wp*FieldOptions(...))` on one class, parsed positionally. */
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static declaredFieldsOf(
-        declaration: ts.ClassDeclaration,
-        dto: string,
-    ): DeclaredField[] {
-        const fields: DeclaredField[] = [];
-        for (const member of declaration.members) {
-            if (!ts.isPropertyDeclaration(member) || !ts.isIdentifier(member.name)) {
-                continue;
-            }
-            const argument = Sweep.decoratorCall(member, 'WpDtoField')?.arguments[0];
-            if (argument === undefined || !ts.isNewExpression(argument)) {
-                continue;
-            }
-            const args = argument.arguments ?? ts.factory.createNodeArray<ts.Expression>([]);
-            const map = argument.expression.getText() === 'WpDtoMapFieldOptions';
-            fields.push(
-                new DeclaredField(
-                    dto,
-                    member.name.text,
-                    Sweep.literalString(args[0]) ?? '',
-                    Sweep.literalBoolean(args[1]),
-                    map ? undefined : Sweep.elementText(args[2]),
-                    map ? Sweep.elementText(args[2]) : undefined,
-                    map ? false : (Sweep.literalBoolean(args[3]) ?? false),
-                    map ? undefined : Sweep.literalNumber(args[4]),
-                    map ? undefined : Sweep.literalNumber(args[5]),
-                    map ? undefined : Sweep.literalStrings(args[6]),
-                    map ? undefined : Sweep.headerName(args[7]),
-                ),
-            );
-        }
-        return fields;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static elementText(node: ts.Expression | undefined): string | undefined {
-        if (node === undefined) {
-            return undefined;
-        }
-        if (ts.isStringLiteralLike(node)) {
-            return node.text;
-        }
-        if (ts.isIdentifier(node)) {
-            return node.text === 'undefined' ? undefined : node.text;
-        }
-        return undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static headerName(node: ts.Expression | undefined): string | undefined {
-        if (node === undefined || !ts.isNewExpression(node)) {
-            return undefined;
-        }
-        return Sweep.literalString(node.arguments?.[0]);
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static literalStrings(node: ts.Expression | undefined): readonly string[] | undefined {
-        const unwrapped = node !== undefined && ts.isAsExpression(node) ? node.expression : node;
-        if (unwrapped === undefined || !ts.isArrayLiteralExpression(unwrapped)) {
-            return undefined;
-        }
-        const values: string[] = [];
-        for (const element of unwrapped.elements) {
-            const text = Sweep.literalString(element);
-            if (text !== undefined) {
-                values.push(text);
-            }
-        }
-        return values;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static literalString(node: ts.Expression | undefined): string | undefined {
-        return node !== undefined && ts.isStringLiteralLike(node) ? node.text : undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static literalBoolean(node: ts.Expression | undefined): boolean | undefined {
-        if (node?.kind === ts.SyntaxKind.TrueKeyword) {
-            return true;
-        }
-        if (node?.kind === ts.SyntaxKind.FalseKeyword) {
-            return false;
-        }
-        return undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static literalNumber(node: ts.Expression | undefined): number | undefined {
-        if (node !== undefined && ts.isNumericLiteral(node)) {
-            return Number(node.text);
-        }
-        if (
-            node !== undefined &&
-            ts.isPrefixUnaryExpression(node) &&
-            node.operator === ts.SyntaxKind.MinusToken &&
-            ts.isNumericLiteral(node.operand)
-        ) {
-            return -Number(node.operand.text);
-        }
-        return undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static stringProperty(
-        literal: ts.ObjectLiteralExpression,
-        name: string,
-    ): string | undefined {
-        for (const property of literal.properties) {
-            if (
-                ts.isPropertyAssignment(property) &&
-                ts.isIdentifier(property.name) &&
-                property.name.text === name
-            ) {
-                return Sweep.literalString(property.initializer);
-            }
-        }
-        return undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static decoratorCall(node: ts.Node, name: string): ts.CallExpression | undefined {
-        const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
-        for (const decorator of decorators) {
-            const call = decorator.expression;
-            if (
-                ts.isCallExpression(call) &&
-                ts.isIdentifier(call.expression) &&
-                call.expression.text === name
-            ) {
-                return call;
-            }
-        }
-        return undefined;
-    }
 }
 
 describe('every @WpMcpTool in this repo, read by the compiler', () => {
@@ -604,24 +180,22 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
         ]);
     });
 
-    it('no @WpDtoField argument contradicts its declared TypeScript type', () => {
-        expect(sweep.lies.map(String)).toEqual([]);
-    });
-
     it('records which tools the compiler can render, and why the rest cannot', () => {
         expect(sweep.tools.map(String)).toEqual([
             // A DISCRIMINATED UNION. MCP's input schema is one flat object with no `oneOf`, so this
-            // tool cannot be published as it stands — and the same contract could never be
-            // REGISTERED either: its DTOs are interfaces with no `@WpDto`, so `DtoSchemaBuilder`
-            // refuses them. Compiler and runtime agree it is not publishable, for different reasons.
+            // tool cannot be published as it stands. That is a PROTOCOL limit and not a defect of
+            // this extractor, and what to do about it — publish `oneOf` and require MCP clients to
+            // handle it, or keep such contracts off MCP — is a decision for a human (#983,
+            // condition 4). It is recorded here, unchanged, until one is made.
             'PartnerOrdersApi/fetch_orders: a union has no MCP input-schema shape (Order.window)',
-            // An UNDOCUMENTED field. An MCP parameter with no prose is one an agent has nothing to
-            // go on for, so the renderer refuses rather than publishing a nameless hole.
-            'ExampleApi/save_customer: a published DTO field has no documentation (SaveRequest.customer)',
+            // A RECURSIVE DTO: `TreeNode` holds `TreeNode[]`. A tool schema is inline and has no
+            // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
+            // carries `Mixed`, an un-narrowable union, for the reason above.
+            "ExampleApi/save_customer: recursive DTO 'TreeNode' cannot use an inline MCP schema (TreeNode)",
             'McpEquivalenceApi/lookup_orders',
             'McpEquivalenceApi/cancel_order',
             'McpEquivalenceApi/reindex_store',
-            'WidgetsApi/list_widgets: a published DTO field has no documentation (ListWidgetsResponse.widgets)',
+            'WidgetsApi/list_widgets',
             'RemoteMcpApi/remote_integration_search',
             'MissingRemoteMcpApi/missing_remote_integration_search',
             'RefusedRemoteApi/refused_remote',
@@ -635,15 +209,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
         ]);
     });
 
-    it('records the #984 migration list: decorator prose vs source prose', () => {
-        expect(sweep.migration.map(String)).toEqual([
-            'PartnerOrdersApi.fetchOrders: decorator="Fetch recent orders for one store." ' +
-                'source="Read-only. Call this before answering any question about recent orders; ' +
-                'do not reuse an\\nearlier answer, order state changes minute to minute."',
-            'ExampleApi.save: decorator="Create or update one customer." ' +
-                'source="Create or update one customer record. Safe to retry."',
-            'WidgetsApi.list: decorator="List widgets." ' +
-                'source="Read-only. Prefer this over guessing from an earlier answer."',
-        ]);
+    it('names every tool under the stable protocol name @WpMcpTool declares', () => {
+        expect(sweep.tools.every((tool: ToolOutcome) => tool.toolName.trim() !== '')).toBe(true);
     });
 });

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiBadRequestError } from '../../errors/ApiError';
-import { WpDto, WpDtoField, WpDtoFieldOptions } from '../../mcp/DtoSchema';
+import { ApiJsonSchema, ObjectSchemaBuilder } from '../../mcp/DtoSchema';
 import {
     getStreamingEndpoint,
     StreamCorrelation,
@@ -13,20 +13,24 @@ import {
     WpStream,
 } from '../StreamingContract';
 
-@WpDto()
 class InputEvent {
-    @WpDtoField(new WpDtoFieldOptions('input', true))
     value!: string;
 }
 
-@WpDto()
+const inputEventSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
+
 class OutputEvent {
-    @WpDtoField(new WpDtoFieldOptions('output', true))
     result!: string;
 }
 
+const outputEventSchema = new ObjectSchemaBuilder()
+    .required('result', new ApiJsonSchema('string'))
+    .build();
+
 abstract class StreamingApi {
-    @WpStream(() => InputEvent, () => OutputEvent)
+    @WpStream(inputEventSchema, outputEventSchema)
     exchange(_response: ResponseStream<OutputEvent>): Promise<RequestStream<InputEvent>> {
         throw new Error('contract only');
     }

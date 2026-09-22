@@ -45,6 +45,7 @@ const REGENERATE = [
 
 class Golden {
     readonly fresh = new Map<string, string>();
+    skippedMcpTools: readonly string[] = [];
 
     generate(): void {
         const out = fs.mkdtempSync(path.join(os.tmpdir(), 'partner-openapi-'));
@@ -55,6 +56,7 @@ class Golden {
         for (const file of result.written) {
             this.fresh.set(path.basename(file), fs.readFileSync(file, 'utf8'));
         }
+        this.skippedMcpTools = result.skippedMcpTools.map(String);
     }
 
     committed(fileName: string): string {
@@ -95,6 +97,25 @@ describe('the committed OpenAPI documents', () => {
             const fromYaml: unknown = reader.read(golden.fresh.get(`${name}.yaml`)!);
             expect(fromYaml, `${name}.yaml does not match ${name}.json`).toEqual(fromJson);
         }
+    });
+
+    /**
+     * `fetch_orders` is DECLARED as an MCP tool and has never been servable as one: `Order.window` is
+     * a discriminated union, and an MCP tool schema is one flat object with no `oneOf`. The
+     * reflect-metadata runtime refused the same contract for its own reasons, so nothing regressed
+     * here — it is a limit of the PROTOCOL.
+     *
+     * What to do about it — publish `oneOf` and require MCP clients to handle it, or keep such
+     * contracts off MCP — is an open question for a human (#983, condition 4; #984 deliberately did
+     * not guess). This test is where that question is recorded, so it cannot be forgotten and cannot
+     * be answered by accident: the build NAMES the tool it left out, and `McpToolRegistry` refuses to
+     * boot a server that still declares it.
+     */
+    it('NAMES fetch_orders as a tool it could not give an MCP schema, and writes no catalog', () => {
+        expect(golden.skippedMcpTools).toEqual([
+            'PartnerOrdersApi/fetch_orders: a union has no MCP input-schema shape (Order.window)',
+        ]);
+        expect(golden.fresh.has('mcp-tools.json')).toBe(false);
     });
 
     it('the hidden method is absent from the customer document by TYPE NAME, not only by path', () => {

@@ -22,6 +22,7 @@ import {
     LEGACY_VERSION,
     OLDER_LEGACY_VERSION,
     SearchApi,
+    SPEC_TOOL_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
@@ -69,6 +70,7 @@ describe('WpMcpServer protocol negotiation', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(SearchApi, router)],
+                SPEC_TOOL_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );

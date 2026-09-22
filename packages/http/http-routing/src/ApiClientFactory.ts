@@ -170,7 +170,7 @@ export class ApiClientFactory {
             async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
                 this.deliverResponseEnvelope(clientResponse, envelope),
             (value: DtoValue): void =>
-                validator.validate(streaming.responseEventClass, value, 'response'),
+                validator.validate(streaming.responseSchema, value, 'response'),
             streaming.supportsNonTerminalFailures,
         );
 
@@ -184,7 +184,7 @@ export class ApiClientFactory {
             async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
                 this.deliverRequestEnvelope(serverRequest, envelope),
             (value: DtoValue): void =>
-                validator.validate(streaming.requestEventClass, value, 'request'),
+                validator.validate(streaming.requestSchema, value, 'request'),
             streaming.supportsNonTerminalFailures,
         );
         // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral

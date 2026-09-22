@@ -65,9 +65,8 @@ export class DocumentedField {
          * is nearly all of them.
          *
          * It is documentation and therefore lives in JSDoc, next to the sentence describing the
-         * field, rather than in a decorator argument. The runtime spells it `WpMcpHeader` inside
-         * `@WpDtoField`; the two are proved identical by the equivalence gate (#983) before #984
-         * deletes the decorator spelling.
+         * field, rather than in a decorator argument — and since #984 it is the only spelling of the
+         * fact at all.
          */
         readonly mcpHeader: string | undefined,
     ) {}
@@ -102,20 +101,20 @@ export class DocumentedEndpointOptions {
 }
 
 /**
- * The `@WpMcpTool(...)` declaration, when the method carries one — the TWO facts the source cannot
- * otherwise state, and nothing else.
+ * The `@WpMcpTool('search_stores')` declaration, when the method carries one — the ONE fact the
+ * source cannot otherwise state, and nothing else.
  *
- * `description` is deliberately NOT read off the decorator. The method's JSDoc is the description, for
- * the agent and for the partner alike, byte-identical: two authored copies of one paragraph is the
+ * `description` used to sit on the decorator too. The method's JSDoc is the description, for the
+ * agent and for the partner alike, byte-identical: two authored copies of one paragraph is the
  * two-spellings shim, and its failure mode is concrete — the partner reads the JSDoc in the OpenAPI
  * document while the agent reads the decorator string in `tools/list`, and they drift the first time
- * somebody edits one. (The field still exists on the decorator; #984 deletes it across its 29 call
- * sites. Nothing here reads it, so nothing here depends on a field that is about to disappear.)
+ * somebody edits one. #984 deleted it, which left the decorator holding one field, so it takes the
+ * name as a plain string.
  *
- * The three side-effect hints are not read either: they are COMPUTED from the endpoint's `operation`
- * by `mcpHintsForOperation` in `@webpieces/core-util`, which is the one place that mapping lives.
- * `READ | WRITE_IDEMPOTENT | WRITE` already says whether repeating a call is safe, so a hand-declared
- * hint would be a second answer to a question the contract has answered.
+ * The three side-effect hints are COMPUTED from the endpoint's `operation` by `mcpHintsForOperation`
+ * in `@webpieces/core-util`, which is the one place that mapping lives — `READ | WRITE_IDEMPOTENT |
+ * WRITE` already says whether repeating a call is safe, so a hand-declared hint would be a second
+ * answer to a question the contract has answered. `openWorldHint` is `@Endpoint`'s `openWorld`.
  */
 export class DocumentedMcpTool {
     constructor(

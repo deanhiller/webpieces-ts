@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ApiConnectionError } from '../errors/ApiError';
 import { ApiErrorCodec, ApiErrorPayload } from '../errors/ApiErrorCodec';
-import { ApiJsonSchema, DtoClass, DtoSchemaBuilder, DtoValue } from '../mcp/DtoSchema';
+import { ApiJsonSchema, ApiJsonSchemaValidator, DtoValue } from '../mcp/DtoSchema';
 import { toError } from '../lib/errorUtils';
 import { METADATA_KEYS } from './decorators';
 
@@ -95,36 +95,41 @@ export class StreamTransportError extends ApiConnectionError {
     }
 }
 
-/** Runtime schema and wire-policy metadata for one streaming method. */
+/**
+ * Runtime schema and wire-policy metadata for one streaming method.
+ *
+ * It holds the two event SCHEMAS rather than two DTO classes. Until #984 it held classes and built
+ * their schemas from `@WpDtoField` at decoration time; that decorator is deleted, because the
+ * compiler already knows every fact it restated (#983). A schema is the thing a boundary validates
+ * against, so it is the thing the metadata carries.
+ */
 export class StreamingEndpointMetadata {
-    readonly requestSchema: ApiJsonSchema;
-    readonly responseSchema: ApiJsonSchema;
-
     constructor(
-        public readonly requestEventClass: DtoClass,
-        public readonly responseEventClass: DtoClass,
+        public readonly requestSchema: ApiJsonSchema,
+        public readonly responseSchema: ApiJsonSchema,
         /** Generic NDJSON/SSE supports non-terminal failures in both directions. */
         public readonly supportsNonTerminalFailures = true,
-    ) {
-        const schemas = new DtoSchemaBuilder();
-        this.requestSchema = schemas.build(requestEventClass);
-        this.responseSchema = schemas.build(responseEventClass);
-    }
+    ) {}
 }
 
-/** Marks `(ResponseStream<ResponseEvent>) => Promise<RequestStream<RequestEvent>>`. */
+/**
+ * Marks `(ResponseStream<ResponseEvent>) => Promise<RequestStream<RequestEvent>>`, with the two
+ * event schemas the wire adapters validate against.
+ *
+ * Build them with {@link ObjectSchemaBuilder}, or read them out of the build's generated model.
+ */
 // webpieces-disable no-function-outside-class -- decorator factory
 export function WpStream(
-    requestEvent: () => DtoClass,
-    responseEvent: () => DtoClass,
+    requestEventSchema: ApiJsonSchema,
+    responseEventSchema: ApiJsonSchema,
 ): MethodDecorator {
     return (target: object, propertyKey: string | symbol): void => {
         const apiClass = target.constructor;
         const methods: Record<string, StreamingEndpointMetadata> =
             Reflect.getMetadata(METADATA_KEYS.STREAM_ENDPOINTS, apiClass) ?? {};
         methods[String(propertyKey)] = new StreamingEndpointMetadata(
-            requestEvent(),
-            responseEvent(),
+            requestEventSchema,
+            responseEventSchema,
         );
         Reflect.defineMetadata(METADATA_KEYS.STREAM_ENDPOINTS, methods, apiClass);
     };
@@ -142,11 +147,11 @@ export function getStreamingEndpoint(
 
 /** Validate a typed event at every adapter boundary, with one consistent diagnostic. */
 export class StreamEventValidator {
-    private readonly schemas = new DtoSchemaBuilder();
+    private readonly schemas = new ApiJsonSchemaValidator();
 
     // webpieces-disable no-any-unknown -- DTO validation is the runtime narrowing boundary
-    validate(dtoClass: DtoClass, value: unknown, direction: 'request' | 'response'): void {
-        const failure = this.schemas.validate(dtoClass, value as DtoValue);
+    validate(schema: ApiJsonSchema, value: unknown, direction: 'request' | 'response'): void {
+        const failure = this.schemas.validate(schema, value as DtoValue);
         if (failure)
             throw new StreamTransportError(`Invalid ${direction} stream event: ${failure.message}`);
     }

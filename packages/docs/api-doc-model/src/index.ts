@@ -24,7 +24,6 @@ export {
     UnmappedType,
 } from './model/ApiDocModel';
 export { McpRenderError } from './render/McpRenderError';
-export { McpSchemaRenderer } from './render/McpSchemaRenderer';
-export { McpToolDefinition } from './render/McpToolDefinition';
+export { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from './render/McpSchemaRenderer';
 export { TypeRef } from './model/TypeRef';
 export type { PrimitiveKind, TypeRefKind } from './model/TypeRef';

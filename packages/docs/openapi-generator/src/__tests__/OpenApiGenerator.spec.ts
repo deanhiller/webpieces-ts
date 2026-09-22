@@ -109,6 +109,9 @@ describe('which documents are written', () => {
             'full-private-openapi.yaml',
             'mcp-openapi.json',
             'mcp-openapi.yaml',
+            // NOT a document: the runtime catalog WpMcpServer boots from, so --format never
+            // applies to it and there is no .yaml twin.
+            'mcp-tools.json',
             'public-openapi.json',
             'public-openapi.yaml',
         ]);
@@ -470,6 +473,7 @@ describe('the unmapped-type guard', () => {
         expect(fs.readdirSync(out).sort()).toEqual([
             'full-private-openapi.json',
             'mcp-openapi.json',
+            'mcp-tools.json',
             'public-openapi.json',
         ]);
     });

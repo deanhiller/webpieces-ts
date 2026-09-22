@@ -95,11 +95,16 @@ cannot.
 `MCP` in `@ApiType` requires `@WpMcpTool` on at least one method, and `@WpMcpTool` on a contract that
 does not declare `MCP` is an error. Membership has one spelling.
 
-The agent reads the SAME `description` a human does — the method's JSDoc, byte for byte.
-`@WpMcpTool`'s own `description` field is never read: two authored copies of one paragraph drift the
-first time somebody edits one. The tool carries only what JSDoc cannot say — the stable protocol name.
-`readOnlyHint`, `destructiveHint` and `idempotentHint` are computed from the endpoint's declared
-`operation`; `openWorldHint` comes from `{ openWorld: true }` on the endpoint.
+The agent reads the SAME `description` a human does — the method's JSDoc, byte for byte. Two authored
+copies of one paragraph drift the first time somebody edits one, so `@WpMcpTool('search_stores')`
+carries only what JSDoc cannot say: the stable protocol name. `readOnlyHint`, `destructiveHint` and
+`idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
+`{ openWorld: true }` on the endpoint.
+
+Alongside `mcp-openapi.json`, a run writes **`mcp-tools.json`** whenever some contract declares `MCP`.
+That one is not a document: it is the RUNTIME catalog `WpMcpServer` is constructed with, so the schema
+an agent is shown in `tools/list` and the schema the server validates a call against are the same
+bytes. `--format` does not apply to it.
 
 ## It refuses to publish a field it has no schema for
 

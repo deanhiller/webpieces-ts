@@ -151,11 +151,7 @@ export abstract class PartnerOrdersApi {
      */
     @Endpoint(POST, '/fetch', READ, RPC)
     @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
-    @WpMcpTool({
-        name: 'fetch_orders',
-        description: 'Fetch recent orders for one store.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('fetch_orders')
     @WpMcpAuthJwt({ roles: ['partner-agent'] })
     fetchOrders(request: FetchOrdersRequest): Promise<FetchOrdersResponse> {
         throw new Error('Method fetchOrders() must be implemented by subclass');

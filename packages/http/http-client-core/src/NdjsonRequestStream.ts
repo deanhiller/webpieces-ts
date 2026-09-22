@@ -39,7 +39,7 @@ export class NdjsonRequestStream implements RequestStream<DtoValue> {
 
     async event(value: DtoValue, correlation?: StreamCorrelation): Promise<void> {
         this.requireWritable();
-        this.validator.validate(this.metadata.requestEventClass, value, 'request');
+        this.validator.validate(this.metadata.requestSchema, value, 'request');
         await this.write(new StreamEnvelope('event', value, undefined, correlation));
     }
 

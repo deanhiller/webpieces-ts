@@ -13,13 +13,15 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
     ApiPath,
+    ApiType,
     Endpoint,
     HeaderRegistry,
     WpAuthJwt,
     WpMcpTool,
-    WpResponseDto,
+    MCP,
     POST,
     RPC,
+    SVC_TO_SVC,
     WRITE,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
@@ -38,6 +40,7 @@ import {
     SearchController,
     SearchRequest,
     SearchResponse,
+    SPEC_TOOL_CATALOG,
     TestJwtHook,
     TestTokenAuthority,
     USER_ID,
@@ -97,6 +100,7 @@ describe('WpMcpServer HTTP bridge', () => {
                     McpApiBinding.local(SearchApi, router),
                     McpApiBinding.remote(RemoteSearchApi, () => remote),
                 ],
+                SPEC_TOOL_CATALOG,
                 McpDeployment.singleProcess(1_234),
                 ['https://trusted.example.test'],
             ),
@@ -137,7 +141,10 @@ describe('WpMcpServer HTTP bridge', () => {
     ): Promise<BoundTestBridge> {
         const instance = new WpMcpServer<string, string>(serverConfig());
         const app: Express = express();
-        instance.bind(app, new McpBindOptions(ENDPOINT_PATH, bindings, deployment));
+        instance.bind(
+            app,
+            new McpBindOptions(ENDPOINT_PATH, bindings, SPEC_TOOL_CATALOG, deployment),
+        );
         const server = createServer(app);
         await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
             server.once('error', reject);
@@ -532,11 +539,12 @@ describe('WpMcpServer HTTP bridge', () => {
 
     it('requires MCP auth metadata and topology-compatible HTTP auth at startup', () => {
         @ApiPath('/invalid')
+        @ApiType(SVC_TO_SVC, MCP)
         class MissingMcpAuthApi {
+            /** Invalid: no @WpMcpAuthJwt. */
             @WpAuthJwt({ allRolesAllowed: true })
             @Endpoint(POST, '/tool', WRITE, RPC)
-            @WpResponseDto(() => SearchResponse)
-            @WpMcpTool({ name: 'missing_mcp_auth', description: 'invalid' })
+            @WpMcpTool('missing_mcp_auth')
             tool(_request: SearchRequest): Promise<SearchResponse> {
                 throw new Error('contract only');
             }
@@ -548,6 +556,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.local(MissingMcpAuthApi, router)],
+                    SPEC_TOOL_CATALOG,
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -559,6 +568,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.remote(SearchApi, () => new SearchController())],
+                    SPEC_TOOL_CATALOG,
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -608,6 +618,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     '/some-other-path',
                     [McpApiBinding.local(SearchApi, router)],
+                    SPEC_TOOL_CATALOG,
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -622,6 +633,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.local(SearchApi, router)],
+                    SPEC_TOOL_CATALOG,
                     McpDeployment.singleProcess(),
                 ),
             ),

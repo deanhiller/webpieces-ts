@@ -1,65 +1,34 @@
 import { WpMcpTool } from './McpMetadata';
-import { WpDtoFieldOptions, WpDtoMapFieldOptions } from './DtoSchema';
 
-const invalidEmptyEnum = new WpDtoFieldOptions(
-    'invalid enum',
-    true,
-    undefined,
-    false,
-    undefined,
-    undefined,
-    // @ts-expect-error enumValues must contain at least one allowed string
-    [],
-);
-
-// @ts-expect-error a map's value type must be a scalar name or a DtoClass
-const invalidMapValue = new WpDtoMapFieldOptions('invalid map', true, 'date');
-
-// @ts-expect-error a map value type is mandatory: it is the whole point of WpDtoMapFieldOptions
-const missingMapValue = new WpDtoMapFieldOptions('invalid map', true);
-
-const noEighthFieldArgument = new WpDtoFieldOptions(
-    'maps are not a WpDtoFieldOptions argument',
-    false,
-    undefined,
-    false,
-    undefined,
-    undefined,
-    undefined,
-    // @ts-expect-error maps use WpDtoMapFieldOptions; the 8th argument is only a WpMcpHeader
-    'string',
-);
-
+/**
+ * Compile-time pins for `@WpMcpTool`. These live in a COMPILED file rather than a `.spec.ts` because
+ * vitest strips types with esbuild and `tsconfig.lib.json` excludes specs, so a `@ts-expect-error` in
+ * a spec is inert (`.claude/rules/no-backwards-compat.md` shim shape #4). Here, tsc fails the build
+ * with TS2578 the moment one of these starts compiling.
+ */
 abstract class InvalidMcpContract {
-    @WpMcpTool({
-        name: 'invalid',
-        description: 'This declaration must never compile.',
-        // @ts-expect-error side-effect claims belong on @Endpoint.operation, never @WpMcpTool
-        readOnlyHint: true,
-        openWorldHint: false,
-    })
-    invalid(_request: object): Promise<object> {
+    // @ts-expect-error @WpMcpTool takes the stable protocol NAME, not an options object
+    @WpMcpTool({ name: 'invalid' })
+    options(_request: object): Promise<object> {
+        throw new Error('contract only');
+    }
+
+    // @ts-expect-error side-effect claims belong on @Endpoint.operation, never @WpMcpTool
+    @WpMcpTool('invalid', true)
+    hints(_request: object): Promise<object> {
         throw new Error('contract only');
     }
 }
 
 abstract class InvalidMcpArities {
     // @ts-expect-error MCP tools require exactly one request DTO
-    @WpMcpTool({
-        name: 'zero-arity',
-        description: 'This declaration must never compile.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('zero-arity')
     zero(): Promise<object> {
         throw new Error('contract only');
     }
 
     // @ts-expect-error MCP tools require exactly one request DTO
-    @WpMcpTool({
-        name: 'multi-arity',
-        description: 'This declaration must never compile.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('multi-arity')
     multi(_first: object, _second: object): Promise<object> {
         throw new Error('contract only');
     }
@@ -67,7 +36,3 @@ abstract class InvalidMcpArities {
 
 void InvalidMcpContract;
 void InvalidMcpArities;
-void invalidEmptyEnum;
-void invalidMapValue;
-void missingMapValue;
-void noEighthFieldArgument;

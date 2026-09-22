@@ -3,6 +3,7 @@ import {
     ApiPath,
     ApiType,
     Endpoint,
+    Integer,
     MCP,
     POST,
     READ,
@@ -11,241 +12,150 @@ import {
     WRITE,
     WRITE_IDEMPOTENT,
     WpAuthJwt,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
-    WpDtoMapFieldOptions,
-    WpInt,
     WpMax,
     WpMcpAuthJwt,
-    WpMcpHeader,
     WpMcpTool,
     WpMin,
-    WpResponseDto,
 } from '@webpieces/core-util';
 
-/** One page of a listing. */
-@WpDto()
+/** Where an order is in its lifecycle. */
+export type OrderPhase = 'placed' | 'done';
+
+/**
+ * One page of a listing.
+ *
+ * A CLASS and not an interface because `@WpMin`/`@WpMax` are property decorators and an interface
+ * has nowhere to hang one. A bound is policy, which no TypeScript type can state.
+ */
 export class PageRequest {
     /** Opaque cursor from the previous response. */
-    @WpDtoField(new WpDtoFieldOptions('Opaque cursor from the previous response.', true))
     cursor!: string;
 
     /** How many orders to return. */
-    @WpDtoField(new WpDtoFieldOptions('How many orders to return.', true, undefined, true, 1, 50))
-    @WpInt()
     @WpMin(1)
     @WpMax(50)
-    size!: number;
+    size!: Integer;
 }
 
 /** One label attached at placement. */
-@WpDto()
-export class LabelSpec {
+export interface LabelSpec {
     /** The label's value. */
-    @WpDtoField(new WpDtoFieldOptions("The label's value.", true))
-    value!: string;
+    value: string;
 }
 
-/** Everything the lookup tool accepts. */
-@WpDto()
+/** Everything the lookup tool accepts. See {@link PageRequest} for why this is a class. */
 export class LookupRequest {
     /**
      * The store to read.
      * @mcpHeader store-id
      */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'The store to read.',
-            true,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            undefined,
-            new WpMcpHeader('store-id'),
-        ),
-    )
     storeId!: string;
 
     /** Only orders in this phase. */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'Only orders in this phase.',
-            false,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            ['placed', 'done'] as const,
-        ),
-    )
-    phase?: 'placed' | 'done';
+    phase?: OrderPhase;
 
     /** The most orders to return. */
-    @WpDtoField(new WpDtoFieldOptions('The most orders to return.', false, undefined, true, 1, 100))
-    @WpInt()
     @WpMin(1)
     @WpMax(100)
-    limit?: number;
+    limit?: Integer;
 
     /** Include orders the store has archived. */
-    @WpDtoField(new WpDtoFieldOptions('Include orders the store has archived.', false))
     includeArchived?: boolean;
 
     /** Only orders carrying every one of these tags. */
-    @WpDtoField(
-        new WpDtoFieldOptions('Only orders carrying every one of these tags.', false, 'string'),
-    )
     tags?: string[];
 
-    /** Only these internal order numbers. */
-    @WpDtoField(new WpDtoFieldOptions('Only these internal order numbers.', false, 'integer'))
-    @WpInt()
-    orderNumbers?: number[];
+    /** Only these internal order numbers. A bound on an ARRAY lands on its ITEM. */
+    @WpMin(1)
+    orderNumbers?: Integer[];
 
     /** Free-form equality filters applied to the order record. */
-    @WpDtoField(
-        new WpDtoMapFieldOptions(
-            'Free-form equality filters applied to the order record.',
-            false,
-            'string',
-        ),
-    )
     filters?: Record<string, string>;
 
     /** Labels to match, by label name. */
-    @WpDtoField(new WpDtoMapFieldOptions('Labels to match, by label name.', false, LabelSpec))
     labels?: Record<string, LabelSpec>;
 
     /** Where in the listing to resume. */
-    @WpDtoField(new WpDtoFieldOptions('Where in the listing to resume.', false))
     page?: PageRequest;
 }
 
 /** One order, as the lookup tool reports it. */
-@WpDto()
-export class OrderSummary {
+export interface OrderSummary {
     /** Our identifier for it. */
-    @WpDtoField(new WpDtoFieldOptions('Our identifier for it.', true))
-    id!: string;
+    id: string;
 
     /** Where it is in its lifecycle. */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'Where it is in its lifecycle.',
-            true,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            ['placed', 'done'] as const,
-        ),
-    )
-    phase!: 'placed' | 'done';
+    phase: OrderPhase;
 
     /** What the customer paid, in cents. */
-    @WpDtoField(new WpDtoFieldOptions('What the customer paid, in cents.', true, undefined, true))
-    @WpInt()
-    totalCents!: number;
+    totalCents: Integer;
+
+    /**
+     * The store's own identifier for it, PRESENT and `null` when the store has none — which is a
+     * different wire document from omitting the key, and a distinction the deleted reflect-metadata
+     * runtime could neither see nor write down.
+     */
+    externalId: string | null;
 }
 
 /** What the lookup tool returns. */
-@WpDto()
-export class LookupResponse {
+export interface LookupResponse {
     /** The matching orders, newest first. */
-    @WpDtoField(new WpDtoFieldOptions('The matching orders, newest first.', true, OrderSummary))
-    orders!: OrderSummary[];
+    orders: OrderSummary[];
 
     /** Pass as the next cursor; absent when the listing is exhausted. */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'Pass as the next cursor; absent when the listing is exhausted.',
-            false,
-        ),
-    )
     nextCursor?: string;
 }
 
 /** Everything the cancel tool accepts. */
-@WpDto()
-export class CancelRequest {
+export interface CancelRequest {
     /** The order to cancel. */
-    @WpDtoField(new WpDtoFieldOptions('The order to cancel.', true))
-    orderId!: string;
+    orderId: string;
 
     /** Why, for the store's records. */
-    @WpDtoField(new WpDtoFieldOptions("Why, for the store's records.", true))
-    reason!: string;
+    reason: string;
 }
 
 /** What the cancel tool returns. */
-@WpDto()
-export class CancelResponse {
+export interface CancelResponse {
     /** The order's phase after the attempt. */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            "The order's phase after the attempt.",
-            true,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            ['placed', 'done'] as const,
-        ),
-    )
-    phase!: 'placed' | 'done';
+    phase: OrderPhase;
 }
 
 /** Everything the reindex tool accepts. */
-@WpDto()
-export class ReindexRequest {
+export interface ReindexRequest {
     /** The store whose cache to rebuild. */
-    @WpDtoField(new WpDtoFieldOptions('The store whose cache to rebuild.', true))
-    storeId!: string;
+    storeId: string;
 }
 
 /** What the reindex tool returns. */
-@WpDto()
-export class ReindexResponse {
+export interface ReindexResponse {
     /** How many menu items were re-read. */
-    @WpDtoField(new WpDtoFieldOptions('How many menu items were re-read.', true, undefined, true))
-    @WpInt()
-    itemsRead!: number;
+    itemsRead: Integer;
 }
 
 /**
- * The DOUBLE-DECLARED contract the equivalence gate (#983) measures.
+ * The contract the MCP schema gate renders, and the golden `mcp-tools.json` beside it is the
+ * REGRESSION guard: a change that moves a live tool's input schema shows up as a diff a human reads.
  *
- * Every DTO field here states its shape TWICE, on purpose:
+ * ## What it used to be, and why that is over
  *
- * - to the RUNTIME, as `@WpDtoField(new WpDtoFieldOptions(...))` — which is the only way
- *   `DtoSchemaBuilder` can learn that a field is required, that an array holds strings, or that a
- *   number is an integer, because TypeScript erases all three;
- * - to the COMPILER, as the declared type plus JSDoc — which is what `@webpieces/api-doc-model`
- *   reads.
+ * Until #984 every field here stated its shape TWICE — once to the runtime as
+ * `@WpDtoField(new WpDtoFieldOptions(...))`, once to the compiler as its declared type plus JSDoc —
+ * and the spec asserted the two schemas were equal. They were, for every shape the runtime could
+ * build (#983), which is what licensed deleting the runtime half. What is left is the declaration
+ * that was always the real one.
  *
- * The spec beside it builds both schemas and asserts they are EQUAL. That is the whole evidence #984
- * is waiting on: it deletes the first declaration, and a tool whose input schema quietly loses a
- * `required` entry or an `enum` fails agent calls at runtime rather than at build.
+ * ## Three shapes it deliberately carries, because the deleted runtime could not
  *
- * ## Why the prose is duplicated byte-for-byte
- *
- * Each field's JSDoc sentence is the SAME STRING as its `WpDtoFieldOptions` description. That is not
- * laziness, it is the assertion: the settled design says documentation has ONE source (JSDoc), and
- * this fixture is what a contract looks like the moment before the decorator's copy is deleted. A
- * fixture whose two copies differed would make the gate measure a typo instead of a mechanism.
- *
- * ## Two shapes are deliberately ABSENT, and both are findings rather than oversights
- *
- * - **A field typed with a NAMED type alias** (`phase: OrderPhase`, `size: Integer`). Under `tsc`,
- *   `design:type` resolves to `String` / `Number`; under SWC — which is what vitest and several
- *   bundlers use — it emits `Object`, and `DtoSchemaBuilder` then refuses the DTO outright. So the
- *   runtime's view of an aliased field depends on the TRANSPILER, and the fixture writes the unions
- *   inline. The compiler has no such problem, which is one more reason the extraction belongs there.
- * - **A NULLABLE field** (`externalId: string | null`). `design:type` is `Object` for it, so the
- *   runtime cannot carry one at all; `ApiJsonSchema.type` holds a single string, so it could not
- *   publish one either. The compiler sees it perfectly.
+ * - **NAMED TYPE ALIASES** — `phase: OrderPhase`, `size: Integer`. `design:type` resolved to
+ *   `String`/`Number` under `tsc` and to `Object` under SWC, where `DtoSchemaBuilder` refused the DTO
+ *   outright, so the runtime's view of an aliased field depended on the TRANSPILER. `Integer` —
+ *   #981's preferred spelling of integer-ness — was therefore unusable on a runtime-registered DTO at
+ *   all. The compiler walks the written syntax and has no such problem.
+ * - **A NULLABLE field** — `externalId: string | null`, rendered `type: ["string", "null"]`.
+ * - **A BOUND ON AN ARRAY's items** — `@WpMin`/`@WpMax` land on the numeric leaf, where OpenAPI puts
+ *   them; `@WpDtoField` rejected numeric constraints on a non-`Number` field.
  */
 @ApiPath('/equivalence')
 @ApiType(SVC_TO_SVC, MCP)
@@ -258,12 +168,7 @@ export abstract class McpEquivalenceApi {
     @Endpoint(POST, '/lookup', READ, RPC)
     @WpAuthJwt({ allRolesAllowed: true })
     @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpMcpTool({
-        name: 'lookup_orders',
-        description: 'Looks up orders at one store, newest first.',
-        openWorldHint: false,
-    })
-    @WpResponseDto(() => LookupResponse)
+    @WpMcpTool('lookup_orders')
     lookup(_request: LookupRequest): Promise<LookupResponse> {
         throw new Error('contract only');
     }
@@ -274,12 +179,7 @@ export abstract class McpEquivalenceApi {
     @Endpoint(POST, '/cancel', WRITE, RPC, { openWorld: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpMcpTool({
-        name: 'cancel_order',
-        description: 'Cancels one order.',
-        openWorldHint: true,
-    })
-    @WpResponseDto(() => CancelResponse)
+    @WpMcpTool('cancel_order')
     cancel(_request: CancelRequest): Promise<CancelResponse> {
         throw new Error('contract only');
     }
@@ -290,12 +190,7 @@ export abstract class McpEquivalenceApi {
     @Endpoint(POST, '/reindex', WRITE_IDEMPOTENT, RPC, { hidden: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpMcpTool({
-        name: 'reindex_store',
-        description: "Rebuilds a store's menu cache.",
-        openWorldHint: false,
-    })
-    @WpResponseDto(() => ReindexResponse)
+    @WpMcpTool('reindex_store')
     reindex(_request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('contract only');
     }

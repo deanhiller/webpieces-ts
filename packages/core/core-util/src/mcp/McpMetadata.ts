@@ -1,11 +1,6 @@
 import 'reflect-metadata';
 import { METADATA_KEYS } from '../http/decorators';
-import {
-    EndpointOperation,
-    READ,
-    WRITE_IDEMPOTENT,
-    WRITE,
-} from '../http/HttpEndpointOptions';
+import { EndpointOperation, READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
 
 /** The immutable hints MCP clients use when deciding whether and how to call a tool. */
 export class WpMcpToolHints {
@@ -16,17 +11,6 @@ export class WpMcpToolHints {
         public readonly openWorldHint: boolean,
     ) {}
 }
-
-type CommonToolOptions = {
-    /** Stable protocol name. Renaming this breaks saved agent workflows. */
-    name: string;
-    /** Tool-level documentation published verbatim by tools/list. */
-    description: string;
-    openWorldHint: boolean;
-};
-
-/** Tool-specific declarations. Side-effect hints come only from the endpoint operation. */
-export type WpMcpToolOptions = CommonToolOptions;
 
 type AsyncObjectMethod = (...args: never[]) => Promise<object>;
 type ExactOneParameter<TMethod extends AsyncObjectMethod> = Parameters<TMethod>['length'] extends 1
@@ -47,24 +31,36 @@ export class WpMcpToolMetadata {
     constructor(
         public readonly methodName: string,
         public readonly name: string,
-        public readonly description: string,
-        public readonly openWorldHint: boolean,
     ) {}
 }
 
 /**
- * Explicitly publishes an existing `@Endpoint(POST, path, WRITE, RPC)` method as an MCP tool.
+ * Explicitly publishes an existing `@Endpoint(POST, path, WRITE, RPC)` method as an MCP tool, under
+ * the STABLE protocol name given here.
  *
- * This annotation owns tool-level documentation only. Input/output field documentation and JSON
- * Schema come from the request/response DTO metadata. The endpoint's `@WpAuth*` annotation remains
- * the sole runtime authorization policy.
+ * The name is the whole argument, and deliberately the only one. It is independent of the method
+ * name because renaming a method must not break a saved agent workflow, and nothing else about a
+ * tool is unsayable in the source:
+ *
+ * | fact | where it comes from |
+ * |---|---|
+ * | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads |
+ * | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation`, via {@link mcpHintsForOperation} |
+ * | `openWorldHint` | `@Endpoint`'s `openWorld` option |
+ * | `inputSchema` / `outputSchema` | the declared request and response types |
+ *
+ * ```typescript
+ * @WpMcpTool('search_stores')
+ * ```
+ *
+ * Until #984 it also took a `description`, duplicating the JSDoc. Two authored copies of one
+ * paragraph drift the first time somebody edits one, and nothing catches it — the partner reads the
+ * OpenAPI text and the agent reads the decorator text. With `description` gone the options object
+ * held one field, so it is a plain string and `WpMcpToolOptions` is deleted with it.
  */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpMcpTool(options: WpMcpToolOptions): WpMcpMethodDecorator {
-    if (options.name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
-    if (options.description.trim() === '') {
-        throw new Error('@WpMcpTool requires non-empty tool documentation.');
-    }
+export function WpMcpTool(name: string): WpMcpMethodDecorator {
+    if (name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
     return <TMethod extends AsyncObjectMethod>(
         target: object,
         propertyKey: string | symbol,
@@ -74,12 +70,7 @@ export function WpMcpTool(options: WpMcpToolOptions): WpMcpMethodDecorator {
         const tools: Record<string, WpMcpToolMetadata> =
             Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
         const methodName = String(propertyKey);
-        tools[methodName] = new WpMcpToolMetadata(
-            methodName,
-            options.name,
-            options.description,
-            options.openWorldHint,
-        );
+        tools[methodName] = new WpMcpToolMetadata(methodName, name);
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }

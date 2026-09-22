@@ -95,8 +95,8 @@ export function assertApiTypeMatchesMcpTools(apiClass: Function): void {
     if (declaresMcp && tools.length === 0) {
         throw new Error(
             `${apiClass.name} declares @ApiType(..., MCP) but no method carries @WpMcpTool. ` +
-                'Add @WpMcpTool({name, description, openWorldHint}) to the methods agents may ' +
-                'call, or drop MCP from the @ApiType list.',
+                "Add @WpMcpTool('<stable_tool_name>') to the methods agents may call, or drop MCP " +
+                'from the @ApiType list.',
         );
     }
     if (!declaresMcp && tools.length > 0) {

@@ -148,15 +148,7 @@ export type {
     EndpointOptions,
     ExternalEndpointOptions,
 } from './http/decorators';
-export {
-    RPC,
-    CLOUDTASKS,
-    CRON,
-    EXTERNAL,
-    READ,
-    WRITE_IDEMPOTENT,
-    WRITE,
-} from './http/decorators';
+export { RPC, CLOUDTASKS, CRON, EXTERNAL, READ, WRITE_IDEMPOTENT, WRITE } from './http/decorators';
 export {
     WpMcpTool,
     WpMcpToolHints,
@@ -164,21 +156,16 @@ export {
     getWpMcpTools,
     mcpHintsForOperation,
 } from './mcp/McpMetadata';
-export type { WpMcpMethodDecorator, WpMcpToolOptions } from './mcp/McpMetadata';
+export type { WpMcpMethodDecorator } from './mcp/McpMetadata';
 export { WpMcpAuthJwt, WpMcpJwtAuthMetadata, getWpMcpAuthJwt } from './mcp/McpAuthMetadata';
 export {
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
-    WpMcpHeader,
-    WpDtoMapFieldOptions,
-    WpDtoFieldMetadata,
-    WpResponseDto,
     ApiJsonSchema,
+    ApiJsonSchemaValidator,
     DtoValidationFailure,
-    DtoSchemaBuilder,
+    ObjectSchemaBuilder,
 } from './mcp/DtoSchema';
-export type { DtoClass, DtoElementType, DtoValue } from './mcp/DtoSchema';
+export type { ApiJsonSchemaType, DtoValue } from './mcp/DtoSchema';
+export { McpToolCatalog, McpToolCatalogError, McpToolDefinition } from './mcp/McpToolCatalog';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
 export type {
