@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
-    ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
+    AtomicFile, ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
+import { VerdictProvenanceService } from '../workflow/verdict-provenance';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 
@@ -66,6 +67,7 @@ function enforcerUnderTest(): ProvenanceEnforcer {
         new ReviewProvenanceService(),
         new ReviewerInstructionsService(reviewJsonService),
         reviewJsonService,
+        new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
     );
 }
 
@@ -327,6 +329,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
         const enforcer = new ProvenanceEnforcer(
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
+            new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
         );
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
@@ -344,6 +347,7 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
         const enforcer = new ProvenanceEnforcer(
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
+            new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
         );
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 

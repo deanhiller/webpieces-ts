@@ -120,7 +120,7 @@ export class DiffMaterializer {
         const manifest = new DiffManifest(
             basis.base, basis.headSha, basis.dirty, basis.diffCommand, [], [], [], basis.hashMainHead);
         if (basis.unresolved) return this.writeManifest(dir, manifest);
-        const byFile = this.captureByFile(repoRoot, basis);
+        const byFile = this.diffByFile(repoRoot, basis);
         const used = new Set<string>();
         for (const file of [...changedFiles].sort()) {
             this.writeOne(repoRoot, filesDir, file, byFile, used, excludeGlobs, manifest);
@@ -134,7 +134,7 @@ export class DiffMaterializer {
      * Untracked files never appear in `git diff`, so they are synthesized as all-added patches — the same
      * treatment DiffScope.getFileDiff already gives them, kept consistent so a reviewer sees one format.
      */
-    private captureByFile(repoRoot: string, basis: DiffBasis): Map<string, string> {
+    diffByFile(repoRoot: string, basis: DiffBasis): Map<string, string> {
         const args = basis.dirty ? ['diff', basis.base] : ['diff', basis.base, basis.headSha];
         const out = this.gitOut(repoRoot, args);
         const byFile = new Map<string, string>();

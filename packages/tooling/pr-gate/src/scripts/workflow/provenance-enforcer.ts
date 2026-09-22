@@ -11,6 +11,7 @@ import {
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
+import { VerdictProvenanceService } from './verdict-provenance';
 
 /**
  * The provenance outcome: whether each reviewer was VERIFIED to have run (the integrity check, which
@@ -46,6 +47,7 @@ export class ProvenanceEnforcer {
         private readonly provenanceRecord: ReviewProvenanceService,
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly reviewJsonService: ReviewJsonService,
+        private readonly verdictProvenance: VerdictProvenanceService,
     ) {}
 
     /**
@@ -69,9 +71,13 @@ export class ProvenanceEnforcer {
 
     // Enforce that EACH matched checklist was reviewed by a real reviewer SUBAGENT — the coding agent may
     // not self-certify. Not by one of a particular NAME: see SubagentProvenanceService.isReviewerRun. One run may cover several checklists, because `reviewerAgents` is a
-    // required CAP and grouping under it is what the repo configured. A verified set passes silently; no
-    // session id warns but passes;
-    // any missing reviewer throws so the PR does not open.
+    // required CAP and grouping under it is what the repo configured. A verified set passes silently; any
+    // missing reviewer throws so the PR does not open.
+    //
+    // No Claude session id (Codex, a plain terminal) is NOT a pass on integrity any more (issue #863): by
+    // the time this runs the checklist scan has already REJECTED every verdict that `wp-write-review` did
+    // not write for a reviewer subagent. What is skipped is only the transcript evidence, and the audit
+    // record is filled from the bin's provenance instead — so a Codex reviewer's identity is recorded too.
     // eslint-disable-next-line @typescript-eslint/max-params
     enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
@@ -87,13 +93,33 @@ export class ProvenanceEnforcer {
         const result = this.provenance.verifyReviewers(expected, context);
         report.verified = result.status === PROVENANCE_OK;
         if (result.status === PROVENANCE_SKIPPED) process.stderr.write(`⚠️  ${result.detail}\n`);
-        report.evidence = this.provenance.evidenceFor(context, expected, result.agentIds);
-        const blind = this.blindReviewers(report.evidence, config);
+        const skipped = result.status === PROVENANCE_SKIPPED;
+        report.evidence = skipped
+            ? this.binEvidence(repoRoot, expected)
+            : this.provenance.evidenceFor(context, expected, result.agentIds);
+        // Bin evidence says WHO submitted, not what they read, so it cannot be judged blind.
+        const blind = skipped ? [] : this.blindReviewers(report.evidence, config);
         // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
         // that only ever appeared on success could not answer what the reviewers did the time it was refused.
         this.writeProvenanceRecord(repoRoot, enforced, result, report.evidence);
         this.refuse(result, blind, context);
         return report;
+    }
+
+    /**
+     * Evidence from `review-<id>.provenance.json` when there are no Claude transcripts to read: the harness,
+     * session and agent `wp-write-review` recorded. Read-counters stay at zero — the bin cannot know them.
+     */
+    private binEvidence(repoRoot: string, expected: readonly ExpectedReviewer[]): ReviewerEvidence[] {
+        const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
+        const out: ReviewerEvidence[] = [];
+        for (const want of expected) {
+            const record = this.verdictProvenance.read(reviewPath, want.checklistId);
+            if (record === null) continue;
+            out.push(new ReviewerEvidence(
+                want.checklistId, record.agentType === '' ? want.agentType : record.agentType, record.agentId));
+        }
+        return out;
     }
 
     /**

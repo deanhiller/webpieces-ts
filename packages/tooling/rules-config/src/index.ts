@@ -388,6 +388,15 @@ export {
 } from './subagent-provenance';
 export { CLAUDE_CONFIG_DIR_ENV, ClaudeConfigDir, claudeConfigDir } from './claude-config-dir';
 export {
+    ReviewIdentityStamp,
+    ReviewIdentityStampService,
+    reviewIdentityStamps,
+    WRITE_REVIEW_BIN,
+    WRITE_REVIEW_CHECKLIST_FLAG,
+    REVIEW_STAMP_DIR,
+    REVIEW_STAMP_MAX_AGE_MS,
+} from './review-identity-stamp';
+export {
     ReviewProvenanceService,
     ReviewProvenance,
     ReviewerTranscript,

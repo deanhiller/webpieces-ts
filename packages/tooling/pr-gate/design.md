@@ -37,6 +37,7 @@ graph TD
     ChecklistNotice["ChecklistNotice"]
     ChecklistOverrideService["ChecklistOverrideService"]
     ChecklistScanner["ChecklistScanner"]
+    ChecklistScopeHasher["ChecklistScopeHasher"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     ConfigFile["ConfigFile"]
@@ -88,12 +89,14 @@ graph TD
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     RepoScratchDirs["RepoScratchDirs"]
+    ReviewIdentityStampService["ReviewIdentityStampService"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
     ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
+    ReviewerIdentityResolver["ReviewerIdentityResolver"]
     ReviewerInstructionsService["ReviewerInstructionsService"]
     ReviewerVerdictGate["ReviewerVerdictGate"]
     RunUpdate["RunUpdate"]
@@ -105,20 +108,24 @@ graph TD
     SubagentProvenanceService["SubagentProvenanceService"]
     SyncMainCommand["SyncMainCommand"]
     TmpScratchSweeper["TmpScratchSweeper"]
+    VerdictProvenanceService["VerdictProvenanceService"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeLockVerdicts["WorktreeLockVerdicts"]
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
+    WriteReviewCommand["WriteReviewCommand"]
     ActiveHatchReport --> ConfigFile
     AiBranchName --> BranchNaming
     AwaitChecksCommand --> AwaitLoop
     AwaitChecksCommand --> StageOutputLog
     AwaitLoop --> StageOutputLog
+    AwaitReviewsCommand --> AiBranchName
     AwaitReviewsCommand --> AwaitLoop
     AwaitReviewsCommand --> ChecklistScanner
     AwaitReviewsCommand --> RepoRootFinder
     AwaitReviewsCommand --> ReviewJsonService
+    AwaitReviewsCommand --> ReviewStageReceiptService
     AwaitReviewsCommand --> StageOutputLog
     BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
@@ -143,11 +150,14 @@ graph TD
     ChecklistInstructionsService --> ReviewJsonService
     ChecklistScanner --> AiBranchName
     ChecklistScanner --> ChecklistDetector
+    ChecklistScanner --> ChecklistScopeHasher
     ChecklistScanner --> DiffBasisResolver
     ChecklistScanner --> DiffScope
     ChecklistScanner --> HomeConfigService
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
+    ChecklistScanner --> VerdictProvenanceService
+    ChecklistScopeHasher --> DiffMaterializer
     CleanTmp --> AgedTreeSweeper
     CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
@@ -261,11 +271,13 @@ graph TD
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
     PrGateApp --> SyncMainCommand
+    PrGateApp --> WriteReviewCommand
     ProvenanceEnforcer --> AiBranchName
     ProvenanceEnforcer --> ReviewJsonService
     ProvenanceEnforcer --> ReviewProvenanceService
     ProvenanceEnforcer --> ReviewerInstructionsService
     ProvenanceEnforcer --> SubagentProvenanceService
+    ProvenanceEnforcer --> VerdictProvenanceService
     PushDevCommand --> DevDeployRefs
     PushDevCommand --> DevDeployWatchHints
     PushDevCommand --> DevResolveRunner
@@ -279,6 +291,8 @@ graph TD
     ReapWorktreeCommand --> WorktreeService
     RepoRootFinder --> DotWebpieces
     RepoScratchDirs --> DotWebpieces
+    ReviewIdentityStampService --> AtomicFile
+    ReviewIdentityStampService --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistInstructionsService
@@ -303,6 +317,7 @@ graph TD
     ReviewUpsertPrCommand --> ReviewerInstructionsService
     ReviewUpsertPrCommand --> StageOutputLog
     ReviewerBriefingBuilder --> ReviewJsonService
+    ReviewerIdentityResolver --> ReviewIdentityStampService
     ReviewerInstructionsService --> ReviewJsonService
     ReviewerVerdictGate --> ChecklistInstructionsService
     ReviewerVerdictGate --> ReviewJsonService
@@ -326,6 +341,8 @@ graph TD
     SyncMainCommand --> OrphanDirSweeper
     SyncMainCommand --> RepoRootFinder
     SyncMainCommand --> WorkingTreeGate
+    VerdictProvenanceService --> AtomicFile
+    VerdictProvenanceService --> ReviewJsonService
     WorktreeCleanupSection --> BranchMutationLog
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper
@@ -336,6 +353,11 @@ graph TD
     WorktreeReaper --> BranchArchiver
     WorktreeReaper --> BranchMutationLog
     WorktreeReaper --> WorktreeService
+    WriteReviewCommand --> AiBranchName
+    WriteReviewCommand --> RepoRootFinder
+    WriteReviewCommand --> ReviewStageReceiptService
+    WriteReviewCommand --> ReviewerIdentityResolver
+    WriteReviewCommand --> VerdictProvenanceService
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

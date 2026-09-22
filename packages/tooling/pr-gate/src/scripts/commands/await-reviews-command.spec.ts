@@ -24,7 +24,7 @@ function writeVerdict(id: string, status: string, output: string): void {
 }
 
 function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = waitedOn): ReviewerWaitProbe {
-    return new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, waitedOn, applicable);
+    return new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, waitedOn, applicable, 0);
 }
 
 /**
@@ -103,5 +103,21 @@ describe('ReviewerWaitProbe timeout report', () => {
         expect(text).toContain('pnpm wp-await-reviews');
         expect(text).toContain('not a failure');
         expect(text).toContain('1 of 2 still owe a verdict: b');
+    });
+});
+
+/**
+ * Issue #863: stage ② now re-briefs a STALE green and a REJECTED (hand-written) verdict, and that file is
+ * still on disk when the wait starts. It is not an answer to THIS round, so it must not end the wait.
+ */
+describe('ReviewerWaitProbe ignores a verdict file older than the last stage ②', () => {
+    it('keeps waiting on a verdict written before the round began, and ends on a fresh one', () => {
+        writeVerdict('a', 'green', 'judged the previous diff');
+        const old = new Date(Date.now() - 60_000);
+        fs.utimesSync(path.join(dir, 'review-a.json'), old, old);
+        const p = new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, [checklist('a')], [checklist('a')], Date.now() - 1_000);
+        expect(p.done()).toBe(false);
+        writeVerdict('a', 'green', 'judged this diff');
+        expect(p.done()).toBe(true);
     });
 });

@@ -202,7 +202,7 @@ describe('L1 cures — the runnable ones clear the block they are prescribed for
         const skew = stageSkew();
         const tree = new EffectiveTree(
             skew.main, skew.worktree, skew.worktree, skew.main, skew.main, 'worktree');
-        const report = new VersionSyncGuard().block('pnpm build', tree);
+        const report = new VersionSyncGuard().block('pnpm build', tree, 'claude-code');
         expect(report).not.toBeNull();
         expect(report).toContain(row.cure?.denyMention);
     });
@@ -259,7 +259,7 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
                 dirs.main, dirs.worktree, dirs.worktree, governed, dirs.main,
                 kind === 'primary' ? 'primary' : 'worktree',
             );
-            const blocked = guard.block(command, tree) !== null;
+            const blocked = guard.block(command, tree, 'claude-code') !== null;
             const classification = L1Classification.forEnforcement(
                 tree.kind, guard.skewed(tree), command === 'ls -la', false, false,
             );
@@ -491,7 +491,7 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
         const dead = path.join(primary, '.claude', 'worktrees', 'agent-reaped');
         const command = `cd ${dead} && git fetch origin main`;
         const tree = new EffectiveTreeResolver().resolve(command, primary, primary);
-        const report = new MissingDirectoryGuard().block(command, tree);
+        const report = new MissingDirectoryGuard().block(command, tree, 'claude-code');
         expect(report).not.toBeNull();
         expect(report).toContain(L1_ROWS[6].cure?.denyMention);
     });

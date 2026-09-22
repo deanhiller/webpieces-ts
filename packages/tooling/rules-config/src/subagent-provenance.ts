@@ -5,11 +5,12 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { claudeConfigDir } from './claude-config-dir';
 import { toError } from './to-error';
 import { dotWebpieces } from './state-dir';
+import { reviewIdentityStamps } from './review-identity-stamp';
 
 // Outcome of a provenance check.
 export const PROVENANCE_OK = 'ok';           // a matching reviewer subagent demonstrably ran on this branch
 export const PROVENANCE_MISSING = 'missing'; // session known, but no matching subagent artifact found → refuse (BLOCK)
-export const PROVENANCE_SKIPPED = 'skipped'; // no CLAUDE_CODE_SESSION_ID (plain terminal / CI) → warn + pass
+export const PROVENANCE_SKIPPED = 'skipped'; // no CLAUDE_CODE_SESSION_ID → transcript evidence skipped; wp-write-review provenance still enforced (#863)
 
 export class ProvenanceResult {
     status: string; // PROVENANCE_OK | PROVENANCE_MISSING | PROVENANCE_SKIPPED
@@ -224,12 +225,8 @@ export class SubagentProvenanceService {
     // grouping is always something the repo asked for. A run is still only credited when it is a real
     // subagent of the right type that ran on this branch.
     //
-    // There used to be a `sharedRuns` parameter, false when `reviewerAgents` was absent, which demanded a
-    // DISTINCT run per checklist. It went with the absent branch, and nothing was lost: a cap is a MAXIMUM,
-    // so even a consumer setting it to their checklist count may legitimately group — the old flag could
-    // never have enforced distinctness from the cap alone.
-    //
-    // Either way a run that NAMED this checklist's verdict file is preferred over one that merely ran on the
+    // (A removed `sharedRuns` flag once demanded a distinct run per checklist; a cap is a MAXIMUM, so it never could.)
+    // Either way a run that NAMED (or wp-write-review-submitted) this checklist's verdict is preferred over one that merely ran on the
     // branch, so each checklist is credited to the reviewer that actually wrote it whenever that is knowable.
     //
     // Scoped by BRANCH across ALL sessions (not the current session): once a reviewer ran on this branch in
@@ -309,7 +306,7 @@ export class SubagentProvenanceService {
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
             jsonl,
             scan.models,
-            verdictPath !== '' && this.mentions(inputs, verdictPath),
+            this.submittedVerdict(inputs, want.checklistId, verdictPath),
         );
     }
 
@@ -407,7 +404,7 @@ export class SubagentProvenanceService {
 
     private skipped(what: string): ProvenanceResult {
         return new ProvenanceResult(PROVENANCE_SKIPPED,
-            `CLAUDE_CODE_SESSION_ID not set — cannot verify ${what} ran (plain terminal / CI). Skipping the provenance check.`,
+            `CLAUDE_CODE_SESSION_ID not set — no Claude transcripts to verify ${what} against (Codex / terminal / CI); each verdict's wp-write-review provenance is still enforced.`,
             {}, []);
     }
 
@@ -466,10 +463,14 @@ export class SubagentProvenanceService {
     // Did this run's transcript name the checklist's own verdict path?
     // eslint-disable-next-line @typescript-eslint/max-params
     private namedVerdict(dir: string, agentId: string, checklistId: string, context: ReviewerContext): boolean {
-        const verdictPath = context.verdictPaths[checklistId] ?? '';
         const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
-        if (verdictPath === '' || !fs.existsSync(jsonl)) return false;
-        return this.mentions(this.scanTranscript(jsonl).inputs, verdictPath);
+        return fs.existsSync(jsonl) && this.submittedVerdict(this.scanTranscript(jsonl).inputs, checklistId, context.verdictPaths[checklistId] ?? '');
+    }
+
+    // Named its verdict file, or submitted it via wp-write-review (#863). Proves authorship, never branch.
+    private submittedVerdict(inputs: readonly string[], checklistId: string, verdictPath: string): boolean {
+        if (verdictPath !== '' && this.mentions(inputs, verdictPath)) return true;
+        return inputs.some((i: string): boolean => reviewIdentityStamps.invokedChecklists(i).includes(checklistId));
     }
 
     /**

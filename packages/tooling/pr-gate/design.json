@@ -198,7 +198,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/checklist-override.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "ChecklistScanner",
@@ -207,6 +207,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts",
                     "level": 2
+                },
+                {
+                    "id": "ChecklistScopeHasher",
+                    "className": "ChecklistScopeHasher",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-scope-hasher.ts",
+                    "level": 3
                 },
                 {
                     "id": "CleanTmp",
@@ -278,7 +286,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "DiffScope",
@@ -617,12 +625,20 @@
                     "level": 4
                 },
                 {
+                    "id": "ReviewIdentityStampService",
+                    "className": "ReviewIdentityStampService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/review-identity-stamp.ts",
+                    "level": 3
+                },
+                {
                     "id": "ReviewJsonService",
                     "className": "ReviewJsonService",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-json.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "ReviewProvenanceService",
@@ -662,6 +678,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/reviewer-briefing-builder.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ReviewerIdentityResolver",
+                    "className": "ReviewerIdentityResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/reviewer-identity.ts",
                     "level": 2
                 },
                 {
@@ -753,6 +777,14 @@
                     "level": 5
                 },
                 {
+                    "id": "VerdictProvenanceService",
+                    "className": "VerdictProvenanceService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts",
+                    "level": 3
+                },
+                {
                     "id": "WorkingTreeGate",
                     "className": "WorkingTreeGate",
                     "kind": "class",
@@ -791,6 +823,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/worktrees.ts",
                     "level": 6
+                },
+                {
+                    "id": "WriteReviewCommand",
+                    "className": "WriteReviewCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/write-review-command.ts",
+                    "level": 1
                 }
             ],
             "edges": [
@@ -841,6 +881,15 @@
                 },
                 {
                     "from": "AwaitReviewsCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
                     "to": "AwaitLoop",
                     "injection": "type",
                     "token": "AwaitLoop",
@@ -874,6 +923,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "AwaitReviewsCommand",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
                 },
                 {
                     "from": "AwaitReviewsCommand",
@@ -1093,6 +1151,15 @@
                 },
                 {
                     "from": "ChecklistScanner",
+                    "to": "ChecklistScopeHasher",
+                    "injection": "type",
+                    "token": "ChecklistScopeHasher",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scope-hasher.ts#ChecklistScopeHasher",
+                    "paramName": "scopeHasher",
+                    "paramType": "ChecklistScopeHasher"
+                },
+                {
+                    "from": "ChecklistScanner",
                     "to": "DiffBasisResolver",
                     "injection": "type",
                     "token": "DiffBasisResolver",
@@ -1135,6 +1202,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "VerdictProvenanceService",
+                    "injection": "type",
+                    "token": "VerdictProvenanceService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
+                    "paramName": "verdictProvenance",
+                    "paramType": "VerdictProvenanceService"
+                },
+                {
+                    "from": "ChecklistScopeHasher",
+                    "to": "DiffMaterializer",
+                    "injection": "type",
+                    "token": "DiffMaterializer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts#DiffMaterializer",
+                    "paramName": "materializer",
+                    "paramType": "DiffMaterializer"
                 },
                 {
                     "from": "CleanTmp",
@@ -2154,6 +2239,15 @@
                     "paramType": "SyncMainCommand"
                 },
                 {
+                    "from": "PrGateApp",
+                    "to": "WriteReviewCommand",
+                    "injection": "type",
+                    "token": "WriteReviewCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/write-review-command.ts#WriteReviewCommand",
+                    "paramName": "writeReviewCommand",
+                    "paramType": "WriteReviewCommand"
+                },
+                {
                     "from": "ProvenanceEnforcer",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -2197,6 +2291,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/subagent-provenance.ts#SubagentProvenanceService",
                     "paramName": "provenance",
                     "paramType": "SubagentProvenanceService"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "VerdictProvenanceService",
+                    "injection": "type",
+                    "token": "VerdictProvenanceService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
+                    "paramName": "verdictProvenance",
+                    "paramType": "VerdictProvenanceService"
                 },
                 {
                     "from": "PushDevCommand",
@@ -2308,6 +2411,24 @@
                 },
                 {
                     "from": "RepoScratchDirs",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewIdentityStampService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "ReviewIdentityStampService",
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
@@ -2532,6 +2653,15 @@
                     "paramType": "ReviewJsonService"
                 },
                 {
+                    "from": "ReviewerIdentityResolver",
+                    "to": "ReviewIdentityStampService",
+                    "injection": "type",
+                    "token": "ReviewIdentityStampService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-identity-stamp.ts#ReviewIdentityStampService",
+                    "paramName": "stamps",
+                    "paramType": "ReviewIdentityStampService"
+                },
+                {
                     "from": "ReviewerInstructionsService",
                     "to": "ReviewJsonService",
                     "injection": "type",
@@ -2739,6 +2869,24 @@
                     "paramType": "WorkingTreeGate"
                 },
                 {
+                    "from": "VerdictProvenanceService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "VerdictProvenanceService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
                     "from": "WorktreeCleanupSection",
                     "to": "BranchMutationLog",
                     "injection": "type",
@@ -2827,6 +2975,51 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "WriteReviewCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "WriteReviewCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "WriteReviewCommand",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
+                },
+                {
+                    "from": "WriteReviewCommand",
+                    "to": "ReviewerIdentityResolver",
+                    "injection": "type",
+                    "token": "ReviewerIdentityResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reviewer-identity.ts#ReviewerIdentityResolver",
+                    "paramName": "identity",
+                    "paramType": "ReviewerIdentityResolver"
+                },
+                {
+                    "from": "WriteReviewCommand",
+                    "to": "VerdictProvenanceService",
+                    "injection": "type",
+                    "token": "VerdictProvenanceService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
+                    "paramName": "provenance",
+                    "paramType": "VerdictProvenanceService"
                 }
             ],
             "unresolved": []

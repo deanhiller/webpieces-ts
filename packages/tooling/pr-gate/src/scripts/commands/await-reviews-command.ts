@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import {
     ChecklistResult, ChecklistVerdict, CK_FAIL, CK_MISSING, CK_BAD_FORMAT, loadAndValidate,
     RepoRootFinder, RequiredChecklist, ReviewJsonService,
@@ -6,6 +7,8 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { AwaitLoop, WaitOutcome, WaitProbe } from '../workflow/await-loop';
 import { ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
+import { AiBranchName } from '../workflow/git-readAiBranchName';
+import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { StageOutputLog } from '../workflow/stage-output-log';
 
 /**
@@ -42,6 +45,8 @@ export class AwaitReviewsCommand {
         private readonly reviewJsonService: ReviewJsonService,
         private readonly awaitLoop: AwaitLoop,
         private readonly stageConsole: StageOutputLog,
+        private readonly receipts: ReviewStageReceiptService,
+        private readonly aiBranchName: AiBranchName,
     ) {}
 
     async run(): Promise<void> {
@@ -58,8 +63,11 @@ export class AwaitReviewsCommand {
         // not wait for them, and a wait that did would never end, because nothing is ever going to write
         // a verdict for a reviewer that was deliberately never spawned. (The SET is shared with finish;
         // the PREDICATE is not — see `done()` for why a wait ends on arrival and finish does not.)
+        // A verdict file older than the last stage ② is NOT an arrival: it is the stale green or rejected
+        // file that stage just re-briefed (issue #863), and counting it would end the wait on the spot.
+        const since = this.receipts.writtenAtMs(repoRoot, this.aiBranchName.getFeatureName());
         const probe = new ReviewerWaitProbe(
-            this.reviewJsonService, scan.reviewPath, scan.outstanding, scan.applicable);
+            this.reviewJsonService, scan.reviewPath, scan.outstanding, scan.applicable, since);
         const outcome = await this.awaitLoop.run(probe);
         this.report(probe, outcome);
     }
@@ -100,6 +108,8 @@ export class ReviewerWaitProbe implements WaitProbe {
         private readonly reviewPath: string,
         private readonly waitedOn: readonly RequiredChecklist[],
         private readonly applicable: readonly RequiredChecklist[],
+        // Epoch ms of the last stage ② (0 = none): a verdict file last written before it is not an answer.
+        private readonly sinceMs: number,
     ) {
         this.reload();
     }
@@ -188,7 +198,13 @@ export class ReviewerWaitProbe implements WaitProbe {
     // arrival and not the gate's own "still owed".
     private pending(): RequiredChecklist[] {
         return this.waitedOn.filter((req: RequiredChecklist): boolean =>
-            this.reviewJsonService.resolveVerdict(req, this.results).status === CK_MISSING);
+            this.reviewJsonService.resolveVerdict(req, this.results).status === CK_MISSING || this.predates(req));
+    }
+
+    private predates(req: RequiredChecklist): boolean {
+        if (this.sinceMs === 0) return false;
+        const file = this.reviewJsonService.checklistResultPath(this.reviewPath, req.id);
+        return fs.existsSync(file) && fs.statSync(file).mtimeMs < this.sinceMs;
     }
 
     private reload(): void {

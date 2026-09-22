@@ -16,6 +16,7 @@ import { AgentPayload, AgentPayloadParser } from './agent-payload';
 import { AgentAdapters } from './agent-adapters';
 import { detectAiType } from './detect-ai';
 import { CodexSubagentSharedTreeGuard, CODEX_SUBAGENT_RULE } from './codex-subagent-guard';
+import { ReviewIdentityStamper } from './review-identity-stamper';
 import { governingShimRoot, isAllowed, installedShimRulesVersion } from '../bin/shim';
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { shimStaleDenyReason } from '../bin/shim-deny-reason';
@@ -35,6 +36,7 @@ export type { HookMode };
 
 const ADAPTERS = new AgentAdapters();
 const SUBAGENT_GUARD = new CodexSubagentSharedTreeGuard();
+const REVIEW_IDENTITY_STAMPER = new ReviewIdentityStamper();
 
 // The rule name for a block's audit line: the FIRST rule the report cites, or `fallback` when the
 // report opens with no `[rule]` header (a hand-written guard message). Comma-joined when a report
@@ -64,7 +66,12 @@ function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): never {
     // knowing who is calling. `event.aiType` is the adapter's answer, the same one that routed this
     // call to the Codex read-parity loop above.
     const result = runBash(command, cwd, mode, event.aiType);
-    if (!result) { emitAllow(); }
+    if (!result) {
+        // ALLOWED — so if this call submits a reviewer verdict, record who is submitting it before the
+        // command runs. `wp-write-review` cannot learn that from its env (see ReviewIdentityStamper).
+        REVIEW_IDENTITY_STAMPER.stamp(event, command, cwd);
+        emitAllow();
+    }
     // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
     // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its
     // row, L2's guards into `L2-decisions/` with their rule and cache, and emitDeny below stamps the

@@ -4,6 +4,7 @@ import {
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistScan } from './checklist-scanner';
+import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 /**
  * The gate `wp-finish-upsert-pr` runs before it parses review.json: REFUSE the PR while any applicable
@@ -56,6 +57,7 @@ export class ReviewerVerdictGate {
             this.headline(scan, refused, neverRan)
             + this.unreadableSection(scan)
             + this.refusedSection(refusals, scan.singleRoundReview)
+            + this.discountedSection(scan, neverRan)
             + this.neverRanSection(scan, neverRan)
             + this.footer(refused.length > 0, scan.singleRoundReview),
         );
@@ -122,13 +124,31 @@ export class ReviewerVerdictGate {
     }
 
     /**
+     * Verdict files that EXIST but do not count (issue #863), each with why — printed before the spawn
+     * list so the reader does not mistake them for reviewers that never ran, and so a hand-written verdict
+     * is named as what it is. REJECTED: no `wp-write-review` provenance, or edited after submission — a
+     * coordinator writing a reviewer's verdict lands here, and that is the forgery this gate exists to
+     * refuse. STALE: the checklist's in-scope files changed since it was submitted.
+     */
+    private discountedSection(scan: ChecklistScan, neverRan: readonly RequiredChecklist[]): string {
+        const owed = new Set(neverRan.map((r: RequiredChecklist): string => r.id));
+        const discounted = scan.standings.filter((s: VerdictStanding): boolean => owed.has(s.checklistId)
+            && (s.standing === STANDING_REJECTED || s.standing === STANDING_STALE));
+        if (discounted.length === 0) return '';
+        return '🚫 NOT COUNTED — these verdict files exist, but they are not a current review:\n\n'
+            + discounted.map((s: VerdictStanding): string => `  • ${s.checklistId} — ${s.standing.toUpperCase()}: ${s.reason}`).join('\n')
+            + '\n   A reviewer SUBAGENT must submit a fresh verdict with pnpm wp-write-review. Do NOT write or copy the\n'
+            + '   file yourself: the bin refuses the coordinating agent, and this gate rejects a verdict it did not write.\n\n';
+    }
+
+    /**
      * The reviewers that genuinely never ran — LAST, and listing ONLY these. When there are none this block
      * is absent entirely, which is the whole point: the "You MUST run these N reviewer subagent(s)"
      * imperative must not appear at all on a run whose only problem is a refusal.
      */
     private neverRanSection(scan: ChecklistScan, neverRan: readonly RequiredChecklist[]): string {
         if (neverRan.length === 0) return '';
-        return '❓ NO VERDICT YET — nothing has been written for these, so they must actually be run:\n\n'
+        return '❓ NO VERDICT YET — nothing that counts has been submitted for these, so they must actually be run:\n\n'
             + `${this.instructions.render(neverRan, scan.reviewPath, scan.context)}\n\n`;
     }
 

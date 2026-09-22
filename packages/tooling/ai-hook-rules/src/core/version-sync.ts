@@ -1,3 +1,4 @@
+import { AiType } from './agent-event';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 
@@ -95,13 +96,13 @@ export class VersionSyncGuard {
     }
 
     /** The deny report, or null to allow. */
-    block(command: string, tree: EffectiveTree): string | null {
+    block(command: string, tree: EffectiveTree, aiType: AiType): string | null {
         if (!this.applies(tree)) return null;
         if (this.inspection.isReadOnlyInspection(command)) return null;
         if (this.isCureOrLook(command)) return null;
         const quartet = this.quartetFor(tree);
         if (quartet.inSync) return null;
-        return this.report(tree, quartet);
+        return this.report(tree, quartet, aiType);
     }
 
     /**
@@ -153,13 +154,13 @@ export class VersionSyncGuard {
     // Short on purpose — L0 ran a deliberate message diet and these blocks regress into a wall of text
     // if each one argues its case. State the skew, show every version WITH its file, give the git cure
     // first, then the two structural escapes, then what is still allowed.
-    private report(tree: EffectiveTree, quartet: VersionQuartet): string {
+    private report(tree: EffectiveTree, quartet: VersionQuartet, aiType: AiType): string {
         const skew = this.classify(tree, quartet);
         // The two SELF-SERVE cases print NO escalation, and that omission is the deliverable rather than
         // a saving: an escalation block on a cure the reader can perform HERE teaches it to stop and wait
         // for a main agent who has nothing to do. The other three genuinely need the main tree to move.
         const selfServe = skew === 'main-ahead' || skew === 'worktree-stale';
-        const escalation = selfServe ? [] : ['', ...this.escalationLines(tree, quartet, skew)];
+        const escalation = selfServe ? [] : ['', ...this.escalationLines(tree, quartet, skew, aiType)];
         return [
             `❌ @webpieces version SKEW — this worktree and the main tree disagree, so work here is blocked.`,
             '',
@@ -432,29 +433,61 @@ export class VersionSyncGuard {
      * further tool calls / RETRYING IS THE BUG / WAIT) — shouting the whole report would just restore
      * the wall of text the L0 message diet exists to prevent.
      */
-    private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private escalationLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase, aiType: AiType): readonly string[] {
         return [
             `   SUBAGENT? You cannot fix the main tree from here. Forward this to your coordinator verbatim:`,
             `     > My worktree ${tree.root} is on @webpieces ${this.show(quartet.worktree.pinned).trim()};`,
             `     > the main tree ${tree.mainRoot} is on ${this.show(quartet.main.pinned).trim()}.`,
             ...this.askLines(tree, quartet, skew),
+            ...this.afterwardLines(aiType),
             `   THEN STOP WORKING NOW. Forwarding that message IS the end of your turn: make NO further tool`,
             `   calls and do NOT retry this one — RETRYING IS THE BUG. Every retry re-fires this identical`,
             `   deny and buries the ask above; one subagent did it 13 times, 25 across that whole session.`,
-            `   Nothing you can do from this tree clears it. WAIT for the main agent to confirm it is done,`,
-            `   then resume — nothing between.`,
+            ...this.waitLines(aiType),
         ];
     }
 
     /**
+     * What the coordinator does ONCE main is synced — and here the two harnesses need opposite answers.
+     *
+     * Codex runs every subagent in the coordinator's own checkout, so "tell me when it is done so I can
+     * continue" is literally true: the same agent picks up where it stopped.
+     *
+     * Claude Code does NOT keep that tree for it. A worktree-isolated subagent that hands back with an
+     * unchanged worktree has that worktree REAPED, and a subagent resumed afterwards (SendMessage) comes
+     * back with its cwd on the PRIMARY clone — which happened to the first agent on issue #863 itself. So
+     * asking to be resumed routes the work into the one tree it must never land in. The ask is therefore a
+     * FRESH `isolation: "worktree"` subagent, and "resume me" / "continue working" must not appear.
+     */
+    private afterwardLines(aiType: AiType): readonly string[] {
+        if (aiType === 'codex') {
+            return [`     > Tell me when that is complete so I can continue working.`];
+        }
+        return [
+            `     > Once main is synced, spawn a FRESH isolation: "worktree" subagent to redo this task. Do NOT`,
+            `     > message this agent again: my worktree is reaped on hand-back, and a re-messaged agent lands in the primary clone.`,
+        ];
+    }
+
+    private waitLines(aiType: AiType): readonly string[] {
+        if (aiType === 'codex') {
+            return [
+                `   Nothing you can do from this tree clears it. WAIT for the main agent to confirm it is done,`,
+                `   then resume — nothing between.`,
+            ];
+        }
+        return [`   Nothing you can do from this tree clears it; the coordinator redoes it in a fresh worktree.`];
+    }
+
+    /**
      * The forwardable ASK, one per case that needs one. `main-ahead` never reaches here — it has nothing
-     * to ask for — so the three shapes below cover every escalating case.
+     * to ask for — so the three shapes below cover every escalating case. What happens AFTER the ask is
+     * harness-specific and lives in {@link afterwardLines}, so none of these says "tell me when".
      *
      * The bump ask carries the upgrade sentence VERBATIM as Dean wrote it, because it answers the one
      * question an upgrade agent gets wrong: "webpieces cannot be upgraded from a worktree" is not a
-     * missing permission it can route around, it is a property of who governs whom. Its `STOP` is about
-     * the ROLE ("you are the wrong agent for this task"); the caps beat at the end of the block is about
-     * the TURN ("forwarding ends it"). Two different instructions, and the closer stays last and unique.
+     * missing permission it can route around, it is a property of who governs whom.
      */
     private askLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
         if (skew === 'bump') {
@@ -462,8 +495,7 @@ export class VersionSyncGuard {
                 `     > A \`pnpm install\` in main will NOT fix this — main's PIN has to move. Pick one:`,
                 `     >  (a) I redo this task in the MAIN tree (a version bump cannot be done in a worktree), or`,
                 `     >  (b) you TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to`,
-                `     >      raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there, and to tell me when it is complete`,
-                `     >      so I can continue here. I cannot reach that tree from here.`,
+                `     >      raise main's catalog pin to ${this.show(quartet.worktree.pinned).trim()} and \`pnpm install\` there. I cannot reach that tree from here.`,
                 `   If you are a subagent upgrading webpieces, STOP — only main agents in worktrees can do`,
                 `   this. Otherwise your main agent must \`git pull\` main: main has an earlier version of`,
                 `   webpieces pinned and must upgrade. You MUST tell the main agent to pull main and`,
@@ -474,16 +506,14 @@ export class VersionSyncGuard {
             return [
                 `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
                 `     > \`pnpm install\` there — its node_modules is on ${this.show(quartet.main.installed).trim()} but its own pin says`,
-                `     > ${this.show(quartet.main.pinned).trim()}, so no pull is needed — and to tell me when it is complete so I can`,
-                `     > continue working. I cannot reach that tree from here.`,
+                `     > ${this.show(quartet.main.pinned).trim()}, so no pull is needed. I cannot reach that tree from here.`,
             ];
         }
         return [
             `     > Please TELL THE MAIN AGENT in the MAIN git worktree ${tree.mainRoot} to run`,
             `     > \`git checkout main && git pull && pnpm install\` there — it must NAME main, since a bare`,
             `     > pull moves whatever branch that tree is on — so both trees are on the same release, and`,
-            `     > to tell me when it is complete so I can continue working, and what`,
-            `     > \`ls node_modules/@webpieces\` shows there. I cannot reach that tree from here.`,
+            `     > to report what \`ls node_modules/@webpieces\` shows there. I cannot reach that tree from here.`,
         ];
     }
 

@@ -14,6 +14,12 @@ export class ReviewStageReceipt {
     buildCommand: string;
     buildPassedAt: string;    // ISO; '' when the gate was skipped (mode OFF / no command)
     reviewersBriefed: string[];
+    /**
+     * checklist id → the hash of its in-scope diff at `headSha` (ChecklistScopeHasher). `wp-write-review`
+     * stamps a verdict's provenance with the hash its reviewer was BRIEFED on, and the next stage ② carries
+     * a green/yellow forward only while that hash is unchanged (issue #863). Assigned after construction.
+     */
+    scopeHashes: Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(headSha = '', mergeValidated = false, buildCommand = '', buildPassedAt = '', reviewersBriefed: string[] = []) {
@@ -22,6 +28,7 @@ export class ReviewStageReceipt {
         this.buildCommand = buildCommand;
         this.buildPassedAt = buildPassedAt;
         this.reviewersBriefed = reviewersBriefed;
+        this.scopeHashes = {};
     }
 }
 
@@ -64,17 +71,38 @@ export class ReviewStageReceiptService {
         try {
             // webpieces-disable no-any-unknown -- opaque parsed JSON, narrowed field-by-field below
             const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>;
-            return new ReviewStageReceipt(
+            const receipt = new ReviewStageReceipt(
                 typeof raw['headSha'] === 'string' ? (raw['headSha'] as string) : '',
                 raw['mergeValidated'] === true,
                 typeof raw['buildCommand'] === 'string' ? (raw['buildCommand'] as string) : '',
                 typeof raw['buildPassedAt'] === 'string' ? (raw['buildPassedAt'] as string) : '',
                 Array.isArray(raw['reviewersBriefed']) ? (raw['reviewersBriefed'] as string[]) : [],
             );
+            receipt.scopeHashes = this.stringMap(raw['scopeHashes']);
+            return receipt;
         } catch (err: unknown) {
             const error = toError(err);
             void error; // unreadable ⇒ treated as absent, which re-runs stage ② (the safe direction)
             return null;
         }
+    }
+
+    /** The receipt file's mtime in epoch ms, or 0 when there is none — when stage ② last briefed anyone. */
+    writtenAtMs(repoRoot: string, featureName: string): number {
+        const p = this.receiptPath(repoRoot, featureName);
+        return fs.existsSync(p) ? fs.statSync(p).mtimeMs : 0;
+    }
+
+    // webpieces-disable no-any-unknown -- one opaque JSON value, narrowed to string→string
+    private stringMap(value: unknown): Record<string, string> {
+        const out: Record<string, string> = {};
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) return out;
+        // webpieces-disable no-any-unknown -- entries of an opaque JSON object, each narrowed below
+        const obj = value as Record<string, unknown>;
+        for (const key of Object.keys(obj)) {
+            const v = obj[key];
+            if (typeof v === 'string') out[key] = v;
+        }
+        return out;
     }
 }

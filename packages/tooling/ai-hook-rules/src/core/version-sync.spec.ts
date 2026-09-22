@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { EffectiveTree } from './effective-tree';
+import { AiType } from './agent-event';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
 import { specTempDirs } from '@webpieces/rules-config';
@@ -88,13 +89,13 @@ function residentTree(main: string, wt: string): EffectiveTree {
  */
 export function renderVersionSyncRow8Report(): string {
     const dirs = pair('0.4.612', '0.4.616');
-    return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+    return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
 }
 
 describe('VersionSyncGuard — when it fires', () => {
     it('BLOCKS real work in a worktree whose pin disagrees with the main tree', () => {
         const dirs = pair('0.4.616', '0.4.612');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt));
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code');
         expect(report).not.toBeNull();
         expect(report).toContain('0.4.616');
         expect(report).toContain('0.4.612');
@@ -102,7 +103,7 @@ describe('VersionSyncGuard — when it fires', () => {
 
     it('ALLOWS when every version agrees', () => {
         const dirs = pair('0.4.616', '0.4.616');
-        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt))).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code')).toBeNull();
     });
 
     /**
@@ -112,7 +113,7 @@ describe('VersionSyncGuard — when it fires', () => {
     it('never fires on the MAIN tree, however skewed anything else is', () => {
         const dirs = pair('0.4.616', '0.4.612');
         const primary = new EffectiveTree(dirs.main, dirs.main, dirs.main, dirs.main, dirs.main, 'primary');
-        expect(new VersionSyncGuard().block('pnpm build', primary)).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', primary, 'claude-code')).toBeNull();
     });
 
     /**
@@ -128,7 +129,7 @@ describe('VersionSyncGuard — when it fires', () => {
         const tree = residentTree(dirs.main, dirs.wt);
         expect(tree.governedRoot).toBe(dirs.wt);
         expect(guard.skewed(tree)).toBe(true);
-        const report = guard.block('pnpm build', tree);
+        const report = guard.block('pnpm build', tree, 'claude-code');
         expect(report).not.toBeNull();
         expect(report).toContain('0.4.616');
         expect(report).toContain('0.4.624');
@@ -140,7 +141,7 @@ describe('VersionSyncGuard — when it fires', () => {
     it('stays silent for a resident agent once the two trees agree', () => {
         const dirs = pair('0.4.616', '0.4.616');
         writeInstalled(dirs.wt, '0.4.616');
-        expect(new VersionSyncGuard().block('pnpm build', residentTree(dirs.main, dirs.wt))).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', residentTree(dirs.main, dirs.wt), 'claude-code')).toBeNull();
     });
 
     it('a resident agent can still look, and still run the cure, from inside the block', () => {
@@ -149,7 +150,7 @@ describe('VersionSyncGuard — when it fires', () => {
         const guard = new VersionSyncGuard();
         const tree = residentTree(dirs.main, dirs.wt);
         for (const command of ['ls -la', 'cat pnpm-workspace.yaml', 'git status', 'git pull', 'pnpm install']) {
-            expect(guard.block(command, tree), command).toBeNull();
+            expect(guard.block(command, tree, 'claude-code'), command).toBeNull();
         }
     });
 
@@ -163,14 +164,14 @@ describe('VersionSyncGuard — when it fires', () => {
         writeInstalled(dirs.wt, '0.4.500');
         const selfTree = new EffectiveTree(dirs.wt, dirs.wt, dirs.wt, dirs.wt, dirs.wt, 'worktree');
         expect(new VersionSyncGuard().skewed(selfTree)).toBe(false);
-        expect(new VersionSyncGuard().block('pnpm build', selfTree)).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', selfTree, 'claude-code')).toBeNull();
     });
 
     it('never fires on read-only inspection — you can always look before you fix', () => {
         const dirs = pair('0.4.616', '0.4.612');
         const tree = worktreeTree(dirs.main, dirs.wt);
         for (const command of ['ls -la', 'cat package.json', 'git status', 'pwd']) {
-            expect(new VersionSyncGuard().block(command, tree), command).toBeNull();
+            expect(new VersionSyncGuard().block(command, tree, 'claude-code'), command).toBeNull();
         }
     });
 
@@ -183,7 +184,7 @@ describe('VersionSyncGuard — when it fires', () => {
         const tree = worktreeTree(dirs.main, dirs.wt);
         const guard = new VersionSyncGuard();
         for (const command of ['git pull', 'git fetch origin main', 'pnpm install', `git -C ${dirs.main} pull`]) {
-            expect(guard.block(command, tree), command).toBeNull();
+            expect(guard.block(command, tree, 'claude-code'), command).toBeNull();
         }
     });
 
@@ -192,7 +193,7 @@ describe('VersionSyncGuard — when it fires', () => {
         const tree = worktreeTree(dirs.main, dirs.wt);
         const guard = new VersionSyncGuard();
         for (const command of ['pnpm build', 'pnpm test', 'git commit -m x', 'npx nx run-many -t build']) {
-            expect(guard.block(command, tree), command).not.toBeNull();
+            expect(guard.block(command, tree, 'claude-code'), command).not.toBeNull();
         }
     });
 
@@ -206,7 +207,7 @@ describe('VersionSyncGuard — when it fires', () => {
         const wt = path.join(base, 'wt');
         fs.mkdirSync(main, { recursive: true });
         fs.mkdirSync(wt, { recursive: true });
-        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt))).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code')).toBeNull();
     });
 
     /** A range cannot be compared for equality; treating it as skew would block every loose pinner. */
@@ -218,7 +219,7 @@ describe('VersionSyncGuard — when it fires', () => {
         writeInstalled(main, '0.4.616');
         fs.mkdirSync(wt, { recursive: true });
         fs.writeFileSync(path.join(wt, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': ^0.4.0\n`);
-        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt))).toBeNull();
+        expect(new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code')).toBeNull();
     });
 });
 
@@ -232,7 +233,7 @@ describe('VersionSyncGuard — the FOURTH version', () => {
     it('catches a worktree whose OWN node_modules disagrees, even when both pins match', () => {
         const dirs = pair('0.4.616', '0.4.616');
         writeInstalled(dirs.wt, '0.4.500');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt));
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code');
         expect(report).not.toBeNull();
         expect(report).toContain('0.4.500');
         expect(report).toContain('what nx, vitest and eslint load IN this tree');
@@ -240,7 +241,7 @@ describe('VersionSyncGuard — the FOURTH version', () => {
 
     it('does not mention the fourth location when the worktree has no node_modules', () => {
         const dirs = pair('0.4.616', '0.4.612');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).not.toContain('what nx, vitest and eslint load IN this tree');
     });
 });
@@ -272,7 +273,7 @@ describe('VersionSyncGuard — the decision table', () => {
         writePin(main, '0.4.616');
         writeInstalled(main, '0.4.620');   // main's own two legs disagree
         writePin(wt, '0.4.620');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code') ?? '';
         expect(report).toContain('THE MAIN TREE IS INTERNALLY INCONSISTENT');
         expect(report).toContain(`Tell main agent: run \`pnpm install\` in ${main}`);
         expect(report).toContain('no pull is needed');
@@ -288,7 +289,7 @@ describe('VersionSyncGuard — the decision table', () => {
      */
     it('B: main install > worktree pin → a self-serve pin edit, and NO escalation at all', () => {
         const dirs = pair('0.4.616', '0.4.612');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain('THIS ONE IS YOURS, AND YOU CAN DO IT RIGHT HERE');
         expect(report).toContain(`Edit ${dirs.wt}/pnpm-workspace.yaml`);
         expect(report).toContain('set it to 0.4.616');
@@ -304,13 +305,13 @@ describe('VersionSyncGuard — the decision table', () => {
     it('B: names the install too when this tree has its own node_modules', () => {
         const dirs = pair('0.4.616', '0.4.612');
         writeInstalled(dirs.wt, '0.4.612');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain('Then run `pnpm install` HERE');
     });
 
     it('B: says there is nothing to install when this tree has no node_modules', () => {
         const dirs = pair('0.4.616', '0.4.612');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain('there is nothing to install');
     });
 
@@ -329,7 +330,7 @@ describe('VersionSyncGuard — the decision table', () => {
         run(wt, ['add', '.']);
         run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
         run(wt, ['checkout', '-q', '--detach']);
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code') ?? '';
         expect(report).toContain('GET ONTO A BRANCH FIRST');
         expect(report).toContain('HEAD is DETACHED');
         expect(report).not.toContain('That edit is ALLOWED');
@@ -338,7 +339,7 @@ describe('VersionSyncGuard — the decision table', () => {
     /** C — main is genuinely older. Only the main agent can move it, so this one DOES escalate. */
     it('C: main install < worktree pin → the main-agent pull cure, and an escalation', () => {
         const dirs = pair('0.4.612', '0.4.616');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain(`Tell main agent: \`cd ${dirs.main} && git checkout main && git pull\``);
         expect(report).toContain('Forward this to your coordinator verbatim');
         expect(report).toContain('STOP WORKING NOW');
@@ -348,7 +349,7 @@ describe('VersionSyncGuard — the decision table', () => {
     it('D: pins all agree, only this tree\'s install lags → `pnpm install` HERE, no escalation', () => {
         const dirs = pair('0.4.616', '0.4.616');
         writeInstalled(dirs.wt, '0.4.500');
-        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        const report = new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), 'claude-code') ?? '';
         expect(report).toContain('THIS ONE IS YOURS, AND IT IS ONE COMMAND');
         expect(report).toContain(`Run \`pnpm install\` HERE, in ${dirs.wt}`);
         expect(report).not.toContain('Forward this to your coordinator');
@@ -357,9 +358,9 @@ describe('VersionSyncGuard — the decision table', () => {
 });
 
 describe('VersionSyncGuard — the message', () => {
-    const reportFor = (): string => {
+    const reportFor = (aiType: AiType = 'claude-code'): string => {
         const dirs = pair('0.4.612', '0.4.616');
-        return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt)) ?? '';
+        return new VersionSyncGuard().block('pnpm build', worktreeTree(dirs.main, dirs.wt), aiType) ?? '';
     };
 
     it('names every version WITH the file it came from, so no grepping is needed', () => {
@@ -439,8 +440,8 @@ describe('VersionSyncGuard — the message', () => {
         expect(report).toContain('is on 0.4.612');
         expect(report).toContain('TELL THE MAIN AGENT in the MAIN git worktree');
         expect(report).toContain('git pull && pnpm install');
-        expect(report).toContain('tell me');
         expect(report).toContain('I cannot reach that tree from here');
+        expect(reportFor('codex')).toContain('Tell me when that is complete');
     });
 
     /**
@@ -452,7 +453,7 @@ describe('VersionSyncGuard — the message', () => {
     it('routes the ask through the MAIN AGENT rather than phrasing it as a command the subagent could run', () => {
         const report = reportFor();
         expect(report).toContain('TELL THE MAIN AGENT');
-        expect(report).toContain('so I can continue working');
+        expect(reportFor('codex')).toContain('so I can continue working');
         // The old phrasing handed the subagent a command aimed at a tree it cannot reach.
         expect(report).not.toContain('Please `git -C');
     });
@@ -475,7 +476,7 @@ describe('VersionSyncGuard — the message', () => {
         expect(report).toContain('STOP WORKING NOW');
         expect(report).toContain('NO further tool');
         expect(report).toContain('RETRYING IS THE BUG');
-        expect(report).toContain('WAIT for the main agent');
+        expect(reportFor('codex')).toContain('WAIT for the main agent');
     });
 
     /** The obvious wrong fix: downgrade main so it matches. That breaks every other tree. */
@@ -499,6 +500,7 @@ describe('VersionSyncGuard — the message', () => {
      */
     it('stays on the L0 message diet — short enough to be read, not skimmed', () => {
         expect(reportFor().split('\n').length).toBeLessThanOrEqual(42);
+        expect(reportFor('codex').split('\n').length).toBeLessThanOrEqual(42);
     });
 });
 
@@ -522,7 +524,7 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         run(wt, ['add', '.']);
         run(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base']);
         writePin(wt, '0.4.638');
-        return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt)) ?? '';
+        return new VersionSyncGuard().block('pnpm build', worktreeTree(main, wt), 'claude-code') ?? '';
     };
 
     /** `pnpm install` moving a pin is the guess every agent makes here, and it is always wrong. */
@@ -553,7 +555,8 @@ describe('VersionSyncGuard — a deliberate pin bump is not ordinary drift', () 
         expect(report).toContain('a version bump cannot be done in a worktree');
         // Same defect, same cure: option (b) is something only the MAIN AGENT can perform.
         expect(report).toContain('TELL THE MAIN AGENT in the MAIN git worktree');
-        expect(report).toContain('tell me when it is complete');
+        expect(report).toContain('spawn a FRESH isolation: "worktree" subagent');
+        expect(report).not.toContain('continue');
     });
 
     /**

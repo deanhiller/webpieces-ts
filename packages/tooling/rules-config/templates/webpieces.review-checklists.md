@@ -121,8 +121,8 @@ hand can drift out of date if nothing is restated by hand.
 Unlike the report-only command it replaces, this one **can fail** — on an unresolved merge or a red build.
 It fails before any reviewer is spawned, which is the point.
 
-Checklists already reviewed on this branch are **not** re-listed — verdict files persist, so a second
-start/review/finish cycle re-instructs nothing.
+Checklists already reviewed on this branch are **not** re-listed while their in-scope files are unchanged
+— verdict files persist, so a second start/review/finish cycle re-instructs only what changed.
 
 `wp-finish-upsert-pr` recomputes the same set and **refuses to open the PR** while any reviewer still owes
 a passing verdict, naming only the ones still missing. An optional checklist that was offered and declined
@@ -153,8 +153,22 @@ When `reviewerAgents` is positive, for each matched **required** checklist — a
    `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
-3. Have it **write its verdict** to `.webpieces/pr-review/<featureSlug>/review-<id>.json` (one file per
-   checklist, so concurrent reviewers never clobber each other). `<id>` is the checklist's `id`.
+3. Have it **submit its verdict** with `pnpm wp-write-review --checklist <id>` (the JSON on stdin, or
+   `--file <path>`). The bin writes `review-<id>.json` beside the branch's `review.json` — one file per
+   checklist, so concurrent reviewers never clobber each other — plus `review-<id>.provenance.json`
+   recording WHO submitted it (the harness's own session/agent ids, stamped by the PreToolUse hook), the
+   commit it was briefed on, and a hash of the checklist's in-scope diff. It is the ONLY way a verdict is
+   written: it refuses the coordinating agent, and `wp-finish-upsert-pr` rejects a `review-<id>.json` that
+   has no provenance or was edited after submission. There is no second route.
+
+**Codex has no agent types**, so spawn a generic subagent with NO forked turns — fresh context, never a fork
+of your own conversation — and hand it only the instructions files. The brief on disk is its whole input;
+a forked conversation hands a reviewer the author's reasoning, which costs tokens and its independence.
+
+**Verdicts CARRY while their scope is unchanged.** On a re-run, `wp-review-upsert-pr` keeps a checklist's
+green or yellow verdict while the hash of that checklist's in-scope diff is the one its provenance
+recorded, and prints it as `<id> — carried GREEN from <sha>, in-scope files unchanged`. It briefs only the
+checklists that are red, never ran, were rejected, or whose in-scope files changed. A red is never carried.
 
 **How to ask about the optional ones.** `wp-review-upsert-pr` prints them as their own step, listing each
 with the files it matched and the doc it reviews against. Put them to the human in **ONE multi-select
@@ -163,11 +177,15 @@ answering "no" nine times in a row is being worn down rather than consulted, and
 cheap answer is yes to everything — which is exactly the state `required: false` exists to fix. If they
 pick none, that is a complete answer; go straight to finish.
 
-**You may never write a reviewer's `review-<id>.json` yourself.** If the reviewer agent cannot be spawned,
-that is a config bug, not your cue to self-certify — report it to the human. (webpieces rejects a
-reviewer agent that has no `.claude/agents/<name>.md`, so this should surface as a config error instead.)
+**You may never write or submit a reviewer's verdict yourself.** `wp-write-review` refuses the
+coordinating agent, and a hand-written `review-<id>.json` is rejected at finish. If the reviewer agent cannot
+be spawned, that is a config bug, not your cue to self-certify — report it to the human.
 
-## `review-<id>.json` (each reviewer subagent writes its own)
+**From a plain terminal** (no AI harness in the environment, no hook stamp) `wp-write-review` records the
+submitter as `terminal` — a HUMAN reviewer — and finish accepts it. CI never submits or reads verdicts:
+the review state is local and never committed.
+
+## The verdict each reviewer subagent submits through `wp-write-review`
 
 ```json
 {
@@ -262,7 +280,8 @@ review must not read as a fully-reviewed one.
 ```
 
 Then run `pnpm wp-finish-upsert-pr`. It re-computes the matched checklists, requires a well-formed,
-passing (or overridden) `review-<id>.json` for each, verifies a reviewer subagent ran for each, and
+passing (or overridden) `review-<id>.json` for each — submitted through `wp-write-review`, unedited, and
+judging the in-scope diff as it is now — verifies a reviewer subagent ran for each, and
 only then opens/updates the PR.
 
 > Provenance is verified from Claude Code's own subagent records — it is not tamper-proof (a determined

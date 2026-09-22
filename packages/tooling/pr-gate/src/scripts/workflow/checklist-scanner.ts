@@ -1,12 +1,16 @@
 import {
     ChangedFilesOptions, ChecklistDefinition, ChecklistResult, ChecklistReviewContext, DiffScope,
-    HomeConfigService, RequiredChecklist, ReviewJsonService, reviewJsonPath,
+    HomeConfigService, RequiredChecklist, ReviewJsonService, VERDICT_RED, reviewJsonPath,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { ChecklistDetector, ChecklistRoster } from './checklist-detector';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
+import { ChecklistScopeHasher } from './checklist-scope-hasher';
+import {
+    STANDING_REJECTED, STANDING_STALE, VerdictProvenanceService, VerdictStanding,
+} from './verdict-provenance';
 
 /** How a caller wants the scan filtered. Data-only (per CLAUDE.md). */
 export class ChecklistScanOptions {
@@ -117,6 +121,16 @@ export class ChecklistScan {
     suppressed: RequiredChecklist[];
     /** TRUE only for the top-level `singleRoundReview` machine opt-in. */
     singleRoundReview: boolean;
+    /**
+     * How every EXISTING verdict file stands (issue #863): CURRENT (submitted through `wp-write-review` and
+     * its checklist's in-scope diff is unchanged — it carries), STALE (in-scope diff changed since — re-brief)
+     * or REJECTED (no bin provenance, or edited after submission — it is not a review). A REJECTED verdict,
+     * and a STALE green or yellow one, is left OUT of `results`, so it is owed like one that never ran; a
+     * stale RED stays in `results` and keeps refusing. Empty under suppression.
+     */
+    standings: VerdictStanding[];
+    /** checklist id → ChecklistScopeHasher's hash of its in-scope diff NOW. Recorded in the stage-② receipt. */
+    scopeHashes: Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -159,6 +173,8 @@ export class ChecklistScan {
         this.results = results;
         this.optionalNotRun = optionalNotRun;
         this.singleRoundReview = singleRoundReview;
+        this.standings = [];
+        this.scopeHashes = {};
     }
 }
 
@@ -195,6 +211,8 @@ export class ChecklistScanner {
         // Injected BY TYPE (no Symbol token, per CLAUDE.md) so the ONE reviewer kill switch is read in the
         // ONE place that computes what a branch owes — see the suppression note on `scan`.
         private readonly homeConfig: HomeConfigService,
+        private readonly scopeHasher: ChecklistScopeHasher,
+        private readonly verdictProvenance: VerdictProvenanceService,
     ) {}
 
     /**
@@ -235,7 +253,10 @@ export class ChecklistScanner {
                 changedFiles, [], [], homeConfig.singleRoundReview);
         }
         const applicable = matched;
-        const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
+        const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
+        const loaded = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
+        const standings = this.standingsOf(reviewPath, loaded, scopeHashes, homeConfig.singleRoundReview);
+        const results = this.liveResults(loaded, standings);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
         // NOT `!owedIds.has(...)`-with-the-optional-exemption-folded-in: an optional checklist nobody ran is
@@ -243,7 +264,7 @@ export class ChecklistScanner {
         // that never happened.
         const reviewed = applicable.filter((r: RequiredChecklist): boolean => !owedIds.has(r.id));
         const optionalNotRun = this.reviewJsonService.optionalWithoutVerdict(applicable, results);
-        return new ChecklistScan(
+        const scan = new ChecklistScan(
             defined,
             applicable,
             reviewed,
@@ -261,6 +282,37 @@ export class ChecklistScanner {
             optionalNotRun,
             homeConfig.singleRoundReview,
         );
+        scan.standings = standings;
+        scan.scopeHashes = scopeHashes;
+        return scan;
+    }
+
+    /**
+     * Judge every READABLE verdict against its bin provenance and the in-scope diff as it is now. A file
+     * with a format problem is left to the format complaint, which names the fix; it is not assessed.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private standingsOf(
+        reviewPath: string, loaded: readonly ChecklistResult[], scopeHashes: Record<string, string>, singleRound: boolean,
+    ): VerdictStanding[] {
+        return loaded
+            .filter((r: ChecklistResult): boolean => r.problem === '')
+            .map((r: ChecklistResult): VerdictStanding =>
+                this.verdictProvenance.assess(reviewPath, r, scopeHashes[r.id] ?? '', singleRound));
+    }
+
+    /**
+     * The verdicts that still COUNT. A rejected one never does. A stale green or yellow judged code that
+     * has since changed, so it is owed again; a stale RED still refuses — a refusal is not lifted by
+     * changing other code in its scope, only by a fresh verdict — and it is re-briefed anyway because it
+     * is red.
+     */
+    private liveResults(loaded: readonly ChecklistResult[], standings: readonly VerdictStanding[]): ChecklistResult[] {
+        const dropped = new Set(standings
+            .filter((s: VerdictStanding): boolean =>
+                s.standing === STANDING_REJECTED || (s.standing === STANDING_STALE && s.status !== VERDICT_RED))
+            .map((s: VerdictStanding): string => s.checklistId));
+        return loaded.filter((r: ChecklistResult): boolean => !dropped.has(r.id));
     }
 
     /**

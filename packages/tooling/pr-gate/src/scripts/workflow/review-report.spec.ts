@@ -5,6 +5,7 @@ import {
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-report';
+import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/review.json';
@@ -192,7 +193,7 @@ describe('reviewerAgents — how many reviewer subagents stage ② asks for', ()
         expect(text).toContain('AT MOST 1 subagent(s) of type `webpieces-reviewer` (commands.pr-gate.reviewerAgents = 1)');
         expect(text).toContain('Use ONE subagent for all of them.');
         expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(1);
-        expect(text).toContain('write ONE verdict file per');
+        expect(text).toContain('submit ONE verdict per');
         for (const id of ['a', 'b', 'c', 'd']) {
             expect(text).toContain(`instructions:  /repo/.webpieces/pr-review/dean-feature/instructions/${id}.instructions.md`);
         }
@@ -396,7 +397,7 @@ describe('required reviewers are spawned; optional ones are only offered', () =>
     it('counts four steps with both kinds owed, and still names finish exactly once', () => {
         const text = mixed();
         expect(text).toContain('▶ NEXT — 4 steps');
-        expect(text).toContain('STEP 4 — only once every reviewer you ran has written its verdict file');
+        expect(text).toContain('STEP 4 — only once every reviewer you ran has submitted its verdict');
         expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
     });
 
@@ -459,7 +460,7 @@ describe('--no-optional suppresses the offer without hiding what was skipped', (
  * re-spawned reviewer writes to the same review-<id>.json). Reviews are once per branch by construction —
  * a passing verdict is never archived the way review.json is — so the output has to say so out loud.
  */
-describe('the once-per-branch rule is stated, not left to be inferred', () => {
+describe('the carry-forward rule is stated, not left to be inferred', () => {
     const reusedOnly = (): string => {
         const input = withOneOwedReviewer();
         input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
@@ -468,12 +469,12 @@ describe('the once-per-branch rule is stated, not left to be inferred', () => {
 
     it('names the rule and forbids re-spawning when everything is reused', () => {
         const text = reusedOnly();
-        expect(text).toContain('ONCE PER BRANCH');
+        expect(text).toContain('CARRIES FORWARD for as long as its checklist\'s in-scope files are unchanged');
         expect(text).toContain('Do NOT re-spawn');
     });
 
     it('warns that a re-spawn overwrites the banked verdict, not just that it costs tokens', () => {
-        expect(reusedOnly()).toContain('overwrites the');
+        expect(reusedOnly()).toContain('replaces the verdict it already');
     });
 
     // The all-clear is NOT printed while anything is still owed, so a mixed run would otherwise carry the
@@ -493,7 +494,43 @@ describe('the once-per-branch rule is stated, not left to be inferred', () => {
         const input = withMixedReviewers();
         input.skipOptional = true;
         input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
-        expect(report.render(input)).toContain('ONCE PER BRANCH');
+        expect(report.render(input)).toContain('CARRIES FORWARD');
+    });
+});
+
+/**
+ * Issue #863 — the banner NAMES every carried verdict and why, and every existing verdict that was
+ * re-briefed and why, so a reader never has to guess whether an earlier green still counts.
+ */
+describe('carried, stale and rejected verdicts are each printed with their reason (issue #863)', () => {
+    it('prints a CARRIED green with the sha it was briefed on and the unchanged-scope reason', () => {
+        const input = withOneOwedReviewer();
+        input.reviewed = [new RequiredChecklist('security-auth-reviewer', POLICY, '', [])];
+        input.standings = [new VerdictStanding('security-auth-reviewer', STANDING_CURRENT, 'green', '5e57c16a0000', 'x')];
+        expect(report.render(input))
+            .toContain('security-auth-reviewer — carried GREEN from 5e57c16a, in-scope files unchanged');
+    });
+
+    it('prints a STALE green and a REJECTED verdict as re-briefed, each with its reason', () => {
+        const input = withOneOwedReviewer();
+        input.standings = [
+            new VerdictStanding('db-migration-reviewer', STANDING_STALE, 'green', '1f75a798aaaa', 'in-scope files CHANGED since'),
+            new VerdictStanding('other-reviewer', STANDING_REJECTED, 'green', '', 'not submitted through pnpm wp-write-review'),
+        ];
+        const text = report.render(input);
+        expect(text).toContain('db-migration-reviewer — GREEN from 1f75a798 is STALE: in-scope files CHANGED since; re-briefed below');
+        expect(text).toContain('other-reviewer — verdict REJECTED: not submitted through pnpm wp-write-review; re-briefed below');
+    });
+
+    it('tells a Codex coordinator to spawn with NO forked turns and hand over only the instructions files', () => {
+        const text = report.render(withOneOwedReviewer());
+        expect(text).toContain('Codex (no agent types): spawn a generic subagent with NO forked turns');
+        expect(text).toContain('hand it ONLY the instructions files below');
+    });
+
+    it('never lets the coordinator submit on a reviewer\'s behalf', () => {
+        expect(report.render(withOneOwedReviewer())).toContain('pnpm wp-write-review');
+        expect(report.render(withOneOwedReviewer())).toContain('refuses the coordinating agent');
     });
 });
 

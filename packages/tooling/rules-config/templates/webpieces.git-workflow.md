@@ -19,7 +19,7 @@ That question is already answered: **yes, always.** Run the flow:
 pnpm wp-start-upsert-pr        # ① 3-point update from main. Does NOT push and does NOT build.
 pnpm wp-review-upsert-pr       # ② validates that merge, runs the BUILD GATE, extracts the diff,
                                #   and prints the reviewer subagents to spawn
-# → spawn each reviewer it names (each writes its own review-<id>.json)
+# → spawn each reviewer it names (each submits its own verdict: pnpm wp-write-review --checklist <id>)
 # → write review.json at the exact path it prints
 #   (.webpieces/pr-review/<feature>/review.json — its `title` becomes the PR title)
 pnpm wp-finish-upsert-pr       # ③ creates/updates the PR (and pushes — the ONE push)

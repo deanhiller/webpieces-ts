@@ -48,12 +48,14 @@ describe('renderReviewerAgent — the generic reviewer definition', () => {
         expect(agent).toContain('ONE OR MORE instructions files by absolute path, one per checklist');
         expect(agent).not.toContain('.webpieces/');
         expect(agent).toContain('ONLY against its own in-scope files');
-        expect(agent).toContain('Exactly ONE verdict file per checklist you were handed');
+        expect(agent).toContain('Exactly ONE verdict per checklist you were handed');
         expect(agent).toContain('nothing for a checklist you were not handed');
     });
 
-    it('never edits anything but its verdict files', () => {
-        expect(agent).toContain('You NEVER edit code, config, docs, or any file other than those verdict files.');
+    it('never edits the repo, and submits through wp-write-review (issue #863)', () => {
+        expect(agent).toContain('You NEVER edit code, config, docs, or any other file in the repo.');
+        expect(agent).toContain('pnpm wp-write-review --checklist <id>');
+        expect(agent).toContain('is rejected by the gate');
     });
 
     it('carries no version stamp, so it only changes when its words do', () => {

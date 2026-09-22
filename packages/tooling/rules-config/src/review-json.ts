@@ -6,6 +6,7 @@ import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import { ReviewJsonSchemaRenderer } from './review-json-schema-renderer';
+import { VerdictSchemaRenderer } from './verdict-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';
 import {
     VERDICT_GREEN,
@@ -547,9 +548,8 @@ export class ReviewJsonService {
                 if (!req.required) continue;
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(
-                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.reviewer.agentName}" subagent to review it, ` +
-                    `then write ${this.checklistFileName(req.id)} with ` +
-                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","agent":"unknown","model":"unknown","output":"…"}.${doc}`,
+                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.reviewer.agentName}" subagent to review it; ` +
+                    `IT submits the verdict with ${this.submitCommand(req.id)} — nobody writes ${this.checklistFileName(req.id)} by hand.${doc}`,
                 );
             }
         }
@@ -561,37 +561,23 @@ export class ReviewJsonService {
     }
 
     /**
-     * THE renderer for a reviewer's verdict schema — with the reviewer's own `id` already filled in and,
-     * when known, the exact file it must write.
+     * THE renderer for a reviewer's verdict schema — with the reviewer's own `id` already filled in.
      *
      * There is one because a verdict schema that lives anywhere a human maintains it goes stale, and a
      * reviewer follows the stale copy. That is not a hypothetical: when `success` was replaced by the
      * tri-state `status`, hand-written `.claude/agents/*.md` files kept documenting `success`, and a real
      * PR had to carry "the verdict format in your own agent .md file is OUT OF DATE" in the spawn prompt to
      * work around it. Every printed copy — the stage-② roster, the generated per-reviewer instructions
-     * file, and the complaint raised against a malformed verdict — now comes from here.
-     *
+     * file, and the complaint raised against a malformed verdict — now comes from here. It ends with the
+     * ONE way a verdict is submitted (`wp-write-review`, issue #863), never a file path to write.
      */
-    verdictSchemaFor(id: string, verdictPath = '', indent = '      '): string {
-        const lines = [
-            `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
-            `"agent": "claude | codex | unknown", "model": "opus | sonnet | actual readable model name | unknown", ` +
-            `"output": "what you checked / found" }`,
-            `${indent}Identity fields are REQUIRED non-empty strings. Use your own harness and model, never the parent's.`,
-            `${indent}Use the literal "unknown" when unavailable; never guess. These are self-reported, not provenance.`,
-            `${indent}  ${VERDICT_GREEN}  → passes, nothing to flag`,
-            `${indent}  ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR`,
-            `${indent}  ${VERDICT_RED}    → REFUSES the PR; your "output" is printed verbatim`,
-            `${indent}Prefer "${VERDICT_YELLOW}" over red when the change is acceptable but worth a human's attention —`,
-            `${indent}a red a human then authorizes reads as a deliberately-accepted defect, a yellow reads as a note.`,
-            // The one sentence that stops a reviewer doing what a reviewer did once: telling the human to run
-            // a command, on its own authority, to get past its own finding.
-            `${indent}THERE IS NO "override" FIELD HERE, and you NEVER write one. A reviewer does not authorize`,
-            `${indent}shipping past its own finding: if this needs a human's decision, SAY SO in "output" and STOP.`,
-            `${indent}The coordinating agent is the one with the human, and records that decision in override-${id}.json.`,
-        ];
-        if (verdictPath !== '') lines.push(`${indent}File: ${verdictPath}`);
-        return lines.join('\n');
+    renderVerdictSchema(id: string, indent = '      '): string {
+        return new VerdictSchemaRenderer().render(id, indent);
+    }
+
+    /** THE command that submits one checklist's verdict (issue #863) — see VerdictSchemaRenderer. */
+    submitCommand(id: string): string {
+        return new VerdictSchemaRenderer().submitCommand(id);
     }
 
     // Unreadable objects retain their format complaint; absent/unparseable verdicts return null.
@@ -632,21 +618,21 @@ export class ReviewJsonService {
      */
     // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence here
     private verdictProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
-        // The ONE renderer — see verdictSchemaFor. A second copy here is what let the old `success` shape
+        // The ONE renderer — see renderVerdictSchema. A second copy here is what let the old `success` shape
         // survive in print after it was removed from the parser.
-        const shape = this.verdictSchemaFor(id, filePath);
+        const shape = this.renderVerdictSchema(id);
         if ('override' in raw) {
             return `Checklist "${id}" wrote its verdict with the MOVED "override" field. A ship-anyway `
                 + 'authorization is no longer part of a reviewer\'s verdict: it MOVED to its own file, '
                 + `${this.overrides.overrideFileName(id)}, which only the coordinating agent writes and only on a `
                 + 'human\'s in-session instruction. There is no compatibility mode — DELETE the "override" key from '
-                + `${filePath}. Rewrite the file as:\n${shape}`;
+                + `${filePath} by resubmitting it:\n${shape}`;
         }
         // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
         if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
         if ('success' in raw) {
             return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` +
-                `"status" — there is no compatibility mode. Rewrite the file as:\n${shape}`;
+                `"status" — there is no compatibility mode. Resubmit it as:\n${shape}`;
         }
         return `Checklist "${id}" wrote a verdict with no valid "status" (got ${JSON.stringify(status)}). ` +
             `It must be exactly one of ${VERDICT_STATUSES.join(', ')}:\n${shape}`;
