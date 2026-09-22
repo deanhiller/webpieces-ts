@@ -38,7 +38,7 @@ import {
     WebpiecesDefaultErrorTranslator,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 
 /**
  * The wire is the ONE place operator prose must not appear. These specs drive the real
@@ -151,12 +151,10 @@ class WireHarness {
     }
 
     private newWrapper(): ExpressWrapper {
-        return new ExpressWrapper(
-            () => Promise.resolve({}),
-            '/test',
-            // webpieces-disable no-any-unknown -- RequestContextHeaders is unused by handleError
-            {} as unknown as ConstructorParameters<typeof ExpressWrapper>[2],
-        );
+        // A REAL RequestContextHeaders: handleError's response path now writes every context key that
+        // declares a `responseHeader` (it used to hard-code one `x-request-id` off the static
+        // RequestContext), so the collaborator is genuinely exercised. It is stateless.
+        return new ExpressWrapper(() => Promise.resolve({}), '/test', new RequestContextHeaders());
     }
 
     /**

@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { Readable } from 'stream';
-import { ApiBadRequestError } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import {
+    ApiBadRequestError,
+    HeaderRegistry,
+} from '@webpieces/core-util';
+import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ExpressWrapper } from '../ExpressWrapper';
 
 /** Captures the response status + serialized body written by executeImpl on the success path. */
@@ -44,10 +47,17 @@ function fakeRequest(bodyText: string): import('express').Request {
     return req;
 }
 
-/** Stub RequestContextHeaders — executeImpl only calls fillFromRequest, which we no-op here. */
+/**
+ * A REAL RequestContextHeaders with the inbound fill silenced, rather than a bare object: the
+ * response path writes every key that declares a `responseHeader` through the same collaborator, so
+ * an object carrying only `fillFromRequest` no longer stands in for it.
+ */
+class SilentFillHeaders extends RequestContextHeaders {
+    override fillFromRequest(): void {}
+}
+
 function stubHeaders(): ConstructorParameters<typeof ExpressWrapper>[2] {
-    // webpieces-disable no-any-unknown -- only fillFromRequest is exercised
-    return { fillFromRequest() {} } as unknown as ConstructorParameters<typeof ExpressWrapper>[2];
+    return new SilentFillHeaders();
 }
 
 /**
@@ -88,6 +98,14 @@ class CapturingWrapper {
         return RequestContext.run(() => this.wrapper.executeImpl(req, res, next));
     }
 }
+
+/**
+ * Every real server calls this at startup. These specs drive the response path, which reads the
+ * registry's response keys, so the registry has to exist here too.
+ */
+beforeAll(() => {
+    HeaderRegistry.configure([], /*platformHeaders*/ true);
+});
 
 describe('ExpressWrapper body parse (annotation-driven)', () => {
     it('formPost:true parses application/x-www-form-urlencoded into a flat DTO', async () => {

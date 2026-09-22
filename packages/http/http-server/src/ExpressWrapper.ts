@@ -427,27 +427,31 @@ export class ExpressWrapper {
     }
 
     private send(res: Response, response: HttpResponseDto): void {
-        this.stampTransactionId(res);
+        this.stampResponseContext(res);
         this.responseWriter.write(res, response);
     }
 
     /**
-     * Put the transaction id on EVERY response — success and error, webpieces' default body and an
-     * app's own. It is INFRASTRUCTURE, not app policy: an app that overrides what an error looks like
-     * must not thereby lose the header its support desk quotes back. That is why this lives here and
-     * not in {@link WebpiecesDefaultErrorTranslator.toWire} or in an app's translators.
+     * THE response choke point: every context key that declares a `responseHeader` goes onto EVERY
+     * response — success and error, webpieces' default body and an app's own. It is INFRASTRUCTURE,
+     * not app policy: an app that overrides what an error looks like must not thereby lose the
+     * headers its support desk quotes back. That is why this lives here and not in
+     * {@link WebpiecesDefaultErrorTranslator.toWire} or in an app's translators.
      *
-     * Silently absent when there is no id to send, which is exactly the accepted known issue recorded
-     * at step 0 of {@link executeImpl}: a malformed or oversize body fails before `fillFromRequest`
-     * mints one.
+     * This method names NO key. It used to be `stampTransactionId`, a hard-coded
+     * `res.setHeader('x-request-id', ...)` that nothing else could join without editing it;
+     * `WebpiecesCoreHeaders.REQUEST_ID` now declares `responseHeader: 'x-request-id'` like any other
+     * key and arrives through the loop in `RequestContextHeaders.buildResponseHeaders`. A second
+     * response key needs no edit here at all — which is the whole test of whether the generalisation
+     * is real.
+     *
+     * Silently empty when there is no context, which is exactly the accepted known issue recorded at
+     * step 0 of {@link executeImpl}: a malformed or oversize body fails before `fillFromRequest`
+     * mints an id.
      */
-    private stampTransactionId(res: Response): void {
-        if (!RequestContext.isActive()) {
-            return;
-        }
-        const txId = RequestContext.getUntrusted(WebpiecesCoreHeaders.REQUEST_ID);
-        if (txId) {
-            res.setHeader(WebpiecesCoreHeaders.REQUEST_ID.httpHeader!, txId);
+    private stampResponseContext(res: Response): void {
+        for (const entry of this.headers.buildResponseHeaders().entries()) {
+            res.setHeader(entry[0], entry[1]);
         }
     }
 }

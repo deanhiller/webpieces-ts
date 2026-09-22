@@ -25,6 +25,7 @@ import { ClientRequest } from './ClientRequest';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 import { RequestOutcome } from './RequestOutcome';
+import { RequestBodySerializer } from './RequestBodySerializer';
 import { ResponseBodyReader } from './ResponseBodyReader';
 import { NdjsonRequestStream } from './NdjsonRequestStream';
 import { SseResponseStream } from './SseResponseStream';
@@ -85,6 +86,12 @@ export abstract class ProxyClient {
 
     // Same shape and same reason: stateless, so it is constructed here rather than injected.
     private readonly bodyReader = new ResponseBodyReader();
+
+    /**
+     * DTO -> wire bytes, in the encoding the endpoint declared. Stateless, so one instance per
+     * client; see {@link RequestBodySerializer} for why it lives outside this class.
+     */
+    private readonly bodySerializer = new RequestBodySerializer();
 
     /**
      * fetch `Response` -> the transport-neutral {@link HttpResponseDto} the registered `ErrorTranslator`
@@ -205,6 +212,22 @@ export abstract class ProxyClient {
      * The default is a no-op, so every existing subclass is unaffected.
      */
     protected onRequestEnd(_route: RouteMetadata, _outcome: RequestOutcome): void {}
+
+    /**
+     * A settled response's headers -> the CALLER's context, so a value set by a callee travels UP the
+     * call tree hop by hop without anything in between naming HTTP.
+     *
+     * Fires on EVERY settled call, ok or error, because an error response carries the diagnostic
+     * headers you most want (which backend answered, why it was a cache miss). It does NOT fire when
+     * the transport never produced a response at all — there is nothing to read.
+     *
+     * The default is a no-op. Where the context LIVES is environment-specific (node: the ambient
+     * RequestContext; browser: the app-held store), so the two subclasses implement it and this class
+     * stays free of both. `destination` is threaded through unchanged from the request that produced
+     * this response: it is what decides whether a TRUSTED response key may be believed at all — see
+     * {@link DestinationTrust.allows}.
+     */
+    protected acceptResponseContext(_headers: Headers, _destination: DestinationTrust): void {}
 
     // ---------------------------------------------------------------- contract binding
 
@@ -398,6 +421,7 @@ export abstract class ProxyClient {
                     ),
                 30_000,
             );
+            this.readResponseContext(route, response);
             this.onRequestEnd(
                 route,
                 new RequestOutcome(true, response?.status ?? 0, response?.headers),
@@ -405,12 +429,29 @@ export abstract class ProxyClient {
             return requestStream;
         } catch (err: unknown) {
             const error = toError(err);
+            this.readResponseContext(route, response);
             this.onRequestEnd(
                 route,
                 new RequestOutcome(false, response?.status ?? 0, response?.headers, error),
             );
             throw err;
         }
+    }
+
+    /**
+     * Hand a settled response's headers to {@link acceptResponseContext}, with the SAME
+     * {@link DestinationTrust} the request was built with. One private helper rather than the same
+     * four lines on each of the four settle paths, because a path that forgot it would silently stop
+     * propagating context upward with nothing failing.
+     */
+    private readResponseContext(route: RouteMetadata, response: Response | undefined): void {
+        if (response === undefined) {
+            return;
+        }
+        this.acceptResponseContext(
+            response.headers,
+            DestinationTrust.forAuthMode(route.authMeta?.mode),
+        );
     }
 
     private async openStreamingTransport(
@@ -500,12 +541,14 @@ export abstract class ProxyClient {
             );
         } catch (err: unknown) {
             const error = toError(err);
+            this.readResponseContext(route, response);
             this.onRequestEnd(
                 route,
                 new RequestOutcome(false, response?.status ?? 0, response?.headers, error),
             );
             throw err;
         }
+        this.readResponseContext(route, response);
         this.onRequestEnd(
             route,
             new RequestOutcome(true, response?.status ?? 0, response?.headers),
@@ -524,7 +567,7 @@ export abstract class ProxyClient {
             args,
         );
         const headers = new Map<string, string>();
-        const body = this.serializeBody(route, mapped.body, headers);
+        const body = this.bodySerializer.serialize(this.apiName, route, mapped.body, headers);
         const context = this.outboundContextHeaders(
             DestinationTrust.forAuthMode(route.authMeta?.mode),
         );
@@ -538,44 +581,6 @@ export abstract class ProxyClient {
             mapped.body,
             mapped.path,
         );
-    }
-
-    /** Serialize exactly the encoding the endpoint declared; GET is always bodyless. */
-    // webpieces-disable no-any-unknown -- request DTO type is erased at the generated proxy boundary
-    private serializeBody(
-        route: RouteMetadata,
-        requestDto: unknown,
-        headers: Map<string, string>,
-    ): string | undefined {
-        if (route.httpMethod === 'GET' || requestDto === undefined) return undefined;
-        if (route.formPost) {
-            headers.set('Content-Type', 'application/x-www-form-urlencoded');
-            return this.serializeForm(requestDto, route);
-        }
-        headers.set('Content-Type', 'application/json');
-        return JSON.stringify(requestDto);
-    }
-
-    /** Flat form DTO -> deterministic urlencoded bytes, repeating array-valued fields. */
-    // webpieces-disable no-any-unknown -- form DTO fields are contract-owned and heterogeneous
-    private serializeForm(requestDto: unknown, route: RouteMetadata): string {
-        if (requestDto === null || typeof requestDto !== 'object' || Array.isArray(requestDto)) {
-            throw new Error(
-                `${this.apiName}.${route.methodName} declares formPost:true, so its body must be a flat object.`,
-            );
-        }
-        const params = new URLSearchParams();
-        // webpieces-disable no-any-unknown -- checked object is narrowed to its contract-owned field bag
-        for (const key of Object.keys(requestDto as Record<string, unknown>).sort()) {
-            // webpieces-disable no-any-unknown -- checked object is narrowed to its contract-owned field bag
-            const value = (requestDto as Record<string, unknown>)[key];
-            if (value === undefined || value === null) continue;
-            const values = Array.isArray(value) ? value : [value];
-            for (const item of values) {
-                if (item !== undefined && item !== null) params.append(key, String(item));
-            }
-        }
-        return params.toString();
     }
 
     /**
@@ -652,9 +657,7 @@ export abstract class ProxyClient {
             // EVERY response passes the seam, 2xx included: an app whose 200 body signals failure
             // turns it into a throw here. The webpieces default returns silently, so the success
             // path is unchanged — and the body is parsed ONCE, because a fetch body reads once.
-            ClientErrorTranslator.throwIfFailure(
-                this.responseDtoFactory.fromFetch(response, body),
-            );
+            ClientErrorTranslator.throwIfFailure(this.responseDtoFactory.fromFetch(response, body));
             return body;
         }
         const protocolError = await this.bodyReader.readErrorBody(response, callId);

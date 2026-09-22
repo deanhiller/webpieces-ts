@@ -53,6 +53,14 @@
                 "http-client-browser"
             ]
         },
+        "api-doc-model": {
+            "level": 0,
+            "framework": ["node"],
+            "role": "lib",
+            "shortDescription": "Read a webpieces API contract with the **TypeScript compiler API** and produce ONE in-memory `ApiDocModel`. It is the single extraction pass both the OpenAPI documents and the MCP tool list are rendered from (#982), and it renders nothing itself.",
+            "responsibilitiesFile": "packages/docs/api-doc-model/responsibilities.md",
+            "dependsOn": []
+        },
         "app-example-e2e": {
             "level": 7,
             "framework": ["express"],

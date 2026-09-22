@@ -1,0 +1,31 @@
+{
+    "name": "api-doc-model",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/docs/api-doc-model/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/docs/api-doc-model/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/docs/api-doc-model",
+                "main": "packages/docs/api-doc-model/src/index.ts",
+                "tsConfig": "packages/docs/api-doc-model/tsconfig.lib.json",
+                "assets": [
+                    "packages/docs/api-doc-model/package.json",
+                    "packages/docs/api-doc-model/README.md"
+                ]
+            }
+        },
+        "ci": {
+            "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}

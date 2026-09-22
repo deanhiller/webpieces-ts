@@ -97,6 +97,12 @@ ORDER=(
     # round until publish-packages.spec.ts re-derived the order from the manifests and said so — latent
     # because npm never enforces the order, it just leaves a window where core-context resolves a
     # core-util that is not on the registry yet.
+    # api-doc-model depends on `typescript` and no @webpieces package at all, so it may sit anywhere
+    # in this list; it goes here to keep the docs family beside the core it documents. Like core-mock
+    # and mcp-server before it, the NAME has to be bootstrapped on npm by an authenticated manual
+    # publish once — npm trusted publishing (OIDC + --provenance) can publish to an existing scoped
+    # name but cannot CREATE one, and the first automated release 404s until somebody has.
+    packages/docs/api-doc-model
     packages/core/core-util
     packages/core/ipc-bridge
     packages/core/core-context

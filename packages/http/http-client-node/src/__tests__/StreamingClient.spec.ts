@@ -58,6 +58,13 @@ class StubHeaders {
         return new Map<string, string>([['x-context-test', 'propagated']]);
     }
 
+    /**
+     * The RESPONSE half of the same seam, no-op here: these specs assert on the REQUEST the client
+     * built, and the context-transfer of response keys is covered in core-context's
+     * `ResponseContext.spec.ts`.
+     */
+    acceptResponseHeaders(_headers: Headers, _destination: DestinationTrust): void {}
+
     findRecorder(): TestCaseRecorder | undefined {
         return undefined;
     }

@@ -50,6 +50,8 @@ export { ContextMgr } from '@webpieces/core-util';
 // Re-export the context-key contract from core-util for convenience (browser one-import)
 export {
     ContextReader,
+    ContextWriter,
+    ContextStore,
     ContextKey,
     HeaderRegistry,
     ClientRegistry,

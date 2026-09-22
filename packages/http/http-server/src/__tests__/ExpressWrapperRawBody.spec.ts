@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { Readable } from 'stream';
-import { ApiBadRequestError } from '@webpieces/core-util';
-import { HttpRequest, RequestContext } from '@webpieces/core-context';
+import {
+    ApiBadRequestError,
+    HeaderRegistry,
+} from '@webpieces/core-util';
+import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ExpressWrapper, MAX_BODY_BYTES } from '../ExpressWrapper';
 
 /**
@@ -67,12 +70,16 @@ class CapturingWrapper {
     readonly wrapper: ExpressWrapper;
 
     constructor(formPost: boolean, rawBody: boolean, maxBytes: number = MAX_BODY_BYTES) {
-        // webpieces-disable no-any-unknown -- only fillFromRequest is exercised
-        const headers = {
-            fillFromRequest: (request: HttpRequest): void => {
-                this.published = request;
-            },
-        } as unknown as ConstructorParameters<typeof ExpressWrapper>[2];
+        // A REAL RequestContextHeaders with ONE method overridden, rather than a bare object: the
+        // response path writes every key declaring a `responseHeader` through the same collaborator,
+        // so an object carrying only the inbound half no longer stands in for it.
+        const captured = this;
+        class CapturingHeaders extends RequestContextHeaders {
+            override fillFromRequest(request: HttpRequest): void {
+                captured.published = request;
+            }
+        }
+        const headers = new CapturingHeaders();
         this.wrapper = new ExpressWrapper(
             (requestDto: unknown) => {
                 this.captured = requestDto;
@@ -103,6 +110,14 @@ class CapturingWrapper {
         return RequestContext.run(() => this.wrapper.executeImpl(req, res, next));
     }
 }
+
+/**
+ * Every real server calls this at startup. These specs drive the response path, which reads the
+ * registry's response keys, so the registry has to exist here too.
+ */
+beforeAll(() => {
+    HeaderRegistry.configure([], /*platformHeaders*/ true);
+});
 
 describe('{ rawBody: true } retains what the SENDER transmitted', () => {
     it('delivers byte-identical bytes for multi-byte UTF-8, an emoji and an exponent float', async () => {

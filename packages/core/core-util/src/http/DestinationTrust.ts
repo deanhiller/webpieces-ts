@@ -86,9 +86,22 @@ export class DestinationTrust {
     }
 
     /**
-     * May this key go on the wire to this destination? Untrusted keys always may — nobody was ever
-     * going to make a security decision on them. A trusted key may only when the destination will
-     * authenticate US, because that is the only case its `AuthFilter` will admit it.
+     * May this key cross the boundary between us and this destination? Untrusted keys always may —
+     * nobody was ever going to make a security decision on them. A trusted key may only when we and
+     * the destination authenticate each other.
+     *
+     * ONE method answers BOTH directions, deliberately, because it is one question:
+     *
+     * - OUTBOUND (`buildOutboundHeaders`): may we SEND a trusted key there? Only when the destination
+     *   will authenticate US, because that is the only case its `AuthFilter` will admit it.
+     * - RESPONSE (`acceptResponseHeaders`): may we BELIEVE a trusted key that came BACK? Only from a
+     *   destination this client authenticated to — an `@WpAuthOidc` / `@WpAuthSharedSecret` peer is a
+     *   service in our own trust domain, while a `@WpAuthPublic` / `@WpAuthJwt` / partner endpoint is
+     *   somebody else's process whose response headers are an assertion, not a proof.
+     *
+     * A second, identically-bodied `believesResponsesFrom(key)` would be two spellings of one
+     * decision — the shim shape `.claude/rules/no-backwards-compat.md` rejects — so the direction
+     * lives in the CALLER's name and the rule lives here, once.
      */
     allows(key: AnyContextKey): boolean {
         return this.verifiesCaller || !key.isTrusted();
