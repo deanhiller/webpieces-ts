@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { AddressInfo, createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+    ApiJsonSchema,
+    ObjectSchemaBuilder,
     ApiPath,
     ClientRegistry,
     DestinationTrust,
@@ -14,9 +16,6 @@ import {
     StreamWriter,
     TestCaseRecorder,
     WpAuthPublic,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WpStream,
     POST,
     READ,
@@ -30,24 +29,28 @@ import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
 import { NodeProxyClient } from '../NodeProxyClient';
 
-@WpDto()
 class ClientEvent {
-    @WpDtoField(new WpDtoFieldOptions('client event', true))
     value!: string;
 }
 
-@WpDto()
+const clientEventSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
+
 class ServerEvent {
-    @WpDtoField(new WpDtoFieldOptions('server event', true))
     result!: string;
 }
+
+const serverEventSchema = new ObjectSchemaBuilder()
+    .required('result', new ApiJsonSchema('string'))
+    .build();
 
 @Rpc()
 @ApiPath('/stream')
 abstract class StreamingApi {
     @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('integration test')
-    @WpStream(() => ClientEvent, () => ServerEvent)
+    @WpStream(clientEventSchema, serverEventSchema)
     exchange(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
         throw new Error('contract only');
     }

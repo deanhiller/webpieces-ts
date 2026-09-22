@@ -75,8 +75,13 @@ export interface Customer {
 
 /** A self-referential DTO. It terminates because a NAMED type is ONE model entry. */
 export interface TreeNode {
+    /** This node's label. */
     name: string;
+
+    /** Everything directly beneath it. */
     children: TreeNode[];
+
+    /** The node above it, absent at the root. */
     parent?: TreeNode;
 }
 
@@ -128,6 +133,7 @@ export interface Beta {
 export type Mixed = Alpha | Beta;
 
 export interface SaveRequest {
+    /** The customer record to create or update, keyed by its email address. */
     customer: Customer;
     tree: TreeNode;
     chain: Hop1;
@@ -201,11 +207,7 @@ export class ExampleApi {
      */
     @Endpoint(POST, SAVE_PATH, WRITE, RPC)
     @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpTool({
-        name: 'save_customer',
-        description: 'Create or update one customer.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('save_customer')
     @WpMcpAuthJwt({ roles: ['admin'] })
     @MaskLog({ secretToken: 'full' })
     save(request: SaveRequest): Promise<SaveResponse> {

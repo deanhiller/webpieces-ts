@@ -5,7 +5,7 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 
 ## In scope
 
-- Convert `@WpMcpTool` API metadata and DTO metadata into MCP tool definitions.
+- Resolve `@WpMcpTool` API metadata against the build's generated `McpToolCatalog` into registered MCP tools, FAILING FAST when a registered tool is absent from the catalog. The schemas and the description are read from the catalog, never rebuilt here — see the README. `McpToolRegistry` also calls `assertApiTypeMatchesMcpTools`, so `@ApiType(..., MCP)` and `@WpMcpTool` presence cannot disagree at runtime.
 - Validate resource-bound access tokens through an application verifier.
 - Enforce explicit `@WpMcpAuthJwt` policy for the verified MCP user principal.
 - Bind the application-selected MCP path through the official MCP v2 HTTP/JSON-RPC implementation,

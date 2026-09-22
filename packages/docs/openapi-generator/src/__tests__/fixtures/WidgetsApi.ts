@@ -51,6 +51,7 @@ export interface ListWidgetsRequest {
 }
 
 export interface ListWidgetsResponse {
+    /** Every widget matching the request, newest first. */
     widgets: Widget[];
 }
 
@@ -74,7 +75,7 @@ export class WidgetsApi {
      */
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
-    @WpMcpTool({ name: 'list_widgets', description: 'List widgets.', openWorldHint: false })
+    @WpMcpTool('list_widgets')
     @WpMcpAuthJwt({ roles: ['agent'] })
     list(request: ListWidgetsRequest): Promise<ListWidgetsResponse> {
         throw new Error('contract');

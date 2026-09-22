@@ -27,6 +27,7 @@
     },
     "dependencies": {
         "@webpieces/api-doc-model": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
         "typescript": "5.9.3"
     }
 }

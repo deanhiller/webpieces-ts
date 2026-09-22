@@ -4,22 +4,25 @@ import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+    ApiJsonSchema,
     ApiPath,
+    ApiType,
     Endpoint,
     HeaderRegistry,
     LoggerFactory,
     LogManager,
+    McpToolCatalog,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
     WpAuthJwt,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
-    WpDtoMapFieldOptions,
     WpMcpAuthJwt,
     WpMcpTool,
-    WpResponseDto,
+    WpMcpToolHints,
+    MCP,
     POST,
     READ,
     RPC,
+    SVC_TO_SVC,
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
@@ -38,50 +41,82 @@ import {
     RecordedLogLine,
     RecordingLoggerFactory,
     SearchApi,
+    SPEC_TOOL_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
     USER_ID,
 } from './__tests__/WpMcpServerTestFixtures';
 
-@WpDto()
 class PassageSentence {
-    @WpDtoField(new WpDtoFieldOptions('Sentence text', true))
+    /** Sentence text */
     text!: string;
 
-    @WpDtoField(
-        new WpDtoMapFieldOptions('ISO 639-1 -> this sentence in that language', false, 'string'),
-    )
+    /** ISO 639-1 -> this sentence in that language */
     translations?: Record<string, string>;
 }
 
-@WpDto()
 class PassageRequest {
-    @WpDtoField(new WpDtoMapFieldOptions('Requested word counts by locale', false, 'integer'))
+    /** Requested word counts by locale */
     minWordsByLocale?: Record<string, number>;
 }
 
-@WpDto()
 class PassageResponse {
-    @WpDtoField(new WpDtoMapFieldOptions('Sentences by locale', true, PassageSentence))
+    /** Sentences by locale */
     sentencesByLocale!: Record<string, PassageSentence>;
 }
 
 @ApiPath('/mcp-spec-passages')
+@ApiType(SVC_TO_SVC, MCP)
 abstract class PassageApi {
+    /** Find passages with their translations keyed by locale. */
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/passages', READ, RPC)
-    @WpResponseDto(() => PassageResponse)
-    @WpMcpTool({
-        name: 'passages_find',
-        description: 'Find passages with their translations keyed by locale.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('passages_find')
     passages(_request: PassageRequest): Promise<PassageResponse> {
         throw new Error('contract only');
     }
 }
+
+/** The generated catalog entry for `passages_find`, as `wp-openapi` would render the contract. */
+function typedMap(description: string, values: ApiJsonSchema): ApiJsonSchema {
+    const map = new ApiJsonSchema('object');
+    map.description = description;
+    map.additionalProperties = values;
+    return map;
+}
+
+function sentenceSchema(): ApiJsonSchema {
+    const text = new ApiJsonSchema('string');
+    text.description = 'Sentence text';
+    return new ObjectSchemaBuilder()
+        .required('text', text)
+        .optional(
+            'translations',
+            typedMap('ISO 639-1 -> this sentence in that language', new ApiJsonSchema('string')),
+        )
+        .build();
+}
+
+const PASSAGE_CATALOG = new McpToolCatalog([
+    new McpToolDefinition(
+        'passages_find',
+        'passages',
+        'Find passages with their translations keyed by locale.',
+        new WpMcpToolHints(true, false, true, false),
+        new ObjectSchemaBuilder()
+            .optional(
+                'minWordsByLocale',
+                typedMap('Requested word counts by locale', new ApiJsonSchema('integer')),
+            )
+            .build(),
+        new ObjectSchemaBuilder()
+            .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
+            .build(),
+    ),
+    ...SPEC_TOOL_CATALOG.tools,
+]);
 
 @injectable()
 class PassageController extends PassageApi {
@@ -141,6 +176,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(SearchApi, router), McpApiBinding.local(PassageApi, router)],
+                PASSAGE_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );
@@ -300,7 +336,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(modelErrorOf(badInput)).toMatchObject({
             kind: 'bad-request',
             field: '$.minWordsByLocale.es',
-            callerMessage: '$.minWordsByLocale.es must be integer',
+            callerMessage: '$.minWordsByLocale.es must be a number',
         });
         expect(modelErrorOf(badOutput)).toMatchObject({ kind: 'implementation' });
         expect(JSON.stringify(badOutput)).not.toContain('"es":7');

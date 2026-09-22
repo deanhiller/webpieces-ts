@@ -4,7 +4,7 @@ Read a webpieces API contract with the TypeScript compiler API and produce one i
 
 No runtime behaviour and no file output. This is the single extraction pass that OpenAPI documents and MCP tool lists are both rendered from, so the two can never disagree about what the contract says.
 
-It carries ONE renderer of its own, `McpSchemaRenderer`, because the MCP projection is not a document — it is the same `ApiJsonSchema` shape `@webpieces/core-util`'s `DtoSchemaBuilder` already produces at boot from reflect-metadata. Rendering it here is what lets the equivalence gate (#983) assert the two are EQUAL, tool by tool and field by field, before #984 takes the MCP runtime off reflection. The OpenAPI document, which genuinely is a document, is `@webpieces/openapi-generator`'s job.
+It carries ONE renderer of its own, `McpSchemaRenderer`, because the MCP projection is not a document — it is `@webpieces/core-util`'s own `ApiJsonSchema`, which an MCP server publishes verbatim in `tools/list` and validates calls against. It is the SOLE source of that schema: #983 measured it against the reflect-metadata runtime that used to build one at boot, found them identical for every shape that runtime could build, and #984 deleted the runtime half. The OpenAPI document, which genuinely is a document, is `@webpieces/openapi-generator`'s job.
 
 ```typescript
 import { ApiDocExtractor } from '@webpieces/api-doc-model';
@@ -32,7 +32,10 @@ const tools = new McpSchemaRenderer(models[0]).render();
 tools[0].name; // the stable protocol name from @WpMcpTool
 tools[0].description; // the method's JSDoc body, or its `@mcp` tag
 tools[0].hints; // three computed from `operation`, openWorldHint from @Endpoint's options
-tools[0].inputSchema; // ApiJsonSchema, identical to DtoSchemaBuilder's
+tools[0].inputSchema; // ApiJsonSchema — what tools/list publishes and the server validates against
+
+// The whole build's tools, as `wp-openapi` writes them to mcp-tools.json.
+McpSchemaRenderer.catalogOf(models).toJsonText();
 ```
 
-An MCP header is declared in JSDoc as `@mcpHeader <token>` — the runtime's `WpMcpHeader` argument said the same thing, and #984 deletes it.
+An MCP header is declared in JSDoc as `@mcpHeader <token>`, which is now its only spelling: the runtime's `WpMcpHeader` argument said the same thing and #984 deleted it.

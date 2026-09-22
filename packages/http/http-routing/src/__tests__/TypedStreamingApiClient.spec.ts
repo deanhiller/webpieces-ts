@@ -3,6 +3,8 @@ import { Container } from 'inversify';
 import { describe, expect, it } from 'vitest';
 import { HttpRequest, RequestContext } from '@webpieces/core-context';
 import {
+    ApiJsonSchema,
+    ObjectSchemaBuilder,
     ApiBadRequestError,
     ApiPath,
     Endpoint,
@@ -15,9 +17,6 @@ import {
     StreamTransportError,
     StreamWriter,
     WpAuthPublic,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WpStream,
     POST,
     READ,
@@ -30,9 +29,7 @@ import { RouteBuilderImpl } from '../RouteBuilderImpl';
 import { FilterDefinition } from '../WebAppMeta';
 import { WpResponse } from '../WpResponse';
 
-@WpDto()
 class ClientEvent {
-    @WpDtoField(new WpDtoFieldOptions('Client input', true))
     input!: string;
 
     constructor(input?: string) {
@@ -40,9 +37,11 @@ class ClientEvent {
     }
 }
 
-@WpDto()
+const clientEventSchema = new ObjectSchemaBuilder()
+    .required('input', new ApiJsonSchema('string'))
+    .build();
+
 class ServerEvent {
-    @WpDtoField(new WpDtoFieldOptions('Server output', true))
     output!: string;
 
     constructor(output?: string) {
@@ -50,10 +49,14 @@ class ServerEvent {
     }
 }
 
+const serverEventSchema = new ObjectSchemaBuilder()
+    .required('output', new ApiJsonSchema('string'))
+    .build();
+
 @ApiPath('/typed')
 abstract class TypedStreamApi {
     @WpAuthPublic('Typed stream test fixture')
-    @WpStream(() => ClientEvent, () => ServerEvent)
+    @WpStream(clientEventSchema, serverEventSchema)
     @Endpoint(POST, '/stream', READ, RPC)
     stream(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
         throw new Error('subclass');

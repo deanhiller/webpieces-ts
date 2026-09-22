@@ -69,6 +69,7 @@ import {
     RelayWebpiecesPeerErrors,
     REMOTE_ROLES,
     REMOTE_SERVICE,
+    REMOTE_TOOL_CATALOG,
     REMOTE_USER,
     RemoteMcpApi,
     RemoteMcpController,
@@ -154,7 +155,10 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                 new ClientFilterDefinition(1_000, outbound),
             ]),
         );
-        tool = requiredTool(new McpToolRegistry([binding]), 'remote_integration_search');
+        tool = requiredTool(
+            new McpToolRegistry([binding], REMOTE_TOOL_CATALOG),
+            'remote_integration_search',
+        );
         await startGateway(jwtHook, factory);
     });
 
@@ -235,6 +239,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                         ),
                     ),
                 ],
+                REMOTE_TOOL_CATALOG,
                 McpDeployment.singleProcess(),
             ),
         );

@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import {
+    ApiJsonSchema,
+    ObjectSchemaBuilder,
     ApiBadRequestError,
     DtoValue,
     StreamCorrelation,
@@ -8,9 +10,6 @@ import {
     StreamingEndpointMetadata,
     StreamTransportError,
     StreamWriter,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
 } from '@webpieces/core-util';
 import { NdjsonRequestStream } from '../NdjsonRequestStream';
 import { SseEventParser } from '../SseEventParser';
@@ -18,19 +17,23 @@ import { SseResponseStream } from '../SseResponseStream';
 import { StreamEnvelopeCodec } from '../StreamEnvelopeCodec';
 import { Utf8Codec } from '../Utf8Codec';
 
-@WpDto()
 class InputEvent {
-    @WpDtoField(new WpDtoFieldOptions('input', true))
     value!: string;
 }
 
-@WpDto()
+const inputEventSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
+
 class OutputEvent {
-    @WpDtoField(new WpDtoFieldOptions('output', true))
     result!: string;
 }
 
-const metadata = new StreamingEndpointMetadata(InputEvent, OutputEvent);
+const outputEventSchema = new ObjectSchemaBuilder()
+    .required('result', new ApiJsonSchema('string'))
+    .build();
+
+const metadata = new StreamingEndpointMetadata(inputEventSchema, outputEventSchema);
 
 describe('streaming HTTP wire primitives', () => {
     it('parses LF and CRLF separators, multiline data, comments, boundaries, and multiple events', () => {

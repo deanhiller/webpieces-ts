@@ -1,6 +1,9 @@
 import {
     ApiJsonSchema,
+    ApiJsonSchemaType,
     EndpointOperation,
+    McpToolCatalog,
+    McpToolDefinition,
     mcpHintsForOperation,
     READ,
     WRITE,
@@ -14,40 +17,57 @@ import {
 } from '../model/ApiDocModel';
 import { TypeRef } from '../model/TypeRef';
 import { McpRenderError } from './McpRenderError';
-import { McpToolDefinition } from './McpToolDefinition';
 
 /** RFC 9110 token, which is what an `Mcp-Param-{name}` header name has to be. */
 const HEADER_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
+/** ONE `@WpMcpTool` the build could not give a schema, and why. See {@link McpSchemaRenderer.catalogOf}. */
+export class SkippedMcpTool {
+    constructor(
+        /** The stable protocol name it declared. */
+        readonly name: string,
+        readonly contractName: string,
+        /** The render refusal, verbatim, including the declaration it points at. */
+        readonly reason: string,
+    ) {}
+
+    toString(): string {
+        return `${this.contractName}/${this.name}: ${this.reason}`;
+    }
+}
+
+/** What one catalog render produced: the tools, and the ones it could not produce. */
+export class McpCatalogRender {
+    constructor(
+        readonly catalog: McpToolCatalog,
+        readonly skipped: readonly SkippedMcpTool[],
+    ) {}
+}
+
 /**
- * `ApiDocModel` -> the MCP tool list, in exactly the shape `DtoSchemaBuilder` produces at boot from
- * reflect-metadata.
+ * `ApiDocModel` -> the MCP tool list an agent is shown, and the server accepts calls against.
  *
- * ## Why this exists at all, and why it is READ-ONLY
+ * ## It is the ONLY source of an MCP schema
  *
- * #984 wants the MCP runtime off reflect-metadata, which deletes every erasure-repair argument of
- * `@WpDtoField` — `required`, `arrayItems`, `integer`, `minimum`, `maximum`, `enumValues`. That is a
- * behaviour change on a live protocol surface, and its failure mode is silent: a tool whose input
- * schema quietly loses a `required` entry or an `enum` starts failing agent calls at RUNTIME, not at
- * build. This renderer plus the equivalence spec beside it turn "the compiler can obviously replace
- * those arguments" from a plausible argument into a MEASURED one (#983).
+ * It was written for #983 as a MEASUREMENT: it rendered the same `ApiJsonSchema` the reflect-metadata
+ * runtime built, so the two could be compared field by field. They matched for every DTO shape the
+ * runtime could build, which is what licensed #984 to delete `@WpDtoField` and its erasure-repair
+ * arguments — `required`, `arrayItems`, `integer`, `minimum`, `maximum`, `enumValues`, `mapValues`,
+ * `mcpHeader` — along with `DtoSchemaBuilder` itself. There is now one schema, built here, written to
+ * `mcp-tools.json` by `wp-openapi`, and read at boot by `McpToolRegistry`.
  *
- * ## It deliberately reproduces `DtoSchemaBuilder`, defect-for-defect
+ * ## Where it now goes FURTHER than the deleted runtime could
  *
- * Where MCP's `ApiJsonSchema` subset could express MORE than the runtime does, this renderer emits
- * what the RUNTIME emits, and the gate's report names the difference. Three concrete cases:
+ * The three reproductions #983 documented were runtime capability gaps, and two of them are closed:
  *
- * - **NULLABLE is not rendered.** `ApiJsonSchema.type` holds one string, so `type: [T, "null"]` is
- *   not expressible in the type the runtime publishes. The compiler can SEE `externalId: string | null`
- *   and the runtime cannot; emitting it here would fail the gate on a difference that is a runtime
- *   capability GAP rather than an extractor bug, and hide the real mismatches under it.
- * - **A nested DTO is INLINED**, with the FIELD's prose on it, because `buildAt` inlines and then
- *   `fieldSchema` overwrites `description`. MCP has no `$ref`.
- * - **A bound on an ARRAY of numbers** is put on the ITEM, where OpenAPI puts it; the runtime cannot
- *   express it at all (`@WpDtoField` rejects numeric constraints on a non-`Number` field).
- *
- * Making the comparison agree by WEAKENING it would destroy the only thing the gate is for, so every
- * one of those is a documented, deliberate reproduction rather than a relaxation.
+ * - **NULLABLE is rendered**, as `type: [T, "null"]`. `ApiJsonSchema.type` used to hold one string,
+ *   so the runtime could not write it down even where the compiler could see `externalId: string | null`
+ *   — and `{}` and `{externalId: null}` are different wire documents. `type` is now
+ *   `ApiJsonSchemaType | readonly ApiJsonSchemaType[]` and the union is emitted.
+ * - **A bound on an ARRAY of numbers** lands on the ITEM, where OpenAPI puts it. `@WpDtoField`
+ *   rejected numeric constraints on a non-`Number` field, so it had nowhere to go at all.
+ * - **A nested DTO is INLINED**, with the FIELD's prose on it — not a gap but the protocol: MCP tool
+ *   schemas are inline and have no `$ref`.
  */
 export class McpSchemaRenderer {
     constructor(private readonly model: ApiDocModel) {}
@@ -63,7 +83,54 @@ export class McpSchemaRenderer {
         return tools;
     }
 
-    private tool(endpoint: DocumentedEndpoint): McpToolDefinition {
+    /**
+     * The tools of SEVERAL contracts as one catalog — the artifact a server boots from — plus every
+     * tool that could not be rendered and why.
+     *
+     * A catalog rather than a per-contract list because the protocol namespace is flat: two contracts
+     * declaring one tool name is a collision an agent would see, and {@link McpToolCatalog} refuses it
+     * here, at build time, rather than at somebody's boot.
+     *
+     * ## Why an unrenderable tool is REPORTED here rather than throwing
+     *
+     * Some shapes have no MCP schema at all — a discriminated union, a recursive DTO — and that is a
+     * limit of the PROTOCOL, not a defect in a contract that is otherwise perfectly good HTTP. Such a
+     * tool was never servable: the reflect-metadata runtime refused it too, for its own reasons. So
+     * failing the whole document build over one would stop a repo publishing its OpenAPI over a tool
+     * nobody could ever have called.
+     *
+     * It is not silence either. The build NAMES every skipped tool with its reason, and
+     * `McpToolRegistry` REFUSES TO BOOT when a registered `@WpMcpTool` is missing from the catalog —
+     * which is the right place for that failure, because that is the process actually claiming to
+     * serve it.
+     */
+    // webpieces-disable no-function-outside-class -- static factory over this class
+    static catalogOf(models: readonly ApiDocModel[]): McpCatalogRender {
+        const tools: McpToolDefinition[] = [];
+        const skipped: SkippedMcpTool[] = [];
+        for (const model of models) {
+            const renderer = new McpSchemaRenderer(model);
+            for (const endpoint of model.endpoints) {
+                if (endpoint.mcpTool === undefined) {
+                    continue;
+                }
+                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a per-tool render refusal is REPORTED, see the docstring
+                try {
+                    tools.push(renderer.tool(endpoint));
+                } catch (err: unknown) {
+                    //const error = toError(err);
+                    if (!(err instanceof McpRenderError)) throw err;
+                    skipped.push(
+                        new SkippedMcpTool(endpoint.mcpTool.name, model.contractName, err.message),
+                    );
+                }
+            }
+        }
+        return new McpCatalogRender(new McpToolCatalog(tools), skipped);
+    }
+
+    /** ONE tool. Visible to {@link catalogOf}, which renders tool by tool so it can report one. */
+    tool(endpoint: DocumentedEndpoint): McpToolDefinition {
         const where = `${this.model.contractName}.${endpoint.methodName}`;
         const description = endpoint.mcpDescription ?? endpoint.description;
         if (description.trim() === '') {
@@ -119,7 +186,7 @@ export class McpSchemaRenderer {
         }
     }
 
-    /** A tool's input/output schema: always a closed object, exactly as `DtoSchemaBuilder.build` is. */
+    /** A tool's input/output schema: always a CLOSED object, because MCP publishes objects. */
     private rootSchema(ref: TypeRef, where: string, side: string): ApiJsonSchema {
         if (ref.kind !== 'ref') {
             throw new McpRenderError(
@@ -145,12 +212,12 @@ export class McpSchemaRenderer {
     }
 
     /**
-     * One object DTO. CLOSED (`additionalProperties: false`), `required` only when non-empty — both
-     * exactly as `DtoSchemaBuilder.buildAt` writes them, because that is what is being compared.
+     * One object DTO. CLOSED (`additionalProperties: false`), with `required` written only when it is
+     * non-empty, so an all-optional DTO carries no empty list.
      *
-     * The cycle stop is `parents`, and it THROWS rather than truncating, which is again what the
-     * runtime does: an inline schema cannot express a recursive DTO, and one that silently stopped a
-     * level down would publish a shape the server does not accept.
+     * The cycle stop is `parents`, and it THROWS rather than truncating: an inline schema cannot
+     * express a recursive DTO, and one that silently stopped a level down would publish a shape the
+     * server does not accept.
      */
     private objectSchema(type: DocumentedType, parents: ReadonlySet<string>): ApiJsonSchema {
         if (parents.has(type.name)) {
@@ -198,10 +265,14 @@ export class McpSchemaRenderer {
     /**
      * One FIELD: its type, then the prose and the constraints that hang off the field.
      *
-     * The ORDER matters and mirrors `fieldSchema`: the type is built first and `description` is
-     * written over whatever the type produced, so a nested DTO carries the FIELD's sentence rather
-     * than the DTO's. `@WpMin` / `@WpMax` land on the numeric LEAF — on an array, on the item — for
-     * the same reason `SchemaRenderer` puts them there: a `minimum` on an array means nothing.
+     * The ORDER matters: the type is built first and `description` is written over whatever the type
+     * produced, so a nested DTO carries the FIELD's sentence rather than the DTO's. `@WpMin` /
+     * `@WpMax` land on the numeric LEAF — on an array, on the item — for the same reason
+     * `SchemaRenderer` puts them there: a `minimum` on an array means nothing.
+     *
+     * NULLABLE widens the type to `[T, "null"]` and is deliberately NOT the same thing as OPTIONAL,
+     * which is an absent entry in the object's `required` list. `{}` and `{externalId: null}` are
+     * different wire documents, and an agent told only "optional" would send the wrong one.
      */
     private fieldSchema(
         owner: DocumentedType,
@@ -232,7 +303,24 @@ export class McpSchemaRenderer {
             McpSchemaRenderer.assertHeaderFits(field, schema, where);
             schema['x-mcp-header'] = field.mcpHeader;
         }
+        if (field.nullable) {
+            schema.type = McpSchemaRenderer.nullable(schema, where);
+        }
         return schema;
+    }
+
+    /** `T` -> `[T, "null"]`, refusing a field with no type at all rather than publishing `["null"]`. */
+    // webpieces-disable no-function-outside-class -- private static mapping of this class
+    private static nullable(schema: ApiJsonSchema, where: string): readonly ApiJsonSchemaType[] {
+        const base = ApiJsonSchema.baseTypeOf(schema);
+        if (base === undefined) {
+            throw new McpRenderError(
+                'a nullable field has no other type',
+                where,
+                'A field typed only `null` carries no information — give it a real type beside it.',
+            );
+        }
+        return [base, 'null'];
     }
 
     /**

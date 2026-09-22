@@ -2,7 +2,7 @@ import {
     ApiBadRequestError,
     ApiForbiddenError,
     ApiImplementationError,
-    DtoSchemaBuilder,
+    ApiJsonSchemaValidator,
     DtoValue,
     rolesRequired,
     WebpiecesCoreHeaders,
@@ -19,7 +19,7 @@ import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationCon
  * boundary in `WpMcpServer`, so local and remote bindings are translated identically.
  */
 export class McpApiDispatcher {
-    private readonly schemaBuilder = new DtoSchemaBuilder();
+    private readonly schemas = new ApiJsonSchemaValidator();
 
     async call(
         tool: RegisteredMcpTool,
@@ -28,10 +28,10 @@ export class McpApiDispatcher {
         invocation: McpInvocationContext,
         endpointBearerToken?: string,
     ): Promise<DtoValue> {
-        const inputFailure = this.schemaBuilder.validate(tool.requestClass, requestDto);
+        const inputFailure = this.schemas.validate(tool.inputSchema, requestDto);
         if (inputFailure) {
             throw new ApiBadRequestError(
-                `MCP arguments for ${tool.name} did not match ${tool.requestClass.name}: ${inputFailure.message}`,
+                `MCP arguments for ${tool.name} did not match its published input schema: ${inputFailure.message}`,
                 inputFailure.field,
                 inputFailure.message,
             );

@@ -588,11 +588,13 @@ export class ApiDocExtractor {
     }
 
     /**
-     * `@WpMcpTool({ name, openWorldHint })` — the two facts the source cannot otherwise state.
+     * `@WpMcpTool('search_stores')` — the stable protocol name, which is the ONE fact the source
+     * cannot otherwise state.
      *
-     * `description` is NOT read: the method's JSDoc is the description for the agent and the partner
-     * alike. The three side-effect hints are not read either — they are computed from the endpoint's
-     * `operation`. See {@link DocumentedMcpTool} for why both of those are deliberate.
+     * Nothing else is read because nothing else is declared there any more (#984): the method's JSDoc
+     * is the description for the agent and the partner alike, the three side-effect hints are computed
+     * from the endpoint's `operation`, and `openWorldHint` is `@Endpoint`'s `openWorld`. See
+     * {@link DocumentedMcpTool}.
      */
     // webpieces-disable no-function-outside-class -- private static reader of this class
     private static mcpToolOf(
@@ -601,12 +603,10 @@ export class ApiDocExtractor {
     ): DocumentedMcpTool | undefined {
         const call = ApiDocExtractor.decoratorCall(member, MCP_TOOL);
         const argument = call?.arguments[0];
-        if (argument === undefined || !ts.isObjectLiteralExpression(argument)) {
+        if (argument === undefined) {
             return undefined;
         }
-        return new DocumentedMcpTool(
-            ApiDocExtractor.stringProperty(argument, 'name', folder) ?? '',
-        );
+        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '');
     }
 
     /** `@MaskLog({ refreshToken: 'full' })` -> field name -> mask mode. */

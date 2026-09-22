@@ -32,9 +32,9 @@ export class JsDoc {
          * parameter is mirrored into (`Mcp-Param-{token}`).
          *
          * It is a JSDoc tag and not a decorator because it is a DOCUMENTATION fact about one field
-         * of one wire document, and this epic's rule is that documentation has one source. The
-         * runtime spells the same fact as `WpMcpHeader` inside `@WpDtoField`; #984 deletes that
-         * spelling, and the equivalence gate (#983) is what proves the two say the same thing first.
+         * of one wire document, and this epic's rule is that documentation has one source. It is the
+         * ONLY spelling: the equivalence gate (#983) proved the deleted decorator argument said the
+         * same thing, and #984 deleted it.
          */
         readonly mcpHeader: string | undefined,
     ) {}

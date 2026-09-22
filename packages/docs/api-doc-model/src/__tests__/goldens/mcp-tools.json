@@ -1,0 +1,240 @@
+[
+  {
+    "name": "cancel_order",
+    "methodName": "cancel",
+    "description": "Cancels one order.",
+    "hints": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "The order to cancel."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why, for the store's records."
+        }
+      },
+      "required": [
+        "orderId",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "description": "The order's phase after the attempt.",
+          "enum": [
+            "placed",
+            "done"
+          ]
+        }
+      },
+      "required": [
+        "phase"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "lookup_orders",
+    "methodName": "lookup",
+    "description": "Looks up orders at one store, newest first.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "storeId": {
+          "type": "string",
+          "description": "The store to read.",
+          "x-mcp-header": "store-id"
+        },
+        "phase": {
+          "type": "string",
+          "description": "Only orders in this phase.",
+          "enum": [
+            "placed",
+            "done"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "The most orders to return.",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "includeArchived": {
+          "type": "boolean",
+          "description": "Include orders the store has archived."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Only orders carrying every one of these tags.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "orderNumbers": {
+          "type": "array",
+          "description": "Only these internal order numbers. A bound on an ARRAY lands on its ITEM.",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "filters": {
+          "type": "object",
+          "description": "Free-form equality filters applied to the order record.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "type": "object",
+          "description": "Labels to match, by label name.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "description": "The label's value."
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "page": {
+          "type": "object",
+          "description": "Where in the listing to resume.",
+          "properties": {
+            "cursor": {
+              "type": "string",
+              "description": "Opaque cursor from the previous response."
+            },
+            "size": {
+              "type": "integer",
+              "description": "How many orders to return.",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "cursor",
+            "size"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "storeId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "orders": {
+          "type": "array",
+          "description": "The matching orders, newest first.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Our identifier for it."
+              },
+              "phase": {
+                "type": "string",
+                "description": "Where it is in its lifecycle.",
+                "enum": [
+                  "placed",
+                  "done"
+                ]
+              },
+              "totalCents": {
+                "type": "integer",
+                "description": "What the customer paid, in cents."
+              },
+              "externalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The store's own identifier for it, PRESENT and `null` when the store has none — which is a\ndifferent wire document from omitting the key, and a distinction the deleted reflect-metadata\nruntime could neither see nor write down."
+              }
+            },
+            "required": [
+              "id",
+              "phase",
+              "totalCents",
+              "externalId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "Pass as the next cursor; absent when the listing is exhausted."
+        }
+      },
+      "required": [
+        "orders"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reindex_store",
+    "methodName": "reindex",
+    "description": "Rebuilds a store's menu cache.",
+    "hints": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "storeId": {
+          "type": "string",
+          "description": "The store whose cache to rebuild."
+        }
+      },
+      "required": [
+        "storeId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "itemsRead": {
+          "type": "integer",
+          "description": "How many menu items were re-read."
+        }
+      },
+      "required": [
+        "itemsRead"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

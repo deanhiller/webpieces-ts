@@ -1,3 +1,4 @@
+import { McpToolCatalog } from '@webpieces/core-util';
 import { McpApiBinding } from './McpApiBinding';
 import { McpDeployment } from './McpDeployment';
 
@@ -6,6 +7,12 @@ export class McpBindOptions {
         /** Supplied by the application/discovery config; Webpieces never assumes `/mcp`. */
         public readonly endpointPath: string,
         public readonly bindings: readonly McpApiBinding[],
+        /**
+         * The tools this build published — `mcp-tools.json`, written by `wp-openapi` and read with
+         * `McpToolCatalog.fromJsonText`. It is REQUIRED because it is the only source of a tool's
+         * documentation and schemas; there is no reflect-metadata fallback to fall back to.
+         */
+        public readonly toolCatalog: McpToolCatalog,
         public readonly deployment: McpDeployment,
         /** Requests without Origin remain valid for non-browser MCP clients. */
         public readonly allowedOrigins: readonly string[] = [],

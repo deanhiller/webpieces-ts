@@ -1,357 +1,161 @@
-import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import {
     ApiJsonSchema,
-    DtoSchemaBuilder,
-    WpMcpHeader,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
-    WpDtoMapFieldOptions,
-    WpResponseDto,
+    ApiJsonSchemaValidator,
+    DtoValidationFailure,
+    ObjectSchemaBuilder,
 } from './DtoSchema';
-import { getWpMcpTools, WpMcpTool } from './McpMetadata';
 
-@WpDto()
-class AddressDto {
-    @WpDtoField(new WpDtoFieldOptions('Postal city', true))
-    city!: string;
+const validator = new ApiJsonSchemaValidator();
+
+function stringSchema(): ApiJsonSchema {
+    return new ApiJsonSchema('string');
 }
 
-@WpDto()
-class SearchRequest {
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'Words to find',
-            true,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            undefined,
-            new WpMcpHeader('query'),
-        ),
-    )
-    query!: string;
-
-    @WpDtoField(new WpDtoFieldOptions('Maximum results', false, undefined, true, 1, 20))
-    limit?: number;
-
-    @WpDtoField(new WpDtoFieldOptions('Allowed categories', true, 'string'))
-    categories!: string[];
-
-    @WpDtoField(new WpDtoFieldOptions('Shipping address', true))
-    address!: AddressDto;
+function messageOf(failure: DtoValidationFailure | undefined): string {
+    return failure?.message ?? '';
 }
 
-@WpDto()
-class SearchResponse {
-    @WpDtoField(new WpDtoFieldOptions('Matched titles', true, 'string'))
-    titles!: string[];
-}
+describe('ApiJsonSchema', () => {
+    it('carries a nullable type as [T, "null"] and answers both halves of it', () => {
+        const nullable = new ApiJsonSchema(['string', 'null']);
 
-abstract class SearchApi {
-    @WpMcpTool({
-        name: 'search',
-        description: 'Search the signed-in user account.',
-        openWorldHint: false,
-    })
-    @WpResponseDto(() => SearchResponse)
-    search(_request: SearchRequest): Promise<SearchResponse> {
-        throw new Error('contract only');
-    }
-}
-
-describe('DTO JSON Schema metadata', () => {
-    const builder = new DtoSchemaBuilder();
-
-    it('combines reflected DTO types with field documentation and constraints', () => {
-        const requestClass = builder.requestClassOf(SearchApi, 'search');
-        const schema = builder.build(requestClass);
-
-        expect(schema).toMatchObject({
-            type: 'object',
-            additionalProperties: false,
-            required: ['query', 'categories', 'address'],
-            properties: {
-                query: { type: 'string', description: 'Words to find', 'x-mcp-header': 'query' },
-                limit: { type: 'integer', minimum: 1, maximum: 20 },
-                categories: { type: 'array', items: { type: 'string' } },
-                address: {
-                    type: 'object',
-                    required: ['city'],
-                    properties: { city: { type: 'string', description: 'Postal city' } },
-                },
-            },
-        });
-        expect(builder.responseClassOf(SearchApi, 'search')).toBe(SearchResponse);
+        expect(ApiJsonSchema.baseTypeOf(nullable)).toBe('string');
+        expect(ApiJsonSchema.allowsNull(nullable)).toBe(true);
+        expect(ApiJsonSchema.allowsNull(stringSchema())).toBe(false);
+        expect(ApiJsonSchema.baseTypeOf(stringSchema())).toBe('string');
     });
 
-    it('rejects unknown, missing, wrongly typed, and out-of-range values', () => {
-        expect(builder.validate(SearchRequest, { query: 'x' })?.message).toContain('categories');
-        expect(
-            builder.validate(SearchRequest, {
-                query: 'x',
-                categories: [],
-                address: { city: 'Kyiv' },
-                forged: 'user-2',
-            })?.message,
-        ).toContain('forged');
-        expect(
-            builder.validate(SearchRequest, {
-                query: 'x',
-                limit: 30,
-                categories: [],
-                address: { city: 'Kyiv' },
-            })?.message,
-        ).toContain('<= 20');
+    it('counts a typed map as CLOSED, not only additionalProperties: false', () => {
+        const closed = new ObjectSchemaBuilder().build();
+        const typedMap = new ApiJsonSchema('object');
+        typedMap.additionalProperties = stringSchema();
+        const open = new ApiJsonSchema('object');
+
+        expect(ApiJsonSchema.isClosed(closed)).toBe(true);
+        expect(ApiJsonSchema.isClosed(typedMap)).toBe(true);
+        expect(ApiJsonSchema.isClosed(open)).toBe(false);
+    });
+});
+
+describe('ObjectSchemaBuilder', () => {
+    it('builds a closed object, listing only the required names', () => {
+        const schema = new ObjectSchemaBuilder()
+            .required('value', stringSchema())
+            .optional('note', stringSchema())
+            .build();
+
+        expect(schema.type).toBe('object');
+        expect(schema.additionalProperties).toBe(false);
+        expect(schema.required).toEqual(['value']);
+        expect(Object.keys(schema.properties ?? {})).toEqual(['value', 'note']);
     });
 
-    it('keeps tool documentation separate from DTO field documentation', () => {
-        expect(getWpMcpTools(SearchApi)).toEqual([
-            expect.objectContaining({
-                name: 'search',
-                description: 'Search the signed-in user account.',
-            }),
-        ]);
+    it('omits `required` entirely when every field is optional', () => {
+        expect(new ObjectSchemaBuilder().optional('note', stringSchema()).build().required).toBe(
+            undefined,
+        );
+    });
+});
+
+describe('ApiJsonSchemaValidator', () => {
+    const schema = new ObjectSchemaBuilder()
+        .required('name', stringSchema())
+        .optional('count', new ApiJsonSchema('integer'))
+        .build();
+
+    it('accepts a value matching the schema', () => {
+        expect(validator.validate(schema, { name: 'a', count: 2 })).toBe(undefined);
     });
 
-    it('fails startup rather than emitting misleading schemas for erased or contradictory facts', () => {
-        @WpDto()
-        class MissingArrayItems {
-            @WpDtoField(new WpDtoFieldOptions('Values', true))
-            values!: string[];
-        }
+    it('names the missing required field with its JSON path', () => {
+        const failure = validator.validate(schema, {});
 
-        @WpDto()
-        class ContradictoryField {
-            @WpDtoField(new WpDtoFieldOptions('Name', true, undefined, true))
-            name!: string;
-        }
+        expect(failure?.field).toBe('$.name');
+        expect(messageOf(failure)).toBe('$.name is required');
+    });
 
-        expect(() => builder.build(MissingArrayItems)).toThrow(/must declare arrayItems/);
-        expect(() => builder.build(ContradictoryField)).toThrow(
-            /numeric constraints.*not a number/,
+    it('rejects a key the closed schema does not declare', () => {
+        expect(messageOf(validator.validate(schema, { name: 'a', other: 1 }))).toBe(
+            '$.other is not allowed',
         );
     });
 
-    it('validates MCP 2026 x-mcp-header declarations', () => {
-        const builder = new DtoSchemaBuilder();
-
-        @WpDto()
-        class InvalidMcpHeader {
-            @WpDtoField(
-                new WpDtoFieldOptions(
-                    'Name',
-                    true,
-                    undefined,
-                    false,
-                    undefined,
-                    undefined,
-                    undefined,
-                    new WpMcpHeader('bad header'),
-                ),
-            )
-            name!: string;
-        }
-
-        expect(() => builder.build(InvalidMcpHeader)).toThrow(/RFC 9110 token/);
-
-        @WpDto()
-        class DuplicateMcpHeader {
-            @WpDtoField(
-                new WpDtoFieldOptions(
-                    'First',
-                    true,
-                    undefined,
-                    false,
-                    undefined,
-                    undefined,
-                    undefined,
-                    new WpMcpHeader('tenant'),
-                ),
-            )
-            first!: string;
-
-            @WpDtoField(
-                new WpDtoFieldOptions(
-                    'Second',
-                    true,
-                    undefined,
-                    false,
-                    undefined,
-                    undefined,
-                    undefined,
-                    new WpMcpHeader('TENANT'),
-                ),
-            )
-            second!: string;
-        }
-
-        expect(() => builder.build(DuplicateMcpHeader)).toThrow(/duplicates.*case-insensitively/);
+    it('rejects a non-integer where the schema says integer', () => {
+        expect(messageOf(validator.validate(schema, { name: 'a', count: 1.5 }))).toBe(
+            '$.count must be an integer',
+        );
     });
 
-    describe('typed maps', () => {
-        @WpDto()
-        class SentenceItem {
-            @WpDtoField(new WpDtoFieldOptions('Sentence text', true))
-            text!: string;
-        }
+    it('enforces minimum and maximum', () => {
+        const bounded = new ApiJsonSchema('number');
+        bounded.minimum = 1;
+        bounded.maximum = 10;
 
-        @WpDto()
-        class PassageDto {
-            @WpDtoField(new WpDtoMapFieldOptions('ISO 639-1 -> sentence', false, 'string'))
-            translations?: Record<string, string>;
-
-            @WpDtoField(new WpDtoMapFieldOptions('Sentences by locale', true, SentenceItem))
-            sentencesByLocale!: Record<string, SentenceItem>;
-
-            @WpDtoField(new WpDtoMapFieldOptions('Word counts by locale', false, 'integer'))
-            counts?: Record<string, number>;
-        }
-
-        it('emits additionalProperties as the value schema, recursing into DTO values', () => {
-            const schema = builder.build(PassageDto);
-            expect(schema.additionalProperties).toBe(false);
-            expect(schema.required).toEqual(['sentencesByLocale']);
-            expect(schema.properties).toEqual({
-                translations: {
-                    type: 'object',
-                    description: 'ISO 639-1 -> sentence',
-                    additionalProperties: { type: 'string' },
-                },
-                sentencesByLocale: {
-                    type: 'object',
-                    description: 'Sentences by locale',
-                    additionalProperties: {
-                        type: 'object',
-                        properties: { text: { type: 'string', description: 'Sentence text' } },
-                        additionalProperties: false,
-                        required: ['text'],
-                    },
-                },
-                counts: {
-                    type: 'object',
-                    description: 'Word counts by locale',
-                    additionalProperties: { type: 'integer' },
-                },
-            });
-        });
-
-        it('accepts well-typed maps, including empty ones', () => {
-            expect(
-                builder.validate(PassageDto, {
-                    translations: { es: 'hola', fr: 'bonjour' },
-                    sentencesByLocale: { es: { text: 'hola' } },
-                    counts: { es: 3 },
-                }),
-            ).toBeUndefined();
-            expect(builder.validate(PassageDto, { sentencesByLocale: {} })).toBeUndefined();
-        });
-
-        it('rejects wrongly typed map values with a keyed path', () => {
-            const base = { sentencesByLocale: {} };
-            expect(
-                builder.validate(PassageDto, { ...base, translations: { es: 3 } })?.message,
-            ).toBe('$.translations.es must be string');
-            expect(builder.validate(PassageDto, { ...base, counts: { es: 1.5 } })?.message).toBe(
-                '$.counts.es must be integer',
-            );
-            expect(
-                builder.validate(PassageDto, { sentencesByLocale: { es: { text: 'x', extra: 1 } } })
-                    ?.message,
-            ).toBe('$.sentencesByLocale.es.extra is not allowed');
-            expect(builder.validate(PassageDto, { sentencesByLocale: { es: 'x' } })?.message).toBe(
-                '$.sentencesByLocale.es must be an object',
-            );
-            expect(builder.validate(PassageDto, {})?.message).toBe(
-                '$.sentencesByLocale is required',
-            );
-            expect(builder.validate(PassageDto, {})?.field).toBe('$.sentencesByLocale');
-            expect(builder.validate(PassageDto, { ...base, translations: { es: 3 } })?.field).toBe(
-                '$.translations.es',
-            );
-        });
-
-        it('rejects map values that are not plain objects', () => {
-            expect(builder.validate(PassageDto, { sentencesByLocale: [] })?.message).toBe(
-                '$.sentencesByLocale must be an object map',
-            );
-            expect(builder.validate(PassageDto, { sentencesByLocale: null })?.message).toBe(
-                '$.sentencesByLocale must be an object map',
-            );
-            expect(builder.validate(PassageDto, { sentencesByLocale: 'x' })?.message).toBe(
-                '$.sentencesByLocale must be an object map',
-            );
-            expect(builder.validate(PassageDto, { sentencesByLocale: new Map() })?.message).toBe(
-                '$.sentencesByLocale must be a plain object map',
-            );
-        });
-
-        it('still applies the recursion guard to DTO map values', () => {
-            @WpDto()
-            class TreeNode {
-                @WpDtoField(new WpDtoMapFieldOptions('Children by name', true, TreeNode))
-                children!: Record<string, TreeNode>;
-            }
-            expect(() => builder.build(TreeNode)).toThrow(
-                'Recursive DTO TreeNode cannot use an inline MCP schema.',
-            );
-        });
-
-        it('rejects map options on a field that is not a map', () => {
-            @WpDto()
-            class NotAMap {
-                @WpDtoField(new WpDtoMapFieldOptions('Name', true, 'string'))
-                name!: string;
-            }
-            expect(() => builder.build(NotAMap)).toThrow(
-                'NotAMap.name declares mapValues but is not a map (Record<string, V>).',
-            );
-        });
-
-        it('explains that an Object-typed field needs map options or a real DTO class', () => {
-            interface Shape {
-                name: string;
-            }
-            @WpDto()
-            class InterfaceField {
-                @WpDtoField(new WpDtoFieldOptions('Some shape', true))
-                shape!: Shape;
-            }
-            @WpDto()
-            class UndeclaredMap {
-                @WpDtoField(new WpDtoFieldOptions('Some map', true))
-                values!: Record<string, string>;
-            }
-            expect(() => builder.build(InterfaceField)).toThrow(
-                'InterfaceField.shape has type Object: an interface or Record can never be a @WpDto. ' +
-                    'For a map, use WpDtoMapFieldOptions.',
-            );
-            expect(() => builder.build(UndeclaredMap)).toThrow(
-                'UndeclaredMap.values has type Object: an interface or Record can never be a @WpDto. ' +
-                    'For a map, use WpDtoMapFieldOptions.',
-            );
-        });
+        expect(messageOf(validator.validate(bounded, 0))).toBe('$ must be >= 1');
+        expect(messageOf(validator.validate(bounded, 11))).toBe('$ must be <= 10');
     });
 
-    describe('DtoSchemaBuilder.isClosedSchema', () => {
-        it('accepts a closed object and a typed map', () => {
-            const closed = new ApiJsonSchema('object');
-            closed.additionalProperties = false;
-            const typedMap = new ApiJsonSchema('object');
-            typedMap.additionalProperties = new ApiJsonSchema('string');
-            expect(builder.isClosedSchema(closed)).toBe(true);
-            expect(builder.isClosedSchema(typedMap)).toBe(true);
-            expect(builder.isClosedSchema(builder.build(SearchRequest))).toBe(true);
-        });
+    it('enforces an enum, listing the allowed values', () => {
+        const phase = stringSchema();
+        phase.enum = ['open', 'closed'];
 
-        it('rejects a schema with no closure and an explicitly open object', () => {
-            const open = new ApiJsonSchema('object');
-            open.additionalProperties = true;
-            expect(builder.isClosedSchema(new ApiJsonSchema())).toBe(false);
-            expect(builder.isClosedSchema(new ApiJsonSchema('object'))).toBe(false);
-            expect(builder.isClosedSchema(open)).toBe(false);
-        });
+        expect(messageOf(validator.validate(phase, 'other'))).toBe(
+            '$ must be one of: open, closed',
+        );
+    });
+
+    it('walks array items and reports the offending index', () => {
+        const list = new ApiJsonSchema('array');
+        list.items = stringSchema();
+
+        expect(messageOf(validator.validate(list, ['a', 2]))).toBe('$[1] must be a string');
+    });
+
+    it('typechecks every value of a typed map and allows its open key set', () => {
+        const map = new ApiJsonSchema('object');
+        map.additionalProperties = stringSchema();
+
+        expect(validator.validate(map, { anything: 'a' })).toBe(undefined);
+        expect(messageOf(validator.validate(map, { anything: 3 }))).toBe(
+            '$.anything must be a string',
+        );
+    });
+
+    it('distinguishes NULLABLE from OPTIONAL, which the reflect-metadata runtime could not', () => {
+        const nullable = new ObjectSchemaBuilder()
+            .required('externalId', new ApiJsonSchema(['string', 'null']))
+            .build();
+
+        expect(validator.validate(nullable, { externalId: null })).toBe(undefined);
+        expect(messageOf(validator.validate(nullable, {}))).toBe('$.externalId is required');
+        expect(messageOf(validator.validate(schema, { name: null }))).toBe(
+            '$.name must not be null',
+        );
+    });
+});
+
+/**
+ * #984 deleted the runtime spelling of every DTO field fact. These are the symbols that went, and
+ * this spec exists so re-adding one to the barrel turns red rather than quietly reopening the second
+ * spelling (`.claude/rules/no-backwards-compat.md`).
+ */
+describe('the deleted reflect-metadata DTO surface', () => {
+    it('exports none of the removed symbols from @webpieces/core-util', async () => {
+        const barrel: Record<string, unknown> = await import('../index');
+
+        for (const removed of [
+            'WpDto',
+            'WpDtoField',
+            'WpDtoFieldOptions',
+            'WpDtoMapFieldOptions',
+            'WpDtoFieldMetadata',
+            'WpMcpHeader',
+            'WpResponseDto',
+            'DtoSchemaBuilder',
+            'WpMcpToolOptions',
+        ]) {
+            expect(Object.hasOwn(barrel, removed)).toBe(false);
+        }
     });
 });

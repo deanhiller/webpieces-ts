@@ -36,12 +36,13 @@ import {
     WebpiecesCoreHeaders,
     WpAuthJwt,
     WpAuthOidc,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
+    ApiJsonSchema,
+    McpToolCatalog,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
     WpMcpAuthJwt,
     WpMcpTool,
-    WpResponseDto,
+    WpMcpToolHints,
     MCP,
     POST,
     READ,
@@ -71,10 +72,8 @@ export const EXTERNAL_MCP_BEARER = 'external-mcp-access-token';
 export const LOCAL_ENDPOINT_JWT = 'local-endpoint-jwt-that-must-not-cross-the-remote-hop';
 export const GATEWAY_PATH = '/gateway/mcp';
 
-@WpDto()
 export class RemoteRequest {
     /** Search text */
-    @WpDtoField(new WpDtoFieldOptions('Search text', true))
     query!: string;
 
     constructor(query?: string) {
@@ -82,18 +81,14 @@ export class RemoteRequest {
     }
 }
 
-@WpDto()
 export class RemoteResponse {
     /** Delegated user */
-    @WpDtoField(new WpDtoFieldOptions('Delegated user', true))
     user!: string;
 
     /** Delegated roles */
-    @WpDtoField(new WpDtoFieldOptions('Delegated roles', true))
     roles!: string;
 
     /** Result */
-    @WpDtoField(new WpDtoFieldOptions('Result', true))
     result!: string;
 
     constructor(user?: string, roles?: string, result?: string) {
@@ -103,6 +98,42 @@ export class RemoteResponse {
     }
 }
 
+/**
+ * The generated tool catalog these contracts would produce — what `wp-openapi` writes to
+ * `mcp-tools.json`. Hand-built here because `@webpieces/mcp-server` does not depend on the
+ * TypeScript compiler API; the runtime's job is to BE HANDED a catalog.
+ */
+function describedString(description: string): ApiJsonSchema {
+    const schema = new ApiJsonSchema('string');
+    schema.description = description;
+    return schema;
+}
+
+function searchTool(name: string, methodName: string, description: string): McpToolDefinition {
+    return new McpToolDefinition(
+        name,
+        methodName,
+        description,
+        new WpMcpToolHints(true, false, true, false),
+        new ObjectSchemaBuilder().required('query', describedString('Search text')).build(),
+        new ObjectSchemaBuilder()
+            .required('user', describedString('Delegated user'))
+            .required('roles', describedString('Delegated roles'))
+            .required('result', describedString('Result'))
+            .build(),
+    );
+}
+
+export const REMOTE_TOOL_CATALOG = new McpToolCatalog([
+    searchTool('remote_integration_search', 'search', 'Calls a remote Webpieces API.'),
+    searchTool('missing_remote_integration_search', 'search', 'Intentionally absent route.'),
+    searchTool('refused_remote', 'search', 'Nothing listens on this port.'),
+    searchTool('garbage_remote', 'search', 'Answers an undecodable body.'),
+    searchTool('oidc_fail_remote', 'search', 'Its OIDC token cannot be minted.'),
+    searchTool('local_throw', 'fail', 'Throws the requested failure in-process.'),
+    searchTool('remote_throw', 'fail', 'Throws the requested failure remotely.'),
+]);
+
 @ApiPath('/remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteMcpApi {
@@ -110,12 +141,7 @@ export abstract class RemoteMcpApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'remote_integration_search',
-        description: 'Calls a remote Webpieces API.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('remote_integration_search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -128,12 +154,7 @@ export abstract class MissingRemoteMcpApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'missing_remote_integration_search',
-        description: 'Intentionally absent route.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('missing_remote_integration_search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -146,12 +167,7 @@ export abstract class RefusedRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'refused_remote',
-        description: 'Nothing listens on this port.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('refused_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -164,12 +180,7 @@ export abstract class GarbageRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'garbage_remote',
-        description: 'Answers an undecodable body.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('garbage_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -182,12 +193,7 @@ export abstract class OidcFailRemoteApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'oidc_fail_remote',
-        description: 'Its OIDC token cannot be minted.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('oidc_fail_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -200,12 +206,7 @@ export abstract class LocalThrowApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'local_throw',
-        description: 'Throws the requested failure in-process.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('local_throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -218,12 +219,7 @@ export abstract class RemoteThrowApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc('mcp-gateway')
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpResponseDto(() => RemoteResponse)
-    @WpMcpTool({
-        name: 'remote_throw',
-        description: 'Throws the requested failure remotely.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('remote_throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }

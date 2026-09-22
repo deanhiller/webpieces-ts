@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import {
+    ApiJsonSchema,
+    ObjectSchemaBuilder,
     ApiPath,
     Endpoint,
     RequestStream,
@@ -8,9 +10,6 @@ import {
     Rpc,
     StreamWriter,
     WpAuthPublic,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WpStream,
     POST,
     READ,
@@ -21,24 +20,28 @@ import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
 import { MutableContextStore } from '../MutableContextStore';
 
-@WpDto()
 class BrowserInput {
-    @WpDtoField(new WpDtoFieldOptions('input', true))
     value!: string;
 }
 
-@WpDto()
+const browserInputSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
+
 class BrowserOutput {
-    @WpDtoField(new WpDtoFieldOptions('output', true))
     result!: string;
 }
+
+const browserOutputSchema = new ObjectSchemaBuilder()
+    .required('result', new ApiJsonSchema('string'))
+    .build();
 
 @Rpc()
 @ApiPath('/stream')
 abstract class BrowserStreamingApi {
     @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('test stream')
-    @WpStream(() => BrowserInput, () => BrowserOutput)
+    @WpStream(browserInputSchema, browserOutputSchema)
     exchange(_response: ResponseStream<BrowserOutput>): Promise<RequestStream<BrowserInput>> {
         throw new Error('contract only');
     }

@@ -3,6 +3,8 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Readable } from 'node:stream';
 import { describe, expect, it, vi, beforeAll } from 'vitest';
 import {
+    ApiJsonSchema,
+    ObjectSchemaBuilder,
     ApiBadRequestError,
     HeaderRegistry,
     RequestStream,
@@ -12,25 +14,26 @@ import {
     StreamTransportError,
     StreamWriter,
     StreamingEndpointMetadata,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
     WRITE,
 } from '@webpieces/core-util';
 import { StreamExpressWrapper } from '../StreamExpressWrapper';
 import { RequestContextHeaders } from '@webpieces/core-context';
 
-@WpDto()
 class InputEvent {
-    @WpDtoField(new WpDtoFieldOptions('input value', true))
     value!: string;
 }
 
-@WpDto()
+const inputEventSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
+
 class OutputEvent {
-    @WpDtoField(new WpDtoFieldOptions('output value', true))
     result!: string;
 }
+
+const outputEventSchema = new ObjectSchemaBuilder()
+    .required('result', new ApiJsonSchema('string'))
+    .build();
 
 class FakeResponse extends EventEmitter {
     statusCode?: number;
@@ -96,7 +99,7 @@ function route(): RouteMetadata {
         [],
         undefined,
         'body',
-        new StreamingEndpointMetadata(InputEvent, OutputEvent),
+        new StreamingEndpointMetadata(inputEventSchema, outputEventSchema),
     );
 }
 

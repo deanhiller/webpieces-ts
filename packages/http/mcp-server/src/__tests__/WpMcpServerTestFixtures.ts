@@ -20,13 +20,13 @@ import {
     Endpoint,
     WpAuthJwt,
     WpAuthOidc,
-    WpDto,
-    WpDtoField,
-    WpDtoFieldOptions,
+    ApiJsonSchema,
+    McpToolCatalog,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
     WpMcpAuthJwt,
-    WpMcpHeader,
     WpMcpTool,
-    WpResponseDto,
+    WpMcpToolHints,
     MCP,
     POST,
     READ,
@@ -52,37 +52,81 @@ export const OLDER_LEGACY_VERSION = '2025-03-26';
 /** A revision NO era knows: the one case a server is still right to refuse. */
 export const UNKNOWN_VERSION = '1999-01-01';
 
-@WpDto()
 export class SearchRequest {
     /**
      * Search text
      * @mcpHeader query
      */
-    @WpDtoField(
-        new WpDtoFieldOptions(
-            'Search text',
-            true,
-            undefined,
-            false,
-            undefined,
-            undefined,
-            undefined,
-            new WpMcpHeader('query'),
-        ),
-    )
     query!: string;
 }
 
-@WpDto()
 export class SearchResponse {
     /** Authenticated user */
-    @WpDtoField(new WpDtoFieldOptions('Authenticated user', true))
     userId!: string;
 
     /** Search result */
-    @WpDtoField(new WpDtoFieldOptions('Search result', true))
     result!: string;
 }
+
+/**
+ * The tool catalog these specs boot `WpMcpServer` with — the same shape `wp-openapi` writes to
+ * `mcp-tools.json` from the contracts above.
+ *
+ * It is built by hand here rather than extracted, because `@webpieces/mcp-server` deliberately does
+ * not depend on the TypeScript compiler API: the runtime's job is to BE HANDED a catalog, and these
+ * specs exercise exactly that. The extractor's own suite proves the catalog matches these contracts.
+ */
+function searchInputSchema(): ApiJsonSchema {
+    const query = new ApiJsonSchema('string');
+    query.description = 'Search text';
+    query['x-mcp-header'] = 'query';
+    return new ObjectSchemaBuilder().required('query', query).build();
+}
+
+function searchOutputSchema(): ApiJsonSchema {
+    const userId = new ApiJsonSchema('string');
+    userId.description = 'Authenticated user';
+    const result = new ApiJsonSchema('string');
+    result.description = 'Search result';
+    return new ObjectSchemaBuilder().required('userId', userId).required('result', result).build();
+}
+
+function searchTool(
+    name: string,
+    methodName: string,
+    description: string,
+    hints: WpMcpToolHints,
+): McpToolDefinition {
+    return new McpToolDefinition(
+        name,
+        methodName,
+        description,
+        hints,
+        searchInputSchema(),
+        searchOutputSchema(),
+    );
+}
+
+export const SPEC_TOOL_CATALOG = new McpToolCatalog([
+    searchTool(
+        'account_search',
+        'search',
+        'Search records owned by the authenticated user.',
+        new WpMcpToolHints(true, false, true, false),
+    ),
+    searchTool(
+        'admin_search',
+        'admin',
+        'Administrative search.',
+        new WpMcpToolHints(false, true, false, false),
+    ),
+    searchTool(
+        'remote_search',
+        'search',
+        'Search a remote binding.',
+        new WpMcpToolHints(false, true, false, false),
+    ),
+]);
 
 @ApiPath('/mcp-spec')
 @ApiType(SVC_TO_SVC, MCP)
@@ -91,12 +135,7 @@ export abstract class SearchApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpResponseDto(() => SearchResponse)
-    @WpMcpTool({
-        name: 'account_search',
-        description: 'Search records owned by the authenticated user.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('account_search')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
@@ -105,12 +144,7 @@ export abstract class SearchApi {
     @WpMcpAuthJwt({ roles: ['admin'] })
     @WpAuthJwt({ roles: ['admin'] })
     @Endpoint(POST, '/admin', WRITE, RPC)
-    @WpResponseDto(() => SearchResponse)
-    @WpMcpTool({
-        name: 'admin_search',
-        description: 'Administrative search.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('admin_search')
     admin(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
@@ -123,12 +157,7 @@ export abstract class RemoteSearchApi {
     @WpMcpAuthJwt({ allRolesAllowed: true })
     @WpAuthOidc()
     @Endpoint(POST, '/search', WRITE, RPC)
-    @WpResponseDto(() => SearchResponse)
-    @WpMcpTool({
-        name: 'remote_search',
-        description: 'Search a remote binding.',
-        openWorldHint: false,
-    })
+    @WpMcpTool('remote_search')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
