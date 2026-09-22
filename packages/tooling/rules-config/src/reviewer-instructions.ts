@@ -392,12 +392,16 @@ export class ReviewerInstructionsService {
      */
     private verdictSection(b: ReviewerBriefing): string[] {
         return [
-            '## Write your verdict',
+            '## Submit your verdict',
             '',
-            `Write EXACTLY this shape, to EXACTLY this file: \`${b.verdictPath}\``,
+            `Submit EXACTLY this shape through \`${this.reviewJsonService.submitCommand(b.checklistId)}\` —`,
+            'the JSON on stdin (a heredoc is simplest), or `--file <path>` naming a scratch file. Do NOT write',
+            `\`${b.verdictPath}\` yourself: the bin validates the verdict, writes that file, and records that YOU`,
+            'submitted it, and `wp-finish-upsert-pr` REJECTS a verdict file written any other way. The bin also',
+            'refuses the coordinating agent, so nobody can submit this on your behalf.',
             '',
             '```',
-            this.reviewJsonService.verdictSchemaFor(b.checklistId, '', ''),
+            this.reviewJsonService.verdictSchemaFor(b.checklistId, ''),
             '```',
             '',
         ];
@@ -428,7 +432,8 @@ export class ReviewerInstructionsService {
             'Open your diff files before writing a verdict. `wp-finish-upsert-pr` reads your own transcript and',
             'reports a verdict written without opening the diff. It also records the path of that transcript,',
             'beside what you were offered and what you read, in `provenance.json` next to your verdict file —',
-            'so the review is auditable after the fact. You do not write that file; the tooling does.',
+            'so the review is auditable after the fact. You do not write that file, or the',
+            '`review-<id>.provenance.json` wp-write-review writes beside your verdict; the tooling does.',
         ];
     }
 }

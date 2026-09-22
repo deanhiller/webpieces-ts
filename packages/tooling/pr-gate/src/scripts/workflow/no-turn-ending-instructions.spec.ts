@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-    ChecklistInstructionsService, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
+    ChecklistInstructionsService, RequiredChecklist, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { ReviewReport, ReviewReportInput } from './review-report';
+import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
 import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
@@ -80,13 +81,22 @@ const emitted = (): Map<string, string> => {
     const grouped = reviewInput(2, 2, [owedReviewer(), owedReviewer()]);
     grouped.reviewer = new ReviewerAgentPolicy('webpieces-reviewer', 1);
     rendered.set('review-report: grouped reviewers (reviewerAgents)', report.render(grouped));
+    // Issue #863: the carried / stale / rejected verdict lines and the Codex fresh-context spawn line.
+    const carried = reviewInput(3, 3, [owedReviewer()]);
+    carried.reviewed = [new RequiredChecklist('security-auth-reviewer', new ReviewerAgentPolicy('webpieces-reviewer', 2), '', [])];
+    carried.standings = [
+        new VerdictStanding('security-auth-reviewer', STANDING_CURRENT, 'green', '5e57c16a', 'in-scope files unchanged'),
+        new VerdictStanding('db-migration-reviewer', STANDING_STALE, 'green', '1f75a798', 'in-scope files CHANGED'),
+        new VerdictStanding('error-reviewer', STANDING_REJECTED, 'green', '', 'hand-written'),
+    ];
+    rendered.set('review-report: carried + stale + rejected verdicts', report.render(carried));
     return rendered;
 };
 
 describe('no string the gate prints tells an AI to end its turn', () => {
     it('renders something for every case, so an empty map cannot pass this file', () => {
         const rendered = emitted();
-        expect(rendered.size).toBe(OUTCOMES.size * 2 + 4);
+        expect(rendered.size).toBe(OUTCOMES.size * 2 + 5);
         expect([...rendered.values()].filter((text: string): boolean => text.length > 0).length)
             .toBeGreaterThan(OUTCOMES.size);
     });

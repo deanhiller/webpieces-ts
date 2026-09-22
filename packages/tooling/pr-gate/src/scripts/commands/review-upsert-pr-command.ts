@@ -123,10 +123,14 @@ export class ReviewUpsertPrCommand {
         const recordedReviewers = singleRoundRepeat
             ? singleRoundReviewers
             : briefings.map((b: ReviewerBriefing): string => b.checklistId);
-        this.receipts.write(repoRoot, featureName, new ReviewStageReceipt(
+        const receipt = new ReviewStageReceipt(
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
             recordedReviewers,
-        ));
+        );
+        // The hashes `wp-write-review` stamps into each verdict's provenance — what its reviewer was briefed
+        // on. A single-round repeat briefs nobody, so it keeps the round's original hashes with its reviewers.
+        receipt.scopeHashes = singleRoundRepeat ? (previousReceipt?.scopeHashes ?? {}) : scan.scopeHashes;
+        this.receipts.write(repoRoot, featureName, receipt);
         this.reportActiveHatches(repoRoot);
         this.report(repoRoot, featureName, scan, briefings, opts, singleRoundRepeat, recordedReviewers, config);
     }
@@ -208,7 +212,12 @@ export class ReviewUpsertPrCommand {
         // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
         scan.context = this.prContextWriter.ensure(
             repoRoot, featureName, scan.basis, 'stage2-review', scan.changedFiles, diffDir);
-        const briefings = this.briefingBuilder.build(repoRoot, scan, manifest, diffDir, config);
+        // ONLY the checklists still owed a verdict (issue #863). A green or yellow whose in-scope diff is
+        // unchanged since it was submitted CARRIES — the scan left it in `reviewed` — so briefing it again
+        // would pay a reviewer to re-read code it already judged. Red, stale and never-run are briefed.
+        const reviewedIds = new Set(scan.reviewed.map((r: RequiredChecklist): string => r.id));
+        const owed = scan.applicable.filter((r: RequiredChecklist): boolean => !reviewedIds.has(r.id));
+        const briefings = this.briefingBuilder.build(repoRoot, scan, owed, manifest, diffDir, config);
         const dir = this.reviewerInstructions.instructionsDirFor(repoRoot, featureName);
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
         fs.mkdirSync(dir, { recursive: true });
@@ -250,6 +259,7 @@ export class ReviewUpsertPrCommand {
         input.singleRoundReview = scan.singleRoundReview;
         input.singleRoundRepeat = singleRoundRepeat;
         input.singleRoundReviewers = singleRoundReviewers.slice();
+        input.standings = scan.standings.slice();
         // `say`: this block IS the next action — which reviewers to spawn, where review.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and
         // no instruction, which is the one thing this stage may never do.

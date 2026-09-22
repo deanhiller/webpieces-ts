@@ -3,9 +3,10 @@ import { injectable, bindingScopeValues } from 'inversify';
 import {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, reviewJsonSchemaHint,
     ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy,
-    ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
+    ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, VERDICT_RED,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
+import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -77,6 +78,11 @@ export class ReviewReportInput {
     // The reviewer agent (webpieces-reviewer, or the overrideReviewerAgent name) + reviewerAgents: which agent
     // type to spawn, and the per-round cap.
     reviewer: ReviewerAgentPolicy;
+    /**
+     * How every existing verdict stands (issue #863) — straight off the scan. A CURRENT one is printed as
+     * CARRIED with its sha and the reason; a STALE or REJECTED one is printed with why it was re-briefed.
+     */
+    standings: VerdictStanding[];
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {
         this.repoRoot = repoRoot;
@@ -95,6 +101,7 @@ export class ReviewReportInput {
         this.singleRoundRepeat = false;
         this.singleRoundReviewers = [];
         this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_PLACEHOLDER);
+        this.standings = [];
     }
 }
 
@@ -175,9 +182,8 @@ export class ReviewReport {
         // The prohibition rides on the REUSE line itself, not only in the all-clear below, because the
         // all-clear is not printed when anything is still owed — and "some reviewers are reused, others
         // must be spawned" is exactly the shape in which an agent re-spawns the reused ones too.
-        for (const r of input.reviewed) {
-            lines.push(`  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`);
-        }
+        for (const r of input.reviewed) lines.push(this.carriedLine(input, r));
+        lines.push(...this.rebriefedLines(input));
         // A verdict file that EXISTS but is unreadable as a verdict is called out here. Without it this
         // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
         // correcting the file sitting right there.
@@ -186,6 +192,42 @@ export class ReviewReport {
         if (this.actionableOwed(input).length === 0) lines.push('', this.allClear(input));
         if (lines.length === 0) return '';
         return '\n' + lines.join('\n') + '\n';
+    }
+
+    /**
+     * One reused verdict, with WHY it is reused. "Already reviewed" alone was a state, not a reason, and
+     * an agent that cannot see why a verdict still counts re-checks it. The sha and the in-scope claim are
+     * the reason: that verdict judged exactly the diff its checklist is judged on now.
+     */
+    private carriedLine(input: ReviewReportInput, r: RequiredChecklist): string {
+        const standing = input.standings.find((s: VerdictStanding): boolean => s.checklistId === r.id);
+        if (standing === undefined) {
+            return `  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`;
+        }
+        return `  ✓ ${r.id} — carried ${standing.status.toUpperCase()} from ${this.short(standing.fromSha)}, `
+            + `in-scope files unchanged; verdict STANDS, do NOT re-spawn`;
+    }
+
+    /**
+     * The verdicts that exist on disk but do NOT count, each with why — so a reviewer listed below is not
+     * mistaken for one that simply never ran. A STALE red is not listed here: it is still a refusal, and
+     * its block below says so.
+     */
+    private rebriefedLines(input: ReviewReportInput): string[] {
+        const lines: string[] = [];
+        for (const s of input.standings) {
+            if (s.standing === STANDING_STALE && s.status !== VERDICT_RED) {
+                lines.push(`  ↻ ${s.checklistId} — ${s.status.toUpperCase()} from ${this.short(s.fromSha)} is STALE: ${s.reason}; re-briefed below`);
+            }
+            if (s.standing === STANDING_REJECTED) {
+                lines.push(`  ⛔ ${s.checklistId} — verdict REJECTED: ${s.reason}; re-briefed below`);
+            }
+        }
+        return lines;
+    }
+
+    private short(sha: string): string {
+        return sha === '' ? '(unknown sha)' : sha.slice(0, 8);
     }
 
     /**
@@ -285,10 +327,11 @@ export class ReviewReport {
      */
     private oncePerBranchRule(): string {
         return (
-            '   Reviews here are ONCE PER BRANCH: a passing verdict carries forward to every later iteration\n' +
-            '   of this PR, deliberately, so post-PR edits cost no reviewer tokens. Do NOT re-spawn a reviewer\n' +
-            '   listed above to "re-check" the newer code — it burns a full subagent run AND overwrites the\n' +
-            '   verdict file it already wrote. The only reviewers you may spawn are ones a STEP below names.'
+            '   A passing verdict CARRIES FORWARD for as long as its checklist\'s in-scope files are unchanged,\n' +
+            '   deliberately, so edits elsewhere cost no reviewer tokens. When those files DO change, this\n' +
+            '   stage re-briefs that checklist itself and names it in a STEP below. Do NOT re-spawn a reviewer\n' +
+            '   listed above to "re-check" — it burns a full subagent run AND replaces the verdict it already\n' +
+            '   submitted. The only reviewers you may spawn are ones a STEP below names.'
         );
     }
 
@@ -366,7 +409,8 @@ export class ReviewReport {
             `STEP ${step} — only once that file is written, review these ${owed.length} REQUIRED checklist(s) with`,
             ...this.howManyAgents(input, owed.length),
             '         They block the PR, so do NOT ask whether to run them. You may NOT review your own',
-            '         work, and you may NOT write a reviewer\'s verdict file on its behalf.',
+            '         work, and you may NOT submit a reviewer\'s verdict on its behalf: pnpm wp-write-review',
+            '         refuses the coordinating agent, and finish rejects a verdict file written by hand.',
             '',
         ];
         lines.push(...this.refusedWarning(input, owed));
@@ -481,7 +525,7 @@ export class ReviewReport {
         // legitimately have run none of them, and a precondition naming reviewers that were declined reads as
         // an unmeetable one.
         const precondition = anyReviewers
-            ? 'once every reviewer you ran has written its verdict file'
+            ? 'once every reviewer you ran has submitted its verdict'
             : 'once that file exists';
         return (
             `STEP ${stepNumber} — only ${precondition}, run:  pnpm wp-finish-upsert-pr\n` +
@@ -553,8 +597,9 @@ export class ReviewReport {
             '         Spawn each one as:',
             `             subagent_type: ${reviewer.agentName}`,
             '             prompt:        Read EACH instructions file below FIRST and follow it exactly. Review each',
-            '                            checklist only over its own in-scope files and write ONE verdict file per',
-            '                            checklist — never one for a checklist you were not given.',
+            '                            checklist only over its own in-scope files and submit ONE verdict per',
+            '                            checklist with pnpm wp-write-review — never one for a checklist you were',
+            '                            not given.',
             '                            <then list the instructions file of every checklist this subagent covers>',
             '         Every checklist below must be covered by exactly one of those subagents.',
             this.agentDefinitionLine(input),
@@ -568,7 +613,10 @@ export class ReviewReport {
      */
     private agentDefinitionLine(input: ReviewReportInput): string {
         const file = path.join(input.repoRoot, '.claude', 'agents', `${input.reviewer.agentName}.md`);
-        return `         Codex (no agent types): spawn a generic subagent and have it read ${file} first.`;
+        return `         Codex (no agent types): spawn a generic subagent with NO forked turns (fresh context — do not\n`
+            + `         fork this conversation into it) and hand it ONLY the instructions files below; it reads\n`
+            + `         ${file} first. The brief on disk is its whole input: a forked conversation hands a\n`
+            + `         reviewer the author's reasoning, which costs tokens and its independence.`;
     }
 
     // The lines above the spawn coordinates: normally just why this reviewer is in scope; for one that

@@ -43,7 +43,7 @@ export function reviewerAgentPath(projectRoot: string): string {
 export function renderReviewerAgent(): string {
     return `---
 name: ${REVIEWER_AGENT_NAME}
-description: Generic PR-gate reviewer. Reviews a diff against one or more checklist docs, each over its own in-scope files, and writes exactly one verdict file per checklist. Spawned by \`pnpm wp-review-upsert-pr\`, which names the instructions files to read. Never edits code.
+description: Generic PR-gate reviewer. Reviews a diff against one or more checklist docs, each over its own in-scope files, and submits exactly one verdict per checklist through pnpm wp-write-review. Spawned by \`pnpm wp-review-upsert-pr\`, which names the instructions files to read. Never edits code.
 tools: Read, Grep, Glob, Bash, Write
 ---
 
@@ -62,7 +62,7 @@ holds, for its checklist:
 - the checklist doc to review against — the substance of that review;
 - the files in scope, each with its extracted diff and the absolute path of the full source;
 - the diff manifest, the diff basis, and any pre-resolved context for this repo;
-- the exact verdict file to write, and its exact format.
+- the exact verdict format, and the exact command that submits it.
 
 Work only from those files. Nothing about any checklist is restated here, so nothing here can drift.
 
@@ -76,14 +76,17 @@ Work only from those files. Nothing about any checklist is restated here, so not
    \`node_modules\`, no re-deriving the dependency graph. If something you need is missing, say so in
    \`output\` and judge what you could see.
 
-## What you write
+## What you submit
 
-Exactly ONE verdict file per checklist you were handed, at the path and in the format its instructions
-file gives — and nothing for a checklist you were not handed.
+Exactly ONE verdict per checklist you were handed — and nothing for a checklist you were not handed —
+in the format its instructions file gives, submitted through \`pnpm wp-write-review --checklist <id>\`
+with the verdict JSON on stdin (a heredoc is simplest), or \`--file <path>\` naming a scratch file. It validates
+it, writes the verdict file, and records that YOU wrote it. A verdict file written any other way —
+by you, or by the coordinating agent on your behalf — is rejected by the gate, so there is no other route.
 
-You NEVER edit code, config, docs, or any file other than those verdict files. You never write
-\`review.json\` or an \`override-<id>.json\`. If a finding needs a human's decision, say so in \`output\`;
-the coordinating agent is the one with the human.
+You NEVER edit code, config, docs, or any other file in the repo. You never write \`review.json\` or an
+\`override-<id>.json\`. If a finding needs a human's decision, say so in \`output\`; the coordinating
+agent is the one with the human.
 `;
 }
 

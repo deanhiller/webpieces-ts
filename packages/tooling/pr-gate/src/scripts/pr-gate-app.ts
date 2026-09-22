@@ -13,6 +13,7 @@ import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
+import { WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
@@ -41,6 +42,7 @@ export class PrGateApp {
         private readonly reapWorktreeCommand: ReapWorktreeCommand,
         private readonly buildCommand: BuildCommand,
         private readonly awaitReviewsCommand: AwaitReviewsCommand,
+        private readonly writeReviewCommand: WriteReviewCommand,
         private readonly awaitChecksCommand: AwaitChecksCommand,
         private readonly pushDevCommand: PushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
@@ -95,6 +97,14 @@ export class PrGateApp {
      */
     awaitReviews(): Promise<void> {
         return this.awaitReviewsCommand.run();
+    }
+
+    /**
+     * `wp-write-review`: a reviewer subagent submits ONE checklist verdict, with provenance (issue #863).
+     * Not blocked during a `wp-push-dev --resolve`: it writes only this branch's review state.
+     */
+    writeReview(opts: WriteReviewOptions): Promise<void> {
+        return this.writeReviewCommand.run(opts);
     }
 
     /**

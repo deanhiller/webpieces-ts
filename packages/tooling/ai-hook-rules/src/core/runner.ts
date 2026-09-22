@@ -288,8 +288,8 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
 // hooks are absolute, so the main tree's binary judges every tree — which is fine until the two trees
 // disagree about which release that should be. L1 row 8; guards/L1-location.md carries the table.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function versionSkewBlock(command: string, tree: EffectiveTree): BlockedResult | null {
-    const report = VERSION_SYNC.block(command, tree);
+function versionSkewBlock(command: string, tree: EffectiveTree, aiType: AiType): BlockedResult | null {
+    const report = VERSION_SYNC.block(command, tree, aiType);
     return report === null ? null : new BlockedResult(report);
 }
 
@@ -335,7 +335,7 @@ function l1Classify(command: string, tree: EffectiveTree): L1Classification {
 // and, for the same reason, none of them knows about the matrix POINTER either: every deny is stamped
 // with it HERE, from the same scope and the same row number, so deny and log line cannot disagree.
 // webpieces-disable no-function-outside-class -- sibling of the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function l1LocationBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+function l1LocationBlock(command: string, tree: EffectiveTree, aiType: AiType): BlockedResult | null {
     const misplacedCd = misplacedCdBlock(command, tree);
     if (misplacedCd !== null) {
         logL1(tree, command, 'BLOCK_AI_CURE', L1_PRESTAGE_ROW, 'cd-must-be-first', 'cd not leading/literal');
@@ -353,7 +353,7 @@ function l1LocationBlock(command: string, tree: EffectiveTree): BlockedResult | 
     }
     logL1(tree, command, 'BLOCK_AI_CURE', rowNum, row.blockId, row.why);
     if (row.blockId === 'missing-directory') return withLocationMatrixPointer(missingDirectoryBlock(command, tree), tree.root, rowNum);
-    if (row.blockId === 'trinary-version-skew') return withLocationMatrixPointer(versionSkewBlock(command, tree), tree.root, rowNum);
+    if (row.blockId === 'trinary-version-skew') return withLocationMatrixPointer(versionSkewBlock(command, tree, aiType), tree.root, rowNum);
     return withLocationMatrixPointer(gitFromSubdirBlock(command, tree, isGitOrGhCommand(command)), tree.root, rowNum);
 }
 
@@ -463,7 +463,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command, aiType) ? null : outOfSync;
 
-    const locationBlock = l1LocationBlock(command, tree);
+    const locationBlock = l1LocationBlock(command, tree, aiType);
     if (locationBlock) return locationBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs

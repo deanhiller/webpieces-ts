@@ -51,18 +51,18 @@ export class ChecklistInstructionsService {
         if (reviewer.maxAgents === 0) {
             return [
                 'Reviewer-agent reviews are disabled for this project (commands.pr-gate.reviewerAgents = 0).',
-                'Do not spawn reviewer subagents and do not write checklist verdict files.',
+                'Do not spawn reviewer subagents and do not submit checklist verdicts.',
             ];
         }
         const own = [
-            'You may NOT review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
+            'You may NOT review your own work, and you may NOT submit a reviewer\'s verdict on its behalf — wp-write-review refuses the coordinating agent.',
         ];
         const cap = Math.min(reviewer.maxAgents, pending.length);
         return [
             `You MUST run these ${pending.length} checklist review(s) using AT MOST ${cap} \`${reviewer.agentName}\` subagent(s)`,
             `(commands.pr-gate.reviewerAgents = ${reviewer.maxAgents}). ${this.groupingHint(pending.length, cap)}`,
-            'Give each subagent every checklist it covers (doc, in-scope files, verdict path); it writes ONE verdict',
-            'file per checklist it covers, and never one for a checklist it was not given.',
+            'Give each subagent every checklist it covers (doc, in-scope files); it submits ONE verdict per checklist',
+            'it covers through pnpm wp-write-review, and never one for a checklist it was not given.',
             ...own,
         ];
     }
@@ -90,7 +90,8 @@ export class ChecklistInstructionsService {
         // handed this string can actually open it. Printing the raw config value would not resolve.
         if (req.doc.trim() !== '') lines.push(`      doc to read:  ${req.doc}`);
         for (const scopeLine of this.scope(req)) lines.push(`      ${scopeLine}`);
-        lines.push(`      must write:   ${this.reviewJsonService.checklistResultPath(reviewPath, req.id)}`);
+        lines.push(`      submits via:  ${this.reviewJsonService.submitCommand(req.id)}`);
+        lines.push(`      which writes: ${this.reviewJsonService.checklistResultPath(reviewPath, req.id)}`);
         return lines;
     }
 
@@ -120,9 +121,9 @@ export class ChecklistInstructionsService {
     // hand-written agent .md.)
     private verdictFormat(): string[] {
         return [
-            'TELL EACH subagent to write each of its verdict files with EXACTLY this format (there is NO "success" field —',
+            'TELL EACH subagent to submit each of its verdicts with EXACTLY this format (there is NO "success" field —',
             'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
-            ...this.reviewJsonService.verdictSchemaFor('<the checklist id>', '', '  ').split('\n'),
+            ...this.reviewJsonService.verdictSchemaFor('<the checklist id>', '  ').split('\n'),
         ];
     }
 

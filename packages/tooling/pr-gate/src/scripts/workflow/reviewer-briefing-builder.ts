@@ -18,13 +18,18 @@ import { ChecklistScan } from './checklist-scanner';
 export class ReviewerBriefingBuilder {
     constructor(private readonly reviewJsonService: ReviewJsonService) {}
 
-    build(repoRoot: string, scan: ChecklistScan, manifest: DiffManifest, diffDir: string, config: PrGateConfig): ReviewerBriefing[] {
+    /** One briefing per checklist in `checklists` — the OWED ones; a carried verdict is not re-briefed. */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    build(
+        repoRoot: string, scan: ChecklistScan, checklists: readonly RequiredChecklist[], manifest: DiffManifest,
+        diffDir: string, config: PrGateConfig,
+    ): ReviewerBriefing[] {
         // Resolved ONCE for the whole run, not per reviewer: `require.resolve` hits the filesystem, and the
         // answer cannot differ between two reviewers in the same process.
         const shared = this.contextEntries(repoRoot, config);
         const entryByFile = new Map<string, DiffManifestEntry>();
         for (const e of manifest.entries) entryByFile.set(e.file, e);
-        return scan.applicable.map((req: RequiredChecklist): ReviewerBriefing =>
+        return checklists.map((req: RequiredChecklist): ReviewerBriefing =>
             this.one(repoRoot, req, scan, entryByFile, diffDir, shared, manifest));
     }
 
