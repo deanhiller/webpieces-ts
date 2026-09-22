@@ -179,7 +179,9 @@ export class VerdictProvenanceService {
         const record = this.read(reviewPath, id);
         const reject = (reason: string): VerdictStanding => new VerdictStanding(id, STANDING_REJECTED, result.status, '', reason);
         if (record === null) {
-            return reject(`review-${id}.json was not submitted through pnpm ${WRITE_REVIEW_BIN} (no ${path.basename(this.provenancePath(reviewPath, id))}) — a hand-written verdict is not a review`);
+            const file = this.provenancePath(reviewPath, id);
+            const why = fs.existsSync(file) ? `${path.basename(file)} is unreadable` : `no ${path.basename(file)}`;
+            return reject(`review-${id}.json was not submitted through pnpm ${WRITE_REVIEW_BIN} (${why}) — a hand-written verdict is not a review`);
         }
         if (record.writer !== WRITE_REVIEW_BIN || record.checklistId !== id) {
             return reject(`review-${id}.provenance.json was not written by ${WRITE_REVIEW_BIN} for this checklist`);

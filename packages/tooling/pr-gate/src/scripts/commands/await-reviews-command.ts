@@ -109,7 +109,7 @@ export class ReviewerWaitProbe implements WaitProbe {
         private readonly waitedOn: readonly RequiredChecklist[],
         private readonly applicable: readonly RequiredChecklist[],
         // Epoch ms of the last stage ② (0 = none): a verdict file last written before it is not an answer.
-        private readonly sinceMs: number = 0,
+        private readonly sinceMs: number,
     ) {
         this.reload();
     }

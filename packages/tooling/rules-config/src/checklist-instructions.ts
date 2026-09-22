@@ -123,7 +123,7 @@ export class ChecklistInstructionsService {
         return [
             'TELL EACH subagent to submit each of its verdicts with EXACTLY this format (there is NO "success" field —',
             'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
-            ...this.reviewJsonService.verdictSchemaFor('<the checklist id>', '  ').split('\n'),
+            ...this.reviewJsonService.renderVerdictSchema('<the checklist id>', '  ').split('\n'),
         ];
     }
 

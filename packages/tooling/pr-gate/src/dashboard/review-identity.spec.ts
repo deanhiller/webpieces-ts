@@ -68,7 +68,7 @@ describe('review identity from JSON to PR comments', () => {
     it('teaches required identity and unknown in the generated main and reviewer schemas', () => {
         expect(service.reviewJsonSchemaHint('/review.json')).toContain('"agent"');
         expect(service.reviewJsonSchemaHint('/review.json')).toContain('"model"');
-        const schema = service.verdictSchemaFor('api');
+        const schema = service.renderVerdictSchema('api');
         expect(schema).toContain('REQUIRED non-empty strings');
         expect(schema).toContain('never the parent');
         expect(schema).toContain('literal "unknown"');

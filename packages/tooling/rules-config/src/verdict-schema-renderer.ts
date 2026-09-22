@@ -3,7 +3,7 @@ import { WRITE_REVIEW_BIN } from './review-identity-stamp';
 
 /**
  * Pure renderer for ONE reviewer's verdict schema and the command that submits it. Reached only through
- * ReviewJsonService.verdictSchemaFor / submitCommand — the single renderer every printed copy comes from.
+ * ReviewJsonService.renderVerdictSchema / submitCommand — the single renderer every printed copy comes from.
  */
 export class VerdictSchemaRenderer {
     /**

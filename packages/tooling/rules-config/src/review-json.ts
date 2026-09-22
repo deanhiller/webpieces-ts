@@ -571,7 +571,7 @@ export class ReviewJsonService {
      * file, and the complaint raised against a malformed verdict — now comes from here. It ends with the
      * ONE way a verdict is submitted (`wp-write-review`, issue #863), never a file path to write.
      */
-    verdictSchemaFor(id: string, indent = '      '): string {
+    renderVerdictSchema(id: string, indent = '      '): string {
         return new VerdictSchemaRenderer().render(id, indent);
     }
 
@@ -618,9 +618,9 @@ export class ReviewJsonService {
      */
     // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence here
     private verdictProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
-        // The ONE renderer — see verdictSchemaFor. A second copy here is what let the old `success` shape
+        // The ONE renderer — see renderVerdictSchema. A second copy here is what let the old `success` shape
         // survive in print after it was removed from the parser.
-        const shape = this.verdictSchemaFor(id);
+        const shape = this.renderVerdictSchema(id);
         if ('override' in raw) {
             return `Checklist "${id}" wrote its verdict with the MOVED "override" field. A ship-anyway `
                 + 'authorization is no longer part of a reviewer\'s verdict: it MOVED to its own file, '

@@ -24,7 +24,7 @@ function writeVerdict(id: string, status: string, output: string): void {
 }
 
 function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = waitedOn): ReviewerWaitProbe {
-    return new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, waitedOn, applicable);
+    return new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, waitedOn, applicable, 0);
 }
 
 /**

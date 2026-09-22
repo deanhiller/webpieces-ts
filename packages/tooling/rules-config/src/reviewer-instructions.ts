@@ -137,7 +137,7 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
  * It is GENERATED per run, and the reviewer agent (`.claude/agents/<name>.md`, by default the
  * webpieces-owned `webpieces-reviewer.md`) is checklist-agnostic and points here, because content a human
  * maintains goes stale and a reviewer follows the stale copy. The verdict
- * schema in particular comes from {@link ReviewJsonService.verdictSchemaFor}.
+ * schema in particular comes from {@link ReviewJsonService.renderVerdictSchema}.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
  */
@@ -401,7 +401,7 @@ export class ReviewerInstructionsService {
             'refuses the coordinating agent, so nobody can submit this on your behalf.',
             '',
             '```',
-            this.reviewJsonService.verdictSchemaFor(b.checklistId, ''),
+            this.reviewJsonService.renderVerdictSchema(b.checklistId, ''),
             '```',
             '',
         ];
