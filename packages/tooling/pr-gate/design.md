@@ -41,6 +41,9 @@ graph TD
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     ConfigFile["ConfigFile"]
+    ConsumerBinResolver["ConsumerBinResolver"]
+    ContractDiffRenderer["ContractDiffRenderer"]
+    ContractDiffStep["ContractDiffStep"]
     Dashboard["Dashboard"]
     DevDeployRefs["DevDeployRefs"]
     DevDeployWatchHints["DevDeployWatchHints"]
@@ -59,6 +62,7 @@ graph TD
     GatedPrPublisher["GatedPrPublisher"]
     GatherInfo["GatherInfo"]
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
+    GeneratorRunner["GeneratorRunner"]
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
     HarnessAgentActivityReader["HarnessAgentActivityReader"]
@@ -74,6 +78,7 @@ graph TD
     MergeStart["MergeStart"]
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
+    OpenApiContractDiff["OpenApiContractDiff"]
     OpenPrCheck["OpenPrCheck"]
     OrphanDirArchiver["OrphanDirArchiver"]
     OrphanDirScanner["OrphanDirScanner"]
@@ -167,6 +172,11 @@ graph TD
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
+    ContractDiffStep --> ConsumerBinResolver
+    ContractDiffStep --> ContractDiffRenderer
+    ContractDiffStep --> GeneratorRunner
+    ContractDiffStep --> GitExec
+    ContractDiffStep --> OpenApiContractDiff
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevDeployRefs
     DevResolveRunner --> DevDeployWatchHints
@@ -190,6 +200,7 @@ graph TD
     FinishUpsertPrCommand --> BuildGateLog
     FinishUpsertPrCommand --> ChecklistCommentRenderer
     FinishUpsertPrCommand --> ChecklistScanner
+    FinishUpsertPrCommand --> ContractDiffStep
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> FinishBanner
     FinishUpsertPrCommand --> GateTokenService

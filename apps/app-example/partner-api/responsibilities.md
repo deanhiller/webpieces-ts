@@ -1,6 +1,6 @@
 # Responsibilities — partner-api
 
-The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the COMMITTED OpenAPI documents generated from it, and the markdown prose a docs site publishes alongside them.
+The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the golden documents the generator must keep producing, and the prose a docs site publishes.
 
 It exists so the generator is demonstrated against source somebody could plausibly have written rather than against a fixture. Every feature of `wp-openapi` is exercised here by an ordinary-looking contract: `@ApiType` selection, a hidden operator method, derived api-key security, an outbound webhook, a document-wide error contract, and a response header named by constant.
 
@@ -10,24 +10,27 @@ It exists so the generator is demonstrated against source somebody could plausib
 - `PartnerDeliveryWebhookApi` — the event this service SENDS to a partner's own endpoint, selected into the document's `webhooks:` block by the manifest and never by its filename
 - `ApiErrors.ts` / `ResponseHeaders.ts` — the types and constants the manifest NAMES, so the published document reads them with the compiler instead of carrying copies
 - `openapi.manifest.json`, `description.md`
-- `generated/` — the committed `full-private-openapi.json`, `public-openapi.json` and `mcp-openapi.json`
+- `src/__tests__/goldens/` — `full-private-openapi.json`, `public-openapi.json`, `mcp-openapi.json` and `mcp-tools.json`: TEST FIXTURES, the generator's expected output for this contract
 - `src/__tests__/openapi-golden.spec.ts` — regenerates them, diffs them, and checks each YAML parses back to its JSON
 - `docs/` — `docs.manifest.json` and the partner-facing prose it names, IN ITS ORDER, which is the second of a docs site's two ordered sources (the first is the document's own `tags[]`)
-- `src/__tests__/docs-site-golden.spec.ts` — renders `public-openapi.json` plus `docs/` into a site and asserts the properties a reader depends on
+- `src/__tests__/docs-site-golden.spec.ts` — renders the `public-openapi.json` golden plus `docs/` into a site and asserts the properties a reader depends on
 
 ## Out of Scope
 
 - Serving any of it. There is no controller and no server wiring: this is a CONTRACT, and what is under test is the document generated from it, and the site rendered from that
-- A COMMITTED docs site. The OpenAPI documents are committed because a moved byte there IS a moved published contract; committing the HTML would instead pin the stylesheet, the class names and the markup, none of which a partner has a contract about
+- COMMITTED generated documents. An app's documents are build output: `openapi-generate` writes them into the build `outputPath` and they ship inside the package (see `.claude/rules/api-docs.md`). The goldens above exist only because webpieces must prove its own generator; a consuming repo commits nothing generated
+- A pinned docs site. Pinning the HTML would pin the stylesheet, the class names and the markup, none of which a partner has a contract about
 - Generator behaviour with no customer-facing story. That is covered by `packages/docs/openapi-generator`'s own fixtures
 
-## Why the documents are COMMITTED
+## Why the goldens exist
 
-Assertions only fail for the things somebody thought to assert. What the golden catches is the change nobody predicted — a decorator gains an argument, a JSDoc sentence is reworded, a DTO field turns optional — and the published customer contract MOVES. Committing the documents makes every one of those a visible diff in the PR that causes it, which is the only point at which anybody can say whether the customer-facing change was intended. A green build that silently republishes a different contract is the failure mode the generator exists to remove.
+Assertions only fail for the things somebody thought to assert. What the golden catches is the change nobody predicted in what the GENERATOR emits — a decorator gains an argument, a JSDoc sentence is reworded, a DTO field turns optional — and the output moves. That is webpieces testing webpieces, which is why only webpieces keeps goldens.
 
-Committing the private one too is what makes `hidden` reviewable: `diff full-private-openapi.json public-openapi.json` is the complete list of what this service does not show a customer.
+Reviewing whether a CONTRACT change moved what partners see is a different job, and it lives in the PR gate: `wp-finish-upsert-pr` generates the partner-facing document at the merge-base and at HEAD for every project declaring an `openapi-generate` target and posts the difference as a PR comment — the backstop for `hidden`, against what actually shipped rather than against a checked-in file.
 
-**Only the JSON is committed.** Committing the YAML would double the review surface every decorator change has to be diffed against, for a file that is the first one restated; the spec generates BOTH formats and asserts each YAML parses back to its JSON counterpart instead.
+Pinning the private document too keeps `hidden` tested: the spec asserts `/orders/reindex` is the complete list of what this service does not show a customer, by path and by type name.
+
+**Only the JSON is pinned.** The spec generates BOTH formats and asserts each YAML parses back to its JSON counterpart instead.
 
 ## Notes
 

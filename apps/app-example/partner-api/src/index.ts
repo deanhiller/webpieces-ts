@@ -1,9 +1,10 @@
 /**
  * The example PARTNER-FACING contract, and the source `wp-openapi` reads.
  *
- * `generated/` holds the COMMITTED OpenAPI documents. `src/__tests__/openapi-golden.spec.ts`
- * regenerates them and diffs, so a decorator change that moves the document is a red test rather
- * than a silent republish.
+ * Its generated documents are build output and are never committed (`.claude/rules/api-docs.md`).
+ * `src/__tests__/goldens/` holds the generator's EXPECTED output for this contract, as test
+ * fixtures: `src/__tests__/openapi-golden.spec.ts` regenerates and diffs against them, so a
+ * generator change that moves what it emits is a red test rather than a silent republish.
  */
 export { REQUEST_ID_HEADER } from './ResponseHeaders';
 export type { ApiErrorResponse } from './ApiErrors';

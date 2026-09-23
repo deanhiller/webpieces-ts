@@ -5,7 +5,7 @@
     "main": "./src/index.js",
     "types": "./src/index.d.ts",
     "private": true,
-    "description": "The example PARTNER-FACING contract, and the committed OpenAPI documents generated from it by wp-openapi",
+    "description": "The example PARTNER-FACING contract wp-openapi and wp-docs-site are proven against; its generated documents are build output, pinned here only as test goldens",
     "dependencies": {
         "@webpieces/core-util": "workspace:*"
     },

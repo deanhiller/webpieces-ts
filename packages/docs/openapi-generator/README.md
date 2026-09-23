@@ -3,7 +3,7 @@
 Render a webpieces API contract to **OpenAPI 3.1.0**.
 
 ```bash
-wp-openapi --manifest path/to/openapi.manifest.json --out path/to/generated [--format json|yaml|both]
+wp-openapi --manifest path/to/openapi.manifest.json --out path/to/dist [--format json|yaml|both]
 ```
 
 ## Which documents you get is a property of your CONTRACTS
@@ -114,8 +114,15 @@ is no flag to switch that off — the cure is at the contract, by naming the typ
 
 ## Worked example
 
-`apps/app-example/partner-api` in this repo: a real contract, its manifest, the committed documents,
-and a spec that regenerates and diffs them.
+`apps/app-example/partner-api` in this repo: a real contract, its manifest, golden documents under
+`src/__tests__/goldens/`, and a spec that regenerates and diffs them.
+
+## In an nx workspace
+
+Inside nx, nobody chooses `--out`: the `@webpieces/nx-webpieces-rules:openapi-generate` executor writes
+into the project's own build `outputPath`, so the documents are packed and published inside the api
+library's package, and are never committed. It runs THIS package from the consumer's `node_modules`
+and refuses one older than it needs. See `.claude/rules/api-docs.md` in webpieces-ts.
 
 ## Dependencies
 

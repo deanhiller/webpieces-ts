@@ -386,7 +386,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "api-lib",
-            "shortDescription": "The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the COMMITTED OpenAPI documents generated from it, and the markdown prose a docs site publishes alongside them.",
+            "shortDescription": "The WORKED EXAMPLE for `@webpieces/openapi-generator` and `@webpieces/docs-site`: a customer-facing contract written the way a real one would be, its `openapi.manifest.json`, the golden documents the generator must keep producing, and the prose a docs site publishes.",
             "responsibilitiesFile": "apps/app-example/partner-api/responsibilities.md",
             "dependsOn": [
                 "docs-site",
