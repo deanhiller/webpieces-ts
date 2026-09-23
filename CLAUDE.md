@@ -15,6 +15,7 @@ about to do; skip the rest.
 | `.claude/rules/tickets.md` | you are starting any change (does it have a GitHub issue yet?) or writing `review.json`'s `summary`, which stage ③ renders into the PR body (does it LEAD with `Fixes #NNN`?) |
 | `.claude/rules/finishing-a-feature.md` | the code is written and you are posting the PR, landing one, or cleaning up branches and worktrees afterwards |
 | `.claude/rules/no-backwards-compat.md` | your diff changes ANY surface — a decorator, an `*Api.ts`, a `src/index.ts` barrel, anything under `packages/**`, or a `webpieces.config.json` key |
+| `.claude/rules/no-rule-defaults.md` | your diff adds or changes a webpieces RULE — a `RULE_SCHEMAS` entry, a `defaultRules` entry, a `FieldDef`'s optionality, or a rule's config read path |
 | `.claude/rules/experiments.md` | your diff touches an `experimental.*` flag, its read path, its default, or the policy prose about experiments |
 | `.claude/rules/published-vs-local-source.md` | you change `packages/tooling/**`, a validator rejects a config key, a guard/executor does not seem to see your change, or you are in a linked worktree |
 | `.claude/rules/packaging-and-bins.md` | you touch a `package.json` `bin` / `publishConfig`, the publish script, `pnpm-workspace.yaml`'s catalog, or a `workspace:` dep between `packages/tooling/*` |

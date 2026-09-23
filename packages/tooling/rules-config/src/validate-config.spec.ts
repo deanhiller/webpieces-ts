@@ -319,10 +319,8 @@ describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', 
     it('branch-creation-guard accepts autoReapMergedBranches false (report-only)', () => {
         const errors = validateWebpiecesConfig({
             'branch-creation-guard': {
-                mode: 'ON',
-                autoReapMergedBranches: false,
-                turnOffRuleUntilEpoch: 0,
-                turnOffRuleWhileOnBranch: null,
+                mode: 'ON', autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>',
+                turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
             },
         });
         expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
@@ -549,18 +547,8 @@ describe('rule registry consistency', () => {
         expect(missing).toEqual([]);
     });
 
-    // The five Nx infrastructure validators enforced unconditionally before they were wired to config.
-    // Their default MUST stay RUN_EVERY_TIME so upgrading a repo never silently stops a CI gate.
-    it('the Nx infrastructure validators default to RUN_EVERY_TIME (never silently disabled on upgrade)', () => {
-        const infra = [
-            'validate-architecture-unchanged', 'validate-no-architecture-cycles',
-            'validate-packagejson', 'validate-versions-locked', 'validate-eslint-sync',
-        ];
-        for (const name of infra) {
-            expect(new Set(allRuleNames()).has(name)).toBe(true);
-            expect(defaultRules[name]?.['mode']).toBe('RUN_EVERY_TIME');
-        }
-    });
+    // The five Nx infrastructure validators moved to no-rule-defaults.spec.ts (#1017): they have
+    // no default, and what replaces one is that the config is DEMANDED to state their mode.
 });
 
 // webpieces-disable no-any-unknown -- a raw pr-gate section from a test
@@ -627,11 +615,13 @@ describe('recommendedSeedMode', () => {
 describe('seedEntryForRule', () => {
     it('emits EVERY schema-required field, not just mode + the two hatches', () => {
         // The gap this closed: a seeded branch-creation-guard had no autoReapMergedBranches, so a fresh
-        // install wrote a config that failed to load. The value tracks defaultRules, which now ships
-        // TRUE — reaping is on by default, and every reap is logged with a `recover=` command.
+        // install wrote a config that failed to load. The values come from SEED_VALUES (seed-entry.ts)
+        // now that no rule has a DEFAULT (#1017) — autoReap seeds FALSE ("nobody answered" = delete
+        // nothing).
         expect(seedEntryForRule('branch-creation-guard')).toEqual({
             mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
-            autoReapMergedBranches: true,
+            autoReapMergedBranches: false,
+            subBranchNaming: 'feature/<ticket>/<short-description>',
         });
     });
 

@@ -227,13 +227,20 @@ export const UNKNOWN_VALUE_API = `/** Promotions, published to partners. */
     }
 `;
 
-/** An RPC that answers nothing, beside a cloudtasks endpoint that legitimately answers nothing. */
+/**
+ * Every endpoint kind answering `void` at once: an `rpc` and an `external` (both REFUSED — somebody
+ * is waiting on the response), beside a `cloudtasks` and a `cron` (both ALLOWED — fire-and-forget).
+ */
 export const VOID_RPC_API = `/** Stores. */
     @ApiPath('/stores')
     export abstract class StoresApi {
         /** Pause a store. */
         @Endpoint('POST', '/pause', 'write', 'rpc')
         abstract pause(request: PauseRequest): Promise<void>;
+
+        /** Notify us that a store closed — posted by a partner, synchronously. */
+        @Endpoint('POST', '/closed', 'write', 'external')
+        abstract closed(request: PauseRequest): Promise<void>;
 
         /** Reindex, in the background. */
         @Endpoint('POST', '/reindex', 'write', 'cloudtasks')

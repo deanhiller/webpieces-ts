@@ -28,6 +28,20 @@ import { EndpointKind } from './api-relations';
  */
 export const RPC_KIND: EndpointKind = 'rpc';
 
+/**
+ * The endpoint kinds whose response a caller WAITS FOR, and which therefore must name a DTO (#1017).
+ *
+ * `rpc` and `external` are both synchronous request/response: somebody posts and reads what comes
+ * back, so there IS a body and it must be a named type that can gain a field later. `void` on either
+ * is a one-way door — a `void` response can never grow without breaking every generated client, where
+ * an empty DTO grows additively forever. #1016 refused it on `rpc` only, because `external` was
+ * unstated at the time; it is stated now.
+ *
+ * `cloudtasks` and `cron` are deliberately NOT here: delivery is fire-and-forget, nobody waits for a
+ * body, and `Promise<void>` is the CONTRACT rather than an omission.
+ */
+export const ANSWERING_KINDS: readonly EndpointKind[] = ['rpc', 'external'];
+
 /** The scalar keywords a MIXED SCALAR union is made of. */
 const SCALAR_KEYWORDS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.StringKeyword,
@@ -81,12 +95,14 @@ export function unknownValueCure(rule: string): string {
     );
 }
 
-/** The one cure for a `void` RPC. */
+/** The one cure for a `void` endpoint that somebody is WAITING on (rpc or external). */
 export const VOID_RPC_CURE =
     'Declare a named response DTO and return Promise<That>, even when it has no fields today: an ' +
     'empty object grows additively forever, and a void response cannot gain a field without ' +
-    'breaking every generated client. Promise<void> stays legal on a cloudtasks or cron endpoint, ' +
-    'where fire-and-forget is the contract.';
+    'breaking every generated client. An external endpoint is a synchronous call an outside caller ' +
+    'waits on, so it has a body too — an empty one serializes as {} and the failure detail rides on ' +
+    'the thrown error. Promise<void> stays legal on a cloudtasks or cron endpoint, where ' +
+    'fire-and-forget is the contract.';
 
 /**
  * Why the resolver could not map this type, said in the author's vocabulary.

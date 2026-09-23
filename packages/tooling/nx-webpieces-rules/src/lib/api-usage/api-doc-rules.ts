@@ -7,7 +7,14 @@
  */
 
 import * as fs from 'fs';
-import { loadAndValidate, RULE_NAMES, WEBPIECES_DISABLE } from '@webpieces/rules-config';
+import {
+    ChangedFilesOptions,
+    DiffScope,
+    loadAndValidate,
+    matchesAnyGlob,
+    RULE_NAMES,
+    WEBPIECES_DISABLE,
+} from '@webpieces/rules-config';
 import { RuleGate } from '../rule-gate';
 
 /** As written in a disable comment and as a config key. */
@@ -118,12 +125,16 @@ export class ApiDocRulesFindings {
     }
 }
 
+/** The mode value that narrows the scan to the projects the diff touched. */
+export const AFFECTED_PROJECT_MODE = 'AFFECTED_PROJECT';
+
 /**
  * ONE rule's switches, resolved from webpieces.config.json once per scan.
  *
- * The DEFAULT is OFF, and unlike an absent entry elsewhere that is deliberate: `defaultRules` in
- * `@webpieces/rules-config` carries `mode: 'OFF'` for both, and the argument for it is written
- * there rather than here so there is one place to read it.
+ * There is NO default (#1017). Both rules are schema'd, so `webpieces.config.json` must carry an
+ * entry for each or the config FAILS TO LOAD naming them — a consumer states `OFF`,
+ * `AFFECTED_PROJECT` or `RUN_EVERY_TIME` out loud. The `off()` a bare constructor or a unit test
+ * gets is not a default; it is what a caller that configured nothing asked for.
  */
 export class ApiDocRule {
     constructor(
@@ -131,17 +142,46 @@ export class ApiDocRule {
         public readonly enabled: boolean,
         /** Project roots this rule does not apply to — `allowedPaths` in the config. */
         public readonly allowedPaths: readonly string[],
+        /**
+         * Workspace-relative paths the diff touched, under `AFFECTED_PROJECT`; `null` under
+         * `RUN_EVERY_TIME`, which means every project is in scope.
+         *
+         * `null` is also what an UNCOMPUTABLE diff resolves to — no merge-base, a shallow clone, no
+         * repository at all. A diff that could not be read is not evidence that nothing changed, and
+         * the only safe reading of "I do not know what changed" is "look at all of it".
+         */
+        public readonly changedPaths: readonly string[] | null = null,
     ) {}
 
-    /** ARMED, everywhere — what a unit test constructs, and what an opted-in repo resolves to. */
+    /** ARMED over every project — what a unit test constructs, and what RUN_EVERY_TIME resolves to. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static armed(name: string): ApiDocRule {
-        return new ApiDocRule(name, true, []);
+        return new ApiDocRule(name, true, [], null);
+    }
+
+    /** ARMED over the projects owning one of `changedPaths` — what AFFECTED_PROJECT resolves to. */
+    // webpieces-disable no-function-outside-class -- static factory of this class
+    static affected(name: string, changedPaths: readonly string[]): ApiDocRule {
+        return new ApiDocRule(name, true, [], changedPaths);
     }
 
     // webpieces-disable no-function-outside-class -- static factory of this class
     static off(name: string): ApiDocRule {
-        return new ApiDocRule(name, false, []);
+        return new ApiDocRule(name, false, [], null);
+    }
+
+    /**
+     * True when this rule scans the contracts of the project rooted at `root`.
+     *
+     * ONE place answers it, for both rules, so `allowedPaths` and the affected-project narrowing can
+     * never be applied by one caller and skipped by another.
+     */
+    coversProject(root: string): boolean {
+        if (!this.enabled) return false;
+        if (matchesAnyGlob(root, this.allowedPaths)) return false;
+        if (this.changedPaths === null) return true;
+        const prefix = `${root}/`;
+        return this.changedPaths.some((each: string): boolean => each.startsWith(prefix));
     }
 
     /** `mode: OFF` and the time-box/branch hatches come from RuleGate, so there is ONE reading. */
@@ -152,7 +192,29 @@ export class ApiDocRule {
         }
         const rule = loadAndValidate(workspaceRoot).resolved.rules.get(name);
         const allowed = rule?.options['allowedPaths'];
-        return new ApiDocRule(name, true, Array.isArray(allowed) ? (allowed as string[]) : []);
+        const allowedPaths = Array.isArray(allowed) ? (allowed as string[]) : [];
+        const affected =
+            rule?.options['mode'] === AFFECTED_PROJECT_MODE
+                ? ApiDocRule.changedPathsOf(workspaceRoot)
+                : null;
+        return new ApiDocRule(name, true, allowedPaths, affected);
+    }
+
+    /**
+     * Every path the diff touched, against the base nx itself uses (`NX_BASE`, else the merge-base
+     * with origin/main). NOT ts-only and INCLUDING deletions: a deleted DTO changes what a project's
+     * contracts can express exactly as an added one does, and a `project.json` edit can change which
+     * project owns a contract at all.
+     */
+    // webpieces-disable no-function-outside-class -- private static reader of this class
+    private static changedPathsOf(workspaceRoot: string): readonly string[] | null {
+        const scope = new DiffScope();
+        const range = scope.resolveBase(workspaceRoot);
+        if (range.base === undefined) return null;
+        const opts = new ChangedFilesOptions();
+        opts.tsOnly = false;
+        opts.includeDeletions = true;
+        return scope.getChangedFiles(workspaceRoot, range.base, range.head, opts);
     }
 }
 

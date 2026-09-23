@@ -1,6 +1,11 @@
 /**
  * `api-rules-for-openapi` and `api-rules-for-mcp` (#1011) — the CI half of "is this contract
- * publishable", on EVERY `@ApiPath` class in the workspace, `@ApiType` or not.
+ * publishable", on every `@ApiPath` class IN SCOPE, `@ApiType` or not.
+ *
+ * "In scope" is the rule's `mode` (#1017): `AFFECTED_PROJECT` scans the contracts of the projects the
+ * diff touched — the granularity nx already builds at, and the mode a consumer normally picks —
+ * while `RUN_EVERY_TIME` scans the whole workspace for a migration sweep. `ApiDocRule.coversProject`
+ * is the one place that answers it, for both rules.
  *
  * ## The acceptance contract, and why this file drives the generator instead of copying it
  *
@@ -20,17 +25,19 @@
  *    field). The extractor maps it to a primitive and the generator publishes `{}`, which in JSON
  *    Schema means "anything" — a partner-facing field with no shape, which is the defect the
  *    unmapped guard exists for, arriving through a door the guard does not watch.
- *  - an RPC whose response is `void`. Fire-and-forget is the CONTRACT of a `cloudtasks` or `cron`
- *    endpoint and is allowed there; an RPC that answers nothing can never gain a field without a
- *    breaking change, where a named empty response object grows additively forever.
+ *  - an `rpc` or `external` endpoint whose response is `void`. Fire-and-forget is the CONTRACT of a
+ *    `cloudtasks` or `cron` endpoint and is allowed there; an endpoint somebody WAITS on that answers
+ *    nothing can never gain a field without a breaking change, where a named empty response object
+ *    grows additively forever (#1017 — #1016 read this narrowly as rpc-only because `external` was
+ *    unstated).
  *
  * ## Why it lives in the rules engine and not in the doc parser
  *
  * `@webpieces/api-doc-model` is only ever pointed at contracts somebody chose to publish. `@ApiType`
  * is a PUBLISHING decision added later, on purpose — so a shape rule that only ran on contracts which
  * had already opted in would let a team discover, six months afterwards, that the type was never
- * expressible, by which time it is in partners' generated clients. Every check below runs on every
- * contract in the workspace.
+ * expressible, by which time it is in partners' generated clients. So every check below runs on every
+ * contract in scope, opted in or not — `@ApiType` narrows nothing here.
  *
  * ## Root-level unions are NOT re-checked here
  *
@@ -54,7 +61,6 @@ import {
     TypeRef,
     UnmappedType,
 } from '@webpieces/api-doc-model';
-import { matchesAnyGlob } from '@webpieces/rules-config';
 import { ProjectInfo } from '../project-info';
 import { collectTsFiles, isTestFile } from './api-ast';
 import {
@@ -68,8 +74,8 @@ import {
     OPENAPI_RULE,
 } from './api-doc-rules';
 import {
+    ANSWERING_KINDS,
     ContractLines,
-    RPC_KIND,
     unknownValueCure,
     VOID_RPC_CURE,
     carriesUnknown,
@@ -224,7 +230,7 @@ export class ApiDocRulesScan {
     constructor(
         private readonly workspaceRoot: string,
         private readonly projectInfos: Map<string, ProjectInfo>,
-        /** OFF unless a caller read otherwise out of webpieces.config.json — see `defaultRules`. */
+        /** OFF unless a caller read otherwise out of webpieces.config.json, which MUST state it. */
         private readonly openApiRule: ApiDocRule = ApiDocRule.off(OPENAPI_RULE),
         private readonly mcpRule: ApiDocRule = ApiDocRule.off(MCP_RULE),
     ) {}
@@ -312,7 +318,7 @@ export class ApiDocRulesScan {
         const lines = contractLinesOf(source, model.contractName);
         this.judgeUnmapped(model, sink, source.fileName);
         this.judgeUnknownValues(model, sink, source.fileName);
-        this.judgeRpcResponses(model, source, lines, sink);
+        this.judgeAnsweringResponses(model, source, lines, sink);
         this.judgeTools(model, source, lines, sink, toolNames);
     }
 
@@ -359,30 +365,33 @@ export class ApiDocRulesScan {
     }
 
     /**
-     * An RPC must NAME a response DTO, even an empty one.
+     * An endpoint somebody WAITS ON must NAME a response DTO, even an empty one.
      *
      * `Promise<void>` on a `cloudtasks` or `cron` endpoint is the CONTRACT — fire-and-forget, nothing
-     * to shape — and is allowed. On an RPC it is a one-way door: a `void` response can never gain a
-     * field without breaking every generated client, where `{}` grows additively forever. This is a
-     * contract-EVOLUTION rule, which is why it is here and not in the MCP half: it is worth having on
-     * an RPC that never becomes a tool.
+     * to shape — and is allowed. On an `rpc` OR an `external` it is a one-way door: both are
+     * synchronous request/response, an outside caller reads what comes back, and a `void` response
+     * can never gain a field without breaking every generated client where `{}` grows additively
+     * forever. This is a contract-EVOLUTION rule, which is why it is here and not in the MCP half: it
+     * is worth having on an endpoint that never becomes a tool. See ANSWERING_KINDS (#1017).
      */
-    private judgeRpcResponses(
+    private judgeAnsweringResponses(
         model: ApiDocModel,
         source: ts.SourceFile,
         lines: ContractLines,
         sink: DefectSink,
     ): void {
         for (const endpoint of model.endpoints) {
-            if (endpoint.kind !== RPC_KIND) continue;
+            // `.some` and not `.includes`: the model's `kind` is a widened string, and the list is
+            // typed EndpointKind so a kind that stops existing is a compile error here.
+            if (!ANSWERING_KINDS.some((kind: string): boolean => kind === endpoint.kind)) continue;
             if (endpoint.response !== undefined && !isVoidLike(endpoint.response)) continue;
             const site = new Site(source.fileName, lines.lineOf(endpoint.methodName));
             sink.shared(
                 (): ApiContractDefect => new ApiContractDefect(
                     model.contractName,
                     endpoint.methodName,
-                    'an RPC returns nothing a document can name (void, unknown, or no declared ' +
-                        'return type)',
+                    `an ${endpoint.kind} endpoint returns nothing a document can name (void, ` +
+                        'unknown, or no declared return type)',
                     site.relativeTo(this.workspaceRoot),
                     VOID_RPC_CURE,
                     model.apiTypes,
@@ -457,11 +466,11 @@ export class ApiDocRulesScan {
         const found: ContractFile[] = [];
         for (const info of this.projectInfos.values()) {
             if (info.root === '' || info.root === '.') continue;
-            const openApi =
-                this.openApiRule.enabled &&
-                !matchesAnyGlob(info.root, this.openApiRule.allowedPaths);
-            const mcp =
-                this.mcpRule.enabled && !matchesAnyGlob(info.root, this.mcpRule.allowedPaths);
+            // ONE question, asked of the rule itself: `mode` (OFF / AFFECTED_PROJECT /
+            // RUN_EVERY_TIME) and `allowedPaths` are both folded into coversProject, so the
+            // affected-project narrowing cannot be honoured in one branch and skipped in the other.
+            const openApi = this.openApiRule.coversProject(info.root);
+            const mcp = this.mcpRule.coversProject(info.root);
             if (!openApi && !mcp) continue;
             const srcDir = path.join(path.resolve(this.workspaceRoot, info.root), 'src');
             if (!fs.existsSync(srcDir)) continue;

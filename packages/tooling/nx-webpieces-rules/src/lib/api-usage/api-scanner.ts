@@ -133,7 +133,7 @@ export interface ApiScanResult {
     rootUnions: RootUnionFindings;
     /**
      * `api-rules-for-openapi` / `api-rules-for-mcp` findings (#1011). Both ship OFF, so this is
-     * EMPTY unless a repo opted in — see `defaultRules` in `@webpieces/rules-config` for why.
+     * EMPTY unless a repo stated otherwise — no rule in this framework has a default (#1017).
      */
     apiDocRules: ApiDocRulesFindings;
 }
@@ -308,9 +308,9 @@ export class ApiUsageScanner {
         private readonly externalApiPaths: readonly string[] = [],
         /** `no-root-union-api-type`'s switches — ARMED unless scanAndAttachApiRelations read otherwise. */
         private readonly rootUnionRule: RootUnionRule = RootUnionRule.enabledEverywhere(),
-        /** `api-rules-for-openapi`'s switches — OFF unless a repo opted in. */
+        /** `api-rules-for-openapi`'s switches — read from the config, which MUST state them (#1017). */
         private readonly openApiRule: ApiDocRule = ApiDocRule.off(OPENAPI_RULE),
-        /** `api-rules-for-mcp`'s switches — OFF unless a repo opted in. */
+        /** `api-rules-for-mcp`'s switches — read from the config, which MUST state them (#1017). */
         private readonly mcpRule: ApiDocRule = ApiDocRule.off(MCP_RULE),
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);

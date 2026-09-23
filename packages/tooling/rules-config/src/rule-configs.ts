@@ -415,7 +415,14 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,
     // which require human approval). Never applied to branches created off main.
-    subBranchNaming?: string;
+    //
+    // Schema-REQUIRED (#1017), like `mode` and `autoReapMergedBranches`, and for the same reason: it
+    // is BEHAVIOUR, not a knob. This string decides which branch names the guard BLOCKS, and the
+    // refusal quotes it back at the agent as the convention to follow — so a repo running webpieces'
+    // shipped value is a repo whose branch-naming convention was chosen by a framework author who
+    // never saw it. TS-optional but schema-required, the split `mode` uses: absent at RUNTIME means
+    // the config never passed validation.
+    subBranchNaming!: string;
     // Human-sentence instruction telling the AI how to name a NEW branch off main. Surfaced back
     // to the agent in the guard's fix hints. May mirror no-edit-on-main.branchNamingConvention.
     branchFormat?: string;
@@ -445,7 +452,7 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
         mode: new FieldDef('string', BRANCH_GUARD_MODES),
-        subBranchNaming: FieldDef.optional('string'),
+        subBranchNaming: new FieldDef('string'),
         branchFormat: FieldDef.optional('string'),
         maxLocalBranches: FieldDef.optional('number'),
         maxWorktrees: FieldDef.optional('number'),
