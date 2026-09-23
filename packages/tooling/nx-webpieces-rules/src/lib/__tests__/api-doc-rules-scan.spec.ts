@@ -229,14 +229,23 @@ describe('api-rules-for-openapi', () => {
         expect(found.cure).toContain('VALIDATE WRONGLY');
     });
 
-    it('REFUSES an RPC that returns void, and ALLOWS cloudtasks and cron that do', () => {
+    /**
+     * #1016 refused `void` on `rpc` alone, because `external` was unstated at the time. It is stated
+     * now (#1017): an `external` endpoint is a SYNCHRONOUS call an outside caller waits on, so there
+     * is a body and it must be a named DTO that can gain a field later. `cloudtasks` and `cron` keep
+     * it, because nobody is waiting for one.
+     */
+    it('REFUSES rpc AND external returning void, and ALLOWS cloudtasks and cron that do', () => {
         const findings = scan('void-rpc-api');
 
-        expect(lines(findings.openApi.violations)).toEqual([
-            'StoresApi.pause: an RPC returns nothing a document can name (void, unknown, or no ' +
-                'declared return type)',
+        expect(lines(findings.openApi.violations).sort()).toEqual([
+            'StoresApi.closed: an external endpoint returns nothing a document can name (void, ' +
+                'unknown, or no declared return type)',
+            'StoresApi.pause: an rpc endpoint returns nothing a document can name (void, unknown, ' +
+                'or no declared return type)',
         ]);
         expect(findings.openApi.violations[0].cure).toContain('empty object grows additively');
+        expect(findings.openApi.violations[0].cure).toContain('An external endpoint is a synchronous');
     });
 
     it('REFUSES an unknown VALUE TYPE, is not silenced by a no-any-unknown disable, and honours its own', () => {
@@ -483,5 +492,54 @@ describe('the switches', () => {
                 .run()
                 .openApi.isEmpty(),
         ).toBe(true);
+    });
+
+    /**
+     * AFFECTED_PROJECT (#1017) — the granularity nx already builds at. A contract in a project no
+     * changed path belongs to CANNOT have changed, so it is not scanned; every project whose tree the
+     * diff touched is. The two assertions below are one fixture read twice, which is the only way to
+     * show the narrowing rather than the rule simply being off.
+     */
+    it('AFFECTED_PROJECT does not scan an UNAFFECTED project, and does scan an affected one', () => {
+        const unaffected = new ApiDocRulesScan(
+            root,
+            fixtureProjects('open-enum-api'),
+            ApiDocRule.affected(OPENAPI_RULE, ['libraries/some-other-api/src/index.ts']),
+            ApiDocRule.off(MCP_RULE),
+        ).run();
+        expect(unaffected.openApi.isEmpty()).toBe(true);
+
+        const affected = new ApiDocRulesScan(
+            root,
+            fixtureProjects('open-enum-api'),
+            ApiDocRule.affected(OPENAPI_RULE, ['libraries/open-enum-api/src/index.ts']),
+            ApiDocRule.off(MCP_RULE),
+        ).run();
+        expect(affected.openApi.violations.length).toBeGreaterThan(0);
+    });
+
+    it('a path that merely PREFIXES a project root does not make it affected', () => {
+        const rule = ApiDocRule.affected(OPENAPI_RULE, ['libraries/open-enum-api-extras/src/x.ts']);
+
+        expect(rule.coversProject('libraries/open-enum-api')).toBe(false);
+        expect(rule.coversProject('libraries/open-enum-api-extras')).toBe(true);
+    });
+
+    it('RUN_EVERY_TIME carries no changed-path narrowing at all', () => {
+        expect(ApiDocRule.armed(OPENAPI_RULE).changedPaths).toBeNull();
+        expect(ApiDocRule.armed(OPENAPI_RULE).coversProject('anything/at/all')).toBe(true);
+    });
+
+    it('reads the MODE out of webpieces.config.json: RUN_EVERY_TIME scans all, AFFECTED_PROJECT asks the diff', () => {
+        expect(ApiDocRule.fromConfig(writeConfig({}), OPENAPI_RULE).changedPaths).toBeNull();
+
+        const affected = ApiDocRule.fromConfig(
+            writeConfig({ mode: 'AFFECTED_PROJECT' }),
+            OPENAPI_RULE,
+        );
+        expect(affected.enabled).toBe(true);
+        // A LIST (possibly empty here — the fixture dir is not a repository), never null: null is
+        // reserved for RUN_EVERY_TIME and for a diff that could not be computed at all.
+        expect(Array.isArray(affected.changedPaths) || affected.changedPaths === null).toBe(true);
     });
 });

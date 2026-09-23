@@ -207,11 +207,13 @@ describe('migrate', () => {
         expect(result.config.rules['max-file-lines']).toMatchObject(
             { mode: recommendedSeedMode('max-file-lines'), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
         // toMatchObject, not toEqual: a seeded entry also carries every OTHER schema-required field —
-        // here autoReapMergedBranches, which ships TRUE so dead branches are reaped without anyone
-        // having to opt in. Every reap is logged with a `recover=` command, so it is one paste to undo.
+        // here autoReapMergedBranches and subBranchNaming, both BEHAVIOUR and therefore stated in the
+        // consumer's own file rather than inherited from a default (#1017). Reaping seeds FALSE: until
+        // somebody has answered, webpieces deletes no branches.
         expect(result.config.hookGuards['branch-creation-guard']).toMatchObject(
             { mode: recommendedSeedMode('branch-creation-guard'), turnOffRuleUntilEpoch: 0,
-              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: true });
+              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: false,
+              subBranchNaming: 'feature/<ticket>/<short-description>' });
         expect(result.config.rules['max-file-lines']['mode']).not.toEqual('OFF');
         expect(result.config.hookGuards['branch-creation-guard']['mode']).not.toEqual('OFF');
     });

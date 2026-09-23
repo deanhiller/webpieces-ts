@@ -11,9 +11,34 @@ const DEFAULT_EXCLUDE_PATHS: readonly string[] = [
     '**/jest.config.ts',
 ];
 
-// On/off is driven by `mode` ("OFF" disables; an absent mode leaves a rule
-// on). Code-rules entries omit `mode` so each executor keeps its own default
-// scope; structural rules declare `mode: 'RUN_EVERY_TIME'`, bash guards `mode: 'ON'`.
+// A RULE HAS NO DEFAULT. Not `mode`, and not any other field a schema marks REQUIRED.
+//
+// This table is TUNING ONLY: the value an OPTIONAL field takes when a consumer omits it, and the value
+// the installer seeds that field with. It may never carry `mode`, and it may never carry a
+// schema-required field — `no-rule-defaults.spec.ts` fails the build if one appears, and
+// `webpieces-config-defaults-reviewer` fails the PR.
+//
+// Why, in one paragraph. Every rule with a schema is one `webpieces.config.json` must carry an entry
+// for: validateWebpiecesConfig pushes a copy-paste snippet for every RULE_SCHEMAS key the config does
+// not name, and that error FAILS THE LOAD. A default sitting beneath that is therefore not "the value
+// when nobody said" — it is the value when the loader is bypassed, and its real effect is to make the
+// question look answered. The consumer ANSWERING it is the product: a repo that was never asked
+// whether merged branches may be deleted unattended is a repo where nobody decided, and an agent
+// authoring a rule is the wrong party to decide that on every downstream repo's behalf. The failing
+// load is the delivery mechanism, exactly as a compile error is for a changed surface — the upgrade
+// breaks, the agent reads "add this entry", finds out what it means, and the human chooses.
+//
+// The six entries #1017 measured are gone from here, and every consumer must now state each one in
+// its own config: branch-creation-guard (mode + subBranchNaming + autoReapMergedBranches),
+// pr-lifecycle-guard (mode), branch-state-guard (mode + maxCommitsBehind), no-root-union-api-type,
+// api-rules-for-openapi and api-rules-for-mcp (mode). THIS repo states only the first three today —
+// the other three are new keys the one-release-behind validator does not know yet
+// (.claude/rules/published-vs-local-source.md), so they land with the pin bump, tracked in #1015.
+// `autoReapMergedBranches` and `subBranchNaming` are schema-REQUIRED
+// because they are BEHAVIOUR — one deletes branches unattended, the other decides which branch names
+// are blocked — and behaviour is stated, never inherited. The numeric caps (maxLocalBranches,
+// maxWorktrees) stay optional knobs on purpose: they tune a refusal that PRINTS the cap it hit, so the
+// value is visible at the moment it bites rather than only in webpieces' source.
 // webpieces-disable no-any-unknown -- rule options are opaque at framework level
 export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-any-unknown': {},
@@ -25,116 +50,49 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-destructure': { allowTopLevel: true },
     'catch-error-pattern': {},
     'no-unmanaged-exceptions': {},
-    'no-file-import-cycles': { mode: 'RUN_EVERY_TIME' },
-    'runtime-architecture': { mode: 'RUN_EVERY_TIME' },
+    'no-file-import-cycles': {},
+    'runtime-architecture': {},
     'prisma-validate-dtos': {},
     'prisma-converter': {},
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
-    // Ships OFF: a repo opts in per webpieces.config.json once it is ready to migrate any
-    // client-in-a-lib sites (severity defaults to "warn" so even when enabled it reports without
-    // failing until a repo flips it to "error").
-    'no-client-creation-outside-server-or-client': { mode: 'OFF' },
+    'no-client-creation-outside-server-or-client': {},
     'no-custom-css': { allowGlobs: [] },
-    // Ships ARMED, and diff-scoped. A template that restates a `.webpieces/` path ships that path into
-    // every governed repo as instruction, and the paths are per-worktree — so the default has to be the
-    // one that stops the NEXT one, not one a repo has to discover. NEW_AND_MODIFIED_CODE is what makes
-    // that safe: the docs whose subject IS the layout are untouched until somebody edits the line.
-    'no-state-paths-in-templates': { mode: 'NEW_AND_MODIFIED_CODE' },
+    'no-state-paths-in-templates': {},
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': {
-        mode: 'MODIFIED_PROJECTS',
         knownTypes: ['browser', 'react', 'angular', 'node', 'express'],
     },
     'role-tag': {
-        mode: 'MODIFIED_PROJECTS',
         knownTypes: ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'],
     },
-    'ensure-we-are-secure': { mode: 'MODIFIED_PROJECTS' },
-    'nx-wiring': { mode: 'RUN_EVERY_TIME' },
-    'di-graph': { mode: 'RUN_EVERY_TIME' },
-    'missing-design-annotation': { mode: 'RUN_EVERY_TIME' },
+    'ensure-we-are-secure': {},
+    'nx-wiring': {},
+    'di-graph': {},
+    'missing-design-annotation': {},
     'validate-ts-in-src': {
-        mode: 'NEW_AND_MODIFIED_FILES',
         allowedRootFiles: ['jest.setup.ts'],
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
-    'no-js-files': { mode: 'OFF' },
-    // The five Nx infrastructure validators. They enforced unconditionally before they were wired to
-    // config, so RUN_EVERY_TIME is the only default that keeps existing repos behaving identically on
-    // upgrade. Set "mode": "OFF" to disable one; the two graph-baseline rules
-    // (validate-architecture-unchanged / validate-no-architecture-cycles) additionally honor
-    // turnOffRuleUntilEpoch — the other three are all-or-nothing (see rule-configs.ts).
-    'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME' },
-    'validate-no-architecture-cycles': { mode: 'RUN_EVERY_TIME' },
-    'validate-packagejson': { mode: 'RUN_EVERY_TIME' },
-    'validate-versions-locked': { mode: 'RUN_EVERY_TIME' },
-    'validate-eslint-sync': { mode: 'RUN_EVERY_TIME' },
-    // Ships ARMED (#1009), which is the opposite of the usual "new rule ships OFF" and is deliberate:
-    // the defect it refuses BRICKS AN ENTIRE MCP CLIENT SESSION — one tool with a root-level oneOf
-    // makes every request to OpenAI or Anthropic 400, not just that tool's call — and it is found by a
-    // partner at runtime, in somebody else's client, where the symptom is every OTHER tool breaking.
-    // Shipping it off would mean the first repo to meet it learns the rule exists from that incident.
-    'no-root-union-api-type': { mode: 'RUN_EVERY_TIME' },
-    // The two CONTRACT rules (#1011) ship OFF, which is the OPPOSITE of the line directly above —
-    // and the difference between them is measurement, not taste.
-    //
-    // `no-root-union-api-type` was armed because its defect BRICKS a live MCP client session and the
-    // sweep that justified it found ZERO occurrences: arming a rule nothing violates costs nobody a
-    // red build. These two are the mirror image. The same sweep of a real upstream repo found 6
-    // OpenAPI failures and 57 MCP-blocked methods out of 98, and NONE of them is live — the defect is
-    // that a document which was never generated could not be generated, because `@ApiType` was never
-    // added. Arming them would turn somebody's next `pnpm install` into dozens of red lines at a
-    // moment they did not choose, over documents nobody is publishing yet.
-    //
-    // They are also, by design, a MIGRATION AID: a team switches one on when it decides to publish an
-    // API, fixes what it names, and only then adds `@ApiType`. That is a per-repo decision with a
-    // per-repo cost, which is the definition of opt-in. And the enabling edit cannot ship with the
-    // rule anyway — a brand-new config key is rejected by the one-release-behind validator (see
-    // .claude/rules/published-vs-local-source.md) — so OFF is also the only default under which the
-    // release and its adoption are not forced into the same PR.
-    'api-rules-for-openapi': { mode: 'OFF' },
-    'api-rules-for-mcp': { mode: 'OFF' },
-    // autoReapMergedBranches ships TRUE, and it is also what a fresh config is seeded with.
-    //
-    // It shipped FALSE on the reasoning that an upgrade must never delete branches unattended before a
-    // human opts in. In practice that produced the opposite of safety: nobody opts in, dead branches
-    // pile up, and the pile is what makes a real branch hard to find. The reap is also NOT destructive
-    // in the way the old comment implied — BranchReaper deletes only provably-dead branches (a merged
-    // PR, a squash-merge backup of one, or no commits of their own), spares everything else for a
-    // human, and logs each deletion to the branch-mutation log (BranchMutationLog.branchMutationLogPath,
-    // which is per-worktree) with the pre-delete SHA
-    // and a ready-made `recover=` command. So the worst case is one paste to undo, which a human can
-    // resolve; the previous default's worst case was unbounded accumulation nobody ever cleaned.
-    //
-    // Set it false to keep reaping manual; `pnpm wp-cleanup` works either way.
-    'branch-creation-guard': {
-        mode: 'ON',
-        subBranchNaming: 'feature/<ticket>/<short-description>',
-        autoReapMergedBranches: true,
-    },
-    'pr-lifecycle-guard': { mode: 'ON' },
+    'no-js-files': {},
+    'validate-architecture-unchanged': {},
+    'validate-no-architecture-cycles': {},
+    'validate-packagejson': {},
+    'validate-versions-locked': {},
+    'validate-eslint-sync': {},
+    'no-root-union-api-type': {},
+    'api-rules-for-openapi': {},
+    'api-rules-for-mcp': {},
+    'branch-creation-guard': {},
+    'pr-lifecycle-guard': {},
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and
     // HOOK_GUARD_NAMES with it. It is EXPERIMENTAL and OFF by default; the ONLY thing that turns it on
     // is `experimental.whole-repo-build-guard: true` in the optional machine-local
     // ~/.webpieces/config.json. Adding it back here would make it a rule every consumer must CONFIGURE
     // — which is fault Y, i.e. every Bash call blocked on upgrade, which is exactly what it did the
     // first time. See RETIRED_CONFIG_KEYS.
-    //
-    // branch-state-guard ships ON, INCLUDING its Read-blocking half.
-    //
-    // Its predecessor `read-stale-guard` shipped OFF as a "phase 1" staged rollout, on the reasoning
-    // that Read is the highest-blast-radius tool there is and nobody should be armed before verifying
-    // the fail-open paths against their own git layout. Phase 1 is over: this repo has run it ON in
-    // production for releases, and the fail-open paths (branch undeterminable, cache absent, cache for
-    // another branch, offline, dirty tree on main) are each covered by tests. Keeping it OFF now buys
-    // nothing and costs the exact incident the guard exists for — a session spent reading a tree 18
-    // commits behind while the log read "handled".
-    //
-    // Nothing is armed behind anyone's back either way: every built-in requires an explicit entry (the
-    // config-sync check blocks until one exists), so a consumer states this mode themselves on upgrade.
-    'branch-state-guard': { mode: 'ON', maxCommitsBehind: 5 },
+    'branch-state-guard': {},
 };
 
 export const defaultRulesDir: readonly string[] = [];

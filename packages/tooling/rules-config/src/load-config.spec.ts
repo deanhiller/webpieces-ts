@@ -79,7 +79,8 @@ const CODE_RULE_NAMES = [
 const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     'branch-state-guard': { maxCommitsBehind: 5 },
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
-    'branch-creation-guard': { autoReapMergedBranches: false },
+    // Schema-required (#1017): both are BEHAVIOUR, so a config states them rather than inheriting one.
+    'branch-creation-guard': { autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>' },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

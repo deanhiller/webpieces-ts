@@ -11,6 +11,9 @@ import { defaultRules } from './default-rules';
 // supports so a fresh config opts into a low-friction rollout rather than reflexively OFF.
 const GRADUAL_MODE_PREFERENCE = [
     'MODIFIED_PROJECTS',
+    // Same granularity as MODIFIED_PROJECTS, from the other direction: the projects nx's diff makes
+    // affected. Listed after it so a rule offering both keeps its existing recommendation (#1017).
+    'AFFECTED_PROJECT',
     'NEW_AND_MODIFIED_CODE',
     'NEW_AND_MODIFIED_METHODS',
     'MODIFIED_CLASS',
@@ -44,15 +47,41 @@ export function recommendedSeedMode(ruleName: string): string {
     return recommendedSeedModeFor(schema['mode']?.enumValues ?? []);
 }
 
+/**
+ * What a FRESH config is SEEDED with for a schema-REQUIRED field that is not `mode` or a hatch.
+ *
+ * This is NOT a default, and the distinction is the whole of #1017. A default is the value a rule
+ * runs on when the consumer's config never mentions it — invisible, and therefore a decision made
+ * for somebody who was never asked. A seed VALUE is written into the consumer's own
+ * `webpieces.config.json`, where it is read, reviewed and changed like any other line they own. So
+ * `defaultRules` may not carry a required field (no-rule-defaults.spec.ts fails the build if it
+ * does), and the installer still has something sensible to write on day one.
+ *
+ * Keyed `<rule>.<field>`. Anything absent falls through to the conservative type fallback below.
+ */
+// webpieces-disable no-any-unknown -- a config field value is opaque JSON by construction
+const SEED_VALUES: Record<string, unknown> = {
+    // The convention this repo's own config states; a consumer edits it to theirs.
+    'branch-creation-guard.subBranchNaming': 'feature/<ticket>/<short-description>',
+    // FALSE on purpose, and NOT what this repo runs. Unattended branch deletion is the one setting
+    // where "nobody has answered yet" must mean "delete nothing" — a consumer turns it on once they
+    // have read what BranchReaper proves dead and what it archives.
+    'branch-creation-guard.autoReapMergedBranches': false,
+    // 0..5 behind allowed, stale-main blocks at 6. The type fallback for a number is 0, which would
+    // block the moment origin/main moves at all — a seeded config that blocks on arrival.
+    'branch-state-guard.maxCommitsBehind': 5,
+};
+
 // The value a seeded entry gets for ONE required field. Order matters and is deliberate:
 //   1. the two universal escape hatches — always their "active" state (0 / null), never a placeholder;
 //   2. `mode` — the shared recommendation (see recommendedSeedMode);
-//   3. the framework's documented default for that rule (defaultRules) — the value the rule's own
-//      config class commits to, e.g. max-file-lines.limit: 900, branch-creation-guard
-//      .autoReapMergedBranches: true (reaping is on by default — see default-rules.ts for why);
-//   4. a conservative fallback by type — null if the field accepts null, false for boolean, [] for
-//      string[], the first enum value for an enum, '' / 0 otherwise. Reaching step 4 for a NEW field
-//      means the rule forgot to give defaultRules an entry, which the seed-validates-clean spec in
+//   3. this rule+field's SEED_VALUES entry, when it has one;
+//   4. the framework's documented tuning default for that rule (defaultRules), which by policy holds
+//      OPTIONAL fields only (e.g. max-file-lines.limit: 900) — so this step fires for a field that is
+//      required here and optional in another rule's schema;
+//   5. a conservative fallback by type — null if the field accepts null, false for boolean, [] for
+//      string[], the first enum value for an enum, '' / 0 otherwise. Reaching step 5 for a NEW
+//      required field means it wants a SEED_VALUES entry, which the seed-validates-clean spec in
 //      ai-hook-rules/src/bin/setup.spec.ts turns into a build failure if the fallback is not valid.
 // webpieces-disable no-any-unknown -- a config field value is opaque JSON by construction
 // webpieces-disable no-function-outside-class -- sibling of the module-scope schema helpers in this file
@@ -60,6 +89,9 @@ function seedFieldValue(ruleName: string, key: string, def: FieldDef): unknown {
     if (key === 'turnOffRuleUntilEpoch') return 0;
     if (key === 'turnOffRuleWhileOnBranch') return null;
     if (key === 'mode') return recommendedSeedModeFor(def.enumValues ?? []);
+
+    const seeded = SEED_VALUES[`${ruleName}.${key}`];
+    if (seeded !== undefined) return seeded;
 
     const documented = defaultRules[ruleName]?.[key];
     if (documented !== undefined) return documented;

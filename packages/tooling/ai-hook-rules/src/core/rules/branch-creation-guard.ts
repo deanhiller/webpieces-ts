@@ -14,7 +14,6 @@ import { toError } from '../to-error';
 // intentionally NOT the sub-branch convention (sub-branches are a separate, human-approved path).
 const DEFAULT_BRANCH_FORMAT =
     'Name it {whoami}/<short-feature-description> — lowercase, no version numbers, no sub/ prefix (e.g. dean/upgrade-webpieces)';
-const DEFAULT_SUB_BRANCH_NAMING = 'feature/<ticket>/<short-description>';
 
 // Hard cap on local feature branches. Enforced at CREATION because that is the one moment cleanup is
 // both cheap and obviously worth it — reaping happens over time, never "ASAP".
@@ -139,7 +138,6 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         'Block new-branch and new-worktree creation when main is stale, when branching off a non-main ' +
         'branch, or when the branch/worktree count is at its cap (forces cleanup of dead ones).';
     override readonly defaultOptions = {
-        subBranchNaming: DEFAULT_SUB_BRANCH_NAMING,
         branchFormat: DEFAULT_BRANCH_FORMAT,
         maxLocalBranches: DEFAULT_MAX_LOCAL_BRANCHES,
         maxWorktrees: DEFAULT_MAX_WORKTREES,
@@ -162,8 +160,10 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         return this.config.branchFormat ?? DEFAULT_BRANCH_FORMAT;
     }
 
+    // No `??` fallback: `subBranchNaming` is schema-REQUIRED (#1017), so a config that reached here
+    // stated it. A default here would be the framework choosing a consumer's branch convention.
     private get subBranchNaming(): string {
-        return this.config.subBranchNaming ?? DEFAULT_SUB_BRANCH_NAMING;
+        return this.config.subBranchNaming;
     }
 
     private get maxLocalBranches(): number {
