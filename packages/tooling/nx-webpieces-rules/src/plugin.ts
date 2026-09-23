@@ -19,7 +19,7 @@
  */
 
 import { dirname, join } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import type {
     CreateNodesV2,
     CreateNodesContextV2,
@@ -34,7 +34,7 @@ import {
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
-import { GenerateTargets, RawProjectJson } from './generate-targets';
+import { GenerateTargets, RawProjectJson, RawProjectJsonReader } from './generate-targets';
 
 /**
  * Circular dependency checking options
@@ -273,7 +273,7 @@ function addPerProjectTargets(
             projectRoot,
             opts,
             architectureEnabled,
-            isProjectJson ? readRawProjectJson(context.workspaceRoot, projectFile, projectRoot) : undefined,
+            isProjectJson ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot) : undefined,
         );
 
         if (Object.keys(targets).length === 0) continue;
@@ -288,15 +288,6 @@ function addPerProjectTargets(
 
         results.push([projectFile, result] as const);
     }
-}
-
-/** The fields of a project.json that tag-driven inference reads, as they sit in the file. */
-type ProjectJsonFields = { name?: string; tags?: string[]; targets?: RawProjectJson['targets'] };
-
-/** The raw fields of this project's project.json that tag-driven inference reads (tags, targets). */
-function readRawProjectJson(workspaceRoot: string, projectFile: string, projectRoot: string): RawProjectJson {
-    const raw = JSON.parse(readFileSync(join(workspaceRoot, projectFile), 'utf8')) as ProjectJsonFields;
-    return new RawProjectJson(raw.name ?? projectRoot, raw.tags ?? [], raw.targets ?? {});
 }
 
 /**

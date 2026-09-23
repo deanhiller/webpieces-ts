@@ -37,11 +37,7 @@ import type {
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
-import {
-    GenerateWiring,
-    GenerateWiringProblem,
-    ProjectDependency,
-} from '../../lib/generated-docs/generate-wiring';
+import { GenerateWiring } from '../../lib/generated-docs/generate-wiring';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -219,21 +215,6 @@ function reportProjectGateFailure(problems: ProjectGateProblem[]): void {
     }
 }
 
-function reportGenerateWiringFailure(problems: GenerateWiringProblem[]): void {
-    console.error('\n❌ A project generating API documents is not wired so that ^build generates them.\n');
-    for (const p of problems) {
-        console.error(`  ${p.project}: ${p.problem}`);
-        console.error(`    fix: ${p.cure}\n`);
-    }
-}
-
-function generateWiringProblems(
-    projectsConfig: ProjectsConfigurations,
-    graphDependencies: Record<string, readonly ProjectDependency[]>,
-): GenerateWiringProblem[] {
-    return new GenerateWiring(projectsConfig.projects, graphDependencies).problems();
-}
-
 export default async function runExecutor(
     options: ValidateNxWiringOptions,
     context: ExecutorContext,
@@ -253,7 +234,8 @@ export default async function runExecutor(
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
 
-    const generateProblems = generateWiringProblems(projectsConfig, projectGraph.dependencies);
+    const generateWiring = new GenerateWiring(projectsConfig.projects, projectGraph.dependencies);
+    const generateProblems = generateWiring.problems();
 
     const inUse = findCompileExecutorsInUse(projectsConfig, compileExecutors);
     const relevantExecutors = compileExecutors.filter((executorName: string) =>
@@ -262,7 +244,7 @@ export default async function runExecutor(
 
     if (relevantExecutors.length === 0) {
         if (generateProblems.length > 0) {
-            reportGenerateWiringFailure(generateProblems);
+            generateWiring.report(generateProblems);
             return { success: false };
         }
         console.log('✅ No known compile executors in use — nothing to gate\n');
@@ -280,6 +262,6 @@ export default async function runExecutor(
 
     if (wiringProblems.length > 0) reportFailure(wiringProblems, requiredDeps);
     if (gateProblems.length > 0) reportProjectGateFailure(gateProblems);
-    if (generateProblems.length > 0) reportGenerateWiringFailure(generateProblems);
+    if (generateProblems.length > 0) generateWiring.report(generateProblems);
     return { success: false };
 }

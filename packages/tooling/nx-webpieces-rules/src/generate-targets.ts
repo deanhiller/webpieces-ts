@@ -28,6 +28,8 @@
 
 import type { TargetConfiguration } from '@nx/devkit';
 import { GeneratedApiDocsLayout, LayoutTargets } from '@webpieces/core-util';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 export const GENERATE_OPENAPI_TAG = 'generate:openapi';
 export const GENERATE_DOCS_SITE_TAG = 'generate:docs-site';
@@ -39,6 +41,17 @@ export class RawProjectJson {
         readonly tags: readonly string[],
         readonly targets: LayoutTargets,
     ) {}
+}
+
+/** The fields of a project.json that tag-driven inference reads, as they sit in the file. */
+type ProjectJsonFields = { name?: string; tags?: string[]; targets?: LayoutTargets };
+
+/** Reads the raw project.json — the tags and the consumer's own target options — at graph time. */
+export class RawProjectJsonReader {
+    read(workspaceRoot: string, projectFile: string, projectRoot: string): RawProjectJson {
+        const raw = JSON.parse(readFileSync(join(workspaceRoot, projectFile), 'utf8')) as ProjectJsonFields;
+        return new RawProjectJson(raw.name ?? projectRoot, raw.tags ?? [], raw.targets ?? {});
+    }
 }
 
 export class GenerateTargets {
