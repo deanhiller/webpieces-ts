@@ -20,6 +20,7 @@ about to do; skip the rest.
 | `.claude/rules/published-vs-local-source.md` | you change `packages/tooling/**`, a validator rejects a config key, a guard/executor does not seem to see your change, or you are in a linked worktree |
 | `.claude/rules/packaging-and-bins.md` | you touch a `package.json` `bin` / `publishConfig`, the publish script, `pnpm-workspace.yaml`'s catalog, or a `workspace:` dep between `packages/tooling/*` |
 | `.claude/rules/never-tell-an-ai-to-end-its-turn.md` | your diff writes or edits ANY string webpieces prints at an agent — a gate banner, a guard cure, a `wp-*` output, a `templates/**` file — and especially one about WAITING |
+| `.claude/rules/api-docs.md` | you change a contract, an `openapi.manifest.json`, anything under `packages/docs/**`, or an `openapi-generate` / `docs-generate` target — or you are about to commit a generated document |
 | `.claude/rules/framework-patterns.md` | you are writing a filter, a controller, a `Routes` class, or a test against the server, or you need the request-path architecture overview |
 | `.claude/rules/decorator-object-literal-carve-out.md` | you are about to write an object literal as a DECORATOR argument, or you are reviewing one |
 

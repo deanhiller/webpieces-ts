@@ -9,13 +9,11 @@ node_modules/
 # Generated files
 *.tsbuildinfo
 
-# Documents written by `wp-openapi`, byte for byte, and committed as goldens. Prettier reformatting
-# them would make the regenerate-and-diff spec fail against a file nothing in the generator produced.
-**/generated/*openapi.json
-**/generated/*openapi.yaml
-**/generated/mcp-tools.json
-
-# The MCP tool catalog golden, for the same reason: it is what `McpToolCatalog.toJsonText()` writes.
+# Test goldens written by `wp-openapi`, byte for byte. Prettier reformatting them would make the
+# regenerate-and-diff specs fail against a file nothing in the generator produced. (An app's REAL
+# generated documents are build output under dist/ and are never committed — see
+# .claude/rules/api-docs.md.)
+**/__tests__/goldens/*openapi.json
 **/__tests__/goldens/mcp-tools.json
 
 # Markdown files

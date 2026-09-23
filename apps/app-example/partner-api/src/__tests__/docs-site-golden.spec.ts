@@ -17,14 +17,17 @@ import { DocsSiteCli } from '@webpieces/docs-site';
  *
  * ## Why this asserts properties and the OpenAPI golden asserts bytes
  *
- * `openapi-golden.spec.ts` commits its documents because a moved byte there IS a moved published
- * contract. Committing the HTML would instead pin the stylesheet, the class names and the markup —
+ * `openapi-golden.spec.ts` pins its documents byte for byte because a moved byte there IS a moved
+ * contract. Pinning the HTML would instead pin the stylesheet, the class names and the markup —
  * none of which a partner has a contract about — and every layout change would arrive as a
  * thousand-line diff nobody could read the real change out of. So the ASSERTIONS are the golden:
  * they name the properties a reader depends on, and they are what a layout change must keep true.
+ *
+ * The input is the document golden `openapi-golden.spec.ts` proves is what the generator emits
+ * today, so this spec renders the real partner-facing document without re-running the generator.
  */
 const PROJECT = path.resolve(__dirname, '..', '..');
-const SPEC = path.join(PROJECT, 'generated', 'public-openapi.json');
+const SPEC = path.join(__dirname, 'goldens', 'public-openapi.json');
 const PROSE = path.join(PROJECT, 'docs');
 
 class Site {
