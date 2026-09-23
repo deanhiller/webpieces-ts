@@ -4,6 +4,8 @@
  * This plugin automatically creates targets for:
  * 1. Workspace-level architecture validation (generate, visualize, validate-*)
  * 2. Per-project circular dependency checking
+ * 3. Per-project API documents, opted into with a TAG: `generate:openapi` infers `openapi-generate`,
+ *    `generate:docs-site` infers `openapi-generate` + `docs-generate` (see generate-targets.ts)
  *
  * Install with: nx add @webpieces/nx-webpieces-rules
  *
@@ -17,7 +19,7 @@
  */
 
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import type {
     CreateNodesV2,
     CreateNodesContextV2,
@@ -32,6 +34,7 @@ import {
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
+import { GenerateTargets, RawProjectJson } from './generate-targets';
 
 /**
  * Circular dependency checking options
@@ -270,6 +273,7 @@ function addPerProjectTargets(
             projectRoot,
             opts,
             architectureEnabled,
+            isProjectJson ? readRawProjectJson(context.workspaceRoot, projectFile, projectRoot) : undefined,
         );
 
         if (Object.keys(targets).length === 0) continue;
@@ -286,6 +290,15 @@ function addPerProjectTargets(
     }
 }
 
+/** The fields of a project.json that tag-driven inference reads, as they sit in the file. */
+type ProjectJsonFields = { name?: string; tags?: string[]; targets?: RawProjectJson['targets'] };
+
+/** The raw fields of this project's project.json that tag-driven inference reads (tags, targets). */
+function readRawProjectJson(workspaceRoot: string, projectFile: string, projectRoot: string): RawProjectJson {
+    const raw = JSON.parse(readFileSync(join(workspaceRoot, projectFile), 'utf8')) as ProjectJsonFields;
+    return new RawProjectJson(raw.name ?? projectRoot, raw.tags ?? [], raw.targets ?? {});
+}
+
 /**
  * Build the target map for one project. Most targets are project.json-only
  * (package.json-only projects may not have TypeScript source); `ci` goes on all.
@@ -295,6 +308,7 @@ function buildPerProjectTargets(
     projectRoot: string,
     opts: Required<ArchitecturePluginOptions>,
     architectureEnabled: boolean,
+    rawProject: RawProjectJson | undefined,
 ): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
 
@@ -321,6 +335,17 @@ function buildPerProjectTargets(
     if (isProjectJson && opts.workspace.validations!.diGraph) {
         targets['di-graph-generate'] = createDiGraphGenerateTarget();
         validationTargets.push('di-graph-generate');
+    }
+
+    // API documents, opted into with a TAG (generate:openapi / generate:docs-site). An untagged project
+    // costs this one in-memory tag check. They ride ci like every other build step — generation is
+    // ordinary BUILD work, not a side channel (#1021).
+    if (rawProject !== undefined) {
+        const generated = new GenerateTargets(projectRoot, rawProject).infer();
+        for (const [name, target] of Object.entries(generated)) {
+            targets[name] = target;
+            validationTargets.push(name);
+        }
     }
 
     // Add ci target to ALL projects (both project.json and package.json). ci aggregates

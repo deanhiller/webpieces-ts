@@ -69,7 +69,8 @@ import {
     RelayWebpiecesPeerErrors,
     REMOTE_ROLES,
     REMOTE_SERVICE,
-    REMOTE_TOOL_CATALOG,
+    GATEWAY_CATALOGS,
+    REMOTE_MCP_CATALOG,
     REMOTE_USER,
     RemoteMcpApi,
     RemoteMcpController,
@@ -156,7 +157,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             ]),
         );
         tool = requiredTool(
-            new McpToolRegistry([binding], REMOTE_TOOL_CATALOG),
+            new McpToolRegistry([binding], [REMOTE_MCP_CATALOG]),
             'remote_integration_search',
         );
         await startGateway(jwtHook, factory);
@@ -239,7 +240,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                         ),
                     ),
                 ],
-                REMOTE_TOOL_CATALOG,
+                GATEWAY_CATALOGS,
                 McpDeployment.singleProcess(),
             ),
         );

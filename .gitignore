@@ -12,6 +12,8 @@ lerna-debug.log*
 dist/
 build/
 out/
+# The static API docs site docs-generate renders for HOSTING (never packed, never committed, #1021).
+generated-docs/
 
 # TypeScript cache
 *.tsbuildinfo

@@ -21,7 +21,7 @@ import {
     WpAuthJwt,
     WpAuthOidc,
     ApiJsonSchema,
-    McpToolCatalog,
+    McpToolCatalogFile,
     McpToolDefinition,
     ObjectSchemaBuilder,
     WpMcpAuthJwt,
@@ -38,6 +38,7 @@ import { RequestContext } from '@webpieces/core-context';
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
 import { McpAccessTokenAuthority, VerifiedMcpCredential } from '../McpAuth';
 import { MCP_INVOCATION_CONTEXT } from '../McpInvocationContext';
+import { McpToolCatalog } from '../McpToolCatalog';
 
 export const USER_ID = ContextKey.trusted<string>(
     'mcpSpecUserId',
@@ -69,8 +70,8 @@ export class SearchResponse {
 }
 
 /**
- * The tool catalog these specs boot `WpMcpServer` with — the same shape `wp-openapi` writes to
- * `mcp-tools.json` from the contracts above.
+ * The tool catalogs these specs boot `WpMcpServer` with — ONE PER CONTRACT, the same shape
+ * `wp-openapi` writes to `mcp-<ContractClass>-tools.json` from the contracts below.
  *
  * It is built by hand here rather than extracted, because `@webpieces/mcp-server` deliberately does
  * not depend on the TypeScript compiler API: the runtime's job is to BE HANDED a catalog, and these
@@ -107,26 +108,38 @@ function searchTool(
     );
 }
 
-export const SPEC_TOOL_CATALOG = new McpToolCatalog([
-    searchTool(
-        'account_search',
-        'search',
-        'Search records owned by the authenticated user.',
-        new WpMcpToolHints(true, false, true, false),
-    ),
-    searchTool(
-        'admin_search',
-        'admin',
-        'Administrative search.',
-        new WpMcpToolHints(false, true, false, false),
-    ),
-    searchTool(
-        'remote_search',
-        'search',
-        'Search a remote binding.',
-        new WpMcpToolHints(false, true, false, false),
-    ),
-]);
+/** The label a hand-built catalog carries where a read one names its directory. */
+export const IN_MEMORY = '(built in memory by the spec)';
+
+export const SEARCH_API_CATALOG = new McpToolCatalog(
+    new McpToolCatalogFile('SearchApi', [
+        searchTool(
+            'account_search',
+            'search',
+            'Search records owned by the authenticated user.',
+            new WpMcpToolHints(true, false, true, false),
+        ),
+        searchTool(
+            'admin_search',
+            'admin',
+            'Administrative search.',
+            new WpMcpToolHints(false, true, false, false),
+        ),
+    ]),
+    IN_MEMORY,
+);
+
+export const REMOTE_SEARCH_API_CATALOG = new McpToolCatalog(
+    new McpToolCatalogFile('RemoteSearchApi', [
+        searchTool(
+            'remote_search',
+            'search',
+            'Search a remote binding.',
+            new WpMcpToolHints(false, true, false, false),
+        ),
+    ]),
+    IN_MEMORY,
+);
 
 @ApiPath('/mcp-spec')
 @ApiType(SVC_TO_SVC, MCP)

@@ -167,7 +167,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
                     `'${this.config.resource}' and the bound route are the same endpoint.`,
             );
         }
-        this.registry = new McpToolRegistry(options.bindings, options.toolCatalog);
+        this.registry = new McpToolRegistry(options.bindings, options.toolCatalogs);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
         this.streamingHandler = this.createHandler(options, 'sse');

@@ -37,7 +37,7 @@ import {
     WpAuthJwt,
     WpAuthOidc,
     ApiJsonSchema,
-    McpToolCatalog,
+    McpToolCatalogFile,
     McpToolDefinition,
     ObjectSchemaBuilder,
     WpMcpAuthJwt,
@@ -51,6 +51,7 @@ import {
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
+import { McpToolCatalog } from '../McpToolCatalog';
 
 /** Contracts, controllers and test doubles for McpRemoteBinding.integration.spec.ts. */
 
@@ -99,8 +100,8 @@ export class RemoteResponse {
 }
 
 /**
- * The generated tool catalog these contracts would produce — what `wp-openapi` writes to
- * `mcp-tools.json`. Hand-built here because `@webpieces/mcp-server` does not depend on the
+ * The generated tool catalogs these contracts would produce — what `wp-openapi` writes, one
+ * `mcp-<ContractClass>-tools.json` per contract. Hand-built here because `@webpieces/mcp-server` does not depend on the
  * TypeScript compiler API; the runtime's job is to BE HANDED a catalog.
  */
 function describedString(description: string): ApiJsonSchema {
@@ -124,15 +125,31 @@ function searchTool(name: string, methodName: string, description: string): McpT
     );
 }
 
-export const REMOTE_TOOL_CATALOG = new McpToolCatalog([
+/** One contract's hand-built catalog, labelled as built in memory. */
+function contractCatalog(contractName: string, tool: McpToolDefinition): McpToolCatalog {
+    return new McpToolCatalog(new McpToolCatalogFile(contractName, [tool]), '(built in memory by the spec)');
+}
+
+export const REMOTE_MCP_CATALOG = contractCatalog(
+    'RemoteMcpApi',
     searchTool('remote_integration_search', 'search', 'Calls a remote Webpieces API.'),
-    searchTool('missing_remote_integration_search', 'search', 'Intentionally absent route.'),
-    searchTool('refused_remote', 'search', 'Nothing listens on this port.'),
-    searchTool('garbage_remote', 'search', 'Answers an undecodable body.'),
-    searchTool('oidc_fail_remote', 'search', 'Its OIDC token cannot be minted.'),
-    searchTool('local_throw', 'fail', 'Throws the requested failure in-process.'),
-    searchTool('remote_throw', 'fail', 'Throws the requested failure remotely.'),
-]);
+);
+
+/** The catalogs of every contract the gateway binds — one per contract, exactly as a build writes them. */
+export const GATEWAY_CATALOGS: readonly McpToolCatalog[] = [
+    contractCatalog(
+        'MissingRemoteMcpApi',
+        searchTool('missing_remote_integration_search', 'search', 'Intentionally absent route.'),
+    ),
+    contractCatalog('RefusedRemoteApi', searchTool('refused_remote', 'search', 'Nothing listens on this port.')),
+    contractCatalog('GarbageRemoteApi', searchTool('garbage_remote', 'search', 'Answers an undecodable body.')),
+    contractCatalog(
+        'OidcFailRemoteApi',
+        searchTool('oidc_fail_remote', 'search', 'Its OIDC token cannot be minted.'),
+    ),
+    contractCatalog('LocalThrowApi', searchTool('local_throw', 'fail', 'Throws the requested failure in-process.')),
+    contractCatalog('RemoteThrowApi', searchTool('remote_throw', 'fail', 'Throws the requested failure remotely.')),
+];
 
 @ApiPath('/remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)

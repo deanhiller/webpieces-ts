@@ -35,7 +35,7 @@ export class McpToolDefinition {
     ) {}
 }
 
-/** Thrown when the catalog a server was handed is not a catalog this release can read. */
+/** Thrown when a catalog is not one this release can read or write. */
 export class McpToolCatalogError extends Error {
     constructor(
         message: string,
@@ -49,24 +49,52 @@ export class McpToolCatalogError extends Error {
 }
 
 /** The one cure every catalog failure prescribes: rebuild the artifact from the contracts. */
-const REGENERATE = 'Regenerate it with `wp-openapi --manifest <manifest> --out <dir>`.';
+const REGENERATE =
+    'Rebuild the api library that declares the contract (its `openapi-generate` target runs ' +
+    '`wp-openapi`, which writes one `mcp-<ContractClass>-tools.json` per MCP contract).';
+
+const FILE_PREFIX = 'mcp-';
+const FILE_SUFFIX = '-tools.json';
+
+/** A class name, which is what the file name carries. Anything else is not one of these files. */
+const CONTRACT_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 /**
- * Every MCP tool one build published, keyed by protocol name — the artifact `wp-openapi` writes as
- * `mcp-tools.json` and `WpMcpServer` is constructed with.
+ * ONE contract's MCP tools, keyed by protocol name — the artifact `wp-openapi` writes as
+ * `mcp-<ContractClass>-tools.json`, one file per contract that declares `MCP` and has at least one
+ * `@WpMcpTool`, beside the library's OpenAPI documents.
  *
- * A tool the build never saw is a tool whose schema nobody checked, so `McpToolRegistry` fails fast
- * at boot rather than publishing a shape derived from a second source.
+ * ## Why one file per CONTRACT and not one per library
+ *
+ * One api library holds many contracts (it is how a public partner API is grouped), and a server binds
+ * contracts, not libraries — `McpApiBinding.local(LangCourseAuthorApi, ...)`. With one file per
+ * contract the server can check every binding against exactly the file generated from THAT contract,
+ * and refuse a file it was handed for a contract it does not bind. A single per-library file could only
+ * say "some tool is missing" (#1021).
+ *
+ * This is the browser-safe CODEC — the bytes and the file name. Reading the files from an installed
+ * package is `McpToolCatalog.fromPackages` in `@webpieces/mcp-server`, because only a node process
+ * has a filesystem to read them from.
  */
-export class McpToolCatalog {
+export class McpToolCatalogFile {
     private readonly byName: ReadonlyMap<string, McpToolDefinition>;
 
-    constructor(readonly tools: readonly McpToolDefinition[]) {
+    constructor(
+        /** The contract CLASS name — `binding.api.name` at runtime, the class declaration at build time. */
+        readonly contractName: string,
+        readonly tools: readonly McpToolDefinition[],
+    ) {
+        if (!CONTRACT_NAME.test(contractName)) {
+            throw new McpToolCatalogError(
+                `'${contractName}' is not a contract class name, so it cannot name an MCP tool catalog.`,
+                REGENERATE,
+            );
+        }
         const byName = new Map<string, McpToolDefinition>();
         for (const tool of tools) {
             if (byName.has(tool.name)) {
                 throw new McpToolCatalogError(
-                    `Duplicate MCP tool name '${tool.name}' in the generated catalog.`,
+                    `Duplicate MCP tool name '${tool.name}' in the generated catalog of ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
                         "of the two @WpMcpTool('...') declarations.",
                 );
@@ -74,6 +102,11 @@ export class McpToolCatalog {
             byName.set(tool.name, tool);
         }
         this.byName = byName;
+    }
+
+    /** `mcp-<ContractClass>-tools.json`. */
+    get fileName(): string {
+        return McpToolCatalogFile.fileNameFor(this.contractName);
     }
 
     find(name: string): McpToolDefinition | undefined {
@@ -93,28 +126,51 @@ export class McpToolCatalog {
         return `${JSON.stringify(tools, undefined, 2)}\n`;
     }
 
+    /** The file name the catalog of `contractName` is written to and read from. */
+    // webpieces-disable no-function-outside-class -- static helper of this class
+    static fileNameFor(contractName: string): string {
+        return `${FILE_PREFIX}${contractName}${FILE_SUFFIX}`;
+    }
+
+    /** The contract a file name is the catalog of, or `undefined` when it is not one of these files. */
+    // webpieces-disable no-function-outside-class -- static helper of this class
+    static contractNameOf(fileName: string): string | undefined {
+        if (!fileName.startsWith(FILE_PREFIX) || !fileName.endsWith(FILE_SUFFIX)) return undefined;
+        const name = fileName.slice(FILE_PREFIX.length, fileName.length - FILE_SUFFIX.length);
+        return CONTRACT_NAME.test(name) ? name : undefined;
+    }
+
     /**
-     * Reads `mcp-tools.json`. Every nested value is rebuilt as a real class instance, because this is
-     * the one place untyped bytes become the schemas a live protocol surface publishes.
+     * Reads one `mcp-<ContractClass>-tools.json`. The contract is the one the FILE NAME names. Every
+     * nested value is rebuilt as a real class instance, because this is the one place untyped bytes
+     * become the schemas a live protocol surface publishes.
      *
      * Malformed JSON is not caught here: it throws `SyntaxError` to the caller's own top-level
      * handler, which is where every other read-the-world failure in webpieces is reported.
      */
     // webpieces-disable no-function-outside-class -- static factory of this class
-    static fromJsonText(text: string): McpToolCatalog {
-        return new McpCatalogJson().parse(text);
+    static fromJsonText(fileName: string, text: string): McpToolCatalogFile {
+        const contractName = McpToolCatalogFile.contractNameOf(fileName);
+        if (contractName === undefined) {
+            throw new McpToolCatalogError(
+                `'${fileName}' is not an MCP tool catalog file name; they are named ` +
+                    `${FILE_PREFIX}<ContractClass>${FILE_SUFFIX}.`,
+                REGENERATE,
+            );
+        }
+        return new McpToolCatalogFile(contractName, new McpCatalogJson().parse(text));
     }
 }
 
 /**
  * The PARSE BOUNDARY: untyped bytes in, real class instances out.
  *
- * A class of its own rather than statics on {@link McpToolCatalog} so every step is an ordinary
+ * A class of its own rather than statics on {@link McpToolCatalogFile} so every step is an ordinary
  * instance method — and because it is the one place in this file where `unknown` is the correct type
  * rather than a missing one. Nothing else in webpieces should ever hold a half-narrowed schema.
  */
 class McpCatalogJson {
-    parse(text: string): McpToolCatalog {
+    parse(text: string): readonly McpToolDefinition[] {
         // webpieces-disable no-any-unknown -- this IS the untyped-bytes boundary; every step below narrows it
         const parsed: unknown = JSON.parse(text);
         if (!Array.isArray(parsed)) {
@@ -124,7 +180,7 @@ class McpCatalogJson {
             );
         }
         // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs
-        return new McpToolCatalog(parsed.map((entry: unknown) => this.toolFrom(entry)));
+        return parsed.map((entry: unknown) => this.toolFrom(entry));
     }
 
     // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs

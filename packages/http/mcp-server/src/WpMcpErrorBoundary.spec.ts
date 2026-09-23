@@ -11,7 +11,7 @@ import {
     HeaderRegistry,
     LoggerFactory,
     LogManager,
-    McpToolCatalog,
+    McpToolCatalogFile,
     McpToolDefinition,
     ObjectSchemaBuilder,
     WpAuthJwt,
@@ -29,6 +29,7 @@ import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
+import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
 import {
     McpHttpTestHarness,
@@ -41,7 +42,8 @@ import {
     RecordedLogLine,
     RecordingLoggerFactory,
     SearchApi,
-    SPEC_TOOL_CATALOG,
+    IN_MEMORY,
+    SEARCH_API_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
@@ -99,7 +101,8 @@ function sentenceSchema(): ApiJsonSchema {
         .build();
 }
 
-const PASSAGE_CATALOG = new McpToolCatalog([
+const PASSAGE_CATALOG = new McpToolCatalog(
+    new McpToolCatalogFile('PassageApi', [
     new McpToolDefinition(
         'passages_find',
         'passages',
@@ -115,8 +118,9 @@ const PASSAGE_CATALOG = new McpToolCatalog([
             .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
             .build(),
     ),
-    ...SPEC_TOOL_CATALOG.tools,
-]);
+    ]),
+    IN_MEMORY,
+);
 
 @injectable()
 class PassageController extends PassageApi {
@@ -176,7 +180,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(SearchApi, router), McpApiBinding.local(PassageApi, router)],
-                PASSAGE_CATALOG,
+                [PASSAGE_CATALOG, SEARCH_API_CATALOG],
                 McpDeployment.singleProcess(),
             ),
         );

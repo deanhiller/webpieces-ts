@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { McpToolCatalog } from '@webpieces/core-util';
+import { McpToolCatalogFile } from '@webpieces/core-util';
 import { OpenApiCli, YamlReader } from '@webpieces/openapi-generator';
 
 /**
@@ -11,9 +11,9 @@ import { OpenApiCli, YamlReader } from '@webpieces/openapi-generator';
  * ## These are test fixtures, not the published documents
  *
  * An app's generated documents are BUILD OUTPUT: `openapi-generate` writes them into the project's
- * build `outputPath` and they ship inside its npm package, never committed (#986). A consuming repo
- * commits nothing generated — it trusts the generator. webpieces is the one place that must PROVE the
- * generator still works, so this spec pins its output against expected bytes, exactly as any unit test
+ * compile target's `outputPath` and they ship inside its npm package, never committed (#986, #1021).
+ * A consuming repo commits nothing generated — it trusts the generator. webpieces is the one place
+ * that must PROVE the generator still works, so this spec pins its output against expected bytes, exactly as any unit test
  * pins its expected output. `src/__tests__/goldens/` holds those bytes and nothing else reads them.
  *
  * ## Why a golden and not a set of assertions about the document
@@ -21,8 +21,8 @@ import { OpenApiCli, YamlReader } from '@webpieces/openapi-generator';
  * Assertions only fail for the things somebody thought to assert. What this test has to catch is a
  * change nobody predicted in what the GENERATOR emits for an ordinary-looking contract: a decorator
  * gains an argument, a JSDoc sentence is reworded, a DTO field turns optional — and the output moves.
- * (Whether a CONTRACT change moved what partners see is the PR gate's job, not this spec's: it diffs
- * the generated document at the merge-base against HEAD and posts the difference on the PR.)
+ * (Whether a CONTRACT change moved what partners see is read off the contract source's own diff in
+ * review, not this spec's job: nothing generated is committed or compared, #1021.)
  *
  * ## Why only the JSON is pinned
  *
@@ -41,6 +41,12 @@ const GOLDENS = path.join(__dirname, 'goldens');
 
 /** The documents this contract set produces, by the `@ApiType`s it declares. */
 const DOCUMENTS = ['full-private-openapi', 'public-openapi', 'mcp-openapi'];
+
+/**
+ * The MCP tool catalog: ONE FILE PER CONTRACT (#1021). Only `PartnerOrdersApi` declares `MCP`, so it is
+ * the only one — `PartnerDeliveryWebhookApi` is a partner contract with no agent tools.
+ */
+const MCP_CATALOG = 'mcp-PartnerOrdersApi-tools.json';
 
 const REGENERATE = [
     'If the new output is intended, regenerate the goldens:',
@@ -94,10 +100,10 @@ describe('the OpenAPI documents generated from the example contract', () => {
         const json = Array.from(golden.fresh.keys())
             .filter((name: string) => name.endsWith('.json'))
             .sort();
-        // mcp-tools.json is not a DOCUMENT — it is the RUNTIME catalog, not serialized by --format —
-        // but it is pinned exactly like one.
+        // The per-contract MCP catalog is not a DOCUMENT — it is the RUNTIME catalog, not serialized
+        // by --format — but it is pinned exactly like one.
         expect(json).toEqual(
-            [...DOCUMENTS.map((name: string) => `${name}.json`), 'mcp-tools.json'].sort(),
+            [...DOCUMENTS.map((name: string) => `${name}.json`), MCP_CATALOG].sort(),
         );
     });
 
@@ -123,15 +129,15 @@ describe('the OpenAPI documents generated from the example contract', () => {
      */
     it('gives fetch_orders an MCP schema, skipping nothing, and writes the catalog', () => {
         expect(golden.skippedMcpTools).toEqual([]);
-        expect(golden.fresh.has('mcp-tools.json')).toBe(true);
-        expect(golden.fresh.get('mcp-tools.json')).toBe(golden.golden('mcp-tools.json'));
+        expect(golden.fresh.has(MCP_CATALOG)).toBe(true);
+        expect(golden.fresh.get(MCP_CATALOG)).toBe(golden.golden(MCP_CATALOG));
     });
 
     /** The union itself, in the bytes an agent is served: `oneOf` + the DERIVED discriminator. */
     it('publishes Order.window as a discriminated oneOf, nested inside the response object', () => {
         // Read back through the runtime's own parser, which is what `McpToolRegistry` boots with —
         // so this asserts the bytes survive the round trip, not merely that they were written.
-        const fetch = McpToolCatalog.fromJsonText(golden.golden('mcp-tools.json')).find(
+        const fetch = McpToolCatalogFile.fromJsonText(MCP_CATALOG, golden.golden(MCP_CATALOG)).find(
             'fetch_orders',
         );
         expect(fetch).toBeDefined();

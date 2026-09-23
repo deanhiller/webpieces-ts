@@ -241,30 +241,6 @@
                     "level": 3
                 },
                 {
-                    "id": "ConsumerBinResolver",
-                    "className": "ConsumerBinResolver",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/contract/consumer-bin-resolver.ts",
-                    "level": 3
-                },
-                {
-                    "id": "ContractDiffRenderer",
-                    "className": "ContractDiffRenderer",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/contract/contract-diff-renderer.ts",
-                    "level": 3
-                },
-                {
-                    "id": "ContractDiffStep",
-                    "className": "ContractDiffStep",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/contract/contract-diff-step.ts",
-                    "level": 2
-                },
-                {
                     "id": "Dashboard",
                     "className": "Dashboard",
                     "kind": "class",
@@ -409,14 +385,6 @@
                     "level": 3
                 },
                 {
-                    "id": "GeneratorRunner",
-                    "className": "GeneratorRunner",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/contract/generator-runner.ts",
-                    "level": 3
-                },
-                {
                     "id": "GitExec",
                     "className": "GitExec",
                     "kind": "class",
@@ -535,14 +503,6 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/merged-branches.ts",
                     "level": 4
-                },
-                {
-                    "id": "OpenApiContractDiff",
-                    "className": "OpenApiContractDiff",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/workflow/contract/openapi-contract-diff.ts",
-                    "level": 3
                 },
                 {
                     "id": "OpenPrCheck",
@@ -1343,51 +1303,6 @@
                     "paramType": "WorktreeCleanupSection"
                 },
                 {
-                    "from": "ContractDiffStep",
-                    "to": "ConsumerBinResolver",
-                    "injection": "type",
-                    "token": "ConsumerBinResolver",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/contract/consumer-bin-resolver.ts#ConsumerBinResolver",
-                    "paramName": "resolver",
-                    "paramType": "ConsumerBinResolver"
-                },
-                {
-                    "from": "ContractDiffStep",
-                    "to": "ContractDiffRenderer",
-                    "injection": "type",
-                    "token": "ContractDiffRenderer",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/contract/contract-diff-renderer.ts#ContractDiffRenderer",
-                    "paramName": "renderer",
-                    "paramType": "ContractDiffRenderer"
-                },
-                {
-                    "from": "ContractDiffStep",
-                    "to": "GeneratorRunner",
-                    "injection": "type",
-                    "token": "GeneratorRunner",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/contract/generator-runner.ts#GeneratorRunner",
-                    "paramName": "runner",
-                    "paramType": "GeneratorRunner"
-                },
-                {
-                    "from": "ContractDiffStep",
-                    "to": "GitExec",
-                    "injection": "type",
-                    "token": "GitExec",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
-                    "paramName": "gitExec",
-                    "paramType": "GitExec"
-                },
-                {
-                    "from": "ContractDiffStep",
-                    "to": "OpenApiContractDiff",
-                    "injection": "type",
-                    "token": "OpenApiContractDiff",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/contract/openapi-contract-diff.ts#OpenApiContractDiff",
-                    "paramName": "differ",
-                    "paramType": "OpenApiContractDiff"
-                },
-                {
                     "from": "DevDeployRefs",
                     "to": "GitExec",
                     "injection": "type",
@@ -1593,15 +1508,6 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
                     "paramName": "checklistScanner",
                     "paramType": "ChecklistScanner"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
-                    "to": "ContractDiffStep",
-                    "injection": "type",
-                    "token": "ContractDiffStep",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/contract/contract-diff-step.ts#ContractDiffStep",
-                    "paramName": "contractDiff",
-                    "paramType": "ContractDiffStep"
                 },
                 {
                     "from": "FinishUpsertPrCommand",

@@ -153,12 +153,12 @@
         "openapi-generate": {
             "implementation": "./src/executors/openapi-generate/executor",
             "schema": "./src/executors/openapi-generate/schema.json",
-            "description": "Per-project: render the contracts to OpenAPI + mcp-tools.json into the build outputPath, with the consumer's own @webpieces/openapi-generator"
+            "description": "Per-project, inferred from the generate:openapi tag: render the contracts to OpenAPI + one mcp-<ContractClass>-tools.json per MCP contract into the compile target outputPath, with the consumer's own @webpieces/openapi-generator"
         },
         "docs-generate": {
             "implementation": "./src/executors/docs-generate/executor",
             "schema": "./src/executors/docs-generate/schema.json",
-            "description": "Per-project: render the static API reference site from a generated document into the build outputPath, with the consumer's own @webpieces/docs-site"
+            "description": "Per-project, inferred from the generate:docs-site tag: render the static API reference site from a generated document into <projectRoot>/<siteDir>, with the consumer's own @webpieces/docs-site"
         },
         "validate-nx-wiring": {
             "implementation": "./src/executors/validate-nx-wiring/executor",

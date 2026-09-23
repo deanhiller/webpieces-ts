@@ -1,38 +1,43 @@
 /**
  * openapi-generate Executor
  *
- * Renders a project's contracts to OpenAPI (and `mcp-tools.json`) INTO the project's own build
- * `outputPath`, so the documents are packed and published inside the api library's npm package: a
- * consumer installs the library and has the contract. They are build output — never committed.
+ * Renders a project's contracts to OpenAPI, plus ONE MCP tool catalog per contract
+ * (`mcp-<ContractClass>-tools.json`), INTO the outputPath of the target it dependsOn — the api
+ * library's compile step — so the documents are packed and published inside the api library's npm
+ * package: a consumer installs the library and has the contract. They are build output, never
+ * committed.
  *
- * Usage (project.json):
+ * Consumers do not declare this executor. The nx-webpieces-rules plugin INFERS the target on a project
+ * tagged `generate:openapi` (executor, cache, inputs, outputs); project.json states only what is the
+ * consumer's to decide, under the same target name:
  *
- *   "openapi-generate": {
- *     "executor": "@webpieces/nx-webpieces-rules:openapi-generate",
- *     "dependsOn": ["build"],
- *     "cache": true,
- *     "inputs": ["default", "^default"],
- *     "outputs": [
- *       "{workspaceRoot}/dist/<project>/*openapi.json",
- *       "{workspaceRoot}/dist/<project>/*openapi.yaml",
- *       "{workspaceRoot}/dist/<project>/mcp-tools.json"
- *     ],
- *     "options": { "manifest": "<project>/openapi.manifest.json", "format": "both" }
+ *   "tags": ["generate:openapi"],
+ *   "targets": {
+ *     "compile": { "executor": "@nx/js:tsc", "outputs": ["{options.outputPath}"],
+ *                  "options": { "outputPath": "dist/<project>", ... } },
+ *     "openapi-generate": {
+ *       "dependsOn": ["compile"],
+ *       "options": { "manifest": "<project>/openapi.manifest.json", "format": "both" }
+ *     },
+ *     "build": { "executor": "nx:noop", "dependsOn": ["compile", "openapi-generate"] }
  *   }
  *
- * `dependsOn: ["build"]` and `outputs` are CHECKED, not merely recommended — see GeneratorTarget. The
+ * The output directory is the outputPath of the ONE target `dependsOn` names (GeneratedApiDocsLayout
+ * in @webpieces/core-util — the same lookup the MCP server reads with), never a hardcoded target name
+ * and never an assumed dist/. `outputs` are CHECKED against what a run wrote — see GeneratorTarget. The
  * generator itself is the CONSUMER's `@webpieces/openapi-generator`, resolved from its node_modules and
- * version-checked; this plugin bundles no copy of it (see ConsumerBinResolver in @webpieces/pr-gate).
+ * version-checked; this plugin bundles no copy of it (see ConsumerBinResolver).
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import {
-    ConsumerBinRequest, ConsumerBinResolver, GeneratorRunner, OPENAPI_GENERATOR,
-} from '@webpieces/pr-gate';
+import { GeneratedApiDocsLayout } from '@webpieces/core-util';
 import { RepoScratchDirs, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ExecutorResult } from '../../executor-result';
+import { ConsumerBinRequest, ConsumerBinResolver } from '../../lib/generated-docs/consumer-bin-resolver';
+import { OPENAPI_GENERATOR } from '../../lib/generated-docs/generator-package';
+import { GeneratorRunner } from '../../lib/generated-docs/generator-runner';
 import { GeneratorTarget, StagedOutput } from '../../lib/generated-docs/generator-target';
 import { toError } from '../../toError';
 
@@ -43,7 +48,7 @@ export interface OpenApiGenerateOptions {
     format?: string;
 }
 
-const RULE_NAME = 'openapi-generate';
+const RULE_NAME = GeneratedApiDocsLayout.OPENAPI_TARGET;
 
 /** Everything except the process-facing reporting, so the suite drives it exactly as nx does. */
 export class OpenApiGenerate {
@@ -56,10 +61,9 @@ export class OpenApiGenerate {
     /** @returns the files written, absolute. Throws RuleFailError on every refusal. */
     run(options: OpenApiGenerateOptions, context: ExecutorContext): string[] {
         const target = GeneratorTarget.of(RULE_NAME, context);
-        target.assertDependsOn('build');
+        const outDir = target.documentsDir();
         const manifest = target.requiredOption(options.manifest, 'manifest');
         const format = target.requiredOption(options.format, 'format');
-        const outDir = target.buildOutputDir();
         const bin = this.resolver.resolve(new ConsumerBinRequest(
             RULE_NAME, OPENAPI_GENERATOR, [path.join(context.root, target.projectRoot), context.root]));
 

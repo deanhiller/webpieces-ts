@@ -18,6 +18,10 @@
  * fast compile-only step while `nx ci` runs the full gate. This executor therefore only
  * guards build ORDER (`^build`), not the validators — those are guaranteed by the plugin.
  *
+ * 3. Generated API documents (#1021) — a project tagged `generate:openapi` / `generate:docs-site` has the
+ *    `compile` → `openapi-generate` → `build` (nx:noop) shape, and every project depending on one has
+ *    `test` dependsOn `^build`. See GenerateWiring for why.
+ *
  * Conservative by design: only REQUIRES wiring on compile executors actually in use
  * (@nx/js:tsc, @angular/build:application). A repo that uses neither passes.
  *
@@ -33,6 +37,11 @@ import type {
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
+import {
+    GenerateWiring,
+    GenerateWiringProblem,
+    ProjectDependency,
+} from '../../lib/generated-docs/generate-wiring';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -210,6 +219,21 @@ function reportProjectGateFailure(problems: ProjectGateProblem[]): void {
     }
 }
 
+function reportGenerateWiringFailure(problems: GenerateWiringProblem[]): void {
+    console.error('\n❌ A project generating API documents is not wired so that ^build generates them.\n');
+    for (const p of problems) {
+        console.error(`  ${p.project}: ${p.problem}`);
+        console.error(`    fix: ${p.cure}\n`);
+    }
+}
+
+function generateWiringProblems(
+    projectsConfig: ProjectsConfigurations,
+    graphDependencies: Record<string, readonly ProjectDependency[]>,
+): GenerateWiringProblem[] {
+    return new GenerateWiring(projectsConfig.projects, graphDependencies).problems();
+}
+
 export default async function runExecutor(
     options: ValidateNxWiringOptions,
     context: ExecutorContext,
@@ -229,12 +253,18 @@ export default async function runExecutor(
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
 
+    const generateProblems = generateWiringProblems(projectsConfig, projectGraph.dependencies);
+
     const inUse = findCompileExecutorsInUse(projectsConfig, compileExecutors);
     const relevantExecutors = compileExecutors.filter((executorName: string) =>
         inUse.has(executorName),
     );
 
     if (relevantExecutors.length === 0) {
+        if (generateProblems.length > 0) {
+            reportGenerateWiringFailure(generateProblems);
+            return { success: false };
+        }
         console.log('✅ No known compile executors in use — nothing to gate\n');
         return { success: true };
     }
@@ -243,12 +273,13 @@ export default async function runExecutor(
     const wiringProblems = findProblems(relevantExecutors, targetDefaults, requiredDeps);
     const gateProblems = findProjectGateProblems(projectsConfig, inUse, requiredDeps);
 
-    if (wiringProblems.length === 0 && gateProblems.length === 0) {
+    if (wiringProblems.length === 0 && gateProblems.length === 0 && generateProblems.length === 0) {
         console.log('✅ Validators are wired into the build (targetDefaults + every project)\n');
         return { success: true };
     }
 
     if (wiringProblems.length > 0) reportFailure(wiringProblems, requiredDeps);
     if (gateProblems.length > 0) reportProjectGateFailure(gateProblems);
+    if (generateProblems.length > 0) reportGenerateWiringFailure(generateProblems);
     return { success: false };
 }

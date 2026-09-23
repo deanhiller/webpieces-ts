@@ -34,27 +34,22 @@ import {
 } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
-import { ContractDiffStep } from '../workflow/contract/contract-diff-step';
-import { CONTRACT_DIFF_COMMENT_MARKER } from '../workflow/contract/contract-diff-renderer';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * The inputs the PR COMMENTS are rendered from, bundled so `publishAll` takes one parameter for
- * them instead of four it only forwards. Data-only, per CLAUDE.md.
+ * The three inputs the PR COMMENTS are rendered from, bundled so `publishAll` takes one parameter for
+ * them instead of three it only forwards. Data-only, per CLAUDE.md.
  */
 class PrCommentSources {
     scan: ChecklistScan;
     review: ReviewJson;
     provenance: ProvenanceReport;
-    /** The rendered partner-facing contract diff, or '' when no project declares a contract. */
-    contractDiff: string;
 
-    constructor(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport, contractDiff: string) {
+    constructor(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport) {
         this.scan = scan;
         this.review = review;
         this.provenance = provenance;
-        this.contractDiff = contractDiff;
     }
 }
 
@@ -154,8 +149,6 @@ export class FinishUpsertPrCommand {
         // rendered. Server-side, so no config can express them — see SquashSettingsEnforcer.
         private readonly squashSettings: SquashSettingsEnforcer,
         private readonly stageConsole: StageOutputLog,
-        // The 3rd PR comment: the partner-facing contract diff, merge-base → HEAD (#986).
-        private readonly contractDiff: ContractDiffStep,
     ) {}
 
     /**
@@ -220,10 +213,7 @@ export class FinishUpsertPrCommand {
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted, scan);
-        // BEFORE anything is published: a declared contract that no longer generates throws here, while
-        // the remote and the PR are both still untouched (see ContractDiffStep).
-        const contractDiff = this.contractDiff.commentBody(repoRoot, path.join(prDirFor(repoRoot, featureName), 'contract-diff'));
-        const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance, contractDiff));
+        const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance));
         this.archiveConsumedReview(repoRoot, featureName, result);
 
         // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
@@ -504,24 +494,6 @@ export class FinishUpsertPrCommand {
         this.commentUpserter.upsert(request);
     }
 
-    /**
-     * The 3rd PR comment: what this PR changes in the partner-facing contract, generated at the merge-base
-     * and at HEAD (see ContractDiffStep). It is what a committed openapi.json used to be for, without
-     * committing generated code. Absent when no project declares an `openapi-generate` target; non-fatal
-     * like the other two, because the PR is already up.
-     */
-    private postContractDiffComment(repoRoot: string, prNumber: string, body: string): void {
-        if (prNumber === '' || body === '') return;
-        const request = new PrCommentRequest();
-        request.prNumber = prNumber;
-        request.marker = CONTRACT_DIFF_COMMENT_MARKER;
-        request.body = body;
-        request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
-        request.payloadName = 'contract-diff-comment.json';
-        request.label = 'partner contract diff comment';
-        this.commentUpserter.upsert(request);
-    }
-
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
     // create / merge against `baseBranch` (baseBranchName tolerates a leftover `…wpN` mid-transition).
     // GatedPrPublisher owns the edit/push/create half and its ORDERING — the gated body goes up before
@@ -618,7 +590,6 @@ export class FinishUpsertPrCommand {
         // comment must not turn a finished run into a failed one.
         this.postDetailComment(repoRoot, result.prNumber, input);
         this.postChecklistComment(repoRoot, result.prNumber, sources.scan, sources.review, sources.provenance);
-        this.postContractDiffComment(repoRoot, result.prNumber, sources.contractDiff);
 
         // Having just written the description AS the commit body, make sure GitHub will actually use it.
         // Here rather than anywhere earlier because it is about what happens to the artifact we just

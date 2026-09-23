@@ -24,7 +24,7 @@ It exists because **a DTO field's type is erased at runtime**. Reflection can se
 
 ## The ONE renderer that lives here: `McpSchemaRenderer`
 
-`ApiDocModel` → `McpToolDefinition[]`, and `McpSchemaRenderer.catalogOf(models)` → the `McpToolCatalog` that `wp-openapi` writes as `mcp-tools.json`. It is here and not in a renderer package because the MCP projection is not a DOCUMENT — it is the runtime's own `ApiJsonSchema`, published verbatim by `tools/list`.
+`ApiDocModel` → `McpToolDefinition[]`, and `McpSchemaRenderer.catalogOf(models)` → one `McpToolCatalogFile` per contract, which `wp-openapi` writes as `mcp-<ContractClass>-tools.json` (tool names are still refused across contracts, since the protocol namespace is flat). It is here and not in a renderer package because the MCP projection is not a DOCUMENT — it is the runtime's own `ApiJsonSchema`, published verbatim by `tools/list`.
 
 It is the SOLE source of that schema. Until #984 an MCP server built one at boot from `@WpDtoField` reflect-metadata, so the document a partner read and the schema a server accepted were two derivations of one contract. The equivalence gate (#983) measured them against each other and found the compiler reproduces every erasure-repair argument byte for byte; #984 deleted the runtime half, and the gate became `McpSchemaGolden.spec.ts` — a COMMITTED golden catalog, so a change that moves a live tool's published schema is a diff a human reads in the PR that caused it. `McpRepoSweep.spec.ts` asks whether every `@WpMcpTool` in the repo renders at all, and asserts the blocked list exactly, in both directions.
 

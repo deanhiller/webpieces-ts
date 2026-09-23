@@ -190,8 +190,8 @@ describe('the acceptance contract — rules pass, THEN @ApiType generates', () =
 
         const render = McpSchemaRenderer.catalogOf([model]);
         expect(render.skipped.map(String)).toEqual([]);
-        expect(render.catalog.names()).toEqual(['fetch_order']);
-        const tool = render.catalog.find('fetch_order')!;
+        expect(render.catalogs[0]!.names()).toEqual(['fetch_order']);
+        const tool = render.catalogs[0]!.find('fetch_order')!;
         expect(tool.description).toBe('Fetch one order by its id.');
         expect(tool.inputSchema.properties!['id'].type).toBe('string');
         expect(tool.outputSchema.properties!['phase'].enum).toEqual(['placed', 'done']);

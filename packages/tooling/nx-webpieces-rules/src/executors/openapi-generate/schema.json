@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "OpenAPI Generate Executor",
-    "description": "Render the project's contracts to OpenAPI (and mcp-tools.json) into the project's build outputPath, with the consumer's own @webpieces/openapi-generator. The target must dependsOn build and declare outputs covering what it writes.",
+    "description": "Inferred on a project tagged generate:openapi. Render the project's contracts to OpenAPI plus one mcp-<ContractClass>-tools.json per MCP contract, with the consumer's own @webpieces/openapi-generator, into the outputPath of the ONE target this target dependsOn (the compile step).",
     "type": "object",
     "properties": {
         "manifest": {
@@ -11,7 +11,7 @@
         "format": {
             "type": "string",
             "enum": ["json", "yaml", "both"],
-            "description": "Which serializations to write, and therefore publish. No default."
+            "description": "Which serializations of the OpenAPI documents to write, and therefore publish. No default."
         }
     },
     "required": ["manifest", "format"]

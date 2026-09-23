@@ -1,8 +1,8 @@
 # @webpieces/mcp-server
 
 Publishes explicitly annotated Webpieces RPC endpoints as MCP tools. The bridge is HANDED the input
-and output JSON Schema — the build extracts them from the contract source and writes `mcp-tools.json`
-— invokes the normal Webpieces filter/controller path, and turns exceptions into safe model-visible
+and output JSON Schema — the build extracts them from the contract source and writes one
+`mcp-<ContractClass>-tools.json` per contract — invokes the normal Webpieces filter/controller path, and turns exceptions into safe model-visible
 MCP results.
 
 `@WpMcpTool` is an opt-in and every tool must also declare `@WpMcpAuthJwt`. MCP user
@@ -51,21 +51,27 @@ Every `@Endpoint` declares one enum-backed operation, independent of its require
 argument: a GET may deliberately write and a POST may be a read. A tool therefore cannot claim to be
 read-only while its endpoint declares `WRITE` — the contradiction is unrepresentable.
 
-## Booting: the server is constructed with the generated catalog
+## Booting: the server is constructed with the generated catalogs
 
-```bash
-wp-openapi --manifest openapi.manifest.json --out dist
-```
-
-writes `mcp-tools.json` beside the OpenAPI documents. Hand it to `McpBindOptions`:
+The api library's build (its `openapi-generate` target — tag the library `generate:openapi`) writes one
+`mcp-<ContractClass>-tools.json` per MCP contract into its build output, beside the OpenAPI documents.
+Hand them to `McpBindOptions` with ONE call that works in every environment:
 
 ```ts
-const catalog = McpToolCatalog.fromJsonText(fs.readFileSync('dist/mcp-tools.json', 'utf8'));
-server.bind(app, new McpBindOptions(path, bindings, catalog, McpDeployment.singleProcess()));
+const catalogs = McpToolCatalog.fromPackages(['@myorg/my-apis'], __dirname);
+server.bind(app, new McpBindOptions(path, bindings, catalogs, McpDeployment.singleProcess()));
 ```
 
-`McpToolRegistry` FAILS FAST at boot when a registered `@WpMcpTool` is absent from the catalog: a tool
-the build never saw is a tool whose schema nobody checked. Tool arguments and structured output are
+`fromPackages` resolves each package from `__dirname` the way node does. A BUILT or published package
+(a Docker image relinking `node_modules/@myorg/*` onto `dist/`) holds the files beside its
+`package.json`; a workspace SOURCE directory (pnpm linking onto `libraries/...` for local dev and
+vitest) holds a `project.json`, and the files are read from the outputPath of the target its
+`openapi-generate` dependsOn — which is why a server's `test` target must dependsOn `^build`.
+
+`McpToolRegistry` FAILS FAST at boot, naming every directory the catalogs were read from, when a bound
+contract has no catalog, a catalog's contract is not bound, or a tool name is declared twice — and when
+a registered `@WpMcpTool` is absent from its contract's catalog: a tool the build never saw is a tool
+whose schema nobody checked. Tool arguments and structured output are
 validated against those same schemas by `ApiJsonSchemaValidator`, so the shape an agent is shown and
 the shape the server accepts are the same bytes rather than two derivations of one contract.
 

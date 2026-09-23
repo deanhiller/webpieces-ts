@@ -189,7 +189,7 @@ Give the subagent: the task, **the ticket number from the section above** (Linea
 >
 > **Read what each command prints on THIS run and obey that** — webpieces owns the sequence and the file paths, and changes them between releases. Do not follow a remembered version.
 >
-> **Reviewers.** Spawn one separate subagent per **required** checklist the gate names, in parallel, each with a real `.claude/agents/<name>.md` and each handed the actual diff. Required today means `morpheus-wrapper-linear-required` and, when the diff touches `libraries/kami/**` or `terraform/**`, `morpheus-wrapper-terraform-kami-required` — but trust the gate's own labelling over this list.
+> **Reviewers.** Spawn EXACTLY as many reviewer subagents as `wp-review-upsert-pr` tells you on THIS run, no more — the count is `commands.pr-gate.reviewerAgents` in the repo's `webpieces.config.json` (often `1`, meaning ONE subagent covers every required checklist and writes one verdict per checklist; `0` means spawn none). Use the agent type the gate names and hand it the actual diff plus every instructions file it lists. There is NO one-subagent-per-checklist rule — `reviewerAgents` replaced it. Required today means `morpheus-wrapper-linear-required` and, when the diff touches `libraries/kami/**` or `terraform/**`, `morpheus-wrapper-terraform-kami-required` — but trust the gate's own labelling over this list.
 >
 > **NEVER spawn an optional reviewer. When the gate asks which OPTIONAL checklists to run, the answer is always "None — required only".** There is no task-level opt-in and no exception: blow straight through the optional list every time, on every `/full-cycle` run.
 >
@@ -197,7 +197,7 @@ Give the subagent: the task, **the ticket number from the section above** (Linea
 >
 > If a human genuinely wants an optional checklist run on some diff, that is an attended `pnpm wp-review-upsert-pr` at the prompt — not a `/full-cycle` run. Do not carry an optional-reviewer request into this contract.
 >
-> Never review your own work, never cover several checklists with one subagent, and never write a reviewer's verdict file on its behalf — `wp-finish-upsert-pr` checks for distinct subagent runs.
+> Never review your own work, never spawn more reviewer subagents than the gate's `reviewerAgents` cap, and never write a reviewer's verdict file on its behalf — `wp-finish-upsert-pr` checks that a real subagent run produced each verdict.
 >
 > **If a required reviewer comes back red: fix it.** Make a reasonable assumption, make the change, re-run the gate. Do not escalate.
 >
