@@ -1,4 +1,15 @@
-import { ApiPath, ApiType, Endpoint, MCP, POST, READ, RPC, WpMcpTool } from '@webpieces/core-util';
+import {
+    ApiPath,
+    ApiType,
+    Endpoint,
+    MCP,
+    POST,
+    READ,
+    RPC,
+    WpAuthJwt,
+    WpMcpAuthJwt,
+    WpMcpTool,
+} from '@webpieces/core-util';
 
 /** A window given as a clock time. */
 export interface ScheduledWindow {
