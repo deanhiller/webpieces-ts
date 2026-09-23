@@ -519,6 +519,9 @@ importers:
       '@webpieces/code-rules':
         specifier: workspace:*
         version: link:../code-rules
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules

@@ -27,7 +27,8 @@ customer-facing surface on one screen.
 `--format` picks the serialization of whichever documents exist, and defaults to `both`.
 
 `diff full-private-openapi.json public-openapi.json` is the complete list of what you do not show a
-customer. Commit both, and hiding a method shows up in the PR that hides it.
+customer. Neither is committed — both are build output (see "In an nx workspace" below); diff the two
+the build wrote when you need that list.
 
 ## Hiding ONE method
 
@@ -101,10 +102,12 @@ carries only what JSDoc cannot say: the stable protocol name. `readOnlyHint`, `d
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
 `{ openWorld: true }` on the endpoint.
 
-Alongside `mcp-openapi.json`, a run writes **`mcp-tools.json`** whenever some contract declares `MCP`.
-That one is not a document: it is the RUNTIME catalog `WpMcpServer` is constructed with, so the schema
-an agent is shown in `tools/list` and the schema the server validates a call against are the same
-bytes. `--format` does not apply to it.
+Alongside `mcp-openapi.json`, a run writes ONE **`mcp-<ContractClass>-tools.json`** per contract that
+declares `MCP` and has at least one `@WpMcpTool` (e.g. `mcp-PartnerOrdersApi-tools.json`). Those are
+not documents: they are the RUNTIME catalogs `WpMcpServer` boots from, so the schema an agent is shown
+in `tools/list` and the schema the server validates a call against are the same bytes. One file per
+contract because a server binds contracts, and checks each binding against exactly its own contract's
+file. `--format` does not apply to them.
 
 ## It refuses to publish a field it has no schema for
 
@@ -119,8 +122,9 @@ is no flag to switch that off — the cure is at the contract, by naming the typ
 
 ## In an nx workspace
 
-Inside nx, nobody chooses `--out`: the `@webpieces/nx-webpieces-rules:openapi-generate` executor writes
-into the project's own build `outputPath`, so the documents are packed and published inside the api
+Inside nx, nobody chooses `--out`. Tag the api library `generate:openapi` and the
+`@webpieces/nx-webpieces-rules` plugin infers an `openapi-generate` target that writes into the
+outputPath of the compile target it dependsOn, so the documents are packed and published inside the api
 library's package, and are never committed. It runs THIS package from the consumer's `node_modules`
 and refuses one older than it needs. See `.claude/rules/api-docs.md` in webpieces-ts.
 

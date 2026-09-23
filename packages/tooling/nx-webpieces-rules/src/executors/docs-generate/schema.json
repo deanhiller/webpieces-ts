@@ -1,16 +1,16 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Docs Generate Executor",
-    "description": "Render the static API reference site from a document openapi-generate wrote into the build outputPath, with the consumer's own @webpieces/docs-site, into <outputPath>/<siteDir>. The target must dependsOn openapi-generate and declare outputs covering the site.",
+    "description": "Inferred on a project tagged generate:docs-site. Render the static API reference site from a document openapi-generate wrote, with the consumer's own @webpieces/docs-site, into <projectRoot>/<siteDir> (gitignored, for hosting — not packed into the package).",
     "type": "object",
     "properties": {
         "document": {
             "type": "string",
-            "description": "The document inside the build outputPath to render, e.g. public-openapi.json. No default."
+            "description": "The document openapi-generate wrote to render, e.g. public-openapi.json. No default."
         },
         "siteDir": {
             "type": "string",
-            "description": "The site's directory name inside the build outputPath, e.g. docs-site. No default."
+            "description": "The site's directory relative to the project root, e.g. generated-docs. Emptied and rewritten on every run; gitignore it. No default."
         },
         "prose": {
             "type": "string",

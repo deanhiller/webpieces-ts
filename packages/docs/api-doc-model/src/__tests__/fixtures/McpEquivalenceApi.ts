@@ -135,7 +135,7 @@ export interface ReindexResponse {
 }
 
 /**
- * The contract the MCP schema gate renders, and the golden `mcp-tools.json` beside it is the
+ * The contract the MCP schema gate renders, and the golden `mcp-McpEquivalenceApi-tools.json` is the
  * REGRESSION guard: a change that moves a live tool's input schema shows up as a diff a human reads.
  *
  * ## What it used to be, and why that is over

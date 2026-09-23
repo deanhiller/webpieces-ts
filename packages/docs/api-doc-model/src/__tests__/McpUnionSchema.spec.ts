@@ -55,7 +55,7 @@ describe('a union in an MCP tool schema', () => {
     }, 60_000);
 
     it('renders a NESTED discriminated union as oneOf plus its derived discriminator', () => {
-        const window = rendered.catalog.find('fetch_delivery')!.outputSchema.properties!['window'];
+        const window = rendered.catalogs[0]!.find('fetch_delivery')!.outputSchema.properties!['window'];
 
         expect(window.oneOf?.length).toBe(2);
         expect(window.discriminator?.propertyName).toBe('kind');
@@ -71,7 +71,7 @@ describe('a union in an MCP tool schema', () => {
     });
 
     it('REFUSES a tool whose request is itself a union, naming the tool and the cure', () => {
-        expect(rendered.catalog.find('move_window')).toBe(undefined);
+        expect(rendered.catalogs[0]!.find('move_window')).toBe(undefined);
         const refusal = rendered.skipped.find(
             (skipped: SkippedMcpTool) => skipped.name === 'move_window',
         );

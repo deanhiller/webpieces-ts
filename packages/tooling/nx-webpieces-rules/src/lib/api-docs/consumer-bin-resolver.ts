@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Option, RuleFailError } from '@webpieces/rules-config';
-import { injectable, bindingScopeValues } from 'inversify';
 import { GeneratorPackage } from './generator-package';
 import { JsonObject } from './json-value';
 
@@ -68,7 +67,6 @@ class ReleaseVersion {
  * installed generator older than `minimumVersion` is a pin to bump, never a bug to work around. The
  * refusal names the bump: `@webpieces/openapi-generator >= X.Y.Z`.
  */
-@injectable(bindingScopeValues.Singleton)
 export class ConsumerBinResolver {
     resolve(request: ConsumerBinRequest): ConsumerBin {
         const packageJson = this.findPackageJson(request);

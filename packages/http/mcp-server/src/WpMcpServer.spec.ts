@@ -29,6 +29,7 @@ import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
+import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
 import { McpHttpTestHarness, McpPostReply, RpcResponse } from './__tests__/McpHttpTestHarness';
 import {
@@ -40,7 +41,8 @@ import {
     SearchController,
     SearchRequest,
     SearchResponse,
-    SPEC_TOOL_CATALOG,
+    REMOTE_SEARCH_API_CATALOG,
+    SEARCH_API_CATALOG,
     TestJwtHook,
     TestTokenAuthority,
     USER_ID,
@@ -100,7 +102,7 @@ describe('WpMcpServer HTTP bridge', () => {
                     McpApiBinding.local(SearchApi, router),
                     McpApiBinding.remote(RemoteSearchApi, () => remote),
                 ],
-                SPEC_TOOL_CATALOG,
+                [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG],
                 McpDeployment.singleProcess(1_234),
                 ['https://trusted.example.test'],
             ),
@@ -139,11 +141,16 @@ describe('WpMcpServer HTTP bridge', () => {
         deployment: McpDeployment,
         bindings: McpApiBinding[] = [McpApiBinding.local(SearchApi, router)],
     ): Promise<BoundTestBridge> {
+        // Exactly the catalogs of the contracts bound — the registry refuses one for an unbound contract.
+        const catalogs = [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG].filter(
+            (catalog: McpToolCatalog) =>
+                bindings.some((binding: McpApiBinding) => binding.api.name === catalog.contractName),
+        );
         const instance = new WpMcpServer<string, string>(serverConfig());
         const app: Express = express();
         instance.bind(
             app,
-            new McpBindOptions(ENDPOINT_PATH, bindings, SPEC_TOOL_CATALOG, deployment),
+            new McpBindOptions(ENDPOINT_PATH, bindings, catalogs, deployment),
         );
         const server = createServer(app);
         await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
@@ -556,7 +563,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.local(MissingMcpAuthApi, router)],
-                    SPEC_TOOL_CATALOG,
+                    [],
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -568,7 +575,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.remote(SearchApi, () => new SearchController())],
-                    SPEC_TOOL_CATALOG,
+                    [SEARCH_API_CATALOG],
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -618,7 +625,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     '/some-other-path',
                     [McpApiBinding.local(SearchApi, router)],
-                    SPEC_TOOL_CATALOG,
+                    [SEARCH_API_CATALOG],
                     McpDeployment.singleProcess(),
                 ),
             ),
@@ -633,7 +640,7 @@ describe('WpMcpServer HTTP bridge', () => {
                 new McpBindOptions(
                     ENDPOINT_PATH,
                     [McpApiBinding.local(SearchApi, router)],
-                    SPEC_TOOL_CATALOG,
+                    [SEARCH_API_CATALOG],
                     McpDeployment.singleProcess(),
                 ),
             ),

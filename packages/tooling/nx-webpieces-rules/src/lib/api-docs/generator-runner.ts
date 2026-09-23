@@ -1,5 +1,4 @@
 import { spawnSync } from 'child_process';
-import { injectable, bindingScopeValues } from 'inversify';
 import { ConsumerBin } from './consumer-bin-resolver';
 
 /** One finished generator process. Data-only. */
@@ -19,11 +18,9 @@ export class GeneratorRun {
  * Runs a resolved {@link ConsumerBin} with the node that is running US, so the generator gets the
  * consumer's `node_modules` (it lives there) without depending on a `.bin` shim or on `PATH`.
  *
- * It REPORTS the outcome rather than throwing on a non-zero exit, because the two callers mean
- * different things by one: the nx executor refuses the build, while the PR gate's merge-base run
- * records "the merge-base does not generate with today's generator" and says so in the PR.
+ * It REPORTS the outcome rather than throwing on a non-zero exit, so the executor that ran it decides
+ * how to word the refusal (it names the manifest or the document it was rendering).
  */
-@injectable(bindingScopeValues.Singleton)
 export class GeneratorRunner {
     run(bin: ConsumerBin, args: readonly string[], cwd: string): GeneratorRun {
         const result = spawnSync(process.execPath, [bin.binPath, ...args], { cwd, encoding: 'utf8' });

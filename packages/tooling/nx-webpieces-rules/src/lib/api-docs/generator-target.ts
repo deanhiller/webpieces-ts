@@ -4,19 +4,22 @@
  *
  * Both halves read the project's own declarations and never supply a value of their own:
  *
- * - the output directory is the project's `build` target's `options.outputPath` — the directory tsc
- *   writes and the package is packed from, so the documents ship INSIDE the published package. It is
- *   ASKED of nx, never assumed: this repo builds into a workspace-root `dist/apps/...`, another
- *   consumer builds into a project-local `<project>/dist`, and hardcoding either one generates the
+ * - the documents' directory is the `outputPath` of the target `openapi-generate` dependsOn — the api
+ *   library's `compile` (tsc) step, which writes the directory the package is packed from, so the
+ *   documents ship INSIDE the published package. It is ASKED of nx through `GeneratedApiDocsLayout`
+ *   (`@webpieces/core-util`), the same lookup `McpToolCatalog.fromPackages` reads with, and never
+ *   assumed: this repo builds into a workspace-root `dist/apps/...`, another consumer builds into a
+ *   project-local `<project>/dist`, and hardcoding either one — or the target's NAME — generates the
  *   document somewhere the package is not packed from;
  * - the ordering and the cache are the target's own `dependsOn` and `outputs`, which the executor
- *   checks rather than trusts, because both failures are silent: a missing `dependsOn: ["build"]`
- *   lets tsc's clean of `outputPath` race the write (the document vanishes and a dependent test dies on
- *   ENOENT, intermittently, only in CI), and `outputs` that miss a written file make every cache hit
- *   restore a package without that file.
+ *   checks rather than trusts, because both failures are silent: without the `dependsOn` edge, tsc's
+ *   clean of `outputPath` races the write (the document vanishes and a dependent test dies on ENOENT,
+ *   intermittently, only in CI), and `outputs` that miss a written file make every cache hit restore a
+ *   package without that file.
  */
 
 import type { ExecutorContext, TargetConfiguration, TargetDependencyConfig } from '@nx/devkit';
+import { GeneratedApiDocsLayout } from '@webpieces/core-util';
 import { Option, RuleFailError, matchesAnyGlob } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -34,7 +37,7 @@ export class GeneratorTarget {
         readonly projectRoot: string,
         readonly targetName: string,
         readonly target: TargetConfiguration,
-        readonly build: TargetConfiguration | undefined,
+        readonly targets: Record<string, TargetConfiguration>,
     ) {}
 
     // webpieces-disable no-function-outside-class -- static factory of this class
@@ -48,24 +51,43 @@ export class GeneratorTarget {
             throw new Error(`${ruleName}: nx did not describe project '${projectName}' target '${targetName}'`);
         }
         return new GeneratorTarget(
-            ruleName, context.root, projectName, project.root, targetName, target, project.targets?.['build']);
+            ruleName, context.root, projectName, project.root, targetName, target, project.targets ?? {});
     }
 
-    /** Absolute path to the project's declared `build` `outputPath` — the directory the package is packed from. */
-    buildOutputDir(): string {
-        const declared = this.build?.options?.['outputPath'];
-        if (typeof declared !== 'string' || declared.trim() === '') {
+    /**
+     * Absolute path to the directory the documents live in: the `outputPath` of the target
+     * `openapi-generate` dependsOn — the directory the package is packed from.
+     */
+    documentsDir(): string {
+        const lookup = new GeneratedApiDocsLayout(this.projectRoot, this.projectName, this.targets).outputTarget();
+        if (lookup.found === undefined) {
             throw new RuleFailError(
                 this.ruleName,
-                `${this.projectName} has no build target with an options.outputPath, so ${this.ruleName} has ` +
-                    `nowhere to write that gets published. The documents go into the build's own output ` +
-                    `directory — the one the package is packed from — and are never assumed to be ./dist.`,
+                `${lookup.problem!.problem} The documents go into the build's own output directory — the ` +
+                    'one the package is packed from — and are never assumed to be ./dist.',
                 undefined,
                 undefined,
-                [new Option(`Declare targets.build.options.outputPath in ${this.projectRoot}/project.json`, true)],
+                [new Option(lookup.problem!.cure, true)],
             );
         }
-        return path.resolve(this.workspaceRoot, this.interpolate(declared));
+        return path.resolve(this.workspaceRoot, lookup.found.outputPath);
+    }
+
+    /** Absolute `<projectRoot>/<dir>`, refusing anything that is not strictly inside the project. */
+    insideProject(dir: string, optionName: string): string {
+        const projectAbs = path.resolve(this.workspaceRoot, this.projectRoot);
+        const resolved = path.resolve(projectAbs, dir);
+        const relative = path.relative(projectAbs, resolved);
+        if (relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)) return resolved;
+        throw new RuleFailError(
+            this.ruleName,
+            `${this.projectName}:${this.targetName} options.${optionName} is '${dir}', which is not a directory ` +
+                `strictly inside ${this.projectRoot}. It is emptied and rewritten on every run, so it may only ` +
+                'name a directory of the project\'s own.',
+            undefined,
+            undefined,
+            [new Option(`Set options.${optionName} to a project-relative directory, e.g. "generated-docs"`, true)],
+        );
     }
 
     /** Refuse unless this target `dependsOn` the sibling `required` target. */
@@ -74,10 +96,10 @@ export class GeneratorTarget {
         if (entries.some((entry: DependsOnEntry) => this.namesSibling(entry, required))) return;
         throw new RuleFailError(
             this.ruleName,
-            `${this.projectName}:${this.targetName} does not declare dependsOn "${required}". It writes into ` +
-                `the build's outputPath, so without that edge nx may run it before or alongside ${required} ` +
-                `— and ${required}'s clean of that directory deletes the document it just wrote. That ` +
-                `fails intermittently and mostly in CI, which is why it is refused here instead.`,
+            `${this.projectName}:${this.targetName} does not declare dependsOn "${required}". It reads what ` +
+                `${required} writes, so without that edge nx may run it before or alongside ${required} and ` +
+                `render a stale or missing document. That fails intermittently and mostly in CI, which is ` +
+                `why it is refused here instead.`,
             undefined,
             undefined,
             [new Option(`Add "dependsOn": ["${required}"] to the ${this.targetName} target in ${this.projectRoot}/project.json`, true)],

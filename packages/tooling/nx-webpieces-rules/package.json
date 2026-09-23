@@ -21,6 +21,7 @@
         "@webpieces/ai-hook-rules": "workspace:*",
         "@webpieces/api-doc-model": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/pr-gate": "workspace:*",
         "@webpieces/rules-config": "workspace:*",

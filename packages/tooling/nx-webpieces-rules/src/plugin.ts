@@ -4,6 +4,8 @@
  * This plugin automatically creates targets for:
  * 1. Workspace-level architecture validation (generate, visualize, validate-*)
  * 2. Per-project circular dependency checking
+ * 3. Per-project API documents, opted into with a TAG: `generate:openapi` infers `openapi-generate`,
+ *    `generate:docs-site` infers `openapi-generate` + `docs-generate` (see generate-targets.ts)
  *
  * Install with: nx add @webpieces/nx-webpieces-rules
  *
@@ -32,6 +34,7 @@ import {
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
+import { GenerateTargets, RawProjectJson, RawProjectJsonReader } from './generate-targets';
 
 /**
  * Circular dependency checking options
@@ -270,6 +273,7 @@ function addPerProjectTargets(
             projectRoot,
             opts,
             architectureEnabled,
+            isProjectJson ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot) : undefined,
         );
 
         if (Object.keys(targets).length === 0) continue;
@@ -295,6 +299,7 @@ function buildPerProjectTargets(
     projectRoot: string,
     opts: Required<ArchitecturePluginOptions>,
     architectureEnabled: boolean,
+    rawProject: RawProjectJson | undefined,
 ): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
 
@@ -321,6 +326,17 @@ function buildPerProjectTargets(
     if (isProjectJson && opts.workspace.validations!.diGraph) {
         targets['di-graph-generate'] = createDiGraphGenerateTarget();
         validationTargets.push('di-graph-generate');
+    }
+
+    // API documents, opted into with a TAG (generate:openapi / generate:docs-site). An untagged project
+    // costs this one in-memory tag check. They ride ci like every other build step — generation is
+    // ordinary BUILD work, not a side channel (#1021).
+    if (rawProject !== undefined) {
+        const generated = new GenerateTargets(projectRoot, rawProject).infer();
+        for (const [name, target] of Object.entries(generated)) {
+            targets[name] = target;
+            validationTargets.push(name);
+        }
     }
 
     // Add ci target to ALL projects (both project.json and package.json). ci aggregates

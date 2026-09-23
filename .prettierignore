@@ -14,7 +14,7 @@ node_modules/
 # generated documents are build output under dist/ and are never committed — see
 # .claude/rules/api-docs.md.)
 **/__tests__/goldens/*openapi.json
-**/__tests__/goldens/mcp-tools.json
+**/__tests__/goldens/mcp-*-tools.json
 
 # Markdown files
 *.md

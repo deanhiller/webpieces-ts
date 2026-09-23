@@ -107,11 +107,11 @@ describe('which documents are written', () => {
         expect(Array.from(harness.run('single.manifest.json').keys()).sort()).toEqual([
             'full-private-openapi.json',
             'full-private-openapi.yaml',
+            // NOT a document: the runtime catalog WpMcpServer boots from — ONE PER CONTRACT, named
+            // after it — so --format never applies to it and there is no .yaml twin.
+            'mcp-WidgetsApi-tools.json',
             'mcp-openapi.json',
             'mcp-openapi.yaml',
-            // NOT a document: the runtime catalog WpMcpServer boots from, so --format never
-            // applies to it and there is no .yaml twin.
-            'mcp-tools.json',
             'public-openapi.json',
             'public-openapi.yaml',
         ]);
@@ -472,8 +472,8 @@ describe('the unmapped-type guard', () => {
         expect(sink.text()).toContain('full-private-openapi.json');
         expect(fs.readdirSync(out).sort()).toEqual([
             'full-private-openapi.json',
+            'mcp-WidgetsApi-tools.json',
             'mcp-openapi.json',
-            'mcp-tools.json',
             'public-openapi.json',
         ]);
     });

@@ -3,7 +3,8 @@ import {
     ApiJsonSchemaDiscriminator,
     ApiJsonSchemaType,
     EndpointOperation,
-    McpToolCatalog,
+    McpToolCatalogError,
+    McpToolCatalogFile,
     McpToolDefinition,
     mcpHintsForOperation,
     READ,
@@ -37,10 +38,13 @@ export class SkippedMcpTool {
     }
 }
 
-/** What one catalog render produced: the tools, and the ones it could not produce. */
+/**
+ * What one catalog render produced: ONE catalog per contract that has at least one renderable tool
+ * (`mcp-<ContractClass>-tools.json` each), and the tools it could not produce.
+ */
 export class McpCatalogRender {
     constructor(
-        readonly catalog: McpToolCatalog,
+        readonly catalogs: readonly McpToolCatalogFile[],
         readonly skipped: readonly SkippedMcpTool[],
     ) {}
 }
@@ -55,7 +59,8 @@ export class McpCatalogRender {
  * runtime could build, which is what licensed #984 to delete `@WpDtoField` and its erasure-repair
  * arguments — `required`, `arrayItems`, `integer`, `minimum`, `maximum`, `enumValues`, `mapValues`,
  * `mcpHeader` — along with `DtoSchemaBuilder` itself. There is now one schema, built here, written to
- * `mcp-tools.json` by `wp-openapi`, and read at boot by `McpToolRegistry`.
+ * one `mcp-<ContractClass>-tools.json` per contract by `wp-openapi`, and read at boot by
+ * `McpToolRegistry`.
  *
  * ## Where it now goes FURTHER than the deleted runtime could
  *
@@ -85,12 +90,13 @@ export class McpSchemaRenderer {
     }
 
     /**
-     * The tools of SEVERAL contracts as one catalog — the artifact a server boots from — plus every
-     * tool that could not be rendered and why.
+     * The tools of SEVERAL contracts as ONE CATALOG PER CONTRACT — the artifacts a server boots from,
+     * one `mcp-<ContractClass>-tools.json` each — plus every tool that could not be rendered and why.
      *
-     * A catalog rather than a per-contract list because the protocol namespace is flat: two contracts
-     * declaring one tool name is a collision an agent would see, and {@link McpToolCatalog} refuses it
-     * here, at build time, rather than at somebody's boot.
+     * Per contract because a server binds contracts, and checks each `McpApiBinding` against the file
+     * generated from exactly that contract (#1021). The protocol namespace is still FLAT, though: two
+     * contracts declaring one tool name is a collision an agent would see, so it is refused here, at
+     * build time, across every contract of the run, rather than at somebody's boot.
      *
      * ## Why an unrenderable tool is REPORTED here rather than throwing
      *
@@ -109,10 +115,12 @@ export class McpSchemaRenderer {
      */
     // webpieces-disable no-function-outside-class -- static factory over this class
     static catalogOf(models: readonly ApiDocModel[]): McpCatalogRender {
-        const tools: McpToolDefinition[] = [];
+        const catalogs: McpToolCatalogFile[] = [];
         const skipped: SkippedMcpTool[] = [];
+        const owners = new Map<string, string>();
         for (const model of models) {
             const renderer = new McpSchemaRenderer(model);
+            const tools: McpToolDefinition[] = [];
             for (const endpoint of model.endpoints) {
                 if (endpoint.mcpTool === undefined) {
                     continue;
@@ -128,8 +136,32 @@ export class McpSchemaRenderer {
                     );
                 }
             }
+            McpSchemaRenderer.claimNames(owners, model.contractName, tools);
+            if (tools.length > 0) {
+                catalogs.push(new McpToolCatalogFile(model.contractName, tools));
+            }
         }
-        return new McpCatalogRender(new McpToolCatalog(tools), skipped);
+        return new McpCatalogRender(catalogs, skipped);
+    }
+
+    /** Refuse a tool name some OTHER contract of this run already declared: the namespace is flat. */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static claimNames(
+        owners: Map<string, string>,
+        contractName: string,
+        tools: readonly McpToolDefinition[],
+    ): void {
+        for (const tool of tools) {
+            const owner = owners.get(tool.name);
+            if (owner !== undefined && owner !== contractName) {
+                throw new McpToolCatalogError(
+                    `Duplicate MCP tool name '${tool.name}': declared by both ${owner} and ${contractName}.`,
+                    'Tool names are the protocol identity and must be globally unique — rename one ' +
+                        "of the two @WpMcpTool('...') declarations.",
+                );
+            }
+            owners.set(tool.name, contractName);
+        }
     }
 
     /** ONE tool. Visible to {@link catalogOf}, which renders tool by tool so it can report one. */

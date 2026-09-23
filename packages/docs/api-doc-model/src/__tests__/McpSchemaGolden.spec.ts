@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as ts from 'typescript';
-import { ApiJsonSchema, McpToolCatalog, McpToolDefinition } from '@webpieces/core-util';
+import { ApiJsonSchema, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
 import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
 
@@ -38,19 +38,23 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
     paths: { '@webpieces/core-util': [path.join(CORE_UTIL, 'src', 'index.ts')] },
 };
 
-const GOLDEN = path.join(__dirname, 'goldens', 'mcp-tools.json');
+const GOLDEN = path.join(__dirname, 'goldens', 'mcp-McpEquivalenceApi-tools.json');
 
-function renderCatalog(): McpToolCatalog {
+function renderCatalog(): McpToolCatalogFile {
     const fixture = path.join(__dirname, 'fixtures', 'McpEquivalenceApi.ts');
     const rendered = McpSchemaRenderer.catalogOf([
         new ApiDocExtractor().extractFile(fixture, COMPILER_OPTIONS),
     ]);
     expect(rendered.skipped).toEqual([]);
-    return rendered.catalog;
+    // ONE file per contract (#1021), named after it — the name the server looks the binding up by.
+    expect(rendered.catalogs.map((catalog: McpToolCatalogFile) => catalog.fileName)).toEqual([
+        path.basename(GOLDEN),
+    ]);
+    return rendered.catalogs[0]!;
 }
 
 describe('the MCP tool catalog rendered from a contract', () => {
-    let catalog: McpToolCatalog;
+    let catalog: McpToolCatalogFile;
 
     beforeAll(() => {
         catalog = renderCatalog();

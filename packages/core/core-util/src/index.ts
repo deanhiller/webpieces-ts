@@ -169,7 +169,14 @@ export {
     ObjectSchemaBuilder,
 } from './mcp/DtoSchema';
 export type { ApiJsonSchemaType, DtoValue } from './mcp/DtoSchema';
-export { McpToolCatalog, McpToolCatalogError, McpToolDefinition } from './mcp/McpToolCatalog';
+export { McpToolCatalogFile, McpToolCatalogError, McpToolDefinition } from './mcp/McpToolCatalogFile';
+export {
+    GeneratedApiDocsLayout,
+    GenerateLayoutProblem,
+    GenerateOutputLookup,
+    GenerateOutputTarget,
+} from './mcp/GeneratedApiDocsLayout';
+export type { LayoutDependsOn, LayoutDependsOnObject, LayoutTarget, LayoutTargets } from './mcp/GeneratedApiDocsLayout';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
 export type {

@@ -1,6 +1,6 @@
-import { McpToolCatalog } from '@webpieces/core-util';
 import { McpApiBinding } from './McpApiBinding';
 import { McpDeployment } from './McpDeployment';
+import { McpToolCatalog } from './McpToolCatalog';
 
 export class McpBindOptions {
     constructor(
@@ -8,11 +8,13 @@ export class McpBindOptions {
         public readonly endpointPath: string,
         public readonly bindings: readonly McpApiBinding[],
         /**
-         * The tools this build published — `mcp-tools.json`, written by `wp-openapi` and read with
-         * `McpToolCatalog.fromJsonText`. It is REQUIRED because it is the only source of a tool's
-         * documentation and schemas; there is no reflect-metadata fallback to fall back to.
+         * The tools the build published — ONE catalog per bound contract, each the
+         * `mcp-<ContractClass>-tools.json` `wp-openapi` wrote beside its library's OpenAPI documents,
+         * read with `McpToolCatalog.fromPackages([...], __dirname)`. REQUIRED because it is the only
+         * source of a tool's documentation and schemas; there is no reflect-metadata fallback.
+         * `McpToolRegistry` refuses to boot unless it holds exactly one catalog per bound contract.
          */
-        public readonly toolCatalog: McpToolCatalog,
+        public readonly toolCatalogs: readonly McpToolCatalog[],
         public readonly deployment: McpDeployment,
         /** Requests without Origin remain valid for non-browser MCP clients. */
         public readonly allowedOrigins: readonly string[] = [],

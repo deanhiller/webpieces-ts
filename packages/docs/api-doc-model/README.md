@@ -34,8 +34,9 @@ tools[0].description; // the method's JSDoc body, or its `@mcp` tag
 tools[0].hints; // three computed from `operation`, openWorldHint from @Endpoint's options
 tools[0].inputSchema; // ApiJsonSchema — what tools/list publishes and the server validates against
 
-// The whole build's tools, as `wp-openapi` writes them to mcp-tools.json.
-McpSchemaRenderer.catalogOf(models).toJsonText();
+// The whole build's tools, ONE catalog per contract, as `wp-openapi` writes them to
+// mcp-<ContractClass>-tools.json.
+McpSchemaRenderer.catalogOf(models).catalogs[0].toJsonText();
 ```
 
 An MCP header is declared in JSDoc as `@mcpHeader <token>`, which is now its only spelling: the runtime's `WpMcpHeader` argument said the same thing and #984 deleted it.

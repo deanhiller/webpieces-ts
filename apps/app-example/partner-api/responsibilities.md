@@ -10,7 +10,7 @@ It exists so the generator is demonstrated against source somebody could plausib
 - `PartnerDeliveryWebhookApi` — the event this service SENDS to a partner's own endpoint, selected into the document's `webhooks:` block by the manifest and never by its filename
 - `ApiErrors.ts` / `ResponseHeaders.ts` — the types and constants the manifest NAMES, so the published document reads them with the compiler instead of carrying copies
 - `openapi.manifest.json`, `description.md`
-- `src/__tests__/goldens/` — `full-private-openapi.json`, `public-openapi.json`, `mcp-openapi.json` and `mcp-tools.json`: TEST FIXTURES, the generator's expected output for this contract
+- `src/__tests__/goldens/` — `full-private-openapi.json`, `public-openapi.json`, `mcp-openapi.json` and `mcp-PartnerOrdersApi-tools.json` (one MCP tool catalog per contract; only `PartnerOrdersApi` declares `MCP`): TEST FIXTURES, the generator's expected output for this contract
 - `src/__tests__/openapi-golden.spec.ts` — regenerates them, diffs them, and checks each YAML parses back to its JSON
 - `docs/` — `docs.manifest.json` and the partner-facing prose it names, IN ITS ORDER, which is the second of a docs site's two ordered sources (the first is the document's own `tags[]`)
 - `src/__tests__/docs-site-golden.spec.ts` — renders the `public-openapi.json` golden plus `docs/` into a site and asserts the properties a reader depends on
@@ -18,7 +18,7 @@ It exists so the generator is demonstrated against source somebody could plausib
 ## Out of Scope
 
 - Serving any of it. There is no controller and no server wiring: this is a CONTRACT, and what is under test is the document generated from it, and the site rendered from that
-- COMMITTED generated documents. An app's documents are build output: `openapi-generate` writes them into the build `outputPath` and they ship inside the package (see `.claude/rules/api-docs.md`). The goldens above exist only because webpieces must prove its own generator; a consuming repo commits nothing generated
+- COMMITTED generated documents. An app's documents are build output: `openapi-generate` writes them into the compile target's `outputPath` and they ship inside the package (see `.claude/rules/api-docs.md`). The goldens above exist only because webpieces must prove its own generator; a consuming repo commits nothing generated
 - A pinned docs site. Pinning the HTML would pin the stylesheet, the class names and the markup, none of which a partner has a contract about
 - Generator behaviour with no customer-facing story. That is covered by `packages/docs/openapi-generator`'s own fixtures
 

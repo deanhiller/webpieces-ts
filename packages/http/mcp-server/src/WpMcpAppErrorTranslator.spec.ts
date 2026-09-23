@@ -12,7 +12,7 @@ import {
     HeaderRegistry,
     LoggerFactory,
     LogManager,
-    McpToolCatalog,
+    McpToolCatalogFile,
     McpToolDefinition,
     ObjectSchemaBuilder,
     WpAuthJwt,
@@ -30,6 +30,7 @@ import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
+import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
 import { McpDefaultToolCallRenderer, McpErrorTranslator } from './McpToolCallRendering';
 import { McpRegistry } from './McpRegistry';
@@ -39,7 +40,8 @@ import {
     RecordedLogLine,
     RecordingLoggerFactory,
     SearchApi,
-    SPEC_TOOL_CATALOG,
+    IN_MEMORY,
+    SEARCH_API_CATALOG,
     SearchController,
     TestJwtHook,
     TestTokenAuthority,
@@ -83,7 +85,8 @@ function described(type: 'string' | 'boolean', description: string): ApiJsonSche
     return schema;
 }
 
-const LOCK_CATALOG = new McpToolCatalog([
+const LOCK_CATALOG = new McpToolCatalog(
+    new McpToolCatalogFile('LockApi', [
     new McpToolDefinition(
         'passage_open',
         'open',
@@ -96,8 +99,9 @@ const LOCK_CATALOG = new McpToolCatalog([
             .required('open', described('boolean', 'Whether the passage is open'))
             .build(),
     ),
-    ...SPEC_TOOL_CATALOG.tools,
-]);
+    ]),
+    IN_MEMORY,
+);
 
 @injectable()
 class LockController extends LockApi {
@@ -176,7 +180,7 @@ describe('application-owned tools/call error translation', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(LockApi, router), McpApiBinding.local(SearchApi, router)],
-                LOCK_CATALOG,
+                [LOCK_CATALOG, SEARCH_API_CATALOG],
                 McpDeployment.singleProcess(),
             ),
         );
@@ -322,7 +326,7 @@ describe('no application translator registered', () => {
             new McpBindOptions(
                 ENDPOINT_PATH,
                 [McpApiBinding.local(LockApi, router)],
-                LOCK_CATALOG,
+                [LOCK_CATALOG],
                 McpDeployment.singleProcess(),
             ),
         );

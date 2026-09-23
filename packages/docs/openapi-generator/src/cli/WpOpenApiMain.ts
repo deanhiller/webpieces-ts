@@ -39,7 +39,7 @@ export class WpOpenApiMain {
             // `McpToolRegistry` refuses to boot while it is still declared — see
             // `McpSchemaRenderer.catalogOf` for why that is the right place for the failure.
             for (const skipped of result.skippedMcpTools) {
-                out.write(`no MCP schema, left out of mcp-tools.json: ${skipped}\n`);
+                out.write(`no MCP schema, left out of its contract's MCP tool catalog: ${skipped}\n`);
             }
             return 0;
             // webpieces-disable no-any-unknown -- the catch binding, which TypeScript types for us

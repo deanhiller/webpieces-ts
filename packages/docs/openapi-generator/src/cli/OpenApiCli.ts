@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { MCP } from '@webpieces/core-util';
+import { MCP, McpToolCatalogFile } from '@webpieces/core-util';
 import { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from '@webpieces/api-doc-model';
 import { ArtifactWriter, GeneratedArtifact, OutputFormat } from '../emit/ArtifactWriter';
 import { ContractModel, GenerationInputs } from '../generate/GenerationInputs';
@@ -25,8 +25,9 @@ export const USAGE = [
     '  public-openapi         contracts declaring EXTERNAL_CUSTOMER, minus every { hidden: true } method',
     '  mcp-openapi            contracts declaring MCP, carrying the x-mcp-* extensions',
     '',
-    'Alongside them, mcp-tools.json is written whenever some contract declares MCP: the RUNTIME',
-    'artifact WpMcpServer is constructed with. It is not a document, so --format does not apply.',
+    'Alongside them, one mcp-<ContractClass>-tools.json is written per contract that declares MCP',
+    'and has an @WpMcpTool: the RUNTIME catalogs WpMcpServer boots from. They are not documents, so',
+    '--format does not apply.',
     '',
     'A document no contract asked for is not written. --format chooses the serialization of',
     'whichever documents were written, and defaults to both.',
@@ -45,7 +46,7 @@ export class CliResult {
     ) {}
 }
 
-/** The MCP half of one run: the artifact to write, if any, and what it could not carry. */
+/** The MCP half of one run: the per-contract catalogs to write, and what they could not carry. */
 class McpArtifacts {
     constructor(
         readonly artifacts: readonly GeneratedArtifact[],
@@ -97,15 +98,18 @@ export class OpenApiCli {
     }
 
     /**
-     * `mcp-tools.json` — the RUNTIME artifact, beside the three documents.
+     * `mcp-<ContractClass>-tools.json` — the RUNTIME artifacts, one per contract, beside the three
+     * documents.
      *
-     * It is not a document and is not serialized by `--format`: `WpMcpServer` is constructed with it,
-     * and `McpToolRegistry` fails fast at boot when a registered `@WpMcpTool` is missing from it. That
-     * is what took the MCP runtime off reflect-metadata (#984) — the schema an agent is shown and the
-     * schema the server accepts are now the same bytes, rather than two derivations of one contract.
+     * They are not documents and are not serialized by `--format`: `WpMcpServer` boots from them, and
+     * `McpToolRegistry` checks every `McpApiBinding` against the file generated from exactly that
+     * contract, failing fast at boot when one is missing (#1021). That is what took the MCP runtime off
+     * reflect-metadata (#984) — the schema an agent is shown and the schema the server accepts are now
+     * the same bytes, rather than two derivations of one contract.
      *
-     * Written only when some contract declares `MCP`, which is the same rule `mcp-openapi.json`
-     * follows, for the same reason: an empty file is a claim that there are no tools.
+     * Written only for a contract that declares `MCP` and has at least one renderable tool, which is
+     * the same rule `mcp-openapi.json` follows, for the same reason: an empty file is a claim that there
+     * are no tools.
      */
     // webpieces-disable no-function-outside-class -- private static composition step of this class
     private static mcpCatalog(inputs: GenerationInputs): McpArtifacts {
@@ -116,10 +120,9 @@ export class OpenApiCli {
             return new McpArtifacts([], []);
         }
         const rendered: McpCatalogRender = McpSchemaRenderer.catalogOf(models);
-        const artifacts =
-            rendered.catalog.tools.length === 0
-                ? []
-                : [new GeneratedArtifact('mcp-tools.json', rendered.catalog.toJsonText())];
+        const artifacts = rendered.catalogs.map(
+            (catalog: McpToolCatalogFile) => new GeneratedArtifact(catalog.fileName, catalog.toJsonText()),
+        );
         return new McpArtifacts(artifacts, rendered.skipped);
     }
 
