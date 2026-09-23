@@ -37,7 +37,7 @@ import type {
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
-import { GenerateWiring } from '../../lib/generated-docs/generate-wiring';
+import { GenerateWiring } from '../../lib/api-docs/generate-wiring';
 import * as fs from 'fs';
 import * as path from 'path';
 

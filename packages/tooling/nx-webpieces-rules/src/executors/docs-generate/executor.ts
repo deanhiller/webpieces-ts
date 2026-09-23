@@ -30,10 +30,10 @@ import { Option, RepoScratchDirs, RuleFailError, renderRuleFailForHuman } from '
 import * as fs from 'fs';
 import * as path from 'path';
 import { ExecutorResult } from '../../executor-result';
-import { ConsumerBinRequest, ConsumerBinResolver } from '../../lib/generated-docs/consumer-bin-resolver';
-import { DOCS_SITE } from '../../lib/generated-docs/generator-package';
-import { GeneratorRunner } from '../../lib/generated-docs/generator-runner';
-import { GeneratorTarget, StagedOutput } from '../../lib/generated-docs/generator-target';
+import { ConsumerBinRequest, ConsumerBinResolver } from '../../lib/api-docs/consumer-bin-resolver';
+import { DOCS_SITE } from '../../lib/api-docs/generator-package';
+import { GeneratorRunner } from '../../lib/api-docs/generator-runner';
+import { GeneratorTarget, StagedOutput } from '../../lib/api-docs/generator-target';
 import { toError } from '../../toError';
 
 export interface DocsGenerateOptions {

@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import type { CreateNodesResult, ProjectConfiguration, TargetConfiguration } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { specTempDirs } from '@webpieces/rules-config';
+import { Option, specTempDirs } from '@webpieces/rules-config';
 import { createNodesV2 } from '../../plugin';
-import { GenerateWiring, GenerateWiringProblem, ProjectDependency } from '../generated-docs/generate-wiring';
+import { GenerateWiring, GenerateWiringProblem, ProjectDependency } from '../api-docs/generate-wiring';
 
 /** The api library, in the shape #1021 prescribes. */
 function apiProject(tags: string[]): object {
@@ -137,6 +137,29 @@ describe('GenerateWiring (validate-nx-wiring) enforces the compile → openapi-g
 
         expect(problems({ 'lang-apis': api })).toEqual([
             expect.stringMatching(/lang-apis:compile .* does not dependsOn "\^build"/),
+        ]);
+    });
+
+    it('refuses a hand-written executor on an UNTAGGED project — the tag is the one way to opt in', () => {
+        const handWritten = project('libraries/other', [], {
+            'openapi-generate': { executor: '@webpieces/nx-webpieces-rules:openapi-generate' },
+        });
+
+        expect(problems({ other: handWritten })).toEqual([
+            expect.stringMatching(/names the executor @webpieces\/nx-webpieces-rules:openapi-generate by hand[\s\S]*FIX: Add "generate:openapi" to "tags" in libraries\/other\/project\.json/),
+        ]);
+    });
+
+    it('renders every problem as ONE RuleFailError, one fix Option per problem', () => {
+        const api = structuredClone(GOOD_API);
+        api.targets!['build'] = { executor: '@nx/js:tsc' };
+        const wiring = new GenerateWiring({ 'lang-apis': api }, {});
+
+        const failure = wiring.failure(wiring.problems());
+
+        expect(failure.humanMessage).toContain('lang-apis: lang-apis:build must be an nx:noop');
+        expect(failure.fixOptions.map((option: Option) => option.text)).toEqual([
+            expect.stringContaining('lang-apis: Set targets.build in libraries/lang-apis/project.json'),
         ]);
     });
 

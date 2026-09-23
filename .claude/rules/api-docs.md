@@ -139,7 +139,7 @@ removes.
 
 The executors run `@webpieces/openapi-generator` / `@webpieces/docs-site` from the CONSUMER's
 `node_modules`, found by walking up from the project the way node does — never a copy inside the nx
-plugin (`ConsumerBinResolver`, `src/lib/generated-docs` in nx-webpieces-rules). The generator must be the
+plugin (`ConsumerBinResolver`, `src/lib/api-docs` in nx-webpieces-rules). The generator must be the
 release the consumer pinned beside the decorators it reads; a bundled copy would be the rules stream's
 release, which a repo deliberately runs one release behind.
 
