@@ -180,6 +180,7 @@ function field(name: string, type: TypeRef): DocumentedField {
         undefined,
         undefined,
         undefined,
+        `spec-fixture.ts:1:1`,
     );
 }
 
@@ -196,6 +197,7 @@ function endpoint(): DocumentedEndpoint {
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
         new DocumentedMcpTool('ask_either'),
+        undefined,
         undefined,
         new Map<string, string>(),
         'Asks.',

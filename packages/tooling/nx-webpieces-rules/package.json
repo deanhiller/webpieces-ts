@@ -19,6 +19,7 @@
     ],
     "dependencies": {
         "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/api-doc-model": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/pr-gate": "workspace:*",

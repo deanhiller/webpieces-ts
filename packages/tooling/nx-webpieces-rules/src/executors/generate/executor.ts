@@ -25,7 +25,10 @@ import {
 } from '../../lib/api-usage/api-scanner';
 // The unresolved-contract report moved beside the other contract reports when api-scanner.ts reached
 // its file-size limit.
-import { describeUnresolvedApiCalls } from '../../lib/api-usage/api-contract-errors';
+import {
+    describeMcpExclusions,
+    describeUnresolvedApiCalls,
+} from '../../lib/api-usage/api-contract-errors';
 import { buildExternalSystems } from '../../lib/api-usage/external-systems';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
@@ -102,6 +105,11 @@ function scanApiRelations(
     const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
     const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
     if (scan.unresolvedApiCalls.length > 0) console.warn(describeUnresolvedApiCalls(scan.unresolvedApiCalls));
+    // #1014: restated on EVERY run, green or red. An exclusion announced once, at the moment
+    // somebody adds it, is read by the one person who already knows the decision.
+    if (scan.apiDocRules.mcpExclusions.length > 0) {
+        console.log(describeMcpExclusions(scan.apiDocRules.mcpExclusions));
+    }
     // A decorator argument we could not read costs the graph a basePath, a method, or a whole
     // contract — none of which leaves a trace in the output. Name them before anything is written.
     if (scan.nonLiteralDecoratorArgs.length > 0) {

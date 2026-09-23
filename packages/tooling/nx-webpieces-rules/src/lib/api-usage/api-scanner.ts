@@ -55,6 +55,8 @@ import {
     sortApiRefs,
 } from './api-relations';
 import {
+    ApiRulesForMcpError,
+    ApiRulesForOpenApiError,
     EmptiedApiContractError,
     MissingBasePathError,
     RootUnionApiTypeError,
@@ -63,6 +65,8 @@ import {
     UnresolvedEndpointPathError,
 } from './api-contract-errors';
 import { RootUnionFindings, RootUnionRule, RootUnionScan } from './root-union-scan';
+import { ApiDocRule, ApiDocRulesFindings, MCP_RULE, OPENAPI_RULE } from './api-doc-rules';
+import { ApiDocRulesScan } from './api-doc-rules-scan';
 import {
     DecoratorArgDiagnostics,
     apiClassInfoFrom,
@@ -127,6 +131,11 @@ export interface ApiScanResult {
     undeclaredEndpointOperations: UndeclaredEndpointOperation[];
     /** `no-root-union-api-type`'s findings. Fatal in buildApiContracts — see root-union-scan.ts. */
     rootUnions: RootUnionFindings;
+    /**
+     * `api-rules-for-openapi` / `api-rules-for-mcp` findings (#1011). Both ship OFF, so this is
+     * EMPTY unless a repo opted in — see `defaultRules` in `@webpieces/rules-config` for why.
+     */
+    apiDocRules: ApiDocRulesFindings;
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -299,6 +308,10 @@ export class ApiUsageScanner {
         private readonly externalApiPaths: readonly string[] = [],
         /** `no-root-union-api-type`'s switches — ARMED unless scanAndAttachApiRelations read otherwise. */
         private readonly rootUnionRule: RootUnionRule = RootUnionRule.enabledEverywhere(),
+        /** `api-rules-for-openapi`'s switches — OFF unless a repo opted in. */
+        private readonly openApiRule: ApiDocRule = ApiDocRule.off(OPENAPI_RULE),
+        /** `api-rules-for-mcp`'s switches — OFF unless a repo opted in. */
+        private readonly mcpRule: ApiDocRule = ApiDocRule.off(MCP_RULE),
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);
         this.decoratorArgDiagnostics = new DecoratorArgDiagnostics(workspaceRoot);
@@ -333,6 +346,12 @@ export class ApiUsageScanner {
                 this.workspaceRoot,
                 this.projectInfos,
                 this.rootUnionRule,
+            ).run(),
+            apiDocRules: new ApiDocRulesScan(
+                this.workspaceRoot,
+                this.projectInfos,
+                this.openApiRule,
+                this.mcpRule,
             ).run(),
         };
     }
@@ -509,6 +528,8 @@ export function scanAndAttachApiRelations(
         projectInfos,
         externalApiPaths,
         RootUnionRule.fromConfig(workspaceRoot),
+        ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
+        ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
     ).scan();
     for (const projectName of result.relationsByProject.keys()) {
         const entry = graph[projectName];
@@ -551,6 +572,15 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     // A shape no function-calling API will accept, read perfectly well — unlike the four above, which
     // are contracts the scan could not READ at all.
     if (!scan.rootUnions.isEmpty()) throw new RootUnionApiTypeError(scan.rootUnions);
+    // Contract shapes that are not PUBLISHABLE, read by the generator's own extractor (#1011).
+    // After the root union, which is the one shape no function-calling API will accept at all, and
+    // before the caller checks below, which are about the architecture graph rather than a document.
+    if (!scan.apiDocRules.openApi.isEmpty()) {
+        throw new ApiRulesForOpenApiError(scan.apiDocRules.openApi);
+    }
+    if (!scan.apiDocRules.mcp.isEmpty()) {
+        throw new ApiRulesForMcpError(scan.apiDocRules.mcp, scan.apiDocRules.mcpExclusions);
+    }
     // After the two above: an unreadable path is what empties a contract, and a contract that lost
     // every method has no external endpoint left to complain about.
     if (scan.undeclaredExternalCallers.length > 0) {

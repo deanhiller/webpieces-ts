@@ -211,6 +211,16 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "api-rules-for-openapi": {
+            "mode": "OFF",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "api-rules-for-mcp": {
+            "mode": "OFF",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "ensure-we-are-secure": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,

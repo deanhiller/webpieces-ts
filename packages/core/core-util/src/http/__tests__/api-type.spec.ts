@@ -9,7 +9,16 @@ import {
     MCP,
     SVC_TO_SVC,
 } from '../api-type';
-import { WpMcpTool } from '../../mcp/McpMetadata';
+import {
+    InvalidEndpointForMcp,
+    getInvalidEndpointsForMcp,
+    WpMcpTool,
+} from '../../mcp/McpMetadata';
+
+/** The reason both measured cases share: the type is CORRECT and the exclusion is permanent. */
+const TRANSPORT_REASON =
+    'a transport envelope body is opaque by design; the published partner contract for each event ' +
+    'type owns its shape';
 
 /**
  * `@ApiType` decides WHICH generated documents a contract feeds, and the two things worth pinning are
@@ -78,6 +87,47 @@ class AgreesApi {
     }
 }
 
+@ApiPath('/mixed-mcp')
+@ApiType(SVC_TO_SVC, MCP)
+class MixedMcpApi {
+    @Endpoint(POST, '/go', READ, RPC)
+    @WpAuthPublic('Test fixture.')
+    @WpMcpTool('go')
+    go(request: Request): Promise<Response> {
+        throw new Error('contract');
+    }
+
+    @Endpoint(POST, '/fanout', READ, RPC)
+    @WpAuthPublic('Test fixture.')
+    @InvalidEndpointForMcp(TRANSPORT_REASON)
+    fanout(request: Request): Promise<Response> {
+        throw new Error('contract');
+    }
+}
+
+@ApiPath('/contradicts')
+@ApiType(SVC_TO_SVC, MCP)
+class ContradictsApi {
+    @Endpoint(POST, '/go', READ, RPC)
+    @WpAuthPublic('Test fixture.')
+    @WpMcpTool('go')
+    @InvalidEndpointForMcp(TRANSPORT_REASON)
+    go(request: Request): Promise<Response> {
+        throw new Error('contract');
+    }
+}
+
+@ApiPath('/all-excluded')
+@ApiType(SVC_TO_SVC, MCP)
+class AllExcludedApi {
+    @Endpoint(POST, '/fanout', READ, RPC)
+    @WpAuthPublic('Test fixture.')
+    @InvalidEndpointForMcp(TRANSPORT_REASON)
+    fanout(request: Request): Promise<Response> {
+        throw new Error('contract');
+    }
+}
+
 describe('@ApiType', () => {
     it('records what a contract declared, in declaration order', () => {
         expect(getApiTypes(DeclaredApi)).toEqual([SVC_TO_SVC, EXTERNAL_CUSTOMER]);
@@ -116,5 +166,39 @@ describe('MCP membership has exactly ONE spelling', () => {
     it('accepts a contract that declares neither', () => {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- asserting it does NOT throw
         expect(() => assertApiTypeMatchesMcpTools(DeclaredApi)).not.toThrow();
+    });
+});
+
+describe('@InvalidEndpointForMcp — permanently outside MCP, with the reason', () => {
+    it('REFUSES an empty reason at decoration time, because the reason IS the declaration', () => {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the assertion
+        expect(() => InvalidEndpointForMcp('   ')).toThrow(/requires a non-empty reason/);
+    });
+
+    it('records the method and its reason, which is what makes the grep worth running', () => {
+        expect(getInvalidEndpointsForMcp(MixedMcpApi)).toEqual([
+            { methodName: 'fanout', reason: TRANSPORT_REASON },
+        ]);
+    });
+
+    it('sits OUTSIDE the biconditional — a contract with one tool and one exclusion is fine', () => {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- asserting it does NOT throw
+        expect(() => assertApiTypeMatchesMcpTools(MixedMcpApi)).not.toThrow();
+    });
+
+    it('REJECTS @WpMcpTool on the same method — the two contradict each other', () => {
+        // Resolving it either way would make the pair a second spelling of one decision, and half
+        // the readers of that method would be wrong about what it does.
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the assertion
+        expect(() => assertApiTypeMatchesMcpTools(ContradictsApi)).toThrow(
+            /carries BOTH @WpMcpTool and @InvalidEndpointForMcp on go/,
+        );
+    });
+
+    it('REJECTS a contract declaring MCP where EVERY endpoint is excluded', () => {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the assertion
+        expect(() => assertApiTypeMatchesMcpTools(AllExcludedApi)).toThrow(
+            /EVERY endpoint on it is @InvalidEndpointForMcp/,
+        );
     });
 });

@@ -513,6 +513,9 @@ importers:
       '@webpieces/ai-hook-rules':
         specifier: workspace:*
         version: link:../ai-hook-rules
+      '@webpieces/api-doc-model':
+        specifier: workspace:*
+        version: link:../../docs/api-doc-model
       '@webpieces/code-rules':
         specifier: workspace:*
         version: link:../code-rules

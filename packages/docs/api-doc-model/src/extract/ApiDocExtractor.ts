@@ -23,6 +23,7 @@ import {
     EXTERNAL_CUSTOMER,
     MCP,
     SVC_TO_SVC,
+    InvalidEndpointForMcp,
     WpMcpAuthJwt,
     WpMcpTool,
 } from '@webpieces/core-util';
@@ -40,6 +41,7 @@ import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { ConstantFolder } from './ConstantFolder';
 import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
+import { assertApiTypeMatchesMcpTools } from './McpMembership';
 import { TypeResolver } from './TypeResolver';
 
 /**
@@ -70,6 +72,7 @@ const API_PATH = ApiPath.name;
 const ENDPOINT = Endpoint.name;
 const MASK_LOG = MaskLog.name;
 const MCP_TOOL = WpMcpTool.name;
+const MCP_INVALID = InvalidEndpointForMcp.name;
 const MCP_AUTH = WpMcpAuthJwt.name;
 const API_KEY_AUTH = WpAuthApiKey.name;
 const API_TYPE = ApiType.name;
@@ -231,7 +234,7 @@ export class ApiDocExtractor {
                 endpoints.push(endpoint);
             }
         }
-        this.assertApiTypeMatchesMcpTools(contract, apiTypes, endpoints);
+        assertApiTypeMatchesMcpTools(contract, apiTypes, endpoints);
 
         return new ApiDocModel(
             contract.name?.text ?? '<anonymous>',
@@ -369,6 +372,7 @@ export class ApiDocExtractor {
             ),
             ApiDocExtractor.authOf(member, folder),
             mcpTool,
+            ApiDocExtractor.invalidForMcpOf(member, folder),
             ApiDocExtractor.decoratorCall(member, MCP_AUTH)?.arguments[0]?.getText(),
             ApiDocExtractor.maskLogOf(member),
             doc.description,
@@ -439,40 +443,6 @@ export class ApiDocExtractor {
             }
         }
         return declared.length === 0 ? DEFAULT_API_TYPES : declared;
-    }
-
-    /**
-     * MCP membership has exactly ONE spelling, and this is the build-time half of enforcing it
-     * (`assertApiTypeMatchesMcpTools` in `@webpieces/core-util` is the wiring-time half).
-     *
-     * Declared in two places, the two can disagree — and the disagreement is invisible, because each
-     * declaration is individually valid. That is the defect this whole epic exists to remove, so it
-     * fails the DOCUMENT build rather than producing one that quietly lists the wrong tools.
-     */
-    private assertApiTypeMatchesMcpTools(
-        contract: ts.ClassDeclaration,
-        apiTypes: readonly string[],
-        endpoints: readonly DocumentedEndpoint[],
-    ): void {
-        const tools = endpoints.filter((e: DocumentedEndpoint) => e.mcpTool !== undefined);
-        const declaresMcp = apiTypes.includes(MCP);
-        if (declaresMcp && tools.length === 0) {
-            throw new ApiDocExtractionError(
-                `@${API_TYPE} names MCP but no method carries @${MCP_TOOL}`,
-                SourceLocation.of(contract),
-                `Add @${MCP_TOOL}({name, description, openWorldHint}) to the methods agents may ` +
-                    `call, or drop MCP from the @${API_TYPE} list.`,
-            );
-        }
-        if (!declaresMcp && tools.length > 0) {
-            const named = tools.map((e: DocumentedEndpoint) => e.methodName).join(', ');
-            throw new ApiDocExtractionError(
-                `@${MCP_TOOL} is on ${named} but @${API_TYPE} does not name MCP`,
-                SourceLocation.of(contract),
-                `Add MCP to the @${API_TYPE} list — membership has ONE spelling, so a tool on a ` +
-                    'contract nobody published to agents is a contradiction, not a hint.',
-            );
-        }
     }
 
     /** The FIRST parameter's declared type. An endpoint with no parameter has no request document. */
@@ -607,6 +577,26 @@ export class ApiDocExtractor {
             return undefined;
         }
         return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '');
+    }
+
+    /**
+     * `@InvalidEndpointForMcp('<reason>')`'s reason, or undefined.
+     *
+     * A reason that will not fold is read as the EMPTY STRING rather than as "no decorator": the
+     * method is still permanently outside MCP, and losing that fact because the argument was written
+     * as a cross-module constant would silently put the endpoint back in the candidate set.
+     */
+    // webpieces-disable no-function-outside-class -- private static reader of this class
+    private static invalidForMcpOf(
+        member: ts.Node,
+        folder: ConstantFolder,
+    ): string | undefined {
+        const call = ApiDocExtractor.decoratorCall(member, MCP_INVALID);
+        if (call === undefined) {
+            return undefined;
+        }
+        const argument = call.arguments[0];
+        return argument === undefined ? '' : (folder.tryFoldString(argument) ?? '');
     }
 
     /** `@MaskLog({ refreshToken: 'full' })` -> field name -> mask mode. */

@@ -54,6 +54,8 @@ export const METADATA_KEYS = {
     MASK_LOG: 'webpieces:mask-log',
     /** Per-method opt-in metadata for publishing an RPC endpoint as an MCP tool. */
     MCP_TOOLS: 'webpieces:mcp-tools',
+    /** Per-method PERMANENT exclusion from MCP, with the reason — see @InvalidEndpointForMcp. */
+    MCP_INVALID: 'webpieces:mcp-invalid',
     /** Per-method request/response event metadata for a typed streaming endpoint. */
     STREAM_ENDPOINTS: 'webpieces:stream-endpoints',
     /** Per-method MCP-user authorization, intentionally separate from HTTP hop auth. */
