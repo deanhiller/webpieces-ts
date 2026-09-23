@@ -75,10 +75,18 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # guards and every `wp-*` bin. Stranding them is strictly the worst outcome of a partial release: the
 # runtime packages just sit a build behind, but a half-published tooling family desynchronises the
 # umbrella from its children and can wedge an agent session (see
-# .claude/rules/published-vs-local-source.md). Nothing in the family depends on any runtime package — `rules-config` has no @webpieces
-# dependency at all, the middle four depend only on `rules-config`, and `nx-webpieces-rules` bundles
-# the other five — so putting them at the front costs nothing and removes them as hostages of a
-# transient failure on an unrelated package like cloudtasks-client (entry 21 of 28, run 585).
+# .claude/rules/published-vs-local-source.md). `rules-config` has no @webpieces dependency at all,
+# the middle four depend only on `rules-config`, and `nx-webpieces-rules` bundles the other five — so
+# putting them at the front removes them as hostages of a transient failure on an unrelated package
+# like cloudtasks-client (entry 21 of 28, run 585).
+#
+# `core-util` and `api-doc-model` are HOISTED INTO that front block for the same reason, not moved out
+# of the docs family for tidiness: since #1011 the umbrella declares `api-doc-model`, because
+# `api-rules-for-openapi` / `api-rules-for-mcp` DRIVE the generator's own extractor rather than
+# restating what is expressible. The alternative — pushing `nx-webpieces-rules` down behind the docs
+# family — would have made the governing packages hostages of everything above them, which is exactly
+# what this block exists to prevent. Both hoisted packages are leaves the umbrella genuinely needs:
+# `core-util` has no @webpieces dependency, and `api-doc-model` depends on `core-util` alone.
 #
 # publish-packages.spec.ts re-derives this from the real manifests, so a new @webpieces
 # dependency that invalidates the order fails a test rather than a release.
@@ -92,20 +100,22 @@ ORDER=(
     packages/tooling/ai-hook-rules
     packages/tooling/pr-gate
     packages/tooling/code-rules
-    packages/tooling/nx-webpieces-rules
     # core-util has no @webpieces dependency; core-context depends on it. These two were the wrong way
     # round until publish-packages.spec.ts re-derived the order from the manifests and said so — latent
     # because npm never enforces the order, it just leaves a window where core-context resolves a
     # core-util that is not on the registry yet.
-    # api-doc-model depends on `typescript` and no @webpieces package at all, so it may sit anywhere
-    # in this list; it goes here to keep the docs family beside the core it documents. Like core-mock
-    # and mcp-server before it, the NAME has to be bootstrapped on npm by an authenticated manual
-    # publish once — npm trusted publishing (OIDC + --provenance) can publish to an existing scoped
-    # name but cannot CREATE one, and the first automated release 404s until somebody has.
     packages/core/core-util
-    # The docs family publishes with the SERVER libs, and BOTH depend on core-util — they read its
-    # decorator symbols so a rename is a compile error rather than a silently empty document — so they
-    # must follow it here. openapi-generator additionally depends on api-doc-model.
+    # api-doc-model depends on core-util alone. It sits HERE, above the umbrella, because
+    # nx-webpieces-rules declares it: the two api-contract rules drive this extractor rather than
+    # reimplementing it. Like core-mock and mcp-server before it, the NAME has to be bootstrapped on
+    # npm by an authenticated manual publish once — npm trusted publishing (OIDC + --provenance) can
+    # publish to an existing scoped name but cannot CREATE one, and the first automated release 404s
+    # until somebody has.
+    packages/docs/api-doc-model
+    packages/tooling/nx-webpieces-rules
+    # The rest of the docs family publishes with the SERVER libs, and depends on core-util — it reads
+    # its decorator symbols so a rename is a compile error rather than a silently empty document — so
+    # it must follow it here. openapi-generator additionally depends on api-doc-model.
     #
     # Like core-mock and mcp-server before them, each NAME has to be bootstrapped on npm by an
     # authenticated manual publish once: npm trusted publishing (OIDC + --provenance) can publish to an
@@ -113,7 +123,6 @@ ORDER=(
     # has. openapi-generator also carries the `wp-openapi` bin in publishConfig.bin, which this script
     # hoists into the dist manifest below — npm (unlike pnpm) leaves publishConfig.bin alone, which is
     # how 0.4.575 shipped with no bins at all.
-    packages/docs/api-doc-model
     packages/docs/openapi-generator
     # docs-site depends on NOTHING — Node builtins only, deliberately, so adding an API reference to
     # an upstream project never grows that project's dependency surface. It could therefore sit

@@ -70,6 +70,8 @@ const CODE_RULE_NAMES = [
     'validate-versions-locked',
     'validate-eslint-sync',
     'no-root-union-api-type',
+    'api-rules-for-openapi',
+    'api-rules-for-mcp',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding

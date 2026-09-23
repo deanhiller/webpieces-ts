@@ -285,6 +285,7 @@ export {
     BaseRuleConfig,
 } from './rule-configs';
 export { NoRootUnionApiTypeConfig } from './no-root-union-config';
+export { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig } from './api-doc-rules-config';
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
 export {
     METHOD_LIMIT_MODES,

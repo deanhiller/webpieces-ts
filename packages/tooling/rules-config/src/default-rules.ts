@@ -77,6 +77,25 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // partner at runtime, in somebody else's client, where the symptom is every OTHER tool breaking.
     // Shipping it off would mean the first repo to meet it learns the rule exists from that incident.
     'no-root-union-api-type': { mode: 'RUN_EVERY_TIME' },
+    // The two CONTRACT rules (#1011) ship OFF, which is the OPPOSITE of the line directly above —
+    // and the difference between them is measurement, not taste.
+    //
+    // `no-root-union-api-type` was armed because its defect BRICKS a live MCP client session and the
+    // sweep that justified it found ZERO occurrences: arming a rule nothing violates costs nobody a
+    // red build. These two are the mirror image. The same sweep of a real upstream repo found 6
+    // OpenAPI failures and 57 MCP-blocked methods out of 98, and NONE of them is live — the defect is
+    // that a document which was never generated could not be generated, because `@ApiType` was never
+    // added. Arming them would turn somebody's next `pnpm install` into dozens of red lines at a
+    // moment they did not choose, over documents nobody is publishing yet.
+    //
+    // They are also, by design, a MIGRATION AID: a team switches one on when it decides to publish an
+    // API, fixes what it names, and only then adds `@ApiType`. That is a per-repo decision with a
+    // per-repo cost, which is the definition of opt-in. And the enabling edit cannot ship with the
+    // rule anyway — a brand-new config key is rejected by the one-release-behind validator (see
+    // .claude/rules/published-vs-local-source.md) — so OFF is also the only default under which the
+    // release and its adoption are not forced into the same PR.
+    'api-rules-for-openapi': { mode: 'OFF' },
+    'api-rules-for-mcp': { mode: 'OFF' },
     // autoReapMergedBranches ships TRUE, and it is also what a fresh config is seeded with.
     //
     // It shipped FALSE on the reasoning that an upgrade must never delete branches unattended before a

@@ -69,6 +69,16 @@ export class DocumentedField {
          * fact at all.
          */
         readonly mcpHeader: string | undefined,
+        /**
+         * Pointer-style `path/to/File.ts:12:5` for the property declaration itself.
+         *
+         * A renderer never needs it — it publishes a schema, not a file offset. The build RULES do:
+         * `api-rules-for-openapi` refuses a field whose value type is `unknown`, and a refusal that
+         * cannot say WHERE costs the author a grep over every DTO the contract reaches. It is
+         * carried on the FIELD rather than recomputed because only the extractor still has the
+         * syntax node, and a second reader deriving it would be a second answer to "where is this".
+         */
+        readonly location: string,
     ) {}
 }
 
@@ -206,6 +216,17 @@ export class DocumentedEndpoint {
         readonly options: DocumentedEndpointOptions,
         readonly auth: DocumentedAuth | undefined,
         readonly mcpTool: DocumentedMcpTool | undefined,
+        /**
+         * `@InvalidEndpointForMcp('<reason>')`'s reason, when the method carries one — this endpoint
+         * is PERMANENTLY outside MCP and was never a tool candidate.
+         *
+         * Distinct from "has no `@WpMcpTool`", which only says "not a tool yet". A renderer must not
+         * report one of these as a SKIPPED tool, and `api-rules-for-mcp` stops asking a method with
+         * one whether it could be served — the declaration is the answer. Carrying the reason rather
+         * than a boolean is the point: the rule restates the list of exclusions with their arguments
+         * on every run.
+         */
+        readonly invalidForMcp: string | undefined,
         /** `@WpMcpAuthJwt(...)`'s argument text, when present. */
         readonly mcpAuthText: string | undefined,
         /** `@MaskLog({...})` — field name -> mask mode. */

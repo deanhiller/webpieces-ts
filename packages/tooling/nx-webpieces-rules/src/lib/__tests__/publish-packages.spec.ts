@@ -253,22 +253,33 @@ describe('ORDER is a valid dependency order, re-derived from the real manifests'
 
     /**
      * The reorder run 585 bought. The tooling family is what this repo governs itself with, so a
-     * partial release that strands it is the worst case — and nothing in it depends on a runtime
-     * package, so nothing had to be traded to move it to the front.
+     * partial release that strands it is the worst case, and it therefore publishes FIRST.
+     *
+     * The front block is the family plus exactly two runtime LEAVES, and they are hoisted rather
+     * than the family being pushed down behind them: since #1011 `nx-webpieces-rules` declares
+     * `api-doc-model`, because `api-rules-for-openapi` / `api-rules-for-mcp` drive the generator's
+     * own extractor instead of restating what is expressible. Pushing the umbrella below the docs
+     * family would have made every governing package a hostage of everything above it, which is the
+     * exact failure this ordering exists to prevent. `core-util` has no @webpieces dependency and
+     * `api-doc-model` depends on `core-util` alone, so hoisting the pair drags nothing else along —
+     * which the next test asserts as a property rather than as a list.
      */
-    it('publishes the whole tooling family before any runtime package', () => {
+    it('publishes the whole tooling family, and the two leaves it needs, before anything else', () => {
         const lastTooling = ORDER.map((d: string): boolean => d.startsWith('packages/tooling/')).lastIndexOf(true);
-        const toolingCount = ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length;
-        expect(toolingCount).toBe(6);
-        expect(lastTooling).toBe(toolingCount - 1);
+        const front = ORDER.slice(0, lastTooling + 1);
+
+        expect(ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length).toBe(6);
+        expect(front.filter((d: string): boolean => !d.startsWith('packages/tooling/')))
+            .toEqual(['packages/core/core-util', 'packages/docs/api-doc-model']);
     });
 
-    it('depends on no runtime package from the tooling family (the reason the move is free)', () => {
-        for (const dir of ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/'))) {
+    it('drags nothing into that front block beyond what the front block itself depends on', () => {
+        const lastTooling = ORDER.map((d: string): boolean => d.startsWith('packages/tooling/')).lastIndexOf(true);
+        const front = new Set(ORDER.slice(0, lastTooling + 1).map(packageNameOf));
+
+        for (const dir of ORDER.slice(0, lastTooling + 1)) {
             for (const dep of webpiecesDepsOf(dir)) {
-                expect(dep.replace('@webpieces/', ''),
-                    `${dir} would drag a runtime package to the front of ORDER`)
-                    .toMatch(/^(rules-config|pr-gate|eslint-rules|ai-hook-rules|code-rules|nx-webpieces-rules)$/);
+                expect(front, `${dir} would drag ${dep} to the front of ORDER`).toContain(dep);
             }
         }
     });

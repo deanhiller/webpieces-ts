@@ -1,6 +1,11 @@
 import 'reflect-metadata';
 import { METADATA_KEYS } from './decorators';
-import { getWpMcpTools, WpMcpToolMetadata } from '../mcp/McpMetadata';
+import {
+    InvalidEndpointForMcpMetadata,
+    getInvalidEndpointsForMcp,
+    getWpMcpTools,
+    WpMcpToolMetadata,
+} from '../mcp/McpMetadata';
 
 /** Nominal backing keeps raw string literals out of contract declarations. */
 enum ApiTypeValue {
@@ -62,6 +67,10 @@ export const DEFAULT_API_TYPES: readonly ApiTypeKind[] = [SVC_TO_SVC];
  * contract that does not declare `MCP` is an error. Both directions are asserted by
  * {@link assertApiTypeMatchesMcpTools}; without that, membership is declared in two places and they
  * can disagree, which is the defect this whole documentation epic exists to remove.
+ *
+ * `@InvalidEndpointForMcp` sits OUTSIDE that biconditional: a method declared permanently unusable
+ * as a tool is neither required to carry `@WpMcpTool` nor permitted to. A contract on which EVERY
+ * endpoint is so declared must not declare `MCP` at all, and that too is asserted there.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function ApiType(first: ApiTypeKind, ...rest: readonly ApiTypeKind[]): ClassDecorator {
@@ -92,7 +101,18 @@ export function getApiTypes(apiClass: Function): readonly ApiTypeKind[] {
 export function assertApiTypeMatchesMcpTools(apiClass: Function): void {
     const declaresMcp = getApiTypes(apiClass).includes(MCP);
     const tools = getWpMcpTools(apiClass);
+    const excluded = getInvalidEndpointsForMcp(apiClass);
+    assertNoToolIsAlsoExcluded(apiClass, tools, excluded);
     if (declaresMcp && tools.length === 0) {
+        // The all-excluded case gets its own sentence because its cure is the opposite one: there is
+        // nothing to add, and the contract should stop declaring MCP.
+        if (excluded.length > 0 && excluded.length === getApiTypeEndpointNames(apiClass).length) {
+            throw new Error(
+                `${apiClass.name} declares @ApiType(..., MCP) but EVERY endpoint on it is ` +
+                    '@InvalidEndpointForMcp. Drop MCP from the @ApiType list — a contract whose ' +
+                    'every method is permanently outside MCP does not feed the MCP document.',
+            );
+        }
         throw new Error(
             `${apiClass.name} declares @ApiType(..., MCP) but no method carries @WpMcpTool. ` +
                 "Add @WpMcpTool('<stable_tool_name>') to the methods agents may call, or drop MCP " +
@@ -107,6 +127,33 @@ export function assertApiTypeMatchesMcpTools(apiClass: Function): void {
                 'contract nobody published to agents is a contradiction, not a hint.',
         );
     }
+}
+
+/**
+ * `@WpMcpTool` and `@InvalidEndpointForMcp` on ONE method is a contradiction, not a precedence rule.
+ *
+ * Resolving it either way would make the pair a second spelling of a decision that already has one —
+ * shim shape #1 in `.claude/rules/no-backwards-compat.md` — and whichever way it resolved, half the
+ * readers of that method would be wrong about what it does.
+ */
+// webpieces-disable no-function-outside-class -- private assert of assertApiTypeMatchesMcpTools, beside it
+function assertNoToolIsAlsoExcluded(
+    apiClass: Function,
+    tools: readonly WpMcpToolMetadata[],
+    excluded: readonly InvalidEndpointForMcpMetadata[],
+): void {
+    const excludedNames = new Set(
+        excluded.map((one: InvalidEndpointForMcpMetadata) => one.methodName),
+    );
+    const both = tools
+        .filter((tool: WpMcpToolMetadata) => excludedNames.has(tool.methodName))
+        .map((tool: WpMcpToolMetadata) => tool.methodName);
+    if (both.length === 0) return;
+    throw new Error(
+        `${apiClass.name} carries BOTH @WpMcpTool and @InvalidEndpointForMcp on ${both.join(', ')}. ` +
+            'They contradict each other — one publishes the method to agents and the other declares ' +
+            'it permanently unusable as a tool. Delete whichever one is wrong.',
+    );
 }
 
 /** Reads the endpoints map so a caller can see which methods exist without importing decorators.ts. */

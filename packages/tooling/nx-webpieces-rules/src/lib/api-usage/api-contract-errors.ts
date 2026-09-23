@@ -19,6 +19,170 @@ import {
     UnresolvedEndpointPath,
 } from './api-relations';
 import { RootUnionApiType, RootUnionFindings, ROOT_UNION_RULE } from './root-union-scan';
+import {
+    ApiContractDefect,
+    ApiRuleFindings,
+    McpExclusion,
+    MCP_RULE,
+    OPENAPI_RULE,
+} from './api-doc-rules';
+
+/**
+ * The endpoints declared PERMANENTLY outside MCP, with their reasons — restated on EVERY run of
+ * `api-rules-for-mcp`, green or red (#1014).
+ *
+ * Not a warning and not a finding. #1014 asked whether adding an `@InvalidEndpointForMcp` should
+ * warn, and the answer is that a one-off warning is read by the one person who already knows the
+ * decision. A list restated on every run is read by whoever comes next, which is who the reason was
+ * written for. Printed by the caller, exactly like `describeUnresolvedApiCalls`.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnresolvedApiCalls
+export function describeMcpExclusions(exclusions: readonly McpExclusion[]): string {
+    const lines = [
+        `ℹ️  ${exclusions.length} endpoint(s) are PERMANENTLY outside MCP (@InvalidEndpointForMcp):`,
+    ];
+    for (const one of exclusions) {
+        lines.push(`     • ${one.api}.${one.method} at ${one.at}`);
+        lines.push(`       ${one.reason === '' ? '<reason could not be read>' : one.reason}`);
+    }
+    lines.push(
+        `   These are DECLARATIONS, not suppressions: each says the endpoint can never be a tool and`,
+        `   why. They are restated every run rather than announced once, so the reasons stay readable`,
+        `   by whoever comes next. \`grep -rn InvalidEndpointForMcp\` is the same list from a shell.`,
+    );
+    return lines.join('\n');
+}
+
+/** The rule's message with its PERMANENT-exclusion list appended, when there is one. */
+// webpieces-disable no-function-outside-class -- pure formatter beside the error that uses it
+function appendExclusions(message: string, exclusions: readonly McpExclusion[]): string {
+    if (exclusions.length === 0) return message;
+    return `${message}\n\n${describeMcpExclusions(exclusions)}`;
+}
+
+/**
+ * One defect per line, with its cure INDENTED under it rather than collected into a footer.
+ *
+ * Every other error in this file prints one shared cure because its offenders share one root cause —
+ * an unreadable constant, a missing `calledBy`. These two do not: an open enum, an `unknown` value
+ * and a `void` RPC are three different edits, and a footer would make the reader work out which of
+ * the three applies to which line.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, mirrors rootUnionLines
+function apiDefectLines(found: readonly ApiContractDefect[]): string {
+    return found
+        .map((one: ApiContractDefect) => {
+            const exposure = one.isExternal() ? ' [PARTNER-FACING]' : '';
+            return (
+                `     • ${one.where()}${exposure} — ${one.what}\n` +
+                `       at ${one.at}\n` +
+                `       cure: ${one.cure}`
+            );
+        })
+        .join('\n');
+}
+
+/** The two halves every api-doc rule prints, so both refusals say the reasonless part identically. */
+// webpieces-disable no-function-outside-class -- pure formatter shared by the two errors below
+function apiRuleMessage(
+    rule: string,
+    headline: string,
+    findings: ApiRuleFindings,
+    why: string,
+): string {
+    const parts: string[] = [];
+    if (findings.violations.length > 0) {
+        parts.push(
+            `${findings.violations.length} ${headline}:\n` +
+                apiDefectLines(findings.violations) +
+                `\n${why}\n` +
+                `   This runs on EVERY @ApiPath contract, with or without @ApiType: @ApiType is a\n` +
+                `   PUBLISHING decision added later, so a shape that is not expressible must fail on the\n` +
+                `   first line rather than on the day somebody annotates it — by which time the type is\n` +
+                `   in partners' generated clients and cannot be changed.\n` +
+                `   Last resort, per site: // webpieces-disable ${rule} -- <reason>`,
+        );
+    }
+    if (findings.reasonlessDisables.length > 0) {
+        parts.push(
+            `${findings.reasonlessDisables.length} disable(s) of ${rule} give NO reason:\n` +
+                apiDefectLines(findings.reasonlessDisables) +
+                `\n   The reason is MANDATORY — a reasonless disable is itself a violation. Write it as\n` +
+                `   // webpieces-disable ${rule} -- <why this contract is published like this>\n` +
+                `   The hatch is per-site and argued on purpose: the next reader needs the argument,\n` +
+                `   not just the suppression.`,
+        );
+    }
+    return parts.join('\n\n');
+}
+
+/**
+ * `api-rules-for-openapi`: a contract that cannot produce an OpenAPI document.
+ *
+ * Fatal because the failure it prevents is DOCUMENT-WIDE and arrives late. One field with no shape
+ * fails the whole document, so no partner can generate a client for ANY operation of that API — six
+ * of 98 endpoints in a measured upstream repo, from exactly two root causes, and five of those six
+ * were one field. The author who wrote that field had no way to know, because nothing looked at the
+ * contract until somebody added `@ApiType` months later.
+ *
+ * Its verdict is the GENERATOR'S: the scan drives `ApiDocExtractor` rather than restating what is
+ * expressible, so a contract that passes this is one where adding `@ApiType` then generates.
+ */
+export class ApiRulesForOpenApiError extends Error {
+    constructor(public readonly findings: ApiRuleFindings) {
+        super(
+            apiRuleMessage(
+                OPENAPI_RULE,
+                '@ApiPath contract defect(s) would block the OpenAPI document',
+                findings,
+                `   An OpenAPI failure is DOCUMENT-WIDE: one field with no shape blocks client generation\n` +
+                    `   for every operation of that API, not just the one that declares it.`,
+            ),
+        );
+        this.name = 'ApiRulesForOpenApiError';
+    }
+}
+
+/**
+ * `api-rules-for-mcp`: a `@WpMcpTool` that could not be served.
+ *
+ * Every one of these is something `McpToolRegistry` refuses to BOOT on — a tool it cannot find a
+ * schema for is a tool whose schema nobody checked — so the choice is only WHERE it is discovered.
+ * Here it names the method; at boot it names a process that will not start, in an environment where
+ * nobody is editing the contract.
+ *
+ * Separate from the OpenAPI error because the blast radii are different: this blocks ONE tool, where
+ * an OpenAPI defect blocks a whole document. A team publishing a partner API and no tools runs the
+ * first rule and not this one, which is only possible if they are two rules.
+ */
+export class ApiRulesForMcpError extends Error {
+    constructor(
+        public readonly findings: ApiRuleFindings,
+        /**
+         * The `@InvalidEndpointForMcp` endpoints, appended to the message.
+         *
+         * A red run is exactly when somebody is looking at this output, so it is also when the
+         * PERMANENT exclusions are most worth restating: the next question after "why is this tool
+         * blocked" is "which endpoints did we already decide can never be tools, and why".
+         */
+        public readonly exclusions: readonly McpExclusion[] = [],
+    ) {
+        super(
+            appendExclusions(
+            apiRuleMessage(
+                MCP_RULE,
+                '@WpMcpTool declaration(s) could not be served as MCP tools',
+                findings,
+                `   Each of these makes McpToolRegistry REFUSE TO BOOT: a registered tool the build never\n` +
+                    `   published is a tool whose schema nobody checked. Caught here, it names the method;\n` +
+                    `   caught at boot, it names a process that will not start.`,
+            ),
+                exclusions,
+            ),
+        );
+        this.name = 'ApiRulesForMcpError';
+    }
+}
 
 /**
  * Loud, actionable report for contracts the scan could not map to source. Callers print this

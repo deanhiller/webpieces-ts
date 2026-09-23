@@ -37,6 +37,8 @@ export const RULE_NAMES = {
     MAX_LINES_MODIFIED_FILES: 'max-lines-modified-files',
     MAX_LINES_MODIFIED: 'max-lines-modified',
     NO_ROOT_UNION_API_TYPE: 'no-root-union-api-type',
+    API_RULES_FOR_OPENAPI: 'api-rules-for-openapi',
+    API_RULES_FOR_MCP: 'api-rules-for-mcp',
 } as const;
 
 // Merge-state convention shared by the pr-gate scripts (which WRITE the marker during a

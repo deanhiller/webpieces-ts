@@ -512,6 +512,7 @@ export class TypeResolver {
             min,
             max,
             doc.mcpHeader,
+            SourceLocation.of(member),
         );
     }
 

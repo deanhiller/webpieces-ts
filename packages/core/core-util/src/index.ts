@@ -150,9 +150,12 @@ export type {
 } from './http/decorators';
 export { RPC, CLOUDTASKS, CRON, EXTERNAL, READ, WRITE_IDEMPOTENT, WRITE } from './http/decorators';
 export {
+    InvalidEndpointForMcp,
+    InvalidEndpointForMcpMetadata,
     WpMcpTool,
     WpMcpToolHints,
     WpMcpToolMetadata,
+    getInvalidEndpointsForMcp,
     getWpMcpTools,
     mcpHintsForOperation,
 } from './mcp/McpMetadata';
