@@ -76,6 +76,8 @@ export interface MoveWindowResponse {
 export abstract class McpUnionApi {
     /** Reads one delivery, whose window is a discriminated union. */
     @WpMcpTool('fetch_delivery')
+    @WpAuthJwt({ allRolesAllowed: true })
+    @WpMcpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/fetch', READ, RPC)
     fetchDelivery(_request: FetchRequest): Promise<FetchResponse> {
         throw new Error('contract only');
@@ -83,6 +85,8 @@ export abstract class McpUnionApi {
 
     /** Moves a delivery window. Its REQUEST is a union, which no tool schema may publish. */
     @WpMcpTool('move_window')
+    @WpAuthJwt({ allRolesAllowed: true })
+    @WpMcpAuthJwt({ allRolesAllowed: true })
     @Endpoint(POST, '/move', READ, RPC)
     moveWindow(_request: MoveWindowRequest): Promise<MoveWindowResponse> {
         throw new Error('contract only');

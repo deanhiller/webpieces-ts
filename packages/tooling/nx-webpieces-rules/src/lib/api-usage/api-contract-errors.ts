@@ -73,8 +73,7 @@ export class RootUnionApiTypeError extends Error {
         this.name = 'RootUnionApiTypeError';
     }
 
-    // webpieces-disable no-function-outside-class -- private static renderer of this class
-    // webpieces-disable max-lines-new-methods -- one message, and splitting it hides what is read
+    // webpieces-disable no-function-outside-class, max-lines-new-methods -- private static renderer of this class, and splitting one message hides what a reader actually sees
     private static render(findings: RootUnionFindings): string {
         const parts: string[] = [];
         if (findings.violations.length > 0) {
