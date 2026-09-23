@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import type { ApiScanResult } from '../api-usage/api-scanner';
-import { UnresolvedApiCall } from '../api-usage/api-scanner';
+import { UnresolvedApiCall } from '../api-usage/api-relations';
 import type { ApiClassInfo } from '../api-usage/api-relations';
 import { findUnclassifiedApiDeps, describeUnclassifiedApiDep } from '../api-usage/api-relations-validator';
 import type { UnclassifiedApiDep } from '../api-usage/api-relations-validator';

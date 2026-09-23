@@ -268,6 +268,25 @@ export interface ApiContract {
 export type ApiContracts = Record<string, ApiContract>;
 
 /**
+ * An `addRoutes`/`createRpcClient`/`createPubSubClient` first argument that resolved to an
+ * abstract class in a DECLARATION file which owns no indexed contract. Unambiguously a broken
+ * scan (a real api-lib whose source we never indexed), never a "this isn't an API" argument —
+ * so it is reported loudly instead of collapsing into a silent `return null`.
+ */
+export class UnresolvedApiCall {
+    constructor(
+        /** The project whose source makes the call. */
+        public readonly project: string,
+        /** The contract class name as written at the call site. */
+        public readonly api: string,
+        /** `path/to/file.ts:LINE` of the call site, workspace-relative. */
+        public readonly at: string,
+        /** The declaration file the checker resolved to (where decorators are erased). */
+        public readonly declaredIn: string,
+    ) {}
+}
+
+/**
  * ONE decorator argument the scan saw but could not reduce to a string — `@ApiPath(SOME_CONST)`
  * where SOME_CONST is imported from another module, a computed expression, an enum member, ...
  *

@@ -32,6 +32,29 @@ export type ApiJsonSchemaType =
     | 'array'
     | 'null';
 
+/**
+ * The DISCRIMINATOR of a {@link ApiJsonSchema.oneOf} — which property narrows the union, and what
+ * each of its values names.
+ *
+ * The shape MIRRORS what `OpenApiGenerator`'s `SchemaRenderer` already emits for the same union
+ * (`propertyName` + `mapping`), because a union has exactly ONE published spelling in this repo and
+ * the OpenAPI renderer is the reference implementation of it. The one difference is what a mapping
+ * VALUE holds: OpenAPI maps a value to `#/components/schemas/ScheduledWindow`, and an MCP tool
+ * schema is INLINE and has no `$ref` to point at, so it maps to the branch's type NAME.
+ *
+ * `mapping` is DOCUMENTATION for the reader. {@link ApiJsonSchemaValidator} never narrows with it:
+ * it selects the branch whose own `enum` carries the value, so the accepted request and the
+ * published document cannot disagree about which branch a value means.
+ */
+export class ApiJsonSchemaDiscriminator {
+    constructor(
+        /** The property every branch declares as exactly one string literal, e.g. `kind`. */
+        public propertyName: string,
+        /** discriminator value -> the branch's TYPE NAME (MCP is inline: there is no `$ref`). */
+        public mapping: Record<string, string>,
+    ) {}
+}
+
 /** The JSON Schema subset emitted for Webpieces API DTOs. */
 export class ApiJsonSchema {
     /** One type, or `[T, "null"]` for a nullable field. */
@@ -45,6 +68,22 @@ export class ApiJsonSchema {
     enum?: string[];
     minimum?: number;
     maximum?: number;
+    /**
+     * The branches of a union, INLINE (MCP tool schemas have no `$ref`), in declaration order.
+     *
+     * A union is legal NESTED, inside a property. It is NOT legal at the ROOT of a tool's parameter
+     * schema — both the OpenAI and the Anthropic function-calling APIs reject a top-level
+     * `oneOf`/`anyOf`/`allOf`, and because a server sends its whole tool list on every request, one
+     * such tool makes EVERY request 400. That is refused at build time by the `no-root-union-api-type`
+     * rule, before a contract can be published at all.
+     */
+    oneOf?: readonly ApiJsonSchema[];
+    /**
+     * Set ONLY when every branch carries the same property typed as one string literal — DERIVED,
+     * never invented. A union TypeScript itself cannot narrow is published as a bare {@link oneOf},
+     * because claiming a narrowing the source does not have is worse than admitting there is none.
+     */
+    discriminator?: ApiJsonSchemaDiscriminator;
     /** MCP 2026 SEP-2243 schema extension consumed by the official SDK. */
     declare 'x-mcp-header'?: string;
 
@@ -153,6 +192,9 @@ export class ApiJsonSchemaValidator {
                 ? undefined
                 : new DtoValidationFailure(path, `${path} must not be null`);
         }
+        if (schema.oneOf !== undefined) {
+            return this.validateUnion(schema, value, path);
+        }
         switch (ApiJsonSchema.baseTypeOf(schema)) {
             case 'object':
                 return this.validateObject(schema, value, path);
@@ -170,6 +212,80 @@ export class ApiJsonSchemaValidator {
             default:
                 return undefined;
         }
+    }
+
+    /**
+     * A union, validated BY DISCRIMINATOR.
+     *
+     * The discriminator property is read FIRST and the branch chosen from it, so a value naming no
+     * branch is reported as what it is — `$.window.kind must be one of: scheduled | asap`, naming the
+     * field that is wrong and the values it may hold. Trying every branch and reporting "no branch
+     * matched" tells a caller nothing they can act on: it names neither the offending property nor
+     * the legal values, and it hides a branch that matched on `kind` and failed three levels down.
+     *
+     * The branch is selected by the branches' own `enum`s, never by
+     * {@link ApiJsonSchemaDiscriminator.mapping} — the branches ARE the schema, so selection and
+     * validation read one source and cannot disagree.
+     */
+    private validateUnion(
+        schema: ApiJsonSchema,
+        value: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        const branches = schema.oneOf ?? [];
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            return new DtoValidationFailure(path, `${path} must be an object`);
+        }
+        const discriminator = schema.discriminator;
+        if (discriminator === undefined) {
+            return this.validateAnyBranch(branches, value, path);
+        }
+        const property = discriminator.propertyName;
+        const held: DtoValue = Object.getOwnPropertyDescriptor(value, property)?.value;
+        const branch = branches.find((one: ApiJsonSchema) =>
+            ApiJsonSchemaValidator.branchValuesOf(one, property).includes(held as string),
+        );
+        if (branch === undefined) {
+            const legal = branches
+                .flatMap((one: ApiJsonSchema) =>
+                    ApiJsonSchemaValidator.branchValuesOf(one, property),
+                )
+                .join(' | ');
+            return new DtoValidationFailure(
+                `${path}.${property}`,
+                `${path}.${property} must be one of: ${legal}`,
+            );
+        }
+        return this.validateAt(branch, value, path);
+    }
+
+    /**
+     * A union with NO discriminator — one TypeScript itself cannot narrow. Every branch is tried and
+     * the value accepted when one matches. There is no better report when none does: the source does
+     * not narrow, so no property can honestly be named as the wrong one.
+     */
+    private validateAnyBranch(
+        branches: readonly ApiJsonSchema[],
+        value: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        for (const branch of branches) {
+            if (this.validateAt(branch, value, path) === undefined) {
+                return undefined;
+            }
+        }
+        return new DtoValidationFailure(
+            path,
+            `${path} matches none of the ${branches.length} accepted shapes`,
+        );
+    }
+
+    /** The string literals ONE branch declares for the discriminator property. */
+    // webpieces-disable no-function-outside-class -- private static reader of a branch schema
+    private static branchValuesOf(branch: ApiJsonSchema, property: string): readonly string[] {
+        const declared = Object.getOwnPropertyDescriptor(branch.properties ?? {}, property)
+            ?.value as ApiJsonSchema | undefined;
+        return declared?.enum ?? [];
     }
 
     private validateObject(

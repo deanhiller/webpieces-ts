@@ -15,8 +15,96 @@ import {
     EmptiedApiContract,
     UndeclaredEndpointOperation,
     UndeclaredExternalCaller,
+    UnresolvedApiCall,
     UnresolvedEndpointPath,
 } from './api-relations';
+import { RootUnionApiType, RootUnionFindings, ROOT_UNION_RULE } from './root-union-scan';
+
+/**
+ * Loud, actionable report for contracts the scan could not map to source. Callers print this
+ * instead of emitting a green graph that is quietly missing relations. Not fatal: a contract
+ * from a genuinely EXTERNAL (published, non-workspace) api-lib legitimately has no source here.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnclassifiedApiDep
+export function describeUnresolvedApiCalls(calls: UnresolvedApiCall[]): string {
+    const lines = [
+        `⚠️  ${calls.length} API contract(s) resolved to a declaration file with no matching workspace source.`,
+        `   Decorators (@ApiPath) are ERASED in .d.ts output, so these relations are MISSING from the graph:`,
+    ];
+    for (const call of calls) {
+        lines.push(
+            `     • ${call.api} at ${call.at} (${call.project}) → resolved to ${call.declaredIn}`,
+        );
+    }
+    lines.push(
+        `   If the api-lib IS in this workspace, add a tsconfig.base.json 'paths' entry mapping it to its`,
+        `   src/index.ts, or confirm its project root is registered. If it is a published external package,`,
+        `   this relation cannot be derived and the graph edge will not appear.`,
+    );
+    return lines.join('\n');
+}
+
+/** One line per offender, in the shape every error in this file uses. */
+// webpieces-disable no-function-outside-class -- pure formatter shared by the one error below
+function rootUnionLines(found: readonly RootUnionApiType[]): string {
+    return found
+        .map(
+            (one: RootUnionApiType) =>
+                `     • ${one.api}.${one.method} — ${one.side} type '${one.typeName}' at ${one.at}`,
+        )
+        .join('\n');
+}
+
+/**
+ * `no-root-union-api-type`: a request or response type that IS a union, on ANY `@ApiPath` contract.
+ *
+ * Fatal, and fatal EARLY, because the failure it prevents is discovered by somebody else at runtime
+ * and does not look like this contract's fault: a top-level `oneOf` is rejected by both the OpenAI
+ * and the Anthropic function-calling APIs, a server sends its whole tool list on every request, and
+ * so ONE such tool makes EVERY request 400. The user's report is "all the other tools broke".
+ *
+ * The second list is reasonless disables. A disable for this rule must carry an argument somebody
+ * wrote down: the escape hatch is deliberately per-site and never a blanket switch, because the
+ * blast radius is a whole session rather than one call.
+ */
+export class RootUnionApiTypeError extends Error {
+    constructor(public readonly findings: RootUnionFindings) {
+        super(RootUnionApiTypeError.render(findings));
+        this.name = 'RootUnionApiTypeError';
+    }
+
+    // webpieces-disable no-function-outside-class, max-lines-new-methods -- private static renderer of this class, and splitting one message hides what a reader actually sees
+    private static render(findings: RootUnionFindings): string {
+        const parts: string[] = [];
+        if (findings.violations.length > 0) {
+            parts.push(
+                `${findings.violations.length} @ApiPath method(s) declare a request or response type that IS a union:\n` +
+                    rootUnionLines(findings.violations) +
+                    `\n   A union at the TOP LEVEL of a tool's parameter schema is rejected by BOTH the OpenAI and\n` +
+                    `   the Anthropic function-calling APIs. A server sends its WHOLE tool list on every request, so\n` +
+                    `   ONE of these makes EVERY request 400 and the entire client session unusable — not just that\n` +
+                    `   tool. Nested composition, INSIDE a property, is fine and publishes as oneOf.\n` +
+                    `   Fix it by wrapping the union in a property of an object:\n` +
+                    `     export interface MoveWindowRequest { window: ScheduledWindow | AsapWindow }\n` +
+                    `   This runs on EVERY @ApiPath contract, with or without @ApiType: @ApiType is a publishing\n` +
+                    `   decision added later, so a shape that is not expressible must fail on the first line rather\n` +
+                    `   than on the day somebody annotates it.\n` +
+                    `   Last resort, per site: // webpieces-disable ${ROOT_UNION_RULE} -- <reason>`,
+            );
+        }
+        if (findings.reasonlessDisables.length > 0) {
+            parts.push(
+                `${findings.reasonlessDisables.length} disable(s) of ${ROOT_UNION_RULE} give NO reason:\n` +
+                    rootUnionLines(findings.reasonlessDisables) +
+                    `\n   The reason is MANDATORY — a reasonless disable is itself a violation. Write it as\n` +
+                    `   // webpieces-disable ${ROOT_UNION_RULE} -- <why this root union is deliberate>\n` +
+                    `   The hatch is per-site and argued on purpose: this defect costs a whole client session, so\n` +
+                    `   the next reader needs the argument, not just the suppression.`,
+            );
+        }
+        return parts.join('\n\n');
+    }
+}
 
 /** Endpoints missing the operation declaration that drives retry safety and MCP annotations. */
 export class UndeclaredEndpointOperationError extends Error {

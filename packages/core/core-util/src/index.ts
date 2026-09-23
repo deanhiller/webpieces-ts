@@ -160,6 +160,7 @@ export type { WpMcpMethodDecorator } from './mcp/McpMetadata';
 export { WpMcpAuthJwt, WpMcpJwtAuthMetadata, getWpMcpAuthJwt } from './mcp/McpAuthMetadata';
 export {
     ApiJsonSchema,
+    ApiJsonSchemaDiscriminator,
     ApiJsonSchemaValidator,
     DtoValidationFailure,
     ObjectSchemaBuilder,

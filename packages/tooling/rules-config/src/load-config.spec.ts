@@ -69,6 +69,7 @@ const CODE_RULE_NAMES = [
     'validate-packagejson',
     'validate-versions-locked',
     'validate-eslint-sync',
+    'no-root-union-api-type',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
