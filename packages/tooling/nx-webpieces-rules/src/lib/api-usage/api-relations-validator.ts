@@ -14,7 +14,9 @@
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
-import { ApiScanResult, UnresolvedApiCall } from './api-scanner';
+import { ApiScanResult } from './api-scanner';
+// UnresolvedApiCall moved beside its sibling diagnostic DTOs when api-scanner.ts reached its limit.
+import { UnresolvedApiCall } from './api-relations';
 
 /** Roles that must justify every api-lib dependency (top-level runnables). */
 const CHECKED_ROLES: ReadonlyArray<string> = ['server', 'client'];

@@ -293,7 +293,8 @@
                         "type": "string",
                         "enum": [
                             "asap"
-                        ]
+                        ],
+                        "description": "Discriminates this branch of DeliveryWindow."
                     },
                     "estimateMinutes": {
                         "type": "number",
@@ -505,7 +506,8 @@
                         "type": "string",
                         "enum": [
                             "scheduled"
-                        ]
+                        ],
+                        "description": "Discriminates this branch of DeliveryWindow."
                     },
                     "from": {
                         "type": "string",

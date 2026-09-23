@@ -174,6 +174,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'apps/app-example/partner-api/src/PartnerOrdersApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
@@ -182,12 +183,13 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
 
     it('records which tools the compiler can render, and why the rest cannot', () => {
         expect(sweep.tools.map(String)).toEqual([
-            // A DISCRIMINATED UNION. MCP's input schema is one flat object with no `oneOf`, so this
-            // tool cannot be published as it stands. That is a PROTOCOL limit and not a defect of
-            // this extractor, and what to do about it — publish `oneOf` and require MCP clients to
-            // handle it, or keep such contracts off MCP — is a decision for a human (#983,
-            // condition 4). It is recorded here, unchanged, until one is made.
-            'PartnerOrdersApi/fetch_orders: a union has no MCP input-schema shape (Order.window)',
+            // RENDERS since #1009. `Order.window` is a discriminated union, which this list used to
+            // record as unpublishable — "MCP's input schema is one flat object with no oneOf". That
+            // was never a protocol limit: MCP tool schemas are JSON Schema 2020-12, the same dialect
+            // OpenAPI 3.1 uses, and the obstacle was our own `ApiJsonSchema` subset. The union is
+            // NESTED, inside a property, which is the half that is legal — a union at the ROOT of a
+            // tool schema is refused, here and by the `no-root-union-api-type` build rule.
+            'PartnerOrdersApi/fetch_orders',
             // A RECURSIVE DTO: `TreeNode` holds `TreeNode[]`. A tool schema is inline and has no
             // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
             // carries `Mixed`, an un-narrowable union, for the reason above.
@@ -195,6 +197,11 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'McpEquivalenceApi/lookup_orders',
             'McpEquivalenceApi/cancel_order',
             'McpEquivalenceApi/reindex_store',
+            'McpUnionApi/fetch_delivery',
+            // A ROOT-level union request. Legal TypeScript, legal HTTP, and unservable as a tool:
+            // the OpenAI and Anthropic function-calling APIs reject a top-level oneOf, and a server
+            // sends its whole tool list on every request, so one of these 400s the whole session.
+            "McpUnionApi/move_window: an MCP tool's request is itself a union (McpUnionApi.moveWindow)",
             'WidgetsApi/list_widgets',
             'RemoteMcpApi/remote_integration_search',
             'MissingRemoteMcpApi/missing_remote_integration_search',

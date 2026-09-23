@@ -35,6 +35,7 @@ export type OrderState = 'placed' | 'accepted' | 'delivered' | 'cancelled';
 
 /** A delivery window given as a clock time. */
 export interface ScheduledWindow {
+    /** Discriminates this branch of {@link DeliveryWindow}. */
     kind: 'scheduled';
 
     /**
@@ -46,6 +47,7 @@ export interface ScheduledWindow {
 
 /** A delivery that goes out as soon as it is ready. */
 export interface AsapWindow {
+    /** Discriminates this branch of {@link DeliveryWindow}. */
     kind: 'asap';
 
     /** Roughly how long the kitchen said it needs, in minutes. */

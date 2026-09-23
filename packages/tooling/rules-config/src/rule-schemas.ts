@@ -40,6 +40,7 @@ import {
     ValidateVersionsLockedConfig,
     ValidateEslintSyncConfig,
 } from './rule-configs';
+import { NoRootUnionApiTypeConfig } from './no-root-union-config';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
 
@@ -91,6 +92,7 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-packagejson': ValidatePackageJsonConfig.SCHEMA,
     'validate-versions-locked': ValidateVersionsLockedConfig.SCHEMA,
     'validate-eslint-sync': ValidateEslintSyncConfig.SCHEMA,
+    'no-root-union-api-type': NoRootUnionApiTypeConfig.SCHEMA,
 };
 
 /**

@@ -206,6 +206,11 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "no-root-union-api-type": {
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "ensure-we-are-secure": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,
@@ -241,7 +246,7 @@
             "mode": "ON",
             "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
             "mergeMode": "NONE",
-      "reviewerAgents": 1,
+            "reviewerAgents": 1,
             "gateSalt": "1eaf975da170d130d5ec5693fb77b28f40202d430b5bccd44833a7ec13b0999b"
         }
     },

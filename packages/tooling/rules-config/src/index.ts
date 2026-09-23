@@ -284,6 +284,7 @@ export {
     ValidateEslintSyncConfig,
     BaseRuleConfig,
 } from './rule-configs';
+export { NoRootUnionApiTypeConfig } from './no-root-union-config';
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
 export {
     METHOD_LIMIT_MODES,

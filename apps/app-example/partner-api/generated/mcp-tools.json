@@ -1,0 +1,160 @@
+[
+  {
+    "name": "fetch_orders",
+    "methodName": "fetchOrders",
+    "description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "storeId": {
+          "type": "string",
+          "description": "The store to read."
+        },
+        "from": {
+          "type": "string",
+          "description": "Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely."
+        },
+        "states": {
+          "type": "array",
+          "description": "Only these states. Omit for every state.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "placed",
+              "accepted",
+              "delivered",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "required": [
+        "storeId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "orders": {
+          "type": "array",
+          "description": "The matching orders, newest first.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Our identifier for it. Stable for the life of the order."
+              },
+              "state": {
+                "type": "string",
+                "description": "Where it is in its lifecycle.",
+                "enum": [
+                  "placed",
+                  "accepted",
+                  "delivered",
+                  "cancelled"
+                ]
+              },
+              "externalId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Your own identifier, echoed back. PRESENT and possibly null — an order placed through our own\nUI has none, which is a different wire document from one where you did not send the field."
+              },
+              "placedAt": {
+                "type": "string",
+                "description": "When it was placed."
+              },
+              "window": {
+                "description": "When it is meant to arrive.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "description": "Discriminates this branch of DeliveryWindow.",
+                        "enum": [
+                          "scheduled"
+                        ]
+                      },
+                      "from": {
+                        "type": "string",
+                        "description": "When the window opens."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "from"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "description": "Discriminates this branch of DeliveryWindow.",
+                        "enum": [
+                          "asap"
+                        ]
+                      },
+                      "estimateMinutes": {
+                        "type": "number",
+                        "description": "Roughly how long the kitchen said it needs, in minutes."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "estimateMinutes"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "scheduled": "ScheduledWindow",
+                    "asap": "AsapWindow"
+                  }
+                }
+              },
+              "labels": {
+                "type": "object",
+                "description": "Free-form labels you attached at placement.",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "externalId",
+              "placedAt",
+              "window",
+              "labels"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "nextFrom": {
+          "type": "string",
+          "description": "Pass as `from` on the next call; absent when the window is exhausted."
+        }
+      },
+      "required": [
+        "orders"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

@@ -19,11 +19,13 @@ import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../
 import { ProjectInfo } from '../../lib/project-info';
 import {
     scanAndAttachApiRelations,
-    describeUnresolvedApiCalls,
     describeNonLiteralDecoratorArgs,
     buildApiContracts,
     describeMismatchedEndpointKinds,
 } from '../../lib/api-usage/api-scanner';
+// The unresolved-contract report moved beside the other contract reports when api-scanner.ts reached
+// its file-size limit.
+import { describeUnresolvedApiCalls } from '../../lib/api-usage/api-contract-errors';
 import { buildExternalSystems } from '../../lib/api-usage/external-systems';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { loadRuntimeConfig } from '../../lib/runtime-config';

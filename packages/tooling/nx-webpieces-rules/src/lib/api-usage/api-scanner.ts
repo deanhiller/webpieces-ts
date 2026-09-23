@@ -48,6 +48,7 @@ import {
     ProjectApiRelations,
     UndeclaredExternalCaller,
     UndeclaredEndpointOperation,
+    UnresolvedApiCall,
     UnresolvedEndpointPath,
     apiRefKey,
     deriveApiRelationKind,
@@ -56,10 +57,12 @@ import {
 import {
     EmptiedApiContractError,
     MissingBasePathError,
+    RootUnionApiTypeError,
     UndeclaredExternalCallerError,
     UndeclaredEndpointOperationError,
     UnresolvedEndpointPathError,
 } from './api-contract-errors';
+import { RootUnionFindings, RootUnionRule, RootUnionScan } from './root-union-scan';
 import {
     DecoratorArgDiagnostics,
     apiClassInfoFrom,
@@ -78,25 +81,6 @@ import {
 const RPC_CLIENT_METHOD = 'createRpcClient';
 const PUBSUB_CLIENT_METHOD = 'createPubSubClient';
 const ADD_ROUTES_METHOD = 'addRoutes';
-
-/**
- * An `addRoutes`/`createRpcClient`/`createPubSubClient` first argument that resolved to an
- * abstract class in a DECLARATION file which owns no indexed contract. Unambiguously a broken
- * scan (a real api-lib whose source we never indexed), never a "this isn't an API" argument —
- * so it is reported loudly instead of collapsing into a silent `return null`.
- */
-export class UnresolvedApiCall {
-    constructor(
-        /** The project whose source makes the call. */
-        public readonly project: string,
-        /** The contract class name as written at the call site. */
-        public readonly api: string,
-        /** `path/to/file.ts:LINE` of the call site, workspace-relative. */
-        public readonly at: string,
-        /** The declaration file the checker resolved to (where decorators are erased). */
-        public readonly declaredIn: string,
-    ) {}
-}
 
 /** The whole-workspace result of a scan. */
 export interface ApiScanResult {
@@ -141,6 +125,8 @@ export interface ApiScanResult {
     undeclaredExternalCallers: UndeclaredExternalCaller[];
     /** Endpoints lacking the explicit side-effect contract used for retry safety and MCP hints. */
     undeclaredEndpointOperations: UndeclaredEndpointOperation[];
+    /** `no-root-union-api-type`'s findings. Fatal in buildApiContracts — see root-union-scan.ts. */
+    rootUnions: RootUnionFindings;
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -311,6 +297,8 @@ export class ApiUsageScanner {
         private readonly projectInfos: Map<string, ProjectInfo>,
         /** Globs of project roots whose exported `*Api` types are contracts for outside systems. */
         private readonly externalApiPaths: readonly string[] = [],
+        /** `no-root-union-api-type`'s switches — ARMED unless scanAndAttachApiRelations read otherwise. */
+        private readonly rootUnionRule: RootUnionRule = RootUnionRule.enabledEverywhere(),
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);
         this.decoratorArgDiagnostics = new DecoratorArgDiagnostics(workspaceRoot);
@@ -341,6 +329,11 @@ export class ApiUsageScanner {
             undeclaredExternalCallers: this.decoratorArgDiagnostics.undeclaredExternalCallers(),
             undeclaredEndpointOperations:
                 this.decoratorArgDiagnostics.undeclaredEndpointOperations(),
+            rootUnions: new RootUnionScan(
+                this.workspaceRoot,
+                this.projectInfos,
+                this.rootUnionRule,
+            ).run(),
         };
     }
 
@@ -511,7 +504,12 @@ export function scanAndAttachApiRelations(
     projectInfos: Map<string, ProjectInfo>,
     externalApiPaths: readonly string[] = [],
 ): ApiScanResult {
-    const result = new ApiUsageScanner(workspaceRoot, projectInfos, externalApiPaths).scan();
+    const result = new ApiUsageScanner(
+        workspaceRoot,
+        projectInfos,
+        externalApiPaths,
+        RootUnionRule.fromConfig(workspaceRoot),
+    ).scan();
     for (const projectName of result.relationsByProject.keys()) {
         const entry = graph[projectName];
         if (entry) entry.apiRelations = result.relationsByProject.get(projectName);
@@ -550,6 +548,9 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     if (scan.undeclaredEndpointOperations.length > 0) {
         throw new UndeclaredEndpointOperationError(scan.undeclaredEndpointOperations);
     }
+    // A shape no function-calling API will accept, read perfectly well — unlike the four above, which
+    // are contracts the scan could not READ at all.
+    if (!scan.rootUnions.isEmpty()) throw new RootUnionApiTypeError(scan.rootUnions);
     // After the two above: an unreadable path is what empties a contract, and a contract that lost
     // every method has no external endpoint left to complain about.
     if (scan.undeclaredExternalCallers.length > 0) {
@@ -628,30 +629,6 @@ export function describeMismatchedEndpointKinds(contracts: ApiContracts): string
         }
     }
     return problems;
-}
-
-/**
- * Loud, actionable report for contracts the scan could not map to source. Callers print this
- * instead of emitting a green graph that is quietly missing relations. Not fatal: a contract
- * from a genuinely EXTERNAL (published, non-workspace) api-lib legitimately has no source here.
- */
-// webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnclassifiedApiDep
-export function describeUnresolvedApiCalls(calls: UnresolvedApiCall[]): string {
-    const lines = [
-        `⚠️  ${calls.length} API contract(s) resolved to a declaration file with no matching workspace source.`,
-        `   Decorators (@ApiPath) are ERASED in .d.ts output, so these relations are MISSING from the graph:`,
-    ];
-    for (const call of calls) {
-        lines.push(
-            `     • ${call.api} at ${call.at} (${call.project}) → resolved to ${call.declaredIn}`,
-        );
-    }
-    lines.push(
-        `   If the api-lib IS in this workspace, add a tsconfig.base.json 'paths' entry mapping it to its`,
-        `   src/index.ts, or confirm its project root is registered. If it is a published external package,`,
-        `   this relation cannot be derived and the graph edge will not appear.`,
-    );
-    return lines.join('\n');
 }
 
 /**

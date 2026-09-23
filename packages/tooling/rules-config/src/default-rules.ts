@@ -71,6 +71,12 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'validate-packagejson': { mode: 'RUN_EVERY_TIME' },
     'validate-versions-locked': { mode: 'RUN_EVERY_TIME' },
     'validate-eslint-sync': { mode: 'RUN_EVERY_TIME' },
+    // Ships ARMED (#1009), which is the opposite of the usual "new rule ships OFF" and is deliberate:
+    // the defect it refuses BRICKS AN ENTIRE MCP CLIENT SESSION — one tool with a root-level oneOf
+    // makes every request to OpenAI or Anthropic 400, not just that tool's call — and it is found by a
+    // partner at runtime, in somebody else's client, where the symptom is every OTHER tool breaking.
+    // Shipping it off would mean the first repo to meet it learns the rule exists from that incident.
+    'no-root-union-api-type': { mode: 'RUN_EVERY_TIME' },
     // autoReapMergedBranches ships TRUE, and it is also what a fresh config is seeded with.
     //
     // It shipped FALSE on the reasoning that an upgrade must never delete branches unattended before a

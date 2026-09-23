@@ -16,7 +16,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
-import { ApiUsageScanner, describeUnresolvedApiCalls } from '../api-usage/api-scanner';
+import { ApiUsageScanner } from '../api-usage/api-scanner';
+import { describeUnresolvedApiCalls } from '../api-usage/api-contract-errors';
 import { ApiRelation } from '../api-usage/api-relations';
 import { specTempDirs } from '@webpieces/rules-config';
 

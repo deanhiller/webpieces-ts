@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { McpToolCatalog } from '@webpieces/core-util';
 import { OpenApiCli, YamlReader } from '@webpieces/openapi-generator';
 
 /**
@@ -87,7 +88,11 @@ describe('the committed OpenAPI documents', () => {
         const json = Array.from(golden.fresh.keys())
             .filter((name: string) => name.endsWith('.json'))
             .sort();
-        expect(json).toEqual(DOCUMENTS.map((name: string) => `${name}.json`).sort());
+        // mcp-tools.json is not a DOCUMENT — it is the RUNTIME catalog, not serialized by --format —
+        // but it is committed and reviewed exactly like one.
+        expect(json).toEqual(
+            [...DOCUMENTS.map((name: string) => `${name}.json`), 'mcp-tools.json'].sort(),
+        );
     });
 
     it('the YAML parses back to the SAME document as its JSON counterpart', () => {
@@ -100,22 +105,40 @@ describe('the committed OpenAPI documents', () => {
     });
 
     /**
-     * `fetch_orders` is DECLARED as an MCP tool and has never been servable as one: `Order.window` is
-     * a discriminated union, and an MCP tool schema is one flat object with no `oneOf`. The
-     * reflect-metadata runtime refused the same contract for its own reasons, so nothing regressed
-     * here — it is a limit of the PROTOCOL.
+     * `fetch_orders` was DECLARED as an MCP tool and, for two releases, was not servable as one:
+     * `Order.window` is a discriminated union and `ApiJsonSchema` had no `oneOf`. That was recorded
+     * here as a PROTOCOL limit, which it never was — MCP tool schemas are JSON Schema 2020-12, the
+     * same dialect the OpenAPI document beside it already publishes the union in. #1009 removed our
+     * own subset's limit, so the tool now renders and the catalog is COMMITTED.
      *
-     * What to do about it — publish `oneOf` and require MCP clients to handle it, or keep such
-     * contracts off MCP — is an open question for a human (#983, condition 4; #984 deliberately did
-     * not guess). This test is where that question is recorded, so it cannot be forgotten and cannot
-     * be answered by accident: the build NAMES the tool it left out, and `McpToolRegistry` refuses to
-     * boot a server that still declares it.
+     * The committed catalog is the review device: `McpToolRegistry` reads exactly these bytes at
+     * boot and agents are shown exactly this `tools/list`, so a diff here is a diff in a live
+     * protocol surface.
      */
-    it('NAMES fetch_orders as a tool it could not give an MCP schema, and writes no catalog', () => {
-        expect(golden.skippedMcpTools).toEqual([
-            'PartnerOrdersApi/fetch_orders: a union has no MCP input-schema shape (Order.window)',
-        ]);
-        expect(golden.fresh.has('mcp-tools.json')).toBe(false);
+    it('gives fetch_orders an MCP schema, skipping nothing, and commits the catalog', () => {
+        expect(golden.skippedMcpTools).toEqual([]);
+        expect(golden.fresh.has('mcp-tools.json')).toBe(true);
+        expect(golden.fresh.get('mcp-tools.json')).toBe(golden.committed('mcp-tools.json'));
+    });
+
+    /** The union itself, in the bytes an agent is served: `oneOf` + the DERIVED discriminator. */
+    it('publishes Order.window as a discriminated oneOf, nested inside the response object', () => {
+        // Read back through the runtime's own parser, which is what `McpToolRegistry` boots with —
+        // so this asserts the bytes survive the round trip, not merely that they were written.
+        const fetch = McpToolCatalog.fromJsonText(golden.committed('mcp-tools.json')).find(
+            'fetch_orders',
+        );
+        expect(fetch).toBeDefined();
+        const window = fetch!.outputSchema.properties!['orders'].items!.properties!['window'];
+        expect(window.oneOf?.length).toBe(2);
+        expect(window.discriminator).toEqual({
+            propertyName: 'kind',
+            mapping: { scheduled: 'ScheduledWindow', asap: 'AsapWindow' },
+        });
+        // NESTED, which is the legal half. A union at the ROOT of a tool schema is refused by the
+        // OpenAI and Anthropic function-calling APIs and by the no-root-union-api-type build rule.
+        expect(fetch!.inputSchema.oneOf).toBeUndefined();
+        expect(fetch!.outputSchema.oneOf).toBeUndefined();
     });
 
     it('the hidden method is absent from the customer document by TYPE NAME, not only by path', () => {

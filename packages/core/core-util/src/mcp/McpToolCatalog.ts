@@ -1,4 +1,4 @@
-import { ApiJsonSchema, ApiJsonSchemaType } from './DtoSchema';
+import { ApiJsonSchema, ApiJsonSchemaDiscriminator, ApiJsonSchemaType } from './DtoSchema';
 import { WpMcpToolHints } from './McpMetadata';
 
 /**
@@ -174,7 +174,33 @@ class McpCatalogJson {
             }
             schema.properties = built;
         }
+        const oneOf = record['oneOf'];
+        if (Array.isArray(oneOf)) {
+            // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs
+            schema.oneOf = oneOf.map((branch: unknown) => this.schemaFrom(branch));
+            schema.discriminator = this.discriminatorFrom(record['discriminator']);
+        }
         return schema;
+    }
+
+    /**
+     * The `discriminator` block, or undefined — a union TypeScript cannot narrow is published WITHOUT
+     * one, so an absent block is a legal document and not a missing field.
+     */
+    // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs
+    private discriminatorFrom(value: unknown): ApiJsonSchemaDiscriminator | undefined {
+        if (value === undefined) return undefined;
+        const record = this.record(value, 'a schema discriminator block');
+        const mapping: Record<string, string> = {};
+        for (const [key, branch] of Object.entries(
+            this.record(record['mapping'], 'a discriminator mapping block'),
+        )) {
+            mapping[key] = this.text(branch, `discriminator mapping '${key}'`);
+        }
+        return new ApiJsonSchemaDiscriminator(
+            this.text(record['propertyName'], 'discriminator propertyName'),
+            mapping,
+        );
     }
 
     // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs

@@ -34,7 +34,9 @@ Three things the renderer emits that the deleted runtime could not:
 - `Integer` and any other NAMED TYPE ALIAS — `design:type` resolved to `Object` under SWC and to `String`/`Number` under `tsc`, so an aliased field's runtime shape depended on the transpiler
 - a bound on an array of numbers, on the ITEM where OpenAPI puts it — `@WpDtoField` rejected numeric constraints on a non-`Number` field
 
-A nested DTO is INLINED with the FIELD's prose on it: not a gap but the protocol, since MCP tool schemas have no `$ref`. A recursive DTO and a union therefore have no MCP shape at all, and the renderer THROWS rather than publishing a truncated one.
+A nested DTO is INLINED with the FIELD's prose on it: not a gap but the protocol, since MCP tool schemas have no `$ref`. A recursive DTO therefore has no MCP shape at all, and the renderer THROWS rather than publishing a truncated one.
+
+A UNION does have one (#1009): it renders as `oneOf` with its branches inline and its DERIVED discriminator beside them, mirroring what the OpenAPI renderer already emits — MCP tool schemas are JSON Schema 2020-12, the same dialect OpenAPI 3.1 uses, so the obstacle was never the protocol but `ApiJsonSchema`'s own subset. A union TypeScript cannot narrow publishes as a BARE `oneOf`, never with an invented discriminator. NESTED only: a request or response type that IS a union is REFUSED, because both the OpenAI and the Anthropic function-calling APIs reject a top-level `oneOf` and a server sends its whole tool list on every request — one such tool 400s every request in the session. The same shape is refused for EVERY `@ApiPath` contract, `@ApiType` or not, by the `no-root-union-api-type` rule in `@webpieces/nx-webpieces-rules`.
 
 ## Out of Scope
 

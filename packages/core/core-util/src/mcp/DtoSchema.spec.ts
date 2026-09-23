@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     ApiJsonSchema,
+    ApiJsonSchemaDiscriminator,
     ApiJsonSchemaValidator,
     DtoValidationFailure,
     ObjectSchemaBuilder,
@@ -131,6 +132,75 @@ describe('ApiJsonSchemaValidator', () => {
         expect(messageOf(validator.validate(nullable, {}))).toBe('$.externalId is required');
         expect(messageOf(validator.validate(schema, { name: null }))).toBe(
             '$.name must not be null',
+        );
+    });
+});
+
+/**
+ * The union half of the validator (#1009). A discriminated union is narrowed the way the SOURCE
+ * narrows it — read the discriminator, pick the branch — so a bad value is reported as the wrong
+ * FIELD with the legal values beside it, instead of an undifferentiated "no branch matched".
+ */
+describe('ApiJsonSchemaValidator over a oneOf', () => {
+    function branch(kind: string, extra: string): ApiJsonSchema {
+        const literal = new ApiJsonSchema('string');
+        literal.enum = [kind];
+        return new ObjectSchemaBuilder()
+            .required('kind', literal)
+            .required(extra, stringSchema())
+            .build();
+    }
+
+    function window(discriminated: boolean): ApiJsonSchema {
+        const schema = new ApiJsonSchema();
+        schema.oneOf = [branch('scheduled', 'from'), branch('asap', 'estimate')];
+        if (discriminated) {
+            schema.discriminator = new ApiJsonSchemaDiscriminator('kind', {
+                scheduled: 'ScheduledWindow',
+                asap: 'AsapWindow',
+            });
+        }
+        return schema;
+    }
+
+    function nested(discriminated: boolean): ApiJsonSchema {
+        return new ObjectSchemaBuilder().required('window', window(discriminated)).build();
+    }
+
+    it('selects the branch the discriminator names and validates against THAT branch', () => {
+        const schema = nested(true);
+
+        expect(validator.validate(schema, { window: { kind: 'asap', estimate: '20m' } })).toBe(
+            undefined,
+        );
+        // Selected `asap`, so `from` is not a field of the chosen branch — the report names the
+        // extra key rather than blaming the union.
+        expect(messageOf(validator.validate(schema, { window: { kind: 'asap', from: 'x' } }))).toBe(
+            '$.window.from is not allowed',
+        );
+    });
+
+    it('names the discriminator FIELD and its legal values when the value matches no branch', () => {
+        const failure = validator.validate(nested(true), { window: { kind: 'whenever' } });
+
+        expect(failure?.field).toBe('$.window.kind');
+        expect(messageOf(failure)).toBe('$.window.kind must be one of: scheduled | asap');
+    });
+
+    it('says the same thing when the discriminator property is ABSENT entirely', () => {
+        expect(messageOf(validator.validate(nested(true), { window: { from: 'x' } }))).toBe(
+            '$.window.kind must be one of: scheduled | asap',
+        );
+    });
+
+    it('accepts any matching branch of a union published WITHOUT a discriminator', () => {
+        const schema = nested(false);
+
+        expect(validator.validate(schema, { window: { kind: 'asap', estimate: '20m' } })).toBe(
+            undefined,
+        );
+        expect(messageOf(validator.validate(schema, { window: { kind: 'asap' } }))).toBe(
+            '$.window matches none of the 2 accepted shapes',
         );
     });
 });

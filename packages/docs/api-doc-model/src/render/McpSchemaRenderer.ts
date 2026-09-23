@@ -1,5 +1,6 @@
 import {
     ApiJsonSchema,
+    ApiJsonSchemaDiscriminator,
     ApiJsonSchemaType,
     EndpointOperation,
     McpToolCatalog,
@@ -93,8 +94,10 @@ export class McpSchemaRenderer {
      *
      * ## Why an unrenderable tool is REPORTED here rather than throwing
      *
-     * Some shapes have no MCP schema at all — a discriminated union, a recursive DTO — and that is a
-     * limit of the PROTOCOL, not a defect in a contract that is otherwise perfectly good HTTP. Such a
+     * Some shapes have no MCP schema at all — a recursive DTO, an undocumented tool, a request that
+     * is not a named object — and the first of those is a limit of the PROTOCOL rather than a defect
+     * in a contract that is otherwise perfectly good HTTP. (A DISCRIMINATED UNION used to be on this
+     * list and no longer is: #1009 taught `ApiJsonSchema` `oneOf`, so one publishes.) Such a
      * tool was never servable: the reflect-metadata runtime refused it too, for its own reasons. So
      * failing the whole document build over one would stop a repo publishing its OpenAPI over a tool
      * nobody could ever have called.
@@ -186,8 +189,27 @@ export class McpSchemaRenderer {
         }
     }
 
-    /** A tool's input/output schema: always a CLOSED object, because MCP publishes objects. */
+    /**
+     * A tool's input/output schema: always a CLOSED OBJECT, because MCP publishes objects — and
+     * because a union at the ROOT of a tool schema is refused by the function-calling APIs that
+     * consume it. Both OpenAI and Anthropic reject a top-level `oneOf`/`anyOf`/`allOf`, and a server
+     * sends its WHOLE tool list on every request, so one such tool makes every request 400 and bricks
+     * the session — not just that tool. Nested composition, inside a property, is fine.
+     *
+     * The build-time rule `no-root-union-api-type` refuses the same shape across every `@ApiPath`
+     * contract in the workspace, `@ApiType` or not. This is the renderer's own backstop, so a catalog
+     * can never carry one even if it is reached some other way.
+     */
     private rootSchema(ref: TypeRef, where: string, side: string): ApiJsonSchema {
+        if (ref.kind === 'union') {
+            throw new McpRenderError(
+                `an MCP tool's ${side} is itself a union`,
+                where,
+                `Wrap it in a property of an object ${side} — a top-level oneOf is rejected by the ` +
+                    'OpenAI and Anthropic function-calling APIs, and one such tool 400s every ' +
+                    'request in the session.',
+            );
+        }
         if (ref.kind !== 'ref') {
             throw new McpRenderError(
                 `an MCP tool's ${side} is not a named DTO`,
@@ -196,7 +218,17 @@ export class McpSchemaRenderer {
                     `${side} has no object schema, and MCP publishes objects.`,
             );
         }
-        return this.objectSchema(this.namedType(ref.refName!, where), new Set<string>());
+        const type = this.namedType(ref.refName!, where);
+        if (type.unionRefNames.length > 0) {
+            throw new McpRenderError(
+                `an MCP tool's ${side} '${type.name}' is itself a union`,
+                where,
+                `Wrap it in a property of an object ${side} — a top-level oneOf is rejected by the ` +
+                    'OpenAI and Anthropic function-calling APIs, and one such tool 400s every ' +
+                    'request in the session.',
+            );
+        }
+        return this.objectSchema(type, new Set<string>());
     }
 
     private namedType(name: string, where: string): DocumentedType {
@@ -229,11 +261,7 @@ export class McpSchemaRenderer {
             );
         }
         if (type.unionRefNames.length > 0) {
-            throw new McpRenderError(
-                `'${type.name}' is a union, which an MCP input schema cannot express`,
-                type.name,
-                'Publish a single object shape to agents, or keep this contract off MCP.',
-            );
+            return this.unionSchema(type, parents);
         }
         if (type.indexSignatureValue !== undefined && type.fields.length > 0) {
             throw new McpRenderError(
@@ -259,6 +287,72 @@ export class McpSchemaRenderer {
         if (required.length > 0) {
             schema.required = required;
         }
+        return schema;
+    }
+
+    /**
+     * A UNION, as `oneOf` with its branches INLINE and its DERIVED discriminator.
+     *
+     * MCP tool schemas are JSON Schema 2020-12 — the same dialect OpenAPI 3.1 uses — so `oneOf` was
+     * never the obstacle; the obstacle was this repo's own subset, which had no spelling for it
+     * (#1009). The shape written here MIRRORS `SchemaRenderer.union` in `@webpieces/openapi-generator`
+     * branch for branch, because a union has ONE published spelling and that renderer is the
+     * reference implementation of it. The only difference is the absence of `$ref`: a tool schema is
+     * inline, so each branch is rendered in full and the discriminator maps to branch NAMES.
+     *
+     * `discriminator` is written ONLY when the model DERIVED one. A union TypeScript itself cannot
+     * narrow is published as a bare `oneOf` rather than with an invented discriminator — claiming a
+     * narrowing the source does not have is worse than admitting there is none.
+     */
+    private unionSchema(type: DocumentedType, parents: ReadonlySet<string>): ApiJsonSchema {
+        const nested = new Set(parents);
+        nested.add(type.name);
+        const schema = new ApiJsonSchema();
+        schema.oneOf = type.unionRefNames.map((name: string) =>
+            this.objectSchema(this.namedType(name, type.name), nested),
+        );
+        if (type.description.trim() !== '') {
+            schema.description = type.description;
+        }
+        if (type.discriminator !== undefined) {
+            const mapping: Record<string, string> = {};
+            for (const branch of type.unionRefNames) {
+                const value = type.discriminator.branchValues.get(branch);
+                if (value !== undefined) {
+                    mapping[value] = branch;
+                }
+            }
+            schema.discriminator = new ApiJsonSchemaDiscriminator(
+                type.discriminator.propertyName,
+                mapping,
+            );
+        }
+        return schema;
+    }
+
+    /**
+     * A FIELD whose type is a union: the model registers `type X = A | B` as its OWN entry carrying
+     * the derived discriminator, while the field holds a bare list of branch names. Rendering that
+     * list directly would publish the `oneOf` and silently DROP the discriminator — the one part of a
+     * union a client needs to narrow on — so the alias is looked up by its branch list first. This is
+     * the same lookup `SchemaRenderer.namedUnion` does to emit its `$ref`.
+     */
+    private fieldUnion(
+        branchNames: readonly string[],
+        where: string,
+        parents: ReadonlySet<string>,
+    ): ApiJsonSchema {
+        const key = branchNames.join(',');
+        for (const name of this.model.types.keys()) {
+            const candidate = this.model.types.get(name)!;
+            if (candidate.unionRefNames.length > 0 && candidate.unionRefNames.join(',') === key) {
+                return this.unionSchema(candidate, parents);
+            }
+        }
+        const schema = new ApiJsonSchema();
+        schema.oneOf = branchNames.map((name: string) =>
+            this.objectSchema(this.namedType(name, where), parents),
+        );
         return schema;
     }
 
@@ -374,11 +468,7 @@ export class McpSchemaRenderer {
             case 'ref':
                 return this.referencedSchema(ref.refName!, where, parents);
             case 'union':
-                throw new McpRenderError(
-                    'a union has no MCP input-schema shape',
-                    where,
-                    'Publish one object shape to agents, or keep this method off MCP.',
-                );
+                return this.fieldUnion(ref.unionRefNames, where, parents);
             default:
                 throw new McpRenderError(
                     `no MCP schema for the declared type '${ref.unmappedText ?? '<unknown>'}'`,
