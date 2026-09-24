@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "OpenAPI Generate Executor",
-    "description": "Inferred on a project tagged generate:openapi. Render the project's contracts to OpenAPI plus one mcp-<ContractClass>-tools.json per MCP contract, with the consumer's own @webpieces/openapi-generator, into the outputPath of the ONE target this target dependsOn (the compile step).",
+    "description": "Inferred on a project tagged generate:openapi. Render the project's contracts to OpenAPI plus one mcp-<ContractClass>-tools.json per MCP contract, with the consumer's own @webpieces/openapi-generator, into the outputPath of the ONE target this target dependsOn (the api library's build — its @nx/js:tsc step).",
     "type": "object",
     "properties": {
         "manifest": {

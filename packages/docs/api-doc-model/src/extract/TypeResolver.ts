@@ -10,6 +10,7 @@ import { PrimitiveKind, TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
+import { StringValueSets } from './StringValueSets';
 
 /**
  * The decorators this resolver reads off a DTO property, named from the REAL SYMBOLS — a rename in
@@ -147,11 +148,16 @@ export class TypeResolver {
      * A union, after `null` / `undefined` have been dropped (the FIELD records those as nullable /
      * optional — see {@link fieldOf} — because `{}` and `{x: null}` are different wire documents).
      *
-     * Three outcomes, in this order:
+     * The outcomes, in this order:
      *  - every branch a string literal  -> an ENUM
      *  - one branch left                -> that branch
+     *  - every branch a string VALUE    -> an ENUM of all of them: string literals, string-enum
+     *    (literal, enum member, or        members (`VoiceMode.A | VoiceMode.B`) and whole string
+     *    whole string enum)               enums, in declaration order (#1023)
      *  - every branch a named object    -> a UNION, with a DERIVED discriminator when every branch
-     *                                      carries the same property typed as ONE string literal
+     *                                      carries the same property typed as string VALUES — one
+     *                                      literal / enum member, or a union of them — and no value
+     *                                      is claimed by two branches
      *  - anything else                  -> an {@link UnmappedType}. No invented discriminator, ever:
      *                                      a union TypeScript itself cannot narrow is not one a
      *                                      renderer may claim to.
@@ -179,6 +185,10 @@ export class TypeResolver {
         }
 
         const refs: TypeRef[] = branches.map((t: ts.TypeNode) => this.resolve(t, ownerName));
+        const values = new StringValueSets(this.types).valuesOfAll(refs);
+        if (values !== undefined) {
+            return TypeRef.enumOf(values);
+        }
         if (!refs.every((r: TypeRef) => r.kind === 'ref')) {
             return this.recordUnmapped(
                 node,
@@ -187,11 +197,12 @@ export class TypeResolver {
         }
 
         const names = refs.map((r: TypeRef) => r.refName!);
-        const discriminator = this.deriveDiscriminator(names);
+        const discriminator = new StringValueSets(this.types).derive(names);
         if (discriminator === undefined) {
             return this.recordUnmapped(
                 node,
-                'no property is typed as a single string literal on EVERY branch, so this union has no derivable discriminator',
+                'no property is typed as string values (a literal, a string-enum member, or a union of them) on EVERY ' +
+                    'branch with no value shared by two branches, so this union has no derivable discriminator',
             );
         }
         this.registerUnionAlias(node, names, discriminator);
@@ -208,42 +219,6 @@ export class TypeResolver {
             return true;
         }
         return ts.isLiteralTypeNode(node) && node.literal.kind === ts.SyntaxKind.NullKeyword;
-    }
-
-    /**
-     * The DERIVED discriminator: the property every branch declares as exactly ONE string literal,
-     * with a value no two branches share. Derived, never invented — if the source does not narrow,
-     * neither does the document.
-     */
-    private deriveDiscriminator(branchNames: readonly string[]): UnionDiscriminator | undefined {
-        const branches = branchNames.map((name: string) => this.types.get(name));
-        if (branches.some((b: DocumentedType | undefined) => b === undefined)) {
-            return undefined;
-        }
-        const first = branches[0]!;
-        for (const field of first.fields) {
-            const values = new Map<string, string>();
-            for (let i = 0; i < branches.length; i++) {
-                const candidate = branches[i]!.fields.find(
-                    (f: DocumentedField) => f.name === field.name,
-                );
-                const literal =
-                    candidate !== undefined &&
-                    candidate.type.kind === 'enum' &&
-                    candidate.type.enumValues.length === 1
-                        ? candidate.type.enumValues[0]
-                        : undefined;
-                if (literal === undefined) {
-                    values.clear();
-                    break;
-                }
-                values.set(branchNames[i], literal);
-            }
-            if (values.size === branches.length && new Set(values.values()).size === values.size) {
-                return new UnionDiscriminator(field.name, values);
-            }
-        }
-        return undefined;
     }
 
     /** A union written as a named `type X = A | B` becomes its own model entry, so #982 can `$ref` it. */
@@ -297,7 +272,10 @@ export class TypeResolver {
             return this.resolve(args[0], ownerName);
         }
 
-        const declaration = this.declarationOf(node.typeName);
+        // `VoiceMode.RANDOM` is a QualifiedName; the member's symbol is the one on its RIGHT side.
+        const declaration = this.declarationOf(
+            ts.isQualifiedName(node.typeName) ? node.typeName.right : node.typeName,
+        );
         if (declaration === undefined) {
             return this.recordUnmapped(node, `no declaration found for '${name}'`);
         }
@@ -321,6 +299,9 @@ export class TypeResolver {
         }
         if (ts.isEnumDeclaration(declaration)) {
             return this.registerStringEnum(name, declaration);
+        }
+        if (ts.isEnumMember(declaration)) {
+            return this.resolveEnumMember(name, declaration);
         }
         return this.recordUnmapped(
             declaration,
@@ -361,6 +342,22 @@ export class TypeResolver {
             return this.registerNamedObject(name, alias.type, alias);
         }
         return this.resolve(alias.type, ownerName);
+    }
+
+    /**
+     * ONE member of a string enum used as a type — `mode: VoiceMode.RANDOM` — which holds exactly
+     * that member's VALUE on the wire. It is what a union branch's discriminator is written as once
+     * the enum is the one spelling of a fixed set (#1023), so it resolves to a one-value enum exactly
+     * like `mode: 'random'` does.
+     */
+    private resolveEnumMember(name: string, member: ts.EnumMember): TypeRef {
+        if (member.initializer !== undefined && ts.isStringLiteral(member.initializer)) {
+            return TypeRef.enumOf([member.initializer.text]);
+        }
+        return this.recordUnmapped(
+            member,
+            `enum member '${name}' is not initialised with a string literal, so it has no string value to publish`,
+        );
     }
 
     /** A TS `enum` of string members — the one non-union enum shape a document can carry. */

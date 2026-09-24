@@ -72,6 +72,8 @@ const CODE_RULE_NAMES = [
     'no-root-union-api-type',
     'api-rules-for-openapi',
     'api-rules-for-mcp',
+    'no-inline-import-in-api-lib',
+    'one-enum-spelling-in-api-lib',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding

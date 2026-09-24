@@ -33,16 +33,15 @@ const FAKE_DOCS_SITE = [
 ].join('\n');
 
 /**
- * A consumer workspace: one api project in the #1021 shape — `compile` (tsc, with the outputPath),
- * `openapi-generate` dependsOn it, `build` a noop over both — and (optionally) the generators.
+ * A consumer workspace: one api project in the #1023 shape — `build` (tsc, with the outputPath) and
+ * `openapi-generate` dependsOn it — and (optionally) the generators.
  */
 class Workspace {
     readonly root = fs.realpathSync(specTempDirs.make('wp-generated-docs-'));
     readonly targets: Record<string, TargetConfiguration> = {};
 
     constructor(readonly projectRoot: string, outputPath: string | undefined) {
-        this.targets['compile'] = { executor: '@nx/js:tsc', options: outputPath === undefined ? {} : { outputPath } };
-        this.targets['build'] = { executor: 'nx:noop', dependsOn: ['compile', 'openapi-generate'] };
+        this.targets['build'] = { executor: '@nx/js:tsc', options: outputPath === undefined ? {} : { outputPath } };
         this.write(path.join(projectRoot, 'openapi.manifest.json'), '{}');
     }
 
@@ -82,7 +81,7 @@ function rootDist(): Workspace {
     ws.install('@webpieces/openapi-generator', 'wp-openapi', '0.4.812', FAKE_OPENAPI);
     ws.targets['openapi-generate'] = {
         executor: '@webpieces/nx-webpieces-rules:openapi-generate',
-        dependsOn: ['compile'],
+        dependsOn: ['build'],
         outputs: ['{workspaceRoot}/dist/apps/partner/*.json', '{workspaceRoot}/dist/apps/partner/*.yaml'],
         options: OPTIONS,
     };
@@ -110,7 +109,7 @@ describe('openapi-generate', () => {
         ws.install('@webpieces/openapi-generator', 'wp-openapi', '0.4.812', FAKE_OPENAPI);
         ws.write('apps/partner/openapi.manifest.json', '{}');
         ws.targets['openapi-generate'] = {
-            dependsOn: ['compile'], outputs: ['{projectRoot}/dist/*.json', '{projectRoot}/dist/*.yaml'], options: OPTIONS,
+            dependsOn: ['build'], outputs: ['{projectRoot}/dist/*.json', '{projectRoot}/dist/*.yaml'], options: OPTIONS,
         };
 
         new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'));
@@ -130,7 +129,7 @@ describe('openapi-generate', () => {
 
     it('accepts nx’s object form of the same dependsOn', () => {
         const ws = rootDist();
-        ws.targets['openapi-generate']!.dependsOn = [{ target: 'compile' }];
+        ws.targets['openapi-generate']!.dependsOn = [{ target: 'build' }];
 
         expect(new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')).length).toBe(5);
     });
@@ -148,10 +147,10 @@ describe('openapi-generate', () => {
 
     it('refuses two sibling dependsOn — which outputPath is meant is ambiguous', () => {
         const ws = rootDist();
-        ws.targets['openapi-generate']!.dependsOn = ['compile', 'lint'];
+        ws.targets['openapi-generate']!.dependsOn = ['build', 'lint'];
 
         expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
-            .toThrow(/names compile, lint/);
+            .toThrow(/names build, lint/);
     });
 
     it('refuses outputs that miss a written file — a cache hit would ship a package without it', () => {
@@ -162,12 +161,12 @@ describe('openapi-generate', () => {
             .toThrow(/declared outputs do not cover[\s\S]*dist\/apps\/partner\/mcp-PartnerOrdersApi-tools\.json/);
     });
 
-    it('refuses a compile target that declares no outputPath, rather than assuming ./dist', () => {
+    it('refuses a build target that declares no outputPath, rather than assuming ./dist', () => {
         const ws = rootDist();
-        ws.targets['compile'] = { executor: '@nx/js:tsc', options: {} };
+        ws.targets['build'] = { executor: '@nx/js:tsc', options: {} };
 
         expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
-            .toThrow(/partner:compile — the target openapi-generate dependsOn — declares no options\.outputPath/);
+            .toThrow(/partner:build — the target openapi-generate dependsOn — declares no options\.outputPath/);
     });
 
     it('names the option key when a required option is missing — there is no default', () => {
@@ -240,7 +239,7 @@ describe('docs-generate', () => {
 
     it('refuses without dependsOn openapi-generate', () => {
         const ws = withSite();
-        ws.targets['docs-generate']!.dependsOn = ['compile'];
+        ws.targets['docs-generate']!.dependsOn = ['build'];
 
         expect(() => new DocsGenerate().run(DOCS, ws.context('docs-generate')))
             .toThrow(/does not declare dependsOn "openapi-generate"/);

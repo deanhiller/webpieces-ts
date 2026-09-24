@@ -17,6 +17,7 @@ graph TD
     CatchErrorPatternValidator["CatchErrorPatternValidator"]
     CodeRulesApp["CodeRulesApp"]:::controller
     CodeRulesEngine["CodeRulesEngine"]
+    DiffScope["DiffScope"]
     EnsureWeAreSecureConfig["EnsureWeAreSecureConfig"]:::many
     EnsureWeAreSecureValidator["EnsureWeAreSecureValidator"]
     FrameworkTagConfig["FrameworkTagConfig"]:::many
@@ -42,6 +43,8 @@ graph TD
     NoFunctionOutsideClassValidator["NoFunctionOutsideClassValidator"]
     NoImplicitAnyConfig["NoImplicitAnyConfig"]:::many
     NoImplicitAnyValidator["NoImplicitAnyValidator"]
+    NoInlineImportInApiLibConfig["NoInlineImportInApiLibConfig"]:::many
+    NoInlineImportInApiLibValidator["NoInlineImportInApiLibValidator"]
     NoInlineTypeLiteralsConfig["NoInlineTypeLiteralsConfig"]:::many
     NoInlineTypeLiteralsValidator["NoInlineTypeLiteralsValidator"]
     NoProcessExitOutsideMainConfig["NoProcessExitOutsideMainConfig"]:::many
@@ -52,6 +55,8 @@ graph TD
     NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]
     NoUnmanagedExceptionsConfig["NoUnmanagedExceptionsConfig"]:::many
     NoUnmanagedExceptionsValidator["NoUnmanagedExceptionsValidator"]
+    OneEnumSpellingInApiLibConfig["OneEnumSpellingInApiLibConfig"]:::many
+    OneEnumSpellingInApiLibValidator["OneEnumSpellingInApiLibValidator"]
     PrismaConverterConfig["PrismaConverterConfig"]:::many
     PrismaConverterValidator["PrismaConverterValidator"]
     PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
@@ -82,11 +87,13 @@ graph TD
     CodeRulesEngine --> NoDirectApiResolverValidator
     CodeRulesEngine --> NoFunctionOutsideClassValidator
     CodeRulesEngine --> NoImplicitAnyValidator
+    CodeRulesEngine --> NoInlineImportInApiLibValidator
     CodeRulesEngine --> NoInlineTypeLiteralsValidator
     CodeRulesEngine --> NoProcessExitOutsideMainValidator
     CodeRulesEngine --> NoStatePathsInTemplatesValidator
     CodeRulesEngine --> NoSymbolDiTokensValidator
     CodeRulesEngine --> NoUnmanagedExceptionsValidator
+    CodeRulesEngine --> OneEnumSpellingInApiLibValidator
     CodeRulesEngine --> PrismaConverterValidator
     CodeRulesEngine --> PrismaValidateDtosValidator
     CodeRulesEngine --> RequireReturnTypeValidator
@@ -107,11 +114,17 @@ graph TD
     NoDirectApiResolverValidator --> AngularNoDirectApiInResolverConfig
     NoFunctionOutsideClassValidator --> NoFunctionOutsideClassConfig
     NoImplicitAnyValidator --> NoImplicitAnyConfig
+    NoInlineImportInApiLibValidator --> DiffScope
+    NoInlineImportInApiLibValidator --> NoInlineImportInApiLibConfig
+    NoInlineImportInApiLibValidator --> ProjectRoleResolver
     NoInlineTypeLiteralsValidator --> NoInlineTypeLiteralsConfig
     NoProcessExitOutsideMainValidator --> NoProcessExitOutsideMainConfig
     NoStatePathsInTemplatesValidator --> NoStatePathsInTemplatesConfig
     NoSymbolDiTokensValidator --> NoSymbolDiTokensConfig
     NoUnmanagedExceptionsValidator --> NoUnmanagedExceptionsConfig
+    OneEnumSpellingInApiLibValidator --> DiffScope
+    OneEnumSpellingInApiLibValidator --> OneEnumSpellingInApiLibConfig
+    OneEnumSpellingInApiLibValidator --> ProjectRoleResolver
     PrismaConverterValidator --> PrismaConverterConfig
     PrismaValidateDtosValidator --> PrismaValidateDtosConfig
     RequireReturnTypeValidator --> RequireReturnTypeConfig

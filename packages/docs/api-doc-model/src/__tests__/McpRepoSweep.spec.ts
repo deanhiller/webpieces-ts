@@ -173,6 +173,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
         expect(sweep.files).toEqual([
             'apps/app-example/partner-api/src/PartnerOrdersApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
@@ -194,6 +195,12 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
             // carries `Mixed`, an un-narrowable union, for the reason above.
             "ExampleApi/save_customer: recursive DTO 'TreeNode' cannot use an inline MCP schema (TreeNode)",
+            // String enums in every position, and discriminators spelled with enum members and with a
+            // union of values on one branch (#1023).
+            'McpEnumApi/write_story',
+            // Two branches claiming one discriminator value: TypeScript cannot narrow it, so there is
+            // no discriminator to derive and no schema to publish.
+            "McpEnumApi/overlap_story: no MCP schema for the declared type 'OverlapA | OverlapB' (OverlapRequest.choice)",
             'McpEquivalenceApi/lookup_orders',
             'McpEquivalenceApi/cancel_order',
             'McpEquivalenceApi/reindex_store',

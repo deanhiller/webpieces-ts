@@ -153,7 +153,7 @@
         "openapi-generate": {
             "implementation": "./src/executors/openapi-generate/executor",
             "schema": "./src/executors/openapi-generate/schema.json",
-            "description": "Per-project, inferred from the generate:openapi tag: render the contracts to OpenAPI + one mcp-<ContractClass>-tools.json per MCP contract into the compile target outputPath, with the consumer's own @webpieces/openapi-generator"
+            "description": "Per-project, inferred from the generate:openapi tag: render the contracts to OpenAPI + one mcp-<ContractClass>-tools.json per MCP contract into the build (tsc) target outputPath, with the consumer's own @webpieces/openapi-generator"
         },
         "docs-generate": {
             "implementation": "./src/executors/docs-generate/executor",

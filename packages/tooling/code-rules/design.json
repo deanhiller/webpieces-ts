@@ -49,6 +49,14 @@
                     "level": 1
                 },
                 {
+                    "id": "DiffScope",
+                    "className": "DiffScope",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/diff-scope.ts",
+                    "level": 3
+                },
+                {
                     "id": "EnsureWeAreSecureConfig",
                     "className": "EnsureWeAreSecureConfig",
                     "kind": "class",
@@ -249,6 +257,22 @@
                     "level": 2
                 },
                 {
+                    "id": "NoInlineImportInApiLibConfig",
+                    "className": "NoInlineImportInApiLibConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/api-lib-spelling-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoInlineImportInApiLibValidator",
+                    "className": "NoInlineImportInApiLibValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-inline-import-in-api-lib.ts",
+                    "level": 2
+                },
+                {
                     "id": "NoInlineTypeLiteralsConfig",
                     "className": "NoInlineTypeLiteralsConfig",
                     "kind": "class",
@@ -326,6 +350,22 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-unmanaged-exceptions.ts",
+                    "level": 2
+                },
+                {
+                    "id": "OneEnumSpellingInApiLibConfig",
+                    "className": "OneEnumSpellingInApiLibConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/api-lib-spelling-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "OneEnumSpellingInApiLibValidator",
+                    "className": "OneEnumSpellingInApiLibValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-one-enum-spelling-in-api-lib.ts",
                     "level": 2
                 },
                 {
@@ -589,6 +629,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "NoInlineImportInApiLibValidator",
+                    "injection": "type",
+                    "token": "NoInlineImportInApiLibValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-inline-import-in-api-lib.ts#NoInlineImportInApiLibValidator",
+                    "paramName": "noInlineImportInApiLib",
+                    "paramType": "NoInlineImportInApiLibValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "NoInlineTypeLiteralsValidator",
                     "injection": "type",
                     "token": "NoInlineTypeLiteralsValidator",
@@ -631,6 +680,15 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/validate-no-unmanaged-exceptions.ts#NoUnmanagedExceptionsValidator",
                     "paramName": "noUnmanagedExceptions",
                     "paramType": "NoUnmanagedExceptionsValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "OneEnumSpellingInApiLibValidator",
+                    "injection": "type",
+                    "token": "OneEnumSpellingInApiLibValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-one-enum-spelling-in-api-lib.ts#OneEnumSpellingInApiLibValidator",
+                    "paramName": "oneEnumSpellingInApiLib",
+                    "paramType": "OneEnumSpellingInApiLibValidator"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -813,6 +871,33 @@
                     "paramType": "NoImplicitAnyConfig"
                 },
                 {
+                    "from": "NoInlineImportInApiLibValidator",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "NoInlineImportInApiLibValidator",
+                    "to": "NoInlineImportInApiLibConfig",
+                    "injection": "type",
+                    "token": "NoInlineImportInApiLibConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/api-lib-spelling-configs.ts#NoInlineImportInApiLibConfig",
+                    "paramName": "config",
+                    "paramType": "NoInlineImportInApiLibConfig"
+                },
+                {
+                    "from": "NoInlineImportInApiLibValidator",
+                    "to": "ProjectRoleResolver",
+                    "injection": "type",
+                    "token": "ProjectRoleResolver",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-role-resolver.ts#ProjectRoleResolver",
+                    "paramName": "roleResolver",
+                    "paramType": "ProjectRoleResolver"
+                },
+                {
                     "from": "NoInlineTypeLiteralsValidator",
                     "to": "NoInlineTypeLiteralsConfig",
                     "injection": "type",
@@ -856,6 +941,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoUnmanagedExceptionsConfig",
                     "paramName": "config",
                     "paramType": "NoUnmanagedExceptionsConfig"
+                },
+                {
+                    "from": "OneEnumSpellingInApiLibValidator",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "OneEnumSpellingInApiLibValidator",
+                    "to": "OneEnumSpellingInApiLibConfig",
+                    "injection": "type",
+                    "token": "OneEnumSpellingInApiLibConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/api-lib-spelling-configs.ts#OneEnumSpellingInApiLibConfig",
+                    "paramName": "config",
+                    "paramType": "OneEnumSpellingInApiLibConfig"
+                },
+                {
+                    "from": "OneEnumSpellingInApiLibValidator",
+                    "to": "ProjectRoleResolver",
+                    "injection": "type",
+                    "token": "ProjectRoleResolver",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-role-resolver.ts#ProjectRoleResolver",
+                    "paramName": "roleResolver",
+                    "paramType": "ProjectRoleResolver"
                 },
                 {
                     "from": "PrismaConverterValidator",

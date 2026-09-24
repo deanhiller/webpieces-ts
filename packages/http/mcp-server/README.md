@@ -66,7 +66,8 @@ server.bind(app, new McpBindOptions(path, bindings, catalogs, McpDeployment.sing
 (a Docker image relinking `node_modules/@myorg/*` onto `dist/`) holds the files beside its
 `package.json`; a workspace SOURCE directory (pnpm linking onto `libraries/...` for local dev and
 vitest) holds a `project.json`, and the files are read from the outputPath of the target its
-`openapi-generate` dependsOn — which is why a server's `test` target must dependsOn `^build`.
+`openapi-generate` dependsOn (its `build`) — which is why nx.json's targetDefaults for a server's `test`
+(and `build`) must dependsOn `^openapi-generate`; `validate-nx-wiring` prints the exact line.
 
 `McpToolRegistry` FAILS FAST at boot, naming every directory the catalogs were read from, when a bound
 contract has no catalog, a catalog's contract is not bound, or a tool name is declared twice — and when

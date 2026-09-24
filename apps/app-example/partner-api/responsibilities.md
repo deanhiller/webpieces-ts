@@ -18,7 +18,7 @@ It exists so the generator is demonstrated against source somebody could plausib
 ## Out of Scope
 
 - Serving any of it. There is no controller and no server wiring: this is a CONTRACT, and what is under test is the document generated from it, and the site rendered from that
-- COMMITTED generated documents. An app's documents are build output: `openapi-generate` writes them into the compile target's `outputPath` and they ship inside the package (see `.claude/rules/api-docs.md`). The goldens above exist only because webpieces must prove its own generator; a consuming repo commits nothing generated
+- COMMITTED generated documents. An app's documents are build output: `openapi-generate` writes them into the `build` target's `outputPath` and they ship inside the package (see `.claude/rules/api-docs.md`). The goldens above exist only because webpieces must prove its own generator; a consuming repo commits nothing generated
 - A pinned docs site. Pinning the HTML would pin the stylesheet, the class names and the markup, none of which a partner has a contract about
 - Generator behaviour with no customer-facing story. That is covered by `packages/docs/openapi-generator`'s own fixtures
 

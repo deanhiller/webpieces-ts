@@ -27,8 +27,14 @@ export class UnionDiscriminator {
     constructor(
         /** The property every branch carries. */
         readonly propertyName: string,
-        /** branch type name -> the single string literal that branch's property holds. */
-        readonly branchValues: ReadonlyMap<string, string>,
+        /**
+         * branch type name -> EVERY string value that branch's property may hold. One value for
+         * `mode: 'fixed'` / `mode: VoiceMode.FIXED`; several for `mode: 'a' | 'b'` or
+         * `mode: VoiceMode.A | VoiceMode.B` (#1023). No value appears under two branches — that is
+         * what makes the property a discriminator, and an OpenAPI `mapping` point several values at
+         * one schema.
+         */
+        readonly branchValues: ReadonlyMap<string, readonly string[]>,
     ) {}
 }
 

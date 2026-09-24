@@ -115,7 +115,8 @@ export class SchemaRenderer {
 
     /**
      * A union, with a `discriminator` ONLY when the model derived one — which it does only when every
-     * branch carries the same property typed as a single string literal. An invented discriminator
+     * branch carries the same property typed as string values (a literal, a string-enum member, or a
+     * union of them) that no two branches share. An invented discriminator
      * would claim a narrowing TypeScript itself cannot do.
      */
     private union(type: DocumentedType): JsonObject {
@@ -129,9 +130,10 @@ export class SchemaRenderer {
             return schema;
         }
         const mapping = new JsonObject();
+        // EVERY value a branch's property may hold maps to that branch — `mode: 'a' | 'b'` is two
+        // entries pointing at one schema, which OpenAPI's mapping allows (#1023).
         for (const branch of type.unionRefNames) {
-            const value = type.discriminator.branchValues.get(branch);
-            if (value !== undefined) {
+            for (const value of type.discriminator.branchValues.get(branch) ?? []) {
                 mapping.set(value, `#/components/schemas/${branch}`);
             }
         }

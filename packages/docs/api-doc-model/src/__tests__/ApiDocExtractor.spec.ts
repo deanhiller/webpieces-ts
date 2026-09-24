@@ -296,8 +296,8 @@ describe('unions', () => {
         const shape = harness.type(model, 'Shape');
         expect(shape.unionRefNames).toEqual(['Circle', 'Square']);
         expect(shape.discriminator?.propertyName).toBe('kind');
-        expect(shape.discriminator?.branchValues.get('Circle')).toBe('circle');
-        expect(shape.discriminator?.branchValues.get('Square')).toBe('square');
+        expect(shape.discriminator?.branchValues.get('Circle')).toEqual(['circle']);
+        expect(shape.discriminator?.branchValues.get('Square')).toEqual(['square']);
     });
 
     it('INVENTS no discriminator for a union TypeScript itself cannot narrow', () => {
