@@ -95,11 +95,23 @@ class InstalledTreeScan {
         return Object.keys(asObject).filter((name: string) => name.startsWith('@webpieces/')).sort();
     }
 
-    /** Names from `expected` that have no directory in node_modules — the #585 / hoist-collision shape. */
+    /**
+     * Names from `expected` that the umbrella cannot resolve — the #585 / hoist-collision shape.
+     *
+     * Resolved the way Node resolves them FROM THE UMBRELLA: its own nested node_modules first, then the
+     * root. A nested copy is a legitimate install, not a miss: when a workspace project also depends on
+     * the same name via `workspace:*` (e.g. `@webpieces/core-util`), the hoisted linker keeps the
+     * published copy out of the root slot and nests it under the umbrella. Bins are judged separately,
+     * against the root `.bin`, so this widening cannot hide an unlinked bin.
+     */
     missingPackages(expected: string[]): string[] {
+        const umbrellaDir = this.packageDir(UMBRELLA);
         return expected.filter((name: string) => {
             const dir = this.packageDir(name);
-            return dir === null || !fs.existsSync(dir);
+            const atRoot = dir !== null && fs.existsSync(dir);
+            const nested = umbrellaDir !== null
+                && fs.existsSync(path.join(umbrellaDir, 'node_modules', ...name.split('/')));
+            return !atRoot && !nested;
         });
     }
 
