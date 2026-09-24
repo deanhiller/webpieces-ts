@@ -55,6 +55,8 @@ graph TD
     NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]
     NoUnmanagedExceptionsConfig["NoUnmanagedExceptionsConfig"]:::many
     NoUnmanagedExceptionsValidator["NoUnmanagedExceptionsValidator"]
+    NoUtilityTypesInApiLibConfig["NoUtilityTypesInApiLibConfig"]:::many
+    NoUtilityTypesInApiLibValidator["NoUtilityTypesInApiLibValidator"]
     OneEnumSpellingInApiLibConfig["OneEnumSpellingInApiLibConfig"]:::many
     OneEnumSpellingInApiLibValidator["OneEnumSpellingInApiLibValidator"]
     PrismaConverterConfig["PrismaConverterConfig"]:::many
@@ -93,6 +95,7 @@ graph TD
     CodeRulesEngine --> NoStatePathsInTemplatesValidator
     CodeRulesEngine --> NoSymbolDiTokensValidator
     CodeRulesEngine --> NoUnmanagedExceptionsValidator
+    CodeRulesEngine --> NoUtilityTypesInApiLibValidator
     CodeRulesEngine --> OneEnumSpellingInApiLibValidator
     CodeRulesEngine --> PrismaConverterValidator
     CodeRulesEngine --> PrismaValidateDtosValidator
@@ -122,6 +125,9 @@ graph TD
     NoStatePathsInTemplatesValidator --> NoStatePathsInTemplatesConfig
     NoSymbolDiTokensValidator --> NoSymbolDiTokensConfig
     NoUnmanagedExceptionsValidator --> NoUnmanagedExceptionsConfig
+    NoUtilityTypesInApiLibValidator --> DiffScope
+    NoUtilityTypesInApiLibValidator --> NoUtilityTypesInApiLibConfig
+    NoUtilityTypesInApiLibValidator --> ProjectRoleResolver
     OneEnumSpellingInApiLibValidator --> DiffScope
     OneEnumSpellingInApiLibValidator --> OneEnumSpellingInApiLibConfig
     OneEnumSpellingInApiLibValidator --> ProjectRoleResolver

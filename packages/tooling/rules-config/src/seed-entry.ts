@@ -70,6 +70,8 @@ const SEED_VALUES: Record<string, unknown> = {
     // 0..5 behind allowed, stale-main blocks at 6. The type fallback for a number is 0, which would
     // block the moment origin/main moves at all — a seeded config that blocks on arrival.
     'branch-state-guard.maxCommitsBehind': 5,
+    // The api-contract tree the issue that added the rule (#1026) names; a consumer edits it to theirs.
+    'no-utility-types-in-api-lib.paths': ['libraries/apis/**'],
 };
 
 // The value a seeded entry gets for ONE required field. Order matters and is deliberate:

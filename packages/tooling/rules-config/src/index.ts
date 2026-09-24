@@ -286,6 +286,7 @@ export {
 } from './rule-configs';
 export { NoRootUnionApiTypeConfig } from './no-root-union-config';
 export { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
+export { NoUtilityTypesInApiLibConfig } from './no-utility-types-config';
 export { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig, API_DOC_MODES } from './api-doc-rules-config';
 export type { ApiDocMode } from './api-doc-rules-config';
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
