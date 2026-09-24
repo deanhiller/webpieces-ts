@@ -69,8 +69,9 @@ export class DeclaredDependsOn {
 type DependsOnEntry = string | TargetDependencyConfig;
 
 /** The fields of a project.json / nx.json this check reads, as they sit in the file. */
-type RawTargets = { targets?: Record<string, { dependsOn?: unknown }> };
-type RawNxJson = { targetDefaults?: Record<string, { dependsOn?: DependsOnEntry[] }> };
+type RawTarget = { dependsOn?: DependsOnEntry[] };
+type RawTargets = { targets?: Record<string, RawTarget> };
+type RawNxJson = { targetDefaults?: Record<string, RawTarget> };
 
 /** Reads the two on-disk facts the resolved graph has already merged away. */
 export class WiringSourceReader {
@@ -92,17 +93,16 @@ export class WiringSourceReader {
         for (const [name, project] of Object.entries(projects)) {
             const raw = this.readJson(path.join(this.workspaceRoot, project.root, 'project.json')) as RawTargets | undefined;
             byProject[name] = Object.entries(raw?.targets ?? {})
-                .filter((pair: [string, { dependsOn?: unknown }]) => pair[1].dependsOn !== undefined)
-                .map((pair: [string, { dependsOn?: unknown }]) => pair[0]);
+                .filter((pair: [string, RawTarget]) => pair[1].dependsOn !== undefined)
+                .map((pair: [string, RawTarget]) => pair[0]);
         }
         return new DeclaredDependsOn(byProject);
     }
 
     /** A JSON file's contents, or undefined when it is absent — a project inferred from package.json has no project.json. */
-    // webpieces-disable no-any-unknown -- parsed JSON is opaque until the caller narrows it
-    private readJson(file: string): unknown {
+    private readJson(file: string): RawTargets | RawNxJson | undefined {
         if (!fs.existsSync(file)) return undefined;
-        return JSON.parse(fs.readFileSync(file, 'utf8'));
+        return JSON.parse(fs.readFileSync(file, 'utf8')) as RawTargets | RawNxJson;
     }
 }
 
