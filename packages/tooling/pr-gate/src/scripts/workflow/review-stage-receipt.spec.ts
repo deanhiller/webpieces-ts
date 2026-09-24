@@ -35,7 +35,7 @@ describe('ReviewStageReceiptService', () => {
 
     /**
      * ABSENT is the case that matters most. A repo with NO checklists has nothing else forcing stage ②:
-     * `assertEveryReviewerRan` is vacuous there, and review.json — the only other interlock — is a file the
+     * `assertEveryReviewerRan` is vacuous there, and summary.json — the only other interlock — is a file the
      * AI writes itself, so it could write it and go straight to finish, skipping the merge validation and
      * the build entirely. `null` is what makes wp-finish-upsert-pr refuse.
      */
@@ -61,7 +61,7 @@ describe('ReviewStageReceiptService', () => {
         expect(svc().read(repo, 'feat')?.headSha).toBe('0123456789abcdef0123456789abcdef01234567');
     });
 
-    it('lives beside review.json, in the per-feature pr-review dir', () => {
+    it('lives beside summary.json, in the per-feature pr-review dir', () => {
         const repo = tmpRepo();
         expect(svc().receiptPath(repo, 'feat'))
             .toBe(path.join(repo, '.webpieces', 'pr-review', 'feat', 'review-stage.json'));

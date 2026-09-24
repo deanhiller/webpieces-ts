@@ -118,8 +118,10 @@ node_modules_*/
 # with MultipleProjectsWithSameNameError for as long as any agent worktree exists.
 .claude/worktrees/
 
-# Stray review.json at the REPO ROOT. The real one lives in .webpieces/pr-review/<branch>/review.json
-# (gitignored with the rest of .webpieces/). A root-level copy is always an accident: it is what lands
+# Stray author summary at the REPO ROOT. The real one lives in .webpieces/pr-review/<branch>/summary.json
+# (gitignored with the rest of .webpieces/); it was review.json until #1033, and the old name stays ignored
+# while this repo still runs a release that writes it. A root-level copy is always an accident: it is what lands
 # when an isolated agent cannot Write to the shared checkout and `cp`s its verdict to the wrong place.
 # Committed once by #647 that way. Ignored so the next one never reaches a PR.
 /review.json
+/summary.json

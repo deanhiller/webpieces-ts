@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import {
-    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, reviewJsonSchemaHint,
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, summaryJsonSchemaHint,
     ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy,
     ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, VERDICT_RED,
 } from '@webpieces/rules-config';
@@ -42,7 +42,7 @@ export class RefusedReviewer {
 export class ReviewReportInput {
     repoRoot: string;
     featureName: string;
-    reviewPath: string;             // the branch's review.json — the file the AI must write next
+    summaryPath: string;             // the branch's summary.json — the file the AI must write next
     definedCount: number;           // how many checklists pr-gate.checklists defines
     applicableCount: number;        // how many of them apply to THIS diff (0 ⇒ the notice, not spawn blocks)
     reviewed: RequiredChecklist[];  // already have a passing verdict on this branch
@@ -84,10 +84,10 @@ export class ReviewReportInput {
      */
     standings: VerdictStanding[];
 
-    constructor(repoRoot: string, featureName: string, reviewPath: string) {
+    constructor(repoRoot: string, featureName: string, summaryPath: string) {
         this.repoRoot = repoRoot;
         this.featureName = featureName;
-        this.reviewPath = reviewPath;
+        this.summaryPath = summaryPath;
         this.definedCount = 0;
         this.applicableCount = 0;
         this.reviewed = [];
@@ -111,14 +111,14 @@ export class ReviewReportInput {
  *
  * Extracted from the command so it can be asserted on as a rendered string, because the ordering IS the
  * contract. The bug it was extracted to fix: the zero-checklist notice ended with "Carry on and run: pnpm
- * wp-finish-upsert-pr", and the block printed directly beneath it said to write review.json first and
+ * wp-finish-upsert-pr", and the block printed directly beneath it said to write summary.json first and
  * finish afterwards. Two next-steps, in the wrong order, and an agent that follows instructions literally —
  * which is the entire reason this command prints them — took the first one and opened a PR with no review.
  * That is precisely the failure the three-stage flow exists to prevent (reported on PR #519).
  *
  * The invariants, enforced by review-report.spec.ts:
  *   1. `wp-finish-upsert-pr` is named as a thing to run EXACTLY ONCE in the whole block.
- *   2. The review.json instruction comes BEFORE it — and BEFORE the spawn blocks (see nextSteps).
+ *   2. The summary.json instruction comes BEFORE it — and BEFORE the spawn blocks (see nextSteps).
  *   3. With zero checklists the all-clear precedes any configuration guidance.
  *   4. REQUIRED reviewers are spawned unasked; OPTIONAL ones are only ever OFFERED, in one batched
  *      question. The two never share a step, because one instruction says "do it" and the other says
@@ -156,10 +156,10 @@ export class ReviewReport {
         // FIRST, and unconditional: with the kill switch on there is nothing to spawn and nothing to
         // offer, so every heading below would be true-but-misleading. The one thing a reader must take
         // from the first line of this block is that no reviewer looked at this branch.
-        if (input.reviewersSuppressed) return '② ⚫ ALL REVIEWERS SUPPRESSED — review, then finish\n';
-        if (this.requiredOwed(input).length > 0) return '② Review, spawn subagent reviewers, then finish\n';
-        if (this.offerableOwed(input).length > 0) return '② Review, offer the optional reviewers, then finish\n';
-        return '② Review, then finish\n';
+        if (input.reviewersSuppressed) return '② ⚫ ALL REVIEWERS SUPPRESSED — write the PR summary, then finish\n';
+        if (this.requiredOwed(input).length > 0) return '② Write the PR summary, spawn subagent reviewers, then finish\n';
+        if (this.offerableOwed(input).length > 0) return '② Write the PR summary, offer the optional reviewers, then finish\n';
+        return '② Write the PR summary, then finish\n';
     }
 
     /**
@@ -303,7 +303,7 @@ export class ReviewReport {
      * then makes it, reasoning (correctly, on the facts) that the carried-forward verdicts judged an earlier
      * tree. Reviews here are once per branch BY CONSTRUCTION: a passing review-<id>.json satisfies its
      * checklist for the branch's whole life, and `wp-finish-upsert-pr` never archives one the way it archives
-     * review.json. So the reuse is deliberate — it is what keeps post-PR iteration from re-paying for every
+     * summary.json. So the reuse is deliberate — it is what keeps post-PR iteration from re-paying for every
      * matched reviewer — and the output has to say so, because the alternative reading is the expensive one.
      *
      * The overwrite warning is not decoration. A re-spawned reviewer writes to the SAME verdict path, so a
@@ -340,11 +340,11 @@ export class ReviewReport {
      * ("Then… Finally…") so that skipping step 1 is visibly skipping a step, and worded so no earlier line
      * can be mistaken for the real next action.
      *
-     * review.json is STEP 1 and the spawn blocks are STEP 2 — that ORDER is the contract, not a preference.
-     * This block used to print the spawn blocks first and then say to write review.json "WHILE any reviewer
+     * summary.json is STEP 1 and the spawn blocks are STEP 2 — that ORDER is the contract, not a preference.
+     * This block used to print the spawn blocks first and then say to write summary.json "WHILE any reviewer
      * subagents above are still running", which does not merely permit spawning first, it instructs it.
      * Harmless for a reviewer that only reads the diff; wrong for one that judges the PR's stated INTENT —
-     * its title, summary or risk level — because review.json is the only place that intent lives. Such a
+     * its title, summary or risk level — because summary.json is the only place that intent lives. Such a
      * reviewer either finds no file (a false RED and a wasted reviewer run) or, on a second run of this
      * stage on the same branch, finds the PREVIOUS run's file and validates a title that no longer exists —
      * a false GREEN, with nothing in the output saying which of the two happened. A consuming repo had to
@@ -360,10 +360,10 @@ export class ReviewReport {
         const required = this.requiredOwed(input);
         const offerable = this.offerableOwed(input);
         // Numbered by what is actually PRINTED, so the numbers a reader sees are 1..n with no gaps: write
-        // review.json, then a spawn step only if anything must run, then an offer step only if anything may.
+        // summary.json, then a spawn step only if anything must run, then an offer step only if anything may.
         let step = 1;
-        const write = this.writeReviewStep(
-            input.reviewPath, step++, input.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
+        const write = this.writeSummaryStep(
+            input.summaryPath, step++, input.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
         // The wait block goes under the LAST reviewer-listing step, and only there. Printed under both
         // it would be two "what to do next" instructions in one output, which is the defect this
         // method's docstring describes — an agent reading top to bottom obeys the first one it meets.
@@ -374,14 +374,14 @@ export class ReviewReport {
             + write + spawn + offer + this.finishStep(step, required.length + offerable.length > 0);
     }
 
-    private writeReviewStep(reviewPath: string, step: number, mainAgentInstructions: string): string {
+    private writeSummaryStep(summaryPath: string, step: number, mainAgentInstructions: string): string {
         return (
-            `STEP ${step} — review your own changes, then write the review file. Write it FIRST — BEFORE you spawn\n` +
+            `STEP ${step} — write the PR summary (title, summary, risk) to summary.json. Write it FIRST — BEFORE you spawn\n` +
             '         anything below. finish REFUSES without it, and a reviewer subagent may READ it: a\n' +
             '         checklist that judges the PR title, summary or risk level reads exactly this file, so\n' +
             '         writing it afterwards races that reviewer into seeing nothing — or, on a re-run of this\n' +
-            '         stage, into judging the PREVIOUS run\'s review of code that has since changed.\n\n' +
-            reviewJsonSchemaHint(reviewPath, mainAgentInstructions) + '\n\n'
+            '         stage, into judging the PREVIOUS run\'s summary of code that has since changed.\n\n' +
+            summaryJsonSchemaHint(summaryPath, mainAgentInstructions) + '\n\n'
         );
     }
 

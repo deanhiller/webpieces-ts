@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
+    loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict,
     writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
     InformAiError, toError,
     SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
@@ -43,10 +43,10 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  */
 class PrCommentSources {
     scan: ChecklistScan;
-    review: ReviewJson;
+    review: PrSummary;
     provenance: ProvenanceReport;
 
-    constructor(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport) {
+    constructor(scan: ChecklistScan, review: PrSummary, provenance: ProvenanceReport) {
         this.scan = scan;
         this.review = review;
         this.provenance = provenance;
@@ -104,10 +104,10 @@ class UpsertResult {
 }
 
 // STAGE ③ — FINISH of the AI-first PR flow, and the ONLY command that posts PRs. Runs after
-// `wp-review-upsert-pr` verified the branch and the AI spawned the reviewers + wrote review.json.
+// `wp-review-upsert-pr` verified the branch and the AI spawned the reviewers + wrote summary.json.
 //
 // In order: (1) REFUSE on an unvalidated 3-point merge and REQUIRE stage ②'s receipt; (2) REQUIRE
-// review.json + every reviewer's verdict + provenance; (3) run the build gate UNLESS the receipt already
+// summary.json + every reviewer's verdict + provenance; (3) run the build gate UNLESS the receipt already
 // covers this exact HEAD; (4) render the dashboard; (5) create/update the PR via `gh`.
 //
 // It no longer FINALIZES a merge — stage ② does. Two commands owning conflict-resolution validation is two
@@ -170,7 +170,7 @@ export class FinishUpsertPrCommand {
         //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
         const buildAlreadyGreen = this.assertStageTwoRan(repoRoot);
 
-        // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
+        // 2. REQUIRE the AI-authored summary.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
         // The SAME scan wp-review-upsert-pr runs, with filterAlreadyReviewed:true so `outstanding` is exactly what
@@ -188,13 +188,13 @@ export class FinishUpsertPrCommand {
         // PR because a subagent that was never meant to run cannot be proven to have run, and the dashboard
         // would render a MISSING verdict for it.
         const verdicted = this.verdictedOf(scan);
-        // FAIL FAST on an unclear checklist, BEFORE review.json is parsed and before the build gate runs. A
-        // missing reviewer is not a review.json defect (folding it in made the AI fix the wrong thing), and
+        // FAIL FAST on an unclear checklist, BEFORE summary.json is parsed and before the build gate runs. A
+        // missing reviewer is not a summary.json defect (folding it in made the AI fix the wrong thing), and
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
         // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadReviewJson(
-            reviewJsonPath(repoRoot, featureName), required,
+        const review = this.reviewJsonService.loadSummaryJson(
+            summaryJsonPath(repoRoot, featureName), required,
             scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a real reviewer
@@ -228,7 +228,7 @@ export class FinishUpsertPrCommand {
 
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
     // does NOT push (pushRemote=false): this command pushes exactly ONCE, from GatedPrPublisher, and only
-    // after review.json + every BLOCK checklist + the build gate pass and the gated PR body is written.
+    // after summary.json + every BLOCK checklist + the build gate pass and the gated PR body is written.
     /**
      * The build gate — SKIPPED when stage ②'s receipt already covers this exact HEAD.
      *
@@ -311,7 +311,7 @@ export class FinishUpsertPrCommand {
      * run for a foregone answer.
      *
      * Without this check a repo with NO checklists has nothing forcing stage ②: `assertEveryReviewerRan`
-     * is vacuous, and review.json — the only other interlock — is a file the AI writes itself. It could
+     * is vacuous, and summary.json — the only other interlock — is a file the AI writes itself. It could
      * write it and come straight here, skipping the merge validation and the build entirely.
      */
     private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string): boolean {
@@ -321,7 +321,7 @@ export class FinishUpsertPrCommand {
                 '⛔ NO PR — stage ② never ran on this branch. That means the 3-point merge is unvalidated,\n' +
                 'the build gate has not run, no diff was extracted, and no reviewer was briefed.\n\n' +
                 'Run:  pnpm wp-review-upsert-pr\n' +
-                '(then spawn the reviewers it names, write review.json, and re-run this command)',
+                '(then spawn the reviewers it names, write summary.json, and re-run this command)',
             );
         }
         if (receipt.headSha === headSha) return true;
@@ -335,10 +335,10 @@ export class FinishUpsertPrCommand {
     }
 
     /**
-     * Retire the review this run just used — move review.json to old-review.json beside it, stamped as
-     * audit-only (see ReviewJsonService.archiveReviewJson).
+     * Retire the review this run just used — move summary.json to old-summary.json beside it, stamped as
+     * audit-only (see ReviewJsonService.archiveSummaryJson).
      *
-     * WHY it moves rather than staying put: review.json left behind is a live-looking file describing a
+     * WHY it moves rather than staying put: summary.json left behind is a live-looking file describing a
      * review that has already shipped, and the next `wp-review-upsert-pr` on this branch finds it sitting
      * there. A reviewer subagent that judges the PR's stated INTENT — its title, summary or risk level —
      * then reads the previous round's review and can return GREEN against a title that no longer exists,
@@ -354,14 +354,14 @@ export class FinishUpsertPrCommand {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the PR is already up; a failed archive must not fail the command
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const archived = this.reviewJsonService.archiveReviewJson(reviewJsonPath(repoRoot, featureName));
-            if (archived !== '') process.stdout.write(`   archived this run's review.json → ${archived} (audit only) ✓\n`);
+            const archived = this.reviewJsonService.archiveSummaryJson(summaryJsonPath(repoRoot, featureName));
+            if (archived !== '') process.stdout.write(`   archived this run's summary.json → ${archived} (audit only) ✓\n`);
             // Beside it, so an archived review keeps the transcript links belonging to the round that
             // produced it — a review whose provenance was overwritten by the NEXT round audits nothing.
             this.provenanceEnforcer.archiveRecord(prDirFor(repoRoot, featureName));
         } catch (err: unknown) {
             const error = toError(err);
-            process.stderr.write(`⚠️  Could not archive review.json (non-fatal — the PR is already up): ${error.message}\n`);
+            process.stderr.write(`⚠️  Could not archive summary.json (non-fatal — the PR is already up): ${error.message}\n`);
         }
     }
 
@@ -372,13 +372,13 @@ export class FinishUpsertPrCommand {
 
     // The user-facing PR title: the AI-authored review.title, or — if omitted — a readable fallback
     // derived from the stable feature name (NEVER the internal `Squash merge of <branch>` commit subject).
-    private prTitleFrom(review: ReviewJson): string {
+    private prTitleFrom(review: PrSummary): string {
         if (review.title !== '') return review.title;
         return this.aiBranchName.getFeatureName().replace(/[-/]+/g, ' ').trim();
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan): DashboardInput {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: PrSummary, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -417,12 +417,12 @@ export class FinishUpsertPrCommand {
     // Pair each matched checklist with its resolved verdict for the dashboard.
     //
     // A checklist reaching this point is always PASS, WARN or OVERRIDDEN, and the reason is ReviewerVerdictGate
-    // — NOT loadReviewJson. The gate runs one line earlier and throws on every other state (FAIL, MISSING,
-    // BAD_FORMAT), so loadReviewJson's own checklist validation can no longer be the thing that rejects them;
-    // it re-validates the same set and finds it clean. This comment used to credit loadReviewJson, which made
+    // — NOT loadSummaryJson. The gate runs one line earlier and throws on every other state (FAIL, MISSING,
+    // BAD_FORMAT), so loadSummaryJson's own checklist validation can no longer be the thing that rejects them;
+    // it re-validates the same set and finds it clean. This comment used to credit loadSummaryJson, which made
     // the ordering look deliberate while the gate's generic "no verdict yet" message masked every refusal.
     // WARN belongs in that list: yellow SHIPS, so it is not outstanding and reaches the dashboard.
-    private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
+    private checklistRows(required: readonly RequiredChecklist[], review: PrSummary): ChecklistRow[] {
         return required.map((req: RequiredChecklist): ChecklistRow => {
             const verdict = this.reviewJsonService.resolveVerdict(req, review.results);
             return new ChecklistRow(req.id, verdict.status, verdict.detail);
@@ -435,7 +435,7 @@ export class FinishUpsertPrCommand {
      * absent from `applicable` by construction, and their "why not" evidence (the configured globs and the
      * changed-file total) exists nowhere else without recomputing the diff a second way.
      */
-    private commentRows(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): ChecklistCommentRow[] {
+    private commentRows(scan: ChecklistScan, review: PrSummary, provenance: ProvenanceReport): ChecklistCommentRow[] {
         // checklist id -> did its reviewer open the diff. Absent ⇒ not assessed, which prints nothing (see ChecklistCommentRow.diffRead).
         const readByChecklist = new Map<string, boolean>();
         for (const e of provenance.evidence) readByChecklist.set(e.checklistId, e.readDiff);
@@ -479,7 +479,7 @@ export class FinishUpsertPrCommand {
      * checklists configured must still see no comment at all (see ChecklistCommentRenderer).
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): void {
+    private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: PrSummary, provenance: ProvenanceReport): void {
         if (prNumber === '' || scan.defined.length === 0) return;
         if (!loadAndValidate(repoRoot).prGate.checklistComments) return;
         const request = new PrCommentRequest();

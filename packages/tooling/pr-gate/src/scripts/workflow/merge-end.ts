@@ -41,7 +41,7 @@ export class MergeEndOptions {
      * Whether finalizing may push the squashed branch to origin.
      *
      * FALSE for the PR flow (`wp-start-upsert-pr` / `wp-finish-upsert-pr`), which pushes EXACTLY ONCE,
-     * from GatedPrPublisher, after review.json + every BLOCK checklist + the authoritative build gate
+     * from GatedPrPublisher, after summary.json + every BLOCK checklist + the authoritative build gate
      * have passed and the gated PR body is already up. Code must not reach the remote ahead of its
      * review, and an early push here is also what fires `pull_request:synchronize` against a PR body
      * still carrying the previous run's gate token — the flap the whole gate redesign is removing.
@@ -207,7 +207,7 @@ export class MergeEnd {
     // (nothing was pushed), which also keeps the pre-merge snapshot alive — see the backupKept comment.
     private explainNoPush(): boolean {
         process.stdout.write(
-            'Not pushing — the PR flow pushes exactly ONCE, from pnpm wp-finish-upsert-pr, after review.json\n' +
+            'Not pushing — the PR flow pushes exactly ONCE, from pnpm wp-finish-upsert-pr, after summary.json\n' +
             'and the build gate pass and the gated PR body is written. Your work stays local until then\n' +
             '(the pre-merge snapshot below is kept as well, so nothing is only in one place).\n',
         );

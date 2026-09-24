@@ -33,7 +33,7 @@ export class PublishedPr {
  * so the `opened` event already sees the final body.
  *
  * THIS IS THE ONLY PUSH IN THE PR FLOW. `wp-start-upsert-pr` used to push twice (its own `ensurePushed`,
- * and the force-push inside the 3-point merge finalize), which put code on the remote before review.json
+ * and the force-push inside the 3-point merge finalize), which put code on the remote before summary.json
  * and the checklists had even run, and fired `synchronize` against a PR body still carrying the previous
  * run's token. Both are gone — the merge finalize now takes `MergeEndOptions.pushRemote=false` in the PR
  * flow. So the single `synchronize` of a cycle arrives strictly after the body edit below, and can only

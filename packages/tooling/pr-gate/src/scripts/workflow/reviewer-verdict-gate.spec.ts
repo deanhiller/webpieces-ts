@@ -24,7 +24,7 @@ function reviewDir(): string {
 }
 
 function reviewPathIn(dir: string): string {
-    return path.join(dir, 'review.json');
+    return path.join(dir, 'summary.json');
 }
 
 function writeVerdict(dir: string, id: string, status: string, output: string): void {
@@ -38,8 +38,8 @@ function writeVerdict(dir: string, id: string, status: string, output: string): 
  * scanner actually hands the gate. Git is not involved: nothing the gate does depends on the diff.
  */
 function scanOver(dir: string, applicable: RequiredChecklist[], singleRoundReview = false): ChecklistScan {
-    const reviewPath = reviewPathIn(dir);
-    const results = svc.loadChecklistResults(reviewPath, applicable);
+    const summaryPath = reviewPathIn(dir);
+    const results = svc.loadChecklistResults(summaryPath, applicable);
     // The optional-without-a-verdict subtraction is part of how `outstanding` is BUILT (ChecklistScanner
     // owns it, so the gate needs no optional-awareness of its own). Reproduced here for the same reason the
     // rest of this fixture is: a scan assembled differently from the real one tests a gate nobody runs.
@@ -49,7 +49,7 @@ function scanOver(dir: string, applicable: RequiredChecklist[], singleRoundRevie
         .filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
     return new ChecklistScan(
         [], applicable, [], outstanding,
-        new ChecklistReviewContext(), reviewPath, 'abc1234',
+        new ChecklistReviewContext(), summaryPath, 'abc1234',
         new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
         false, [],
         undefined, [], results, optionalNotRun, singleRoundReview,

@@ -20,7 +20,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // rebuild when HEAD has not moved since. `pr-gate.buildCommand` is therefore no longer a finish-only knob.
 //
 // This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the ONE push live in
-// finish, behind review.json + the checklists + the build gate.
+// finish, behind summary.json + the checklists + the build gate.
 @injectable(bindingScopeValues.Singleton)
 export class StartUpsertPrCommand {
     constructor(
@@ -47,7 +47,7 @@ export class StartUpsertPrCommand {
         // uncommitted change build green over a different commit than the one that ships. Fail if dirty.
         this.gitExec.assertCleanTree(repoRoot);
 
-        // Nothing here pushes. This command reviews; wp-finish-upsert-pr pushes ONCE, after review.json,
+        // Nothing here pushes. This command reviews; wp-finish-upsert-pr pushes ONCE, after summary.json,
         // every BLOCK checklist, and the authoritative build gate — so no unreviewed commit reaches the
         // remote, and there is no early `synchronize` firing against a PR body with a stale gate token.
         await this.updateBranchFromMain(repoRoot);
@@ -61,10 +61,10 @@ export class StartUpsertPrCommand {
      * Hand the AI its ONE next step: `wp-review-upsert-pr`.
      *
      * This prints exactly one command on purpose. It used to print three (run the checklist, write
-     * review.json, then finish), and a three-item list is a list with a step to skip. Stage ② now owns all
+     * summary.json, then finish), and a three-item list is a list with a step to skip. Stage ② now owns all
      * of it — it validates the 3-point merge, builds, materializes the diff, briefs the reviewers, AND
-     * prints the review.json schema — so there is nothing here to enumerate. Notably review.json is NOT
-     * requested here any more: asking for a written review before the branch is known to compile invites
+     * prints the summary.json schema — so there is nothing here to enumerate. Notably summary.json is NOT
+     * requested here any more: asking for a written PR summary before the branch is known to compile invites
      * one that describes code that does not build.
      */
     private handOffToReview(repoRoot: string): void {
@@ -74,13 +74,13 @@ export class StartUpsertPrCommand {
         // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
         const context = this.prContextWriter.ensure(
             repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
-        process.stdout.write('\n' + SEP + '② Review the PR, then finish\n' + SEP + '\n');
+        process.stdout.write('\n' + SEP + '② Brief the reviewers and write the PR summary, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
             `${this.contextLines(context)}\n` +
             `▶ NEXT run:  pnpm wp-review-upsert-pr\n` +
             `   It validates the 3-point merge, runs the build gate, extracts this branch's diff for the\n` +
-            `   reviewers, and prints what to spawn plus the review.json schema. Everything else waits on it —\n` +
+            `   reviewers, and prints what to spawn plus the summary.json schema. Everything else waits on it —\n` +
             `   wp-finish-upsert-pr refuses to open a PR until it has run.\n\n`,
         );
     }

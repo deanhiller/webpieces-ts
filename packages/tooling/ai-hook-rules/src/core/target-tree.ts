@@ -123,7 +123,7 @@ export class TargetTreeResolver {
  *   `treeRelativePath` — relative to the tree that OWNS the file. What `isWebpiecesStateDir` must be
  *                        asked about, because `.webpieces/` is the tooling's state dir *of a tree*, and
  *                        a worktree has its own. Governed-root-relative, a reviewer subagent's
- *                        `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/<branch>/review.json`
+ *                        `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/<branch>/summary.json`
  *                        reads as `.claude/...` and was NOT exempt — while
  *                        `<primary>/.webpieces/worktrees/agent-X/pr-review/.../review-1.json`, the same
  *                        kind of file one directory over, was. `wp-review-upsert-pr` REQUIRES that file

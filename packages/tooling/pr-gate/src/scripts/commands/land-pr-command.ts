@@ -209,7 +209,7 @@ export class LandPrCommand {
             'Re-run the gated flow — it re-renders the description and re-posts it to this same PR:\n' +
             '  pnpm wp-start-upsert-pr     # update from main (3-point merge). No push, no build gate.\n' +
             '  pnpm wp-review-upsert-pr    # validate the merge, build gate, extract the diff, brief reviewers\n' +
-            '  # write review.json at the path wp-review-upsert-pr prints\n' +
+            '  # write summary.json at the path wp-review-upsert-pr prints\n' +
             '  pnpm wp-finish-upsert-pr    # build gate, dashboard, create/update the PR\n' +
             'Then re-run `pnpm wp-land-pr`.\n' + SEP,
         );
@@ -252,7 +252,7 @@ export class LandPrCommand {
      * It names BOTH ways bytes get here, because naming only one sent readers down a path that did not
      * exist. It used to assert an old release as "the usual cause" and prescribe re-running finish — and
      * when the marker had come from AUTHOR TEXT instead (a `|` in a summary, from a TypeScript union or a
-     * regex alternation), finish re-rendered the identical character from the unchanged `review.json` and
+     * regex alternation), finish re-rendered the identical character from the unchanged `summary.json` and
      * landing refused again: a loop costing a CI cycle per turn, escapable only by guessing that one
      * character in your prose was the problem. `Dashboard.gitLogSafe` now substitutes both markers at the
      * render exit, so a freshly-rendered body cannot reach here at all — which leaves a HAND-EDITED
@@ -271,8 +271,8 @@ export class LandPrCommand {
             '  2. The PR was posted by a webpieces release OLDER than the one that made the description\n' +
             '     the commit body, so it is still the full dashboard. The dashboard now lives in the PR\'s\n' +
             '     1st comment instead, and re-running finish moves it there.\n\n' +
-            `Either way the cure is the same, and it does NOT require removing ${marker.trim()} from your review\n` +
-            'text — a pipe or a heading in a summary is rendered safe, not rejected:\n' +
+            `Either way the cure is the same, and it does NOT require removing ${marker.trim()} from your PR\n` +
+            'summary text — a pipe or a heading in a summary is rendered safe, not rejected:\n' +
             '  pnpm wp-start-upsert-pr && pnpm wp-review-upsert-pr && pnpm wp-finish-upsert-pr\n' + SEP,
         );
     }
@@ -391,8 +391,8 @@ export class LandPrCommand {
      * Everything landing needs about the PR, in ONE `gh` read: number, title, URL, DESCRIPTION and the
      * head sha GitHub is squashing. `null` when there is no open PR for this head branch.
      *
-     * The TITLE comes from the PR itself, not review.json, so the squash subject matches what a reviewer
-     * approved even if review.json was edited afterwards. The BODY is the gated commit body (see the
+     * The TITLE comes from the PR itself, not summary.json, so the squash subject matches what a reviewer
+     * approved even if summary.json was edited afterwards. The BODY is the gated commit body (see the
      * class doc). `headRefOid` is read BEFORE the merge, because it is what the bookkeeping check
      * compares against and the merge is what makes the branch's fate uninteresting to GitHub.
      */

@@ -11,7 +11,7 @@ import {
  *
  *   - `wp-review-upsert-pr`            — the AI asks "what review do I owe on this diff?"
  *   - `wp-finish-upsert-pr`     — fails fast, listing ONLY the reviewers that still have not run
- *   - `ReviewJsonService`       — the same list appended to a review.json validation failure
+ *   - `ReviewJsonService`       — the same list appended to a summary.json validation failure
  *
  * Callers pass ONLY the checklists still needing a verdict. A checklist already reviewed on this branch is
  * never re-listed — re-instructing it invites a redundant second run, and (worse) reads as though the
@@ -29,13 +29,13 @@ export class ChecklistInstructionsService {
 
     /**
      * The full instruction block, or '' when nothing is pending (so a caller can concatenate it blindly).
-     * `reviewPath` is the branch's review.json — each verdict file sits beside it as review-<id>.json.
+     * `summaryPath` is the branch's summary.json — each verdict file sits beside it as review-<id>.json.
      */
-    render(pending: readonly RequiredChecklist[], reviewPath: string, context: ChecklistReviewContext): string {
+    render(pending: readonly RequiredChecklist[], summaryPath: string, context: ChecklistReviewContext): string {
         if (pending.length === 0) return '';
         if (pending[0].reviewer.maxAgents === 0) return this.spawnRule(pending).join('\n');
         const lines: string[] = [...this.spawnRule(pending), ''];
-        for (const req of pending) lines.push(...this.oneReviewer(req, reviewPath));
+        for (const req of pending) lines.push(...this.oneReviewer(req, summaryPath));
         lines.push('', ...this.verdictFormat());
         lines.push('', ...this.diffLines(context));
         return lines.join('\n');
@@ -84,14 +84,14 @@ export class ChecklistInstructionsService {
 
     // What the subagent reviewing ONE checklist must be given: its doc, why it is running + over what, and
     // the file it must write.
-    private oneReviewer(req: RequiredChecklist, reviewPath: string): string[] {
+    private oneReviewer(req: RequiredChecklist, summaryPath: string): string[] {
         const lines = [`  • checklist ${req.id}`];
         // The doc is REPO-relative by the time it reaches here (see ChecklistDefinition.doc), so a subagent
         // handed this string can actually open it. Printing the raw config value would not resolve.
         if (req.doc.trim() !== '') lines.push(`      doc to read:  ${req.doc}`);
         for (const scopeLine of this.scope(req)) lines.push(`      ${scopeLine}`);
         lines.push(`      submits via:  ${this.reviewJsonService.submitCommand(req.id)}`);
-        lines.push(`      which writes: ${this.reviewJsonService.checklistResultPath(reviewPath, req.id)}`);
+        lines.push(`      which writes: ${this.reviewJsonService.checklistResultPath(summaryPath, req.id)}`);
         return lines;
     }
 

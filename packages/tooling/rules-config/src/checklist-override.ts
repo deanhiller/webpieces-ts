@@ -69,9 +69,9 @@ export class ChecklistOverrideService {
         return `override-${checklistId}.json`;
     }
 
-    /** Absolute path of the override file, beside review.json and review-<id>.json in the AI-WRITABLE dir. */
-    overridePath(reviewJsonFilePath: string, checklistId: string): string {
-        return path.join(path.dirname(reviewJsonFilePath), this.overrideFileName(checklistId));
+    /** Absolute path of the override file, beside summary.json and review-<id>.json in the AI-WRITABLE dir. */
+    overridePath(summaryJsonFilePath: string, checklistId: string): string {
+        return path.join(path.dirname(summaryJsonFilePath), this.overrideFileName(checklistId));
     }
 
     /**
@@ -85,8 +85,8 @@ export class ChecklistOverrideService {
      * REFUSES either way; the difference is entirely in whether the writer is told why it did not count.
      */
     // webpieces-disable no-any-unknown -- opaque parsed JSON, narrowed field-by-field below
-    load(reviewJsonFilePath: string, checklistId: string): ChecklistOverride | null {
-        const filePath = this.overridePath(reviewJsonFilePath, checklistId);
+    load(summaryJsonFilePath: string, checklistId: string): ChecklistOverride | null {
+        const filePath = this.overridePath(summaryJsonFilePath, checklistId);
         if (!fs.existsSync(filePath)) return null;
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unparseable override reads as absent, never fatal
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -94,18 +94,18 @@ export class ChecklistOverrideService {
             // webpieces-disable no-any-unknown -- parsed JSON is opaque until narrowed below
             const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
             if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-                return this.unreadable(reviewJsonFilePath, checklistId, 'it is not a JSON object');
+                return this.unreadable(summaryJsonFilePath, checklistId, 'it is not a JSON object');
             }
             const authorizedBy = this.stringField(raw, 'authorizedBy');
             const authorizedAt = this.stringField(raw, 'authorizedAt');
             const reason = this.stringField(raw, 'reason');
             return new ChecklistOverride(
                 checklistId, authorizedBy, authorizedAt, reason,
-                this.problemFor(reviewJsonFilePath, checklistId, authorizedBy, reason),
+                this.problemFor(summaryJsonFilePath, checklistId, authorizedBy, reason),
             );
         } catch (err: unknown) {
             const error = toError(err);
-            return this.unreadable(reviewJsonFilePath, checklistId, error.message);
+            return this.unreadable(summaryJsonFilePath, checklistId, error.message);
         }
     }
 
@@ -114,11 +114,11 @@ export class ChecklistOverrideService {
      * is not an object. Reported rather than discarded, because "you wrote it wrong" and "you never wrote
      * it" call for opposite next actions and only the reader can tell them apart.
      */
-    private unreadable(reviewJsonFilePath: string, checklistId: string, why: string): ChecklistOverride {
-        const filePath = this.overridePath(reviewJsonFilePath, checklistId);
+    private unreadable(summaryJsonFilePath: string, checklistId: string, why: string): ChecklistOverride {
+        const filePath = this.overridePath(summaryJsonFilePath, checklistId);
         const problem = `The override for checklist "${checklistId}" at ${filePath} cannot be read (${why}), so it `
             + 'authorizes nothing. The human\'s decision is NOT recorded until this file parses. Rewrite the whole '
-            + `file:\n${this.writeCommand(reviewJsonFilePath, checklistId)}`;
+            + `file:\n${this.writeCommand(summaryJsonFilePath, checklistId)}`;
         return new ChecklistOverride(checklistId, '', '', '', problem);
     }
 
@@ -145,8 +145,8 @@ export class ChecklistOverrideService {
      * NOT INDENTED, deliberately: a shell heredoc's closing delimiter must sit at column 0, so indenting
      * this block to match the surrounding message would produce a command that does not run.
      */
-    writeCommand(reviewJsonFilePath: string, checklistId: string): string {
-        const filePath = this.overridePath(reviewJsonFilePath, checklistId);
+    writeCommand(summaryJsonFilePath: string, checklistId: string): string {
+        const filePath = this.overridePath(summaryJsonFilePath, checklistId);
         return [
             `cat > ${filePath} <<'JSON'`,
             '{',
@@ -192,16 +192,16 @@ export class ChecklistOverrideService {
      * stated reason is an assertion rather than a record, which is the whole thing this file replaced.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private problemFor(reviewJsonFilePath: string, checklistId: string, authorizedBy: string, reason: string): string {
+    private problemFor(summaryJsonFilePath: string, checklistId: string, authorizedBy: string, reason: string): string {
         const missing: string[] = [];
         if (authorizedBy === '') missing.push('"authorizedBy"');
         if (reason === '') missing.push('"reason"');
         if (missing.length === 0) return '';
-        const filePath = this.overridePath(reviewJsonFilePath, checklistId);
+        const filePath = this.overridePath(summaryJsonFilePath, checklistId);
         return `The override for checklist "${checklistId}" at ${filePath} is missing ${missing.join(' and ')}. `
             + 'An authorization with no stated reason and no named authorizer is an assertion, not a record — '
             + 'it does not authorize anything. Rewrite the whole file:\n'
-            + this.writeCommand(reviewJsonFilePath, checklistId);
+            + this.writeCommand(summaryJsonFilePath, checklistId);
     }
 }
 

@@ -92,8 +92,8 @@ describe('wp-write-review — the one way a reviewer submits a verdict (issue #8
         hookStamp(dir, 'codex', 'agent-9');
         await command().run(new WriteReviewOptions('security', GREEN, dir));
 
-        const reviewPath = reviewJson.reviewJsonPath(dir, 'dean-feat');
-        const record = provenance.read(reviewPath, 'security');
+        const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
+        const record = provenance.read(summaryPath, 'security');
         expect(record?.harness).toBe('codex');
         expect(record?.agentId).toBe('agent-9');
         expect(record?.scopeHash).toBe(receipts.read(dir, 'dean-feat')?.scopeHashes['security']);
@@ -107,7 +107,7 @@ describe('wp-write-review — the one way a reviewer submits a verdict (issue #8
         const dir = briefedRepo();
         hookStamp(dir, 'codex', '');
         expect(() => command().run(new WriteReviewOptions('security', GREEN, dir))).toThrow(/COORDINATING agent/);
-        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.reviewJsonPath(dir, 'dean-feat'), 'security'))).toBe(false);
+        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security'))).toBe(false);
     });
 
     it('refuses a checklist stage ② did not brief — a carried verdict cannot be overwritten', () => {
@@ -140,10 +140,10 @@ describe('ReviewerIdentityResolver — who is calling', () => {
 describe('wp-finish-upsert-pr rejects a hand-written verdict (issue #863)', () => {
     it('refuses the PR, names the file as NOT COUNTED, and says who may submit one', () => {
         const dir = briefedRepo();
-        const reviewPath = reviewJson.reviewJsonPath(dir, 'dean-feat');
-        fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+        const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
+        fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
         // Exactly what the Codex coordinator did on #1093 and #1095: the right shape, at the right path.
-        fs.writeFileSync(reviewJson.checklistResultPath(reviewPath, 'security'), GREEN);
+        fs.writeFileSync(reviewJson.checklistResultPath(summaryPath, 'security'), GREEN);
         const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(true, ''));
         const gate = new ReviewerVerdictGate(reviewJson, new ChecklistInstructionsService(reviewJson));
         expect(() => gate.assertEveryReviewerRan(scan)).toThrow(/NOT COUNTED/);

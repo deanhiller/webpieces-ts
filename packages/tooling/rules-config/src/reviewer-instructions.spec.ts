@@ -122,7 +122,7 @@ describe('ReviewerInstructionsService — pre-resolved context and scope wording
         expect(md).toContain('pr-gate.reviewContext');
     });
 
-    it('places the instructions file beside review.json, under instructions/', () => {
+    it('places the instructions file beside summary.json, under instructions/', () => {
         expect(svc.pathFor('/repo', 'feat', 'db-reviewer'))
             .toBe(path.join('/repo', '.webpieces', 'pr-review', 'feat', 'instructions', 'db-reviewer.instructions.md'));
     });

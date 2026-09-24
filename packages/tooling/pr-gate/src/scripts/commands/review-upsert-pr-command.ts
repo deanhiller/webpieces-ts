@@ -51,7 +51,7 @@ export class ReviewUpsertPrOptions {
  *   2. assert a clean tree                                 (meaningful now — step 1 committed the resolution)
  *   3. run the build gate                                  (on the merged, committed tree)
  *   4. scan the checklists, EXTRACT the diff, BRIEF the reviewers
- *   5. write the stage receipt, then print what to spawn + the review.json schema
+ *   5. write the stage receipt, then print what to spawn + the summary.json schema
  *
  * Unlike the report-only command it replaces — which always exited 0, because reporting is not gating — this
  * command CAN FAIL, at steps 1, 2 and 3. That is the point: it fails BEFORE any reviewer is spawned, so a
@@ -233,7 +233,7 @@ export class ReviewUpsertPrCommand {
      *
      * The rendering moved OUT of this command so the ordering could be asserted on as a string. It had a
      * real bug: the zero-checklist notice signed off with "Carry on and run: pnpm wp-finish-upsert-pr"
-     * while the block right beneath it said to write review.json first. An agent that reads top to bottom
+     * while the block right beneath it said to write summary.json first. An agent that reads top to bottom
      * obeyed the first line and posted a PR with no review at all.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -241,7 +241,7 @@ export class ReviewUpsertPrCommand {
         repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[],
         opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[], config: PrGateConfig,
     ): void {
-        const input = new ReviewReportInput(repoRoot, featureName, scan.reviewPath);
+        const input = new ReviewReportInput(repoRoot, featureName, scan.summaryPath);
         input.definedCount = scan.defined.length;
         input.applicableCount = scan.applicable.length;
         input.reviewed = scan.reviewed.slice();
@@ -260,7 +260,7 @@ export class ReviewUpsertPrCommand {
         input.singleRoundRepeat = singleRoundRepeat;
         input.singleRoundReviewers = singleRoundReviewers.slice();
         input.standings = scan.standings.slice();
-        // `say`: this block IS the next action — which reviewers to spawn, where review.json goes, and
+        // `say`: this block IS the next action — which reviewers to spawn, where summary.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and
         // no instruction, which is the one thing this stage may never do.
         this.stageConsole.say(this.reviewReport.render(input));
@@ -289,6 +289,6 @@ export class ReviewUpsertPrCommand {
         return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(
             req.id,
             this.reviewJsonService.refusalError(
-                req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.reviewPath)));
+                req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.summaryPath)));
     }
 }

@@ -102,9 +102,9 @@ function scannerFor(turnOffAllReviewers = false, singleRoundReview = false): Che
 function submitVerdict(dir: string, checklists: ChecklistDefinition[], id: string, status: string, output: string): void {
     const reviewJson = new ReviewJsonService();
     const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false, ''));
-    fs.mkdirSync(path.dirname(scan.reviewPath), { recursive: true });
+    fs.mkdirSync(path.dirname(scan.summaryPath), { recursive: true });
     new VerdictProvenanceService(reviewJson, new AtomicFile()).write(
-        scan.reviewPath, new SubmittedVerdict(id, status, 'claude', 'opus', output),
+        scan.summaryPath, new SubmittedVerdict(id, status, 'claude', 'opus', output),
         new VerdictProvenance(id, 'claude-code', 'sess-1', 'agent-1', 'webpieces-reviewer', scan.basis.headSha, scan.scopeHashes[id] ?? ''));
 }
 
@@ -254,11 +254,11 @@ describe('ChecklistScanner — X / N / Z', () => {
     it('an un-overridden FAIL still owes review; an OVERRIDDEN one does not', () => {
         const dir = repoWithFour();
         const svc = new ReviewJsonService();
-        const reviewPath = svc.reviewJsonPath(dir, newAiBranchName().getFeatureName());
-        fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+        const summaryPath = svc.summaryJsonPath(dir, newAiBranchName().getFeatureName());
+        fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
         submitVerdict(dir, FOUR, 'db-reviewer', 'red', 'bad');
         submitVerdict(dir, FOUR, 'ops-reviewer', 'red', 'bad');
-        fs.writeFileSync(checklistOverrideService.overridePath(reviewPath, 'ops-reviewer'), JSON.stringify(
+        fs.writeFileSync(checklistOverrideService.overridePath(summaryPath, 'ops-reviewer'), JSON.stringify(
             new ChecklistOverride('ops-reviewer', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, JIRA-1')));
         const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
@@ -393,9 +393,9 @@ function repoForRoster(): string {
 // The verdict-file path the scanner reads, with `dir`'s review dir created.
 function verdictPath(dir: string, id: string): string {
     const svc = new ReviewJsonService();
-    const reviewPath = svc.reviewJsonPath(dir, newAiBranchName().getFeatureName());
-    fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
-    return svc.checklistResultPath(reviewPath, id);
+    const summaryPath = svc.summaryJsonPath(dir, newAiBranchName().getFeatureName());
+    fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+    return svc.checklistResultPath(summaryPath, id);
 }
 
 // The roster is what the PR comment publishes: every defined checklist, matched or not.

@@ -98,7 +98,7 @@ export class CheckPrCommand {
             `Every commit that lands here must go through it, so:\n\n` +
             `  1. Install the webpieces hooks if you don't have them.\n` +
             `  2. Recreate/update this PR by running the full gated flow, in order:\n` +
-            `       pnpm wp-start-upsert-pr → pnpm wp-review-upsert-pr → write review.json → pnpm wp-finish-upsert-pr\n\n` +
+            `       pnpm wp-start-upsert-pr → pnpm wp-review-upsert-pr → write summary.json → pnpm wp-finish-upsert-pr\n\n` +
             `That re-stamps the PR title, body, and the gate token for the current head commit, and this check goes green.`
         );
     }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { ReviewJson } from '@webpieces/rules-config';
+import { PrSummary } from '@webpieces/rules-config';
 import { AuthorIdentityResolver } from './author-identity';
 import { Dashboard, DashboardInput } from './dashboard';
 
@@ -26,7 +26,7 @@ function harness(claude: boolean, codex: boolean): void {
 
 function rendered(model: string): { body: string; dashboard: string } {
     const renderer = new Dashboard();
-    const review = new ReviewJson(
+    const review = new PrSummary(
         'self-report-is-not-used-for-harness',
         model,
         'Title',

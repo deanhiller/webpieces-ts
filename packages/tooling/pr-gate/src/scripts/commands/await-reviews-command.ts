@@ -67,7 +67,7 @@ export class AwaitReviewsCommand {
         // file that stage just re-briefed (issue #863), and counting it would end the wait on the spot.
         const since = this.receipts.writtenAtMs(repoRoot, this.aiBranchName.getFeatureName());
         const probe = new ReviewerWaitProbe(
-            this.reviewJsonService, scan.reviewPath, scan.outstanding, scan.applicable, since);
+            this.reviewJsonService, scan.summaryPath, scan.outstanding, scan.applicable, since);
         const outcome = await this.awaitLoop.run(probe);
         this.report(probe, outcome);
     }
@@ -105,7 +105,7 @@ export class ReviewerWaitProbe implements WaitProbe {
 
     constructor(
         private readonly reviewJsonService: ReviewJsonService,
-        private readonly reviewPath: string,
+        private readonly summaryPath: string,
         private readonly waitedOn: readonly RequiredChecklist[],
         private readonly applicable: readonly RequiredChecklist[],
         // Epoch ms of the last stage ② (0 = none): a verdict file last written before it is not an answer.
@@ -203,11 +203,11 @@ export class ReviewerWaitProbe implements WaitProbe {
 
     private predates(req: RequiredChecklist): boolean {
         if (this.sinceMs === 0) return false;
-        const file = this.reviewJsonService.checklistResultPath(this.reviewPath, req.id);
+        const file = this.reviewJsonService.checklistResultPath(this.summaryPath, req.id);
         return fs.existsSync(file) && fs.statSync(file).mtimeMs < this.sinceMs;
     }
 
     private reload(): void {
-        this.results = this.reviewJsonService.loadChecklistResults(this.reviewPath, this.applicable);
+        this.results = this.reviewJsonService.loadChecklistResults(this.summaryPath, this.applicable);
     }
 }

@@ -14,7 +14,7 @@ import { injectable, bindingScopeValues } from 'inversify';
  * genuinely useful the first time; it is just not the answer to "is anything wrong?".
  *
  * It also no longer names a command to run. Naming one here produced TWO "what to do next" instructions in
- * stage ②'s output — this one, and the real one below it that asks for review.json first — and an agent
+ * stage ②'s output — this one, and the real one below it that asks for summary.json first — and an agent
  * reading top to bottom obeyed the first, skipping the review it was told to write. Exactly one next-step
  * instruction is emitted per stage now, and it is `ReviewReport`'s, not this class's.
  *

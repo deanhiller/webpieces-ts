@@ -104,7 +104,7 @@ export class ChecklistDetector {
         return this.detect(defs, changedFiles);
     }
 
-    // Flatten matched checklists into the RequiredChecklist shape that review.json enforcement + the hint
+    // Flatten matched checklists into the RequiredChecklist shape that summary.json enforcement + the hint
     // consume.
     toRequired(triggered: readonly TriggeredChecklist[]): RequiredChecklist[] {
         return triggered.map((t: TriggeredChecklist): RequiredChecklist =>

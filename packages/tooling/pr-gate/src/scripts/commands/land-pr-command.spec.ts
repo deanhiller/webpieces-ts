@@ -266,7 +266,7 @@ describe('wp-land-pr — the commit body comes from the PR description', () => {
         expect(landedBody()).toBe('line one\nline two\n');
     });
 
-    /** The body is never re-rendered here — landing has no dashboard, no review.json, no gate. */
+    /** The body is never re-rendered here — landing has no dashboard, no summary.json, no gate. */
     it('never regenerates the body: whatever the PR says is what lands', async (): Promise<void> => {
         ghPrSays('BYTES ONLY THE PR COULD KNOW\n', prHeadOid);
 
@@ -451,7 +451,7 @@ describe('wp-land-pr — refusals', () => {
      *
      * It used to assert an old release as "the usual cause". When the marker had instead come from author
      * text — a `|` in a summary, from a TypeScript union or a regex alternation — re-running finish
-     * re-rendered the identical character from the unchanged `review.json`, so landing refused again: a
+     * re-rendered the identical character from the unchanged `summary.json`, so landing refused again: a
      * loop costing a CI cycle per turn. `Dashboard.gitLogSafe` closed the render side; this pins that the
      * message stopped teaching the diagnosis that sent readers looking for a version skew.
      */

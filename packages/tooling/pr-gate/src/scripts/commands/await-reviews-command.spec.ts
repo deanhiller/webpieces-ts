@@ -8,11 +8,11 @@ import { ReviewerWaitProbe } from './await-reviews-command';
 import { WaitOutcome } from '../workflow/await-loop';
 
 let dir = '';
-let reviewPath = '';
+let summaryPath = '';
 
 beforeEach((): void => {
     dir = specTempDirs.makeReal('await-reviews-');
-    reviewPath = path.join(dir, 'review.json');
+    summaryPath = path.join(dir, 'summary.json');
 });
 
 function checklist(id: string, required = true): RequiredChecklist {
@@ -24,7 +24,7 @@ function writeVerdict(id: string, status: string, output: string): void {
 }
 
 function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = waitedOn): ReviewerWaitProbe {
-    return new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, waitedOn, applicable, 0);
+    return new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, waitedOn, applicable, 0);
 }
 
 /**
@@ -115,7 +115,7 @@ describe('ReviewerWaitProbe ignores a verdict file older than the last stage ②
         writeVerdict('a', 'green', 'judged the previous diff');
         const old = new Date(Date.now() - 60_000);
         fs.utimesSync(path.join(dir, 'review-a.json'), old, old);
-        const p = new ReviewerWaitProbe(new ReviewJsonService(), reviewPath, [checklist('a')], [checklist('a')], Date.now() - 1_000);
+        const p = new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, [checklist('a')], [checklist('a')], Date.now() - 1_000);
         expect(p.done()).toBe(false);
         writeVerdict('a', 'green', 'judged this diff');
         expect(p.done()).toBe(true);

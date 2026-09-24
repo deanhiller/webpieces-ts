@@ -5,7 +5,7 @@ import { ReviewerAgentPolicy } from './checklist-config';
 
 const inst = new ChecklistInstructionsService(new ReviewJsonService());
 const CTX = new ChecklistReviewContext('abc1234', '', 'git diff abc1234 -- <file>');
-const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
 // `n` owed checklists c0..c(n-1), all reviewed by the one shared agent type under cap `max`.
 function owed(max: number, n: number): RequiredChecklist[] {

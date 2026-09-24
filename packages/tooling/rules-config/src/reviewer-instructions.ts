@@ -145,7 +145,7 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
 export class ReviewerInstructionsService {
     constructor(private readonly reviewJsonService: ReviewJsonService) {}
 
-    /** The dir holding this branch's generated instructions, beside its review.json. */
+    /** The dir holding this branch's generated instructions, beside its summary.json. */
     instructionsDirFor(repoRoot: string, featureName: string): string {
         return path.join(this.reviewJsonService.prDirFor(repoRoot, featureName), 'instructions');
     }
