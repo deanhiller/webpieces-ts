@@ -158,11 +158,11 @@ export class NoUtilityTypesInApiLibValidator extends ApiLibSourceRule<NoUtilityT
 
     /** Scoped by the configured `paths` globs, not the role tag — an empty list judges nothing. */
     protected override isApiLibrarySource(_workspaceRoot: string, relFile: string): boolean {
-        return matchesAnyGlob(relFile, this.config.paths ?? []);
+        return matchesAnyGlob(relFile, this.config.paths);
     }
 
     protected override scopeLabel(): string {
-        return `an API contract library (paths: ${(this.config.paths ?? []).join(', ')})`;
+        return `an API contract library (paths: ${this.config.paths.join(', ')})`;
     }
 
     protected why(): string {

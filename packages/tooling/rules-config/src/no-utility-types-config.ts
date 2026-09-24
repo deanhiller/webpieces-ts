@@ -24,7 +24,7 @@ import { BaseRuleConfig, BASE_RULE_SCHEMA, ModifiedCodeMode, MODIFIED_CODE_MODES
  */
 export class NoUtilityTypesInApiLibConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
-    paths?: string[];
+    paths!: string[];
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoUtilityTypesInApiLibConfig> = {
