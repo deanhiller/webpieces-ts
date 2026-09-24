@@ -92,9 +92,8 @@ export class WiringSourceReader {
         const byProject: Record<string, string[]> = {};
         for (const [name, project] of Object.entries(projects)) {
             const raw = this.readJson(path.join(this.workspaceRoot, project.root, 'project.json')) as RawTargets | undefined;
-            byProject[name] = Object.entries(raw?.targets ?? {})
-                .filter((pair: [string, RawTarget]) => pair[1].dependsOn !== undefined)
-                .map((pair: [string, RawTarget]) => pair[0]);
+            const targets = raw?.targets ?? {};
+            byProject[name] = Object.keys(targets).filter((target: string) => targets[target]!.dependsOn !== undefined);
         }
         return new DeclaredDependsOn(byProject);
     }
