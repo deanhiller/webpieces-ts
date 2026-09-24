@@ -8,7 +8,7 @@
  *   a built one.
  *
  * The answer is the `outputPath` of the target `openapi-generate` dependsOn — the api library's
- * compile step, which writes the directory the package is packed from. It is never a hardcoded target
+ * `build` (its @nx/js:tsc step), which writes the directory the package is packed from. It is never a hardcoded target
  * name and never an assumed `dist/`: webpieces-ts builds into a workspace-root `dist/apps/...` while
  * other repos build into a project-local `<project>/dist`, and either assumption is wrong in the other.
  *
@@ -93,11 +93,11 @@ export class GeneratedApiDocsLayout {
         if (siblings.length !== 1) {
             return this.refuse(
                 `${this.projectName}:${GeneratedApiDocsLayout.OPENAPI_TARGET} must dependsOn exactly ONE ` +
-                    `target of its own project — the compile step whose outputPath it writes into — and it ` +
+                    `target of its own project — the build step whose outputPath it writes into — and it ` +
                     `names ${siblings.length === 0 ? 'none' : siblings.join(', ')}.`,
-                `Set "dependsOn": ["compile"] on targets.${GeneratedApiDocsLayout.OPENAPI_TARGET} in ${where}, ` +
-                    `where "compile" is the @nx/js:tsc target (and "build" is an nx:noop that dependsOn ` +
-                    `["compile", "${GeneratedApiDocsLayout.OPENAPI_TARGET}"]).`,
+                `Set "dependsOn": ["build"] on targets.${GeneratedApiDocsLayout.OPENAPI_TARGET} in ${where}, ` +
+                    `where "build" is the @nx/js:tsc target (dependents pull generation in with ` +
+                    `"^${GeneratedApiDocsLayout.OPENAPI_TARGET}" in nx.json targetDefaults).`,
             );
         }
         const targetName = siblings[0]!;

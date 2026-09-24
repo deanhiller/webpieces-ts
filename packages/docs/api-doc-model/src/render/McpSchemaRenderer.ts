@@ -349,8 +349,7 @@ export class McpSchemaRenderer {
         if (type.discriminator !== undefined) {
             const mapping: Record<string, string> = {};
             for (const branch of type.unionRefNames) {
-                const value = type.discriminator.branchValues.get(branch);
-                if (value !== undefined) {
+                for (const value of type.discriminator.branchValues.get(branch) ?? []) {
                     mapping[value] = branch;
                 }
             }

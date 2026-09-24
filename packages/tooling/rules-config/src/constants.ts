@@ -39,6 +39,8 @@ export const RULE_NAMES = {
     NO_ROOT_UNION_API_TYPE: 'no-root-union-api-type',
     API_RULES_FOR_OPENAPI: 'api-rules-for-openapi',
     API_RULES_FOR_MCP: 'api-rules-for-mcp',
+    NO_INLINE_IMPORT_IN_API_LIB: 'no-inline-import-in-api-lib',
+    ONE_ENUM_SPELLING_IN_API_LIB: 'one-enum-spelling-in-api-lib',
 } as const;
 
 // Merge-state convention shared by the pr-gate scripts (which WRITE the marker during a

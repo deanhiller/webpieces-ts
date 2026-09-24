@@ -41,6 +41,7 @@ import {
     ValidateEslintSyncConfig,
 } from './rule-configs';
 import { NoRootUnionApiTypeConfig } from './no-root-union-config';
+import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
 import { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig } from './api-doc-rules-config';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
@@ -96,6 +97,8 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'no-root-union-api-type': NoRootUnionApiTypeConfig.SCHEMA,
     'api-rules-for-openapi': ApiRulesForOpenApiConfig.SCHEMA,
     'api-rules-for-mcp': ApiRulesForMcpConfig.SCHEMA,
+    'no-inline-import-in-api-lib': NoInlineImportInApiLibConfig.SCHEMA,
+    'one-enum-spelling-in-api-lib': OneEnumSpellingInApiLibConfig.SCHEMA,
 };
 
 /**

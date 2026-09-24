@@ -3,7 +3,7 @@
  *
  * Renders a project's contracts to OpenAPI, plus ONE MCP tool catalog per contract
  * (`mcp-<ContractClass>-tools.json`), INTO the outputPath of the target it dependsOn — the api
- * library's compile step — so the documents are packed and published inside the api library's npm
+ * library's `build` (its @nx/js:tsc step) — so the documents are packed and published inside the api library's npm
  * package: a consumer installs the library and has the contract. They are build output, never
  * committed.
  *
@@ -13,14 +13,16 @@
  *
  *   "tags": ["generate:openapi"],
  *   "targets": {
- *     "compile": { "executor": "@nx/js:tsc", "outputs": ["{options.outputPath}"],
- *                  "options": { "outputPath": "dist/<project>", ... } },
+ *     "build": { "executor": "@nx/js:tsc", "outputs": ["{options.outputPath}"],
+ *                "options": { "outputPath": "dist/<project>", ... } },
  *     "openapi-generate": {
- *       "dependsOn": ["compile"],
+ *       "dependsOn": ["build"],
  *       "options": { "manifest": "<project>/openapi.manifest.json", "format": "both" }
- *     },
- *     "build": { "executor": "nx:noop", "dependsOn": ["compile", "openapi-generate"] }
+ *     }
  *   }
+ *
+ * and dependents pull it in through nx.json: `"^openapi-generate"` in every targetDefaults entry
+ * governing a `build` or `test` (#1023 — see GenerateWiring).
  *
  * The output directory is the outputPath of the ONE target `dependsOn` names (GeneratedApiDocsLayout
  * in @webpieces/core-util — the same lookup the MCP server reads with), never a hardcoded target name

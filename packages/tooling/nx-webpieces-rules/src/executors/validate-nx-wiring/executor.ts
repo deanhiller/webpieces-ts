@@ -18,9 +18,11 @@
  * fast compile-only step while `nx ci` runs the full gate. This executor therefore only
  * guards build ORDER (`^build`), not the validators — those are guaranteed by the plugin.
  *
- * 3. Generated API documents (#1021) — a project tagged `generate:openapi` / `generate:docs-site` has the
- *    `compile` → `openapi-generate` → `build` (nx:noop) shape, and every project depending on one has
- *    `test` dependsOn `^build`. See GenerateWiring for why.
+ * 3. Generated API documents (#1023) — on the RESOLVED graph: a project tagged `generate:openapi` /
+ *    `generate:docs-site` has `openapi-generate` dependsOn exactly its own `build` (the @nx/js:tsc
+ *    target, which keeps that name), and every project depending on one — transitively — has
+ *    `^openapi-generate` in the effective dependsOn of its `build` and `test`. A failure names the
+ *    nx.json targetDefaults key to edit and the exact line. See GenerateWiring for why.
  *
  * Conservative by design: only REQUIRES wiring on compile executors actually in use
  * (@nx/js:tsc, @angular/build:application). A repo that uses neither passes.
@@ -37,7 +39,7 @@ import type {
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
-import { GenerateWiring } from '../../lib/api-docs/generate-wiring';
+import { GenerateWiring, WiringSourceReader } from '../../lib/api-docs/generate-wiring';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -234,7 +236,13 @@ export default async function runExecutor(
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
 
-    const generateWiring = new GenerateWiring(projectsConfig.projects, projectGraph.dependencies);
+    const sources = new WiringSourceReader(context.root);
+    const generateWiring = new GenerateWiring(
+        projectsConfig.projects,
+        projectGraph.dependencies,
+        sources.targetDefaults(),
+        sources.declaredDependsOn(projectsConfig.projects),
+    );
     const generateProblems = generateWiring.problems();
 
     const inUse = findCompileExecutorsInUse(projectsConfig, compileExecutors);

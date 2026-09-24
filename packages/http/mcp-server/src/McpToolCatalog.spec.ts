@@ -35,7 +35,7 @@ class UnusedApiFactory implements ApiFactory {
  *   holds the compiled package.json AND the generated catalogs;
  * - `source`: local dev and vitest — the server project's `node_modules/@myorg/apis` is a pnpm link
  *   onto the api library's SOURCE directory (project.json, no catalogs), and the catalogs are in the
- *   compile target's outputPath under the nx workspace root.
+ *   build target's outputPath under the nx workspace root.
  */
 class Layout {
     readonly root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mcp-catalogs-')));
@@ -80,12 +80,11 @@ const API_PROJECT = {
     name: 'apis',
     tags: ['generate:openapi'],
     targets: {
-        compile: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/apis' } },
+        build: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/apis' } },
         'openapi-generate': {
-            dependsOn: ['compile'],
+            dependsOn: ['build'],
             options: { manifest: 'libraries/apis/openapi.manifest.json', format: 'json' },
         },
-        build: { executor: 'nx:noop', dependsOn: ['compile', 'openapi-generate'] },
     },
 };
 
@@ -141,7 +140,7 @@ describe('McpToolCatalog.fromPackages', () => {
 
     it('follows a project-LOCAL outputPath too — the path is read, never assumed to be dist/', () => {
         const project = structuredClone(API_PROJECT);
-        project.targets.compile.options.outputPath = '{projectRoot}/dist';
+        project.targets.build.options.outputPath = '{projectRoot}/dist';
         const layout = track(Layout.source(project, false));
         layout.catalog('libraries/apis/dist', SEARCH_API_CATALOG);
 
@@ -160,7 +159,7 @@ describe('McpToolCatalog.fromPackages', () => {
 
         expect(() =>
             McpToolCatalog.fromPackages(['@myorg/apis'], path.join(layout.root, 'services/server/src')),
-        ).toThrow(/dist\/libraries\/apis — the directory does not exist[\s\S]*"dependsOn": \["\^build"\]/);
+        ).toThrow(/dist\/libraries\/apis — the directory does not exist[\s\S]*"dependsOn": \["\^openapi-generate"\]/);
     });
 
     it('names the missing dependsOn when openapi-generate does not say which target it writes into', () => {
@@ -170,7 +169,7 @@ describe('McpToolCatalog.fromPackages', () => {
 
         expect(() =>
             McpToolCatalog.fromPackages(['@myorg/apis'], path.join(layout.root, 'services/server/src')),
-        ).toThrow(/must dependsOn exactly ONE target[\s\S]*Set "dependsOn": \["compile"\]/);
+        ).toThrow(/must dependsOn exactly ONE target[\s\S]*Set "dependsOn": \["build"\]/);
     });
 
     it('names every node_modules directory it searched when the package is not installed', () => {

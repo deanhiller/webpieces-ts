@@ -124,7 +124,7 @@ is no flag to switch that off — the cure is at the contract, by naming the typ
 
 Inside nx, nobody chooses `--out`. Tag the api library `generate:openapi` and the
 `@webpieces/nx-webpieces-rules` plugin infers an `openapi-generate` target that writes into the
-outputPath of the compile target it dependsOn, so the documents are packed and published inside the api
+outputPath of the library's `build` (the @nx/js:tsc target it dependsOn), so the documents are packed and published inside the api
 library's package, and are never committed. It runs THIS package from the consumer's `node_modules`
 and refuses one older than it needs. See `.claude/rules/api-docs.md` in webpieces-ts.
 

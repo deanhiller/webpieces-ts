@@ -5,7 +5,7 @@
  * Both halves read the project's own declarations and never supply a value of their own:
  *
  * - the documents' directory is the `outputPath` of the target `openapi-generate` dependsOn — the api
- *   library's `compile` (tsc) step, which writes the directory the package is packed from, so the
+ *   library's `build` (tsc) step, which writes the directory the package is packed from, so the
  *   documents ship INSIDE the published package. It is ASKED of nx through `GeneratedApiDocsLayout`
  *   (`@webpieces/core-util`), the same lookup `McpToolCatalog.fromPackages` reads with, and never
  *   assumed: this repo builds into a workspace-root `dist/apps/...`, another consumer builds into a

@@ -1,0 +1,12 @@
+{
+    "title": "Stories API",
+    "version": "1.0.0",
+    "apisWhy": "One contract carrying string enums in every position and multi-value discriminators (#1023).",
+    "apis": [
+        {
+            "entry": "EnumsApi.ts",
+            "tag": "Stories"
+        }
+    ],
+    "securitySchemeNames": []
+}

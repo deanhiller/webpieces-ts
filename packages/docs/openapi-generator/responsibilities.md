@@ -83,4 +83,4 @@ Tagged `framework:node` and `role:lib`. It is in `scripts/publish-packages.sh`'s
 
 The bin is declared in `publishConfig.bin` and never at the top level (`.claude/rules/packaging-and-bins.md`).
 
-`apps/app-example/partner-api` is the worked example: a real contract, its manifest, and golden documents under `src/__tests__/goldens/`, with a spec that regenerates and diffs them. An app's real documents are build output, written into the outputPath of its compile target by the `openapi-generate` nx executor (inferred from the `generate:openapi` tag) and never committed.
+`apps/app-example/partner-api` is the worked example: a real contract, its manifest, and golden documents under `src/__tests__/goldens/`, with a spec that regenerates and diffs them. An app's real documents are build output, written into the outputPath of its `build` (tsc) target by the `openapi-generate` nx executor (inferred from the `generate:openapi` tag) and never committed.

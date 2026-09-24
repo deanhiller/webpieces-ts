@@ -9,6 +9,12 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
 - Project-scoped API security enforcement (`ensure-we-are-secure`): a directly changed project is
   audited in full for explicit method-level `@WpAuth*` HTTP policy or IPC-only
   `@WpInternal`/`@WpIpcEndpoint` contracts. Decorators are recognized by canonical import provenance.
+- The two `role:api-lib` spelling rules (#1023), sharing `ApiLibSourceRule`: `one-enum-spelling-in-api-lib`
+  (a fixed set of string values is a string enum with every member string-initialised — refuses literal
+  unions, `(typeof X)[number]`, `keyof typeof X`, single-literal discriminators and numeric / heterogeneous /
+  `const` / uninitialised enums, printing the enum to write) and `no-inline-import-in-api-lib` (refuses
+  `import('…')` type nodes and dynamic `import()` expressions). Both are parser-only and THROW a
+  `RuleFailError` with one `Option` per site; `mode` has no default.
 - CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 

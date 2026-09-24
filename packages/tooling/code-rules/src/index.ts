@@ -33,6 +33,11 @@ export {
     auditSecurityContracts,
     findDirectlyChangedProjectRoots,
 } from './validate-ensure-we-are-secure';
+export { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
+export { NoInlineImportInApiLibValidator, InlineImportScanner } from './validate-no-inline-import-in-api-lib';
+export { OneEnumSpellingInApiLibValidator, EnumSpellingScanner } from './validate-one-enum-spelling-in-api-lib';
+export { ApiLibEnumIndex } from './api-lib-enum-index';
+export { EnumText } from './api-lib-enum-text';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';
 export { default as validateCode } from './validate-code';

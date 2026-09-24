@@ -27,6 +27,8 @@ import { InjectAnnotationNotNeededForConcreteClassValidator } from './validate-i
 import { FrameworkTagValidator } from './validate-framework-tag';
 import { RoleTagValidator } from './validate-role-tag';
 import { EnsureWeAreSecureValidator } from './validate-ensure-we-are-secure';
+import { NoInlineImportInApiLibValidator } from './validate-no-inline-import-in-api-lib';
+import { OneEnumSpellingInApiLibValidator } from './validate-one-enum-spelling-in-api-lib';
 
 /**
  * Owns running the code-rules suite. Every built-in validator is injected as a singleton (its config
@@ -64,6 +66,8 @@ export class CodeRulesEngine {
         private readonly frameworkTag: FrameworkTagValidator,
         private readonly roleTag: RoleTagValidator,
         private readonly ensureWeAreSecure: EnsureWeAreSecureValidator,
+        private readonly noInlineImportInApiLib: NoInlineImportInApiLibValidator,
+        private readonly oneEnumSpellingInApiLib: OneEnumSpellingInApiLibValidator,
     ) {}
 
     /** The injected built-in validators, in run order. */
@@ -91,6 +95,8 @@ export class CodeRulesEngine {
             this.frameworkTag,
             this.roleTag,
             this.ensureWeAreSecure,
+            this.noInlineImportInApiLib,
+            this.oneEnumSpellingInApiLib,
         ];
     }
 

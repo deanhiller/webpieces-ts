@@ -23,6 +23,8 @@ import {
     FrameworkTagConfig,
     RoleTagConfig,
     EnsureWeAreSecureConfig,
+    NoInlineImportInApiLibConfig,
+    OneEnumSpellingInApiLibConfig,
 } from '@webpieces/rules-config';
 
 /** A rule config class usable as an inversify inject-by-type token. */
@@ -60,4 +62,6 @@ export const CONFIG_BINDINGS: ReadonlyArray<readonly [ConfigCtor, keyof Webpiece
     [FrameworkTagConfig, 'framework-tag'],
     [RoleTagConfig, 'role-tag'],
     [EnsureWeAreSecureConfig, 'ensure-we-are-secure'],
+    [NoInlineImportInApiLibConfig, 'no-inline-import-in-api-lib'],
+    [OneEnumSpellingInApiLibConfig, 'one-enum-spelling-in-api-lib'],
 ];

@@ -4,20 +4,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Option, specTempDirs } from '@webpieces/rules-config';
 import { createNodesV2 } from '../../plugin';
-import { GenerateWiring, GenerateWiringProblem, ProjectDependency } from '../api-docs/generate-wiring';
+import {
+    DeclaredDependsOn,
+    GenerateWiring,
+    GenerateWiringProblem,
+    ProjectDependency,
+    TargetDefault,
+    WiringSourceReader,
+} from '../api-docs/generate-wiring';
 
-/** The api library, in the shape #1021 prescribes. */
+/** The api library, in the shape #1023 prescribes: tsc stays `build`, generation dependsOn it. */
 function apiProject(tags: string[]): object {
     return {
         name: 'lang-apis',
         tags,
         targets: {
-            compile: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/lang-apis' } },
+            build: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/lang-apis' } },
             'openapi-generate': {
-                dependsOn: ['compile'],
+                dependsOn: ['build'],
                 options: { manifest: 'libraries/lang-apis/openapi.manifest.json', format: 'both' },
             },
-            build: { executor: 'nx:noop', dependsOn: ['compile', 'openapi-generate'] },
         },
     };
 }
@@ -46,7 +52,7 @@ describe('tag-inferred API document targets', () => {
         expect(targets['ci']!.dependsOn).not.toContain('openapi-generate');
     });
 
-    it('generate:openapi infers openapi-generate, with outputs INTO the compile outputPath, and rides ci', async () => {
+    it('generate:openapi infers openapi-generate, with outputs INTO the build outputPath, and rides ci', async () => {
         const targets = await inferred(apiProject(['generate:openapi']));
 
         expect(targets['openapi-generate']).toMatchObject({
@@ -91,53 +97,184 @@ function project(root: string, tags: string[], targets: Record<string, TargetCon
 }
 
 const GOOD_API = project('libraries/lang-apis', ['generate:openapi'], {
-    compile: { executor: '@nx/js:tsc', dependsOn: ['^build'], options: { outputPath: 'dist/libraries/lang-apis' } },
-    'openapi-generate': { dependsOn: ['compile'] },
-    build: { executor: 'nx:noop', dependsOn: ['compile', 'openapi-generate'] },
+    build: {
+        executor: '@nx/js:tsc',
+        dependsOn: ['^build', '^openapi-generate'],
+        options: { outputPath: 'dist/libraries/lang-apis' },
+    },
+    'openapi-generate': { dependsOn: ['build'] },
 });
 
-function problems(
-    projects: Record<string, ProjectConfiguration>,
-    dependencies: Record<string, ProjectDependency[]> = {},
-): string[] {
-    return new GenerateWiring(projects, dependencies)
-        .problems()
-        .map((each: GenerateWiringProblem) => `${each.project}: ${each.problem} FIX: ${each.cure}`);
+/** monorepo6's nx.json targetDefaults as they stand before the upgrade — no ^openapi-generate anywhere. */
+const CONSUMER_DEFAULTS: Record<string, TargetDefault> = {
+    '@nx/js:tsc': new TargetDefault(['^build']),
+    build: new TargetDefault(['^build']),
+    test: new TargetDefault(undefined),
+};
+
+/** lang-server: a tsc build (governed by the "@nx/js:tsc" key) and a run-commands test ("test" key). */
+function server(buildDependsOn: string[], testDependsOn: string[] | undefined): ProjectConfiguration {
+    return project('services/server/lang-server', [], {
+        build: {
+            executor: '@nx/js:tsc',
+            dependsOn: buildDependsOn,
+            options: { outputPath: 'dist/services/lang-server' },
+        },
+        test: {
+            executor: 'nx:run-commands',
+            dependsOn: testDependsOn,
+            options: { command: 'vitest run services/server/lang-server/' },
+        },
+    });
 }
 
-describe('GenerateWiring (validate-nx-wiring) enforces the compile → openapi-generate → build shape', () => {
-    it('passes the prescribed shape, and ignores untagged projects entirely', () => {
-        expect(problems({
-            'lang-apis': GOOD_API,
-            other: project('libraries/other', [], { build: { executor: '@nx/js:tsc' } }),
-        })).toEqual([]);
+class Wiring {
+    constructor(
+        readonly projects: Record<string, ProjectConfiguration>,
+        readonly dependencies: Record<string, ProjectDependency[]> = {},
+        readonly defaults: Record<string, TargetDefault> = CONSUMER_DEFAULTS,
+        readonly declared: DeclaredDependsOn = new DeclaredDependsOn({}),
+    ) {}
+
+    wiring(): GenerateWiring {
+        return new GenerateWiring(this.projects, this.dependencies, this.defaults, this.declared);
+    }
+
+    problems(): string[] {
+        return this.wiring()
+            .problems()
+            .map((each: GenerateWiringProblem) => `${each.project}: ${each.problem} FIX: ${each.cure}`);
+    }
+}
+
+const SERVER_DEPS = { 'lang-server': [new ProjectDependency('lang-apis')] };
+
+describe("GenerateWiring (validate-nx-wiring) checks the RESOLVED graph for nx's codegen shape", () => {
+    it('passes the prescribed shape: openapi-generate dependsOn build, dependents carry ^openapi-generate', () => {
+        const fixed = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^build', '^openapi-generate'], ['^openapi-generate']) },
+            SERVER_DEPS,
+        );
+        expect(fixed.problems()).toEqual([]);
     });
 
-    it('refuses a build that is still the tsc step, naming the exact edit', () => {
-        const api = structuredClone(GOOD_API);
-        api.targets!['build'] = { executor: '@nx/js:tsc', dependsOn: ['^build'] };
+    it('ignores projects with no generating library upstream entirely', () => {
+        const other = project('libraries/other', [], {
+            build: { executor: '@nx/js:tsc', dependsOn: ['^build'] },
+            test: {},
+        });
+        expect(new Wiring({ 'lang-apis': GOOD_API, other }).problems()).toEqual([]);
+    });
 
-        expect(problems({ 'lang-apis': api })).toEqual([
-            expect.stringMatching(/lang-apis:build must be an nx:noop over "compile" and "openapi-generate"[\s\S]*FIX: Set targets\.build in libraries\/lang-apis\/project\.json to \{ "executor": "nx:noop", "dependsOn": \["compile", "openapi-generate"\] \}/),
-        ]);
+    it("refuses #1021's compile split, naming the tsc-target-name bug and the edit back", () => {
+        const split = project('libraries/lang-apis', ['generate:openapi'], {
+            compile: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/lang-apis' } },
+            'openapi-generate': { dependsOn: ['compile'] },
+            build: { executor: 'nx:noop', dependsOn: ['compile', 'openapi-generate'] },
+        });
+
+        const found = new Wiring({ 'lang-apis': split }).problems();
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('dependsOn "compile", and must dependsOn "build"');
+        expect(found[0]).toContain('TS6059 (nrwl/nx#18257)');
+        expect(found[0]).toContain(
+            'FIX: lang-apis: in libraries/lang-apis/project.json, name the @nx/js:tsc target "build" again',
+        );
+        expect(found[0]).toContain('set targets.openapi-generate.dependsOn to ["build"]');
     });
 
     it('refuses an openapi-generate with no dependsOn', () => {
         const api = structuredClone(GOOD_API);
         api.targets!['openapi-generate'] = {};
 
-        expect(problems({ 'lang-apis': api })).toEqual([
-            expect.stringMatching(/must dependsOn exactly ONE target[\s\S]*FIX: Set "dependsOn": \["compile"\]/),
+        const found = new Wiring({ 'lang-apis': api }).problems();
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('must dependsOn exactly ONE target');
+        expect(found[0]).toContain('FIX: lang-apis: Set "dependsOn": ["build"]');
+    });
+
+    it('names the EXECUTOR key for a tsc build and the target-name key for a run-commands test, with the exact line', () => {
+        const unwired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^build'], undefined) },
+            SERVER_DEPS,
+        );
+
+        const found = unwired.problems();
+        expect(found).toHaveLength(2);
+        expect(found[0]).toMatch(/^lang-server:build: depends on lang-apis, which generates API documents/);
+        expect(found[0]).toContain(
+            'FIX: In nx.json, set targetDefaults["@nx/js:tsc"].dependsOn so the entry reads ' +
+                '"@nx/js:tsc": { "dependsOn": ["^build", "^openapi-generate"] }',
+        );
+        expect(found[1]).toMatch(/^lang-server:test: depends on lang-apis/);
+        expect(found[1]).toContain(
+            'FIX: In nx.json, set targetDefaults["test"].dependsOn so the entry reads ' +
+                '"test": { "dependsOn": ["^openapi-generate"] }',
+        );
+    });
+
+    it('reaches a TRANSITIVE dependent, and groups every project one nx.json edit fixes into one problem', () => {
+        const lib = project('libraries/lang-lib', [], {
+            build: {
+                executor: '@nx/js:tsc',
+                dependsOn: ['^build'],
+                options: { outputPath: 'dist/libraries/lang-lib' },
+            },
+        });
+        const deps = {
+            'lang-server': [new ProjectDependency('lang-lib')],
+            'lang-lib': [new ProjectDependency('lang-apis')],
+        };
+        const unwired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-lib': lib, 'lang-server': server(['^build'], ['^build']) },
+            deps,
+        );
+
+        const found = unwired.problems();
+        expect(found).toHaveLength(2);
+        expect(found[0]).toMatch(/^lang-lib:build, lang-server:build: depends on lang-apis/);
+    });
+
+    it('sends the cure to project.json when the project overrides dependsOn there — nx does not merge it', () => {
+        const unwired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^build', '^openapi-generate'], ['^build']) },
+            SERVER_DEPS,
+            CONSUMER_DEFAULTS,
+            new DeclaredDependsOn({ 'lang-server': ['test'] }),
+        );
+
+        const found = unwired.problems();
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain(
+            "FIX: In services/server/lang-server/project.json, targets.test.dependsOn REPLACES nx.json's",
+        );
+        expect(found[0]).toContain('"dependsOn": ["^build", "^openapi-generate"]');
+    });
+
+    it('adds a targetDefaults entry when no key governs the target yet', () => {
+        const unwired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^openapi-generate'], undefined) },
+            SERVER_DEPS,
+            {},
+        );
+
+        expect(unwired.problems()).toEqual([
+            expect.stringContaining(
+                'FIX: In nx.json, add the targetDefaults entry "test": { "dependsOn": ["^openapi-generate"] }',
+            ),
         ]);
     });
 
-    it('refuses a compile step that does not build its upstreams first', () => {
-        const api = structuredClone(GOOD_API);
-        api.targets!['compile']!.dependsOn = [];
+    it("accepts nx's object form of ^openapi-generate", () => {
+        const wired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^build', '^openapi-generate'], []) },
+            SERVER_DEPS,
+        );
+        wired.projects['lang-server']!.targets!['test']!.dependsOn = [
+            { target: 'openapi-generate', dependencies: true },
+        ];
 
-        expect(problems({ 'lang-apis': api })).toEqual([
-            expect.stringMatching(/lang-apis:compile .* does not dependsOn "\^build"/),
-        ]);
+        expect(wired.problems()).toEqual([]);
     });
 
     it('refuses a hand-written executor on an UNTAGGED project — the tag is the one way to opt in', () => {
@@ -145,35 +282,51 @@ describe('GenerateWiring (validate-nx-wiring) enforces the compile → openapi-g
             'openapi-generate': { executor: '@webpieces/nx-webpieces-rules:openapi-generate' },
         });
 
-        expect(problems({ other: handWritten })).toEqual([
-            expect.stringMatching(/names the executor @webpieces\/nx-webpieces-rules:openapi-generate by hand[\s\S]*FIX: Add "generate:openapi" to "tags" in libraries\/other\/project\.json/),
-        ]);
+        const found = new Wiring({ other: handWritten }).problems();
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('names the executor @webpieces/nx-webpieces-rules:openapi-generate by hand');
+        expect(found[0]).toContain('FIX: other: add "generate:openapi" to "tags" in libraries/other/project.json');
     });
 
     it('renders every problem as ONE RuleFailError, one fix Option per problem', () => {
-        const api = structuredClone(GOOD_API);
-        api.targets!['build'] = { executor: '@nx/js:tsc' };
-        const wiring = new GenerateWiring({ 'lang-apis': api }, {});
+        const unwired = new Wiring(
+            { 'lang-apis': GOOD_API, 'lang-server': server(['^build'], undefined) },
+            SERVER_DEPS,
+        );
+        const wiring = unwired.wiring();
 
         const failure = wiring.failure(wiring.problems());
 
-        expect(failure.humanMessage).toContain('lang-apis: lang-apis:build must be an nx:noop');
+        expect(failure.humanMessage).toContain('lang-server:build: depends on lang-apis');
         expect(failure.fixOptions.map((option: Option) => option.text)).toEqual([
-            expect.stringContaining('lang-apis: Set targets.build in libraries/lang-apis/project.json'),
+            expect.stringContaining('targetDefaults["@nx/js:tsc"]'),
+            expect.stringContaining('targetDefaults["test"]'),
         ]);
     });
+});
 
-    it('requires test dependsOn ^build of every project depending on a generating library', () => {
-        const server = project('services/lang-server', [], {
-            test: { executor: 'nx:run-commands', options: { command: 'vitest run services/lang-server/' } },
+describe('WiringSourceReader reads what the resolved graph merged away', () => {
+    it('reads nx.json targetDefaults and which targets a project.json declares dependsOn for', () => {
+        const root = fs.realpathSync(specTempDirs.make('wp-wiring-sources-'));
+        fs.writeFileSync(
+            path.join(root, 'nx.json'),
+            JSON.stringify({ targetDefaults: { test: { dependsOn: ['^build'] }, lint: {} } }),
+        );
+        fs.mkdirSync(path.join(root, 'services', 'srv'), { recursive: true });
+        fs.writeFileSync(
+            path.join(root, 'services', 'srv', 'project.json'),
+            JSON.stringify({ targets: { test: { dependsOn: ['^build'] }, build: { executor: '@nx/js:tsc' } } }),
+        );
+        const reader = new WiringSourceReader(root);
+
+        expect(reader.targetDefaults()['test']!.dependsOn).toEqual(['^build']);
+        expect(reader.targetDefaults()['lint']!.dependsOn).toBeUndefined();
+        const declared = reader.declaredDependsOn({
+            srv: { root: 'services/srv' },
+            inferred: { root: 'libraries/none' },
         });
-        const deps = { 'lang-server': [new ProjectDependency('lang-apis')] };
-
-        expect(problems({ 'lang-apis': GOOD_API, 'lang-server': server }, deps)).toEqual([
-            expect.stringMatching(/lang-server depends on lang-apis[\s\S]*FIX: Add "dependsOn": \["\^build"\] to targets\.test in services\/lang-server\/project\.json/),
-        ]);
-
-        server.targets!['test']!.dependsOn = ['^build'];
-        expect(problems({ 'lang-apis': GOOD_API, 'lang-server': server }, deps)).toEqual([]);
+        expect(declared.declares('srv', 'test')).toBe(true);
+        expect(declared.declares('srv', 'build')).toBe(false);
+        expect(declared.declares('inferred', 'test')).toBe(false);
     });
 });

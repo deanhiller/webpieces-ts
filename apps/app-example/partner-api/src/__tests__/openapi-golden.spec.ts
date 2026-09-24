@@ -11,7 +11,7 @@ import { OpenApiCli, YamlReader } from '@webpieces/openapi-generator';
  * ## These are test fixtures, not the published documents
  *
  * An app's generated documents are BUILD OUTPUT: `openapi-generate` writes them into the project's
- * compile target's `outputPath` and they ship inside its npm package, never committed (#986, #1021).
+ * `build` target's `outputPath` and they ship inside its npm package, never committed (#986, #1021).
  * A consuming repo commits nothing generated — it trusts the generator. webpieces is the one place
  * that must PROVE the generator still works, so this spec pins its output against expected bytes, exactly as any unit test
  * pins its expected output. `src/__tests__/goldens/` holds those bytes and nothing else reads them.

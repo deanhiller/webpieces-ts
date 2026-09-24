@@ -18,26 +18,26 @@ describe('GeneratedApiDocsLayout — the ONE answer to "where do the generated d
 
     it('resolves nx tokens, so a project-LOCAL dist resolves the way nx resolves it', () => {
         const found = lookup({
-            compile: { options: { outputPath: '{workspaceRoot}/{projectRoot}/dist' } },
-            'openapi-generate': { dependsOn: [{ target: 'compile' }] },
+            build: { options: { outputPath: '{workspaceRoot}/{projectRoot}/dist' } },
+            'openapi-generate': { dependsOn: [{ target: 'build' }] },
         }).found;
 
         expect(found?.outputPath).toBe('libraries/apis/dist');
     });
 
     it('refuses no dependsOn, an upstream-only one, and an ambiguous one — naming the edit', () => {
-        for (const dependsOn of [[], ['^build'], [{ target: 'compile', dependencies: true }], ['compile', 'lint']]) {
+        for (const dependsOn of [[], ['^build'], [{ target: 'build', dependencies: true }], ['build', 'lint']]) {
             const problem = lookup({
-                compile: { options: { outputPath: 'dist' } },
+                build: { options: { outputPath: 'dist' } },
                 'openapi-generate': { dependsOn },
             }).problem;
-            expect(problem?.cure, JSON.stringify(dependsOn)).toContain('"dependsOn": ["compile"]');
+            expect(problem?.cure, JSON.stringify(dependsOn)).toContain('"dependsOn": ["build"]');
         }
     });
 
     it('refuses a target with no outputPath, and a project with no openapi-generate target', () => {
-        expect(lookup({ compile: {}, 'openapi-generate': { dependsOn: ['compile'] } }).problem?.cure).toBe(
-            'Declare targets.compile.options.outputPath in libraries/apis/project.json.',
+        expect(lookup({ build: {}, 'openapi-generate': { dependsOn: ['build'] } }).problem?.cure).toBe(
+            'Declare targets.build.options.outputPath in libraries/apis/project.json.',
         );
         expect(lookup({}).problem?.cure).toContain('Tag the project "generate:openapi"');
     });

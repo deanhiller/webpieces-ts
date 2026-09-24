@@ -10,9 +10,9 @@ import {
 
 /** How every catalog failure is fixed: build the api library, whose `openapi-generate` writes them. */
 const BUILD_IT =
-    'Build the api library that declares the contracts (`nx run <api-lib>:build`, which runs its ' +
-    '`openapi-generate` target) — or, for a spec that boots the MCP server, give its `test` target ' +
-    '`"dependsOn": ["^build"]` so the library is built first.';
+    'Generate the api library\'s documents (`nx run <api-lib>:openapi-generate`, which builds it first) — ' +
+    'or, for a spec that boots the MCP server, give nx.json\'s targetDefaults for `test` ' +
+    '`"dependsOn": ["^openapi-generate"]` so every dependent generates it first.';
 
 /** The two fields of an nx `project.json` this loader reads. */
 type ProjectJson = { readonly name?: string; readonly targets?: LayoutTargets };

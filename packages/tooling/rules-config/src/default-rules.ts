@@ -84,6 +84,11 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-root-union-api-type': {},
     'api-rules-for-openapi': {},
     'api-rules-for-mcp': {},
+    // #1023: both REQUIRE `mode` — no entry here may carry one. Like the three above they are new keys
+    // the one-release-behind validator does not know yet, so THIS repo's config states them with the
+    // pin bump to the release that ships them, tracked in #1024.
+    'no-inline-import-in-api-lib': {},
+    'one-enum-spelling-in-api-lib': {},
     'branch-creation-guard': {},
     'pr-lifecycle-guard': {},
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and

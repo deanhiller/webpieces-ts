@@ -11,7 +11,7 @@
  * restores a package WITHOUT its documents). The consumer states only what is theirs to decide, in its
  * project.json under the SAME target name, which nx merges over what is inferred here:
  *
- * - `openapi-generate`: `dependsOn` (the ONE compile target whose outputPath it writes into) and
+ * - `openapi-generate`: `dependsOn` (`["build"]` — the tsc target whose outputPath it writes into) and
  *   `options.manifest` / `options.format`;
  * - `docs-generate`: `options.document` / `options.siteDir` (and optionally `options.prose`).
  *
@@ -21,8 +21,8 @@
  * executor the installed plugin lacks breaks the graph load — which is why opting in is a tag and not
  * a hand-written executor target.
  *
- * The api project's shape (`compile` → `openapi-generate` → `build` as an `nx:noop`) is enforced by
- * `validate-nx-wiring`, not here: this runs while nx builds the graph, where a throw takes the whole
+ * The wiring (`openapi-generate` dependsOn `build`, and `^openapi-generate` in every dependent's
+ * `build` / `test`) is enforced by `validate-nx-wiring`, not here: this runs while nx builds the graph, where a throw takes the whole
  * workspace down rather than naming one project's fix.
  */
 
@@ -73,7 +73,7 @@ export class GenerateTargets {
     }
 
     /**
-     * `outputs` point into the compile target's outputPath, read here from the SAME lookup the
+     * `outputs` point into the build target's outputPath, read here from the SAME lookup the
      * executor writes with. When the consumer has not stated `dependsOn` yet there is no outputPath to
      * point at, so no outputs are inferred — and the executor's refusal names the missing `dependsOn`.
      */
@@ -95,7 +95,7 @@ export class GenerateTargets {
             metadata: {
                 technologies: ['nx'],
                 description:
-                    'Generate the OpenAPI documents + one mcp-<ContractClass>-tools.json per MCP contract into the compile outputPath (tag: generate:openapi)',
+                    'Generate the OpenAPI documents + one mcp-<ContractClass>-tools.json per MCP contract into the build outputPath (tag: generate:openapi)',
             },
         };
     }
