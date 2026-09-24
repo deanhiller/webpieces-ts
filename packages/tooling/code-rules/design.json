@@ -353,6 +353,22 @@
                     "level": 2
                 },
                 {
+                    "id": "NoUtilityTypesInApiLibConfig",
+                    "className": "NoUtilityTypesInApiLibConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/no-utility-types-config.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoUtilityTypesInApiLibValidator",
+                    "className": "NoUtilityTypesInApiLibValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-utility-types-in-api-lib.ts",
+                    "level": 2
+                },
+                {
                     "id": "OneEnumSpellingInApiLibConfig",
                     "className": "OneEnumSpellingInApiLibConfig",
                     "kind": "class",
@@ -683,6 +699,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "NoUtilityTypesInApiLibValidator",
+                    "injection": "type",
+                    "token": "NoUtilityTypesInApiLibValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-utility-types-in-api-lib.ts#NoUtilityTypesInApiLibValidator",
+                    "paramName": "noUtilityTypesInApiLib",
+                    "paramType": "NoUtilityTypesInApiLibValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "OneEnumSpellingInApiLibValidator",
                     "injection": "type",
                     "token": "OneEnumSpellingInApiLibValidator",
@@ -941,6 +966,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoUnmanagedExceptionsConfig",
                     "paramName": "config",
                     "paramType": "NoUnmanagedExceptionsConfig"
+                },
+                {
+                    "from": "NoUtilityTypesInApiLibValidator",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "NoUtilityTypesInApiLibValidator",
+                    "to": "NoUtilityTypesInApiLibConfig",
+                    "injection": "type",
+                    "token": "NoUtilityTypesInApiLibConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/no-utility-types-config.ts#NoUtilityTypesInApiLibConfig",
+                    "paramName": "config",
+                    "paramType": "NoUtilityTypesInApiLibConfig"
+                },
+                {
+                    "from": "NoUtilityTypesInApiLibValidator",
+                    "to": "ProjectRoleResolver",
+                    "injection": "type",
+                    "token": "ProjectRoleResolver",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-role-resolver.ts#ProjectRoleResolver",
+                    "paramName": "roleResolver",
+                    "paramType": "ProjectRoleResolver"
                 },
                 {
                     "from": "OneEnumSpellingInApiLibValidator",

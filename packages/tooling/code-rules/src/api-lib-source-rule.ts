@@ -1,6 +1,7 @@
 /**
- * The shared half of the two `role:api-lib` spelling rules (#1023): `no-inline-import-in-api-lib` and
- * `one-enum-spelling-in-api-lib`.
+ * The shared half of the api-library source rules: the two `role:api-lib` spelling rules (#1023),
+ * `no-inline-import-in-api-lib` and `one-enum-spelling-in-api-lib`, and `no-utility-types-in-api-lib`
+ * (#1026), which scopes itself by its configured `paths` globs instead of the role tag.
  *
  * Both judge the SOURCE of an api library — the contract every consumer and the OpenAPI / MCP
  * generator read — and both have the same rollout shape: `mode` NEW_AND_MODIFIED_CODE judges only the
@@ -20,6 +21,7 @@ import {
     DiffScope,
     ModifiedCodeMode,
     NoInlineImportInApiLibConfig,
+    NoUtilityTypesInApiLibConfig,
     OneEnumSpellingInApiLibConfig,
     Option,
     RuleFailError,
@@ -74,7 +76,7 @@ class FoundSite {
     ) {}
 }
 
-type ApiLibConfig = NoInlineImportInApiLibConfig | OneEnumSpellingInApiLibConfig;
+type ApiLibConfig = NoInlineImportInApiLibConfig | OneEnumSpellingInApiLibConfig | NoUtilityTypesInApiLibConfig;
 
 export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValidator<C> {
     constructor(
@@ -134,13 +136,23 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
             .map((site: ApiLibSite) => new FoundSite(relFile, site));
     }
 
-    /** A non-test `.ts` file, not under `allowedPaths`, owned by a `role:api-lib` project. */
+    /** A non-test `.ts` file, not under `allowedPaths`, that {@link isApiLibrarySource} claims. */
     private inScope(workspaceRoot: string, relFile: string): boolean {
         if (!relFile.endsWith('.ts') || relFile.endsWith('.d.ts')) return false;
         if (/\.(spec|test)\.ts$/.test(relFile) || relFile.includes('__tests__/')) return false;
         if (isPathExcluded(relFile, this.config.allowedPaths ?? [])) return false;
         if (!fs.existsSync(path.join(workspaceRoot, relFile))) return false;
+        return this.isApiLibrarySource(workspaceRoot, relFile);
+    }
+
+    /** Is `relFile` part of an api library? By default: its owning project is tagged `role:api-lib`. */
+    protected isApiLibrarySource(workspaceRoot: string, relFile: string): boolean {
         return this.roleResolver.roleOf(workspaceRoot, relFile) === API_LIB_ROLE;
+    }
+
+    /** How the failure names where the sites are — must agree with {@link isApiLibrarySource}. */
+    protected scopeLabel(): string {
+        return 'a role:api-lib project';
     }
 
     /** `// webpieces-disable <rule> -- <reason>` on the site's line or the line above. */
@@ -159,7 +171,7 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
 
     private failure(found: readonly FoundSite[]): RuleFailError {
         const message =
-            `${found.length} site(s) in a role:api-lib project: ${this.why()}\n` +
+            `${found.length} site(s) in ${this.scopeLabel()}: ${this.why()}\n` +
             found.map((each: FoundSite) => `  ${each.relFile}:${each.site.line} — ${each.site.what}\n      ${each.site.snippet}`).join('\n') +
             `\n  Last resort, per site: // webpieces-disable ${this.name} -- <reason>`;
         return new RuleFailError(

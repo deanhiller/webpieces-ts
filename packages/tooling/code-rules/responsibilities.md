@@ -15,6 +15,9 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   `const` / uninitialised enums, printing the enum to write) and `no-inline-import-in-api-lib` (refuses
   `import('…')` type nodes and dynamic `import()` expressions). Both are parser-only and THROW a
   `RuleFailError` with one `Option` per site; `mode` has no default.
+- `no-utility-types-in-api-lib` (#1026), also on `ApiLibSourceRule` but scoped by its required `paths`
+  globs: refuses `Omit` / `Pick` / `Partial` / `Required` / `Exclude` / `Extract` in an api contract (an
+  `extends` clause, a field, an alias, a generic argument), printing the write-the-fields-out cure.
 - CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 

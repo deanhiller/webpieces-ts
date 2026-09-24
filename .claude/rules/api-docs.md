@@ -210,6 +210,13 @@ hatches:
 - `no-inline-import-in-api-lib` refuses an `import('…')` type node and a dynamic `import()` expression;
   the cure is the top-of-file `import { X } from '…';`.
 
-webpieces-ts's own `webpieces.config.json` states neither yet: it runs the previous published release,
+A third, `no-utility-types-in-api-lib` (#1026), is scoped by a REQUIRED `paths` glob list (e.g.
+`["libraries/apis/**"]`) instead of the role tag, with the same `mode` values. It refuses `Omit`, `Pick`,
+`Partial`, `Required`, `Exclude` and `Extract` wherever a type is written — `interface X extends Omit<…>`,
+a field, an alias, a generic argument — because each turns a DTO's field list into a computation over
+another file. The cure is to write the fields out: a shared base interface both DTOs extend, or a flat
+interface or class. The wire JSON is unchanged.
+
+webpieces-ts's own `webpieces.config.json` states none of the three yet: it runs the previous published release,
 whose validator does not know the keys (`.claude/rules/published-vs-local-source.md`). The follow-up
 issue, [#1024](https://github.com/deanhiller/webpieces-ts/issues/1024), adds them with the pin bump to the release that ships them.

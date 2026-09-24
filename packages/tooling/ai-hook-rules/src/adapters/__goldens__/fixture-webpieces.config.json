@@ -231,6 +231,12 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "no-utility-types-in-api-lib": {
+            "mode": "OFF",
+            "paths": ["libraries/apis/**"],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "ensure-we-are-secure": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,

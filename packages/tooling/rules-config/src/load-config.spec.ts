@@ -74,6 +74,7 @@ const CODE_RULE_NAMES = [
     'api-rules-for-mcp',
     'no-inline-import-in-api-lib',
     'one-enum-spelling-in-api-lib',
+    'no-utility-types-in-api-lib',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
@@ -83,6 +84,8 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
     // Schema-required (#1017): both are BEHAVIOUR, so a config states them rather than inheriting one.
     'branch-creation-guard': { autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>' },
+    // Schema-required (#1026): WHICH files are api contracts is the consumer's call.
+    'no-utility-types-in-api-lib': { paths: ['libraries/apis/**'] },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

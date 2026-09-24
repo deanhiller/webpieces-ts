@@ -89,6 +89,9 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // pin bump to the release that ships them, tracked in #1024.
     'no-inline-import-in-api-lib': {},
     'one-enum-spelling-in-api-lib': {},
+    // #1026: REQUIRES `mode` and `paths` — no entry here may carry either. A new key the
+    // one-release-behind validator does not know yet, so THIS repo's config states it after publish.
+    'no-utility-types-in-api-lib': {},
     'branch-creation-guard': {},
     'pr-lifecycle-guard': {},
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and

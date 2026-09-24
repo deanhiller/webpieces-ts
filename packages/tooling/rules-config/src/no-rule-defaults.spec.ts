@@ -91,4 +91,13 @@ describe('a rule has no default', () => {
         expect(schema['maxLocalBranches'].optional).toBe(true);
         expect(schema['maxWorktrees'].optional).toBe(true);
     });
+
+    it('no-utility-types-in-api-lib demands `paths` as well as mode — which files are contracts is the consumer\'s call', () => {
+        const schema = RULE_SCHEMAS['no-utility-types-in-api-lib'];
+        expect(schema['mode'].optional).toBe(false);
+        expect(schema['paths'].optional).toBe(false);
+        expect(schema['allowedPaths'].optional).toBe(true);
+        expect(defaultRules['no-utility-types-in-api-lib']).toEqual({});
+        expect(seedEntryForRule('no-utility-types-in-api-lib')['paths']).toEqual(['libraries/apis/**']);
+    });
 });
