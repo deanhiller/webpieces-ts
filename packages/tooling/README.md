@@ -39,8 +39,11 @@ migration project. That mechanism, packaged and reusable across companies, is th
 The engine is published; the **dials are per-repo**, in the root
 [`webpieces.config.json`](../../webpieces.config.json). Each rule carries three:
 
-- **`mode`** — the ratchet. `OFF` → `NEW_AND_MODIFIED_CODE` → `…FILES` → `RUN_EVERY_TIME`. Scoping,
-  not severity: how much of a diff (or the repo) the rule looks at.
+- **`mode`** — the ratchet. `OFF` → `NEW_AND_MODIFIED_CODE` → `…FILES` → `MODIFIED_PROJECTS` →
+  `RUN_EVERY_TIME`. Scoping, not severity: how much of a diff (or the repo) the rule looks at. Every
+  diff-scoped code rule offers the last two, and `--rule=<name> --mode=<MODE> --projects=a,b` on
+  `nx run architecture:validate-code` (or `wp-validate-code`) measures one rule at any of them without a
+  config edit — see [`ENGINEERING-PRACTICE.md`](../../docs/ENGINEERING-PRACTICE.md), Part 3.
 - **`turnOffRuleUntilEpoch`** — time-boxes a rollout. A rule can be live and visible but not yet
   biting until a date in version control that arrives by itself.
 - **`disableAllowed`** — whether a reasoned `// webpieces-disable <rule> -- <why>` escape hatch exists

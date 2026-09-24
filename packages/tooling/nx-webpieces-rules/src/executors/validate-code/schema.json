@@ -4,6 +4,18 @@
     "description": "Combined validation for new methods, modified methods, and file sizes. Configure via targetDefaults in nx.json for runtime options (no cache issues).",
     "type": "object",
     "properties": {
+        "rule": {
+            "type": "string",
+            "description": "DEBUG RUN (#1027): judge only this rule (a code-rules key or a match-rules name). Not the gate: it labels itself, changes nothing on disk, prints the rule's own failure text plus a site count per project, and exits non-zero when sites exist."
+        },
+        "mode": {
+            "type": "string",
+            "description": "DEBUG RUN: judge --rule at this mode instead of its committed one, without editing webpieces.config.json, e.g. RUN_EVERY_TIME (every file in the repo) or MODIFIED_PROJECTS (every file of every project the diff touches). Omit to use the committed mode. Requires --rule."
+        },
+        "projects": {
+            "type": "string",
+            "description": "DEBUG RUN: comma-separated nx project names to restrict --rule to, e.g. lang-apis,lang-fsdb-api. Requires --rule."
+        },
         "methodMaxLimit": {
             "type": "object",
             "description": "Configuration for method line limit validation",

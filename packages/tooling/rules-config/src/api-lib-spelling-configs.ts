@@ -9,7 +9,8 @@ import { BaseRuleConfig, BASE_RULE_SCHEMA, ModifiedCodeMode, MODIFIED_CODE_MODES
  *
  * `mode` is REQUIRED and has no default (`.claude/rules/no-rule-defaults.md`): OFF |
  * NEW_AND_MODIFIED_CODE (only changed lines — grandfathers the rest) | NEW_AND_MODIFIED_FILES (every
- * occurrence in a changed file). `allowedPaths` exempts whole trees. The per-site escape hatch is
+ * occurrence in a changed file) | MODIFIED_PROJECTS / RUN_EVERY_TIME (every occurrence in each touched
+ * project / the whole repo — #1027). `allowedPaths` exempts whole trees. The per-site escape hatch is
  * `// webpieces-disable no-inline-import-in-api-lib -- <reason>` on the line or the line above.
  */
 export class NoInlineImportInApiLibConfig extends BaseRuleConfig {
@@ -36,7 +37,7 @@ export class NoInlineImportInApiLibConfig extends BaseRuleConfig {
  * The GENERATOR keeps supporting string-literal unions — for other consumers, and for code this rule's
  * mode grandfathers. This rule is what forbids NEW ones in an api library.
  *
- * `mode` is REQUIRED and has no default (`.claude/rules/no-rule-defaults.md`), with the same three
+ * `mode` is REQUIRED and has no default (`.claude/rules/no-rule-defaults.md`), with the same five
  * values as above; `allowedPaths` and the per-site disable work the same way.
  */
 export class OneEnumSpellingInApiLibConfig extends BaseRuleConfig {

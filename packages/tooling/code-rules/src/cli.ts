@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
-import { Container } from 'inversify';
-import { InformAiError, RuleFailError, renderRuleFailForHuman, toError, loadAndValidate, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { InformAiError, RuleFailError, renderRuleFailForHuman, toError, loadAndValidate, RepoRootFinder } from '@webpieces/rules-config';
 
 import { CodeRulesApp } from './code-rules-app';
-import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
-import { CONFIG_BINDINGS } from './code-rules-config-table';
+import { CodeRulesBootstrap } from './code-rules-bootstrap';
+import { CodeRulesRunRequestParser } from './code-rules-run-request';
 
 async function main(): Promise<void> {
     // webpieces-disable no-unmanaged-exceptions -- global entry point for code-rules CLI
@@ -20,18 +19,10 @@ async function main(): Promise<void> {
         }
         console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
-        // Composition root: bind the runtime values (workspace root, each rule's config), then let
-        // inversify build the ENTIRE validator DAG when we resolve the app.
-        // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
-        const container = new Container({ autobind: true });
-        container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
-        container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
-        for (const binding of CONFIG_BINDINGS) {
-            const ConfigClass = binding[0];
-            const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
-            container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
-        }
-
+        // Composition root: the shared bootstrap binds the runtime values (workspace root, the run
+        // request, each rule's planned config) and inversify builds the ENTIRE validator DAG.
+        const request = new CodeRulesRunRequestParser().fromArgv(process.argv.slice(2));
+        const container = new CodeRulesBootstrap().container(workspaceRoot, loaded, request);
         const app = container.get(CodeRulesApp);
         const result = await app.run();
         process.exit(result.success ? 0 : 1);

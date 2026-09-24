@@ -1,41 +1,34 @@
 import 'reflect-metadata';
-import { Container } from 'inversify';
-import { loadAndValidate, BaseRuleConfig } from '@webpieces/rules-config';
+import { loadAndValidate } from '@webpieces/rules-config';
 
 import { ExecutorResult } from './code-validator';
 import { CodeRulesApp } from './code-rules-app';
-import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
-import { CONFIG_BINDINGS } from './code-rules-config-table';
+import { CodeRulesBootstrap } from './code-rules-bootstrap';
+import { CodeRulesRunRequest } from './code-rules-run-request';
 
 export { ExecutorResult } from './code-validator';
 
 /**
- * Run all configured code validators against the workspace root (the nx `validate-code` executor's
+ * Run the configured code validators against the workspace root (the nx `validate-code` executor's
  * entry, via `@webpieces/code-rules`'s `validateCode` export).
  *
- * Composition root: binds the workspace root + each rule's typed config into an inversify container,
- * then RESOLVES {@link CodeRulesApp} so inversify constructs the ENTIRE validator DAG — nothing in the
- * DAG is `new`-ed (every validator, the reporter, and the match-rules checker are injected). Config
- * comes from webpieces.config.json (loaded via @webpieces/rules-config so ai-hooks and this executor
- * agree on every rule's mode/options).
+ * `request` is {@link CodeRulesRunRequest.GATE} for the build: every rule at its committed mode. A debug
+ * request (`--rule` / `--mode` / `--projects` on the nx target) judges one rule without a config edit.
+ * Config comes from webpieces.config.json, loaded via @webpieces/rules-config so ai-hooks and this
+ * executor agree on every rule's mode/options; the DAG is built by {@link CodeRulesBootstrap}.
  */
-export default async function runValidator(workspaceRoot: string): Promise<ExecutorResult> {
+// webpieces-disable no-function-outside-class -- the nx validate-code executor's entry point (exported as validateCode), the executor-side twin of cli.ts main()
+export default async function runValidator(
+    workspaceRoot: string,
+    request: CodeRulesRunRequest,
+): Promise<ExecutorResult> {
     const loaded = loadAndValidate(workspaceRoot);
     if (loaded.configPath === null) {
         console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
         return { success: false };
     }
     console.log(`\n📄 Loaded config: ${loaded.configPath}`);
-
-    // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
-    const container = new Container({ autobind: true });
-    container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
-    container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
-    for (const binding of CONFIG_BINDINGS) {
-        const ConfigClass = binding[0];
-        const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
-        container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
-    }
-
-    return container.get(CodeRulesApp).run();
+    const container = new CodeRulesBootstrap().container(workspaceRoot, loaded, request);
+    const app = container.get(CodeRulesApp);
+    return app.run();
 }

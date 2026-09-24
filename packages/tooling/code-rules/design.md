@@ -17,6 +17,9 @@ graph TD
     CatchErrorPatternValidator["CatchErrorPatternValidator"]
     CodeRulesApp["CodeRulesApp"]:::controller
     CodeRulesEngine["CodeRulesEngine"]
+    CodeRulesRunRequest["CodeRulesRunRequest"]:::many
+    DebugRunReport["DebugRunReport"]
+    DebugTarget___null{{"DebugTarget | null ?"}}:::unresolved
     DiffScope["DiffScope"]
     EnsureWeAreSecureConfig["EnsureWeAreSecureConfig"]:::many
     EnsureWeAreSecureValidator["EnsureWeAreSecureValidator"]
@@ -64,17 +67,24 @@ graph TD
     PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
     PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
     ProjectRoleResolver["ProjectRoleResolver"]
+    ReadonlyMap_string__FileScope_{{"ReadonlyMap<string, FileScope> ?"}}:::unresolved
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
     RequireReturnTypeValidator["RequireReturnTypeValidator"]
     RoleTagConfig["RoleTagConfig"]:::many
     RoleTagValidator["RoleTagValidator"]
     RuleReporter["RuleReporter"]
+    RuleScopes["RuleScopes"]:::many
     WorkspaceRoot["WorkspaceRoot"]:::many
     readonly_MatchRuleConfig__{{"readonly MatchRuleConfig[] ?"}}:::unresolved
+    readonly_string_____null{{"readonly string[] | null ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
+    string___null{{"string | null ?"}}:::unresolved
     CatchErrorPatternValidator --> CatchErrorPatternConfig
     CodeRulesApp --> CodeRulesEngine
     CodeRulesEngine --> CatchErrorPatternValidator
+    CodeRulesEngine --> CodeRulesRunRequest
+    CodeRulesEngine --> DebugRunReport
+    CodeRulesEngine --> DiffScope
     CodeRulesEngine --> EnsureWeAreSecureValidator
     CodeRulesEngine --> FrameworkTagValidator
     CodeRulesEngine --> InjectAnnotationNotNeededForConcreteClassValidator
@@ -102,7 +112,12 @@ graph TD
     CodeRulesEngine --> RequireReturnTypeValidator
     CodeRulesEngine --> RoleTagValidator
     CodeRulesEngine --> RuleReporter
+    CodeRulesEngine --> RuleScopes
     CodeRulesEngine --> WorkspaceRoot
+    CodeRulesRunRequest --> readonly_string_____null
+    CodeRulesRunRequest --> string___null
+    CodeRulesRunRequest --> string___null
+    DebugRunReport --> RuleReporter
     EnsureWeAreSecureValidator --> EnsureWeAreSecureConfig
     FrameworkTagValidator --> FrameworkTagConfig
     InjectAnnotationNotNeededForConcreteClassValidator --> InjectAnnotationNotNeededForConcreteClassConfig
@@ -135,6 +150,8 @@ graph TD
     PrismaValidateDtosValidator --> PrismaValidateDtosConfig
     RequireReturnTypeValidator --> RequireReturnTypeConfig
     RoleTagValidator --> RoleTagConfig
+    RuleScopes --> DebugTarget___null
+    RuleScopes --> ReadonlyMap_string__FileScope_
     WorkspaceRoot --> string
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
