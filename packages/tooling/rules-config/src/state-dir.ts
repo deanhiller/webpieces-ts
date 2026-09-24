@@ -110,7 +110,7 @@ export class GitDirs {
  *
  * ─── Why aiWritable() is a third scope and not a spelling of local() ──────────────────────────────
  * `pr-review/<branch>/` is the one state directory a CODING AGENT writes into with its own file-write
- * tool: `review.json` is authored by the agent running the flow, and `review-<id>.json` by each reviewer
+ * tool: `summary.json` is authored by the agent running the flow, and `review-<id>.json` by each reviewer
  * subagent. A worktree-isolated agent may write ONLY inside its own worktree — its harness refuses any
  * Write/Edit whose path is under the shared checkout, with "This agent is isolated in the worktree …;
  * edit the worktree copy of this file instead". That refusal is not ours to relax.

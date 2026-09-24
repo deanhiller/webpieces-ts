@@ -154,7 +154,7 @@ When `reviewerAgents` is positive, for each matched **required** checklist — a
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **submit its verdict** with `pnpm wp-write-review --checklist <id>` (the JSON on stdin, or
-   `--file <path>`). The bin writes `review-<id>.json` beside the branch's `review.json` — one file per
+   `--file <path>`). The bin writes `review-<id>.json` beside the branch's `summary.json` — one file per
    checklist, so concurrent reviewers never clobber each other — plus `review-<id>.provenance.json`
    recording WHO submitted it (the harness's own session/agent ids, stamped by the PreToolUse hook), the
    commit it was briefed on, and a hash of the checklist's in-scope diff. It is the ONLY way a verdict is
@@ -265,14 +265,14 @@ its own unchecked row — counted separately from the skipped ones and never wit
 applied" and "someone decided not to look" are different claims, and a PR that declined every optional
 review must not read as a fully-reviewed one.
 
-## `review.json` (you, the main agent, write this once)
+## `summary.json` — the PR summary (you, the main agent, write this once)
 
 ```json
 {
   "title": "concise PR title (imperative, no branch names)",
   "riskScore": 0,
   "riskLevel": "green | yellow | red",
-  "summary": "5–10 sentence review summary",
+  "summary": "5–10 sentence PR summary — what changed and why",
   "violations": ["pattern/architecture violations (empty array if none)"],
   "risks": ["notable risks (empty array if none)"],
   "filesToReview": ["paths a human should look at (empty array if none)"]
@@ -298,7 +298,7 @@ the diff dir, its checklist doc) against what it demonstrably *read*, and its to
 **Open this when auditing the review process itself** — e.g. "did the reviewer that passed this checklist
 actually open the diff, or did it write a verdict having read nothing?" It is written on every finish,
 including one that REFUSES for a missing reviewer, and copied to `old-provenance.json` beside
-`old-review.json` when a review is consumed.
+`old-summary.json` when a PR summary is consumed.
 
 Never author or edit it. A reviewer subagent physically cannot know its own transcript path — the
 environment exposes the *parent* session id and no agent id — so any AI-written link would be invented.
@@ -311,7 +311,7 @@ Every path in the file is derived by the tooling from Claude Code's own artifact
 
 ### Review identity
 
-New `review.json` and `review-<id>.json` files require non-empty string fields `agent` and `model`.
+New `summary.json` and `review-<id>.json` files require non-empty string fields `agent` and `model`.
 Use your harness (`claude` or `codex`) and readable model name (for example `opus` or `sonnet`).
 Use the literal `unknown` when a value is unavailable; never guess or inherit the parent reviewer’s model.
 These self-reported labels appear in the PR dashboard and each checklist review comment; they do not

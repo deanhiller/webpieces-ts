@@ -5,7 +5,7 @@ import { PR_REVIEW_DIR } from './constants';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
-import { ReviewJsonSchemaRenderer } from './review-json-schema-renderer';
+import { SummaryJsonSchemaRenderer } from './summary-json-schema-renderer';
 import { VerdictSchemaRenderer } from './verdict-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';
 import {
@@ -17,7 +17,7 @@ import {
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
-    ReviewJson,
+    PrSummary,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -39,7 +39,7 @@ export {
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
-    ReviewJson,
+    PrSummary,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -53,20 +53,20 @@ export {
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
-// Where `wp-finish-upsert-pr` retires the review.json it just consumed, and the note it stamps on the way.
+// Where `wp-finish-upsert-pr` retires the summary.json it just consumed, and the note it stamps on the way.
 // The key sorts first in the written JSON because it is written first — an AI that opens the file to see
-// whether it can reuse the review reads what the file IS before it reads a title it might be tempted to keep.
-const OLD_REVIEW_FILE = 'old-review.json';
+// whether it can reuse the summary reads what the file IS before it reads a title it might be tempted to keep.
+const OLD_SUMMARY_FILE = 'old-summary.json';
 const ARCHIVE_NOTE_KEY = '_ARCHIVED_AUDIT_ONLY';
 const ARCHIVE_NOTE =
-    'ARCHIVE — this is the review from the PREVIOUS wp-finish-upsert-pr run on this branch, kept for audit ' +
-    'purposes only. It is NOT the review for a new review round: it describes the code as of the last PR ' +
-    'update, which has since moved. If you are reviewing again, write a FRESH review.json at the path ' +
+    'ARCHIVE — this is the PR summary from the PREVIOUS wp-finish-upsert-pr run on this branch, kept for audit ' +
+    'purposes only. It is NOT the summary for a new round: it describes the code as of the last PR ' +
+    'update, which has since moved. If you are updating the PR again, write a FRESH summary.json at the path ' +
     'pnpm wp-review-upsert-pr prints; do not copy this file\'s title, summary or risk level forward without ' +
-    're-deciding each one. Overwritten by every finish, so only the most recent review is ever here.';
+    're-deciding each one. Overwritten by every finish, so only the most recent summary is ever here.';
 
 // The same stamp, for a retired per-checklist verdict. Verdict files get their OWN wording because the two
-// archives answer different questions: old-review.json holds a description of the code, this holds a
+// archives answer different questions: old-summary.json holds a description of the code, this holds a
 // REVIEWER'S DECISION. The one thing that must not happen is a reader treating an archived red as the live
 // verdict — the whole reason the file was moved rather than copied — so the note says that outright.
 const CHECKLIST_ARCHIVE_NOTE =
@@ -76,7 +76,7 @@ const CHECKLIST_ARCHIVE_NOTE =
     'by a real reviewer run. Do not copy its status back onto the live path to get past the gate. ' +
     'Overwritten by every retirement, so only the most recently retired verdict is ever here.';
 
-/** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
+/** Locates + loads/validates the AI-authored summary.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewJsonService {
     constructor(
@@ -85,7 +85,7 @@ export class ReviewJsonService {
     ) {}
 
     // The per-feature PR working dir: `<worktree>/.webpieces/pr-review/<feature>`. AI-WRITABLE scope,
-    // not local() — an agent AUTHORS review.json here, and each reviewer subagent authors its own
+    // not local() — an agent AUTHORS summary.json here, and each reviewer subagent authors its own
     // review-<id>.json beside it. A worktree-isolated agent's Write is refused for any path under the
     // shared checkout, which is where local() puts this, so local() made both files unwritable by the
     // very agents the flow instructs to write them. See DotWebpieces.aiWritable() for the full account.
@@ -93,9 +93,9 @@ export class ReviewJsonService {
         return this.dotDir.aiWritableFile(repoRoot, PR_REVIEW_DIR, featureName);
     }
 
-    // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name.
-    reviewJsonPath(repoRoot: string, featureName: string): string {
-        return path.join(this.prDirFor(repoRoot, featureName), 'review.json');
+    // Absolute path of the summary.json for a feature — beside pr-body.md, keyed by branch name.
+    summaryJsonPath(repoRoot: string, featureName: string): string {
+        return path.join(this.prDirFor(repoRoot, featureName), 'summary.json');
     }
 
     // Absolute path of the pr-context.json for a feature (the diff base/head + changed files).
@@ -103,32 +103,32 @@ export class ReviewJsonService {
         return path.join(this.prDirFor(repoRoot, featureName), 'pr-context.json');
     }
 
-    // Where a consumed review.json is archived to, beside it. Always the SAME path — it holds the last
-    // review and only the last one, so it can never be mistaken for a series that means something.
-    oldReviewJsonPath(reviewJsonFilePath: string): string {
-        return path.join(path.dirname(reviewJsonFilePath), OLD_REVIEW_FILE);
+    // Where a consumed summary.json is archived to, beside it. Always the SAME path — it holds the last
+    // summary and only the last one, so it can never be mistaken for a series that means something.
+    oldSummaryJsonPath(summaryJsonFilePath: string): string {
+        return path.join(path.dirname(summaryJsonFilePath), OLD_SUMMARY_FILE);
     }
 
     /**
-     * Retire the review `wp-finish-upsert-pr` just used: move review.json to old-review.json, stamped with a
-     * note saying what it is. Returns the archive path, or '' when there was nothing to archive.
+     * Retire the PR summary `wp-finish-upsert-pr` just used: move summary.json to old-summary.json, stamped
+     * with a note saying what it is. Returns the archive path, or '' when there was nothing to archive.
      *
-     * The point is the MOVE, not the copy. review.json left in place after a PR is posted is a live-looking
-     * file describing a review that already happened, and the next run of stage ② on this branch finds it
+     * The point is the MOVE, not the copy. summary.json left in place after a PR is posted is a live-looking
+     * file describing a PR update that already happened, and the next run of stage ② on this branch finds it
      * sitting there — so a reviewer subagent that judges the PR's stated intent (its title, summary or risk
-     * level) can read the previous run's review and return GREEN against a title that no longer exists.
+     * level) can read the previous run's summary and return GREEN against a title that no longer exists.
      * Nothing in the verdict distinguishes that from a real pass. Moving it means the only way to reach
-     * finish again is to write a fresh one, and {@link loadReviewJson} points at the archive when it is
+     * finish again is to write a fresh one, and {@link loadSummaryJson} points at the archive when it is
      * missing so the archive reads as an audit trail rather than as a lost file.
      *
      * Called only after the PR is actually up: a finish that failed before publishing must stay re-runnable.
      */
-    archiveReviewJson(reviewJsonFilePath: string): string {
-        if (!fs.existsSync(reviewJsonFilePath)) return '';
-        const archivePath = this.oldReviewJsonPath(reviewJsonFilePath);
-        const raw = fs.readFileSync(reviewJsonFilePath, 'utf8');
+    archiveSummaryJson(summaryJsonFilePath: string): string {
+        if (!fs.existsSync(summaryJsonFilePath)) return '';
+        const archivePath = this.oldSummaryJsonPath(summaryJsonFilePath);
+        const raw = fs.readFileSync(summaryJsonFilePath, 'utf8');
         fs.writeFileSync(archivePath, this.archivedBody(raw, ARCHIVE_NOTE));
-        fs.rmSync(reviewJsonFilePath);
+        fs.rmSync(summaryJsonFilePath);
         return archivePath;
     }
 
@@ -136,12 +136,12 @@ export class ReviewJsonService {
      * The archived bytes: the original JSON with an AUDIT-ONLY note as its FIRST key, so anything that opens
      * the file — human or AI — reads what it is before it reads any of its content.
      *
-     * `note` is a parameter rather than a constant because two different files are archived here (review.json
+     * `note` is a parameter rather than a constant because two different files are archived here (summary.json
      * and review-<id>.json) and they need to say different things, while the stamping MECHANICS — parse,
      * note first, original keys in order, fall back to raw — are identical. One implementation, two texts;
      * a second copy of this method would be the thing that drifts.
      *
-     * Falls back to the raw bytes when they do not parse. For review.json `loadReviewJson` has already
+     * Falls back to the raw bytes when they do not parse. For summary.json `loadSummaryJson` has already
      * accepted the file so that is close to impossible, but a verdict file is written by a subagent and may
      * be half-written or not an object at all — and preserving the original always beats losing it to a
      * stamping failure, since the archive exists precisely to be the record.
@@ -225,45 +225,54 @@ export class ReviewJsonService {
         }
     }
 
-    // Copy-paste review.json schema shared by every command that asks the coordinating AI to write it.
-    reviewJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
-        return new ReviewJsonSchemaRenderer().render(filePath, mainAgentInstructions);
+    // Copy-paste summary.json schema shared by every command that asks the coordinating AI to write it.
+    summaryJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
+        return new SummaryJsonSchemaRenderer().render(filePath, mainAgentInstructions);
     }
 
     /**
-     * The extra line the "no review.json" complaint carries when a PREVIOUS review was archived here. It
+     * The extra line the "no summary.json" complaint carries when a PREVIOUS summary was archived here. It
      * turns a bare "not found" — which reads as data loss, and invites hunting for the file — into the fact:
-     * the last finish consumed it, and the archive is audit material, not a review to reuse.
+     * the last finish consumed it, and the archive is audit material, not a summary to reuse.
      */
-    private archivedReviewHint(filePath: string): string {
-        const archive = this.oldReviewJsonPath(filePath);
+    private archivedSummaryHint(filePath: string): string {
+        const archive = this.oldSummaryJsonPath(filePath);
         if (!fs.existsSync(archive)) return '';
-        return `\nA PREVIOUS review was archived to ${archive} when the last pnpm wp-finish-upsert-pr consumed it.\n` +
-            `That file is for AUDIT ONLY — it reviews code this branch has since moved past. Write a fresh one:`;
+        return `\nA PREVIOUS PR summary was archived to ${archive} when the last pnpm wp-finish-upsert-pr consumed it.\n` +
+            `That file is for AUDIT ONLY — it describes code this branch has since moved past. Write a fresh one:`;
     }
 
-    // The per-checklist review file path that sits beside review.json: review-<id>.json.
-    checklistResultPath(reviewJsonFilePath: string, checklistId: string): string {
-        return path.join(path.dirname(reviewJsonFilePath), `review-${checklistId}.json`);
+    // Names summary.json when the author wrote its OLD name (review.json until #1033 — refused by Claude
+    // auto-mode as Self-Approval beside the review-<id>.json verdicts). HARD CUT: the stale file is never read.
+    private renamedFileHint(filePath: string): string {
+        const stale = path.join(path.dirname(filePath), 'review.json');
+        if (!fs.existsSync(stale)) return '';
+        return `\n${stale} is IGNORED — the author's file was renamed to summary.json. ` +
+            `Write the same JSON to ${filePath} instead.`;
+    }
+
+    // The per-checklist review file path that sits beside summary.json: review-<id>.json.
+    checklistResultPath(summaryJsonFilePath: string, checklistId: string): string {
+        return path.join(path.dirname(summaryJsonFilePath), `review-${checklistId}.json`);
     }
 
     /**
      * Where a RETIRED verdict for one checklist goes: `review-<id>.json.old`, beside the live path.
      *
-     * Mirrors {@link oldReviewJsonPath} deliberately, including its single-slot rule: ALWAYS the same path,
+     * Mirrors {@link oldSummaryJsonPath} deliberately, including its single-slot rule: ALWAYS the same path,
      * so it holds the last retired verdict and only the last one. A series (`.old.old`, `.old.1`) would read
      * as though the number of retirements meant something, and nothing downstream can interpret that — the
      * one fact worth keeping is "this checklist refused before, here is what it said".
      */
-    oldChecklistResultPath(reviewJsonFilePath: string, checklistId: string): string {
-        return `${this.checklistResultPath(reviewJsonFilePath, checklistId)}.old`;
+    oldChecklistResultPath(summaryJsonFilePath: string, checklistId: string): string {
+        return `${this.checklistResultPath(summaryJsonFilePath, checklistId)}.old`;
     }
 
     /**
      * Retire one checklist's verdict: MOVE review-<id>.json to review-<id>.json.old, stamped with a note
      * saying what it is. Returns the archive path, or '' when there was nothing to archive.
      *
-     * The point is the MOVE, exactly as in {@link archiveReviewJson}. A red verdict left on the live path is
+     * The point is the MOVE, exactly as in {@link archiveSummaryJson}. A red verdict left on the live path is
      * re-read by the next run and re-reported as the CURRENT state of the branch, so the branch keeps being
      * refused for a finding that may already be fixed — and the fix, when it comes, silently overwrites the
      * only record that the gate ever refused anything. Moving it makes the refusal durable and makes a fresh
@@ -275,10 +284,10 @@ export class ReviewJsonService {
      * verdicts ARE deliberately reused across finish attempts, and retiring one would force a needless (and
      * expensive) subagent re-run.
      */
-    archiveChecklistResult(reviewJsonFilePath: string, checklistId: string): string {
-        const livePath = this.checklistResultPath(reviewJsonFilePath, checklistId);
+    archiveChecklistResult(summaryJsonFilePath: string, checklistId: string): string {
+        const livePath = this.checklistResultPath(summaryJsonFilePath, checklistId);
         if (!fs.existsSync(livePath)) return '';
-        const archivePath = this.oldChecklistResultPath(reviewJsonFilePath, checklistId);
+        const archivePath = this.oldChecklistResultPath(summaryJsonFilePath, checklistId);
         const raw = fs.readFileSync(livePath, 'utf8');
         fs.writeFileSync(archivePath, this.archivedBody(raw, CHECKLIST_ARCHIVE_NOTE));
         fs.rmSync(livePath);
@@ -286,26 +295,26 @@ export class ReviewJsonService {
     }
 
     /**
-     * Load + validate the AI-authored review.json. Throws InformAiError (with the schema) when missing,
+     * Load + validate the AI-authored summary.json. Throws InformAiError (with the schema) when missing,
      * unparseable, or structurally wrong. `required` is the set of checklists the diff matched: every one
      * must have a well-formed, passing (or overridden) review-<id>.json or a validation error is raised
      * alongside the usual ones so the AI gets ONE message.
      */
     // webpieces-disable max-lines-new-methods -- one cohesive load+validate pass over the review fields
-    loadReviewJson(
+    loadSummaryJson(
         filePath: string, required: readonly RequiredChecklist[] = [], expectedMainAgentInstructions = '',
-    ): ReviewJson {
+    ): PrSummary {
         if (!fs.existsSync(filePath)) {
             throw new InformAiError(
-                `Required review.json not found.${this.archivedReviewHint(filePath)}\n\n` +
-                `${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
+                `Required summary.json not found.${this.renamedFileHint(filePath)}${this.archivedSummaryHint(filePath)}\n\n` +
+                `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
-        const raw = this.parseReviewJson(fs.readFileSync(filePath, 'utf8'), filePath, expectedMainAgentInstructions);
+        const raw = this.parseSummaryJson(fs.readFileSync(filePath, 'utf8'), filePath, expectedMainAgentInstructions);
         if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
             throw new InformAiError(
-                `review.json must be a JSON object.\n\n${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
+                `summary.json must be a JSON object.\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
         }
 
         const errors: string[] = [];
@@ -336,9 +345,9 @@ export class ReviewJsonService {
 
         if (errors.length > 0) {
             throw new InformAiError(
-                `review.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
+                `summary.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
                 errors.map((e: string): string => `  • ${e}`).join('\n') +
-                `\n\n${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}`,
+                `\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`,
             );
         }
 
@@ -348,7 +357,7 @@ export class ReviewJsonService {
             : (EMOJI_FOR_LEVEL[level] ?? '🟡');
         const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
 
-        return new ReviewJson((raw['agent'] as string).trim(), (raw['model'] as string).trim(),
+        return new PrSummary((raw['agent'] as string).trim(), (raw['model'] as string).trim(),
             title,
             riskScore as number,
             level,
@@ -423,7 +432,7 @@ export class ReviewJsonService {
     /**
      * THE renderer for "this reviewer refused" — one wording, wherever the refusal surfaces. It exists as a
      * method because the text was previously inlined in {@link requiredChecklistErrors}, reachable only
-     * through review.json validation, while the command layer refused earlier with its own generic message.
+     * through summary.json validation, while the command layer refused earlier with its own generic message.
      * Two messages for one event is how the useful one became unreachable; there is now exactly one.
      *
      * It always quotes the reviewer's own `output` verbatim: the finding is the whole point, and an error
@@ -441,7 +450,7 @@ export class ReviewJsonService {
      * retirement, and a human who already decided to accept this checklist is never asked again.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, reviewJsonFilePath: string, archivedPath = ''): string {
+    refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, summaryJsonFilePath: string, archivedPath = ''): string {
         const finding = `${verdict.detail.split('\n').join('\n      ')}\n`;
         const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.reviewer.agentName}) wrote:\n      ` + finding;
         const retired = archivedPath === ''
@@ -451,7 +460,7 @@ export class ReviewJsonService {
             : `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
               `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
               `"${req.reviewer.agentName}" subagent review again and write a new verdict.\n`;
-        return head + retired + this.overrideRoute(req, reviewJsonFilePath);
+        return head + retired + this.overrideRoute(req, summaryJsonFilePath);
     }
 
     /**
@@ -461,15 +470,15 @@ export class ReviewJsonService {
      * override. A second copy of this paragraph is precisely how the previous one drifted into naming a
      * command that had since been deleted.
      */
-    private overrideRoute(req: RequiredChecklist, reviewJsonFilePath: string): string {
+    private overrideRoute(req: RequiredChecklist, summaryJsonFilePath: string): string {
         return `      To SHIP ANYWAY a human must decide it, and the decision is recorded in its own file — `
             + `${this.overrides.overrideFileName(req.id)}, never inside the reviewer's verdict.\n`
             + `      ${this.overrides.writerRule()}\n`
             + '      Run exactly this, replacing only the "reason" with what the human actually said:\n\n'
-            + `${this.overrides.writeCommand(reviewJsonFilePath, req.id)}\n`;
+            + `${this.overrides.writeCommand(summaryJsonFilePath, req.id)}\n`;
     }
 
-    // Read the per-checklist verdict files `review-<id>.json` beside review.json — one per matched checklist.
+    // Read the per-checklist verdict files `review-<id>.json` beside summary.json — one per matched checklist.
     // A missing file is simply absent from the result (→ counts as MISSING for that checklist); a malformed
     // one is skipped (a stale review-<id>.json never wedges the branch).
     //
@@ -478,20 +487,20 @@ export class ReviewJsonService {
     // the retired file sits right beside the live path, and a scan that swept the directory would hand a
     // RETIRED refusal (or worse, a retired pass) back as the current state, undoing the whole point of the
     // move in {@link archiveChecklistResult}.
-    loadChecklistResults(reviewJsonFilePath: string, required: readonly RequiredChecklist[]): ChecklistResult[] {
+    loadChecklistResults(summaryJsonFilePath: string, required: readonly RequiredChecklist[]): ChecklistResult[] {
         const results: ChecklistResult[] = [];
         for (const req of required) {
-            const p = this.checklistResultPath(reviewJsonFilePath, req.id);
+            const p = this.checklistResultPath(summaryJsonFilePath, req.id);
             if (!fs.existsSync(p)) continue;
             // The human's authorization is read from its OWN file beside the verdict, in the same pass, so
             // resolveVerdict never touches disk and every command resolves one outcome from one read.
-            const parsed = this.parseChecklistResult(p, req.id, this.overrides.load(reviewJsonFilePath, req.id));
+            const parsed = this.parseChecklistResult(p, req.id, this.overrides.load(summaryJsonFilePath, req.id));
             if (parsed) results.push(parsed);
         }
         return results;
     }
 
-    // Resolve ONE checklist's verdict from its review-<id>.json. Central so review.json enforcement AND the
+    // Resolve ONE checklist's verdict from its review-<id>.json. Central so summary.json enforcement AND the
     // finish-command dashboard agree on the outcome. `problem` is checked FIRST: a file whose verdict cannot
     // be read must not fall through to any shipping outcome.
     resolveVerdict(req: RequiredChecklist, results: readonly ChecklistResult[]): ChecklistVerdict {
@@ -513,7 +522,7 @@ export class ReviewJsonService {
      * One loud complaint per checklist whose verdict file EXISTS but cannot be read as a verdict — almost
      * always one still using the removed `success` field. Public and separate from
      * {@link requiredChecklistErrors} because `wp-finish-upsert-pr` refuses on missing reviewers BEFORE it
-     * parses review.json: without this, a legacy file would surface as the generic "no verdict yet" block
+     * parses summary.json: without this, a legacy file would surface as the generic "no verdict yet" block
      * and the AI would re-run a reviewer that already ran instead of fixing four characters of JSON.
      */
     checklistFormatErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
@@ -646,8 +655,8 @@ export class ReviewJsonService {
     }
 
     // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError.
-    // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadReviewJson narrows each field
-    private parseReviewJson(
+    // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadSummaryJson narrows each field
+    private parseSummaryJson(
         raw: string, filePath: string, expectedMainAgentInstructions = '',
     ): Record<string, unknown> {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: convert JSON.parse SyntaxError to an InformAiError for the AI
@@ -658,8 +667,8 @@ export class ReviewJsonService {
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(
-                `review.json is not valid JSON (${error.message}).\n\n` +
-                `${this.reviewJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
+                `summary.json is not valid JSON (${error.message}).\n\n` +
+                `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
@@ -675,11 +684,11 @@ export function prDirFor(repoRoot: string, featureName: string): string {
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it
-export function reviewJsonPath(repoRoot: string, featureName: string): string {
-    return reviewJsonSvc.reviewJsonPath(repoRoot, featureName);
+export function summaryJsonPath(repoRoot: string, featureName: string): string {
+    return reviewJsonSvc.summaryJsonPath(repoRoot, featureName);
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it
-export function reviewJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
-    return reviewJsonSvc.reviewJsonSchemaHint(filePath, mainAgentInstructions);
+export function summaryJsonSchemaHint(filePath: string, mainAgentInstructions = ''): string {
+    return reviewJsonSvc.summaryJsonSchemaHint(filePath, mainAgentInstructions);
 }

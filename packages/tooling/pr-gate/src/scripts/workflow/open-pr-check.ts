@@ -29,7 +29,7 @@ export class OpenPrCheck {
                 'PR already exists, wp-start-update would leave it pointing at the OLD branch. Fix gh first\n' +
                 '(install / `gh auth login` / restore network), then re-run — or, if a PR does exist, use\n' +
                 'the PR flow: pnpm wp-start-upsert-pr → /wp-merge (only on conflict) →\n' +
-                'pnpm wp-review-upsert-pr → write review.json → pnpm wp-finish-upsert-pr\n',
+                'pnpm wp-review-upsert-pr → write summary.json → pnpm wp-finish-upsert-pr\n',
             );
         }
         return (result.stdout ?? '').trim();

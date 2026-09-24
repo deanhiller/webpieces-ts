@@ -13,16 +13,16 @@ import { specTempDirs } from './spec-temp-dirs';
 function dirWithOverride(id: string, body: unknown): string {
     const dir = specTempDirs.make('wp-override-');
     fs.writeFileSync(path.join(dir, `override-${id}.json`), JSON.stringify(body));
-    return path.join(dir, 'review.json');
+    return path.join(dir, 'summary.json');
 }
 
 const SVC = new ChecklistOverrideService();
 
 describe('ChecklistOverrideService.load', () => {
     it('reads who authorized it, when, and their own words', () => {
-        const reviewPath = dirWithOverride('db-reviewer',
+        const summaryPath = dirWithOverride('db-reviewer',
             new ChecklistOverride('db-reviewer', 'human, in-session', '2026-09-03T18:22:11Z', 'part B ships alone'));
-        const loaded = SVC.load(reviewPath, 'db-reviewer');
+        const loaded = SVC.load(summaryPath, 'db-reviewer');
         expect(loaded?.reason).toBe('part B ships alone');
         expect(loaded?.authorizedBy).toBe('human, in-session');
         expect(loaded?.authorizedAt).toBe('2026-09-03T18:22:11Z');
@@ -31,7 +31,7 @@ describe('ChecklistOverrideService.load', () => {
 
     it('is null when no authorization exists — the gate then refuses, which is the safe direction', () => {
         const dir = specTempDirs.make('wp-override-none-');
-        expect(SVC.load(path.join(dir, 'review.json'), 'db-reviewer')).toBeNull();
+        expect(SVC.load(path.join(dir, 'summary.json'), 'db-reviewer')).toBeNull();
     });
 
     /**
@@ -46,7 +46,7 @@ describe('ChecklistOverrideService.load', () => {
 
         const dir = specTempDirs.make('wp-override-bad-');
         fs.writeFileSync(path.join(dir, 'override-db-reviewer.json'), '{ not json');
-        const unparseable = SVC.load(path.join(dir, 'review.json'), 'db-reviewer');
+        const unparseable = SVC.load(path.join(dir, 'summary.json'), 'db-reviewer');
         expect(unparseable?.problem).toContain('cannot be read');
         expect(unparseable?.problem).toContain("cat > ");
     });
@@ -58,9 +58,9 @@ describe('ChecklistOverrideService.load', () => {
      * "the human never authorized anything".
      */
     it('reports a missing reason or authorizer through `problem`, and reprints the command', () => {
-        const reviewPath = dirWithOverride('db-reviewer',
+        const summaryPath = dirWithOverride('db-reviewer',
             new ChecklistOverride('db-reviewer', '', '2026-09-03T18:22:11Z', ''));
-        const loaded = SVC.load(reviewPath, 'db-reviewer');
+        const loaded = SVC.load(summaryPath, 'db-reviewer');
         expect(loaded?.problem).toContain('"authorizedBy" and "reason"');
         expect(loaded?.problem).toContain('override-db-reviewer.json');
         expect(loaded?.problem).toContain("cat > ");
@@ -68,7 +68,7 @@ describe('ChecklistOverrideService.load', () => {
 });
 
 describe('ChecklistOverrideService.writeCommand', () => {
-    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
     it('is a complete, copy-pasteable heredoc with the real id and path', () => {
         const cmd = SVC.writeCommand(REVIEW, 'backwards-compat-reviewer');
@@ -116,7 +116,7 @@ describe('ChecklistOverrideService.writerRule', () => {
     // No message anywhere may teach a command this release does not ship. `wp-authorize` and `wp-check-auth`
     // were deleted outright; a cure naming either is unfollowable.
     it('never names a deleted command', () => {
-        const text = SVC.writerRule() + SVC.writeCommand('/r/review.json', 'a');
+        const text = SVC.writerRule() + SVC.writeCommand('/r/summary.json', 'a');
         expect(text).not.toContain('wp-authorize');
         expect(text).not.toContain('wp-check-auth');
     });

@@ -116,8 +116,8 @@ export class VerdictProvenanceService {
     ) {}
 
     /** `review-<id>.provenance.json`, beside the verdict. */
-    provenancePath(reviewPath: string, checklistId: string): string {
-        return path.join(path.dirname(reviewPath), `review-${checklistId}.provenance.json`);
+    provenancePath(summaryPath: string, checklistId: string): string {
+        return path.join(path.dirname(summaryPath), `review-${checklistId}.provenance.json`);
     }
 
     /**
@@ -130,19 +130,19 @@ export class VerdictProvenanceService {
     }
 
     /** Write the verdict, then its provenance. Returns the verdict path. */
-    write(reviewPath: string, verdict: SubmittedVerdict, provenance: VerdictProvenance): string {
-        const verdictPath = this.reviewJsonService.checklistResultPath(reviewPath, verdict.id);
+    write(summaryPath: string, verdict: SubmittedVerdict, provenance: VerdictProvenance): string {
+        const verdictPath = this.reviewJsonService.checklistResultPath(summaryPath, verdict.id);
         provenance.status = verdict.status;
         provenance.verdictHash = this.canonicalHash(verdict);
         provenance.writtenAt = new Date().toISOString();
         this.atomicFile.writeJsonAtomic(verdictPath, verdict);
-        this.atomicFile.writeJsonAtomic(this.provenancePath(reviewPath, verdict.id), provenance);
+        this.atomicFile.writeJsonAtomic(this.provenancePath(summaryPath, verdict.id), provenance);
         return verdictPath;
     }
 
     /** The provenance for one checklist, or null when there is none (or it is unreadable). */
-    read(reviewPath: string, checklistId: string): VerdictProvenance | null {
-        const file = this.provenancePath(reviewPath, checklistId);
+    read(summaryPath: string, checklistId: string): VerdictProvenance | null {
+        const file = this.provenancePath(summaryPath, checklistId);
         if (!fs.existsSync(file)) return null;
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable record is treated as no record, which REJECTS the verdict
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -174,12 +174,12 @@ export class VerdictProvenanceService {
      *     place — is accepted, and nothing else is.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    assess(reviewPath: string, result: ChecklistResult, currentScopeHash: string, singleRound: boolean): VerdictStanding {
+    assess(summaryPath: string, result: ChecklistResult, currentScopeHash: string, singleRound: boolean): VerdictStanding {
         const id = result.id;
-        const record = this.read(reviewPath, id);
+        const record = this.read(summaryPath, id);
         const reject = (reason: string): VerdictStanding => new VerdictStanding(id, STANDING_REJECTED, result.status, '', reason);
         if (record === null) {
-            const file = this.provenancePath(reviewPath, id);
+            const file = this.provenancePath(summaryPath, id);
             const why = fs.existsSync(file) ? `${path.basename(file)} is unreadable` : `no ${path.basename(file)}`;
             return reject(`review-${id}.json was not submitted through pnpm ${WRITE_REVIEW_BIN} (${why}) — a hand-written verdict is not a review`);
         }

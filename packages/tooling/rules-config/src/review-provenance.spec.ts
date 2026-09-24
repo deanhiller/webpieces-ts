@@ -237,7 +237,7 @@ describe('ReviewProvenanceService.archive', () => {
 
         const archived = svc.archive(prDir);
         expect(archived).toBe(path.join(prDir, 'old-provenance.json'));
-        // A COPY: unlike review.json this file is not an input to anything, so it stays put.
+        // A COPY: unlike summary.json this file is not an input to anything, so it stays put.
         expect(fs.existsSync(path.join(prDir, 'provenance.json'))).toBe(true);
         expect(readProvenance(prDir)['sessionId']).toBe('sess-a');
     });

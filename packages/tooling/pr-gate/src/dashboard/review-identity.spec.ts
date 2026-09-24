@@ -14,7 +14,7 @@ afterEach(() => { for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: 
 function files(): string {
     const dir = specTempDirs.make('review-identity-');
     dirs.push(dir);
-    fs.writeFileSync(path.join(dir, 'review.json'), JSON.stringify({
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
         title: 'Record review identity', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green',
     }));
     fs.writeFileSync(path.join(dir, 'review-api.json'), JSON.stringify({
@@ -36,7 +36,7 @@ describe('review identity from JSON to PR comments', () => {
     });
     it('preserves distinct author/reviewer identities and publishes them without claiming provenance', () => {
         const dir = files();
-        const review = service.loadReviewJson(path.join(dir, 'review.json'), required);
+        const review = service.loadSummaryJson(path.join(dir, 'summary.json'), required);
         expect([review.agent, review.model]).toEqual(['codex', 'unknown']);
         const verdict = review.results[0];
         expect([verdict.agent, verdict.model]).toEqual(['claude', 'opus']);
@@ -44,7 +44,7 @@ describe('review identity from JSON to PR comments', () => {
             review.title, [], new DisableCounts(0, 0, []), true, 'base', 'head', 'merge', review, [], 'pnpm wp-build', 0,
             new AuthorIdentity('codex', 'gpt-5.6-sol'),
         ));
-        expect(dashboard).toContain('**Review agent:** codex · **Model:** unknown (self-reported)');
+        expect(dashboard).toContain('**Summary agent:** codex · **Model:** unknown (self-reported)');
         const row = new ChecklistCommentRow(verdict.agent, verdict.model, verdict.id, 'PASS', verdict.output,
             true, [], [], ['api.ts'], 1);
         const comment = new ChecklistCommentRenderer().render([row], false, true, 0);
@@ -52,7 +52,7 @@ describe('review identity from JSON to PR comments', () => {
         expect(comment).toContain('provenance was NOT verified');
     });
 
-    for (const name of ['review.json', 'review-api.json']) {
+    for (const name of ['summary.json', 'review-api.json']) {
         for (const field of ['agent', 'model']) {
             it.each([undefined, null, 42, {}, [], '', '   '])(`rejects invalid ${field} in ${name}: %j`, value => {
                 const dir = files();
@@ -60,14 +60,14 @@ describe('review identity from JSON to PR comments', () => {
                 const json = JSON.parse(fs.readFileSync(file, 'utf8'));
                 json[field] = value;
                 fs.writeFileSync(file, JSON.stringify(json));
-                expect(() => service.loadReviewJson(path.join(dir, 'review.json'), required)).toThrow(/non-empty string/);
+                expect(() => service.loadSummaryJson(path.join(dir, 'summary.json'), required)).toThrow(/non-empty string/);
             });
         }
     }
 
     it('teaches required identity and unknown in the generated main and reviewer schemas', () => {
-        expect(service.reviewJsonSchemaHint('/review.json')).toContain('"agent"');
-        expect(service.reviewJsonSchemaHint('/review.json')).toContain('"model"');
+        expect(service.summaryJsonSchemaHint('/summary.json')).toContain('"agent"');
+        expect(service.summaryJsonSchemaHint('/summary.json')).toContain('"model"');
         const schema = service.renderVerdictSchema('api');
         expect(schema).toContain('REQUIRED non-empty strings');
         expect(schema).toContain('never the parent');

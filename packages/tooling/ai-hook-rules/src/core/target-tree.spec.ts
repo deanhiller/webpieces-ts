@@ -199,7 +199,7 @@ describe('feature-branch-guard judges the tree that owns the FILE (issue #851)',
  * The `.webpieces/` exemption, in the spelling that was NOT exempt.
  *
  * `<primary>/.webpieces/worktrees/agent-X/pr-review/…/review-1.json` was exempt; the same kind of file
- * at `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/…/review.json` was not, because the skip
+ * at `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/…/summary.json` was not, because the skip
  * was asked about the GOVERNED-root spelling, where that path begins `.claude`. This matters out of all
  * proportion to its size: `wp-review-upsert-pr` REQUIRES that file before `wp-finish-upsert-pr` will
  * open a PR, so the guard could forbid a file the gate demands.
@@ -212,7 +212,7 @@ describe('the .webpieces/ state-dir exemption follows the tree that owns the fil
     }
 
     function reviewJson(): string {
-        return path.join(worktree, '.webpieces', 'pr-review', WORKTREE_BRANCH, 'review.json');
+        return path.join(worktree, '.webpieces', 'pr-review', WORKTREE_BRANCH, 'summary.json');
     }
 
     // The PRE-FIX behaviour, asserted so the change is a measured one rather than a claimed one: the

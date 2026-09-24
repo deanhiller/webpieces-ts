@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ReviewJson } from '@webpieces/rules-config';
+import { PrSummary } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput } from './dashboard';
 import { AuthorIdentity } from './author-identity';
 
 const dash = new Dashboard();
 const URL = 'https://github.com/o/r/pull/42';
 
-function input(reviewOverrides: Partial<ReviewJson> = {}): DashboardInput {
+function input(reviewOverrides: Partial<PrSummary> = {}): DashboardInput {
     const review = Object.assign(
-        new ReviewJson('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'S1. S2. S3. S4. S5.', [], [], []),
+        new PrSummary('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'S1. S2. S3. S4. S5.', [], [], []),
         reviewOverrides,
     );
     return new DashboardInput(
@@ -90,7 +90,7 @@ describe('the PR description IS the squash-merge commit body', () => {
      * non-markdown reasons — a TypeScript union, a regex alternation, a quoted shell pipeline. Nothing
      * escaped it, so finish POSTED such a body and reported success, and `wp-land-pr` then refused those
      * exact bytes and prescribed re-running finish, which re-rendered the identical character from the
-     * unchanged `review.json`. The renderer owns the property now: author text can say whatever it likes.
+     * unchanged `summary.json`. The renderer owns the property now: author text can say whatever it likes.
      */
     it('carries author text containing pipes and headings without ever emitting them', () => {
         const body = dash.renderPrBody(

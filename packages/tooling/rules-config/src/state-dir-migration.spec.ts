@@ -69,20 +69,20 @@ describe('legacy per-worktree .webpieces migration', () => {
     });
 
     /**
-     * The regression this exists to prevent: `pr-review/` is where a coding agent WRITES review.json and
+     * The regression this exists to prevent: `pr-review/` is where a coding agent WRITES summary.json and
      * where reviewer subagents write their verdicts, and a worktree-isolated agent may only write inside
      * its own worktree. `aiWritable()` puts it there deliberately, so a migrator that swept it into the
      * primary clone's namespace would delete the live directory out from under the agent — and put the
      * only writable copy back out of reach.
      */
     it('LEAVES pr-review/ in the worktree — it is aiWritable() state, not legacy', () => {
-        writeFile(worktree, '.webpieces/pr-review/feature/review.json', '{"title":"wip"}');
+        writeFile(worktree, '.webpieces/pr-review/feature/summary.json', '{"title":"wip"}');
         writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"a":1}');
 
         const dot = new DotWebpieces();
         expect(dot.local(worktree)).toBe(namespace);
 
-        expect(fs.readFileSync(path.join(worktree, '.webpieces/pr-review/feature/review.json'), 'utf8'))
+        expect(fs.readFileSync(path.join(worktree, '.webpieces/pr-review/feature/summary.json'), 'utf8'))
             .toBe('{"title":"wip"}');
         expect(fs.existsSync(path.join(namespace, 'pr-review'))).toBe(false);
         // …and it is exactly where aiWritable() says to look for it.

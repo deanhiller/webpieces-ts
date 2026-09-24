@@ -1,6 +1,6 @@
 import {
     ChangedFilesOptions, ChecklistDefinition, ChecklistResult, ChecklistReviewContext, DiffScope,
-    HomeConfigService, RequiredChecklist, ReviewJsonService, VERDICT_RED, reviewJsonPath,
+    HomeConfigService, RequiredChecklist, ReviewJsonService, VERDICT_RED, summaryJsonPath,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
@@ -54,7 +54,7 @@ export class ChecklistScan {
     reviewed: RequiredChecklist[];       // N − Z: already have a passing/warned/overridden review-<id>.json
     outstanding: RequiredChecklist[];    // Z (== applicable when not filtering)
     context: ChecklistReviewContext;     // fork-point sha + pr-context.json path
-    reviewPath: string;                  // the branch's review.json; verdict files sit beside it
+    summaryPath: string;                  // the branch's summary.json; verdict files sit beside it
     forkPoint: string;                   // '' when no fork point resolved
     // ALL X, matched or not, with why — what the PR comment publishes as its roster. Skipped checklists are
     // absent from `applicable` by construction, and recovering them downstream would mean a second
@@ -62,7 +62,7 @@ export class ChecklistScan {
     roster: ChecklistRoster;
     // Verdict files that exist but cannot be read as a verdict (e.g. still using the removed `success`).
     // Carried on the SCAN because wp-finish-upsert-pr refuses on missing reviewers before it ever parses
-    // review.json — a complaint raised only in there would never reach the AI.
+    // summary.json — a complaint raised only in there would never reach the AI.
     formatErrors: string[];
     /**
      * The basis the matching ACTUALLY ran against. Carried out so a caller that materializes the diff
@@ -139,7 +139,7 @@ export class ChecklistScan {
         reviewed: RequiredChecklist[],
         outstanding: RequiredChecklist[],
         context: ChecklistReviewContext,
-        reviewPath: string,
+        summaryPath: string,
         forkPoint: string,
         roster: ChecklistRoster,
         formatErrors: string[],
@@ -162,7 +162,7 @@ export class ChecklistScan {
         this.reviewed = reviewed;
         this.outstanding = outstanding;
         this.context = context;
-        this.reviewPath = reviewPath;
+        this.summaryPath = summaryPath;
         this.forkPoint = forkPoint;
         this.roster = roster;
         this.formatErrors = formatErrors;
@@ -224,7 +224,7 @@ export class ChecklistScanner {
      */
     scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): ChecklistScan {
         const featureName = this.aiBranchName.getFeatureName();
-        const reviewPath = reviewJsonPath(repoRoot, featureName);
+        const summaryPath = summaryJsonPath(repoRoot, featureName);
         // ONE basis for the file set, the reproduce command and any downstream materialization. The fork
         // point still comes from ForkPoint (never DiffScope.resolveBase) — DiffBasisResolver injects it.
         const basis = this.diffBasisResolver.resolve(repoRoot);
@@ -249,13 +249,13 @@ export class ChecklistScanner {
             // defined, roster, basis, changedFiles, context — so every downstream reader can still say
             // WHAT was suppressed, which is the difference between an honest record and a silent one.
             return new ChecklistScan(
-                defined, [], [], [], context, reviewPath, base, roster, [], true, matched, basis,
+                defined, [], [], [], context, summaryPath, base, roster, [], true, matched, basis,
                 changedFiles, [], [], homeConfig.singleRoundReview);
         }
         const applicable = matched;
         const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
-        const loaded = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
-        const standings = this.standingsOf(reviewPath, loaded, scopeHashes, homeConfig.singleRoundReview);
+        const loaded = this.reviewJsonService.loadChecklistResults(summaryPath, applicable);
+        const standings = this.standingsOf(summaryPath, loaded, scopeHashes, homeConfig.singleRoundReview);
         const results = this.liveResults(loaded, standings);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -270,7 +270,7 @@ export class ChecklistScanner {
             reviewed,
             opts.filterAlreadyReviewed ? this.blocking(stillOwed, optionalNotRun) : applicable,
             context,
-            reviewPath,
+            summaryPath,
             base,
             roster,
             this.reviewJsonService.checklistFormatErrors(applicable, results),
@@ -293,12 +293,12 @@ export class ChecklistScanner {
      */
     // eslint-disable-next-line @typescript-eslint/max-params
     private standingsOf(
-        reviewPath: string, loaded: readonly ChecklistResult[], scopeHashes: Record<string, string>, singleRound: boolean,
+        summaryPath: string, loaded: readonly ChecklistResult[], scopeHashes: Record<string, string>, singleRound: boolean,
     ): VerdictStanding[] {
         return loaded
             .filter((r: ChecklistResult): boolean => r.problem === '')
             .map((r: ChecklistResult): VerdictStanding =>
-                this.verdictProvenance.assess(reviewPath, r, scopeHashes[r.id] ?? '', singleRound));
+                this.verdictProvenance.assess(summaryPath, r, scopeHashes[r.id] ?? '', singleRound));
     }
 
     /**

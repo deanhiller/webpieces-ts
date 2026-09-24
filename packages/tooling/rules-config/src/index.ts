@@ -417,7 +417,7 @@ export {
     DEFAULT_RETENTION_DAYS,
 } from './review-provenance';
 export {
-    ReviewJson,
+    PrSummary,
     PrContext,
     ChecklistResult,
     ChecklistVerdict,
@@ -439,8 +439,8 @@ export {
     ChecklistReviewContext,
     ReviewJsonService,
     prDirFor,
-    reviewJsonPath,
-    reviewJsonSchemaHint,
+    summaryJsonPath,
+    summaryJsonSchemaHint,
 } from './review-json';
 export {
     MainSyncStatus,

@@ -20,8 +20,8 @@ pnpm wp-start-upsert-pr        # ① 3-point update from main. Does NOT push and
 pnpm wp-review-upsert-pr       # ② validates that merge, runs the BUILD GATE, extracts the diff,
                                #   and prints the reviewer subagents to spawn
 # → spawn each reviewer it names (each submits its own verdict: pnpm wp-write-review --checklist <id>)
-# → write review.json at the exact path it prints
-#   (.webpieces/pr-review/<feature>/review.json — its `title` becomes the PR title)
+# → write summary.json at the exact path it prints
+#   (its `title` becomes the PR title)
 pnpm wp-finish-upsert-pr       # ③ creates/updates the PR (and pushes — the ONE push)
 ```
 
@@ -30,7 +30,7 @@ unresolved merge or a red build, so a broken branch costs no review effort. It r
 verified, and stage ③ re-runs the build ONLY if HEAD moved since — three stages, one build.
 
 All three stages are required and none may be skipped: stage ③ refuses to post a PR unless stage ② has
-run on this branch AND review.json exists.
+run on this branch AND summary.json exists.
 
 The tooling never commits for you (see the golden rule below), so **commit your work first**, then run
 `pnpm wp-start-upsert-pr`. The only reasons to stop *before* posting are: the human explicitly said "don't
@@ -172,7 +172,7 @@ flow are not interchangeable.
 | start | `pnpm wp-start-update` | `pnpm wp-start-upsert-pr` |
 | resolve conflicts | `/wp-merge` | `/wp-merge` |
 | validate + build + brief reviewers | *(n/a — no PR, no review)* | `pnpm wp-review-upsert-pr` |
-| write the review | *(n/a)* | review.json, at the path stage ② prints |
+| write the PR summary | *(n/a)* | summary.json, at the path stage ② prints |
 | finish | `pnpm wp-finish-update` | `pnpm wp-finish-upsert-pr` |
 
 - `wp-start-update` **pairs with** `wp-finish-update`. `wp-start-upsert-pr` **pairs with**
@@ -202,9 +202,9 @@ flow are not interchangeable.
 4. **`pnpm wp-review-upsert-pr`** — STAGE ②, and the one that verifies before anyone reviews. It validates
    and commits any in-progress 3-point merge, asserts a clean tree, runs the **build gate**, extracts this
    branch's diff to `.webpieces/pr-review/<featureSlug>/diff/`, writes a per-reviewer instructions file, and
-   prints exactly what to spawn plus the `review.json` schema. It CAN fail — and when it does, no reviewer
+   prints exactly what to spawn plus the `summary.json` schema. It CAN fail — and when it does, no reviewer
    has been spawned yet, so a broken branch costs no review effort.
-5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `review.json` (its `title`
+5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `summary.json` (its `title`
    becomes the PR title) and every reviewer's verdict, then pushes and creates/updates the PR. It re-runs
    the build gate ONLY if HEAD moved since stage ②, so the three stages still cost one build.
 6. **`pnpm wp-land-pr`** — squash-merge an already-posted PR into main with the gated commit body, then

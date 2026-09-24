@@ -36,9 +36,9 @@ export class ReviewStageReceipt {
  * Reads/writes the stage-② receipt.
  *
  * WHY a receipt rather than relying on the artifacts that already exist: `wp-finish-upsert-pr` already
- * refuses when a reviewer has no verdict and when review.json is absent, so a repo WITH checklists is
- * mostly interlocked already. A repo with NO checklists is not — review.json is the only thing standing
- * between it and a PR, and the AI writes review.json itself. Nothing stopped it from writing that file and
+ * refuses when a reviewer has no verdict and when summary.json is absent, so a repo WITH checklists is
+ * mostly interlocked already. A repo with NO checklists is not — summary.json is the only thing standing
+ * between it and a PR, and the AI writes summary.json itself. Nothing stopped it from writing that file and
  * going straight to finish, skipping the merge validation and the build entirely.
  *
  * The receipt also pays for itself in the other direction: because it records the sha the build passed on,

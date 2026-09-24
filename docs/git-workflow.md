@@ -131,7 +131,7 @@ Manual `git push` and direct PR creation (`gh pr create`, `gh api .../pulls`, cu
 `pr-creation-or-push-guard`. Everything goes through the gated flow, which updates from main, runs the
 real build, and pushes for you:
 ```bash
-pnpm wp-start-upsert-pr    # update from main + advisory build, then tells you to write review.json
+pnpm wp-start-upsert-pr    # update from main + advisory build, then tells you to write the PR summary (summary.json)
 # resolve conflicts with /wp-merge if prompted
 pnpm wp-finish-upsert-pr   # authoritative build gate, push, create/update the PR + dashboard
 ```
@@ -139,7 +139,7 @@ This same pair is what you use to update from main once a PR exists — `wp-star
 identical 3-point engine *and* re-points the PR afterwards.
 
 If a human genuinely needs an out-of-band push (no PR), they must run it themselves — a manual push
-bypasses the build gate, `review.json`, and dashboard.
+bypasses the build gate, `summary.json`, and dashboard.
 
 ---
 

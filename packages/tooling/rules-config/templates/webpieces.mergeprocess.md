@@ -72,7 +72,7 @@ pnpm {{FINISH_COMMAND}}
 - Leftover conflict markers → fix those files and re-run.
 - Missing merge explanation → write it (see STEP 2) and re-run.
 - Build failure → fix the TypeScript/lint errors and re-run (the gate re-stages for you).
-- Missing review.json (PR flow only) → write it in the printed format (your PR review), then re-run.
+- Missing summary.json (PR flow only) → write it in the printed format (your PR summary), then re-run.
 - On success it commits and finalizes the merge (in the PR flow it also renders the dashboard and
   creates/updates the PR).
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import {
-    InformAiError, RepoRootFinder, VERDICT_STATUSES, WRITE_REVIEW_BIN, checklistOverrideService, reviewJsonPath, toError,
+    InformAiError, RepoRootFinder, VERDICT_STATUSES, WRITE_REVIEW_BIN, checklistOverrideService, summaryJsonPath, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -67,7 +67,7 @@ export class WriteReviewCommand {
         const verdict = this.parse(opts.json, id);
         const record = new VerdictProvenance(
             id, who.harness, who.sessionId, who.agentId, who.agentType, receipt.headSha, receipt.scopeHashes[id] ?? '');
-        const written = this.provenance.write(reviewJsonPath(repoRoot, featureName), verdict, record);
+        const written = this.provenance.write(summaryJsonPath(repoRoot, featureName), verdict, record);
         process.stdout.write(
             `✅ ${verdict.status.toUpperCase()} verdict for "${id}" submitted → ${written}\n`
             + `   provenance: ${who.harness}${who.agentId === '' ? '' : ` agent ${who.agentId}`}, `

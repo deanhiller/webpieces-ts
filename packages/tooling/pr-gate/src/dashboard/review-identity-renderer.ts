@@ -4,7 +4,7 @@ export class ReviewIdentityRenderer {
         return `**${label}:** ${this.text(agent)} · **Model:** ${this.text(model)} (self-reported)`;
     }
 
-    /** Author harness is observed by the gate; only the model comes from the author's review.json. */
+    /** Author harness is observed by the gate; only the model comes from the author's summary.json. */
     renderAuthor(agent: string, model: string, markdown = true): string {
         const label = markdown ? '**Author agent:**' : 'Author agent:';
         const modelLabel = markdown ? '**Model:**' : 'Model:';

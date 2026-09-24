@@ -8,7 +8,7 @@ import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-repor
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
-const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/review.json';
+const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/summary.json';
 const report = new ReviewReport(
     new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
     new ChecklistInstructionsService(new ReviewJsonService()));
@@ -57,7 +57,7 @@ const countOf = (text: string, needle: string): number => text.split(needle).len
 
 /**
  * THE regression. On PR #519 an agent read stage ②'s output top to bottom, hit "Carry on and run: pnpm
- * wp-finish-upsert-pr" in the zero-checklist notice, and ran finish — skipping the review.json instruction
+ * wp-finish-upsert-pr" in the zero-checklist notice, and ran finish — skipping the summary.json instruction
  * printed directly beneath it. These assertions treat the output as an API: exactly one next step, in the
  * order it must actually be performed.
  */
@@ -70,24 +70,37 @@ describe('exactly one "what to do next", in the right order', () => {
         }
     });
 
-    it('puts the review.json instruction BEFORE the finish command, always', () => {
+    it('puts the summary.json instruction BEFORE the finish command, always', () => {
         for (const text of everyVariant()) {
-            expect(text.indexOf('Write your PR review to:')).toBeGreaterThanOrEqual(0);
-            expect(text.indexOf('Write your PR review to:')).toBeLessThan(text.indexOf('wp-finish-upsert-pr'));
+            expect(text.indexOf('Write the PR summary to:')).toBeGreaterThanOrEqual(0);
+            expect(text.indexOf('Write the PR summary to:')).toBeLessThan(text.indexOf('wp-finish-upsert-pr'));
         }
     });
 
-    it('prints the review.json path and the schema the finish gate validates', () => {
+    it('prints the summary.json path and the schema the finish gate validates', () => {
         expect(noChecklists()).toContain(REVIEW_PATH);
         expect(noChecklists()).toContain('"riskLevel"');
     });
 
     // No line may read as "you are done, go finish" before step 1 has been stated.
-    it('never says to carry on / continue to a command before review.json is asked for', () => {
+    it('never says to carry on / continue to a command before summary.json is asked for', () => {
         for (const text of everyVariant()) {
             expect(text).not.toMatch(/carry on and run/i);
             const beforeStep1 = text.slice(0, text.indexOf('STEP 1'));
             expect(beforeStep1).not.toContain('wp-finish-upsert-pr');
+        }
+    });
+
+    /**
+     * #1033: Claude auto-mode refused the author's write of `review.json` as Self-Approval — a file named
+     * like the reviewers' verdicts, requested with "review your own changes, then write the review file".
+     * The author's step is a PR SUMMARY, and nothing stage ② prints may frame it as the author reviewing.
+     */
+    it('asks the author for a PR summary at summary.json — never for its own review', () => {
+        for (const text of everyVariant()) {
+            expect(text).toContain('write the PR summary (title, summary, risk) to summary.json');
+            expect(text).not.toMatch(/review your own changes|write the review file|your PR review/i);
+            expect(text).not.toMatch(/(^|[^-\w])review\.json/);
         }
     });
 
@@ -98,26 +111,26 @@ describe('exactly one "what to do next", in the right order', () => {
 
 /**
  * THE regression this ordering exists for. The block used to print the spawn blocks and THEN say to write
- * review.json "WHILE any reviewer subagents above are still running" — an instruction to spawn first. A
- * reviewer whose checklist judges the PR's stated intent (title / summary / risk level) reads review.json
+ * summary.json "WHILE any reviewer subagents above are still running" — an instruction to spawn first. A
+ * reviewer whose checklist judges the PR's stated intent (title / summary / risk level) reads summary.json
  * itself, so spawning first means it reads nothing (false RED, wasted run) or, on a second stage-② run on
  * the same branch, the PREVIOUS run's file (false GREEN against a title that no longer exists). Asserted on
  * the rendered string because the ordering IS the contract.
  */
-describe('review.json is written BEFORE any reviewer is spawned', () => {
-    it('puts the review.json instruction before the first spawn block', () => {
+describe('summary.json is written BEFORE any reviewer is spawned', () => {
+    it('puts the summary.json instruction before the first spawn block', () => {
         const text = oneOwed();
-        expect(text.indexOf('Write your PR review to:')).toBeLessThan(text.indexOf('subagent_type:'));
+        expect(text.indexOf('Write the PR summary to:')).toBeLessThan(text.indexOf('subagent_type:'));
     });
 
-    it('numbers writing the review file as step 1 and spawning as step 2', () => {
+    it('numbers writing the PR summary as step 1 and spawning as step 2', () => {
         const text = oneOwed();
         expect(text.indexOf('STEP 1')).toBeLessThan(text.indexOf('STEP 2'));
         expect(text).toMatch(/STEP 2 — only once that file is written, review these/);
         expect(text).toContain('STEP 3');
     });
 
-    it('never tells the AI to write the review while the reviewers run', () => {
+    it('never tells the AI to write the PR summary while the reviewers run', () => {
         for (const text of [noChecklists(), nothingMatched(), oneOwed()]) {
             expect(text).not.toMatch(/WHILE any reviewer subagents/i);
         }
@@ -250,7 +263,7 @@ describe('reviewers still owed', () => {
         expect(text).toContain('already reviewed on this branch');
         expect(text).toContain('nothing to spawn');
         expect(text).not.toContain('subagent_type:');
-        // Even here — nothing left to spawn — the ONE next step is still review.json, then finish.
+        // Even here — nothing left to spawn — the ONE next step is still summary.json, then finish.
         expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
     });
 
@@ -262,7 +275,7 @@ describe('reviewers still owed', () => {
 });
 
 describe('singleRoundReview experiment', () => {
-    it('keeps the first invocation normal while embedding durable fixing instructions in review.json', () => {
+    it('keeps the first invocation normal while embedding durable fixing instructions in summary.json', () => {
         const input = withOneOwedReviewer();
         input.singleRoundReview = true;
         const text = report.render(input);
@@ -407,7 +420,7 @@ describe('required reviewers are spawned; optional ones are only offered', () =>
         const text = report.render(input);
         expect(text).toContain('▶ NEXT — 3 steps');
         expect(text).toContain('STEP 2 — these 1 OPTIONAL');
-        expect(text).toContain('② Review, offer the optional reviewers, then finish');
+        expect(text).toContain('② Write the PR summary, offer the optional reviewers, then finish');
     });
 });
 
@@ -458,7 +471,7 @@ describe('--no-optional suppresses the offer without hiding what was skipped', (
  * present; an agent that notices the reused verdicts judged an earlier tree then re-spawns them on its own
  * initiative, which costs a full subagent run per reviewer AND destroys a verdict that was already banked (a
  * re-spawned reviewer writes to the same review-<id>.json). Reviews are once per branch by construction —
- * a passing verdict is never archived the way review.json is — so the output has to say so out loud.
+ * a passing verdict is never archived the way summary.json is — so the output has to say so out loud.
  */
 describe('the carry-forward rule is stated, not left to be inferred', () => {
     const reusedOnly = (): string => {
@@ -590,9 +603,9 @@ describe('turnOffAllReviewers — the suppression is stated, and nothing is offe
         expect(text).not.toContain('REQUIRED reviewer subagent(s)');
     });
 
-    // The stage's own contract, unchanged under suppression: write review.json, THEN finish, and finish
+    // The stage's own contract, unchanged under suppression: write summary.json, THEN finish, and finish
     // named exactly once.
-    it('still sends the agent to review.json first and names wp-finish-upsert-pr exactly once', () => {
+    it('still sends the agent to summary.json first and names wp-finish-upsert-pr exactly once', () => {
         const text = suppressed();
         expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
         expect(text.indexOf(REVIEW_PATH)).toBeLessThan(text.indexOf('pnpm wp-finish-upsert-pr'));

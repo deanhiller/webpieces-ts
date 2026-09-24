@@ -48,7 +48,7 @@ export class ReviewerBriefingBuilder {
         b.required = req.required;
         b.sourceDirs = this.sourceDirsFor(repoRoot, req.matchedFiles);
         b.contextEntries = shared;
-        b.verdictPath = this.reviewJsonService.checklistResultPath(scan.reviewPath, req.id);
+        b.verdictPath = this.reviewJsonService.checklistResultPath(scan.summaryPath, req.id);
         b.fileDiffCommand = scan.context.fileDiffCommand;
         b.dirty = scan.basis.dirty;
         b.ownAgentFileInDiff = this.ownAgentFileIn(manifest, req.reviewer.agentName);

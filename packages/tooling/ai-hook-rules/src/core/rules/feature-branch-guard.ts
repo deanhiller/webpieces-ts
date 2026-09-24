@@ -63,7 +63,7 @@ import { TreeRecovery } from './tree-recovery';
  * plainly the worktree's. This guard then read the branch-keyed main-sync cache under the PRIMARY's
  * branch and enforced that verdict on a file belonging to a clean branch in another tree. The cache was
  * not stale and was not wrong — the correct entry sat in the same JSON file, one key over. Only the
- * lookup key was. Four tool calls were refused, including the `review.json` that `wp-review-upsert-pr`
+ * lookup key was. Four tool calls were refused, including the `summary.json` that `wp-review-upsert-pr`
  * requires before `wp-finish-upsert-pr` will open a PR, which is the shape where this wedges the
  * sanctioned flow rather than merely annoying somebody.
  *

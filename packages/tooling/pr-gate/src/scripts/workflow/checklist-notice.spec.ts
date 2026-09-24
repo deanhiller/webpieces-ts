@@ -23,7 +23,7 @@ describe('zero checklists is never presented as a blocker', () => {
     });
 
     // The bug this replaced: the notice signed off with "Carry on and run: pnpm wp-finish-upsert-pr" while
-    // the block printed under it asked for review.json FIRST. Naming a command here is what made the output
+    // the block printed under it asked for summary.json FIRST. Naming a command here is what made the output
     // self-contradicting, so no variant may name one at all — ReviewReport owns the single next step.
     it('names NO command to run — the one next step is printed once, by ReviewReport', () => {
         for (const text of all()) {

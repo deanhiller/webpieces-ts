@@ -3,7 +3,7 @@ import {
     GateDefinition,
     WEBPIECES_DISABLE,
     RULE_NAMES,
-    ReviewJson,
+    PrSummary,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -117,7 +117,7 @@ export class DashboardInput {
     forkPoint: string;
     featureHead: string;
     mainHead: string;
-    review: ReviewJson; // AI-authored risk/violations/summary (from review.json)
+    review: PrSummary; // AI-authored risk/violations/summary (from summary.json)
     checklists: ChecklistRow[]; // consumer checklists this branch triggered; [] for non-adopting repos
     /**
      * `commands.pr-gate.buildCommand` VERBATIM, named in the PR-body footer so `git log` records WHICH
@@ -156,7 +156,7 @@ export class DashboardInput {
         forkPoint: string,
         featureHead: string,
         mainHead: string,
-        review: ReviewJson,
+        review: PrSummary,
         checklists: ChecklistRow[],
         buildCommand: string,
         suppressedChecklistCount: number,
@@ -341,7 +341,7 @@ export class Dashboard {
      * Before this, `wp-finish-upsert-pr` would happily POST such a body and report success, and then
      * `wp-land-pr` refused those exact bytes — two commands in one flow disagreeing about what the
      * renderer produces, with a refusal that blamed an old release and prescribed re-running finish,
-     * which re-rendered the identical pipe from the unchanged `review.json`. An infinite loop costing a
+     * which re-rendered the identical pipe from the unchanged `summary.json`. An infinite loop costing a
      * CI cycle per turn.
      *
      * `¦` (BROKEN BAR) rather than `\|`: this string's home is `git log` in a terminal, where a
@@ -527,7 +527,7 @@ export class Dashboard {
      * OVERRIDDEN is deliberately NOT folded into passed: an override is a human knowingly accepting a red
      * verdict, and a dashboard that painted that green would hide the single most review-worthy thing on
      * the PR. The blocking bucket is the FALLTHROUGH — CK_FAIL, CK_MISSING, CK_BAD_FORMAT and any verdict
-     * added later all land there, matching review.json's own "not pass|warn|overridden ⇒ refuse" rule
+     * added later all land there, matching summary.json's own "not pass|warn|overridden ⇒ refuse" rule
      * rather than a second list that could silently drift green.
      */
     /**
@@ -593,12 +593,12 @@ export class Dashboard {
     }
 
     // RISK section (the AI half): Risk Score bar, Risk Level, Pattern Violations.
-    private riskLines(review: ReviewJson): string[] {
+    private riskLines(review: PrSummary): string[] {
         const violations = review.violations.length;
         const violationLine = violations === 0 ? '🟢 No' : `🟡 Yes (${violations} violation(s))`;
         return [
             `**Risk Score:** ${this.riskBar(review.riskScore)} **${review.riskScore}/100** ${review.riskEmoji}`,
-            new ReviewIdentityRenderer().render(review.agent, review.model, 'Review agent'),
+            new ReviewIdentityRenderer().render(review.agent, review.model, 'Summary agent'),
             `**Risk Level:** ${review.riskEmoji} **${review.riskLevel}**`,
             `**Pattern Violations:** ${violationLine}`,
         ];

@@ -7,7 +7,7 @@ import { ChecklistScan } from './checklist-scanner';
 import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 /**
- * The gate `wp-finish-upsert-pr` runs before it parses review.json: REFUSE the PR while any applicable
+ * The gate `wp-finish-upsert-pr` runs before it parses summary.json: REFUSE the PR while any applicable
  * checklist is not clear, and say — per checklist — which of three different things went wrong.
  *
  * It is its own class, not a private method on the command, for two reasons. It is the one piece of finish
@@ -149,7 +149,7 @@ export class ReviewerVerdictGate {
     private neverRanSection(scan: ChecklistScan, neverRan: readonly RequiredChecklist[]): string {
         if (neverRan.length === 0) return '';
         return '❓ NO VERDICT YET — nothing that counts has been submitted for these, so they must actually be run:\n\n'
-            + `${this.instructions.render(neverRan, scan.reviewPath, scan.context)}\n\n`;
+            + `${this.instructions.render(neverRan, scan.summaryPath, scan.context)}\n\n`;
     }
 
     /**
@@ -168,7 +168,7 @@ export class ReviewerVerdictGate {
     private retireAndReport(scan: ChecklistScan, req: RequiredChecklist): string {
         const verdict = this.reviewJsonService.resolveVerdict(req, scan.results);
         if (scan.singleRoundReview) {
-            const live = this.reviewJsonService.checklistResultPath(scan.reviewPath, req.id);
+            const live = this.reviewJsonService.checklistResultPath(scan.summaryPath, req.id);
             return `Checklist "${req.id}" FAILED review (status:"red"). The reviewer wrote:\n`
                 + `      ${verdict.detail}\n`
                 + `      DO NOT RERUN this reviewer. After fixing every finding, edit ${live}.\n`
@@ -176,15 +176,15 @@ export class ReviewerVerdictGate {
                 + '      disagree, leave it red and flag the human BEFORE posting the PR; red remains blocking.';
         }
         return this.reviewJsonService.refusalError(
-            req, verdict, scan.reviewPath, this.archiveOrWarn(scan.reviewPath, req.id));
+            req, verdict, scan.summaryPath, this.archiveOrWarn(scan.summaryPath, req.id));
     }
 
     // The archive path, or '' when there was nothing to move or the move failed (see retireAndReport).
-    private archiveOrWarn(reviewPath: string, checklistId: string): string {
+    private archiveOrWarn(summaryPath: string, checklistId: string): string {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: a failed archive must never swallow the refusal it belongs to
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            return this.reviewJsonService.archiveChecklistResult(reviewPath, checklistId);
+            return this.reviewJsonService.archiveChecklistResult(summaryPath, checklistId);
         } catch (err: unknown) {
             const error = toError(err);
             process.stderr.write(

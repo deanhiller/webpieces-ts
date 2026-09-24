@@ -56,7 +56,7 @@ describe('CleanTmp.cleanTmp — 30-day whole-tree GC', () => {
     });
 
     it('keeps a file younger than 30 days', async (): Promise<void> => {
-        const fresh = writeAged('pr-review/liveFeature/review.json', 5);
+        const fresh = writeAged('pr-review/liveFeature/summary.json', 5);
         await run();
         expect(fs.existsSync(fresh)).toBe(true);
     });

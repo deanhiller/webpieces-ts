@@ -84,7 +84,7 @@ with the verdict JSON on stdin (a heredoc is simplest), or \`--file <path>\` nam
 it, writes the verdict file, and records that YOU wrote it. A verdict file written any other way —
 by you, or by the coordinating agent on your behalf — is rejected by the gate, so there is no other route.
 
-You NEVER edit code, config, docs, or any other file in the repo. You never write \`review.json\` or an
+You NEVER edit code, config, docs, or any other file in the repo. You never write \`summary.json\` or an
 \`override-<id>.json\`. If a finding needs a human's decision, say so in \`output\`; the coordinating
 agent is the one with the human.
 `;

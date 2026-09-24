@@ -19,7 +19,7 @@ export const VERDICT_YELLOW = 'yellow';
 export const VERDICT_RED = 'red';
 export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
 
-/** The durable instruction embedded in single-round review.json files for the fixing/coordinating AI. */
+/** The durable instruction embedded in single-round summary.json files for the fixing/coordinating AI. */
 export const SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS =
     'DO NOT RERUN this reviewer. If red, fix every finding and change each addressed red result to yellow; ' +
     'yellow is acceptable. If you genuinely disagree, leave it red and flag the human for a decision BEFORE ' +
@@ -135,10 +135,10 @@ export class ChecklistReviewContext {
     }
 }
 
-// The AI-authored review for a PR. The AI writes review.json itself between `wp-start-upsert-pr` (which
+// The AI-authored PR summary (title, risk, summary). The AI writes summary.json itself between `wp-start-upsert-pr` (which
 // prints the schema) and `wp-finish-upsert-pr` (which reads it); reviewer subagents write the per-checklist
 // review-<id>.json files. Data-only (per CLAUDE.md).
-export class ReviewJson {
+export class PrSummary {
     agent: string;
     model: string;
     title: string; // human PR title describing the change; used as the `gh pr` title (empty → caller falls back)
@@ -180,7 +180,7 @@ export class ReviewJson {
     }
 }
 
-// A checklist's resolved outcome, shared by review.json enforcement and the dashboard so both agree.
+// A checklist's resolved outcome, shared by summary.json enforcement and the dashboard so both agree.
 // PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
 export const CK_PASS = 'pass';               // review-<id>.json status:'green'
 export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns

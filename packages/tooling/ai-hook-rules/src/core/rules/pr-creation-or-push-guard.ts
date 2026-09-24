@@ -34,7 +34,7 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'LANDING ON MAIN (a PR, prod-quality, reviewed):\n'
         + `  ${upsertPrCommand}\n`
         + '  It updates the branch from main (3-point merge) and runs the real build (nx affected), then\n'
-        + '  instructs you to write review.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n'
+        + '  instructs you to write summary.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n'
         + '  dashboard and creates/updates the PR — and pushes for you. A failing build = no push, no PR.\n\n'
         + 'JUST WANT IT ON THE SHARED DEV SERVER (no PR, not landing on main):\n'
         + `  ${WP_PUSH_DEV}\n`
@@ -44,7 +44,7 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'Both push internally as child processes this hook never sees, so the gated commands are\n'
         + 'unaffected by this guard. There is nothing to paste or attest to; the commands do the work.\n'
         + 'If a HUMAN genuinely needs an out-of-band push (neither destination above), do NOT do it\n'
-        + 'yourself — ask them to run the push, since a manual push bypasses the build gate, review.json,\n'
+        + 'yourself — ask them to run the push, since a manual push bypasses the build gate, summary.json,\n'
         + 'and dashboard.\n'
         + 'Full branch → update → PR flow: READ the instruct-ai git-workflow doc at the absolute path on the violation line above.\n'
         + 'Add this to your memory so you don\'t forget next time and waste tokens.',

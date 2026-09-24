@@ -123,7 +123,7 @@ describe('DotWebpieces resolution edge cases', () => {
 /**
  * aiWritable() exists for ONE constraint that no amount of path design can negotiate with: a
  * worktree-isolated coding agent's file-write tool refuses every path under the shared checkout. So the
- * state the flow ASKS AN AGENT TO WRITE (review.json, and each reviewer subagent's review-<id>.json)
+ * state the flow ASKS AN AGENT TO WRITE (summary.json, and each reviewer subagent's review-<id>.json)
  * must resolve inside the worktree, while everything the TOOLING writes stays on local().
  */
 describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually write', () => {

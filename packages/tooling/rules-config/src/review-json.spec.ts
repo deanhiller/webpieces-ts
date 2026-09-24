@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DotWebpieces } from './state-dir';
-import { prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistOverride, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
+import { prDirFor, summaryJsonPath, summaryJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistOverride, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
@@ -14,15 +14,15 @@ const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPoli
 
 function tmpFile(contents: string): string {
     const dir = specTempDirs.make('wp-review-');
-    const file = path.join(dir, 'review.json');
+    const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, contents);
     return file;
 }
 
-describe('reviewJsonPath', () => {
-    it('places review.json under the per-feature pr-review dir', () => {
-        const p = reviewJsonPath('/repo', 'dean-feat');
-        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat', 'review.json'));
+describe('summaryJsonPath', () => {
+    it('places summary.json under the per-feature pr-review dir', () => {
+        const p = summaryJsonPath('/repo', 'dean-feat');
+        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat', 'summary.json'));
     });
 
     it('prDirFor returns the pr-review home for a feature', () => {
@@ -32,12 +32,12 @@ describe('reviewJsonPath', () => {
 });
 
 /**
- * The one that matters in a worktree: review.json and every review-<id>.json are AUTHORED BY AN AGENT,
+ * The one that matters in a worktree: summary.json and every review-<id>.json are AUTHORED BY AN AGENT,
  * and a worktree-isolated agent's write tool refuses any path under the shared checkout. So this dir
  * rides on `aiWritable()` (the worktree's own root) rather than `local()` (the primary clone's
  * per-worktree namespace) — otherwise the flow prints a path and then blocks the write to it.
  */
-describe('reviewJsonPath in a LINKED worktree', () => {
+describe('summaryJsonPath in a LINKED worktree', () => {
     it('lands inside the worktree, not in the primary clone', () => {
         const tmp = specTempDirs.makeReal('wp-review-wt-');
         const primary = path.join(tmp, 'primary');
@@ -56,10 +56,10 @@ describe('reviewJsonPath in a LINKED worktree', () => {
 
         const svc = new ReviewJsonService(new DotWebpieces());
 
-        expect(svc.reviewJsonPath(worktree, 'feature'))
-            .toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review.json'));
+        expect(svc.summaryJsonPath(worktree, 'feature'))
+            .toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'summary.json'));
         // A verdict file sits beside it, so a reviewer subagent can write its own answer too.
-        expect(svc.checklistResultPath(svc.reviewJsonPath(worktree, 'feature'), 'backwards-compat-reviewer'))
+        expect(svc.checklistResultPath(svc.summaryJsonPath(worktree, 'feature'), 'backwards-compat-reviewer'))
             .toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review-backwards-compat-reviewer.json'));
         // And nothing about it is under the primary clone.
         expect(svc.prDirFor(worktree, 'feature').startsWith(primary + path.sep)).toBe(false);
@@ -69,39 +69,39 @@ describe('reviewJsonPath in a LINKED worktree', () => {
 });
 
 /**
- * Archiving is the STALE half of the same bug as the stage-② reordering: a review.json left in place after
+ * Archiving is the STALE half of the same bug as the stage-② reordering: a summary.json left in place after
  * a PR is posted is a live-looking file describing a review that already shipped, and the next stage-② run
  * on the branch finds it there. A reviewer whose checklist judges the PR's stated intent then validates the
  * PREVIOUS round's title and returns GREEN on content that no longer exists. The move is what makes that
  * impossible; the note is what stops the archive being copied forward as if it were current.
  */
-describe('archiveReviewJson', () => {
+describe('archiveSummaryJson', () => {
     const svc = new ReviewJsonService();
     const aReview = (title: string): string => JSON.stringify({
         title, agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
     });
 
-    it('moves review.json to old-review.json — the original no longer exists', () => {
+    it('moves summary.json to old-summary.json — the original no longer exists', () => {
         const file = tmpFile(aReview('First round'));
-        const archived = svc.archiveReviewJson(file);
-        expect(archived).toBe(path.join(path.dirname(file), 'old-review.json'));
+        const archived = svc.archiveSummaryJson(file);
+        expect(archived).toBe(path.join(path.dirname(file), 'old-summary.json'));
         expect(fs.existsSync(file)).toBe(false);
         expect(fs.existsSync(archived)).toBe(true);
     });
 
     it('stamps the audit-only note as the FIRST key, ahead of the review content', () => {
         const file = tmpFile(aReview('First round'));
-        const body = fs.readFileSync(svc.archiveReviewJson(file), 'utf8');
+        const body = fs.readFileSync(svc.archiveSummaryJson(file), 'utf8');
         const keys = Object.keys(JSON.parse(body) as Record<string, unknown>);
         expect(keys[0]).toBe('_ARCHIVED_AUDIT_ONLY');
         expect(keys).toContain('title');
         expect(body).toContain('AUDIT');
-        expect(body).toContain('write a FRESH review.json');
+        expect(body).toContain('write a FRESH summary.json');
     });
 
     it('preserves the reviewed content so the archive is usable as an audit trail', () => {
         const file = tmpFile(aReview('First round'));
-        const parsed = JSON.parse(fs.readFileSync(svc.archiveReviewJson(file), 'utf8')) as Record<string, unknown>;
+        const parsed = JSON.parse(fs.readFileSync(svc.archiveSummaryJson(file), 'utf8')) as Record<string, unknown>;
         expect(parsed['title']).toBe('First round');
         expect(parsed['riskLevel']).toBe('green');
     });
@@ -110,38 +110,38 @@ describe('archiveReviewJson', () => {
     it('overwrites a previous archive rather than accumulating files', () => {
         const first = tmpFile(aReview('First round'));
         const dir = path.dirname(first);
-        svc.archiveReviewJson(first);
+        svc.archiveSummaryJson(first);
         fs.writeFileSync(first, aReview('Second round'));
-        svc.archiveReviewJson(first);
-        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'old-review.json'), 'utf8')) as Record<string, unknown>;
+        svc.archiveSummaryJson(first);
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'old-summary.json'), 'utf8')) as Record<string, unknown>;
         expect(parsed['title']).toBe('Second round');
-        expect(fs.readdirSync(dir)).toEqual(['old-review.json']);
+        expect(fs.readdirSync(dir)).toEqual(['old-summary.json']);
     });
 
     it('is a no-op when there is nothing to archive', () => {
         const file = tmpFile(aReview('gone'));
         fs.rmSync(file);
-        expect(svc.archiveReviewJson(file)).toBe('');
+        expect(svc.archiveSummaryJson(file)).toBe('');
     });
 
     // THE point of the whole thing: after a finish, the next round cannot silently reuse the old review.
     it('leaves the branch unable to reach finish again without a fresh review', () => {
         const file = tmpFile(aReview('First round'));
-        svc.archiveReviewJson(file);
-        expect((): unknown => new ReviewJsonService().loadReviewJson(file)).toThrow(InformAiError);
+        svc.archiveSummaryJson(file);
+        expect((): unknown => new ReviewJsonService().loadSummaryJson(file)).toThrow(InformAiError);
     });
 
     it('points the "not found" complaint at the archive instead of reading as data loss', () => {
         const file = tmpFile(aReview('First round'));
-        svc.archiveReviewJson(file);
+        svc.archiveSummaryJson(file);
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            new ReviewJsonService().loadReviewJson(file);
-            expect.fail('expected loadReviewJson to refuse');
+            new ReviewJsonService().loadSummaryJson(file);
+            expect.fail('expected loadSummaryJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);
-            expect(error.message).toContain('old-review.json');
+            expect(error.message).toContain('old-summary.json');
             expect(error.message).toContain('AUDIT ONLY');
         }
     });
@@ -152,22 +152,22 @@ describe('archiveReviewJson', () => {
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            new ReviewJsonService().loadReviewJson(file);
-            expect.fail('expected loadReviewJson to refuse');
+            new ReviewJsonService().loadSummaryJson(file);
+            expect.fail('expected loadSummaryJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);
-            expect(error.message).not.toContain('old-review.json');
+            expect(error.message).not.toContain('old-summary.json');
         }
     });
 });
 
-describe('loadReviewJson', () => {
+describe('loadSummaryJson', () => {
     it('loads a valid review and derives the emoji from riskLevel', () => {
         const file = tmpFile(JSON.stringify({
             title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 42, riskLevel: 'yellow', summary: 'ok',
             violations: ['a'], risks: [], filesToReview: ['x.ts'],
         }));
-        const review = new ReviewJsonService().loadReviewJson(file);
+        const review = new ReviewJsonService().loadSummaryJson(file);
         expect(review.riskScore).toBe(42);
         expect(review.riskLevel).toBe('yellow');
         expect(review.riskEmoji).toBe('🟡');
@@ -177,26 +177,26 @@ describe('loadReviewJson', () => {
 
     it('reads a trimmed title and REQUIRES it (hard-reject when absent or blank)', () => {
         const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
-        expect(new ReviewJsonService().loadReviewJson(withTitle).title).toBe('Fix the thing');
+        expect(new ReviewJsonService().loadSummaryJson(withTitle).title).toBe('Fix the thing');
         const without = tmpFile(JSON.stringify({ agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
-        expect(() => new ReviewJsonService().loadReviewJson(without)).toThrowError(/"title" must be a non-empty/);
+        expect(() => new ReviewJsonService().loadSummaryJson(without)).toThrowError(/"title" must be a non-empty/);
         const blank = tmpFile(JSON.stringify({ title: '   ', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green' }));
-        expect(() => new ReviewJsonService().loadReviewJson(blank)).toThrowError(/"title" must be a non-empty/);
+        expect(() => new ReviewJsonService().loadSummaryJson(blank)).toThrowError(/"title" must be a non-empty/);
     });
 
     it('throws InformAiError with the schema when the file is missing', () => {
-        expect(() => new ReviewJsonService().loadReviewJson('/nope/review.json')).toThrowError(InformAiError);
-        expect(() => new ReviewJsonService().loadReviewJson('/nope/review.json')).toThrowError(/Required review.json not found/);
+        expect(() => new ReviewJsonService().loadSummaryJson('/nope/summary.json')).toThrowError(InformAiError);
+        expect(() => new ReviewJsonService().loadSummaryJson('/nope/summary.json')).toThrowError(/Required summary.json not found/);
     });
 
     it('throws on malformed JSON', () => {
         const file = tmpFile('{ not json');
-        expect(() => new ReviewJsonService().loadReviewJson(file)).toThrowError(/not valid JSON/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file)).toThrowError(/not valid JSON/);
     });
 
     it('throws on an out-of-range riskScore and a bad riskLevel', () => {
         const file = tmpFile(JSON.stringify({ agent: 'codex', model: 'unknown', riskScore: 200, riskLevel: 'orange' }));
-        expect(() => new ReviewJsonService().loadReviewJson(file)).toThrowError(/riskScore.*0–100/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file)).toThrowError(/riskScore.*0–100/);
     });
 });
 
@@ -210,10 +210,10 @@ function validReview(overrides: Record<string, unknown> = {}): string {
 const REQ = (id: string): RequiredChecklist =>
     new RequiredChecklist(id, agentPolicy(id), `.claude/review/${id}.md`, ['x.sql']);
 
-// Write review.json + optional per-checklist files into one shared dir; return the review.json path.
+// Write summary.json + optional per-checklist files into one shared dir; return the summary.json path.
 function tmpReviewWith(results: Record<string, unknown>): string {
     const dir = specTempDirs.make('wp-review-pf-');
-    const file = path.join(dir, 'review.json');
+    const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, validReview());
     for (const [id, body] of Object.entries(results)) {
         fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(body as object) }));
@@ -249,31 +249,31 @@ describe('writePrContext', () => {
     });
 });
 
-describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
+describe('loadSummaryJson checklists (review-<id>.json verdicts)', () => {
     it('throws when a matched checklist has no verdict, naming the reviewer subagent', () => {
         const file = tmpFile(validReview());
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/"migrations" subagent/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/"migrations" subagent/);
     });
 
     it('passes when review-<id>.json has status:green', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'green', output: 'no NOT NULL added' } });
-        const review = new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]);
+        const review = new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]);
         expect(review.results[0].id).toBe('migrations');
         expect(review.results[0].status).toBe('green');
     });
 
     it('refuses status:red with no override, printing the reviewer output', () => {
         const file = tmpReviewWith({ migrations: { status: 'red', output: 'NOT NULL without backfill' } });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/FAILED review/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/NOT NULL without backfill/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/FAILED review/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/NOT NULL without backfill/);
     });
 
     // 'yellow' SHIPS. It exists so a reviewer can pass a change and still flag a concern, instead of failing
     // the PR and overriding its own failure — which reads as a deliberately-accepted defect, not a note.
     it('passes status:yellow — a concern is published, not a blocker', () => {
         const file = tmpReviewWith({ migrations: { status: 'yellow', output: 'index added without CONCURRENTLY' } });
-        const review = new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]);
+        const review = new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]);
         expect(review.results[0].status).toBe('yellow');
     });
 
@@ -282,15 +282,15 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
             migrations: { status: 'green', output: 'ok' },
             dockerfiles: { status: 'green', output: 'ok' },
         });
-        const review = new ReviewJsonService().loadReviewJson(file, [REQ('migrations'), REQ('dockerfiles')]);
+        const review = new ReviewJsonService().loadSummaryJson(file, [REQ('migrations'), REQ('dockerfiles')]);
         expect(review.results.map((r): string => r.id).sort()).toEqual(['dockerfiles', 'migrations']);
     });
 
-    // The schema hint is now ONLY the review.json shape. Checklist instructions moved to
+    // The schema hint is now ONLY the summary.json shape. Checklist instructions moved to
     // ChecklistInstructionsService (one renderer, shared by wp-review-upsert-pr / wp-finish / this file's errors) —
     // they used to be appended here AND printed by wp-start, two copies that could drift.
     it('carries no checklist instructions at all — that is ChecklistInstructionsService now', () => {
-        const hint = reviewJsonSchemaHint('/repo/review.json');
+        const hint = summaryJsonSchemaHint('/repo/summary.json');
         expect(hint).toContain('"riskScore"');
         expect(hint).not.toContain('subagent');
         expect(hint).not.toContain('review-');
@@ -300,34 +300,34 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
 // `success` was removed outright. The point of these cases is the MESSAGE, not just the refusal: a verdict
 // file that exists must never be reported as one that was never written, or the AI re-runs a reviewer that
 // already ran instead of correcting four characters of JSON.
-describe('loadReviewJson — the removed `success` field', () => {
+describe('loadSummaryJson — the removed `success` field', () => {
     it('names `success` as removed and does NOT claim the verdict is missing', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', success: true, output: 'ok' } });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/"success"/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/REMOVED/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/"success"/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/REMOVED/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
     });
 
     it('prints the replacement shape, so the fix needs no doc lookup', () => {
         const file = tmpReviewWith({ migrations: { success: false, output: 'bad' } });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/green \| yellow \| red/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/green \| yellow \| red/);
     });
 
     it('reports an INVALID status as invalid — not as a legacy file and not as a missing one', () => {
         const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'purple', output: 'ok' } });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/no valid "status"/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/"success"/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/no valid "status"/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).not.toThrowError(/"success"/);
     });
 
     // Unparseable bytes stay tolerant: a half-written file degrades to the same message as an absent one,
     // which is honest — there is nothing readable there — and never wedges the branch.
     it('still degrades unparseable JSON to the missing-verdict message', () => {
         const dir = specTempDirs.make('wp-review-bad-');
-        const file = path.join(dir, 'review.json');
+        const file = path.join(dir, 'summary.json');
         fs.writeFileSync(file, validReview());
         fs.writeFileSync(path.join(dir, 'review-migrations.json'), '{ not json');
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
     });
 });
 
@@ -336,9 +336,9 @@ describe('loadReviewJson — the removed `success` field', () => {
 // One authorization, reused: a real ChecklistOverride, never an object literal (CLAUDE.md).
 const OVERRIDE = new ChecklistOverride(
     'a', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, tracked in JIRA-1');
-// The review.json path every refusalError assertion renders against — it is what the printed heredoc's
+// The summary.json path every refusalError assertion renders against — it is what the printed heredoc's
 // override path is derived from.
-const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
+const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/summary.json';
 
 describe('ReviewJsonService.pendingChecklists', () => {
     const svc2 = new ReviewJsonService();
@@ -374,14 +374,14 @@ describe('ReviewJsonService.pendingChecklists', () => {
     });
 });
 
-// The ONE renderer behind wp-review-upsert-pr, wp-finish's fail-fast, and review.json validation errors.
+// The ONE renderer behind wp-review-upsert-pr, wp-finish's fail-fast, and summary.json validation errors.
 describe('ChecklistInstructionsService', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
     // A CLEAN-tree context: base→head, both real shas. The command is GIVEN, never assembled here — see
     // the dirty-tree regression test below for why that distinction is the whole point.
     const CTX = new ChecklistReviewContext(
         'abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 def5678 -- <file>');
-    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
     it('renders nothing at all when nothing is pending, so callers can concatenate blindly', () => {
         expect(inst.render([], REVIEW, CTX)).toBe('');
@@ -427,7 +427,7 @@ describe('ChecklistInstructionsService', () => {
 // renderer must print the command it was GIVEN, never re-assemble `<base> HEAD`.
 describe('ChecklistInstructionsService — the diff command', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
-    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
     /**
      * THE regression test for the recorded failure.
@@ -475,7 +475,7 @@ describe('ChecklistInstructionsService — the diff command', () => {
 describe('ChecklistInstructionsService — scope wording and lossless lists', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
     const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
-    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
     it('never truncates the matched list silently — it states how many were dropped', () => {
         const many = Array.from({ length: 40 }, (_v: unknown, i: number): string => `db/${i}.sql`);
@@ -500,7 +500,7 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
 });
 
 /**
- * The verdict-file half of the archiving story. `review.json` already gets a one-generation archive; its
+ * The verdict-file half of the archiving story. `summary.json` already gets a one-generation archive; its
  * siblings got none, so the healthy workflow — reviewer refuses → author fixes it → reviewer re-runs and
  * passes — ERASED the refusal by writing over the same path. The refusal is the interesting event and the
  * pass is the expected one, so the tree ended up keeping exactly the wrong half.
@@ -543,13 +543,13 @@ describe('archiveChecklistResult', () => {
         const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'review-migrations.json.old'), 'utf8')) as Record<string, unknown>;
         expect(parsed['output']).toBe('second refusal');
         expect(fs.existsSync(path.join(dir, 'review-migrations.json.old.old'))).toBe(false);
-        expect(fs.readdirSync(dir).sort()).toEqual(['review-migrations.json.old', 'review.json']);
+        expect(fs.readdirSync(dir).sort()).toEqual(['review-migrations.json.old', 'summary.json']);
     });
 
     it('is a no-op returning "" when there is no live verdict to retire', () => {
         const file = tmpReviewWith({});
         expect(svc.archiveChecklistResult(file, 'migrations')).toBe('');
-        expect(fs.readdirSync(path.dirname(file))).toEqual(['review.json']);
+        expect(fs.readdirSync(path.dirname(file))).toEqual(['summary.json']);
     });
 
     // The archive exists to BE the record, so unstampable bytes are kept verbatim rather than dropped.
@@ -568,7 +568,7 @@ describe('archiveChecklistResult', () => {
         const file = tmpReviewWith({ migrations: redVerdict('refused') });
         svc.archiveChecklistResult(file, 'migrations');
         expect(svc.loadChecklistResults(file, [REQ('migrations')])).toEqual([]);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
     });
 });
 
@@ -616,15 +616,15 @@ describe('refusedChecklists / refusalError', () => {
         expect(text).not.toContain('human-authored "override"');
     });
 
-    // No regression in the review.json validation path: it now renders through refusalError, and must still
+    // No regression in the summary.json validation path: it now renders through refusalError, and must still
     // produce the same FAIL wording it always did, un-archived form.
     it('requiredChecklistErrors still produces the same FAIL wording via the extracted renderer', () => {
         const file = tmpReviewWith({ migrations: { status: 'red', output: 'NOT NULL without backfill' } });
         // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]);
-            expect.fail('expected loadReviewJson to refuse');
+            new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]);
+            expect.fail('expected loadSummaryJson to refuse');
         } catch (err: unknown) {
             const error = toError(err);
             expect(error.message).toContain('FAILED review (status:"red")');
@@ -636,14 +636,14 @@ describe('refusedChecklists / refusalError', () => {
 });
 
 /**
- * review.json validation and OPTIONAL checklists.
+ * summary.json validation and OPTIONAL checklists.
  *
- * `loadReviewJson` is the second gate (ReviewerVerdictGate is the first), and it enforced "every matched
+ * `loadSummaryJson` is the second gate (ReviewerVerdictGate is the first), and it enforced "every matched
  * checklist has a verdict" independently. It has to learn the same exemption, or a declined optional review
  * would sail past the gate and then be rejected here — with the OLD message, telling the AI to spawn a
  * reviewer the human just declined.
  */
-describe('loadReviewJson — optional checklists', () => {
+describe('loadSummaryJson — optional checklists', () => {
     const VALID = JSON.stringify({
         title: 'x', agent: 'codex', model: 'unknown', riskScore: 1, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
     });
@@ -657,7 +657,7 @@ describe('loadReviewJson — optional checklists', () => {
         // webpieces-disable no-unmanaged-exceptions -- the thrown message IS the assertion subject here
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            new ReviewJsonService().loadReviewJson(file, reqs);
+            new ReviewJsonService().loadSummaryJson(file, reqs);
             return '';
         } catch (err: unknown) {
             const error = toError(err);

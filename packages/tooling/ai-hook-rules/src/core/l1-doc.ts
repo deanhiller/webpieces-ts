@@ -181,7 +181,7 @@ function renderFilterSection(): string[] {
         '<!-- webpieces-disable no-state-paths-in-templates -- this paragraph\'s subject IS the two spellings of the state dir; a computed path would print one of them and lose the contrast -->',
         'The skip is asked about the path relative to the tree that **OWNS** the file, not to the governed',
         'root, and the two differ in exactly one place: a linked worktree. `<primary>/.webpieces/…` was',
-        'exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces/pr-review/…/review.json` — the same',
+        'exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces/pr-review/…/summary.json` — the same',
         'kind of file, in a worktree\'s own state dir — was not, because governed-root-relative it begins',
         '`.claude`. That is the file `wp-review-upsert-pr` REQUIRES before `wp-finish-upsert-pr` will open a',
         'PR, so the guard could forbid a file the gate demands (issue #851). `GovernedPath` carries both',

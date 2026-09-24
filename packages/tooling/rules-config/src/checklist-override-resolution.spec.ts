@@ -9,7 +9,7 @@ const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPoli
 
 /**
  * `override-<id>.json` END TO END, through the two surfaces that actually decide anything: what
- * `loadReviewJson` resolves a red verdict to, and what the refusal PRINTS when there is no authorization.
+ * `loadSummaryJson` resolves a red verdict to, and what the refusal PRINTS when there is no authorization.
  *
  * Separate from review-json.spec.ts because that file is at the `max-file-lines` limit and because this is
  * its own subject — the split between "what the reviewer found" and "what the human decided", which is the
@@ -25,25 +25,25 @@ const VALID_REVIEW = JSON.stringify({
     violations: [], risks: [], filesToReview: [],
 });
 
-// review.json + one verdict + (optionally) the human's authorization, in one dir. The authorization is a
+// summary.json + one verdict + (optionally) the human's authorization, in one dir. The authorization is a
 // SEPARATE file because it is a different act by a different writer — see ChecklistOverride.
 function tmpDirWith(id: string, verdict: unknown, override: unknown = null): string {
     const dir = specTempDirs.make('wp-override-res-');
-    const file = path.join(dir, 'review.json');
+    const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, VALID_REVIEW);
     fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(verdict as object) }));
     if (override !== null) fs.writeFileSync(path.join(dir, `override-${id}.json`), JSON.stringify(override));
     return file;
 }
 
-describe('loadReviewJson resolves a red verdict against override-<id>.json', () => {
+describe('loadSummaryJson resolves a red verdict against override-<id>.json', () => {
     it('SHIPS a red verdict the human authorized, carrying the reason and its provenance', () => {
         const file = tmpDirWith(
             'migrations',
             { status: 'red', output: 'locks writes' },
             new ChecklistOverride('migrations', 'human, in-session', '2026-09-03T18:22:11Z', 'behind a flag; ONE-2210'),
         );
-        const review = new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]);
+        const review = new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]);
         const override = review.results[0].override;
         expect(override?.reason).toBe('behind a flag; ONE-2210');
         expect(override?.authorizedBy).toBe('human, in-session');
@@ -52,7 +52,7 @@ describe('loadReviewJson resolves a red verdict against override-<id>.json', () 
 
     it('still REFUSES a red verdict with no authorization beside it', () => {
         const file = tmpDirWith('migrations', { status: 'red', output: 'NOT NULL without backfill' });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]))
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]))
             .toThrowError(/NOT NULL without backfill/);
     });
 
@@ -64,7 +64,7 @@ describe('loadReviewJson resolves a red verdict against override-<id>.json', () 
             { status: 'red', output: 'locks writes' },
             new ChecklistOverride('migrations', 'human, in-session', '2026-09-03T18:22:11Z', ''),
         );
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]))
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]))
             .toThrowError(/is missing "reason"/);
     });
 
@@ -75,9 +75,9 @@ describe('loadReviewJson resolves a red verdict against override-<id>.json', () 
      */
     it('rejects a verdict still carrying the MOVED "override" field, even when it is empty', () => {
         const file = tmpDirWith('migrations', { status: 'green', output: 'fine', override: '' });
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]))
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]))
             .toThrowError(/MOVED "override" field/);
-        expect(() => new ReviewJsonService().loadReviewJson(file, [REQ('migrations')]))
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')]))
             .toThrowError(/override-migrations\.json/);
     });
 });
@@ -89,7 +89,7 @@ describe('loadReviewJson resolves a red verdict against override-<id>.json', () 
  */
 describe('refusalError prints the override route', () => {
     const svc = new ReviewJsonService();
-    const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/review.json';
+    const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/summary.json';
     const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), '', ['x.sql'], ['**/*.sql']);
     const refusalFor = (id: string): string => {
         const results = [new ChecklistResult('unknown', 'unknown', id, 'red', 'refused', null)];

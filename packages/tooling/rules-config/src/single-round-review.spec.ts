@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     HOME_KEY_SINGLE_ROUND_REVIEW, HomeConfigService, ReviewJsonService,
-    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, reviewJsonSchemaHint,
+    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, summaryJsonSchemaHint,
 } from './index';
 import { specTempDirs } from './spec-temp-dirs';
 
@@ -26,7 +26,7 @@ function homeWith(value: unknown): string {
 function reviewWith(instructions?: string): string {
     const dir = specTempDirs.make('wp-single-round-review-');
     dirs.push(dir);
-    const file = path.join(dir, 'review.json');
+    const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, JSON.stringify({
         title: 'Use one review round', agent: 'codex', model: 'unknown', riskScore: 10,
         riskLevel: 'green', summary: 'Focused single-round review coverage.', violations: [], risks: [],
@@ -50,10 +50,10 @@ describe('singleRoundReview home config', () => {
     });
 });
 
-describe('single-round review.json instructions', () => {
+describe('single-round summary.json instructions', () => {
     it('omits the field by default and includes the full instruction in single-round mode', () => {
-        expect(reviewJsonSchemaHint('/repo/review.json')).not.toContain('main_agent_instructions');
-        const hint = reviewJsonSchemaHint('/repo/review.json', SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS);
+        expect(summaryJsonSchemaHint('/repo/summary.json')).not.toContain('main_agent_instructions');
+        const hint = summaryJsonSchemaHint('/repo/summary.json', SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS);
         expect(hint).toContain('"main_agent_instructions"');
         expect(hint).toContain('DO NOT RERUN this reviewer');
         expect(hint).toContain('change each addressed red result to yellow');
@@ -61,9 +61,9 @@ describe('single-round review.json instructions', () => {
 
     it('requires the generated instruction in single-round mode and preserves it when loaded', () => {
         const service = new ReviewJsonService();
-        expect(() => service.loadReviewJson(reviewWith(), [], SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS))
+        expect(() => service.loadSummaryJson(reviewWith(), [], SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS))
             .toThrowError(/main_agent_instructions/);
-        expect(service.loadReviewJson(
+        expect(service.loadSummaryJson(
             reviewWith(SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS), [], SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS)
             .mainAgentInstructions).toBe(SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS);
     });

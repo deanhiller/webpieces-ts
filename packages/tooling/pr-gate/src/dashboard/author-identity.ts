@@ -1,7 +1,7 @@
 import { AI_TYPES, AI_TYPE_UNKNOWN, AiType } from '@webpieces/ai-hook-rules';
 import { injectable, bindingScopeValues } from 'inversify';
 
-/** The coding harness observed by the gate, plus the model the author reported in review.json. */
+/** The coding harness observed by the gate, plus the model the author reported in summary.json. */
 export class AuthorIdentity {
     harness: AiType | typeof AI_TYPE_UNKNOWN;
     model: string;
@@ -15,7 +15,7 @@ export class AuthorIdentity {
 /**
  * Resolves the authoring harness from session identifiers supplied by the harness itself.
  *
- * This deliberately does not trust review.json's `agent` field: that file is AI-authored, while the
+ * This deliberately does not trust summary.json's `agent` field: that file is AI-authored, while the
  * session variables are supplied by Claude Code / Codex before the model runs. Both-or-neither is
  * `unknown`; silently picking one in an ambiguous process would turn telemetry into a false claim.
  */

@@ -5,7 +5,7 @@ import { claudeConfigDir } from './claude-config-dir';
 import { toError } from './to-error';
 import { ReviewerEvidence } from './subagent-provenance';
 
-// The audit record `wp-finish-upsert-pr` writes beside review.json, and where a consumed one is retired to.
+// The audit record `wp-finish-upsert-pr` writes beside summary.json, and where a consumed one is retired to.
 const PROVENANCE_FILE = 'provenance.json';
 const OLD_PROVENANCE_FILE = 'old-provenance.json';
 
@@ -135,7 +135,7 @@ export class ProvenanceWriteRequest {
 /**
  * The written record. Field names are the JSON keys, in this order — `_WHAT_THIS_IS` is declared FIRST so
  * anything that opens the file reads what it is before it reads anything it might act on, exactly as
- * ReviewJsonService.archiveReviewJson stamps its note first.
+ * ReviewJsonService.archiveSummaryJson stamps its note first.
  */
 export class ReviewProvenance {
     // webpieces-disable naming-convention -- the leading underscore marks a note-to-the-reader key, not data
@@ -179,7 +179,7 @@ export class ReviewProvenance {
  * The subagent half is already resolved by {@link SubagentProvenanceService}; this carries it to disk and
  * adds the session-level facts (which session, how long the links live).
  *
- * Deliberately a SEPARATE file from review.json / review-<id>.json: those are AI-authored and stay
+ * Deliberately a SEPARATE file from summary.json / review-<id>.json: those are AI-authored and stay
  * byte-untouched, so nothing here can be confused for something a reviewer claimed about itself.
  *
  * Best-effort throughout — an unreadable config tree degrades the record to empty links, never fails a PR.
@@ -190,13 +190,13 @@ export class ReviewProvenance {
  */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewProvenanceService {
-    // Where the audit record for a branch lives, beside review.json.
+    // Where the audit record for a branch lives, beside summary.json.
     provenancePath(prDir: string): string {
         return path.join(prDir, PROVENANCE_FILE);
     }
 
-    // Where a consumed record is retired to — the mirror of ReviewJsonService.oldReviewJsonPath, so an
-    // archived old-review.json keeps the transcript links belonging to the round that produced it.
+    // Where a consumed record is retired to — the mirror of ReviewJsonService.oldSummaryJsonPath, so an
+    // archived old-summary.json keeps the transcript links belonging to the round that produced it.
     oldProvenancePath(prDir: string): string {
         return path.join(prDir, OLD_PROVENANCE_FILE);
     }
@@ -291,7 +291,7 @@ export class ReviewProvenanceService {
     }
 
     // Retire the record for the round that just shipped: copy it to old-provenance.json beside the
-    // old-review.json it belongs to. A COPY, not a move — unlike review.json this file is not an input to
+    // old-summary.json it belongs to. A COPY, not a move — unlike summary.json this file is not an input to
     // anything, so leaving it in place cannot mislead a later reviewer, and the next finish overwrites it.
     archive(prDir: string): string {
         const source = this.provenancePath(prDir);

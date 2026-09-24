@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
+import { GateDefinition, PrSummary } from '@webpieces/rules-config';
 import {
     Dashboard,
     DashboardInput,
@@ -20,8 +20,8 @@ const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables
 const renderDetailComment = (i: DashboardInput): string => dash.renderDetailComment(i);
 const renderPrBody = (i: DashboardInput, url: string): string => dash.renderPrBody(i, url);
 
-function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
-    const base = new ReviewJson('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
+function review(overrides: Partial<PrSummary> = {}): PrSummary {
+    const base = new PrSummary('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
     return Object.assign(base, overrides);
 }
 
@@ -40,7 +40,7 @@ const renderChecklistComment = (
 // string because DashboardInput deliberately requires it — the no-build-command case is a real state a
 // test has to be able to ASK for, not one it falls into by leaving an argument off.
 function baseInput(
-    reviewOverrides: Partial<ReviewJson> = {},
+    reviewOverrides: Partial<PrSummary> = {},
     buildCommand = 'pnpm nx affected --target=ci',
     // 0 = the kill switch is off and reviewers ran normally, which is what every pre-existing test here
     // asserts about. A test that cares about `experimental.turnOffAllReviewers` passes a real count.
