@@ -21,7 +21,7 @@ pnpm wp-review-upsert-pr       # ② validates that merge, runs the BUILD GATE, 
                                #   and prints the reviewer subagents to spawn
 # → spawn each reviewer it names (each submits its own verdict: pnpm wp-write-review --checklist <id>)
 # → write summary.json at the exact path it prints
-#   (.webpieces/pr-review/<feature>/summary.json — its `title` becomes the PR title)
+#   (its `title` becomes the PR title)
 pnpm wp-finish-upsert-pr       # ③ creates/updates the PR (and pushes — the ONE push)
 ```
 

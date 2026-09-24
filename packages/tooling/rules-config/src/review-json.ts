@@ -57,9 +57,6 @@ const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡',
 // The key sorts first in the written JSON because it is written first — an AI that opens the file to see
 // whether it can reuse the summary reads what the file IS before it reads a title it might be tempted to keep.
 const OLD_SUMMARY_FILE = 'old-summary.json';
-// The author's file's name before #1033. Named ONLY so a stale copy can point the agent at summary.json —
-// it is never read (hard cut, no fallback; see renamedFileHint).
-const RETIRED_AUTHOR_FILE = 'review.json';
 const ARCHIVE_NOTE_KEY = '_ARCHIVED_AUDIT_ONLY';
 const ARCHIVE_NOTE =
     'ARCHIVE — this is the PR summary from the PREVIOUS wp-finish-upsert-pr run on this branch, kept for audit ' +
@@ -245,17 +242,10 @@ export class ReviewJsonService {
             `That file is for AUDIT ONLY — it describes code this branch has since moved past. Write a fresh one:`;
     }
 
-    /**
-     * The extra line the "no summary.json" complaint carries when the author wrote the file under its OLD
-     * name. Until #1033 the author's file was review.json: an agent writing a file of that name beside the
-     * reviewers' review-<id>.json verdicts, told to "write your PR review", reads to Claude's auto-mode
-     * safety check as an agent approving its own work, and was refused as Self-Approval.
-     *
-     * HARD CUT, per the no-backwards-compat rule: the stale file is NEVER read. This only names the
-     * destination, so the agent writes the same JSON at the new path instead of hunting for a bug.
-     */
+    // Names summary.json when the author wrote its OLD name (review.json until #1033 — refused by Claude
+    // auto-mode as Self-Approval beside the review-<id>.json verdicts). HARD CUT: the stale file is never read.
     private renamedFileHint(filePath: string): string {
-        const stale = path.join(path.dirname(filePath), RETIRED_AUTHOR_FILE);
+        const stale = path.join(path.dirname(filePath), 'review.json');
         if (!fs.existsSync(stale)) return '';
         return `\n${stale} is IGNORED — the author's file was renamed to summary.json. ` +
             `Write the same JSON to ${filePath} instead.`;
