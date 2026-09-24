@@ -42,5 +42,6 @@ export { EnumText } from './api-lib-enum-text';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';
 export { default as validateCode } from './validate-code';
+export { CodeRulesRunRequest, CodeRulesRunRequestParser } from './code-rules-run-request';
 
 export { ReactNativeCompatibility } from './react-native-compatibility';

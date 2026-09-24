@@ -11,7 +11,8 @@
  * flags violations on changed lines, so a legacy Angular app is never retroactively flooded — the
  * rule bites when a file is next edited.
  *
- * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines) | NEW_AND_MODIFIED_FILES (all in changed files).
+ * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines) | NEW_AND_MODIFIED_FILES (all in changed files)
+ *        | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole-scope, #1027 — widened centrally by DiffScope).
  *
  * ESCAPE HATCH (a genuinely dynamic runtime value):
  *   .ts:   // webpieces-disable no-custom-css -- <reason>

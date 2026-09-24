@@ -9,16 +9,21 @@ import { defaultRules } from './default-rules';
 // Scoped modes (narrowest → broadest) that enforce ONLY on what changed, so a rule can be
 // adopted gradually instead of all-at-once. When a rule offers one, recommend the first it
 // supports so a fresh config opts into a low-friction rollout rather than reflexively OFF.
+//
+// The project-wide modes come LAST. Since #1027 every diff-scoped rule also offers MODIFIED_PROJECTS
+// (and RUN_EVERY_TIME) as a whole-scope view, so listing it first would seed every such rule at the
+// project-wide scope instead of the diff-scoped one it arrived at before. A PROJECT_MODES rule offers
+// nothing narrower, so it still lands on MODIFIED_PROJECTS.
 const GRADUAL_MODE_PREFERENCE = [
-    'MODIFIED_PROJECTS',
-    // Same granularity as MODIFIED_PROJECTS, from the other direction: the projects nx's diff makes
-    // affected. Listed after it so a rule offering both keeps its existing recommendation (#1017).
-    'AFFECTED_PROJECT',
     'NEW_AND_MODIFIED_CODE',
     'NEW_AND_MODIFIED_METHODS',
     'MODIFIED_CLASS',
     'NEW_METHODS',
     'NEW_AND_MODIFIED_FILES',
+    'MODIFIED_PROJECTS',
+    // Same granularity as MODIFIED_PROJECTS, from the other direction: the projects nx's diff makes
+    // affected. Listed after it so a rule offering both keeps its existing recommendation (#1017).
+    'AFFECTED_PROJECT',
 ];
 
 // The ONE place that decides what mode a rule should arrive as. Every consumer of that decision —

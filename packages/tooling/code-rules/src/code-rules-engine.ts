@@ -1,9 +1,12 @@
-import { BaseRuleConfig } from '@webpieces/rules-config';
+import { BaseRuleConfig, DiffScope, FileScope } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult, RuleRun } from './code-validator';
 import { RuleReporter } from './rule-reporter';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
+import { CodeRulesRunRequest } from './code-rules-run-request';
+import { DebugRunReport } from './debug-run-report';
+import { RuleScopes } from './rule-scope-plan';
 import { MatchRulesChecker } from './validate-match-rules';
 import { MaxMethodLinesValidator } from './validate-modified-methods';
 import { MaxFileLinesValidator } from './validate-modified-files';
@@ -45,6 +48,10 @@ export class CodeRulesEngine {
         private readonly reporter: RuleReporter,
         private readonly matchRules: MatchRulesHolder,
         private readonly matchChecker: MatchRulesChecker,
+        private readonly request: CodeRulesRunRequest,
+        private readonly scopes: RuleScopes,
+        private readonly debugReport: DebugRunReport,
+        private readonly diffScope: DiffScope,
         private readonly maxMethodLines: MaxMethodLinesValidator,
         private readonly maxFileLines: MaxFileLinesValidator,
         private readonly requireReturnType: RequireReturnTypeValidator,
@@ -111,13 +118,24 @@ export class CodeRulesEngine {
     private activeRuns(root: string): RuleRun[] {
         const runs: RuleRun[] = [];
         for (const v of this.builtIns()) {
-            if (v.shouldRun()) runs.push(new RuleRun(v.name, () => v.run(root)));
+            if (this.selected(v.configKey) && v.shouldRun())
+                runs.push(new RuleRun(v.name, () => this.scoped(this.scopes.of(v.configKey), () => v.run(root))));
         }
         for (const mr of this.matchRules.rules) {
-            if (this.matchChecker.shouldRun(mr))
-                runs.push(new RuleRun(mr.name, () => this.matchChecker.runForConfig(mr, root)));
+            if (this.selected(mr.name) && this.matchChecker.shouldRun(mr))
+                runs.push(new RuleRun(mr.name, () => this.scoped(this.scopes.of(mr.name), () => this.matchChecker.runForConfig(mr, root))));
         }
         return runs;
+    }
+
+    /** The gate runs every rule; a debug run only the one it names. */
+    private selected(key: string): boolean {
+        return this.request.rule === null || this.request.rule === key;
+    }
+
+    /** Run one rule inside its planned {@link FileScope} (whole-scope modes, `--projects`). */
+    private scoped(scope: FileScope, work: () => Promise<ExecutorResult>): Promise<ExecutorResult> {
+        return this.diffScope.within(scope, work);
     }
 
     /**
@@ -127,6 +145,8 @@ export class CodeRulesEngine {
      */
     async run(): Promise<ExecutorResult> {
         const runs = this.activeRuns(this.workspace.path);
+        const target = this.scopes.debugTarget;
+        if (target !== null) return this.debugReport.run(this.workspace.path, runs, target);
         if (runs.length === 0) {
             console.log('\n⏭️  Skipping all code validations (all modes: OFF)\n');
             return { success: true };

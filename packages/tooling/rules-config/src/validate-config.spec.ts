@@ -4,6 +4,7 @@ import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacemen
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
 import { specTempDirs } from './spec-temp-dirs';
+import { FILE_LIMIT_MODES, MODIFIED_CODE_MODES, PROJECT_MODES } from './rule-configs';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.
 function validMatchRule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -587,7 +588,16 @@ describe('validatePrGateSection rejects gateSaltWhy', () => {
 describe('recommendedSeedMode', () => {
     it('prefers the narrowest gradual mode a rule supports', () => {
         expect(recommendedSeedModeFor(['OFF', 'ON', 'NEW_AND_MODIFIED_FILES', 'NEW_AND_MODIFIED_CODE'])).toEqual('NEW_AND_MODIFIED_CODE');
-        expect(recommendedSeedModeFor(['OFF', 'ON', 'MODIFIED_CLASS', 'MODIFIED_PROJECTS'])).toEqual('MODIFIED_PROJECTS');
+        expect(recommendedSeedModeFor(['OFF', 'ON', 'MODIFIED_CLASS', 'MODIFIED_PROJECTS'])).toEqual('MODIFIED_CLASS');
+    });
+
+    // #1027 gave every diff-scoped rule MODIFIED_PROJECTS / RUN_EVERY_TIME as a whole-scope VIEW. That
+    // must not change what a fresh config is seeded with: the diff-scoped mode stays the recommendation,
+    // and only a rule with nothing narrower (PROJECT_MODES) lands on MODIFIED_PROJECTS.
+    it('seeds a diff-scoped rule diff-scoped, even though it now also offers the whole-scope modes', () => {
+        expect(recommendedSeedModeFor(MODIFIED_CODE_MODES)).toEqual('NEW_AND_MODIFIED_CODE');
+        expect(recommendedSeedModeFor(FILE_LIMIT_MODES)).toEqual('NEW_AND_MODIFIED_FILES');
+        expect(recommendedSeedModeFor(PROJECT_MODES)).toEqual('MODIFIED_PROJECTS');
     });
 
     it('falls back ON -> RUN_EVERY_TIME -> OFF when no gradual mode is offered', () => {

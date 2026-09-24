@@ -49,6 +49,30 @@
                     "level": 1
                 },
                 {
+                    "id": "CodeRulesRunRequest",
+                    "className": "CodeRulesRunRequest",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
+                    "level": 2
+                },
+                {
+                    "id": "DebugRunReport",
+                    "className": "DebugRunReport",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/debug-run-report.ts",
+                    "level": 2
+                },
+                {
+                    "id": "DebugTarget | null",
+                    "className": "DebugTarget | null",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
+                    "level": 3
+                },
+                {
                     "id": "DiffScope",
                     "className": "DiffScope",
                     "kind": "class",
@@ -425,6 +449,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ReadonlyMap<string, FileScope>",
+                    "className": "ReadonlyMap<string, FileScope>",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
+                    "level": 3
+                },
+                {
                     "id": "RequireReturnTypeConfig",
                     "className": "RequireReturnTypeConfig",
                     "kind": "class",
@@ -462,6 +494,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/rule-reporter.ts",
+                    "level": 3
+                },
+                {
+                    "id": "RuleScopes",
+                    "className": "RuleScopes",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
                     "level": 2
                 },
                 {
@@ -481,11 +521,27 @@
                     "level": 3
                 },
                 {
+                    "id": "readonly string[] | null",
+                    "className": "readonly string[] | null",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
+                    "level": 3
+                },
+                {
                     "id": "string",
                     "className": "string",
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/tooling/code-rules/src/code-rules-context.ts",
+                    "level": 3
+                },
+                {
+                    "id": "string | null",
+                    "className": "string | null",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
                     "level": 3
                 }
             ],
@@ -516,6 +572,33 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/validate-catch-error-pattern.ts#CatchErrorPatternValidator",
                     "paramName": "catchErrorPattern",
                     "paramType": "CatchErrorPatternValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "CodeRulesRunRequest",
+                    "injection": "type",
+                    "token": "CodeRulesRunRequest",
+                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-run-request.ts#CodeRulesRunRequest",
+                    "paramName": "request",
+                    "paramType": "CodeRulesRunRequest"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "DebugRunReport",
+                    "injection": "type",
+                    "token": "DebugRunReport",
+                    "tokenKey": "class:packages/tooling/code-rules/src/debug-run-report.ts#DebugRunReport",
+                    "paramName": "debugReport",
+                    "paramType": "DebugRunReport"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -762,12 +845,57 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "RuleScopes",
+                    "injection": "type",
+                    "token": "RuleScopes",
+                    "tokenKey": "class:packages/tooling/code-rules/src/rule-scope-plan.ts#RuleScopes",
+                    "paramName": "scopes",
+                    "paramType": "RuleScopes"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "WorkspaceRoot",
                     "injection": "type",
                     "token": "WorkspaceRoot",
                     "tokenKey": "class:packages/tooling/code-rules/src/code-rules-context.ts#WorkspaceRoot",
                     "paramName": "workspace",
                     "paramType": "WorkspaceRoot"
+                },
+                {
+                    "from": "CodeRulesRunRequest",
+                    "to": "readonly string[] | null",
+                    "injection": "type",
+                    "token": "readonly string[] | null",
+                    "tokenKey": "type:readonly string[] | null",
+                    "paramName": "projects",
+                    "paramType": "readonly string[] | null"
+                },
+                {
+                    "from": "CodeRulesRunRequest",
+                    "to": "string | null",
+                    "injection": "type",
+                    "token": "string | null",
+                    "tokenKey": "type:string | null",
+                    "paramName": "mode",
+                    "paramType": "string | null"
+                },
+                {
+                    "from": "CodeRulesRunRequest",
+                    "to": "string | null",
+                    "injection": "type",
+                    "token": "string | null",
+                    "tokenKey": "type:string | null",
+                    "paramName": "rule",
+                    "paramType": "string | null"
+                },
+                {
+                    "from": "DebugRunReport",
+                    "to": "RuleReporter",
+                    "injection": "type",
+                    "token": "RuleReporter",
+                    "tokenKey": "class:packages/tooling/code-rules/src/rule-reporter.ts#RuleReporter",
+                    "paramName": "reporter",
+                    "paramType": "RuleReporter"
                 },
                 {
                     "from": "EnsureWeAreSecureValidator",
@@ -1058,6 +1186,24 @@
                     "paramType": "RoleTagConfig"
                 },
                 {
+                    "from": "RuleScopes",
+                    "to": "DebugTarget | null",
+                    "injection": "type",
+                    "token": "DebugTarget | null",
+                    "tokenKey": "type:DebugTarget | null",
+                    "paramName": "debugTarget",
+                    "paramType": "DebugTarget | null"
+                },
+                {
+                    "from": "RuleScopes",
+                    "to": "ReadonlyMap<string, FileScope>",
+                    "injection": "type",
+                    "token": "ReadonlyMap<string, FileScope>",
+                    "tokenKey": "type:ReadonlyMap<string, FileScope>",
+                    "paramName": "byKey",
+                    "paramType": "ReadonlyMap<string, FileScope>"
+                },
+                {
                     "from": "WorkspaceRoot",
                     "to": "string",
                     "injection": "type",
@@ -1068,8 +1214,12 @@
                 }
             ],
             "unresolved": [
+                "DebugTarget | null",
+                "ReadonlyMap<string, FileScope>",
                 "readonly MatchRuleConfig[]",
-                "string"
+                "readonly string[] | null",
+                "string",
+                "string | null"
             ]
         }
     ]

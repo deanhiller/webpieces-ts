@@ -176,6 +176,29 @@ is the piece most orgs never build. Every rule carries three dials:
 | `MODIFIED_CLASS` / `MODIFIED_PROJECTS` | Any class / project you touched. |
 | `RUN_EVERY_TIME` | Whole repo, every run — for graph-level invariants that have no diff. |
 
+**Every diff-scoped code rule also accepts the two whole-scope modes** (#1027) — the same names, the
+same meaning: `MODIFIED_PROJECTS` judges every in-scope file of every project the diff touches (plus the
+changed files themselves), and `RUN_EVERY_TIME` every in-scope file in the repo, each file judged whole.
+They are the "what is left?" view of a rule you are ratcheting in. The engine widens the FILE SET once,
+centrally (`DiffScope` / `FileScope` in `@webpieces/rules-config`), so no rule implements them itself and
+a rule added tomorrow has both. Two rules are deliberately left out because nothing judges them at
+build time: `throw-cause-required` and `no-js-files` are edit-time guards only.
+
+**Measuring without editing the config — the debug run.** Committing `RUN_EVERY_TIME` to find out how
+much work a rule is would fail everybody's build. Instead, ask for one run:
+
+```bash
+pnpm nx run architecture:validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis,lang-fsdb-api
+pnpm wp-validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis   # the same, as a bin
+```
+
+It judges only `--rule`, at `--mode` (omit it to judge the COMMITTED mode), restricted to `--projects`
+(omit it for every project). It labels itself as a debug run, prints the rule's own failure text exactly
+as the build does, then a site count per project, and exits non-zero when there are sites — so it can
+gate a fix-it loop. It writes nothing to `webpieces.config.json`, and it ignores `turnOffRuleUntilEpoch` /
+`turnOffRuleWhileOnBranch` for that one run, because it is a measurement, not the gate. The build and
+`wp-build` keep judging the committed mode.
+
 `NEW_AND_MODIFIED_*` is the key idea: **legacy code is grandfathered, but the moment you touch it, it
 must comply.** No migration project, no 60%-finished cleanup epic, no allowlist that only grows. The
 codebase converges on the standard at exactly the rate it is being worked on — which is the rate at

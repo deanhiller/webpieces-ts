@@ -198,7 +198,7 @@ export {
     DEFAULT_MATCH_RULES,
 } from './match-rules-config';
 export type { ConfigSection } from './sections';
-export { schemaFieldNames } from './rule-schemas';
+export { schemaFieldNames, schemaModeValues } from './rule-schemas';
 export {
     HOOK_GUARD_NAMES,
     BRANCH_STATE_GUARD_KEY,
@@ -223,6 +223,8 @@ export {
     DiffRange,
     ChangedFilesOptions,
 } from './diff-scope';
+export { FileScope, ProjectIndex, WholeScopeModes } from './file-scope';
+export type { FileScopeKind } from './file-scope';
 export { AbstractRule } from './abstract-rule';
 export {
     WEBPIECES_DISABLE,
@@ -304,6 +306,8 @@ export {
     ON_OFF_MODES,
     STRUCTURAL_MODES,
     VALIDATE_TS_MODES,
+    WHOLE_SCOPE_MODES,
+    NO_JS_FILES_MODES,
 } from './rule-configs';
 export {
     NoClientCreationOutsideServerOrClientConfig,
@@ -331,6 +335,8 @@ export type {
     OnOffMode,
     StructuralMode,
     ValidateTsMode,
+    WholeScopeMode,
+    NoJsFilesMode,
 } from './rule-configs';
 export { BranchStateGuardConfig, DEFAULT_MAX_COMMITS_BEHIND } from './main-sync-guard-configs';
 export {

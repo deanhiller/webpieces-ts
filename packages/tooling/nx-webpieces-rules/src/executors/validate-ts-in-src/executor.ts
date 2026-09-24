@@ -10,13 +10,15 @@
  * `excludePaths` is holistic — its bare dir names and globs exempt files
  * from BOTH layers. Defaults exempt **\/*.d.ts and **\/jest.config.ts.
  *
- * Only the files changed vs the base branch are validated (NEW_AND_MODIFIED_FILES),
- * so the rule applies cleanly to legacy projects — pre-existing orphan files
- * are grandfathered and only newly-touched files are checked.
+ * NEW_AND_MODIFIED_FILES validates only the files changed vs the base branch, so
+ * the rule applies cleanly to legacy projects — pre-existing orphan files are
+ * grandfathered and only newly-touched files are checked. The whole-scope modes
+ * (#1027) widen that file set centrally (DiffScope / FileScope): MODIFIED_PROJECTS
+ * adds every file of every project the diff touches, RUN_EVERY_TIME every file.
  *
  * Configurable via webpieces.config.json:
  *   "validate-ts-in-src": {
- *       "mode": "NEW_AND_MODIFIED_FILES", // "OFF" disables the rule
+ *       "mode": "NEW_AND_MODIFIED_FILES", // | MODIFIED_PROJECTS | RUN_EVERY_TIME; "OFF" disables the rule
  *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
  *       "allowedRootFiles": [...],
  *       "turnOffRuleUntilEpoch": 0,       // epoch SECONDS; skip the rule until it passes
@@ -28,14 +30,12 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadAndValidate, isPathExcluded, shouldSkipRule, detectBase, getChangedFiles } from '@webpieces/rules-config';
+import { loadAndValidate, isPathExcluded, shouldSkipRule, detectBase, getChangedFiles, DiffScope, FileScope, ValidateTsMode, WholeScopeModes } from '@webpieces/rules-config';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export type ValidateTsInSrcMode = 'OFF' | 'NEW_AND_MODIFIED_FILES';
-
 export interface ValidateTsInSrcOptions {
-    mode?: ValidateTsInSrcMode;
+    mode?: ValidateTsMode;
     excludePaths?: string[];
     allowedRootFiles?: string[];
     turnOffRuleUntilEpoch?: number;
@@ -121,10 +121,10 @@ function checkSingleFileLayerTwo(
 }
 
 function resolveMode(
-    normalMode: ValidateTsInSrcMode,
+    normalMode: ValidateTsMode,
     epoch: number | undefined,
     branch: string | undefined,
-): ValidateTsInSrcMode {
+): ValidateTsMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -178,11 +178,12 @@ function reportLayerTwoFailure(violations: LayerTwoViolation[]): void {
 }
 
 async function runModifiedFilesMode(
+    mode: ValidateTsMode,
     workspaceRoot: string,
     excludePaths: string[],
     allowedRootFiles: string[],
 ): Promise<ExecutorResult> {
-    console.log('\n📁 Validating TypeScript files are in src/ and owned by a project (NEW_AND_MODIFIED_FILES mode)\n');
+    console.log(`\n📁 Validating TypeScript files are in src/ and owned by a project (${mode} mode)\n`);
 
     let base = process.env['NX_BASE'];
     const head = process.env['NX_HEAD'];
@@ -247,7 +248,7 @@ export default async function runExecutor(
     const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get('validate-ts-in-src');
 
-    const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'NEW_AND_MODIFIED_FILES';
+    const rawMode = (rule?.options['mode'] as ValidateTsMode | undefined) ?? 'NEW_AND_MODIFIED_FILES';
     const epoch = rule?.options['turnOffRuleUntilEpoch'] as number | undefined;
     // turnOffRuleWhileOnBranch is required-but-NULLABLE in the config (null = "always on"), so narrow
     // to a branch NAME here; anything else means no branch scoping.
@@ -266,7 +267,8 @@ export default async function runExecutor(
     const allowedRootFiles =
         (rule?.options['allowedRootFiles'] as string[] | undefined) ?? DEFAULT_ALLOWED_ROOT_FILES;
 
-    // Only NEW_AND_MODIFIED_FILES remains once OFF is handled above — validate just the
-    // files changed vs the base branch (legacy-friendly; no whole-workspace scan).
-    return runModifiedFilesMode(workspaceRoot, excludePaths, allowedRootFiles);
+    // OFF is handled above. NEW_AND_MODIFIED_FILES validates just the files changed vs the base branch
+    // (legacy-friendly); a whole-scope mode widens that file set inside DiffScope.within.
+    const scope = new FileScope(new WholeScopeModes().isWholeScopeMode(effectiveMode) ? effectiveMode : 'DIFF', null);
+    return new DiffScope().within(scope, () => runModifiedFilesMode(effectiveMode, workspaceRoot, excludePaths, allowedRootFiles));
 }

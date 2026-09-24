@@ -29,7 +29,8 @@
  * rule is a no-op. Deliberately NOT widened to `backlog/**` (frozen records of past requests — editing
  * them falsifies the record) or to hand-written docs that name a FILE rather than a path.
  *
- * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines only) | NEW_AND_MODIFIED_FILES (whole changed file).
+ * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines only) | NEW_AND_MODIFIED_FILES (whole changed file)
+ *        | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole-scope, #1027 — widened centrally by DiffScope).
  * Diff-scoped by default, so the docs whose SUBJECT is the layout (they print both rows on purpose)
  * are not retroactively flooded — the rule bites when a template is next edited.
  *
