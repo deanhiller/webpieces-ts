@@ -11,6 +11,9 @@ describe('HotfixInstructions', () => {
         expect(text).toContain('pnpm wp-finish-upsert-pr');
         expect(text).not.toContain('pnpm wp-review-upsert-pr');
         expect(text).toContain('No reviewer agent runs');
+        expect(text).toContain('Compilation and tests will run');
+        expect(text).toContain('they have not run yet');
+        expect(text).not.toContain('Compilation and tests ran.');
     });
 
     it('makes an accidental review invocation an explicit no-op', () => {
@@ -19,5 +22,7 @@ describe('HotfixInstructions', () => {
         expect(text).toContain('No reviewer agent ran');
         expect(text).toContain('review receipt was produced');
         expect(text).toContain('pnpm wp-finish-upsert-pr');
+        expect(text).toContain('Compilation and tests will run');
+        expect(text).not.toContain('Compilation and tests ran.');
     });
 });

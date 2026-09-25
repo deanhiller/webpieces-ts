@@ -1,7 +1,8 @@
-import { HOTFIX_AUDIT_BANNER, summaryJsonSchemaHint } from '@webpieces/rules-config';
+import { summaryJsonSchemaHint } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+const PRE_FINISH_NOTICE = 'Compilation and tests will run during pnpm wp-finish-upsert-pr; they have not run yet.';
 
 /** Pure instructions for the two hotfix handoffs, kept identical across stages ① and ②. */
 @injectable(bindingScopeValues.Singleton)
@@ -13,7 +14,7 @@ export class HotfixInstructions {
             '⚠️ HOT FIX ⚠️ — reviews and policy checks are bypassed\n' +
             SEP +
             '\n' +
-            HOTFIX_AUDIT_BANNER +
+            PRE_FINISH_NOTICE +
             '\n\n' +
             context +
             '\n' +
@@ -31,7 +32,7 @@ export class HotfixInstructions {
             '⚠️ HOT FIX ⚠️\n' +
             SEP +
             '\n' +
-            HOTFIX_AUDIT_BANNER +
+            PRE_FINISH_NOTICE +
             '\n\n' +
             'Required and optional reviews are bypassed for this /hotfix/ branch. No reviewer agent ran.\n' +
             'No build, checklist scan,\n' +

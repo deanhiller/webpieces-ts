@@ -58,7 +58,7 @@ export class SkipRuleResult {
 // assertBranchIsTrustworthy) because this getter has callers — the main-sync cache label, merged-PR
 // detection, code-rules' re-export of it — for which a fork's own branch name is a perfectly good
 // answer, and making the getter itself throw would redden all of them.
-export function getCurrentBranch(): string {
+function getCurrentBranch(): string {
     const prBranch = process.env['GITHUB_HEAD_REF'];
     if (prBranch) return prBranch;
 

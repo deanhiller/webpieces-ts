@@ -115,7 +115,7 @@ describe('branch identity is in the hash of every CACHED rule-running target', (
         expect(hasBranchInputs(tsInSrc.inputs)).toBe(false);
     });
 
-    it('keys off the same env vars getCurrentBranch reads', () => {
+    it('keys off the same env vars BranchIdentity reads', () => {
         expect(BRANCH_IDENTITY_INPUTS).toEqual([{ env: 'GITHUB_HEAD_REF' }, { env: 'WEBPIECES_BRANCH' }]);
     });
 });

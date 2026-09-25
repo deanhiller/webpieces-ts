@@ -82,7 +82,7 @@ describe('escape hatches reach the skip decision', () => {
 
     beforeEach(() => {
         configState.rules.clear();
-        // GITHUB_HEAD_REF wins over WEBPIECES_BRANCH inside getCurrentBranch, so it must be cleared or
+        // GITHUB_HEAD_REF wins over WEBPIECES_BRANCH inside BranchIdentity, so it must be cleared or
         // a CI run of this suite would resolve the wrong branch.
         delete process.env['GITHUB_HEAD_REF'];
         onBranch('dean/unrelated-branch');
