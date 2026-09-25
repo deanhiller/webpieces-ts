@@ -26,7 +26,7 @@ import {
 
 /**
  * `required-type-suffix` (#1037): which declarations are judged, the suffix match, the rename each failure
- * prints, which entry governs an overlapping path, then the validator end to end in a throwaway git repo
+ * prints, which entry governs an overlapping path (the first match in config order), then the validator end to end in a throwaway git repo
  * so the modes (including RUN_EVERY_TIME through the same planner the engine uses) are real.
  */
 
@@ -141,26 +141,29 @@ describe('required-type-suffix — the rename and the governing entry', () => {
         expect(new SuffixRename().candidates('FixedStoryVoice', ['Fs'])).toEqual(['FixedStoryVoiceFs']);
     });
 
-    it('the MOST SPECIFIC entry wins, whatever order the entries are listed in', () => {
-        const broad = Entries.of(['libraries/apis/**'], ['Dto']);
+    it('a narrower entry listed FIRST governs its files; the broader entry governs the rest', () => {
         const narrow = Entries.of(['libraries/apis/internal/**'], ['Fs']);
+        const broad = Entries.of(['libraries/apis/**'], ['Dto']);
         const picker = new SuffixEntryPicker();
 
-        expect(picker.entryFor('libraries/apis/internal/x/src/A.ts', [broad, narrow])).toBe(narrow);
         expect(picker.entryFor('libraries/apis/internal/x/src/A.ts', [narrow, broad])).toBe(narrow);
         expect(picker.entryFor('libraries/apis/public/x/src/A.ts', [narrow, broad])).toBe(broad);
         expect(picker.entryFor('libraries/util/src/A.ts', [narrow, broad])).toBeUndefined();
     });
 
-    it('a literal-prefix tie goes to the glob with more literal characters, then to the entry listed first', () => {
-        const wild = Entries.of(['libraries/**/src/**'], ['A']);
-        const longer = Entries.of(['libraries/**/src/models/**'], ['B']);
-        const twin = Entries.of(['libraries/**/src/**'], ['C']);
+    it('the same narrower entry listed AFTER a broader one never applies — the broader one governs', () => {
+        const broad = Entries.of(['libraries/apis/**'], ['Dto']);
+        const narrow = Entries.of(['libraries/apis/internal/**'], ['Fs']);
         const picker = new SuffixEntryPicker();
 
-        expect(picker.entryFor('libraries/x/src/models/M.ts', [wild, longer])).toBe(longer);
-        expect(picker.entryFor('libraries/x/src/M.ts', [wild, twin])).toBe(wild);
-        expect(picker.entryFor('libraries/x/src/M.ts', [twin, wild])).toBe(twin);
+        expect(picker.entryFor('libraries/apis/internal/x/src/A.ts', [broad, narrow])).toBe(broad);
+        expect(picker.winner('libraries/apis/internal/x/src/A.ts', [broad, narrow])?.glob).toBe('libraries/apis/**');
+    });
+
+    it('names the matching glob of the governing entry, not its first glob', () => {
+        const entry = Entries.of(['libraries/other/**', 'libraries/apis/**'], ['Dto']);
+
+        expect(new SuffixEntryPicker().winner('libraries/apis/x/src/A.ts', [entry])?.glob).toBe('libraries/apis/**');
     });
 });
 

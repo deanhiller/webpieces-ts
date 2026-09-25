@@ -224,7 +224,8 @@ A fourth, `required-type-suffix` (#1037), names the LAYER: every exported interf
 type alias under an entry's `paths` must end in one of that entry's `suffixes` — e.g.
 `Request | Response | Event | Dto | Api` for `libraries/apis/internal/**` and `Fs` for the Firestore
 model libraries. `entries` is required and non-empty, each with non-empty `paths` and `suffixes`; when
-entries overlap the most specific glob wins (the full rule, and the example config, are in
+entries overlap the FIRST match in `entries` order wins, so a narrower entry must be listed before a
+broader one (the full rule, and the example config, are in
 `docs/ENGINEERING-PRACTICE.md`, Part 3). Under `NEW_AND_MODIFIED_CODE` only a new or renamed type is
 judged, so legacy names are grandfathered.
 

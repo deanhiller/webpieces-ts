@@ -36,11 +36,13 @@ export class RequiredTypeSuffixEntry {
  *         { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"] }
  *       ]
  *
- * OVERLAP — the MOST SPECIFIC entry wins; suffixes are never unioned. A file is governed by exactly one
- * entry: among the entries with a glob matching the file, the one whose matching glob has the longest
- * LITERAL PREFIX (the characters before its first `*`, `?`, `[` or `{`) wins; a tie goes to the glob with
- * more literal characters overall, then to the entry listed FIRST. So `libraries/apis/internal/**` beats
- * `libraries/apis/**` for `libraries/apis/internal/x/src/A.ts`, whatever order they are listed in.
+ * OVERLAP — the FIRST MATCH in `entries` order wins; suffixes are never unioned. A file is governed by
+ * exactly one entry: the entries are read top to bottom, and the first one with a glob matching the file
+ * decides its suffixes. ORDER MATTERS: a narrower entry must be listed BEFORE a broader one. With
+ * `libraries/apis/internal/**` listed above `libraries/apis/**`, the narrower entry governs
+ * `libraries/apis/internal/x/src/A.ts`; listed below it, the broader entry governs that file and the
+ * narrower one never applies there. A failure names the governing entry's glob, so a reader can see
+ * which entry won.
  *
  * `allowedPaths` exempts whole trees inside `paths`. The per-site escape hatch is
  * `// webpieces-disable required-type-suffix -- <reason>` on the declaration's line or the line above.

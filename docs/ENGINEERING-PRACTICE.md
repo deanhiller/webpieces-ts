@@ -218,13 +218,14 @@ because the suffix is what tells a reader which layer a type belongs to:
 ```
 
 Those two entries are an EXAMPLE, not a default: `mode` and `entries` are required, `entries` must be
-non-empty, and each entry needs non-empty `paths` and `suffixes`. When entries overlap, the **most
-specific entry wins** and suffixes are never unioned: among the entries with a glob matching the file,
-the one whose matching glob has the longest literal prefix (the characters before its first `*`, `?`,
-`[` or `{`) governs it; a tie goes to the glob with more literal characters overall, then to the entry
-listed first. So `libraries/apis/internal/**` beats `libraries/apis/**` whichever is listed first. The
-failure names the type and file:line, the suffixes allowed at that path, and the rename to make; count
-what is left with `pnpm wp-validate-code --rule=required-type-suffix --mode=RUN_EVERY_TIME --projects=lang-apis`.
+non-empty, and each entry needs non-empty `paths` and `suffixes`. When entries overlap, the **first
+match wins** and suffixes are never unioned: `entries` is read top to bottom, and the first entry with a
+glob matching the file governs it. **Order matters** — the firewall / routing-table rule: to give a
+narrower directory stricter suffixes, list its entry BEFORE the broader one. With
+`libraries/apis/internal/**` listed above `libraries/apis/**` the narrower entry governs its files;
+listed below it, the broader entry governs them and the narrower one never applies. The failure names
+the governing entry's glob, so you can see which entry won, plus the type and file:line, the suffixes
+allowed there, and the rename to make; count what is left with `pnpm wp-validate-code --rule=required-type-suffix --mode=RUN_EVERY_TIME --projects=lang-apis`.
 
 `NEW_AND_MODIFIED_*` is the key idea: **legacy code is grandfathered, but the moment you touch it, it
 must comply.** No migration project, no 60%-finished cleanup epic, no allowlist that only grows. The

@@ -42,7 +42,7 @@ export {
     ExportedTypeScanner,
     SuffixEntryPicker,
     SuffixRename,
-    RankedGlob,
+    GoverningGlob,
 } from './validate-required-type-suffix';
 export { ApiLibEnumIndex } from './api-lib-enum-index';
 export { EnumText } from './api-lib-enum-text';
