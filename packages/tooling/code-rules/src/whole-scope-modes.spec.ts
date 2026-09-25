@@ -166,6 +166,15 @@ describe('whole-scope modes (#1027): a violating file NOT in the diff', () => {
         expect(await enumFailures(enumRule('RUN_EVERY_TIME', scan), repo.root)).toEqual(['libs/other/src/Other.ts']);
         expect(Array.from(scan.countsByProject(repo.root).entries())).toEqual([['other-apis', 1]]);
     });
+
+    it('fails loudly with the project.json path when a project identity cannot be parsed', () => {
+        repo.write('libs/apis/project.json', '{ not json');
+
+        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
+            .toThrow(InformAiError);
+        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
+            .toThrow('libs/apis/project.json');
+    });
 });
 
 describe('the DEBUG run (#1027): --rule / --mode / --projects, no config edit', () => {

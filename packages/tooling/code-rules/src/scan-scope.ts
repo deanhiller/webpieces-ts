@@ -19,7 +19,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChangedFilesOptions, DiffScope, ModifiedCodeMode, toError } from '@webpieces/rules-config';
+import { ChangedFilesOptions, DiffScope, InformAiError, ModifiedCodeMode, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** One nx project: its name and its directory (repo-relative, '/'-separated, no trailing slash). */
@@ -74,14 +74,16 @@ export class ProjectCatalog {
     }
 
     private readName(fullPath: string): string | undefined {
+        // webpieces-disable no-unmanaged-exceptions -- add the exact project.json path while preserving the parse/read failure as cause
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as RawProjectName;
             return typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
         } catch (err: unknown) {
             const error = toError(err);
-            void error; // swallow — a malformed project.json falls back to its directory name
-            return undefined;
+            throw new InformAiError(`Cannot read nx project identity from ${fullPath} — fix project.json and retry.`, {
+                cause: error,
+            });
         }
     }
 }
