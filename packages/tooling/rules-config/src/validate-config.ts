@@ -79,9 +79,10 @@ function valueHint(def: FieldDef, key?: string): string {
 /** `[{ "paths": ["<string>", ...], "suffixes": ["<string>", ...] }, ...]` — one element spelled out from its schema. */
 // webpieces-disable no-function-outside-class -- module-scope sibling of valueHint
 function objectListHint(def: FieldDef): string {
-    const fields = Object.entries(def.elementSchema ?? {})
-        .filter((each: [string, FieldDef]) => !each[1].optional)
-        .map((each: [string, FieldDef]) => `"${each[0]}": ${valueHint(each[1], each[0])}`);
+    const schema: Readonly<Record<string, FieldDef>> = def.elementSchema ?? {};
+    const fields = Object.keys(schema)
+        .filter((key: string) => !schema[key].optional)
+        .map((key: string) => `"${key}": ${valueHint(schema[key], key)}`);
     return `[{ ${fields.join(', ')} }, ...]`;
 }
 
@@ -259,6 +260,7 @@ function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: R
 // webpieces-disable no-function-outside-class -- module-scope validator helper, matching every other check in this file
 function arrayFieldErrors(label: string, value: unknown, def: FieldDef): string[] {
     const isObjects = def.type === 'object[]';
+    // webpieces-disable no-any-unknown -- one list element as opaque JSON; this line is what checks its shape
     const elementOk = (v: unknown): boolean =>
         isObjects ? typeof v === 'object' && v !== null && !Array.isArray(v) : typeof v === 'string';
     if (!Array.isArray(value) || !value.every(elementOk)) {
@@ -271,6 +273,7 @@ function arrayFieldErrors(label: string, value: unknown, def: FieldDef): string[
     if (!isObjects || def.elementSchema === undefined) return [];
     const errors: string[] = [];
     const schema = def.elementSchema;
+    // webpieces-disable no-any-unknown -- an element's fields are opaque JSON until checked against its schema below
     value.forEach((element: Record<string, unknown>, index: number) => {
         const at = `${label}[${index}]`;
         for (const key of Object.keys(element)) {
