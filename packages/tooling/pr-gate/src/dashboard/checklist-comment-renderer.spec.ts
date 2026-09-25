@@ -10,7 +10,7 @@ const renderChecklistComment = (
     based = true,
     // 0 = the reviewer kill switch is off, which is what every pre-existing test here asserts about.
     suppressedCount = 0,
-): string => renderer.render(rows, verified, based, suppressedCount);
+): string => renderer.render(rows, verified, based, suppressedCount, false);
 
 // The four files every fixture roster was matched against, so "x of 4" is always honest.
 const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];

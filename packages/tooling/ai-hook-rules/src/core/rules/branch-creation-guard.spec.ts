@@ -71,17 +71,29 @@ function ctx(command: string): BashContext {
 function cacheWith(deletable: string[], keep: string[] = [], worktrees: object[] = [], timestamp: string = new Date().toISOString()): string {
     return JSON.stringify({
         timestamp,
-        deletable: deletable.map((b: string, i: number): object =>
-            ({ branch: b, reason: `PR #${String(100 + i)} merged`, pr: 100 + i })),
-        keep: keep.map((b: string): object =>
-            ({ branch: b, reason: 'no merged PR found — a human must decide', pr: 0 })),
+        deletable: deletable.map((b: string, i: number): object => ({
+            branch: b,
+            reason: `PR #${String(100 + i)} merged`,
+            pr: 100 + i,
+        })),
+        keep: keep.map((b: string): object => ({
+            branch: b,
+            reason: 'no merged PR found — a human must decide',
+            pr: 0,
+        })),
         worktrees,
     });
 }
 
 // One worktree verdict, as the refresher writes it into the cache's `worktrees` list.
 function tree(path: string, branch: string, deletable: boolean): object {
-    return { path, branch, reason: deletable ? 'PR #7 merged' : 'no merged PR found', pr: 0, deletable };
+    return {
+        path,
+        branch,
+        reason: deletable ? 'PR #7 merged' : 'no merged PR found',
+        pr: 0,
+        deletable,
+    };
 }
 
 // The same cache, written long enough ago that nothing in it may be quoted as a present-tense fact.
@@ -139,7 +151,7 @@ describe('branch-creation-guard', () => {
         git.branch = 'dean/existing';
         const violations = rule('ON').check(ctx('git checkout -b dean/another'));
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain("not main");
+        expect(violations[0].message).toContain('not main');
         expect(violations[0].message).toContain('subBranchNaming');
     });
 
@@ -155,6 +167,19 @@ describe('branch-creation-guard', () => {
         expect(msg).not.toContain('subBranchNaming');
     });
 
+    it('permits exact /hotfix/ nested names even when sub-branches are forbidden', () => {
+        git.branch = 'dean/existing';
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/1041/hotfix/fix-timeout'))).toEqual([]);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/hotfix/fix-timeout'))).toEqual([]);
+    });
+
+    it('does not relax lookalike or differently-cased branch names', () => {
+        git.branch = 'dean/existing';
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/Hotfix/fix-timeout'))).toHaveLength(1);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/hotfix-fix-timeout'))).toHaveLength(1);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/notahotfix/fix-timeout'))).toHaveLength(1);
+    });
+
     it('surfaces the configured branchFormat in the block message', () => {
         git.branch = 'dean/existing';
         const format = 'Name it dean/<thing> lowercase';
@@ -163,8 +188,7 @@ describe('branch-creation-guard', () => {
     });
 
     it('fixHint is mode-aware: ON_NO_SUBBRANCHES points to the epoch escape; ON points to subBranchNaming', () => {
-        const flatten = (fh: { mainMessage: string; fixOptions: readonly { text: string }[] }): string =>
-            [fh.mainMessage, ...fh.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        const flatten = (fh: { mainMessage: string; fixOptions: readonly { text: string }[] }): string => [fh.mainMessage, ...fh.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
 
         const strict = flatten(rule('ON_NO_SUBBRANCHES').fixHint);
         expect(strict).toContain('turnOffRuleUntilEpoch');
@@ -216,13 +240,7 @@ describe('branch-creation-guard ignores git commands quoted inside prose', () =>
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
         git.cacheJson = cacheWith(['a', 'b']);
 
-        const heredoc = [
-            "git commit -F - <<'EOF'",
-            'Fix the guard',
-            'The cap is checked BEFORE the origin/main allow — `git checkout -b x origin/main`',
-            'is the path the AI always takes.',
-            'EOF',
-        ].join('\n');
+        const heredoc = ["git commit -F - <<'EOF'", 'Fix the guard', 'The cap is checked BEFORE the origin/main allow — `git checkout -b x origin/main`', 'is the path the AI always takes.', 'EOF'].join('\n');
 
         expect(rule('ON_NO_SUBBRANCHES', { maxLocalBranches: 5 }).check(ctx(heredoc)).length).toBe(0);
     });
@@ -360,7 +378,6 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         git.cacheJson = cacheWith(['a']);
         expect(rule('ON').check(ctx('git checkout -b dean/next origin/main')).length).toBe(1);
     });
-
 });
 
 describe('branch-creation-guard separate branch/worktree budgets', () => {
@@ -396,11 +413,7 @@ describe('branch-creation-guard worktree cap', () => {
      */
     it('blocks a worktree add at the cap and hands over to wp-cleanup — never a chained delete one-liner', () => {
         git.worktreePorcelain = porcelain(5);
-        git.cacheJson = cacheWith([], [], [
-            tree('/tmp/wt1', 'feat1', true),
-            tree('/tmp/wt2', 'feat2', true),
-            tree('/tmp/wt3', 'feat3', false),
-        ]);
+        git.cacheJson = cacheWith([], [], [tree('/tmp/wt1', 'feat1', true), tree('/tmp/wt2', 'feat2', true), tree('/tmp/wt3', 'feat3', false)]);
 
         const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
         const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
@@ -410,8 +423,7 @@ describe('branch-creation-guard worktree cap', () => {
         expect(violations[0].message).toContain('pnpm wp-cleanup');
 
         const hint = r.fixHint;
-        const flat = [hint.violation, hint.mainMessage,
-            ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        const flat = [hint.violation, hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         // NOTHING destructive, in any form, chained or single.
         expect(flat).not.toContain('git worktree remove');
         expect(flat).not.toContain('git worktree prune');
@@ -427,7 +439,6 @@ describe('branch-creation-guard worktree cap', () => {
         // Removing one by hand is still the thing an agent must not do.
         expect(flat).toContain('working in it right now');
     });
-
 });
 
 describe('branch-creation-guard treats an uncommitted worktree as live', () => {
@@ -438,27 +449,33 @@ describe('branch-creation-guard treats an uncommitted worktree as live', () => {
      */
     it('never offers a commitless, PR-less worktree for deletion — that is a live agent', () => {
         git.worktreePorcelain = porcelain(5);
-        git.cacheJson = cacheWith([], [], [
-            // As the refresher now records it: spared, classification no-commits.
-            { path: '/tmp/wt1', branch: 'dean/apipath', pr: 0, deletable: false,
-                classification: 'no-commits',
-                reason: 'no commits of its own — identical to origin/main. That is either an abandoned husk '
-                    + 'OR a worktree/branch someone is working in right now' },
-            tree('/tmp/wt2', 'feat2', false),
-        ]);
+        git.cacheJson = cacheWith(
+            [],
+            [],
+            [
+                // As the refresher now records it: spared, classification no-commits.
+                {
+                    path: '/tmp/wt1',
+                    branch: 'dean/apipath',
+                    pr: 0,
+                    deletable: false,
+                    classification: 'no-commits',
+                    reason: 'no commits of its own — identical to origin/main. That is either an abandoned husk ' + 'OR a worktree/branch someone is working in right now',
+                },
+                tree('/tmp/wt2', 'feat2', false),
+            ],
+        );
 
         const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
         expect(r.check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(1);
 
         const hint = r.fixHint;
-        const flat = [hint.violation, hint.mainMessage,
-            ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        const flat = [hint.violation, hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         expect(flat).not.toContain('dean/apipath');
         expect(flat).not.toContain('no work can be lost');
         expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).toContain('working in it right now');
     });
-
 });
 
 /**
@@ -502,17 +519,13 @@ describe('branch-creation-guard never quotes a cache-derived count', () => {
         expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).not.toContain('it deletes these');
     });
-
 });
 
 describe('branch-creation-guard drops phantom cache entries', () => {
     it('names no cached worktree, including ones already removed', () => {
         // The cache still names two dead worktrees; only ONE of them is still in `git worktree list`.
         git.worktreePorcelain = porcelain(5);
-        git.cacheJson = cacheWith([], [], [
-            tree('/tmp/wt1', 'feat1', true),
-            tree('/tmp/already-removed', 'feat9', true),
-        ]);
+        git.cacheJson = cacheWith([], [], [tree('/tmp/wt1', 'feat1', true), tree('/tmp/already-removed', 'feat9', true)]);
 
         const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
         const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));

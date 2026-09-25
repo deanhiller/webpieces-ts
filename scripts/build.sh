@@ -5,7 +5,8 @@ set -euo pipefail
 # build.sh — Cross-platform node_modules manager + full CI runner
 #
 # Runs the SAME checks as GitHub Actions CI:
-#   lint, build, test, architecture validation (nx affected --target=ci)
+#   normal branches: lint, build, test, architecture validation
+#   /hotfix/ branches: build + test only (selected by wp-ci's shared branch detector)
 #
 # Usage:
 #   ./scripts/build.sh              # swap + lockfile check + full CI
@@ -131,9 +132,10 @@ swap_node_modules() {
 
 do_ci() {
     echo ""
-    echo "🔨 Running CI (same as GitHub Actions: lint, build, test, architecture validation)..."
+    echo "🔨 Running branch-appropriate CI (same selector as GitHub Actions)..."
     git fetch origin main 2>/dev/null || true
-    pnpm nx affected --target=ci --base=origin/main
+    TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register \
+        packages/tooling/code-rules/src/wp-ci.ts --base=origin/main
 }
 
 do_clean() {

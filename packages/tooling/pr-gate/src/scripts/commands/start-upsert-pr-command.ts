@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { writeTemplate, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
+import { writeTemplate, CliExitError, RepoRootFinder, ChecklistReviewContext, BranchIdentity, summaryJsonPath } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -7,6 +7,7 @@ import { DiffBasisResolver } from '../workflow/diff-basis';
 import { GitExec } from '../workflow/git-exec';
 import { PrContextWriter } from '../workflow/pr-context-writer';
 import { RunUpdate } from '../workflow/run-update';
+import { HotfixInstructions } from '../workflow/hotfix-instructions';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -31,6 +32,8 @@ export class StartUpsertPrCommand {
         private readonly runUpdate: RunUpdate,
         private readonly diffBasisResolver: DiffBasisResolver,
         private readonly prContextWriter: PrContextWriter,
+        private readonly branchIdentity: BranchIdentity,
+        private readonly hotfixInstructions: HotfixInstructions,
     ) {}
 
     async run(): Promise<void> {
@@ -50,11 +53,19 @@ export class StartUpsertPrCommand {
         // Nothing here pushes. This command reviews; wp-finish-upsert-pr pushes ONCE, after summary.json,
         // every BLOCK checklist, and the authoritative build gate — so no unreviewed commit reaches the
         // remote, and there is no early `synchronize` firing against a PR body with a stale gate token.
-        await this.updateBranchFromMain(repoRoot);
+        const hotfix = this.branchIdentity.isHotfix();
+        await this.updateBranchFromMain(repoRoot, hotfix);
 
         // No build gate here — a conflicted merge may still be unresolved, so there is nothing worth
         // building. Stage ② finalizes the merge FIRST, then builds; see the class comment.
-        this.handOffToReview(repoRoot);
+        if (hotfix) this.handOffHotfixToFinish(repoRoot);
+        else this.handOffToReview(repoRoot);
+    }
+
+    private handOffHotfixToFinish(repoRoot: string): void {
+        const featureName = this.aiBranchName.getFeatureName();
+        const context = this.prContextWriter.ensure(repoRoot, featureName, this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
+        process.stdout.write(this.hotfixInstructions.afterStart(summaryJsonPath(repoRoot, featureName), this.contextLines(context)));
     }
 
     /**
@@ -72,16 +83,15 @@ export class StartUpsertPrCommand {
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         // Persist the PR diff context (base sha + the full changed-file set) so it exists even if the AI
         // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
-        const context = this.prContextWriter.ensure(
-            repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
+        const context = this.prContextWriter.ensure(repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
         process.stdout.write('\n' + SEP + '② Brief the reviewers and write the PR summary, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
-            `${this.contextLines(context)}\n` +
-            `▶ NEXT run:  pnpm wp-review-upsert-pr\n` +
-            `   It validates the 3-point merge, runs the build gate, extracts this branch's diff for the\n` +
-            `   reviewers, and prints what to spawn plus the summary.json schema. Everything else waits on it —\n` +
-            `   wp-finish-upsert-pr refuses to open a PR until it has run.\n\n`,
+                `${this.contextLines(context)}\n` +
+                `▶ NEXT run:  pnpm wp-review-upsert-pr\n` +
+                `   It validates the 3-point merge, runs the build gate, extracts this branch's diff for the\n` +
+                `   reviewers, and prints what to spawn plus the summary.json schema. Everything else waits on it —\n` +
+                `   wp-finish-upsert-pr refuses to open a PR until it has run.\n\n`,
         );
     }
 
@@ -90,24 +100,20 @@ export class StartUpsertPrCommand {
     private contextLines(context: ChecklistReviewContext): string {
         if (context.baseSha.trim() === '') return '';
         const cmd = context.fileDiffCommand.replace(' -- <file>', '');
-        return (
-            `${cmd === '' ? '' : `Your diff:  ${cmd}\n`}` +
-            `Full changed-file set + base/head sha:  ${context.prContextPath}\n`
-        );
+        return `${cmd === '' ? '' : `Your diff:  ${cmd}\n`}` + `Full changed-file set + base/head sha:  ${context.prContextPath}\n`;
     }
 
     // Bring the branch up to date with main via the shared 3-point engine (in-process). On conflict the
     // merge process doc it writes names `wp-review-upsert-pr` as the finish command — that is the command
     // that now validates and commits a conflict resolution, so it is what the doc must send the AI to.
-    private async updateBranchFromMain(repoRoot: string): Promise<void> {
+    private async updateBranchFromMain(repoRoot: string, hotfix: boolean): Promise<void> {
         process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
         // pushRemote=false — finish owns the single push (see MergeEndOptions).
-        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-review-upsert-pr', false);
+        const next = hotfix ? 'wp-finish-upsert-pr' : 'wp-review-upsert-pr';
+        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', next, false);
         if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
-            throw new CliExitError(2,
-                '\n⏸️  Conflicts — resolve them, then run pnpm wp-review-upsert-pr (it validates the merge, builds it,\n' +
-                '   and only then briefs the reviewers).',
-            );
+            const command = hotfix ? 'pnpm wp-finish-upsert-pr' : 'pnpm wp-review-upsert-pr';
+            throw new CliExitError(2, `\n⏸️  Conflicts — resolve them, then run ${command} ` + (hotfix ? '(it validates the merge, requires the summary, then runs compilation and tests).' : '(it validates the merge, builds it, and only then briefs the reviewers).'));
         }
     }
 }

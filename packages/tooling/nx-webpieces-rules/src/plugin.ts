@@ -294,6 +294,7 @@ function addPerProjectTargets(
  * Build the target map for one project. Most targets are project.json-only
  * (package.json-only projects may not have TypeScript source); `ci` goes on all.
  */
+// webpieces-disable no-function-outside-class -- Nx requires its inference callback and target-map assembly at module scope; this existing functional plugin is invoked by Nx, not DI.
 function buildPerProjectTargets(
     isProjectJson: boolean,
     projectRoot: string,
@@ -343,6 +344,7 @@ function buildPerProjectTargets(
     // lint + build + test + the validation gates that formerly rode on the compile
     // executor's targetDefaults, so a bare `build` stays a fast compile-only step.
     targets['ci'] = createCiTarget(validationTargets, architectureEnabled);
+    targets['hotfix-ci'] = createHotfixCiTarget();
 
     return targets;
 }
@@ -604,6 +606,21 @@ export function createCiTarget(
     };
 }
 
+/** Emergency profile: retain compilation/typechecking and tests, schedule no lint or policy target. */
+// webpieces-disable no-function-outside-class -- Nx inference target factory, matching createCiTarget and invoked by the module-scope plugin callback.
+export function createHotfixCiTarget(): TargetConfiguration {
+    return {
+        executor: 'nx:noop',
+        cache: true,
+        inputs: ['default', ...BRANCH_IDENTITY_INPUTS],
+        dependsOn: ['build', 'test'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Hotfix CI: compilation/typechecking and tests only; lint and Webpieces validators bypassed',
+        },
+    };
+}
+
 function createHelpTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:help',
@@ -651,7 +668,7 @@ function isExcluded(projectRoot: string, excludePatterns: string[]): boolean {
     }
 
     // Simple glob matching (could be enhanced with minimatch if needed)
-    return excludePatterns.some((pattern) => {
+    return excludePatterns.some((pattern: string) => {
         // Convert glob pattern to regex
         const regexPattern = pattern
             .replace(/\*\*/g, '.*') // ** matches any path

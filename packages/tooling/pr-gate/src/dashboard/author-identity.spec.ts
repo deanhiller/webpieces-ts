@@ -51,6 +51,7 @@ function rendered(model: string): { body: string; dashboard: string } {
         'pnpm wp-build',
         0,
         new AuthorIdentityResolver().resolve(review.model),
+        false,
     );
     return {
         body: renderer.renderPrBody(input, ''),

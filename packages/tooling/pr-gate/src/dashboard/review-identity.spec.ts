@@ -43,11 +43,12 @@ describe('review identity from JSON to PR comments', () => {
         const dashboard = new Dashboard().renderDetailComment(new DashboardInput(
             review.title, [], new DisableCounts(0, 0, []), true, 'base', 'head', 'merge', review, [], 'pnpm wp-build', 0,
             new AuthorIdentity('codex', 'gpt-5.6-sol'),
+            false,
         ));
         expect(dashboard).toContain('**Summary agent:** codex · **Model:** unknown (self-reported)');
         const row = new ChecklistCommentRow(verdict.agent, verdict.model, verdict.id, 'PASS', verdict.output,
             true, [], [], ['api.ts'], 1);
-        const comment = new ChecklistCommentRenderer().render([row], false, true, 0);
+        const comment = new ChecklistCommentRenderer().render([row], false, true, 0, false);
         expect(comment).toContain('**Agent:** claude · **Model:** opus (self-reported)');
         expect(comment).toContain('provenance was NOT verified');
     });

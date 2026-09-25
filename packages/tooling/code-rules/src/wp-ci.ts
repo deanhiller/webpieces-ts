@@ -8,8 +8,8 @@
  *
  *   - no nx.json (non-Nx repo)            -> run the standalone code validators, succeed.
  *   - nx.json present, plugin NOT in it   -> fail with the exact install command.
- *   - nx.json present, plugin registered  -> run validators (incl. the wiring guard),
- *                                            then `nx affected --target=ci`.
+ *   - nx.json present, plugin registered  -> normal branch: validators + affected `ci`;
+ *                                            `/hotfix/` branch: affected `hotfix-ci` (build + test only).
  *
  * Repos reference this as a bin (`"webpieces:ci": "wp-ci"`) so the logic is versioned in
  * the npm package instead of copy-pasted into each repo's package.json (which drifts).
@@ -24,18 +24,12 @@ import * as path from 'path';
 
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { loadAndValidate, InformAiError, RuleFailError, renderRuleFailForHuman, toError, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { loadAndValidate, InformAiError, RuleFailError, renderRuleFailForHuman, toError, RepoRootFinder, BaseRuleConfig, BranchIdentity } from '@webpieces/rules-config';
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
 import { CONFIG_BINDINGS } from './code-rules-config-table';
 import { NxStepRunner } from './wp-ci-nx-runner';
-import {
-    GracePeriodResolver,
-    ProcessGroupKiller,
-    ProcessGroupScanner,
-    SurvivorReporter,
-    SurvivorWatchdog,
-} from './wp-ci-survivors';
+import { GracePeriodResolver, ProcessGroupKiller, ProcessGroupScanner, SurvivorReporter, SurvivorWatchdog } from './wp-ci-survivors';
 
 /** How often the watchdog re-runs `ps` while waiting for a finished step's process group to drain. */
 const SURVIVOR_POLL_INTERVAL_MILLIS = 1000;
@@ -132,23 +126,22 @@ async function main(): Promise<void> {
         }
 
         const gracePeriod = new GracePeriodResolver().resolve(process.env);
-        const runner = new NxStepRunner(
-            root,
-            gracePeriod,
-            new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS),
-            new SurvivorReporter(),
-            new ProcessGroupKiller(),
-        );
+        const runner = new NxStepRunner(root, gracePeriod, new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS), new SurvivorReporter(), new ProcessGroupKiller());
+        const hotfix = new BranchIdentity().isHotfix();
 
         // Run the architecture + code validators first (this also runs the wiring guard,
         // which fails loudly if nx.json no longer wires validators into the build).
-        if (fs.existsSync(path.join(root, 'architecture'))) {
+        if (!hotfix && fs.existsSync(path.join(root, 'architecture'))) {
             const validateCode = await runner.run(['run', 'architecture:validate-complete'], 'architecture:validate-complete');
+            // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
             if (validateCode !== 0) process.exit(validateCode);
         }
 
-        // Then the Gradle-style ci composite (lint + build + test) across affected projects.
-        const ciCode = await runner.run(['affected', '--target=ci', ...passthrough], 'nx affected --target=ci');
+        // Hotfix deliberately schedules only compile/typecheck + tests. The shared branch resolver makes
+        // this the same decision the local PR gate makes, including detached GitHub checkouts.
+        const target = hotfix ? 'hotfix-ci' : 'ci';
+        const ciCode = await runner.run(['affected', `--target=${target}`, ...passthrough], `nx affected --target=${target}`);
+        // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
         process.exit(ciCode);
     } catch (err: unknown) {
         const error = toError(err);
@@ -159,6 +152,7 @@ async function main(): Promise<void> {
         } else {
             console.error(`[wp-ci] unexpected error: ${error.message}`);
         }
+        // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
         process.exit(1);
     }
 }

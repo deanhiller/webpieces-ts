@@ -24,6 +24,7 @@ function input(reviewOverrides: Partial<PrSummary> = {}): DashboardInput {
         'pnpm nx affected --target=ci',
         0,
         new AuthorIdentity('codex', 'gpt-5.6-sol'),
+        false,
     );
 }
 

@@ -1,8 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import {
-    formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
-    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
-} from '@webpieces/rules-config';
+import { formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistCommentRow } from './checklist-comment-row';
 
@@ -65,12 +62,12 @@ export class ChecklistCommentRenderer {
         // independent subagent, verified" would be an outright untrue sentence under a PR nobody reviewed.
         // A defaulted 0 would let every existing caller keep printing it. See HOME_KEY_TURN_OFF_ALL_REVIEWERS.
         suppressedCount: number,
+        hotfix: boolean,
     ): string {
+        if (hotfix) return this.hotfixComment(rows);
         if (suppressedCount > 0) return this.suppressedComment(rows, suppressedCount);
         const ran = this.ranOrdered(rows);
-        const prov = provenanceVerified
-            ? '_Each reviewer ran as its own independent subagent, verified from the Claude Code harness._'
-            : '_⚠️ Reviewer provenance was NOT verified (no Claude Code session) — treat these as unverified._';
+        const prov = provenanceVerified ? '_Each reviewer ran as its own independent subagent, verified from the Claude Code harness._' : '_⚠️ Reviewer provenance was NOT verified (no Claude Code session) — treat these as unverified._';
         // The roster lives in the HEADER, never in a section: fitComment only ever shrinks section bodies,
         // so a roster line can never be the thing an oversize comment silently drops.
         const lines: string[] = [CHECKLIST_COMMENT_MARKER, this.rollupHeader(rows, baseResolved)];
@@ -86,6 +83,23 @@ export class ChecklistCommentRenderer {
             `${header}\n\n### Reviews that ran`,
             ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)),
         );
+    }
+
+    private hotfixComment(rows: readonly ChecklistCommentRow[]): string {
+        const lines = [
+            HOTFIX_AUDIT_BANNER,
+            '',
+            CHECKLIST_COMMENT_MARKER,
+            '## 🔍 Company review checklists — ⚫ BYPASSED BY /hotfix/',
+            '_0 reviewer agents ran. Required and optional checklists were bypassed by the exact, case-sensitive /hotfix/ branch convention._',
+            '',
+            `### Checklists (all ${rows.length})`,
+        ];
+        for (const row of rows) {
+            const applicability = row.ran ? 'would have applied to this diff' : 'did not apply to this diff';
+            lines.push(`- [ ] **${row.checklistId}** — ⚫ BYPASSED (${applicability}; no reviewer ran)`);
+        }
+        return lines.join('\n');
     }
 
     /**
@@ -105,11 +119,11 @@ export class ChecklistCommentRenderer {
         const lines: string[] = [
             CHECKLIST_COMMENT_MARKER,
             `## 🔍 Company review checklists — ⚫ ALL SUPPRESSED (${suppressedCount} of ${rows.length} would have run)`,
-            `_No reviewer subagent ran on this PR. Reviewer suppression is controlled by `
-            + `\`commands.pr-gate.reviewerAgents: 0\` in \`webpieces.config.json\` or `
-            + `\`experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true\` in the machine-local `
-            + `\`~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}\`. **This is not an all-clear**, and `
-            + `${required.length} of the suppressed checklist(s) were REQUIRED._`,
+            `_No reviewer subagent ran on this PR. Reviewer suppression is controlled by ` +
+                `\`commands.pr-gate.reviewerAgents: 0\` in \`webpieces.config.json\` or ` +
+                `\`experimental.${HOME_KEY_TURN_OFF_ALL_REVIEWERS}: true\` in the machine-local ` +
+                `\`~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE}\`. **This is not an all-clear**, and ` +
+                `${required.length} of the suppressed checklist(s) were REQUIRED._`,
             '',
             `### Checklists (all ${rows.length})`,
         ];
@@ -128,9 +142,7 @@ export class ChecklistCommentRenderer {
      * deliver, and dropping either would make the reader recompute the diff to tell them apart.
      */
     private suppressedBullet(row: ChecklistCommentRow): string {
-        const state = row.ran
-            ? `⚫ SUPPRESSED${row.required ? ' (REQUIRED)' : ' (optional)'} — no reviewer ran`
-            : '⚪ did not apply to this diff';
+        const state = row.ran ? `⚫ SUPPRESSED${row.required ? ' (REQUIRED)' : ' (optional)'} — no reviewer ran` : '⚪ did not apply to this diff';
         return `- [ ] **${row.checklistId}** — ${state}\n  - ${this.whyLine(row)}`;
     }
 
@@ -145,10 +157,7 @@ export class ChecklistCommentRenderer {
         if (declined.length === 0) {
             return '_No reviewer had to run on this diff — every configured checklist was evaluated and none of them applied._';
         }
-        return (
-            `_No reviewer ran. ${declined.length} OPTIONAL checklist(s) DID apply to this diff and were not ` +
-            `run; the rest were evaluated and did not apply._`
-        );
+        return `_No reviewer ran. ${declined.length} OPTIONAL checklist(s) DID apply to this diff and were not ` + `run; the rest were evaluated and did not apply._`;
     }
 
     // The roll-up line. `baseResolved:false` replaces it entirely: with no fork point the changed-file set is
@@ -156,11 +165,7 @@ export class ChecklistCommentRenderer {
     // "all skipped ✅" would post a green all-clear for a PR where nothing was actually evaluated.
     private rollupHeader(rows: readonly ChecklistCommentRow[], baseResolved: boolean): string {
         if (!baseResolved) {
-            return (
-                `## 🔍 Company review checklists — ⚠️ NOT EVALUATED (${rows.length} defined)\n` +
-                `_No diff base (fork point of main) could be resolved, so no checklist was matched against ` +
-                `anything. This is **not** an all-clear._`
-            );
+            return `## 🔍 Company review checklists — ⚠️ NOT EVALUATED (${rows.length} defined)\n` + `_No diff base (fork point of main) could be resolved, so no checklist was matched against ` + `anything. This is **not** an all-clear._`;
         }
         const ran = rows.filter((r: ChecklistCommentRow): boolean => this.reviewerRan(r));
         const declined = rows.filter((r: ChecklistCommentRow): boolean => this.declined(r));
@@ -192,11 +197,7 @@ export class ChecklistCommentRenderer {
     // checklist was evaluated and did not apply, which the words state as the good news it is.
     private rosterBullet(row: ChecklistCommentRow): string {
         const box = this.reviewerRan(row) ? '- [x]' : '- [ ]';
-        return (
-            `${box} ${this.verdictEmoji(row)} **${row.checklistId}**${this.optionalTag(row)} — ` +
-            `${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
-            `  - ${this.whyLine(row)}`
-        );
+        return `${box} ${this.verdictEmoji(row)} **${row.checklistId}**${this.optionalTag(row)} — ` + `${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` + `  - ${this.whyLine(row)}`;
     }
 
     /**
@@ -277,19 +278,13 @@ export class ChecklistCommentRenderer {
             // gate (every PR names a ticket, every PR has an owner) is exactly what it is FOR — so telling
             // every such row to "add `patterns` if that is not intended" nags the repos that meant it, on
             // every PR, forever. A reader who wants to know whether it was intended can read the config.
-            return (
-                `ALWAYS RUNS (no patterns) — whole diff in scope, ${total} changed file(s): ` +
-                `${formatFileList(row.matchedFiles)}`
-            );
+            return `ALWAYS RUNS (no patterns) — whole diff in scope, ${total} changed file(s): ` + `${formatFileList(row.matchedFiles)}`;
         }
         const configured = this.asCode(row.configuredPatterns);
         if (row.firedPatterns.length === 0) {
             return `${configured} matched 0 of ${total} changed file(s)`;
         }
-        return (
-            `matched ${this.asCode(row.firedPatterns)} → ${row.matchedFiles.length} of ${total} ` +
-            `changed file(s): ${formatFileList(row.matchedFiles)}`
-        );
+        return `matched ${this.asCode(row.firedPatterns)} → ${row.matchedFiles.length} of ${total} ` + `changed file(s): ${formatFileList(row.matchedFiles)}`;
     }
 
     private asCode(patterns: readonly string[]): string {
@@ -303,10 +298,7 @@ export class ChecklistCommentRenderer {
         return rows
             .filter((r: ChecklistCommentRow): boolean => this.reviewerRan(r))
             .slice()
-            .sort(
-                (a: ChecklistCommentRow, b: ChecklistCommentRow): number =>
-                    this.rankOf(rank, a.status) - this.rankOf(rank, b.status),
-            );
+            .sort((a: ChecklistCommentRow, b: ChecklistCommentRow): number => this.rankOf(rank, a.status) - this.rankOf(rank, b.status));
     }
 
     private rankOf(rank: readonly string[], status: string): number {
@@ -316,16 +308,14 @@ export class ChecklistCommentRenderer {
 
     private commentSection(row: ChecklistCommentRow): CommentSection {
         const heading = `#### ${this.verdictEmoji(row)} ${row.checklistId} — ${this.verdictWords(row)}`;
-        const body =
-            row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
+        const body = row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
         return new CommentSection(heading + '\n\n' + new ReviewIdentityRenderer().render(row.agent, row.model), body);
     }
 
     // Keep the comment under GitHub's size cap by shrinking the LONGEST section body first (so a short
     // overridden note is never cut to make room for a long passing one), never dropping a verdict heading.
     private fitComment(header: string, sections: CommentSection[]): string {
-        const assemble = (): string =>
-            `${header}\n\n${sections.map((s: CommentSection): string => `${s.heading}\n\n${s.body}`).join('\n\n')}`;
+        const assemble = (): string => `${header}\n\n${sections.map((s: CommentSection): string => `${s.heading}\n\n${s.body}`).join('\n\n')}`;
         const trunc = '\n\n…_[truncated to fit the GitHub comment size limit]_';
         let out = assemble();
         while (out.length > COMMENT_LIMIT) {

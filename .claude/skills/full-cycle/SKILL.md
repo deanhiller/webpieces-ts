@@ -187,6 +187,11 @@ Give the subagent: the task, **the ticket number from the section above** (Linea
 > pnpm wp-finish-upsert-pr    # opens the PR
 > ```
 >
+> **Hotfix branch exception.** If the branch contains the exact, case-sensitive `/hotfix/` segment,
+> stage ① prints the emergency two-stage flow: write its `summary.json`, then run
+> `pnpm wp-finish-upsert-pr`. Do not run stage ②, do not spawn reviewers, and do not manufacture verdicts;
+> finish runs compilation + tests and publishes the permanent bypass audit banner.
+>
 > **Read what each command prints on THIS run and obey that** — webpieces owns the sequence and the file paths, and changes them between releases. Do not follow a remembered version.
 >
 > **Reviewers.** Spawn EXACTLY as many reviewer subagents as `wp-review-upsert-pr` tells you on THIS run, no more — the count is `commands.pr-gate.reviewerAgents` in the repo's `webpieces.config.json` (often `1`, meaning ONE subagent covers every required checklist and writes one verdict per checklist; `0` means spawn none). Use the agent type the gate names and hand it the actual diff plus every instructions file it lists. There is NO one-subagent-per-checklist rule — `reviewerAgents` replaced it. Required today means `morpheus-wrapper-linear-required` and, when the diff touches `libraries/kami/**` or `terraform/**`, `morpheus-wrapper-terraform-kami-required` — but trust the gate's own labelling over this list.

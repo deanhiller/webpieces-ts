@@ -19,7 +19,7 @@ import { TargetConfiguration } from '@nx/devkit';
  * measured ~3.2x contention cost
  * is what that buys you). Scoped to the rule-running targets, `build`/`test`/`lint` keep sharing.
  *
- * The two vars are the same pair `getCurrentBranch()` reads, in the same order, so the hash keys off
+ * The two vars are the same pair `BranchIdentity.current()` reads, in the same order, so the hash keys off
  * exactly the values the skip decision keys off. A plain `git rev-parse` is deliberately NOT used: nx
  * inputs must be cheap and pure, and on the CI checkout the vars are the authoritative answer anyway.
  *

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isInsideNestedGitRepo, createCiTarget } from './plugin';
+import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget } from './plugin';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { specTempDirs } from '@webpieces/rules-config';
@@ -32,7 +32,7 @@ describe('isInsideNestedGitRepo', () => {
         expect(isInsideNestedGitRepo(root, 'repositories/foo/packages/bar')).toBe(true);
     });
 
-    it('does NOT treat the workspace root\'s own .git as nested', () => {
+    it("does NOT treat the workspace root's own .git as nested", () => {
         const root = tmpRoot();
         fs.mkdirSync(path.join(root, '.git'), { recursive: true });
         fs.mkdirSync(path.join(root, 'apps', 'web'), { recursive: true });
@@ -56,17 +56,8 @@ describe('createCiTarget', () => {
     });
 
     it('appends the per-project validation gates so ci validates but build stays fast', () => {
-        const ci = createCiTarget(
-            ['validate-no-file-import-cycles', 'di-graph-generate'],
-            false,
-        );
-        expect(ci.dependsOn).toEqual([
-            'lint',
-            'build',
-            'test',
-            'validate-no-file-import-cycles',
-            'di-graph-generate',
-        ]);
+        const ci = createCiTarget(['validate-no-file-import-cycles', 'di-graph-generate'], false);
+        expect(ci.dependsOn).toEqual(['lint', 'build', 'test', 'validate-no-file-import-cycles', 'di-graph-generate']);
     });
 
     it('adds the cross-project architecture gate only when the workspace exists', () => {
@@ -74,6 +65,20 @@ describe('createCiTarget', () => {
         expect(withArch.dependsOn).toContain('architecture:validate-complete');
         const withoutArch = createCiTarget(['validate-no-file-import-cycles'], false);
         expect(withoutArch.dependsOn).not.toContain('architecture:validate-complete');
+    });
+});
+
+describe('createHotfixCiTarget', () => {
+    it('runs build + test only', () => {
+        const target = createHotfixCiTarget();
+        expect(target.executor).toBe('nx:noop');
+        expect(target.dependsOn).toEqual(['build', 'test']);
+        expect(target.dependsOn).not.toContain('lint');
+        expect(target.dependsOn).not.toContain('architecture:validate-complete');
+    });
+
+    it('isolates its composite cache receipt by branch identity', () => {
+        expect(createHotfixCiTarget().inputs).toEqual(['default', ...BRANCH_IDENTITY_INPUTS]);
     });
 });
 
@@ -87,7 +92,7 @@ describe('createCiTarget', () => {
 describe('branch identity is in the hash of every CACHED rule-running target', () => {
     function hasBranchInputs(inputs: unknown): boolean {
         const list = (inputs ?? []) as { env?: string }[];
-        return BRANCH_IDENTITY_INPUTS.every(want => list.some(got => JSON.stringify(got) === JSON.stringify(want)));
+        return BRANCH_IDENTITY_INPUTS.every((want) => list.some((got) => JSON.stringify(got) === JSON.stringify(want)));
     }
 
     it('ci carries them', () => {
@@ -110,7 +115,7 @@ describe('branch identity is in the hash of every CACHED rule-running target', (
         expect(hasBranchInputs(tsInSrc.inputs)).toBe(false);
     });
 
-    it('keys off the same env vars getCurrentBranch reads', () => {
+    it('keys off the same env vars BranchIdentity reads', () => {
         expect(BRANCH_IDENTITY_INPUTS).toEqual([{ env: 'GITHUB_HEAD_REF' }, { env: 'WEBPIECES_BRANCH' }]);
     });
 });

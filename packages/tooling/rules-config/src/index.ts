@@ -208,7 +208,7 @@ export {
 } from './sections';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
-export { shouldSkipRule, getCurrentBranch } from './skip-rule';
+export { shouldSkipRule, BranchIdentity, HOTFIX_BRANCH_SEGMENT, HOTFIX_BUILD_COMMAND, HOTFIX_AUDIT_BANNER } from './skip-rule';
 export { SkipRuleResult } from './skip-rule';
 export {
     detectBase,

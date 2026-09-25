@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, PrSummary } from '@webpieces/rules-config';
-import {
-    Dashboard,
-    DashboardInput,
-    GateResult,
-    DisableCounts,
-    ChecklistRow,
-} from './dashboard';
+import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
 import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
 import { ChecklistCommentRow } from './checklist-comment-row';
@@ -14,8 +8,7 @@ import { AuthorIdentity } from './author-identity';
 
 const dash = new Dashboard();
 const AUTHOR = new AuthorIdentity('codex', 'gpt-5.6-sol');
-const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] =>
-    dash.computeGateResults(g, f);
+const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
 const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables(p);
 const renderDetailComment = (i: DashboardInput): string => dash.renderDetailComment(i);
 const renderPrBody = (i: DashboardInput, url: string): string => dash.renderPrBody(i, url);
@@ -28,12 +21,7 @@ function review(overrides: Partial<PrSummary> = {}): PrSummary {
 // The 2nd comment's renderer, used here only by the tests that contrast what the DASHBOARD row drops
 // against what the comment keeps. Its own behaviour is covered in checklist-comment-renderer.spec.ts.
 const checklistRenderer = new ChecklistCommentRenderer();
-const renderChecklistComment = (
-    rows: ChecklistCommentRow[],
-    verified: boolean,
-    based = true,
-    suppressedCount = 0,
-): string => checklistRenderer.render(rows, verified, based, suppressedCount);
+const renderChecklistComment = (rows: ChecklistCommentRow[], verified: boolean, based = true, suppressedCount = 0, hotfix = false): string => checklistRenderer.render(rows, verified, based, suppressedCount, hotfix);
 
 // A minimal all-green input, so a test about ONE property of the PR body does not restate ten
 // positional constructor arguments to get at it. `buildCommand` is a parameter rather than a fixed
@@ -46,20 +34,7 @@ function baseInput(
     // asserts about. A test that cares about `experimental.turnOffAllReviewers` passes a real count.
     suppressedChecklistCount = 0,
 ): DashboardInput {
-    return new DashboardInput(
-        'My PR',
-        computeGateResults([], []),
-        countAddedDisables(''),
-        true,
-        'aaaaaaaaaaaaaaaa',
-        'bbbbbbbbbbbbbbbb',
-        'cccccccccccccccc',
-        review(reviewOverrides),
-        [],
-        buildCommand,
-        suppressedChecklistCount,
-        AUTHOR,
-    );
+    return new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc', review(reviewOverrides), [], buildCommand, suppressedChecklistCount, AUTHOR, false);
 }
 
 // The four files every fixture roster was matched against, so "x of 4" is always honest.
@@ -67,55 +42,23 @@ const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
 
 // A reviewer that RAN because one of its two configured globs hit one of the 4 changed files.
 function ranRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow('unknown', 'unknown',
-        subagent,
-        status,
-        detail,
-        true,
-        ['db/**', '**/*.sql'],
-        ['**/*.sql'],
-        ['db/003.sql'],
-        FOUR_FILES.length,
-    );
+    return new ChecklistCommentRow('unknown', 'unknown', subagent, status, detail, true, ['db/**', '**/*.sql'], ['**/*.sql'], ['db/003.sql'], FOUR_FILES.length);
 }
 
 // A checklist that WAS evaluated and did not apply — its globs hit none of the 4 changed files.
 function skippedRow(subagent: string): ChecklistCommentRow {
-    return new ChecklistCommentRow('unknown', 'unknown',
-        subagent,
-        '',
-        '',
-        false,
-        ['apps/web/**', '**/*.tsx'],
-        [],
-        [],
-        FOUR_FILES.length,
-    );
+    return new ChecklistCommentRow('unknown', 'unknown', subagent, '', '', false, ['apps/web/**', '**/*.tsx'], [], [], FOUR_FILES.length);
 }
 
 // A PATTERNLESS checklist: always runs, whole diff in scope. Note it also has NO fired patterns — the same
 // empty list a skipped checklist has, which is why the renderer must key off the configured list instead.
 function alwaysRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
-    return new ChecklistCommentRow('unknown', 'unknown',
-        subagent,
-        status,
-        detail,
-        true,
-        [],
-        [],
-        FOUR_FILES,
-        FOUR_FILES.length,
-    );
+    return new ChecklistCommentRow('unknown', 'unknown', subagent, status, detail, true, [], [], FOUR_FILES, FOUR_FILES.length);
 }
-
-
 
 describe('computeGateResults', () => {
     it('matches glob patterns and reports matched files', () => {
-        const gates = [
-            new GateDefinition('API Changed', ['libraries/apis/**', '**/*Api.ts'], 'yellow'),
-            new GateDefinition('Schema', ['db/schema.sql'], 'red'),
-        ];
+        const gates = [new GateDefinition('API Changed', ['libraries/apis/**', '**/*Api.ts'], 'yellow'), new GateDefinition('Schema', ['db/schema.sql'], 'red')];
         const changed = ['libraries/apis/Foo.ts', 'src/x/BarApi.ts', 'src/util.ts'];
         const results = computeGateResults(gates, changed);
 
@@ -124,10 +67,7 @@ describe('computeGateResults', () => {
     });
 
     it('skips disabled (example) gates entirely', () => {
-        const gates = [
-            new GateDefinition('Active', ['**/*Api.ts'], 'yellow'),
-            new GateDefinition('Example DB', ['**/*Api.ts'], 'red', true),
-        ];
+        const gates = [new GateDefinition('Active', ['**/*Api.ts'], 'yellow'), new GateDefinition('Example DB', ['**/*Api.ts'], 'red', true)];
         const results = computeGateResults(gates, ['src/FooApi.ts']);
         expect(results.map((r): string => r.name)).toEqual(['Active']);
     });
@@ -153,25 +93,9 @@ describe('countAddedDisables', () => {
 
 describe('renderDetailComment', () => {
     it('renders the RISK section, yellow gates, and build status', () => {
-        const gates = computeGateResults(
-            [new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')],
-            ['src/FooApi.ts'],
-        );
+        const gates = computeGateResults([new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')], ['src/FooApi.ts']);
         const disables = countAddedDisables('');
-        const input = new DashboardInput(
-            'My PR',
-            gates,
-            disables,
-            true,
-            'aaaaaaaaaaaa',
-            'bbbbbbbbbbbb',
-            'cccccccccccc',
-            review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+        const input = new DashboardInput('My PR', gates, disables, true, 'aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc', review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const md = renderDetailComment(input);
 
         expect(md).toContain('🚦 PR Gate Dashboard');
@@ -186,10 +110,7 @@ describe('renderDetailComment', () => {
     });
 
     it('renders a red gate with 🔴 and counts pattern violations', () => {
-        const gates = computeGateResults(
-            [new GateDefinition('DB Schema Changed', ['db/schema.sql'], 'red')],
-            ['db/schema.sql'],
-        );
+        const gates = computeGateResults([new GateDefinition('DB Schema Changed', ['db/schema.sql'], 'red')], ['db/schema.sql']);
         const input = new DashboardInput(
             'My PR',
             gates,
@@ -204,11 +125,12 @@ describe('renderDetailComment', () => {
                 riskEmoji: '🔴',
                 violations: ['boundary crossed', 'naming'],
             }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+            [],
+            'pnpm nx affected --target=ci',
+            0,
+            AUTHOR,
+            false,
+        );
         const md = renderDetailComment(input);
 
         expect(md).toContain('**DB Schema Changed:** 🔴 Yes (1 file(s))');
@@ -240,6 +162,30 @@ describe('renderDetailComment', () => {
     });
 });
 
+describe('hotfix audit surfaces', () => {
+    it('starts the PR body and full dashboard with the permanent banner and never paints bypasses green', () => {
+        const input = baseInput({}, 'pnpm nx affected --target=hotfix-ci');
+        input.hotfix = true;
+        const body = renderPrBody(input, 'https://github.com/acme/repo/pull/1');
+        const detail = renderDetailComment(input);
+        for (const rendered of [body, detail]) {
+            expect(rendered.startsWith('# ⚠️ HOT FIX ⚠️\n\nThis emergency PR bypassed')).toBe(true);
+            expect(rendered).toContain('hotfix-ci');
+        }
+        expect(body).toContain('HOTFIX');
+        expect(body).not.toContain('Flags: 🟢 all green');
+        expect(detail).toContain('⚫ BYPASSED by /hotfix/ convention · 0 reviewer agents ran');
+    });
+
+    it('starts the checklist comment with the banner and reports zero reviewers', () => {
+        const rendered = renderChecklistComment([skippedRow('ticket-required')], true, true, 0, true);
+        expect(rendered.startsWith('# ⚠️ HOT FIX ⚠️\n\nThis emergency PR bypassed')).toBe(true);
+        expect(rendered).toContain('0 reviewer agents ran');
+        expect(rendered).toContain('⚫ BYPASSED');
+        expect(rendered).not.toContain('🟢');
+    });
+});
+
 describe('renderPrBody', () => {
     it('leads with the PR link, then the risk score, omitting green rows', () => {
         const input = new DashboardInput(
@@ -256,11 +202,12 @@ describe('renderPrBody', () => {
                 riskEmoji: '🟢',
                 summary: 'One thing. Two thing. Three thing.',
             }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+            [],
+            'pnpm nx affected --target=ci',
+            0,
+            AUTHOR,
+            false,
+        );
         const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
 
         // ORDER is the point, not mere presence: the link is the FIRST line of the body, so `git log`
@@ -299,7 +246,15 @@ describe('renderPrBody', () => {
         expect(green).toContain('Flags: 🟢 all green');
         expect(green).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
 
-        const red = renderPrBody(baseInput({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), '');
+        const red = renderPrBody(
+            baseInput({
+                riskScore: 80,
+                riskLevel: 'red',
+                riskEmoji: '🔴',
+                violations: ['boundary'],
+            }),
+            '',
+        );
         expect(red).toContain('Non-green Flags (full list in first comment to avoid large git logs)');
         expect(red).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
     });
@@ -339,31 +294,9 @@ describe('renderPrBody', () => {
     });
 
     it('lists every non-green flag (build, gates, violations, disables)', () => {
-        const gates = computeGateResults(
-            [new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')],
-            ['src/FooApi.ts'],
-        );
-        const disables = countAddedDisables(
-            [
-                '+++ b/a.ts',
-                '+// webpieces-disable no-any-unknown -- x',
-                '+// eslint-disable-next-line',
-            ].join('\n'),
-        );
-        const input = new DashboardInput(
-            'My PR',
-            gates,
-            disables,
-            false,
-            'a',
-            'b',
-            'c',
-            review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+        const gates = computeGateResults([new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')], ['src/FooApi.ts']);
+        const disables = countAddedDisables(['+++ b/a.ts', '+// webpieces-disable no-any-unknown -- x', '+// eslint-disable-next-line'].join('\n'));
+        const input = new DashboardInput('My PR', gates, disables, false, 'a', 'b', 'c', review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
 
         expect(body).toContain('Non-green Flags (full list in first comment to avoid large git logs)');
@@ -378,20 +311,7 @@ describe('renderPrBody', () => {
     });
 
     it('caps the summary at 4 sentences', () => {
-        const input = new DashboardInput(
-            'My PR',
-            computeGateResults([], []),
-            countAddedDisables(''),
-            true,
-            'a',
-            'b',
-            'c',
-            review({ summary: 'S1. S2. S3. S4. S5. S6.' }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review({ summary: 'S1. S2. S3. S4. S5. S6.' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
 
         expect(body).toContain('S1. S2. S3. S4.');
@@ -408,14 +328,14 @@ describe('renderPrBody', () => {
             'b',
             'c',
             review({
-                summary:
-                    'Edits dependencies.json and runtime-graph.ts under src/lib. Bumps to 0.4.447 cleanly.',
+                summary: 'Edits dependencies.json and runtime-graph.ts under src/lib. Bumps to 0.4.447 cleanly.',
             }),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+            [],
+            'pnpm nx affected --target=ci',
+            0,
+            AUTHOR,
+            false,
+        );
         const body = renderPrBody(input, '');
 
         // Both real sentences survive intact — the dotted tokens are NOT treated as sentence breaks and
@@ -426,26 +346,10 @@ describe('renderPrBody', () => {
 });
 
 // The ~90-word override paragraph that used to be inlined on EVERY per-checklist dashboard row.
-const OVERRIDE_PROSE =
-    'HUMAN-APPROVED OVERRIDE (Dean Hiller, explicit, in-session). This branch is a THROWAWAY pr-gate ' +
-    'smoke test and is NOT for merge - the defects below were planted deliberately. Delete this branch ' +
-    'after the layout has been eyeballed.';
+const OVERRIDE_PROSE = 'HUMAN-APPROVED OVERRIDE (Dean Hiller, explicit, in-session). This branch is a THROWAWAY pr-gate ' + 'smoke test and is NOT for merge - the defects below were planted deliberately. Delete this branch ' + 'after the layout has been eyeballed.';
 
 function dashboardWith(rows: ChecklistRow[]): string {
-    const input = new DashboardInput(
-        'My PR',
-        computeGateResults([], []),
-        countAddedDisables(''),
-        true,
-        'a',
-        'b',
-        'c',
-        review(),
-        rows,
-    'pnpm nx affected --target=ci',
-    0,
-    AUTHOR,
-);
+    const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
     return renderDetailComment(input);
 }
 
@@ -453,48 +357,19 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
     // Nobody looked is NOT an all-clear. A green row (or, as before, no row at all) reads as "checked and
     // clean"; ⚪ says no reviewer was involved, which is precisely what a reader must be able to tell apart.
     it('renders a SKIPPED ⚪ row — never green, never nothing — when no checklist ran', () => {
-        const input = new DashboardInput(
-            'My PR',
-            computeGateResults([], []),
-            countAddedDisables(''),
-            true,
-            'a',
-            'b',
-            'c',
-            review(),
-        [],
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const md = renderDetailComment(input);
-        expect(md).toContain(
-            '**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment',
-        );
+        expect(md).toContain('**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment');
         expect(md).not.toContain('**Checklists:** 🟢');
         expect(md).not.toContain('Checklist —'); // and no per-checklist row survives anywhere
     });
 
     // The bug this row replaced: six checklists meant six rows, each repeating the SAME override paragraph.
     it('collapses six overridden checklists into ONE orange row with a count and NO override prose', () => {
-        const ids = [
-            'checklist-envvars',
-            'checklist-frontend',
-            'checklist-db',
-            'checklist-api',
-            'checklist-infra',
-            'checklist-a11y',
-        ];
-        const md = dashboardWith(
-            ids.map(
-                (id: string): ChecklistRow => new ChecklistRow(id, CK_OVERRIDDEN, OVERRIDE_PROSE),
-            ),
-        );
+        const ids = ['checklist-envvars', 'checklist-frontend', 'checklist-db', 'checklist-api', 'checklist-infra', 'checklist-a11y'];
+        const md = dashboardWith(ids.map((id: string): ChecklistRow => new ChecklistRow(id, CK_OVERRIDDEN, OVERRIDE_PROSE)));
 
-        expect(md).toContain(
-            '**Checklists:** 🟠 6 ran — 6 overridden (checklist-envvars, checklist-frontend, ' +
-                'checklist-db, checklist-api +2 more) · per-checklist detail in the checklist comment',
-        );
+        expect(md).toContain('**Checklists:** 🟠 6 ran — 6 overridden (checklist-envvars, checklist-frontend, ' + 'checklist-db, checklist-api +2 more) · per-checklist detail in the checklist comment');
         expect(md.match(/\*\*Checklists:\*\*/g)).toHaveLength(1);
         expect(md).not.toContain('HUMAN-APPROVED OVERRIDE');
         expect(md).not.toContain('THROWAWAY');
@@ -502,49 +377,26 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
     });
 
     it('is GREEN and says all passed when every checklist passed', () => {
-        const md = dashboardWith([
-            new ChecklistRow('db-reviewer', CK_PASS),
-            new ChecklistRow('api-reviewer', CK_PASS),
-        ]);
-        expect(md).toContain(
-            '**Checklists:** 🟢 2 ran — all passed · per-checklist detail in the checklist comment',
-        );
+        const md = dashboardWith([new ChecklistRow('db-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_PASS)]);
+        expect(md).toContain('**Checklists:** 🟢 2 ran — all passed · per-checklist detail in the checklist comment');
     });
 
     // Worst-of: red beats orange beats yellow beats green, and the row names who is red.
     it('is RED when any checklist is blocking, even amid overrides and passes', () => {
-        const md = dashboardWith([
-            new ChecklistRow('db-reviewer', CK_PASS),
-            new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit'),
-            new ChecklistRow('secrets-reviewer', CK_OVERRIDDEN, OVERRIDE_PROSE),
-            new ChecklistRow('infra-reviewer', CK_FAIL, 'the Dockerfile is never built'),
-        ]);
-        expect(md).toContain(
-            '**Checklists:** 🔴 4 ran — 1 blocking (infra-reviewer), 1 overridden ' +
-                '(secrets-reviewer), 1 with concerns (api-reviewer), 1 passed · per-checklist detail in the checklist comment',
-        );
+        const md = dashboardWith([new ChecklistRow('db-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit'), new ChecklistRow('secrets-reviewer', CK_OVERRIDDEN, OVERRIDE_PROSE), new ChecklistRow('infra-reviewer', CK_FAIL, 'the Dockerfile is never built')]);
+        expect(md).toContain('**Checklists:** 🔴 4 ran — 1 blocking (infra-reviewer), 1 overridden ' + '(secrets-reviewer), 1 with concerns (api-reviewer), 1 passed · per-checklist detail in the checklist comment');
         expect(md).not.toContain('Dockerfile');
     });
 
     // An override is a human knowingly accepting a RED verdict — it must never render as a clean pass.
     it('is ORANGE (never green) for an override, and YELLOW for a warn-only run', () => {
-        expect(
-            dashboardWith([
-                new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
-            ]),
-        ).toContain('**Checklists:** 🟠 1 ran — 1 overridden (hasura-reviewer)');
-        expect(
-            dashboardWith([
-                new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route'),
-            ]),
-        ).toContain('**Checklists:** 🟡 1 ran — 1 with concerns (api-reviewer)');
+        expect(dashboardWith([new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210')])).toContain('**Checklists:** 🟠 1 ran — 1 overridden (hasura-reviewer)');
+        expect(dashboardWith([new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route')])).toContain('**Checklists:** 🟡 1 ran — 1 with concerns (api-reviewer)');
     });
 
     // An unrecognized verdict is BLOCKING, not a silent pass — the same default the comment side uses.
     it('treats an unknown verdict as blocking rather than green', () => {
-        expect(dashboardWith([new ChecklistRow('mystery-reviewer', 'brand-new-state')])).toContain(
-            '**Checklists:** 🔴 1 ran — 1 blocking (mystery-reviewer)',
-        );
+        expect(dashboardWith([new ChecklistRow('mystery-reviewer', 'brand-new-state')])).toContain('**Checklists:** 🔴 1 ran — 1 blocking (mystery-reviewer)');
     });
 });
 
@@ -552,48 +404,18 @@ describe('renderDetailComment checklists — the detail still lives in the comme
     // The roll-up row is a SUMMARY, not a replacement: the comment is unchanged and still carries every
     // reviewer's verbatim output, which is exactly why the PR body no longer needs to.
     it('leaves the comment carrying the full override prose the dashboard dropped', () => {
-        const rows = [
-            new ChecklistCommentRow('unknown', 'unknown',
-                'checklist-envvars',
-                CK_OVERRIDDEN,
-                OVERRIDE_PROSE,
-                true,
-                ['**/*.ts'],
-                ['**/*.ts'],
-                ['src/a.ts'],
-                4,
-            ),
-        ];
+        const rows = [new ChecklistCommentRow('unknown', 'unknown', 'checklist-envvars', CK_OVERRIDDEN, OVERRIDE_PROSE, true, ['**/*.ts'], ['**/*.ts'], ['src/a.ts'], 4)];
         const md = renderChecklistComment(rows, true);
 
         expect(md).toContain(OVERRIDE_PROSE);
-        expect(md).toContain(
-            '#### 🟠 checklist-envvars — OVERRIDDEN — a human authorized shipping it '
-            + '(recorded in override-checklist-envvars.json)',
-        );
+        expect(md).toContain('#### 🟠 checklist-envvars — OVERRIDDEN — a human authorized shipping it ' + '(recorded in override-checklist-envvars.json)');
         expect(md).not.toContain('**Checklists:** '); // the dashboard row belongs to the PR body only
     });
 
     // The compact commit body is a separate artifact and keeps its per-checklist flags.
     it('carries matched checklists into the compact commit body unchanged', () => {
-        const rows = [
-            new ChecklistRow('hasura-reviewer', CK_PASS),
-            new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit'),
-        ];
-        const input = new DashboardInput(
-            'My PR',
-            computeGateResults([], []),
-            countAddedDisables(''),
-            true,
-            'a',
-            'b',
-            'c',
-            review(),
-            rows,
-        'pnpm nx affected --target=ci',
-        0,
-        AUTHOR,
-    );
+        const rows = [new ChecklistRow('hasura-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit')];
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
         expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
