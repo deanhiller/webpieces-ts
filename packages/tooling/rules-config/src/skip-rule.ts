@@ -58,23 +58,6 @@ export class SkipRuleResult {
 // assertBranchIsTrustworthy) because this getter has callers — the main-sync cache label, merged-PR
 // detection, code-rules' re-export of it — for which a fork's own branch name is a perfectly good
 // answer, and making the getter itself throw would redden all of them.
-function getCurrentBranch(): string {
-    const prBranch = process.env['GITHUB_HEAD_REF'];
-    if (prBranch) return prBranch;
-
-    const override = process.env['WEBPIECES_BRANCH'];
-    if (override) return override;
-
-    // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-    try {
-        return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new InformAiError(`Failed to determine current git branch: ${error.message}`, { cause: error });
-    }
-}
-
 export const HOTFIX_BRANCH_SEGMENT = '/hotfix/';
 export const HOTFIX_BUILD_COMMAND = 'pnpm nx affected --target=hotfix-ci --base=$(git merge-base origin/main HEAD)';
 export const HOTFIX_AUDIT_BANNER = '# ⚠️ HOT FIX ⚠️\n\n' + 'This emergency PR bypassed required reviews, ticket enforcement, Webpieces rules, ESLint, and ' + 'Prettier/format checks. Compilation and tests ran.';
@@ -83,13 +66,28 @@ export const HOTFIX_AUDIT_BANNER = '# ⚠️ HOT FIX ⚠️\n\n' + 'This emergen
 @injectable(bindingScopeValues.Singleton)
 export class BranchIdentity {
     current(): string {
-        return getCurrentBranch();
+        const prBranch = process.env['GITHUB_HEAD_REF'];
+        if (prBranch) return prBranch;
+
+        const override = process.env['WEBPIECES_BRANCH'];
+        if (override) return override;
+
+        // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
+        try {
+            return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+        } catch (err: unknown) {
+            const error = toError(err);
+            throw new InformAiError(`Failed to determine current git branch: ${error.message}`, { cause: error });
+        }
     }
 
     isHotfix(branchName: string = this.current()): boolean {
         return branchName.includes(HOTFIX_BRANCH_SEGMENT);
     }
 }
+
+const branchIdentity = new BranchIdentity();
 
 // The slice of the GitHub `pull_request` event payload that says WHO OWNS the head branch. Only the
 // one field below is read; everything else in that file is ignored.
@@ -227,7 +225,7 @@ export function shouldSkipRule(
         // (SkipRuleResult.hatchNotApplied) rather than being printed, so a caller that does fail can fold
         // it into its own error instead of a library writing to a console nobody can catch.
         assertBranchIsTrustworthy(branchName);
-        const current = getCurrentBranch();
+        const current = branchIdentity.current();
         if (current === 'HEAD' || current === '') {
             return new SkipRuleResult(false, '', `turnOffRuleWhileOnBranch: "${branchName}" did not apply — HEAD is detached, so there is no ` + `branch to match (a tag checkout, a git bisect step, or a CI checkout of a merge ref).`);
         }
