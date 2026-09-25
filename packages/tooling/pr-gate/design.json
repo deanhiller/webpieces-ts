@@ -89,6 +89,14 @@
                     "level": 5
                 },
                 {
+                    "id": "BranchIdentity",
+                    "className": "BranchIdentity",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/skip-rule.ts",
+                    "level": 5
+                },
+                {
                     "id": "BranchMutationLog",
                     "className": "BranchMutationLog",
                     "kind": "class",
@@ -118,7 +126,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "BuildArtifactGate",
@@ -126,7 +134,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-artifact-gate.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "BuildCommand",
@@ -142,7 +150,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-gate-log.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BuildsLog",
@@ -150,7 +158,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/builds-log.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "CheckPrCommand",
@@ -174,7 +182,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "ChecklistInstructionsService",
@@ -198,7 +206,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/checklist-override.ts",
-                    "level": 6
+                    "level": 7
                 },
                 {
                     "id": "ChecklistScanner",
@@ -206,7 +214,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ChecklistScopeHasher",
@@ -214,7 +222,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-scope-hasher.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "CleanTmp",
@@ -278,7 +286,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/diff-basis.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "DiffMaterializer",
@@ -286,7 +294,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "DiffScope",
@@ -294,7 +302,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "DotWebpieces",
@@ -350,7 +358,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts",
-                    "level": 6
+                    "level": 7
                 },
                 {
                     "id": "GateTokenService",
@@ -382,7 +390,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/generated-artifact-registry.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "GitExec",
@@ -414,7 +422,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/home-config.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "HomeDocKeys",
@@ -422,7 +430,23 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/home-config-doc-keys.ts",
-                    "level": 4
+                    "level": 5
+                },
+                {
+                    "id": "HotfixFinishPreparer",
+                    "className": "HotfixFinishPreparer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/hotfix-finish-preparer.ts",
+                    "level": 2
+                },
+                {
+                    "id": "HotfixInstructions",
+                    "className": "HotfixInstructions",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/hotfix-instructions.ts",
+                    "level": 2
                 },
                 {
                     "id": "LandPrCommand",
@@ -550,7 +574,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "PrGateApp",
@@ -574,7 +598,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/provenance-enforcer.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "PushDevCommand",
@@ -622,7 +646,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/repo-scratch-dirs.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "ReviewIdentityStampService",
@@ -638,7 +662,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-json.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "ReviewProvenanceService",
@@ -646,7 +670,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-provenance.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "ReviewReport",
@@ -694,7 +718,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/reviewer-instructions.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "ReviewerVerdictGate",
@@ -726,7 +750,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "StartUpdateCommand",
@@ -758,7 +782,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/subagent-provenance.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "SyncMainCommand",
@@ -782,7 +806,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "WorkingTreeGate",
@@ -977,6 +1001,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
+                },
+                {
+                    "from": "BuildAffected",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
                 },
                 {
                     "from": "BuildAffected",
@@ -1466,6 +1499,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "BranchNaming",
                     "injection": "type",
                     "token": "BranchNaming",
@@ -1553,6 +1595,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "HotfixFinishPreparer",
+                    "injection": "type",
+                    "token": "HotfixFinishPreparer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/hotfix-finish-preparer.ts#HotfixFinishPreparer",
+                    "paramName": "hotfixFinish",
+                    "paramType": "HotfixFinishPreparer"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1769,6 +1820,114 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/home-config-doc-keys.ts#HomeDocKeys",
                     "paramName": "docKeys",
                     "paramType": "HomeDocKeys"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "BuildArtifactGate",
+                    "injection": "type",
+                    "token": "BuildArtifactGate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-artifact-gate.ts#BuildArtifactGate",
+                    "paramName": "buildArtifactGate",
+                    "paramType": "BuildArtifactGate"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "ChecklistScanner",
+                    "injection": "type",
+                    "token": "ChecklistScanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
+                    "paramName": "checklistScanner",
+                    "paramType": "ChecklistScanner"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "DiffMaterializer",
+                    "injection": "type",
+                    "token": "DiffMaterializer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts#DiffMaterializer",
+                    "paramName": "materializer",
+                    "paramType": "DiffMaterializer"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "MergeEnd",
+                    "injection": "type",
+                    "token": "MergeEnd",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
+                    "paramName": "mergeEnd",
+                    "paramType": "MergeEnd"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "PrContextWriter",
+                    "injection": "type",
+                    "token": "PrContextWriter",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts#PrContextWriter",
+                    "paramName": "prContextWriter",
+                    "paramType": "PrContextWriter"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "ProvenanceEnforcer",
+                    "injection": "type",
+                    "token": "ProvenanceEnforcer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/provenance-enforcer.ts#ProvenanceEnforcer",
+                    "paramName": "provenanceEnforcer",
+                    "paramType": "ProvenanceEnforcer"
+                },
+                {
+                    "from": "HotfixFinishPreparer",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "LandPrCommand",
@@ -2510,6 +2669,15 @@
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
                     "to": "BuildAffected",
                     "injection": "type",
                     "token": "BuildAffected",
@@ -2552,6 +2720,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "HotfixInstructions",
+                    "injection": "type",
+                    "token": "HotfixInstructions",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/hotfix-instructions.ts#HotfixInstructions",
+                    "paramName": "hotfixInstructions",
+                    "paramType": "HotfixInstructions"
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
@@ -2771,6 +2948,15 @@
                 },
                 {
                     "from": "StartUpsertPrCommand",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
                     "to": "BranchNaming",
                     "injection": "type",
                     "token": "BranchNaming",
@@ -2795,6 +2981,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "HotfixInstructions",
+                    "injection": "type",
+                    "token": "HotfixInstructions",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/hotfix-instructions.ts#HotfixInstructions",
+                    "paramName": "hotfixInstructions",
+                    "paramType": "HotfixInstructions"
                 },
                 {
                     "from": "StartUpsertPrCommand",

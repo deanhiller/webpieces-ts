@@ -211,8 +211,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      * guard. Anything with whitespace inside quotes is prose, and collapses to a space.
      */
     check(ctx: BashContext): readonly Violation[] {
-        this.capCache = null;
-        this.worktreeCapCache = null;
+        this.capCache = this.worktreeCapCache = null;
         // Match against the command with heredoc bodies and prose-in-quotes removed (BashContext
         // computes it for every guard now — this rule's private copy was the original).
         const command = ctx.commandCode;
@@ -243,8 +242,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (ORIGIN_MAIN_BASE.test(command)) return [];
         if (this.worktreeAdd && WORKTREE_ORIGIN_MAIN_BASE.test(command)) return [];
 
-        // `/hotfix/` is itself the explicit emergency authorization. It may be nested even when the
-        // consumer normally forbids sub-branches; wp-start-upsert-pr still reconciles it with main.
+        // The exact `/hotfix/` convention explicitly authorizes a nested emergency branch.
         if (this.branchIdentity.isHotfix(requestedName)) return [];
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {

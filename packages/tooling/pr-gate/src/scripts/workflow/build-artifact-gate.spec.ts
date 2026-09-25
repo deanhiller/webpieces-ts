@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { BuildsLog, DotWebpieces, RepoRootFinder, toError, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
+import { BranchIdentity, BuildsLog, DotWebpieces, RepoRootFinder, toError, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
 import { BuildAffected } from './build-affected';
 import { BuildGateLog } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -40,7 +40,8 @@ function buildAffected(): BuildAffected {
     return new BuildAffected(
         new BuildGateLog(files, stageConsole),
         new BuildsLog(new DotWebpieces()),
-        stageConsole);
+        stageConsole,
+        new BranchIdentity());
 }
 
 // The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just
