@@ -8,7 +8,7 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## CodeRulesApp — controller, Level 0…3
+## CodeRulesApp — controller, Level 0…5
 
 ```mermaid
 graph TD
@@ -17,9 +17,6 @@ graph TD
     CatchErrorPatternValidator["CatchErrorPatternValidator"]
     CodeRulesApp["CodeRulesApp"]:::controller
     CodeRulesEngine["CodeRulesEngine"]
-    CodeRulesRunRequest["CodeRulesRunRequest"]:::many
-    DebugRunReport["DebugRunReport"]
-    DebugTarget___null{{"DebugTarget | null ?"}}:::unresolved
     DiffScope["DiffScope"]
     EnsureWeAreSecureConfig["EnsureWeAreSecureConfig"]:::many
     EnsureWeAreSecureValidator["EnsureWeAreSecureValidator"]
@@ -66,8 +63,8 @@ graph TD
     PrismaConverterValidator["PrismaConverterValidator"]
     PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
     PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
+    ProjectCatalog["ProjectCatalog"]
     ProjectRoleResolver["ProjectRoleResolver"]
-    ReadonlyMap_string__FileScope_{{"ReadonlyMap<string, FileScope> ?"}}:::unresolved
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
     RequireReturnTypeValidator["RequireReturnTypeValidator"]
     RequiredTypeSuffixConfig["RequiredTypeSuffixConfig"]:::many
@@ -75,18 +72,18 @@ graph TD
     RoleTagConfig["RoleTagConfig"]:::many
     RoleTagValidator["RoleTagValidator"]
     RuleReporter["RuleReporter"]
-    RuleScopes["RuleScopes"]:::many
+    RuleSelection["RuleSelection"]:::many
+    ScanRestriction["ScanRestriction"]:::many
+    ScanScope["ScanScope"]
     WorkspaceRoot["WorkspaceRoot"]:::many
     readonly_MatchRuleConfig__{{"readonly MatchRuleConfig[] ?"}}:::unresolved
-    readonly_string_____null{{"readonly string[] | null ?"}}:::unresolved
+    readonly_string_____undefined{{"readonly string[] | undefined ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
-    string___null{{"string | null ?"}}:::unresolved
+    string___undefined{{"string | undefined ?"}}:::unresolved
     CatchErrorPatternValidator --> CatchErrorPatternConfig
+    CatchErrorPatternValidator --> ScanScope
     CodeRulesApp --> CodeRulesEngine
     CodeRulesEngine --> CatchErrorPatternValidator
-    CodeRulesEngine --> CodeRulesRunRequest
-    CodeRulesEngine --> DebugRunReport
-    CodeRulesEngine --> DiffScope
     CodeRulesEngine --> EnsureWeAreSecureValidator
     CodeRulesEngine --> FrameworkTagValidator
     CodeRulesEngine --> InjectAnnotationNotNeededForConcreteClassValidator
@@ -115,49 +112,65 @@ graph TD
     CodeRulesEngine --> RequiredTypeSuffixValidator
     CodeRulesEngine --> RoleTagValidator
     CodeRulesEngine --> RuleReporter
-    CodeRulesEngine --> RuleScopes
+    CodeRulesEngine --> RuleSelection
     CodeRulesEngine --> WorkspaceRoot
-    CodeRulesRunRequest --> readonly_string_____null
-    CodeRulesRunRequest --> string___null
-    CodeRulesRunRequest --> string___null
-    DebugRunReport --> RuleReporter
     EnsureWeAreSecureValidator --> EnsureWeAreSecureConfig
     FrameworkTagValidator --> FrameworkTagConfig
     InjectAnnotationNotNeededForConcreteClassValidator --> InjectAnnotationNotNeededForConcreteClassConfig
+    InjectAnnotationNotNeededForConcreteClassValidator --> ScanScope
+    MatchRulesChecker --> ScanScope
     MatchRulesHolder --> readonly_MatchRuleConfig__
     MaxFileLinesValidator --> MaxFileLinesConfig
     MaxMethodLinesValidator --> MaxMethodLinesConfig
     NoAnyUnknownValidator --> NoAnyUnknownConfig
+    NoAnyUnknownValidator --> ScanScope
     NoClientCreationOutsideServerOrClientValidator --> NoClientCreationOutsideServerOrClientConfig
     NoClientCreationOutsideServerOrClientValidator --> ProjectRoleResolver
+    NoClientCreationOutsideServerOrClientValidator --> ScanScope
     NoCustomCssValidator --> NoCustomCssConfig
+    NoCustomCssValidator --> ScanScope
     NoDestructureValidator --> NoDestructureConfig
+    NoDestructureValidator --> ScanScope
     NoDirectApiResolverValidator --> AngularNoDirectApiInResolverConfig
     NoFunctionOutsideClassValidator --> NoFunctionOutsideClassConfig
+    NoFunctionOutsideClassValidator --> ScanScope
     NoImplicitAnyValidator --> NoImplicitAnyConfig
+    NoImplicitAnyValidator --> ScanScope
     NoInlineImportInApiLibValidator --> DiffScope
     NoInlineImportInApiLibValidator --> NoInlineImportInApiLibConfig
     NoInlineImportInApiLibValidator --> ProjectRoleResolver
+    NoInlineImportInApiLibValidator --> ScanScope
     NoInlineTypeLiteralsValidator --> NoInlineTypeLiteralsConfig
     NoProcessExitOutsideMainValidator --> NoProcessExitOutsideMainConfig
+    NoProcessExitOutsideMainValidator --> ScanScope
     NoStatePathsInTemplatesValidator --> NoStatePathsInTemplatesConfig
+    NoStatePathsInTemplatesValidator --> ScanScope
     NoSymbolDiTokensValidator --> NoSymbolDiTokensConfig
+    NoSymbolDiTokensValidator --> ScanScope
     NoUnmanagedExceptionsValidator --> NoUnmanagedExceptionsConfig
+    NoUnmanagedExceptionsValidator --> ScanScope
     NoUtilityTypesInApiLibValidator --> DiffScope
     NoUtilityTypesInApiLibValidator --> NoUtilityTypesInApiLibConfig
     NoUtilityTypesInApiLibValidator --> ProjectRoleResolver
+    NoUtilityTypesInApiLibValidator --> ScanScope
     OneEnumSpellingInApiLibValidator --> DiffScope
     OneEnumSpellingInApiLibValidator --> OneEnumSpellingInApiLibConfig
     OneEnumSpellingInApiLibValidator --> ProjectRoleResolver
+    OneEnumSpellingInApiLibValidator --> ScanScope
     PrismaConverterValidator --> PrismaConverterConfig
     PrismaValidateDtosValidator --> PrismaValidateDtosConfig
+    ProjectCatalog --> DiffScope
     RequireReturnTypeValidator --> RequireReturnTypeConfig
     RequiredTypeSuffixValidator --> DiffScope
     RequiredTypeSuffixValidator --> ProjectRoleResolver
     RequiredTypeSuffixValidator --> RequiredTypeSuffixConfig
+    RequiredTypeSuffixValidator --> ScanScope
     RoleTagValidator --> RoleTagConfig
-    RuleScopes --> DebugTarget___null
-    RuleScopes --> ReadonlyMap_string__FileScope_
+    RuleSelection --> string___undefined
+    ScanRestriction --> readonly_string_____undefined
+    ScanScope --> DiffScope
+    ScanScope --> ProjectCatalog
+    ScanScope --> ScanRestriction
     WorkspaceRoot --> string
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

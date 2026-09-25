@@ -38,7 +38,10 @@ export type ConfigCtor = new () => BaseRuleConfig;
  * new ConfigClass())`), so every `@provideSingleton` validator injects its config by type. Data only
  * — the binding loop lives inline in the bin (an inline loop, exempt from no-function-outside-class).
  */
-export const CONFIG_BINDINGS: ReadonlyArray<readonly [ConfigCtor, keyof WebpiecesRulesConfig]> = [
+/** One `[config class, rule key]` row of {@link CONFIG_BINDINGS}. */
+export type ConfigBinding = readonly [ConfigCtor, keyof WebpiecesRulesConfig];
+
+export const CONFIG_BINDINGS: ReadonlyArray<ConfigBinding> = [
     [MaxMethodLinesConfig, 'max-method-lines'],
     [MaxFileLinesConfig, 'max-file-lines'],
     [RequireReturnTypeConfig, 'require-return-type'],

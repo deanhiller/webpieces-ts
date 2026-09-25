@@ -11,6 +11,7 @@ import * as path from 'path';
 import { NoStatePathsInTemplatesConfig, RuleFailError, specTempDirs } from '@webpieces/rules-config';
 
 import { NoStatePathsInTemplatesValidator } from './validate-no-state-paths-in-templates';
+import { GateScanScope } from './scan-scope';
 
 const TEMPLATES = 'packages/tooling/rules-config/templates';
 
@@ -71,13 +72,13 @@ describe('NoStatePathsInTemplatesValidator', () => {
     it('FAILS a template that restates a .webpieces path', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.git-workflow.md`, OFFENDING_DOC);
 
-        await expect(new NoStatePathsInTemplatesValidator(config()).run(root)).rejects.toBeInstanceOf(RuleFailError);
+        await expect(new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });
 
     it('PASSES the same doc once the path is a rendered placeholder', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.git-workflow.md`, RENDERED_DOC);
 
-        expect((await new NoStatePathsInTemplatesValidator(config()).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
 
     /**
@@ -89,7 +90,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
         writeFile(root, 'backlog/bug-someone-asked-for-this.md', OFFENDING_DOC);
         writeFile(root, 'docs/tooling-logs.md', OFFENDING_DOC);
 
-        expect((await new NoStatePathsInTemplatesValidator(config()).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
 
     it('honours the escape hatch a doc whose SUBJECT is the layout needs', async () => {
@@ -97,7 +98,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
             '<!-- webpieces-disable no-state-paths-in-templates -- this table IS the layout -->\n'
             + '| the primary clone | `.webpieces/build.log` |\n');
 
-        expect((await new NoStatePathsInTemplatesValidator(config()).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
 
     it('refuses the escape hatch when disableAllowed is false', async () => {
@@ -107,7 +108,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
         const cfg = config();
         cfg.disableAllowed = false;
 
-        await expect(new NoStatePathsInTemplatesValidator(cfg).run(root)).rejects.toBeInstanceOf(RuleFailError);
+        await expect(new NoStatePathsInTemplatesValidator(cfg, new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });
 
     /**
@@ -119,14 +120,14 @@ describe('NoStatePathsInTemplatesValidator', () => {
         writeFile(root, `${TEMPLATES}/webpieces.config-policy.md`,
             'A MACHINE-LOCAL setting lives in `~/.webpieces/config.json` under `experimental`.\n');
 
-        expect((await new NoStatePathsInTemplatesValidator(config()).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
 
     it('still flags a per-tree path on a line that also names the machine-local one', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.buildlog.md`,
             'The ledger is `~/.webpieces/builds.log`; this build went to `.webpieces/build.log`.\n');
 
-        await expect(new NoStatePathsInTemplatesValidator(config()).run(root)).rejects.toBeInstanceOf(RuleFailError);
+        await expect(new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });
 
     it('respects a configured templateDirs and bannedPathPrefixes', async () => {
@@ -135,13 +136,13 @@ describe('NoStatePathsInTemplatesValidator', () => {
         cfg.templateDirs = ['my/own/templates'];
         cfg.bannedPathPrefixes = ['.mytool/'];
 
-        await expect(new NoStatePathsInTemplatesValidator(cfg).run(root)).rejects.toBeInstanceOf(RuleFailError);
+        await expect(new NoStatePathsInTemplatesValidator(cfg, new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });
 
     it('is a no-op for a repo whose templates dir does not exist', async () => {
         writeFile(root, 'src/app.ts', 'export const a = 1;\n');
 
-        expect((await new NoStatePathsInTemplatesValidator(config()).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
 
     it('mode OFF never fails, whatever the template says', async () => {
@@ -149,7 +150,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
         const cfg = config();
         cfg.mode = 'OFF';
 
-        expect((await new NoStatePathsInTemplatesValidator(cfg).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(cfg, new GateScanScope()).run(root)).success).toBe(true);
     });
 
     /**
@@ -164,15 +165,15 @@ describe('NoStatePathsInTemplatesValidator', () => {
 
         const cfg = config();
         cfg.mode = 'NEW_AND_MODIFIED_CODE';
-        expect((await new NoStatePathsInTemplatesValidator(cfg).run(root)).success).toBe(true);
+        expect((await new NoStatePathsInTemplatesValidator(cfg, new GateScanScope()).run(root)).success).toBe(true);
 
         writeFile(root, `${TEMPLATES}/webpieces.git-workflow.md`,
             OFFENDING_DOC.replace('Use this instead', 'Always use this instead'));
-        await expect(new NoStatePathsInTemplatesValidator(cfg).run(root)).rejects.toBeInstanceOf(RuleFailError);
+        await expect(new NoStatePathsInTemplatesValidator(cfg, new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });
 
     it('narrows its file set in exactly one place — isRelevantFile', () => {
-        const validator = new NoStatePathsInTemplatesValidator(config());
+        const validator = new NoStatePathsInTemplatesValidator(config(), new GateScanScope());
 
         expect(validator.isRelevantFile(`${TEMPLATES}/webpieces.git-workflow.md`)).toBe(true);
         expect(validator.isRelevantFile(`${TEMPLATES}/webpieces-pr-gate.yml`)).toBe(false);
@@ -181,7 +182,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
     });
 
     it('reports the line and column of the restated path', () => {
-        const hits = new NoStatePathsInTemplatesValidator(config()).findHits(OFFENDING_DOC);
+        const hits = new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).findHits(OFFENDING_DOC);
 
         expect(hits.length).toBe(1);
         expect(hits[0].line).toBe(4);
@@ -197,7 +198,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
     it('throws the failure with framework-rendered cures, and hand-numbers nothing', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.git-workflow.md`, OFFENDING_DOC);
 
-        const error = await new NoStatePathsInTemplatesValidator(config()).run(root)
+        const error = await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)
             .then((): RuleFailError | null => null, (err: unknown): RuleFailError => err as RuleFailError);
 
         expect(error).toBeInstanceOf(RuleFailError);

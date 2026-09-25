@@ -7,25 +7,27 @@ import { FieldDef, SchemaShape } from './field-def';
 // consumer) imports these instead of re-declaring the same unions — a rename here ripples
 // everywhere at compile time. The FieldDef SCHEMA below references the same arrays, so the
 // type and the runtime validation can never diverge.
-
-// WHOLE-SCOPE modes (#1027), on every DIFF-scoped code rule: MODIFIED_PROJECTS = every in-scope file of
-// every project the diff touches, RUN_EVERY_TIME = every in-scope file in the repo, each judged WHOLE.
-// Implemented once, centrally, by widening the FILE SET (file-scope.ts) — never rule by rule.
-export const WHOLE_SCOPE_MODES = ['MODIFIED_PROJECTS', 'RUN_EVERY_TIME'] as const;
-export type WholeScopeMode = typeof WHOLE_SCOPE_MODES[number];
-export const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type MethodLimitMode = typeof METHOD_LIMIT_MODES[number];
 
-export const FILE_LIMIT_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const FILE_LIMIT_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES'] as const;
 export type FileLimitMode = typeof FILE_LIMIT_MODES[number];
 
-export const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ReturnTypeMode = typeof RETURN_TYPE_MODES[number];
 
-export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type InlineTypeMode = typeof INLINE_TYPE_MODES[number];
 
-export const MODIFIED_CODE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+// The two WHOLE-SCOPE modes (#1027) reuse the existing vocabulary rather than inventing names:
+//   MODIFIED_PROJECTS — every in-scope file of every project the diff touches (plus the changed files
+//                       themselves, so it is never narrower than NEW_AND_MODIFIED_FILES).
+//   RUN_EVERY_TIME    — every in-scope file in the repo, every run.
+// Both judge WHOLE files, exactly like NEW_AND_MODIFIED_FILES — only the file SET differs. They exist so
+// a rule adopted at NEW_AND_MODIFIED_CODE can be measured ("what is left?") or finished off without a
+// hack, and they are what `wp-validate-code --rule=<name> --mode=<mode> --projects=a,b` accepts.
+// Edit-time (ai-hooks) treats every non-OFF mode alike: it judges the content being written.
+export const MODIFIED_CODE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES', 'MODIFIED_PROJECTS', 'RUN_EVERY_TIME'] as const;
 export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 
 // PROJECT-level rules (e.g. framework-tag): the check is neither line- nor file-scoped — it runs
@@ -34,16 +36,15 @@ export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 export const PROJECT_MODES = ['OFF', 'MODIFIED_PROJECTS'] as const;
 export type ProjectMode = typeof PROJECT_MODES[number];
 
-export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
 
-export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaConverterMode = typeof PRISMA_CONVERTER_MODES[number];
 
-export const DIRECT_API_RESOLVER_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const DIRECT_API_RESOLVER_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
 
-// NOT widened by #1027: throw-cause-required is judged only at edit time, so a whole-scope mode would do nothing.
 export const THROW_CAUSE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE'] as const;
 export type ThrowCauseMode = typeof THROW_CAUSE_MODES[number];
 
@@ -57,7 +58,7 @@ export type OnOffMode = typeof ON_OFF_MODES[number];
 export const BRANCH_GUARD_MODES = ['ON', 'OFF', 'ON_NO_SUBBRANCHES'] as const;
 export type BranchGuardMode = typeof BRANCH_GUARD_MODES[number];
 
-export const VALIDATE_TS_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES', ...WHOLE_SCOPE_MODES] as const;
+export const VALIDATE_TS_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 
 // Structural / whole-graph rules (import-cycle, runtime-architecture, nx-wiring). They can't be
@@ -317,7 +318,7 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
 
 // Flags `process.exit(...)` outside a main()/runMain wrapper (and `import { main }`) so a deep exit
 // can't silently kill a reused server/command. Gradual-rollout knobs via the standard base: mode
-// (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES | MODIFIED_PROJECTS | RUN_EVERY_TIME), turnOffRuleUntilEpoch, branch, and
+// (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch, branch, and
 // disableAllowed for the inline `// webpieces-disable` escape at genuine terminal boundaries.
 export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
@@ -335,7 +336,7 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
 // @DocumentDesign only work when behavior lives in injectable classes — a module-scope function is a
 // dead-end the DI graph can't reach. Inline callbacks, nested functions inside methods, and non-function
 // top-level consts (objects, zod schemas, primitives) are NOT flagged. Standard rollout knobs via the
-// base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES | MODIFIED_PROJECTS | RUN_EVERY_TIME), turnOffRuleUntilEpoch, branch,
+// base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch, branch,
 // and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole file
 // trees that legitimately live outside the class-per-behavior model (e.g. React component/hook files,
 // framework glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`.
@@ -359,7 +360,7 @@ export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
 // its own (see CLAUDE.md, and the no-symbol-di-tokens rule that pushes the same way). Symbol/interface
 // tokens are NOT flagged because they never equal the type (`@inject(FOO_TOKEN) x: Provider<Foo>`).
 // AI keeps carpet-bombing `@inject`; this fails the build on the redundant form. Standard rollout knobs
-// via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES | MODIFIED_PROJECTS | RUN_EVERY_TIME), turnOffRuleUntilEpoch,
+// via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch,
 // branch, and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole
 // file trees, matched with the shared glob/prefix/segment semantics.
 export class InjectAnnotationNotNeededForConcreteClassConfig extends BaseRuleConfig {
@@ -608,18 +609,14 @@ export class MissingDesignAnnotationConfig extends BaseRuleConfig {
     };
 }
 
-// no-js-files is an EDIT-time guard only, so it keeps its own set: nothing would honour a whole-scope mode.
-export const NO_JS_FILES_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES'] as const;
-export type NoJsFilesMode = typeof NO_JS_FILES_MODES[number];
-
 export class NoJsFilesConfig extends BaseRuleConfig {
     // File-tier: NEW_AND_MODIFIED_FILES (active) intercepts a .js/.jsx Write — the file being
     // written is inherently a new/modified file, so it's already diff-scoped in practice.
-    declare mode?: NoJsFilesMode;
+    declare mode?: FileLimitMode;
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoJsFilesConfig> = {
-        mode: new FieldDef('string', NO_JS_FILES_MODES),
+        mode: new FieldDef('string', FILE_LIMIT_MODES),
         allowedPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };

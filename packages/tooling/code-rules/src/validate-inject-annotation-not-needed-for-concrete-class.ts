@@ -43,10 +43,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, InjectAnnotationNotNeededForConcreteClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, InjectAnnotationNotNeededForConcreteClassConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 const RULE_NAME = RULE_NAMES.INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS;
 
@@ -235,7 +236,11 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteClassConfig, workspaceRoot: string): Promise<ExecutorResult> {
+async function runValidatorImpl(
+    scan: ScanScope,
+    options: InjectAnnotationNotNeededForConcreteClassConfig,
+    workspaceRoot: string,
+): Promise<ExecutorResult> {
     const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [];
@@ -261,7 +266,7 @@ async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteCla
     console.log(`   Base: ${base}`);
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = scan.files(workspaceRoot, mode, base, head);
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
         return { success: true };
@@ -272,7 +277,8 @@ async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteCla
     let violations: InjectViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
+    } else {
+        // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
     }
 
@@ -281,17 +287,18 @@ async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteCla
         return { success: true };
     }
 
+    scan.recordSites(RULE_NAME, violations.map((v: InjectViolation) => v.file));
     reportViolations(violations, mode, disableAllowed);
     return { success: false };
 }
 
 @injectable(bindingScopeValues.Singleton)
 export class InjectAnnotationNotNeededForConcreteClassValidator extends CodeValidator<InjectAnnotationNotNeededForConcreteClassConfig> {
-    constructor(config: InjectAnnotationNotNeededForConcreteClassConfig) {
+    constructor(config: InjectAnnotationNotNeededForConcreteClassConfig, private readonly scanScope: ScanScope) {
         super(config, RULE_NAME, RULE_NAME);
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runValidatorImpl(this.scanScope, this.config, workspaceRoot);
     }
 }

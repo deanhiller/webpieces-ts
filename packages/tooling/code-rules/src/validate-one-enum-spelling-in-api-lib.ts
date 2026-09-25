@@ -28,6 +28,7 @@ import { ApiLibEnumIndex, ObjectUnion } from './api-lib-enum-index';
 import { EnumText } from './api-lib-enum-text';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 const ONE_SPELLING = 'a fixed set of string values in an API is a string enum, and only a string enum';
 
@@ -225,8 +226,8 @@ export class OneEnumSpellingInApiLibValidator extends ApiLibSourceRule<OneEnumSp
     /** One index per api-library directory, per run: the union and its branches are in different files. */
     private readonly indexes = new Map<string, ApiLibEnumIndex>();
 
-    constructor(config: OneEnumSpellingInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope) {
-        super(config, RULE_NAMES.ONE_ENUM_SPELLING_IN_API_LIB, roleResolver, diffScope);
+    constructor(config: OneEnumSpellingInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
+        super(config, RULE_NAMES.ONE_ENUM_SPELLING_IN_API_LIB, roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

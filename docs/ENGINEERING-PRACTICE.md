@@ -173,31 +173,35 @@ is the piece most orgs never build. Every rule carries three dials:
 | `NEW_AND_MODIFIED_CODE` | Only lines in the diff. |
 | `NEW_AND_MODIFIED_METHODS` | Any method you touched, whole. |
 | `NEW_AND_MODIFIED_FILES` | Any file you touched, whole. |
-| `MODIFIED_CLASS` / `MODIFIED_PROJECTS` | Any class / project you touched. |
-| `RUN_EVERY_TIME` | Whole repo, every run — for graph-level invariants that have no diff. |
+| `MODIFIED_CLASS` / `MODIFIED_PROJECTS` | Any class / project you touched. On a line/file-scoped code rule, `MODIFIED_PROJECTS` judges every file of every project the diff touches, whole. |
+| `RUN_EVERY_TIME` | Whole repo, every run — for graph-level invariants that have no diff, and, on a line/file-scoped code rule, every in-scope file in the repo. |
 
-**Every diff-scoped code rule also accepts the two whole-scope modes** (#1027) — the same names, the
-same meaning: `MODIFIED_PROJECTS` judges every in-scope file of every project the diff touches (plus the
-changed files themselves), and `RUN_EVERY_TIME` every in-scope file in the repo, each file judged whole.
-They are the "what is left?" view of a rule you are ratcheting in. The engine widens the FILE SET once,
-centrally (`DiffScope` / `FileScope` in `@webpieces/rules-config`), so no rule implements them itself and
-a rule added tomorrow has both. Two rules are deliberately left out because nothing judges them at
-build time: `throw-cause-required` and `no-js-files` are edit-time guards only.
+Every rule whose modes are `OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES` (the
+`MODIFIED_CODE_MODES` family — `no-destructure`, `no-any-unknown`, `catch-error-pattern`,
+`one-enum-spelling-in-api-lib`, `no-inline-import-in-api-lib`, every `match-rules` entry, …) also
+accepts the two **whole-scope** modes, `MODIFIED_PROJECTS` and `RUN_EVERY_TIME` (#1027). They judge
+whole files exactly like `NEW_AND_MODIFIED_FILES`; only the file SET grows. None of them is a default —
+a rule still arrives at the mode your config states.
 
-**Measuring without editing the config — the debug run.** Committing `RUN_EVERY_TIME` to find out how
-much work a rule is would fail everybody's build. Instead, ask for one run:
+**"What is left?" — the debug run.** A rule committed at `NEW_AND_MODIFIED_CODE` grandfathers
+everything nobody has touched, so it cannot tell you how much migration remains. Ask it directly, with
+NO config edit:
 
 ```bash
+# every remaining site in two projects, whatever the diff is:
+pnpm exec wp-validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis,lang-fsdb-api
+# the same, through nx:
 pnpm nx run architecture:validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis,lang-fsdb-api
-pnpm wp-validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis   # the same, as a bin
+# what the gate itself would say about those projects (the COMMITTED mode, scoped to them):
+pnpm exec wp-validate-code --rule=one-enum-spelling-in-api-lib --projects=lang-apis,lang-fsdb-api
 ```
 
-It judges only `--rule`, at `--mode` (omit it to judge the COMMITTED mode), restricted to `--projects`
-(omit it for every project). It labels itself as a debug run, prints the rule's own failure text exactly
-as the build does, then a site count per project, and exits non-zero when there are sites — so it can
-gate a fix-it loop. It writes nothing to `webpieces.config.json`, and it ignores `turnOffRuleUntilEpoch` /
-`turnOffRuleWhileOnBranch` for that one run, because it is a measurement, not the gate. The build and
-`wp-build` keep judging the committed mode.
+It runs ONLY that rule, prints the rule's own failure text (file:line, snippet, cure) and then one site
+count per project, and exits non-zero while any site remains — so it can gate a migration loop. It
+writes nothing, ignores the rule's two escape hatches for that run, and changes nothing about the gate:
+`validate-code` and `wp-build` keep honouring the committed mode. `--projects` names nx projects
+(`project.json` `name`); `--mode`/`--projects` without `--rule` is refused, as is a rule that does not
+offer the whole-scope modes.
 
 **A rule configured per directory: `required-type-suffix`** (#1037). Its one entry-list shape is the
 worked example of a rule you adopt on a repo with hundreds of existing violations. Every EXPORTED

@@ -34,6 +34,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 /** The entry that governs a file, and the glob of it that matched — named in every failure. Data-only. */
 export class GoverningGlob {
@@ -184,8 +185,13 @@ export class RequiredTypeSuffixValidator extends ApiLibSourceRule<RequiredTypeSu
     private readonly picker = new SuffixEntryPicker();
     private readonly scanner = new ExportedTypeScanner();
 
-    constructor(config: RequiredTypeSuffixConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope) {
-        super(config, RULE_NAMES.REQUIRED_TYPE_SUFFIX, roleResolver, diffScope);
+    constructor(
+        config: RequiredTypeSuffixConfig,
+        roleResolver: ProjectRoleResolver,
+        diffScope: DiffScope,
+        scanScope: ScanScope,
+    ) {
+        super(config, RULE_NAMES.REQUIRED_TYPE_SUFFIX, roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

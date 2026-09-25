@@ -7,13 +7,11 @@
  * {@link DiffScope} over follow-up PRs, then the delegators are removed.
  */
 
-import { AsyncLocalStorage } from 'async_hooks';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { FileScope, ScopedFileSelector } from './file-scope';
 import { toError } from './to-error';
 
 /** A git diff range: the base ref to compare against and an optional head (else the working tree). */
@@ -39,38 +37,8 @@ export class ChangedFilesOptions {
 
 @injectable(bindingScopeValues.Singleton)
 export class DiffScope {
-    /**
-     * The {@link FileScope} the current async call chain runs inside. AsyncLocalStorage rather than a
-     * field, because the free-function delegators below and every injected instance must see the SAME
-     * scope, and because the scope must never leak past the one rule run that set it.
-     */
-    private static readonly active = new AsyncLocalStorage<FileScope>();
-
-    /**
-     * Run `work` with every getChangedFiles / getFileDiff call inside it answering for `scope` — the
-     * one switch the whole-scope modes (#1027) and the debug run's `--projects` are built on.
-     */
-    within<T>(scope: FileScope, work: () => Promise<T>): Promise<T> {
-        return DiffScope.active.run(scope, work);
-    }
-
-    /** The scope the caller is running inside; plain DIFF outside any {@link within}. */
-    currentScope(): FileScope {
-        return DiffScope.active.getStore() ?? FileScope.DIFF;
-    }
-
-    /**
-     * Auto-detect the diff base: merge-base of HEAD with origin/main, falling back to local main. Under
-     * RUN_EVERY_TIME the base is irrelevant to the file set, so an undetectable one falls back to HEAD
-     * rather than making the rule skip.
-     */
+    /** Auto-detect the diff base: merge-base of HEAD with origin/main, falling back to local main. */
     detectBase(workspaceRoot: string): string | null {
-        const detected = this.detectMergeBase(workspaceRoot);
-        if (detected === null && this.currentScope().kind === 'RUN_EVERY_TIME') return 'HEAD';
-        return detected;
-    }
-
-    private detectMergeBase(workspaceRoot: string): string | null {
         for (const ref of ['origin/main', 'main']) {
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
@@ -98,37 +66,12 @@ export class DiffScope {
     }
 
     /**
-     * The files a rule judges. Outside any {@link within} (and for the gate's plain diff scope) these are
-     * the changed files between base and head (or base→working-tree when head is omitted), untracked
-     * files unioned in for the working-tree case. Inside a widened {@link FileScope} they are the files
-     * that scope selects — see file-scope.ts. `tsOnly` (default true) restricts to *.ts/*.tsx and drops
-     * test files, in every scope. Deletions are excluded (`--diff-filter=d`).
+     * Changed files between base and head (or base→working-tree when head is omitted). Untracked files
+     * are unioned in for the working-tree case. `tsOnly` (default true) restricts to *.ts/*.tsx and
+     * drops test files. Deletions are excluded (`--diff-filter=d`).
      */
-    getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
-        const scope = this.currentScope();
-        const diffFiles = this.diffFiles(workspaceRoot, base, head, opts);
-        if (scope.isPlainDiff()) return diffFiles;
-        const tsOnly = opts?.tsOnly ?? true;
-        return new ScopedFileSelector().select(
-            workspaceRoot,
-            scope,
-            diffFiles,
-            () => this.diffFiles(workspaceRoot, base, head, this.everyChangedFile()),
-            tsOnly ? ['*.ts', '*.tsx'] : [],
-            (f: string) => !tsOnly || !this.isTestFile(f),
-        );
-    }
-
-    // "Which projects did the diff touch" counts ANY changed file — a project.json, a README — not only
-    // the files the rule itself judges.
-    private everyChangedFile(): ChangedFilesOptions {
-        const opts = new ChangedFilesOptions();
-        opts.tsOnly = false;
-        return opts;
-    }
-
     // webpieces-disable max-lines-new-methods -- git command handling with untracked files needs several code paths
-    private diffFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
+    getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
         const tsOnly = opts?.tsOnly ?? true;
         const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
         const keep = (f: string): boolean => f.length > 0 && (!tsOnly || !this.isTestFile(f));
@@ -170,24 +113,31 @@ export class DiffScope {
     }
 
     /**
-     * Diff content for a single file (synthetic all-added diff for an untracked file with no head). Inside
-     * a whole-scope {@link FileScope} every file is judged WHOLE, so the diff is the synthetic all-added
-     * one for every file — a line- or method-scoped rule then sees the entire file as new.
+     * EVERY file in the working tree — tracked plus untracked-not-ignored, minus files deleted on disk —
+     * filtered exactly like {@link getChangedFiles} (`tsOnly` default true: *.ts/*.tsx, no test files).
+     * The file set of the whole-scope modes (#1027): RUN_EVERY_TIME judges all of it, MODIFIED_PROJECTS the
+     * part owned by a touched project. Git, not a directory walk, so `.gitignore` (node_modules, dist)
+     * is honoured for free.
+     *
+     * Unlike getChangedFiles it does NOT swallow a git failure into an empty list: an empty whole-scope
+     * listing reads as "0 sites left", a false answer to exactly the question these modes exist to
+     * answer, so a failed `git ls-files` throws and fails the run.
      */
+    getAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): string[] {
+        const tsOnly = opts?.tsOnly ?? true;
+        const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
+        const output = execSync(`git ls-files --cached --others --exclude-standard${glob}`, {
+            cwd: workspaceRoot,
+            encoding: 'utf-8',
+            maxBuffer: 256 * 1024 * 1024,
+        });
+        const keep = (f: string): boolean =>
+            f.length > 0 && (!tsOnly || !this.isTestFile(f)) && fs.existsSync(path.join(workspaceRoot, f));
+        return Array.from(new Set(output.trim().split('\n').filter(keep)));
+    }
+
+    /** Diff content for a single file (synthetic all-added diff for an untracked file with no head). */
     getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-        if (this.currentScope().isWhole()) return this.allAddedDiff(workspaceRoot, file);
-        return this.realFileDiff(workspaceRoot, file, base, head);
-    }
-
-    private allAddedDiff(workspaceRoot: string, file: string): string {
-        const fullPath = path.join(workspaceRoot, file);
-        if (!fs.existsSync(fullPath)) return '';
-        const lines = fs.readFileSync(fullPath, 'utf-8').split('\n');
-        // A real hunk header, so getChangedLineNumbers numbers the lines from 1 like any git diff.
-        return [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((l: string) => `+${l}`)].join('\n');
-    }
-
-    private realFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const diffTarget = head ? `${base} ${head}` : base;

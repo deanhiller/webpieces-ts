@@ -6,6 +6,7 @@ import { NoClientCreationOutsideServerOrClientConfig, specTempDirs } from '@webp
 
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { GateScanScope } from './scan-scope';
 
 function git(root: string, cmd: string): string {
     // core.hooksPath=/dev/null keeps machine-global git hooks out of the throwaway test repo.
@@ -38,7 +39,7 @@ describe('NoClientCreationOutsideServerOrClientValidator', () => {
     let root: string;
     let base: string;
     const validator = (c: NoClientCreationOutsideServerOrClientConfig): NoClientCreationOutsideServerOrClientValidator =>
-        new NoClientCreationOutsideServerOrClientValidator(c, new ProjectRoleResolver());
+        new NoClientCreationOutsideServerOrClientValidator(c, new ProjectRoleResolver(), new GateScanScope());
 
     beforeEach(() => {
         root = specTempDirs.makeReal('no-client-creation-');

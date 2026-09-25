@@ -39,10 +39,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, CatchErrorPatternConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, CatchErrorPatternConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 interface CatchViolation {
     file: string;
@@ -417,6 +418,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 async function runValidatorImpl(
+    scan: ScanScope,
     options: CatchErrorPatternConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
@@ -449,7 +451,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = scan.files(workspaceRoot, mode, base, head);
 
     if (changedFiles.length === 0) {
         console.log('\u2705 No TypeScript files changed');
@@ -462,7 +464,8 @@ async function runValidatorImpl(
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
+    } else {
+        // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
@@ -471,6 +474,7 @@ async function runValidatorImpl(
         return { success: true };
     }
 
+    scan.recordSites('catch-error-pattern', violations.map((v: CatchViolation) => v.file));
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
@@ -478,11 +482,11 @@ async function runValidatorImpl(
 
 @injectable(bindingScopeValues.Singleton)
 export class CatchErrorPatternValidator extends CodeValidator<CatchErrorPatternConfig> {
-    constructor(config: CatchErrorPatternConfig) {
+    constructor(config: CatchErrorPatternConfig, private readonly scanScope: ScanScope) {
         super(config, 'catch-error-pattern', 'catch-error-pattern');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runValidatorImpl(this.scanScope, this.config, workspaceRoot);
     }
 }

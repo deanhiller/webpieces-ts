@@ -19,15 +19,11 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   globs: refuses `Omit` / `Pick` / `Partial` / `Required` / `Exclude` / `Extract` in an api contract (an
   `extends` clause, a field, an alias, a generic argument), printing the write-the-fields-out cure.
 - `required-type-suffix` (#1037), also on `ApiLibSourceRule`, scoped by its required `entries` (each a
-  `paths` glob list plus the `suffixes` allowed there; the first entry in config order whose glob matches governs a file, so a narrower entry is listed first): every
+  `paths` glob list plus the `suffixes` allowed there; the first entry in config order whose glob matches
+  governs a file, so a narrower entry is listed first): every
   exported interface / class / enum / type alias must end in an allowed suffix, and the failure prints
   the rename.
-- The whole-scope modes (#1027): `RuleScopePlanner` turns a diff-scoped rule's `MODIFIED_PROJECTS` /
-  `RUN_EVERY_TIME` into its per-file mode run inside a widened `FileScope` — once, for every rule.
-- The debug run (`--rule` / `--mode` / `--projects` on `wp-validate-code` and the nx `validate-code`
-  executor): one rule, labelled as not the gate, its own failure text plus a site count per project
-  (`DebugRunReport`), non-zero when there are sites; no config edit.
-- CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, one shared composition root (`CodeRulesBootstrap`), reporting (`rule-reporter`), mode resolution.
+- CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 
 ## Out of Scope

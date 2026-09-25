@@ -37,10 +37,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -256,6 +257,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 async function runValidatorImpl(
+    scan: ScanScope,
     options: NoSymbolDiTokensConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
@@ -289,7 +291,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = scan.files(workspaceRoot, mode, base, head);
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
@@ -302,7 +304,8 @@ async function runValidatorImpl(
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
+    } else {
+        // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
     }
 
@@ -311,6 +314,7 @@ async function runValidatorImpl(
         return { success: true };
     }
 
+    scan.recordSites('no-symbol-di-tokens', violations.map((v: SymbolViolation) => v.file));
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
@@ -318,11 +322,11 @@ async function runValidatorImpl(
 
 @injectable(bindingScopeValues.Singleton)
 export class NoSymbolDiTokensValidator extends CodeValidator<NoSymbolDiTokensConfig> {
-    constructor(config: NoSymbolDiTokensConfig) {
+    constructor(config: NoSymbolDiTokensConfig, private readonly scanScope: ScanScope) {
         super(config, 'no-symbol-di-tokens', 'no-symbol-di-tokens');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runValidatorImpl(this.scanScope, this.config, workspaceRoot);
     }
 }

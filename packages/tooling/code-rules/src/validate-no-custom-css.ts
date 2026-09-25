@@ -12,7 +12,7 @@
  * rule bites when a file is next edited.
  *
  * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines) | NEW_AND_MODIFIED_FILES (all in changed files)
- *        | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole-scope, #1027 — widened centrally by DiffScope).
+ * | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole files of every touched project / of the repo — #1027).
  *
  * ESCAPE HATCH (a genuinely dynamic runtime value):
  *   .ts:   // webpieces-disable no-custom-css -- <reason>
@@ -33,13 +33,13 @@ import {
     NoCustomCssScope,
     ModifiedCodeMode,
     detectBase,
-    getChangedFiles,
     getFileDiff,
     getChangedLineNumbers,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 // @Component decorator properties that inject hand-written CSS.
 const STYLE_PROPS = new Set(['styles', 'styleUrls', 'styleUrl']);
@@ -74,7 +74,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
     // so `allowGlobs` cannot be honoured by the editor and ignored here (which is what it used to do).
     private readonly pathScope: NoCustomCssScope;
 
-    constructor(config: NoCustomCssConfig) {
+    constructor(config: NoCustomCssConfig, private readonly scanScope: ScanScope) {
         super(config, 'no-custom-css', 'no-custom-css');
         this.pathScope = new NoCustomCssScope(config);
     }
@@ -104,7 +104,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
         // tsOnly:false so changed .html templates are included; then filter to relevant files.
-        const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false }).filter((f: string) => this.isRelevantFile(f));
+        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false }).filter((f: string) => this.isRelevantFile(f));
         if (changedFiles.length === 0) {
             console.log('✅ No Angular .ts/.html files changed');
             return { success: true };
@@ -112,7 +112,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
         const violations =
-            mode === 'NEW_AND_MODIFIED_CODE'
+            this.scanScope.isLineScoped(mode)
                 ? this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
                 : this.findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
 
@@ -120,6 +120,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
             console.log('✅ No custom CSS found');
             return { success: true };
         }
+        this.scanScope.recordSites(this.name, violations.map((v: CssViolation) => v.file));
         this.reportViolations(violations, mode);
         return { success: false };
     }

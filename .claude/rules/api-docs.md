@@ -201,11 +201,11 @@ UNION of them — every value maps to its branch. It keeps supporting string-lit
 
 Two `@webpieces/code-rules` rules keep an api library (`role:api-lib`) on that one spelling. Both have
 NO default (`.claude/rules/no-rule-defaults.md`) — a consumer states `mode` (`OFF` |
-`NEW_AND_MODIFIED_CODE` | `NEW_AND_MODIFIED_FILES` | `MODIFIED_PROJECTS` | `RUN_EVERY_TIME`, the last two
-being the whole-scope views every diff-scoped rule has since #1027), optionally `allowedPaths`, and the
-universal hatches. To count what is left without editing the config, run the debug pass:
-`pnpm nx run architecture:validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=<a>,<b>`
-(see `docs/ENGINEERING-PRACTICE.md`, Part 3).
+`NEW_AND_MODIFIED_CODE` | `NEW_AND_MODIFIED_FILES` | `MODIFIED_PROJECTS` | `RUN_EVERY_TIME`),
+optionally `allowedPaths`, and the universal hatches. The two whole-scope modes (#1027) exist for the
+migration a large api library needs: count what is left with
+`pnpm exec wp-validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=<api libs>`
+(no config edit; see `docs/ENGINEERING-PRACTICE.md`, Part 3):
 
 - `one-enum-spelling-in-api-lib` refuses a 2+ string-literal union (alias, field, parameter),
   `(typeof X)[number]`, `keyof typeof X`, a single string-literal type used as a union discriminator,

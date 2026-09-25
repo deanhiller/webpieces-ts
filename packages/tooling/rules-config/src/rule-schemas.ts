@@ -121,16 +121,6 @@ export function schemaFieldNames(configKey: string): readonly string[] | null {
     return schema === undefined ? null : Object.keys(schema);
 }
 
-/**
- * The `mode` values `configKey`'s schema accepts, or null when there is no schema. The code-rules
- * composition root reads it to decide whether a rule is DIFF-scoped (so a whole-scope mode widens its
- * file set, #1027) and to validate a debug run's `--mode`.
- */
-// webpieces-disable no-function-outside-class -- pure lookup over the module-scope schema table, beside schemaFieldNames
-export function schemaModeValues(configKey: string): readonly string[] | null {
-    return RULE_SCHEMAS[configKey]?.['mode']?.enumValues ?? null;
-}
-
 // Every built-in CONFIG KEY that has a typed schema (code rules + bash guards). The installer uses
 // this (with sectionForRule) to seed a fresh webpieces.config.json with every entry in its section.
 // It is the key set, not the class set: four classes behind `branch-state-guard` contribute one name.
