@@ -473,6 +473,22 @@
                     "level": 2
                 },
                 {
+                    "id": "RequiredTypeSuffixConfig",
+                    "className": "RequiredTypeSuffixConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/required-type-suffix-config.ts",
+                    "level": 3
+                },
+                {
+                    "id": "RequiredTypeSuffixValidator",
+                    "className": "RequiredTypeSuffixValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-required-type-suffix.ts",
+                    "level": 2
+                },
+                {
                     "id": "RoleTagConfig",
                     "className": "RoleTagConfig",
                     "kind": "class",
@@ -827,6 +843,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "RequiredTypeSuffixValidator",
+                    "injection": "type",
+                    "token": "RequiredTypeSuffixValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-required-type-suffix.ts#RequiredTypeSuffixValidator",
+                    "paramName": "requiredTypeSuffix",
+                    "paramType": "RequiredTypeSuffixValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "RoleTagValidator",
                     "injection": "type",
                     "token": "RoleTagValidator",
@@ -1175,6 +1200,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#RequireReturnTypeConfig",
                     "paramName": "config",
                     "paramType": "RequireReturnTypeConfig"
+                },
+                {
+                    "from": "RequiredTypeSuffixValidator",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "RequiredTypeSuffixValidator",
+                    "to": "ProjectRoleResolver",
+                    "injection": "type",
+                    "token": "ProjectRoleResolver",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-role-resolver.ts#ProjectRoleResolver",
+                    "paramName": "roleResolver",
+                    "paramType": "ProjectRoleResolver"
+                },
+                {
+                    "from": "RequiredTypeSuffixValidator",
+                    "to": "RequiredTypeSuffixConfig",
+                    "injection": "type",
+                    "token": "RequiredTypeSuffixConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/required-type-suffix-config.ts#RequiredTypeSuffixConfig",
+                    "paramName": "config",
+                    "paramType": "RequiredTypeSuffixConfig"
                 },
                 {
                     "from": "RoleTagValidator",

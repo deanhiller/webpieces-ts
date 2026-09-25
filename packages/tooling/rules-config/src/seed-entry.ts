@@ -77,6 +77,11 @@ const SEED_VALUES: Record<string, unknown> = {
     'branch-state-guard.maxCommitsBehind': 5,
     // The api-contract tree the issue that added the rule (#1026) names; a consumer edits it to theirs.
     'no-utility-types-in-api-lib.paths': ['libraries/apis/**'],
+    // The api-contract entry the issue that added the rule (#1037) names; a consumer edits it to theirs.
+    // `entries` must be non-empty, so the type fallback ([]) would seed a config that fails to load.
+    'required-type-suffix.entries': [
+        { paths: ['libraries/apis/**'], suffixes: ['Request', 'Response', 'Event', 'Dto', 'Api'] },
+    ],
 };
 
 // The value a seeded entry gets for ONE required field. Order matters and is deliberate:
@@ -105,7 +110,7 @@ function seedFieldValue(ruleName: string, key: string, def: FieldDef): unknown {
 
     if (def.nullable) return null;
     if (def.type === 'boolean') return false;
-    if (def.type === 'string[]') return [];
+    if (def.type === 'string[]' || def.type === 'object[]') return [];
     if (def.enumValues && def.enumValues.length > 0) return def.enumValues[0];
     return def.type === 'number' ? 0 : '';
 }

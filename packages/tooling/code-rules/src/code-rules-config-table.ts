@@ -26,6 +26,7 @@ import {
     NoInlineImportInApiLibConfig,
     OneEnumSpellingInApiLibConfig,
     NoUtilityTypesInApiLibConfig,
+    RequiredTypeSuffixConfig,
 } from '@webpieces/rules-config';
 
 /** A rule config class usable as an inversify inject-by-type token. */
@@ -66,4 +67,5 @@ export const CONFIG_BINDINGS: ReadonlyArray<readonly [ConfigCtor, keyof Webpiece
     [NoInlineImportInApiLibConfig, 'no-inline-import-in-api-lib'],
     [OneEnumSpellingInApiLibConfig, 'one-enum-spelling-in-api-lib'],
     [NoUtilityTypesInApiLibConfig, 'no-utility-types-in-api-lib'],
+    [RequiredTypeSuffixConfig, 'required-type-suffix'],
 ];

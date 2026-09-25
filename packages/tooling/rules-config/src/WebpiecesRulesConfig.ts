@@ -33,6 +33,7 @@ import { BranchStateGuardConfig } from './main-sync-guard-configs';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
 import { NoUtilityTypesInApiLibConfig } from './no-utility-types-config';
+import { RequiredTypeSuffixConfig } from './required-type-suffix-config';
 import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
 
 export class WebpiecesRulesConfig {
@@ -62,6 +63,7 @@ export class WebpiecesRulesConfig {
     'no-inline-import-in-api-lib'?: NoInlineImportInApiLibConfig;
     'one-enum-spelling-in-api-lib'?: OneEnumSpellingInApiLibConfig;
     'no-utility-types-in-api-lib'?: NoUtilityTypesInApiLibConfig;
+    'required-type-suffix'?: RequiredTypeSuffixConfig;
     // The THREE hookGuards keys, complete. It used to list five of the nine class-named keys — both
     // bash guards were simply missing — and nothing caught it, because this class is populated by
     // dynamic key assignment in the loader. One key per POLICY makes completeness checkable by eye.

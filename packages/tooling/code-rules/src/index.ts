@@ -37,6 +37,13 @@ export { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 export { NoInlineImportInApiLibValidator, InlineImportScanner } from './validate-no-inline-import-in-api-lib';
 export { OneEnumSpellingInApiLibValidator, EnumSpellingScanner } from './validate-one-enum-spelling-in-api-lib';
 export { NoUtilityTypesInApiLibValidator, UtilityTypeScanner } from './validate-no-utility-types-in-api-lib';
+export {
+    RequiredTypeSuffixValidator,
+    ExportedTypeScanner,
+    SuffixEntryPicker,
+    SuffixRename,
+    RankedGlob,
+} from './validate-required-type-suffix';
 export { ApiLibEnumIndex } from './api-lib-enum-index';
 export { EnumText } from './api-lib-enum-text';
 export { PrismaValidateDtosValidator } from './validate-dtos';

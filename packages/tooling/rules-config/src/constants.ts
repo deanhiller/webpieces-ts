@@ -42,6 +42,7 @@ export const RULE_NAMES = {
     NO_INLINE_IMPORT_IN_API_LIB: 'no-inline-import-in-api-lib',
     ONE_ENUM_SPELLING_IN_API_LIB: 'one-enum-spelling-in-api-lib',
     NO_UTILITY_TYPES_IN_API_LIB: 'no-utility-types-in-api-lib',
+    REQUIRED_TYPE_SUFFIX: 'required-type-suffix',
 } as const;
 
 // Merge-state convention shared by the pr-gate scripts (which WRITE the marker during a
