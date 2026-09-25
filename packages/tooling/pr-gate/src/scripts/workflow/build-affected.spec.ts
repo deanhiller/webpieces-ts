@@ -209,10 +209,14 @@ describe('hotfix build selection', () => {
         const files = new GateLogFile();
         const stageConsole = new StageOutputLog(files);
         const affected = new BuildAffected(new BuildGateLog(files, stageConsole), builds(), stageConsole, new BranchIdentity());
-        const previous = process.env['WEBPIECES_BRANCH'];
+        const previousOverride = process.env['WEBPIECES_BRANCH'];
+        const previousPrBranch = process.env['GITHUB_HEAD_REF'];
         process.env['WEBPIECES_BRANCH'] = 'dean/hotfix/urgent';
+        delete process.env['GITHUB_HEAD_REF'];
         expect(affected.resolveBuildCommand(dir)).toContain('--target=hotfix-ci');
-        if (previous === undefined) delete process.env['WEBPIECES_BRANCH'];
-        else process.env['WEBPIECES_BRANCH'] = previous;
+        if (previousOverride === undefined) delete process.env['WEBPIECES_BRANCH'];
+        else process.env['WEBPIECES_BRANCH'] = previousOverride;
+        if (previousPrBranch === undefined) delete process.env['GITHUB_HEAD_REF'];
+        else process.env['GITHUB_HEAD_REF'] = previousPrBranch;
     });
 });
