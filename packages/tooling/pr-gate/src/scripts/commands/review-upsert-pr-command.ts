@@ -1,8 +1,5 @@
 import * as fs from 'fs';
-import {
-    loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist,
-    ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
-} from '@webpieces/rules-config';
+import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService, BranchIdentity, summaryJsonPath } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -20,6 +17,7 @@ import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from '../workflow/review-report';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { StageOutputLog, REVIEW_CONSOLE_LOG } from '../workflow/stage-output-log';
+import { HotfixInstructions } from '../workflow/hotfix-instructions';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -83,6 +81,8 @@ export class ReviewUpsertPrCommand {
         // Injected only to RESOLVE + RENDER refusals (see refusals()). This stage never archives a verdict.
         private readonly reviewJsonService: ReviewJsonService,
         private readonly stageConsole: StageOutputLog,
+        private readonly branchIdentity: BranchIdentity,
+        private readonly hotfixInstructions: HotfixInstructions,
     ) {}
 
     /**
@@ -98,11 +98,15 @@ export class ReviewUpsertPrCommand {
      */
     async run(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        await this.stageConsole.withCapture(
-            repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot, opts));
+        await this.stageConsole.withCapture(repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot, opts));
     }
 
     private async runStage(repoRoot: string, opts: ReviewUpsertPrOptions): Promise<void> {
+        if (this.branchIdentity.isHotfix()) {
+            const summaryPath = summaryJsonPath(repoRoot, this.aiBranchName.getFeatureName());
+            this.stageConsole.say(this.hotfixInstructions.reviewNoOp(summaryPath));
+            return;
+        }
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         const featureName = this.aiBranchName.getFeatureName();
@@ -112,7 +116,7 @@ export class ReviewUpsertPrCommand {
         this.gitExec.assertCleanTree(repoRoot);
         const buildPassedAt = await this.runBuildGate(repoRoot);
 
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));  // '' — THIS command writes the context itself, after materializing
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, '')); // '' — THIS command writes the context itself, after materializing
         const previousReceipt = this.receipts.read(repoRoot, featureName);
         const singleRoundReviewers = previousReceipt?.reviewersBriefed ?? [];
         const singleRoundRepeat = scan.singleRoundReview && singleRoundReviewers.length > 0;
@@ -120,13 +124,8 @@ export class ReviewUpsertPrCommand {
         // original generated instructions stay on disk; this run only refreshes the build receipt and gives
         // the caller one explicit next action: finish.
         const briefings = singleRoundRepeat ? [] : this.briefReviewers(repoRoot, featureName, scan, config);
-        const recordedReviewers = singleRoundRepeat
-            ? singleRoundReviewers
-            : briefings.map((b: ReviewerBriefing): string => b.checklistId);
-        const receipt = new ReviewStageReceipt(
-            scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
-            recordedReviewers,
-        );
+        const recordedReviewers = singleRoundRepeat ? singleRoundReviewers : briefings.map((b: ReviewerBriefing): string => b.checklistId);
+        const receipt = new ReviewStageReceipt(scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt, recordedReviewers);
         // The hashes `wp-write-review` stamps into each verdict's provenance — what its reviewer was briefed
         // on. A single-round repeat briefs nobody, so it keeps the round's original hashes with its reviewers.
         receipt.scopeHashes = singleRoundRepeat ? (previousReceipt?.scopeHashes ?? {}) : scan.scopeHashes;
@@ -167,11 +166,7 @@ export class ReviewUpsertPrCommand {
         if (!activeDir || !marker || marker.validated) return true;
         process.stdout.write('\n' + SEP + '① Validating your 3-point merge\n' + SEP + '\n');
         // pushRemote:false — finish still owns the single push.
-        await this.mergeEnd.mergeEnd(
-            repoRoot, 'wp-review-upsert-pr', activeDir,
-            new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
-            new MergeEndOptions(marker.conflictedFiles, false),
-        );
+        await this.mergeEnd.mergeEnd(repoRoot, 'wp-review-upsert-pr', activeDir, new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber), new MergeEndOptions(marker.conflictedFiles, false));
         return true;
     }
 
@@ -181,12 +176,7 @@ export class ReviewUpsertPrCommand {
      * earlier did not turn one build into two.
      */
     private async runBuildGate(repoRoot: string): Promise<string> {
-        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
-            '🛠️  Build gate',
-            'pnpm wp-review-upsert-pr',
-            'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
-            REVIEW_STAGE,
-        ));
+        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions('🛠️  Build gate', 'pnpm wp-review-upsert-pr', 'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.', REVIEW_STAGE));
         // Repo-wide: the build must not have left anything uncommitted AND unstaged. Runs HERE, not in
         // finish, because this is the stage that ran buildCommand and is therefore holding the dirty
         // tree at the exact moment the question is answerable. Replaces the per-project
@@ -203,15 +193,13 @@ export class ReviewUpsertPrCommand {
      */
     private briefReviewers(repoRoot: string, featureName: string, scan: ChecklistScan, config: PrGateConfig): ReviewerBriefing[] {
         if (scan.basis.unresolved) return [];
-        const manifest = this.materializer.materialize(
-            repoRoot, featureName, scan.basis, scan.changedFiles, config.reviewDiffExclude);
+        const manifest = this.materializer.materialize(repoRoot, featureName, scan.basis, scan.changedFiles, config.reviewDiffExclude);
         const diffDir = this.materializer.diffDirFor(repoRoot, featureName);
         // Write pr-context.json ONCE, here — after materializing, so `diffDir` is populated on the first
         // write. The scan deliberately did not write it (ChecklistScanOptions.contextStage === ''); it used
         // to, which meant this command wrote the same file twice, the first time with an empty diffDir.
         // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
-        scan.context = this.prContextWriter.ensure(
-            repoRoot, featureName, scan.basis, 'stage2-review', scan.changedFiles, diffDir);
+        scan.context = this.prContextWriter.ensure(repoRoot, featureName, scan.basis, 'stage2-review', scan.changedFiles, diffDir);
         // ONLY the checklists still owed a verdict (issue #863). A green or yellow whose in-scope diff is
         // unchanged since it was submitted CARRIES — the scan left it in `reviewed` — so briefing it again
         // would pay a reviewer to re-read code it already judged. Red, stale and never-run are briefed.
@@ -222,8 +210,7 @@ export class ReviewUpsertPrCommand {
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
         fs.mkdirSync(dir, { recursive: true });
         for (const b of briefings) {
-            fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.checklistId),
-                this.reviewerInstructions.render(b));
+            fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.checklistId), this.reviewerInstructions.render(b));
         }
         return briefings;
     }
@@ -237,10 +224,7 @@ export class ReviewUpsertPrCommand {
      * obeyed the first line and posted a PR with no review at all.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private report(
-        repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[],
-        opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[], config: PrGateConfig,
-    ): void {
+    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[], opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[], config: PrGateConfig): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.summaryPath);
         input.definedCount = scan.defined.length;
         input.applicableCount = scan.applicable.length;
@@ -286,9 +270,6 @@ export class ReviewUpsertPrCommand {
      */
     private refusals(scan: ChecklistScan): RefusedReviewer[] {
         const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results);
-        return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(
-            req.id,
-            this.reviewJsonService.refusalError(
-                req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.summaryPath)));
+        return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(req.id, this.reviewJsonService.refusalError(req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.summaryPath)));
     }
 }

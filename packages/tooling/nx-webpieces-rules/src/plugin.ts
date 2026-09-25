@@ -20,17 +20,8 @@
 
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import type {
-    CreateNodesV2,
-    CreateNodesContextV2,
-    CreateNodesResultV2,
-    CreateNodesResult,
-    TargetConfiguration,
-} from '@nx/devkit';
-import {
-    createVisualizeRuntimeTarget,
-    createValidateRuntimeArchitectureTarget,
-} from './runtime-targets';
+import type { CreateNodesV2, CreateNodesContextV2, CreateNodesResultV2, CreateNodesResult, TargetConfiguration } from '@nx/devkit';
+import { createVisualizeRuntimeTarget, createValidateRuntimeArchitectureTarget } from './runtime-targets';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
@@ -139,9 +130,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
     },
 };
 
-function normalizeOptions(
-    options: ArchitecturePluginOptions | undefined,
-): Required<ArchitecturePluginOptions> {
+function normalizeOptions(options: ArchitecturePluginOptions | undefined): Required<ArchitecturePluginOptions> {
     const circularDeps = {
         ...DEFAULT_OPTIONS.circularDeps,
         ...options?.circularDeps,
@@ -166,11 +155,7 @@ function normalizeOptions(
     } as Required<ArchitecturePluginOptions>;
 }
 
-async function createNodesFunction(
-    projectFiles: readonly string[],
-    options: ArchitecturePluginOptions | undefined,
-    context: CreateNodesContextV2,
-): Promise<CreateNodesResultV2> {
+async function createNodesFunction(projectFiles: readonly string[], options: ArchitecturePluginOptions | undefined, context: CreateNodesContextV2): Promise<CreateNodesResultV2> {
     const opts = normalizeOptions(options);
     const results: CreateNodesResultV2 = [];
 
@@ -183,12 +168,7 @@ async function createNodesFunction(
     return results;
 }
 
-function addArchitectureProject(
-    results: CreateNodesResultV2,
-    projectFiles: readonly string[],
-    opts: Required<ArchitecturePluginOptions>,
-    context: CreateNodesContextV2,
-): void {
+function addArchitectureProject(results: CreateNodesResultV2, projectFiles: readonly string[], opts: Required<ArchitecturePluginOptions>, context: CreateNodesContextV2): void {
     if (!opts.workspace.enabled) return;
 
     const archDirPath = join(context.workspaceRoot, 'architecture');
@@ -213,7 +193,6 @@ function addArchitectureProject(
     }
 }
 
-
 // A project sits inside a NESTED git repo (e.g. a clone under repositories/) when any of its
 // ancestor dirs — up to but NOT including the workspace root — contains a `.git`. Such projects are
 // separate repos, not part of THIS workspace's graph, so they must not get inferred targets (that is
@@ -229,12 +208,7 @@ export function isInsideNestedGitRepo(workspaceRoot: string, projectRoot: string
     return false;
 }
 
-function addPerProjectTargets(
-    results: CreateNodesResultV2,
-    projectFiles: readonly string[],
-    opts: Required<ArchitecturePluginOptions>,
-    context: CreateNodesContextV2,
-): void {
+function addPerProjectTargets(results: CreateNodesResultV2, projectFiles: readonly string[], opts: Required<ArchitecturePluginOptions>, context: CreateNodesContextV2): void {
     // Track processed project roots to avoid duplicates when both files exist
     const processedRoots = new Set<string>();
 
@@ -265,16 +239,8 @@ function addPerProjectTargets(
 
         processedRoots.add(projectRoot);
 
-        const architectureEnabled =
-            opts.workspace.enabled === true &&
-            existsSync(join(context.workspaceRoot, 'architecture'));
-        const targets = buildPerProjectTargets(
-            isProjectJson,
-            projectRoot,
-            opts,
-            architectureEnabled,
-            isProjectJson ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot) : undefined,
-        );
+        const architectureEnabled = opts.workspace.enabled === true && existsSync(join(context.workspaceRoot, 'architecture'));
+        const targets = buildPerProjectTargets(isProjectJson, projectRoot, opts, architectureEnabled, isProjectJson ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot) : undefined);
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -294,13 +260,7 @@ function addPerProjectTargets(
  * Build the target map for one project. Most targets are project.json-only
  * (package.json-only projects may not have TypeScript source); `ci` goes on all.
  */
-function buildPerProjectTargets(
-    isProjectJson: boolean,
-    projectRoot: string,
-    opts: Required<ArchitecturePluginOptions>,
-    architectureEnabled: boolean,
-    rawProject: RawProjectJson | undefined,
-): Record<string, TargetConfiguration> {
+function buildPerProjectTargets(isProjectJson: boolean, projectRoot: string, opts: Required<ArchitecturePluginOptions>, architectureEnabled: boolean, rawProject: RawProjectJson | undefined): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
 
     // Per-project validation gates that `ci` must depend on. Collected as they are added
@@ -343,6 +303,7 @@ function buildPerProjectTargets(
     // lint + build + test + the validation gates that formerly rode on the compile
     // executor's targetDefaults, so a bare `build` stays a fast compile-only step.
     targets['ci'] = createCiTarget(validationTargets, architectureEnabled);
+    targets['hotfix-ci'] = createHotfixCiTarget();
 
     return targets;
 }
@@ -362,19 +323,13 @@ export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
 /**
  * Build list of enabled validation target names for validate-complete dependency chain
  */
-function buildValidationTargetsList(
-    validations: Required<ArchitecturePluginOptions>['workspace']['validations'],
-): string[] {
+function buildValidationTargetsList(validations: Required<ArchitecturePluginOptions>['workspace']['validations']): string[] {
     const targets: string[] = [];
     if (validations!.noCycles) targets.push('validate-no-architecture-cycles');
     if (validations!.architectureUnchanged) targets.push('validate-architecture-unchanged');
     if (validations!.validatePackageJson) targets.push('validate-packagejson');
     // Use combined validate-code instead of 3 separate targets
-    if (
-        validations!.validateNewMethods ||
-        validations!.validateModifiedMethods ||
-        validations!.validateModifiedFiles
-    ) {
+    if (validations!.validateNewMethods || validations!.validateModifiedMethods || validations!.validateModifiedFiles) {
         targets.push('validate-code');
     }
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
@@ -390,9 +345,7 @@ function buildValidationTargetsList(
  * Create workspace-level architecture validation targets WITHOUT prefix
  * Used for virtual 'architecture' project
  */
-function createWorkspaceTargetsWithoutPrefix(
-    opts: Required<ArchitecturePluginOptions>,
-): Record<string, TargetConfiguration> {
+function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
     const graphPath = opts.workspace.graphPath!;
     const validations = opts.workspace.validations!;
@@ -426,11 +379,7 @@ function createWorkspaceTargetsWithoutPrefix(
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
     // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
-    if (
-        validations.validateNewMethods ||
-        validations.validateModifiedMethods ||
-        validations.validateModifiedFiles
-    ) {
+    if (validations.validateNewMethods || validations.validateModifiedMethods || validations.validateModifiedFiles) {
         targets['validate-code'] = targetFactory.code();
     }
     if (validations.validateVersionsLocked) {
@@ -465,17 +414,11 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:generate',
         cache: false,
-        outputs: [
-            '{workspaceRoot}/architecture/dependencies.json',
-            '{workspaceRoot}/architecture/dependencies.html',
-            '{workspaceRoot}/architecture/apis',
-            '{workspaceRoot}/architecture/runtime-dependencies.json',
-        ],
+        outputs: ['{workspaceRoot}/architecture/dependencies.json', '{workspaceRoot}/architecture/dependencies.html', '{workspaceRoot}/architecture/apis', '{workspaceRoot}/architecture/runtime-dependencies.json'],
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
-            description:
-                'Generate the architecture dependency graph (+ clickable dependencies.html) and the runtime microservice graph',
+            description: 'Generate the architecture dependency graph (+ clickable dependencies.html) and the runtime microservice graph',
         },
     };
 }
@@ -505,10 +448,7 @@ function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
     };
 }
 
-function createValidateNewMethodsTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
+function createValidateNewMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-new-methods',
         cache: false, // Don't cache - depends on git state
@@ -521,10 +461,7 @@ function createValidateNewMethodsTarget(
     };
 }
 
-function createValidateModifiedMethodsTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
+function createValidateModifiedMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-modified-methods',
         cache: false, // Don't cache - depends on git state
@@ -537,10 +474,7 @@ function createValidateModifiedMethodsTarget(
     };
 }
 
-function createValidateModifiedFilesTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
+function createValidateModifiedFilesTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-modified-files',
         cache: false, // Don't cache - depends on git state
@@ -580,10 +514,7 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
  * NOTE: Type checking is done by the build target (@nx/js:tsc) during compilation.
  */
 // webpieces-disable no-function-outside-class -- Nx inference plugin: createNodes invokes these as module-scope target factories; the entire plugin is intentionally functional (matching the surrounding 18 factories), a DI class is not how the Nx plugin API is called.
-export function createCiTarget(
-    perProjectValidation: string[],
-    architectureEnabled: boolean,
-): TargetConfiguration {
+export function createCiTarget(perProjectValidation: string[], architectureEnabled: boolean): TargetConfiguration {
     const dependsOn: string[] = ['lint', 'build', 'test', ...perProjectValidation];
     if (architectureEnabled) {
         dependsOn.push('architecture:validate-complete');
@@ -598,8 +529,21 @@ export function createCiTarget(
         dependsOn,
         metadata: {
             technologies: ['nx'],
-            description:
-                'Run all CI checks: lint, build, test, and validation (Gradle-style composite target)',
+            description: 'Run all CI checks: lint, build, test, and validation (Gradle-style composite target)',
+        },
+    };
+}
+
+/** Emergency profile: retain compilation/typechecking and tests, schedule no lint or policy target. */
+export function createHotfixCiTarget(): TargetConfiguration {
+    return {
+        executor: 'nx:noop',
+        cache: true,
+        inputs: ['default', ...BRANCH_IDENTITY_INPUTS],
+        dependsOn: ['build', 'test'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Hotfix CI: compilation/typechecking and tests only; lint and Webpieces validators bypassed',
         },
     };
 }

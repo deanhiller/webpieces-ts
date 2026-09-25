@@ -32,6 +32,21 @@ verified, and stage ③ re-runs the build ONLY if HEAD moved since — three sta
 All three stages are required and none may be skipped: stage ③ refuses to post a PR unless stage ② has
 run on this branch AND summary.json exists.
 
+### Emergency `/hotfix/` branches
+
+An exact, case-sensitive `/hotfix/` path segment selects the auditable emergency profile. Its flow is:
+
+```bash
+pnpm wp-start-upsert-pr
+# write summary.json at the path and schema stage ① prints
+pnpm wp-finish-upsert-pr
+```
+
+Do not run or manufacture reviewer verdicts. `wp-review-upsert-pr` is a successful no-op if invoked by
+mistake. Finish validates any conflict resolution, requires a clean tree and meaningful summary, runs
+affected `hotfix-ci` (build + tests only), materializes the diff, and posts the permanently-bannered audit
+surfaces. Normal branches retain the three-stage flow above.
+
 The tooling never commits for you (see the golden rule below), so **commit your work first**, then run
 `pnpm wp-start-upsert-pr`. The only reasons to stop *before* posting are: the human explicitly said "don't
 open a PR yet," or the build/tests are red. Otherwise, finishing the feature and posting the PR are the

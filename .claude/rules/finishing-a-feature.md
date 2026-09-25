@@ -22,6 +22,11 @@ Stage ② is where verification happens: it fails on an unresolved merge or a re
 reviewer is spawned, so a broken branch costs no review effort. It records the sha it verified, and
 stage ③ skips its own build when HEAD has not moved — three stages, one build.
 
+For a branch containing the exact, case-sensitive `/hotfix/` segment, use the emergency two-stage flow:
+`wp-start-upsert-pr`, write the printed `summary.json`, then `wp-finish-upsert-pr`. Do not run reviewers
+or create verdict files; review is intentionally bypassed, and finish owns conflict validation plus the
+build-and-test-only `hotfix-ci` gate. `wp-review-upsert-pr` is a successful no-op on such a branch.
+
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 

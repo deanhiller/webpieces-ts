@@ -3,8 +3,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-    BuildsLog, BuildTicket, BuildTermination, CliExitError, DotWebpieces, toError, specTempDirs } from '@webpieces/rules-config';
+import { BranchIdentity, BuildsLog, BuildTicket, BuildTermination, CliExitError, DotWebpieces, toError, specTempDirs } from '@webpieces/rules-config';
 import { BuildAffected, BuildGateOptions } from './build-affected';
 import { BuildGateLog, REVIEW_STAGE } from './build-gate-log';
 import { GateLogFile } from './gate-log-file';
@@ -86,20 +85,21 @@ function buildLog(): BuildGateLog {
 function gate(): BuildAffected {
     const files = new GateLogFile();
     const stageConsole = new StageOutputLog(files);
-    return new BuildAffected(
-        new BuildGateLog(files, stageConsole), builds(), stageConsole);
+    return new BuildAffected(new BuildGateLog(files, stageConsole), builds(), stageConsole, new BranchIdentity());
 }
 
 function opts(): BuildGateOptions {
-    return new BuildGateOptions(
-        '🛠️  Build gate', 'pnpm wp-review-upsert-pr', 'Build failed — nothing was briefed.', REVIEW_STAGE);
+    return new BuildGateOptions('🛠️  Build gate', 'pnpm wp-review-upsert-pr', 'Build failed — nothing was briefed.', REVIEW_STAGE);
 }
 
 /** Swallow the gate's own stdout so the suite output stays readable, and keep what it wrote. */
 async function captureStdout(body: () => Promise<void>): Promise<void> {
     const real = process.stdout.write.bind(process.stdout);
     // webpieces-disable no-any-unknown -- matching node's overloaded write signature for a test double
-    process.stdout.write = ((chunk: string): boolean => { written += chunk; return true; }) as typeof process.stdout.write;
+    process.stdout.write = ((chunk: string): boolean => {
+        written += chunk;
+        return true;
+    }) as typeof process.stdout.write;
     // webpieces-disable no-unmanaged-exceptions -- chokepoint: stdout MUST be restored even when the gate throws
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -167,13 +167,14 @@ describe('the build gate always captures, whatever is on the machine', () => {
         const err = await runExpectingFailure(gate(), dir);
         expect(err.exitCode).toBe(1);
         expect(err.message).toContain('Build process termination: exit code null; signal SIGTERM.');
-        expect(fs.readFileSync(buildLog().existingLogFor(dir, REVIEW_STAGE), 'utf8'))
-            .toContain('Build process termination: exit code null; signal SIGTERM.');
+        expect(fs.readFileSync(buildLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('Build process termination: exit code null; signal SIGTERM.');
     });
 
     it('on SUCCESS says so and names the log, rather than reprinting the build', async () => {
         const dir = repoWithBuild('echo compiling');
-        await captureStdout(async (): Promise<void> => { await gate().runBuildGate(dir, opts()); });
+        await captureStdout(async (): Promise<void> => {
+            await gate().runBuildGate(dir, opts());
+        });
         expect(written).toContain('🛠️  Build gate: echo compiling');
         expect(written).toContain('Build success');
         expect(written).toContain(`FullLog : ${buildLog().existingLogFor(dir, REVIEW_STAGE)}`);
@@ -188,7 +189,9 @@ describe('the build gate always captures, whatever is on the machine', () => {
     // because the file is the contract.
     it('writes the log for a repo whose machine has no ~/.webpieces/config.json', async () => {
         const dir = repoWithBuild('echo compiling');
-        await captureStdout(async (): Promise<void> => { await gate().runBuildGate(dir, opts()); });
+        await captureStdout(async (): Promise<void> => {
+            await gate().runBuildGate(dir, opts());
+        });
         expect(buildLog().existingLogFor(dir, REVIEW_STAGE)).not.toBe('');
     });
 });
@@ -197,5 +200,19 @@ describe('BuildGateOptions', () => {
     // No default for `stage`: a default would silently let two stages share one log file.
     it('requires a stage', () => {
         expect(opts().stage).toBe(REVIEW_STAGE);
+    });
+});
+
+describe('hotfix build selection', () => {
+    it('replaces the configured full gate with affected hotfix-ci', () => {
+        const dir = repoWithBuild('pnpm nx affected --target=ci --base=origin/main');
+        const files = new GateLogFile();
+        const stageConsole = new StageOutputLog(files);
+        const affected = new BuildAffected(new BuildGateLog(files, stageConsole), builds(), stageConsole, new BranchIdentity());
+        const previous = process.env['WEBPIECES_BRANCH'];
+        process.env['WEBPIECES_BRANCH'] = 'dean/hotfix/urgent';
+        expect(affected.resolveBuildCommand(dir)).toContain('--target=hotfix-ci');
+        if (previous === undefined) delete process.env['WEBPIECES_BRANCH'];
+        else process.env['WEBPIECES_BRANCH'] = previous;
     });
 });

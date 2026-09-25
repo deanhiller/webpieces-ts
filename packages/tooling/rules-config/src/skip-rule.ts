@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { InformAiError } from './inform-ai-error';
 import { RuleFailError } from './rule-fail-error';
@@ -57,21 +58,41 @@ export class SkipRuleResult {
 // assertBranchIsTrustworthy) because this getter has callers — the main-sync cache label, merged-PR
 // detection, code-rules' re-export of it — for which a fork's own branch name is a perfectly good
 // answer, and making the getter itself throw would redden all of them.
-export function getCurrentBranch(): string {
-    const prBranch = process.env['GITHUB_HEAD_REF'];
-    if (prBranch) return prBranch;
+export const HOTFIX_BRANCH_SEGMENT = '/hotfix/';
+export const HOTFIX_BUILD_COMMAND = 'pnpm nx affected --target=hotfix-ci --base=$(git merge-base origin/main HEAD)';
+export const HOTFIX_AUDIT_BANNER = '# ⚠️ HOT FIX ⚠️\n\n' + 'This emergency PR bypassed required reviews, ticket enforcement, Webpieces rules, ESLint, and ' + 'Prettier/format checks. Compilation and tests ran.';
 
-    const override = process.env['WEBPIECES_BRANCH'];
-    if (override) return override;
+/** One branch resolver and one exact, case-sensitive hotfix convention for every webpieces surface. */
+@injectable(bindingScopeValues.Singleton)
+export class BranchIdentity {
+    current(): string {
+        const prBranch = process.env['GITHUB_HEAD_REF'];
+        if (prBranch) return prBranch;
 
-    // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-    try {
-        return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new InformAiError(`Failed to determine current git branch: ${error.message}`, { cause: error });
+        const override = process.env['WEBPIECES_BRANCH'];
+        if (override) return override;
+
+        // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
+        try {
+            return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+        } catch (err: unknown) {
+            const error = toError(err);
+            throw new InformAiError(`Failed to determine current git branch: ${error.message}`, {
+                cause: error,
+            });
+        }
     }
+
+    isHotfix(branchName: string = this.current()): boolean {
+        return branchName.includes(HOTFIX_BRANCH_SEGMENT);
+    }
+}
+
+const branchIdentity = new BranchIdentity();
+
+export function getCurrentBranch(): string {
+    return branchIdentity.current();
 }
 
 // The slice of the GitHub `pull_request` event payload that says WHO OWNS the head branch. Only the
@@ -119,9 +140,7 @@ function assertBranchIsTrustworthy(branchName: string): void {
     const headRepo = readHeadRepoFullName(branchName);
     const thisRepo = process.env['GITHUB_REPOSITORY'] ?? '';
     if (headRepo !== null && thisRepo !== '' && headRepo === thisRepo) return;
-    throw forkRefusal(branchName, headRepo === null
-        ? 'pull_request run with no readable $GITHUB_EVENT_PATH, so the head branch cannot be proven to belong to this repo'
-        : `pull_request run whose head branch lives in "${headRepo}", not in "${thisRepo}"`);
+    throw forkRefusal(branchName, headRepo === null ? 'pull_request run with no readable $GITHUB_EVENT_PATH, so the head branch cannot be proven to belong to this repo' : `pull_request run whose head branch lives in "${headRepo}", not in "${thisRepo}"`);
 }
 
 /**
@@ -144,15 +163,13 @@ function readHeadRepoFullName(branchName: string): string | null {
         const error = toError(err);
         throw new RuleFailError(
             'turnOffRuleWhileOnBranch',
-            `turnOffRuleWhileOnBranch: "${branchName}" is configured and this is a pull_request run, so the ` +
-                `head repository must be checked before the hatch may fire — but the runner's event file ` +
-                `${eventPath} could not be read: ${error.message}`,
+            `turnOffRuleWhileOnBranch: "${branchName}" is configured and this is a pull_request run, so the ` + `head repository must be checked before the hatch may fire — but the runner's event file ` + `${eventPath} could not be read: ${error.message}`,
             undefined,
             undefined,
-            [new Option('Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file.', true),
-             new Option('Or clear turnOffRuleWhileOnBranch (set it to null) so no trust check is needed at all.')],
+            [new Option('Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file.', true), new Option('Or clear turnOffRuleWhileOnBranch (set it to null) so no trust check is needed at all.')],
             undefined,
-            error);
+            error,
+        );
     }
 }
 
@@ -182,15 +199,10 @@ function forkRefusal(branchName: string, what: string): RuleFailError {
         undefined,
         [
             new Option(
-                'If the rule must be off for outside contributions too, use turnOffRuleUntilEpoch — it is TIME ' +
-                    'based, so it cannot be self-granted by naming a branch. Keep the date short: it is repo-wide ' +
-                    'while it lasts, so it also shelters unrelated work landing in the same window.',
+                'If the rule must be off for outside contributions too, use turnOffRuleUntilEpoch — it is TIME ' + 'based, so it cannot be self-granted by naming a branch. Keep the date short: it is repo-wide ' + 'while it lasts, so it also shelters unrelated work landing in the same window.',
                 true,
             ),
-            new Option(
-                'Otherwise clear turnOffRuleWhileOnBranch (set it to null) and fix the findings on the ' +
-                    'contributed branch like any other.',
-            ),
+            new Option('Otherwise clear turnOffRuleWhileOnBranch (set it to null) and fix the findings on the ' + 'contributed branch like any other.'),
         ],
     );
 }
@@ -204,7 +216,7 @@ export function shouldSkipRule(
     //
     // null (the "no branch / always on" value of turnOffRuleWhileOnBranch) is treated exactly like
     // undefined — no branch scoping. Only a non-empty branch name activates the branch hatch.
-    branchName: string | undefined | null
+    branchName: string | undefined | null,
 ): SkipRuleResult {
     if (branchName) {
         // The fork gate fires ONLY inside `if (branchName)`. With turnOffRuleWhileOnBranch=null — the
@@ -221,9 +233,7 @@ export function shouldSkipRule(
         assertBranchIsTrustworthy(branchName);
         const current = getCurrentBranch();
         if (current === 'HEAD' || current === '') {
-            return new SkipRuleResult(false, '',
-                `turnOffRuleWhileOnBranch: "${branchName}" did not apply — HEAD is detached, so there is no ` +
-                `branch to match (a tag checkout, a git bisect step, or a CI checkout of a merge ref).`);
+            return new SkipRuleResult(false, '', `turnOffRuleWhileOnBranch: "${branchName}" did not apply — HEAD is detached, so there is no ` + `branch to match (a tag checkout, a git bisect step, or a CI checkout of a merge ref).`);
         }
         if (current === branchName) {
             return new SkipRuleResult(true, `on branch "${branchName}"`);

@@ -1,12 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict,
-    writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
-    InformAiError, toError,
-    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
-} from '@webpieces/rules-config';
+import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, BranchIdentity } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -26,14 +21,11 @@ import { ProvenanceEnforcer, ProvenanceReport } from '../workflow/provenance-enf
 import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
 import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
-import {
-    Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER,
-} from '../../dashboard/dashboard';
-import {
-    ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER,
-} from '../../dashboard/checklist-comment-renderer';
+import { Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER } from '../../dashboard/dashboard';
+import { ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
+import { HotfixFinishPreparer } from '../workflow/hotfix-finish-preparer';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -149,6 +141,8 @@ export class FinishUpsertPrCommand {
         // rendered. Server-side, so no config can express them — see SquashSettingsEnforcer.
         private readonly squashSettings: SquashSettingsEnforcer,
         private readonly stageConsole: StageOutputLog,
+        private readonly branchIdentity: BranchIdentity,
+        private readonly hotfixFinish: HotfixFinishPreparer,
     ) {}
 
     /**
@@ -159,13 +153,16 @@ export class FinishUpsertPrCommand {
      */
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        await this.stageConsole.withCapture(
-            repoRoot, FINISH_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot));
+        await this.stageConsole.withCapture(repoRoot, FINISH_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot));
     }
 
     private async runStage(repoRoot: string): Promise<void> {
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
+        if (this.branchIdentity.isHotfix()) {
+            await this.runHotfixStage(repoRoot);
+            return;
+        }
         // 1. REQUIRE stage ② — see assertStageTwoRan. Returns true when its receipt covers THIS commit,
         //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
         const buildAlreadyGreen = this.assertStageTwoRan(repoRoot);
@@ -193,9 +190,7 @@ export class FinishUpsertPrCommand {
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
         // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadSummaryJson(
-            summaryJsonPath(repoRoot, featureName), required,
-            scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
+        const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a real reviewer
         //     SUBAGENT actually ran on this branch — the coding agent may not self-certify. Its NAME is not
@@ -226,6 +221,20 @@ export class FinishUpsertPrCommand {
         this.stageConsole.say(this.banner.linkDirective(bannerInput));
     }
 
+    /** Hotfix finish owns every prerequisite normally split between stages ② and ③. */
+    private async runHotfixStage(repoRoot: string): Promise<void> {
+        const state = await this.hotfixFinish.prepare(repoRoot);
+        const base = this.branchNaming.baseBranchName(state.currentBranch);
+        const title = this.prTitleFrom(state.review);
+        const input = this.computeDashboardInput(repoRoot, true, state.review, title, [], state.scan, true);
+        const sources = new PrCommentSources(state.scan, state.review, state.provenance);
+        const result = this.publishAll(repoRoot, base, input, sources);
+        this.archiveConsumedReview(repoRoot, state.featureName, result);
+        const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge);
+        this.stageConsole.say(this.banner.render(bannerInput));
+        this.stageConsole.say(this.banner.linkDirective(bannerInput));
+    }
+
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
     // does NOT push (pushRemote=false): this command pushes exactly ONCE, from GatedPrPublisher, and only
     // after summary.json + every BLOCK checklist + the build gate pass and the gated PR body is written.
@@ -240,14 +249,10 @@ export class FinishUpsertPrCommand {
         if (alreadyGreen) {
             // `say`, for the same reason the gate's own two lines are: a caller watching for a build needs
             // to be told, live, that there is not going to be one.
-            this.stageConsole.say('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n'
-                + this.skippedBuildLogNote(repoRoot));
+            this.stageConsole.say('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n' + this.skippedBuildLogNote(repoRoot));
             return;
         }
-        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
-            '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
-            FINISH_STAGE,
-        ));
+        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions('🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.', FINISH_STAGE));
     }
 
     /**
@@ -271,8 +276,7 @@ export class FinishUpsertPrCommand {
      */
     private assertStageTwoRan(repoRoot: string): boolean {
         this.assertNoUnvalidatedMerge(repoRoot);
-        return this.assertReviewStageRan(
-            repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']));
+        return this.assertReviewStageRan(repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']));
     }
 
     /**
@@ -294,12 +298,12 @@ export class FinishUpsertPrCommand {
         if (!activeDir || !marker || marker.validated) return;
         throw new InformAiError(
             '⛔ NO PR — a 3-point merge on this branch is still unvalidated, so nothing here has been\n' +
-            'verified: the conflict resolution is unchecked, the merged tree was never built, and any\n' +
-            'reviewer that ran judged the PRE-merge code.\n\n' +
-            `Conflicted file(s): ${marker.conflictedFiles.join(', ')}\n\n` +
-            'Resolve them (see .webpieces/instruct-ai/webpieces.mergeprocess.md), then run:\n' +
-            '  pnpm wp-review-upsert-pr\n' +
-            'It validates the resolution, commits it, builds it, and re-briefs the reviewers.',
+                'verified: the conflict resolution is unchecked, the merged tree was never built, and any\n' +
+                'reviewer that ran judged the PRE-merge code.\n\n' +
+                `Conflicted file(s): ${marker.conflictedFiles.join(', ')}\n\n` +
+                'Resolve them (see .webpieces/instruct-ai/webpieces.mergeprocess.md), then run:\n' +
+                '  pnpm wp-review-upsert-pr\n' +
+                'It validates the resolution, commits it, builds it, and re-briefs the reviewers.',
         );
     }
 
@@ -319,9 +323,9 @@ export class FinishUpsertPrCommand {
         if (receipt === null) {
             throw new InformAiError(
                 '⛔ NO PR — stage ② never ran on this branch. That means the 3-point merge is unvalidated,\n' +
-                'the build gate has not run, no diff was extracted, and no reviewer was briefed.\n\n' +
-                'Run:  pnpm wp-review-upsert-pr\n' +
-                '(then spawn the reviewers it names, write summary.json, and re-run this command)',
+                    'the build gate has not run, no diff was extracted, and no reviewer was briefed.\n\n' +
+                    'Run:  pnpm wp-review-upsert-pr\n' +
+                    '(then spawn the reviewers it names, write summary.json, and re-run this command)',
             );
         }
         if (receipt.headSha === headSha) return true;
@@ -329,8 +333,9 @@ export class FinishUpsertPrCommand {
         // fix. But it is never silent: the build re-runs here, and the PR says the reviewers saw an older tree.
         process.stderr.write(
             `\n⚠️  HEAD moved since stage ② ran (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
-            '   The build gate will re-run, and the PR will record that reviewers judged an earlier tree.\n' +
-            '   If the change was substantive, re-run pnpm wp-review-upsert-pr and re-spawn the reviewers.\n\n');
+                '   The build gate will re-run, and the PR will record that reviewers judged an earlier tree.\n' +
+                '   If the change was substantive, re-run pnpm wp-review-upsert-pr and re-spawn the reviewers.\n\n',
+        );
         return false;
     }
 
@@ -378,13 +383,15 @@ export class FinishUpsertPrCommand {
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: PrSummary, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan): DashboardInput {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: PrSummary, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan, hotfix = false): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
         const mainHead = this.gitOut(['rev-parse', 'origin/main']);
         const range = `${forkPoint}..${featureHead}`;
-        const changedFiles = this.gitOut(['diff', range, '--name-only']).split('\n').filter((f: string): boolean => f.trim() !== '');
+        const changedFiles = this.gitOut(['diff', range, '--name-only'])
+            .split('\n')
+            .filter((f: string): boolean => f.trim() !== '');
         const patch = this.gitOut(['diff', range]);
 
         const gateResults = this.dashboard.computeGateResults(config.gates, changedFiles);
@@ -396,9 +403,7 @@ export class FinishUpsertPrCommand {
         // `scan.suppressed.length`, never `scan.reviewersDisabled` alone: the dashboard and the commit
         // body have to state HOW MANY reviewers were killed, because a suppressed 4 and an applicable 0
         // are different facts that both render as an empty `rows`. See DashboardInput.
-        return new DashboardInput(
-            title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows,
-            config.buildCommand, scan.suppressed.length, this.authorIdentity.resolve(review.model));
+        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows, this.buildAffected.resolveBuildCommand(repoRoot), scan.suppressed.length, this.authorIdentity.resolve(review.model), hotfix);
     }
 
     /**
@@ -441,21 +446,15 @@ export class FinishUpsertPrCommand {
         for (const e of provenance.evidence) readByChecklist.set(e.checklistId, e.readDiff);
         return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
             const ran = entry.matchedFiles.length > 0;
-            const req = new RequiredChecklist(
-                entry.def.id, entry.def.reviewer, entry.def.doc, entry.matchedFiles, entry.matchedPatterns,
-                entry.def.required);
+            const req = new RequiredChecklist(entry.def.id, entry.def.reviewer, entry.def.doc, entry.matchedFiles, entry.matchedPatterns, entry.def.required);
             // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
             // i.e. as an unreviewed obligation, when in fact it never had one.
-            const verdict = ran
-                ? this.reviewJsonService.resolveVerdict(req, review.results)
-                : new ChecklistVerdict(entry.def.id, '', '');
+            const verdict = ran ? this.reviewJsonService.resolveVerdict(req, review.results) : new ChecklistVerdict(entry.def.id, '', '');
             const identity = review.results.find((result): boolean => result.id === entry.def.id);
-            const row = new ChecklistCommentRow(identity?.agent ?? 'unknown', identity?.model ?? 'unknown',
-                entry.def.id, verdict.status, verdict.detail, ran,
-                entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
+            const row = new ChecklistCommentRow(identity?.agent ?? 'unknown', identity?.model ?? 'unknown', entry.def.id, verdict.status, verdict.detail, ran, entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
             row.required = entry.def.required;
             const read = readByChecklist.get(entry.def.id);
-            row.diffRead = read === undefined ? '' : (read ? 'yes' : 'no');
+            row.diffRead = read === undefined ? '' : read ? 'yes' : 'no';
             return row;
         });
     }
@@ -466,7 +465,6 @@ export class FinishUpsertPrCommand {
         const marker = this.gateTokenService.gateTokenMarker(gateSalt, headSha);
         return marker === '' ? '' : `\n\n${marker}\n`;
     }
-
 
     /**
      * Publish the roster + every reviewer's full `output` as ONE combined PR comment, idempotently (find the
@@ -485,9 +483,7 @@ export class FinishUpsertPrCommand {
         const request = new PrCommentRequest();
         request.prNumber = prNumber;
         request.marker = CHECKLIST_COMMENT_MARKER;
-        request.body = this.checklistComment.render(
-            this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved,
-            scan.suppressed.length);
+        request.body = this.checklistComment.render(this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved, scan.suppressed.length, this.branchIdentity.isHotfix());
         request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         request.payloadName = 'checklist-comment.json';
         request.label = 'checklist review comment';
@@ -511,8 +507,7 @@ export class FinishUpsertPrCommand {
         const published = this.publisher.publish(baseBranch, title, bodyFile);
         if (published.createFailed) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
-            return new UpsertResult('', '', new MergeOutcome(false, false,
-                '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)', MERGE_RESULT_FAILED));
+            return new UpsertResult('', '', new MergeOutcome(false, false, '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)', MERGE_RESULT_FAILED));
         }
         const num = published.number;
 
@@ -611,11 +606,11 @@ export class FinishUpsertPrCommand {
     private backfillPrBody(prNumber: string, bodyFile: string, finalBody: string): void {
         if (prNumber === '') return;
         fs.writeFileSync(bodyFile, finalBody + '\n');
-        const res = spawnSync('gh', ['pr', 'edit', prNumber, '--body-file', bodyFile], { encoding: 'utf8' });
+        const res = spawnSync('gh', ['pr', 'edit', prNumber, '--body-file', bodyFile], {
+            encoding: 'utf8',
+        });
         if (res.status !== 0) {
-            process.stderr.write(
-                '⚠️  Could not add the PR\'s own link to its description (non-fatal — the PR and the gate\n' +
-                '    token are already up). The next wp-finish-upsert-pr writes it.\n');
+            process.stderr.write("⚠️  Could not add the PR's own link to its description (non-fatal — the PR and the gate\n" + '    token are already up). The next wp-finish-upsert-pr writes it.\n');
             return;
         }
         process.stdout.write('   back-filled the PR description with its own link ✓\n');
@@ -645,7 +640,8 @@ export class FinishUpsertPrCommand {
         const request = new PrCommentRequest();
         request.prNumber = prNumber;
         request.marker = DETAIL_COMMENT_MARKER;
-        request.body = DETAIL_COMMENT_MARKER + '\n' + this.dashboard.renderDetailComment(input);
+        const detail = this.dashboard.renderDetailComment(input);
+        request.body = input.hotfix ? detail + '\n\n' + DETAIL_COMMENT_MARKER : DETAIL_COMMENT_MARKER + '\n' + detail;
         request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         request.payloadName = 'detail-comment.json';
         request.label = 'full dashboard comment';
@@ -655,10 +651,7 @@ export class FinishUpsertPrCommand {
     // The PR's number + web URL (for the merge subject `(#N)` and the commit-body back-link). Both ''
     // if it can't be resolved. Rendered via jq into one tab-separated line so no JSON parsing is needed.
     private prRef(baseBranch: string): PrRef {
-        const result = spawnSync(
-            'gh', ['pr', 'view', baseBranch, '--json', 'number,url', '--jq', '"\\(.number)\\t\\(.url)"'],
-            { encoding: 'utf8' },
-        );
+        const result = spawnSync('gh', ['pr', 'view', baseBranch, '--json', 'number,url', '--jq', '"\\(.number)\\t\\(.url)"'], { encoding: 'utf8' });
         if (result.status !== 0) {
             return new PrRef('', '');
         }

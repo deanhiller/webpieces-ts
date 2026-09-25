@@ -1,18 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import {
-    GateDefinition,
-    WEBPIECES_DISABLE,
-    RULE_NAMES,
-    PrSummary,
-    CK_PASS,
-    CK_WARN,
-    CK_OVERRIDDEN,
-    CK_FAIL,
-    CK_MISSING,
-    HOME_CONFIG_DIR,
-    HOME_CONFIG_FILE,
-    HOME_KEY_TURN_OFF_ALL_REVIEWERS,
-} from '@webpieces/rules-config';
+import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AuthorIdentity } from './author-identity';
 
@@ -146,6 +133,7 @@ export class DashboardInput {
      */
     suppressedChecklistCount: number;
     author: AuthorIdentity;
+    hotfix: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -161,6 +149,7 @@ export class DashboardInput {
         buildCommand: string,
         suppressedChecklistCount: number,
         author: AuthorIdentity,
+        hotfix = false,
     ) {
         this.title = title;
         this.gateResults = gateResults;
@@ -174,6 +163,7 @@ export class DashboardInput {
         this.buildCommand = buildCommand;
         this.suppressedChecklistCount = suppressedChecklistCount;
         this.author = author;
+        this.hotfix = hotfix;
     }
 }
 
@@ -185,9 +175,7 @@ export class Dashboard {
         return gates
             .filter((gate: GateDefinition): boolean => !gate.disabled)
             .map((gate: GateDefinition): GateResult => {
-                const matched = changedFiles.filter((file: string): boolean =>
-                    this.matchesAny(gate.patterns, file),
-                );
+                const matched = changedFiles.filter((file: string): boolean => this.matchesAny(gate.patterns, file));
                 return new GateResult(gate.name, gate.warningColor, matched);
             });
     }
@@ -198,9 +186,7 @@ export class Dashboard {
         let webpiecesCount = 0;
         let eslintCount = 0;
         const rules = new Set<string>();
-        const allRuleTokens = Object.keys(RULE_NAMES).map(
-            (key: string): string => (RULE_NAMES as Record<string, string>)[key],
-        );
+        const allRuleTokens = Object.keys(RULE_NAMES).map((key: string): string => (RULE_NAMES as Record<string, string>)[key]);
 
         for (const line of patch.split('\n')) {
             if (!line.startsWith('+') || line.startsWith('+++')) continue;
@@ -230,15 +216,17 @@ export class Dashboard {
      */
     renderDetailComment(input: DashboardInput): string {
         const lines: string[] = [];
+        if (input.hotfix) {
+            lines.push(HOTFIX_AUDIT_BANNER, '');
+        }
         lines.push('## 🚦 PR Gate Dashboard');
         lines.push('');
         for (const line of this.riskLines(input.review)) lines.push(line);
         lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model));
-        lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
+        lines.push(`**Build (${input.hotfix ? 'hotfix-ci: build + test only' : 'nx affected'}):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
         for (const result of input.gateResults) lines.push(this.gateLine(result));
         lines.push(this.disableLine(input.disables));
-        const eslintEmoji =
-            input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
+        const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
         lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
         // ONE rolled-up row for ALL triggered consumer checklists — a worst-of colour and a count, sitting
         // with the other status rows. It used to be one row PER checklist, each inlining that checklist's
@@ -247,7 +235,7 @@ export class Dashboard {
         // checklist COMMENT, per reviewer, in full. ALWAYS emitted, including the zero case: "no reviewer
         // looked at this PR" is a fact a reader must be told, and an absent row silently reads as a green
         // all-clear (see checklistRollupLine).
-        lines.push(this.checklistRollupLine(input.checklists, input.suppressedChecklistCount));
+        lines.push(input.hotfix ? '**Checklists:** ⚫ BYPASSED by /hotfix/ convention · 0 reviewer agents ran' : this.checklistRollupLine(input.checklists, input.suppressedChecklistCount));
         lines.push('');
         if (input.review.summary.trim() !== '') {
             lines.push('### Summary');
@@ -298,19 +286,18 @@ export class Dashboard {
      */
     renderPrBody(input: DashboardInput, prUrl: string): string {
         const lines: string[] = [];
+        if (input.hotfix) {
+            lines.push(HOTFIX_AUDIT_BANNER, '');
+        }
         if (prUrl !== '') {
             lines.push(prUrl);
             lines.push('');
         }
-        lines.push(
-            `Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`,
-        );
+        lines.push(`Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`);
         lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model, false));
         lines.push('');
         const flags = this.nonGreenFlags(input);
-        lines.push(flags.length === 0
-            ? 'Flags: 🟢 all green'
-            : 'Non-green Flags (full list in first comment to avoid large git logs)');
+        lines.push(flags.length === 0 ? 'Flags: 🟢 all green' : 'Non-green Flags (full list in first comment to avoid large git logs)');
         for (const flag of flags) lines.push(`- ${flag}`);
         // ALWAYS the last bullet, green case included. Without it the compact body reads as the whole
         // record, and the reader never learns that every green row, the full summary and each reviewer's
@@ -371,25 +358,21 @@ export class Dashboard {
     // (build passed, gate did not match, zero disables/violations) are intentionally omitted.
     private nonGreenFlags(input: DashboardInput): string[] {
         const flags: string[] = [];
+        if (input.hotfix) {
+            flags.push('⚠️ HOTFIX — reviews, ticket enforcement, Webpieces rules, ESLint, and format checks bypassed; compilation and tests ran');
+        }
         if (!input.buildPassed) flags.push('Build (nx affected): 🔴 Failed');
-        if (input.review.violations.length > 0)
-            flags.push(`Pattern Violations: 🟡 ${input.review.violations.length} violation(s)`);
+        if (input.review.violations.length > 0) flags.push(`Pattern Violations: 🟡 ${input.review.violations.length} violation(s)`);
         for (const result of input.gateResults) {
             if (result.matchedFiles.length === 0) continue;
             const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
             flags.push(`${result.name}: ${emoji} ${result.matchedFiles.length} file(s)`);
         }
         if (input.disables.webpiecesCount > 0) {
-            const which =
-                input.disables.webpiecesRules.length > 0
-                    ? ` — ${input.disables.webpiecesRules.join(', ')}`
-                    : '';
-            flags.push(
-                `Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`,
-            );
+            const which = input.disables.webpiecesRules.length > 0 ? ` — ${input.disables.webpiecesRules.join(', ')}` : '';
+            flags.push(`Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`);
         }
-        if (input.disables.eslintCount > 0)
-            flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
+        if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
         // A triggered checklist is noteworthy in main's history — carry each into the commit body.
         //
         // SUPPRESSED replaces those N bullets with exactly ONE, whatever N is. Not because the per-reviewer
@@ -514,9 +497,7 @@ export class Dashboard {
             return '**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment';
         }
         const allPassed = filled.length === 1 && !filled[0].named;
-        const detail = allPassed
-            ? 'all passed'
-            : filled.map((b: RollupBucket): string => this.bucketPhrase(b)).join(', ');
+        const detail = allPassed ? 'all passed' : filled.map((b: RollupBucket): string => this.bucketPhrase(b)).join(', ');
         return `**Checklists:** ${filled[0].emoji} ${rows.length} ran — ${detail} · per-checklist detail in the checklist comment`;
     }
 
@@ -535,8 +516,7 @@ export class Dashboard {
      * comment, not in `git log`.
      */
     private suppressedChecklistLine(suppressedCount: number): string {
-        return `**Checklists:** ${this.suppressedTail(suppressedCount)}`
-            + ' · NO reviewer subagent ran on this PR — use a positive reviewerAgents value and disable the machine kill switch to get them back';
+        return `**Checklists:** ${this.suppressedTail(suppressedCount)}` + ' · NO reviewer subagent ran on this PR — use a positive reviewerAgents value and disable the machine kill switch to get them back';
     }
 
     /**
@@ -552,9 +532,7 @@ export class Dashboard {
      * nothing here can be mistaken for a verdict a reviewer actually returned.
      */
     private suppressedTail(suppressedCount: number): string {
-        return `⚫ ALL ${suppressedCount} SUPPRESSED (required included) by `
-            + `reviewer policy (reviewerAgents: 0 or ${HOME_KEY_TURN_OFF_ALL_REVIEWERS} in `
-            + `~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE})`;
+        return `⚫ ALL ${suppressedCount} SUPPRESSED (required included) by ` + `reviewer policy (reviewerAgents: 0 or ${HOME_KEY_TURN_OFF_ALL_REVIEWERS} in ` + `~/${HOME_CONFIG_DIR}/${HOME_CONFIG_FILE})`;
     }
 
     private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {
@@ -606,8 +584,7 @@ export class Dashboard {
 
     private disableLine(disables: DisableCounts): string {
         if (disables.webpiecesCount === 0) return '**Webpieces Disables Added:** 🟢 No';
-        const which =
-            disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
+        const which = disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
         return `**Webpieces Disables Added:** 🟡 ${disables.webpiecesCount} line(s)${which}`;
     }
 }

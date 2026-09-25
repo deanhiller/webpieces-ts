@@ -1,6 +1,4 @@
-import {
-    loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, BuildTermination,
-} from '@webpieces/rules-config';
+import { loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, BuildTermination, BranchIdentity, HOTFIX_BUILD_COMMAND } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 import { StageOutputLog } from './stage-output-log';
@@ -12,16 +10,15 @@ import { StageOutputLog } from './stage-output-log';
 // DEFAULT_BUILD_COMMAND — whole-repo-build-guard prints the same string, and one definition is what
 // keeps the refusal message naming the build that actually runs.
 
-
 /**
  * The caller-supplied framing for the build gate (label, re-run command, failure headline, stage id). Kept
  * as a parameter object so runBuildGate stays agnostic of who invokes it. A class (not an object literal)
  * per the codebase's data-structure convention.
  */
 export class BuildGateOptions {
-    label: string;            // section header shown above the gate
-    rerunCommand: string;     // command the AI re-runs after fixing the build
-    failureHeadline: string;  // first line printed on failure
+    label: string; // section header shown above the gate
+    rerunCommand: string; // command the AI re-runs after fixing the build
+    failureHeadline: string; // first line printed on failure
     // WHICH stage's gate this is — REVIEW_STAGE, FINISH_STAGE or BUILD_STAGE. Required, with no default:
     // it decides the captured log's filename, and a default would silently make two stages share one file.
     stage: string;
@@ -41,6 +38,7 @@ export class BuildAffected {
         private readonly buildLog: BuildGateLog,
         private readonly buildsLog: BuildsLog,
         private readonly stageConsole: StageOutputLog,
+        private readonly branchIdentity: BranchIdentity,
     ) {}
 
     /**
@@ -48,6 +46,7 @@ export class BuildAffected {
      * PrGateConfig.buildCommand, or the default affected-ci command when none is set.
      */
     resolveBuildCommand(repoRoot: string): string {
+        if (this.branchIdentity.isHotfix()) return HOTFIX_BUILD_COMMAND;
         const configured = loadAndValidate(repoRoot).prGate.buildCommand;
         return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
     }
@@ -103,11 +102,7 @@ export class BuildAffected {
      * and the un-captured branch's advice was "run the build again yourself", which is the single most
      * expensive thing an agent can be told. Reading a FILE is now the only answer this gate gives.
      */
-    private failureText(
-        opts: BuildGateOptions, buildCommand: string, logPath: string, termination: BuildTermination,
-    ): string {
-        return `\n❌ ${opts.failureHeadline}\n` +
-            this.buildLog.failureMessage(buildCommand, logPath, termination) +
-            `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`;
+    private failureText(opts: BuildGateOptions, buildCommand: string, logPath: string, termination: BuildTermination): string {
+        return `\n❌ ${opts.failureHeadline}\n` + this.buildLog.failureMessage(buildCommand, logPath, termination) + `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`;
     }
 }

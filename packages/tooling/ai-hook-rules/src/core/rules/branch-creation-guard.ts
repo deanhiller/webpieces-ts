@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { BranchCreationGuardConfig, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig, BranchIdentity, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus, Option } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -12,8 +12,7 @@ import { toError } from '../to-error';
 // Defaults used when the rule has no explicit value in webpieces.config.json.
 // branchFormat is a human sentence telling the AI how to name a branch created off main; it is
 // intentionally NOT the sub-branch convention (sub-branches are a separate, human-approved path).
-const DEFAULT_BRANCH_FORMAT =
-    'Name it {whoami}/<short-feature-description> — lowercase, no version numbers, no sub/ prefix (e.g. dean/upgrade-webpieces)';
+const DEFAULT_BRANCH_FORMAT = 'Name it {whoami}/<short-feature-description> — lowercase, no version numbers, no sub/ prefix (e.g. dean/upgrade-webpieces)';
 
 // Hard cap on local feature branches. Enforced at CREATION because that is the one moment cleanup is
 // both cheap and obviously worth it — reaping happens over time, never "ASAP".
@@ -50,9 +49,7 @@ const WORKTREE_ADD = /git\s+worktree\s+add\b/;
 // LAST bare (non-flag) argument, which is the committish; the first bare argument is the path.
 // Flags that take a value (`--reason <s>`, `-b <name>`) are excluded by the caller, which only uses
 // this on commands with no `-b`/`-B` at all.
-const WORKTREE_ADD_EXISTING = new RegExp(
-    String.raw`git\s+worktree\s+add\s+(?:-{1,2}[A-Za-z-]+\s+)*\S+\s+(${REF_NAME})`,
-);
+const WORKTREE_ADD_EXISTING = new RegExp(String.raw`git\s+worktree\s+add\s+(?:-{1,2}[A-Za-z-]+\s+)*\S+\s+(${REF_NAME})`);
 
 // `git branch <name> <sha>` — RESTORING a branch at an explicit commit, which is exactly the
 // `recover=` command wp-cleanup writes to branch-mutations.log for every branch it reaps.
@@ -108,7 +105,10 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
     // read `origin/main` below, never FETCH_HEAD. On a git too old for the flag, retry the plain form.
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        execSync('git fetch --no-write-fetch-head origin main --quiet', { cwd: ctx.workspaceRoot, encoding: 'utf8' });
+        execSync('git fetch --no-write-fetch-head origin main --quiet', {
+            cwd: ctx.workspaceRoot,
+            encoding: 'utf8',
+        });
     } catch (err: unknown) {
         const error = toError(err);
         const text = error.message.toLowerCase();
@@ -122,21 +122,17 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
     }).trim();
     const count = parseInt(countStr, 10);
     if (count > 0) {
-        return [new V(
-            1,
-            truncate(ctx.command),
-            `Local main is ${count} commit(s) behind origin/main. Run 'git pull origin main' first, then retry creating branch '${requestedName}'.`,
-        )];
+        return [new V(1, truncate(ctx.command), `Local main is ${count} commit(s) behind origin/main. Run 'git pull origin main' first, then retry creating branch '${requestedName}'.`)];
     }
     return [];
 }
 
 export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardConfig> {
-    constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard', 'branch-creation-guard'); }
+    constructor(config: BranchCreationGuardConfig) {
+        super(config, 'branch-creation-guard', 'branch-creation-guard');
+    }
 
-    readonly description =
-        'Block new-branch and new-worktree creation when main is stale, when branching off a non-main ' +
-        'branch, or when the branch/worktree count is at its cap (forces cleanup of dead ones).';
+    readonly description = 'Block new-branch and new-worktree creation when main is stale, when branching off a non-main ' + 'branch, or when the branch/worktree count is at its cap (forces cleanup of dead ones).';
     override readonly defaultOptions = {
         branchFormat: DEFAULT_BRANCH_FORMAT,
         maxLocalBranches: DEFAULT_MAX_LOCAL_BRANCHES,
@@ -145,6 +141,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
     private readonly worktrees = new WorktreeService();
     private readonly mergedBranches = new MergedBranchesService(this.worktrees);
+    private readonly branchIdentity = new BranchIdentity();
 
     // Set by check() when (and only when) a cap is what blocked, so fixHint can render the reap
     // instructions instead of the branch-naming ones. Same instance-field handoff pr-merge-guard uses.
@@ -176,9 +173,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
     // The recovery command for "base this off fresh main", in the flavour of whatever was blocked.
     private freshMainCommand(name: string): string {
-        return this.worktreeAdd
-            ? `git fetch origin main && git worktree add ../${name.replace(/\//g, '-')} -b ${name} origin/main`
-            : `git fetch origin main && git checkout -b ${name} origin/main`;
+        return this.worktreeAdd ? `git fetch origin main && git worktree add ../${name.replace(/\//g, '-')} -b ${name} origin/main` : `git fetch origin main && git checkout -b ${name} origin/main`;
     }
 
     // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
@@ -189,29 +184,15 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (this.worktreeCapCache) return remedies.worktreeCap();
         if (this.capCache) return remedies.branchCap();
 
-        const create = this.worktreeAdd
-            ? 'Create it off fresh main: git fetch origin main && git worktree add ../<dir> -b <name> origin/main'
-            : 'Create it off fresh main from anywhere (incl. a worktree): git fetch origin main && git checkout -b <name> origin/main';
+        const create = this.worktreeAdd ? 'Create it off fresh main: git fetch origin main && git worktree add ../<dir> -b <name> origin/main' : 'Create it off fresh main from anywhere (incl. a worktree): git fetch origin main && git checkout -b <name> origin/main';
 
-        const options = [
-            new Option(create, true),
-            new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`),
-        ];
+        const options = [new Option(create, true), new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`)];
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
-            options.push(new Option(
-                'Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' +
-                "branch-creation-guard.turnOffRuleUntilEpoch to a future epoch in webpieces.config.json",
-            ));
+            options.push(new Option('Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' + 'branch-creation-guard.turnOffRuleUntilEpoch to a future epoch in webpieces.config.json'));
         } else {
-            options.push(new Option(
-                `If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`,
-            ));
+            options.push(new Option(`If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`));
         }
-        return new FixHint(
-            'Cannot create this branch (main is stale, or branching off a non-main branch).',
-            'Create your branch from an up-to-date main. Pick one:',
-            options,
-        );
+        return new FixHint('Cannot create this branch (main is stale, or branching off a non-main branch).', 'Create your branch from an up-to-date main. Pick one:', options);
     }
 
     /**
@@ -262,6 +243,10 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (ORIGIN_MAIN_BASE.test(command)) return [];
         if (this.worktreeAdd && WORKTREE_ORIGIN_MAIN_BASE.test(command)) return [];
 
+        // `/hotfix/` is itself the explicit emergency authorization. It may be nested even when the
+        // consumer normally forbids sub-branches; wp-start-upsert-pr still reconciles it with main.
+        if (this.branchIdentity.isHotfix(requestedName)) return [];
+
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,
             encoding: 'utf8',
@@ -273,25 +258,29 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
         // Not on main: creating this branch would stack it on a feature branch (a sub-branch).
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
-            return [new V(
-                1,
-                truncate(ctx.command),
-                `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
-                `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
-                `(works here and inside a worktree). ${this.branchFormat}. ` +
-                `You can temporarily turn this off if you truly need a sub-branch by setting ` +
-                `branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) in webpieces.config.json.`,
-            )];
+            return [
+                new V(
+                    1,
+                    truncate(ctx.command),
+                    `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
+                        `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
+                        `(works here and inside a worktree). ${this.branchFormat}. ` +
+                        `You can temporarily turn this off if you truly need a sub-branch by setting ` +
+                        `branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) in webpieces.config.json.`,
+                ),
+            ];
         }
 
-        return [new V(
-            1,
-            truncate(ctx.command),
-            `You are on '${currentBranch}', not main. Branches must be created from fresh main: ` +
-            `${this.freshMainCommand(requestedName)}. ${this.branchFormat}. ` +
-            `If you truly need a stacked sub-branch (requires human approval), name it per ` +
-            `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
-        )];
+        return [
+            new V(
+                1,
+                truncate(ctx.command),
+                `You are on '${currentBranch}', not main. Branches must be created from fresh main: ` +
+                    `${this.freshMainCommand(requestedName)}. ${this.branchFormat}. ` +
+                    `If you truly need a stacked sub-branch (requires human approval), name it per ` +
+                    `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
+            ),
+        ];
     }
 
     /**
@@ -323,27 +312,23 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (!dead) return [];
 
         const dir = branch.replace(/\//g, '-');
-        return [new V(
-            1,
-            truncate(ctx.command),
-            `Branch '${branch}' is dead — ${dead.reason}. A worktree on it would be a directory full of ` +
-            `PRE-MERGE code: everything you read there is stale relative to origin/main (read-stale-guard ` +
-            `blocks those reads) and every edit is blocked by feature-branch-guard. Base the new worktree ` +
-            `on fresh main instead: git fetch origin main && git worktree add ../${dir} -b <new-branch> origin/main`,
-        )];
+        return [
+            new V(
+                1,
+                truncate(ctx.command),
+                `Branch '${branch}' is dead — ${dead.reason}. A worktree on it would be a directory full of ` +
+                    `PRE-MERGE code: everything you read there is stale relative to origin/main (read-stale-guard ` +
+                    `blocks those reads) and every edit is blocked by feature-branch-guard. Base the new worktree ` +
+                    `on fresh main instead: git fetch origin main && git worktree add ../${dir} -b <new-branch> origin/main`,
+            ),
+        ];
     }
 
     // The reserved `…wpN` generation suffix — see RESERVED_GENERATION_SUFFIX for why it stays blocked
     // even though the tooling no longer produces it.
     private checkReservedSuffix(ctx: BashContext, requestedName: string | null): Violation | null {
         if (!requestedName || !RESERVED_GENERATION_SUFFIX.test(requestedName)) return null;
-        return new V(
-            1,
-            truncate(ctx.command),
-            `Branch name '${requestedName}' ends in 'wp<number>', which is reserved for the ` +
-            `squash-merge tool's generation marker (base → basewp2 → basewp3). ` +
-            `Rename it to a plain feature branch. ${this.branchFormat}.`,
-        );
+        return new V(1, truncate(ctx.command), `Branch name '${requestedName}' ends in 'wp<number>', which is reserved for the ` + `squash-merge tool's generation marker (base → basewp2 → basewp3). ` + `Rename it to a plain feature branch. ${this.branchFormat}.`);
     }
 
     /**
@@ -376,8 +361,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         // PARKED branches only — a branch checked out in a worktree is the worktree cap's problem, and
         // counting it twice would let five worktrees exhaust the branch budget on their own.
         const held = this.worktrees.heldBranches(ctx.workspaceRoot);
-        const parked = this.mergedBranches.localBranches(ctx.workspaceRoot)
-            .filter((branch: string): boolean => !held.has(branch));
+        const parked = this.mergedBranches.localBranches(ctx.workspaceRoot).filter((branch: string): boolean => !held.has(branch));
         const count = parked.length;
         const cap = this.effectiveBranchCap(ctx);
         if (count < cap) return null;
@@ -391,12 +375,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         // so every branch of that sentence had to hedge ("None of them are dead", "NOT known right
         // now — the cached verdicts are stale"), and none of the three variants changed the next
         // move: run pnpm wp-cleanup, which recomputes from scratch. Say the one thing that is true.
-        return new V(
-            1,
-            truncate(ctx.command),
-            `You have ${String(count)} parked local branches (worktree-held ones not counted); the cap ` +
-            `(branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. Run pnpm wp-cleanup.`,
-        );
+        return new V(1, truncate(ctx.command), `You have ${String(count)} parked local branches (worktree-held ones not counted); the cap ` + `(branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. Run pnpm wp-cleanup.`);
     }
 
     /**
@@ -447,7 +426,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             return execSync('git rev-parse --abbrev-ref HEAD', {
-                cwd: workspaceRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
             }).trim();
         } catch (err: unknown) {
             const error = toError(err);
@@ -472,12 +453,6 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
         this.worktreeCapCache = cache;
 
-        return new V(
-            1,
-            truncate(ctx.command),
-            `You have ${String(count)} linked worktrees; the cap (branch-creation-guard.maxWorktrees) ` +
-            `is ${String(this.maxWorktrees)}. Run pnpm wp-cleanup.`,
-        );
+        return new V(1, truncate(ctx.command), `You have ${String(count)} linked worktrees; the cap (branch-creation-guard.maxWorktrees) ` + `is ${String(this.maxWorktrees)}. Run pnpm wp-cleanup.`);
     }
-
 }
