@@ -15,8 +15,9 @@
  * Why: in review a `…Dto` is a wire type and a `…Fs` a Firestore document, while `TopNamePlaceInput` reads
  * the same as a server-internal or vendor type. The suffix is the one place the layer can be stated.
  *
- * Overlapping entries: the MOST SPECIFIC entry governs a file ({@link SuffixEntryPicker}); suffixes are
- * never unioned across entries.
+ * Overlapping entries: the FIRST entry in config order whose paths match governs a file
+ * ({@link SuffixEntryPicker}), so a narrower entry must be listed before a broader one; suffixes are never
+ * unioned across entries.
  *
  * Under NEW_AND_MODIFIED_CODE only a declaration whose NAME line is new or changed is judged — a new type
  * or a renamed one — so legacy names are grandfathered and a repo with hundreds of them can convert slowly.
@@ -34,57 +35,31 @@ import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';
 
-/** One glob of one entry, with how specific it is. Data-only. */
-export class RankedGlob {
+/** The entry that governs a file, and the glob of it that matched — named in every failure. Data-only. */
+export class GoverningGlob {
     constructor(
         readonly entry: RequiredTypeSuffixEntry,
         readonly glob: string,
-        /** Characters before the first glob metacharacter (`*`, `?`, `[`, `{`). */
-        readonly literalPrefix: number,
-        /** Every non-metacharacter in the glob. */
-        readonly literalChars: number,
-        /** Position of the entry in the config — the final tie-break. */
-        readonly order: number,
     ) {}
 }
 
 /**
- * Picks the ONE entry that governs a file. Among the entries with a glob matching the file, the one whose
- * matching glob has the longest LITERAL PREFIX (the characters before its first `*`, `?`, `[` or `{`)
- * wins; a tie goes to the glob with more literal characters overall, then to the entry listed first. So
- * `libraries/apis/internal/**` beats `libraries/apis/**` whatever order they are listed in.
+ * Picks the ONE entry that governs a file: the FIRST entry, in config order, with a glob matching the
+ * file. Order matters — to give a narrower directory stricter suffixes, list its entry ABOVE the broader
+ * one; listed below, it never applies to the files the broader entry already covers.
  */
 export class SuffixEntryPicker {
-    private static readonly META = /[*?[\]{}]/;
-
     entryFor(relFile: string, entries: readonly RequiredTypeSuffixEntry[]): RequiredTypeSuffixEntry | undefined {
         return this.winner(relFile, entries)?.entry;
     }
 
-    /** The winning glob (and its entry) for `relFile`, or undefined when no entry covers it. */
-    winner(relFile: string, entries: readonly RequiredTypeSuffixEntry[]): RankedGlob | undefined {
-        let best: RankedGlob | undefined;
-        entries.forEach((entry: RequiredTypeSuffixEntry, order: number) => {
-            for (const glob of entry.paths) {
-                if (!matchesAnyGlob(relFile, [glob])) continue;
-                const ranked = this.rank(entry, glob, order);
-                if (best === undefined || this.beats(ranked, best)) best = ranked;
-            }
-        });
-        return best;
-    }
-
-    private rank(entry: RequiredTypeSuffixEntry, glob: string, order: number): RankedGlob {
-        const firstMeta = glob.search(SuffixEntryPicker.META);
-        const literalPrefix = firstMeta === -1 ? glob.length : firstMeta;
-        const literalChars = glob.replace(/[*?[\]{}]/g, '').length;
-        return new RankedGlob(entry, glob, literalPrefix, literalChars, order);
-    }
-
-    private beats(a: RankedGlob, b: RankedGlob): boolean {
-        if (a.literalPrefix !== b.literalPrefix) return a.literalPrefix > b.literalPrefix;
-        if (a.literalChars !== b.literalChars) return a.literalChars > b.literalChars;
-        return a.order < b.order;
+    /** The first matching entry (and its matching glob) for `relFile`, or undefined when no entry covers it. */
+    winner(relFile: string, entries: readonly RequiredTypeSuffixEntry[]): GoverningGlob | undefined {
+        for (const entry of entries) {
+            const glob = entry.paths.find((g: string) => matchesAnyGlob(relFile, [g]));
+            if (glob !== undefined) return new GoverningGlob(entry, glob);
+        }
+        return undefined;
     }
 }
 
