@@ -1,19 +1,22 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { CodeRulesRunRequestParser, validateCode } from '@webpieces/code-rules';
+import { validateCode, RunRequestParser } from '@webpieces/code-rules';
 
 /**
- * The build's code-rules pass. With no options it is the gate: every rule at its committed mode. The
- * three debug options (#1027) judge ONE rule without a config edit, e.g.
- *
- *   nx run architecture:validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=lang-apis
- *
- * Every other option in schema.json is accepted and ignored — the rules read webpieces.config.json.
+ * The three DEBUG options (#1027). Every rule's mode and settings come from webpieces.config.json, never
+ * from here; these only turn ONE run into a debug run of one rule:
+ *   nx run architecture:validate-code --rule=<name> [--mode=RUN_EVERY_TIME] [--projects=a,b]
+ * All absent → the gate, at every committed mode.
  */
+export interface ValidateCodeOptions {
+    rule?: string;
+    mode?: string;
+    projects?: string | string[];
+}
+
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- nx executor options arrive as an untyped record
-    options: Record<string, unknown>,
+    options: ValidateCodeOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateCode(context.root, new CodeRulesRunRequestParser().fromExecutorOptions(options));
+    return validateCode(context.root, new RunRequestParser().parse(options.rule, options.mode, options.projects));
 }

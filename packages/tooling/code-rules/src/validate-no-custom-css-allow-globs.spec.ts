@@ -17,6 +17,7 @@ import * as path from 'path';
 import { NoCustomCssConfig, NoCustomCssScope, specTempDirs } from '@webpieces/rules-config';
 
 import { NoCustomCssValidator } from './validate-no-custom-css';
+import { GateScanScope } from './scan-scope';
 
 // The generated design.html legend swatch that started this: an inline style= in a file nobody hand-writes.
 const DESIGN_HTML = `<div class="legend">
@@ -68,20 +69,20 @@ describe('NoCustomCssValidator allowGlobs', () => {
 
     it('PASSES a changed file that a configured glob exempts', async () => {
         writeFile(root, 'services/grubhub-integration/design.html', DESIGN_HTML);
-        const result = await new NoCustomCssValidator(config(['**/design.html'])).run(root);
+        const result = await new NoCustomCssValidator(config(['**/design.html']), new GateScanScope()).run(root);
         expect(result.success).toBe(true);
     });
 
     it('FAILS the same file, same content, once the glob is removed', async () => {
         writeFile(root, 'services/grubhub-integration/design.html', DESIGN_HTML);
-        const result = await new NoCustomCssValidator(config([])).run(root);
+        const result = await new NoCustomCssValidator(config([]), new GateScanScope()).run(root);
         expect(result.success).toBe(false);
     });
 
     it('still enforces a non-matching file while the glob is configured', async () => {
         writeFile(root, 'services/grubhub-integration/design.html', DESIGN_HTML);
         writeFile(root, 'apps/web/src/app/a.component.html', `<div style="color:red"></div>\n`);
-        const result = await new NoCustomCssValidator(config(['**/design.html'])).run(root);
+        const result = await new NoCustomCssValidator(config(['**/design.html']), new GateScanScope()).run(root);
         expect(result.success).toBe(false);
     });
 
@@ -89,17 +90,17 @@ describe('NoCustomCssValidator allowGlobs', () => {
         writeFile(root, 'services/grubhub-integration/design.html', DESIGN_HTML);
         const cfg = config(['**/design.html']);
         cfg.mode = 'NEW_AND_MODIFIED_CODE';
-        expect((await new NoCustomCssValidator(cfg).run(root)).success).toBe(true);
+        expect((await new NoCustomCssValidator(cfg, new GateScanScope()).run(root)).success).toBe(true);
 
         const strict = config([]);
         strict.mode = 'NEW_AND_MODIFIED_CODE';
-        expect((await new NoCustomCssValidator(strict).run(root)).success).toBe(false);
+        expect((await new NoCustomCssValidator(strict, new GateScanScope()).run(root)).success).toBe(false);
     });
 
     it('agrees with the shared NoCustomCssScope the hook rule consults', () => {
         const cfg = config(['**/design.html']);
         const scope = new NoCustomCssScope(cfg);
-        const validator = new NoCustomCssValidator(cfg);
+        const validator = new NoCustomCssValidator(cfg, new GateScanScope());
         for (const file of ['services/x/design.html', 'apps/web/a.component.html', 'src/a.spec.ts', 'apps/web/a.component.ts']) {
             // isRelevantFile is the ONE place this validator narrows its changed-file set, so "exempt by the
             // shared scope" must imply "never inspected here".

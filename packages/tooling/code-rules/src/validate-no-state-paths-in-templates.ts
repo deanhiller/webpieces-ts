@@ -30,7 +30,7 @@
  * them falsifies the record) or to hand-written docs that name a FILE rather than a path.
  *
  * MODES: OFF | NEW_AND_MODIFIED_CODE (changed lines only) | NEW_AND_MODIFIED_FILES (whole changed file)
- *        | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole-scope, #1027 — widened centrally by DiffScope).
+ * | MODIFIED_PROJECTS / RUN_EVERY_TIME (whole files of every touched project / of the repo — #1027).
  * Diff-scoped by default, so the docs whose SUBJECT is the layout (they print both rows on purpose)
  * are not retroactively flooded — the rule bites when a template is next edited.
  *
@@ -53,7 +53,6 @@ import {
     DEFAULT_BANNED_STATE_PATH_PREFIXES,
     ModifiedCodeMode,
     detectBase,
-    getChangedFiles,
     getFileDiff,
     getChangedLineNumbers,
 } from '@webpieces/rules-config';
@@ -61,6 +60,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 /** One restated state path, located in a template. */
 export class StatePathViolation {
@@ -84,7 +84,7 @@ export class StatePathHit {
 
 @injectable(bindingScopeValues.Singleton)
 export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePathsInTemplatesConfig> {
-    constructor(config: NoStatePathsInTemplatesConfig) {
+    constructor(config: NoStatePathsInTemplatesConfig, private readonly scanScope: ScanScope) {
         super(config, RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES, RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES);
     }
 
@@ -113,7 +113,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
         console.log(`   Base: ${base}`);
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-        const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false })
+        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false })
             .filter((file: string): boolean => this.isRelevantFile(file));
         if (changedFiles.length === 0) {
             console.log('✅ No generated-doc templates changed');
@@ -121,7 +121,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
         }
         console.log(`📂 Checking ${String(changedFiles.length)} changed template(s)...`);
 
-        const violations = mode === 'NEW_AND_MODIFIED_CODE'
+        const violations = this.scanScope.isLineScoped(mode)
             ? this.violationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
             : this.violationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
 
@@ -129,6 +129,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
             console.log('✅ No hard-coded state paths in generated-doc templates');
             return { success: true };
         }
+        this.scanScope.recordSites(this.name, violations.map((v: StatePathViolation) => v.file));
         throw this.failure(violations, mode);
     }
 

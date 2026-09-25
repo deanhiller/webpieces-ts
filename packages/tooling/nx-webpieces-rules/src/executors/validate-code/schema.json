@@ -6,15 +6,16 @@
     "properties": {
         "rule": {
             "type": "string",
-            "description": "DEBUG RUN (#1027): judge only this rule (a code-rules key or a match-rules name). Not the gate: it labels itself, changes nothing on disk, prints the rule's own failure text plus a site count per project, and exits non-zero when sites exist."
+            "description": "DEBUG run (#1027): run ONLY this code rule, e.g. one-enum-spelling-in-api-lib. Nothing is written and webpieces.config.json is unchanged, so the normal gate keeps its committed mode. Exits non-zero when any site exists."
         },
         "mode": {
             "type": "string",
-            "description": "DEBUG RUN: judge --rule at this mode instead of its committed one, without editing webpieces.config.json, e.g. RUN_EVERY_TIME (every file in the repo) or MODIFIED_PROJECTS (every file of every project the diff touches). Omit to use the committed mode. Requires --rule."
+            "description": "DEBUG run: run --rule at this mode instead of its committed one, e.g. RUN_EVERY_TIME (every file in the repo) or MODIFIED_PROJECTS (every file of every project the diff touches). Omit to use the committed mode."
         },
         "projects": {
-            "type": "string",
-            "description": "DEBUG RUN: comma-separated nx project names to restrict --rule to, e.g. lang-apis,lang-fsdb-api. Requires --rule."
+            "type": ["string", "array"],
+            "items": { "type": "string" },
+            "description": "DEBUG run: judge only files owned by these nx projects, comma-separated, e.g. lang-apis,lang-fsdb-api. Prints a site count per project."
         },
         "methodMaxLimit": {
             "type": "object",

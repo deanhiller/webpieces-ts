@@ -17,6 +17,7 @@ import { EnumText } from './api-lib-enum-text';
 import { InlineImportScanner, NoInlineImportInApiLibValidator } from './validate-no-inline-import-in-api-lib';
 import { EnumSpellingScanner, OneEnumSpellingInApiLibValidator } from './validate-one-enum-spelling-in-api-lib';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { GateScanScope } from './scan-scope';
 
 /**
  * The two `role:api-lib` spelling rules (#1023): every refused shape, the cure each prints, and the
@@ -223,13 +224,13 @@ async function failureOf(run: () => Promise<unknown>): Promise<RuleFailError | u
 function enumRule(mode: 'NEW_AND_MODIFIED_CODE' | 'NEW_AND_MODIFIED_FILES' | 'OFF'): OneEnumSpellingInApiLibValidator {
     const config = new OneEnumSpellingInApiLibConfig();
     config.mode = mode;
-    return new OneEnumSpellingInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope());
+    return new OneEnumSpellingInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope(), new GateScanScope());
 }
 
 function importRule(mode: 'NEW_AND_MODIFIED_CODE' | 'OFF'): NoInlineImportInApiLibValidator {
     const config = new NoInlineImportInApiLibConfig();
     config.mode = mode;
-    return new NoInlineImportInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope());
+    return new NoInlineImportInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope(), new GateScanScope());
 }
 
 describe('the two validators, end to end', () => {

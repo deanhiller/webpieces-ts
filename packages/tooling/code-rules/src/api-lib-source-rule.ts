@@ -7,7 +7,8 @@
  * Both judge the SOURCE of an api library — the contract every consumer and the OpenAPI / MCP
  * generator read — and both have the same rollout shape: `mode` NEW_AND_MODIFIED_CODE judges only the
  * changed lines (so existing code is grandfathered until someone touches it), NEW_AND_MODIFIED_FILES
- * judges every site in a changed file. This class owns that scoping, the api-lib test, the escape
+ * judges every site in a changed file, and the whole-scope modes (#1027) judge every site of every
+ * file in a touched project (MODIFIED_PROJECTS) or in the repo (RUN_EVERY_TIME) — see ScanScope. This class owns that scoping, the api-lib test, the escape
  * hatches, and the ONE failure spelling: a thrown `RuleFailError` with one `Option` per site, which
  * `RuleReporter` renders. A subclass only says what a violating site IS.
  *
@@ -32,6 +33,7 @@ import {
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 /** The role these rules judge. */
 const API_LIB_ROLE = 'api-lib';
@@ -90,6 +92,7 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
         ruleName: string,
         private readonly roleResolver: ProjectRoleResolver,
         private readonly diffScope: DiffScope,
+        private readonly scanScope: ScanScope,
     ) {
         super(config, ruleName, ruleName);
     }
@@ -111,10 +114,11 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
             return { success: true };
         }
         const found: FoundSite[] = [];
-        for (const relFile of this.diffScope.getChangedFiles(workspaceRoot, base, range.head)) {
+        for (const relFile of this.scanScope.files(workspaceRoot, mode, base, range.head)) {
             found.push(...this.judge(workspaceRoot, relFile, mode, base, range.head));
         }
         if (found.length === 0) return { success: true };
+        this.scanScope.recordSites(this.name, found.map((each: FoundSite) => each.relFile));
         throw this.failure(found);
     }
 
@@ -127,7 +131,7 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
         head: string | undefined,
     ): FoundSite[] {
         if (!this.inScope(workspaceRoot, relFile)) return [];
-        const changedLines = mode === 'NEW_AND_MODIFIED_CODE'
+        const changedLines = this.scanScope.isLineScoped(mode)
             ? this.diffScope.getChangedLineNumbers(this.diffScope.getFileDiff(workspaceRoot, relFile, base, head))
             : undefined;
         if (changedLines !== undefined && changedLines.size === 0) return [];

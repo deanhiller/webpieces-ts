@@ -31,6 +31,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 /** Finds every refused utility-type reference in one parsed file. */
 export class UtilityTypeScanner {
@@ -148,8 +149,8 @@ export class UtilityTypeScanner {
 export class NoUtilityTypesInApiLibValidator extends ApiLibSourceRule<NoUtilityTypesInApiLibConfig> {
     private readonly scanner = new UtilityTypeScanner();
 
-    constructor(config: NoUtilityTypesInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope) {
-        super(config, RULE_NAMES.NO_UTILITY_TYPES_IN_API_LIB, roleResolver, diffScope);
+    constructor(config: NoUtilityTypesInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
+        super(config, RULE_NAMES.NO_UTILITY_TYPES_IN_API_LIB, roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

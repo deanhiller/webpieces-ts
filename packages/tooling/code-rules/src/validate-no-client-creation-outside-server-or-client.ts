@@ -48,7 +48,6 @@ import {
     ClientCreationSeverity,
     ModifiedCodeMode,
     detectBase,
-    getChangedFiles,
     getFileDiff,
     getChangedLineNumbers,
 } from '@webpieces/rules-config';
@@ -56,6 +55,7 @@ import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 const RULE_NAME = RULE_NAMES.NO_CLIENT_CREATION_OUTSIDE_SERVER_OR_CLIENT;
 const DEFAULT_ALLOWED_ROLES = ['server', 'client', 'app'];
@@ -88,6 +88,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
     constructor(
         config: NoClientCreationOutsideServerOrClientConfig,
         private readonly roleResolver: ProjectRoleResolver,
+        private readonly scanScope: ScanScope,
     ) {
         super(config, RULE_NAME, RULE_NAME);
     }
@@ -112,7 +113,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
         console.log('');
 
-        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head);
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
             return { success: true };
@@ -126,6 +127,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
             return { success: true };
         }
 
+        this.scanScope.recordSites(RULE_NAME, violations.map((v: Violation) => v.file));
         this.report(violations, severity);
         // WARN reports but passes; only "error" fails the build.
         return { success: severity !== 'error' };
@@ -168,7 +170,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
     }
 
     /** Violations across changed files: a creation site in a project whose role is not allowed. In
-     *  NEW_AND_MODIFIED_CODE only sites on changed lines count; in NEW_AND_MODIFIED_FILES every site
+     *  NEW_AND_MODIFIED_CODE only sites on changed lines count; in NEW_AND_MODIFIED_FILES (and the whole-scope modes) every site
      *  in a changed file counts. */
     private findViolations(
         workspaceRoot: string,
@@ -186,7 +188,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
             // No role tag → role-tag rule owns it; an allowed role → fine. Either way, skip.
             if (role === null || allowed.has(role)) continue;
 
-            const changedLines = mode === 'NEW_AND_MODIFIED_CODE'
+            const changedLines = this.scanScope.isLineScoped(mode)
                 ? getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head))
                 : null;
             if (changedLines !== null && changedLines.size === 0) continue;

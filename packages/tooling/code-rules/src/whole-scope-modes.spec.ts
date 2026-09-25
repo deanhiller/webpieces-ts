@@ -3,93 +3,57 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    allRuleNames,
-    BaseRuleConfig,
+    CONFIG_FILENAME,
     DiffScope,
-    FileScope,
-    WholeScopeModes,
-    FrameworkTagConfig,
     InformAiError,
-    MaxMethodLinesConfig,
-    NoAnyUnknownConfig,
-    NoInlineTypeLiteralsConfig,
+    ModifiedCodeMode,
+    NoDestructureConfig,
     OneEnumSpellingInApiLibConfig,
-    RequireReturnTypeConfig,
-    RequiredTypeSuffixConfig,
-    RequiredTypeSuffixEntry,
     RuleFailError,
-    schemaModeValues,
+    allRuleNames,
     sectionForRule,
     seedEntryForRule,
     specTempDirs,
-    toError,
-    WHOLE_SCOPE_MODES,
 } from '@webpieces/rules-config';
 
-import { CodeValidator, ExecutorResult } from './code-validator';
-import { CONFIG_BINDINGS } from './code-rules-config-table';
-import { CodeRulesRunRequest, CodeRulesRunRequestParser } from './code-rules-run-request';
+import { CodeRulesBootstrap } from './code-rules-bootstrap';
+import { CodeRulesRunRequest, RunRequestParser } from './code-rules-run-request';
+import { ProjectCatalog, ScanRestriction, ScanScope } from './scan-scope';
 import { ProjectRoleResolver } from './project-role-resolver';
-import { RuleScopePlanner } from './rule-scope-plan';
-import { MaxMethodLinesValidator } from './validate-modified-methods';
-import { NoAnyUnknownValidator } from './validate-no-any-unknown';
-import { NoInlineTypeLiteralsValidator } from './validate-no-inline-types';
-import { RequireReturnTypeValidator } from './validate-return-types';
 import { OneEnumSpellingInApiLibValidator } from './validate-one-enum-spelling-in-api-lib';
-import { RequiredTypeSuffixValidator } from './validate-required-type-suffix';
-import runValidator from './validate-code';
+import { NoDestructureValidator } from './validate-no-destructure';
 
 /**
- * #1027 acceptance: MODIFIED_PROJECTS and RUN_EVERY_TIME on every diff-scoped code rule, and the debug
- * run (`--rule` / `--mode` / `--projects`). A violating file that is NOT in the diff must FAIL under
- * RUN_EVERY_TIME, and under MODIFIED_PROJECTS when its project is touched — and PASS under both
- * NEW_AND_MODIFIED_* modes. Exercised through the same planner + DiffScope.within the engine uses, on
- * rules of every shape (line-scoped, method-scoped, the method-limit pair, api-lib), in a real git repo.
+ * #1027 — the whole-scope modes (MODIFIED_PROJECTS, RUN_EVERY_TIME) on the diff-scoped code rules, and
+ * the per-run DEBUG override (`--rule` / `--mode` / `--projects`) that needs no config edit.
+ *
+ * Every case runs in a throwaway git repo whose base commit already holds violations NOT in the diff —
+ * the "what is left?" sites a rule adopted at NEW_AND_MODIFIED_CODE grandfathers. The diff then touches
+ * ONE project (`lang-apis`) with a clean file.
  */
 
-const WORKSPACE_ROOT = path.resolve(__dirname, '../../../..');
+/** Old, grandfathered violations — committed on the base, so never in the diff. */
+const OLD_UNION = "export type Old = 'a' | 'b';\n";
+const OLD_DESTRUCTURE = 'export class Util {\n    run(p: { a: number }): number {\n        const { a } = p;\n        return a;\n    }\n}\n';
 
 class Repo {
-    readonly root = specTempDirs.makeReal('whole-scope-');
+    readonly root = specTempDirs.makeReal('wp-whole-scope-');
 
     constructor() {
         this.git('init -q -b main');
-        this.git('config user.email test@test.com');
-        this.git('config user.name test');
-        this.project('libs/apis', 'api-lib');
-        this.project('libs/util', 'lib');
-        // The violations, committed BEFORE the diff — so no NEW_AND_MODIFIED_* mode ever sees them.
-        this.write('libs/apis/src/Old.ts', [
-            "export type Old = 'a' | 'b';",
-            'export const loose: any = 1;',
-            'export class Big {',
-            '    long(opts: { a: number }): number {',
-            ...Array.from({ length: 12 }, (_: undefined, i: number) => `        const v${i} = ${i};`),
-            '        return 0;',
-            '    }',
-            '    untyped() {',
-            '        return 1;',
-            '    }',
-            '}',
-            '',
-        ].join('\n'));
-        this.write('libs/apis/src/Touch.ts', 'export const touch = 0;\n');
-        this.write('libs/util/src/Util.ts', 'export const util = 0;\n');
+        this.git('config user.email t@t.t');
+        this.git('config user.name t');
+        this.project('libs/apis', 'lang-apis', 'role:api-lib');
+        this.project('libs/other', 'other-apis', 'role:api-lib');
+        this.project('libs/util', 'util', 'role:lib');
+        this.write('libs/apis/src/Old.ts', OLD_UNION);
+        this.write('libs/other/src/Other.ts', OLD_UNION);
+        this.write('libs/util/src/Util.ts', OLD_DESTRUCTURE);
         this.git('add -A');
         this.git('commit -q -m base');
-        process.env['NX_BASE'] = this.git('rev-parse HEAD');
-        delete process.env['NX_HEAD'];
-    }
-
-    git(cmd: string): string {
-        // core.hooksPath=/dev/null keeps machine-global git hooks out of the throwaway test repo.
-        return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
-            cwd: this.root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-    }
-
-    project(dir: string, role: string): void {
-        this.write(`${dir}/project.json`, JSON.stringify({ name: path.basename(dir), tags: [`role:${role}`] }));
+        process.env['NX_BASE'] = this.git('rev-parse HEAD').trim();
+        // The diff: one clean file in lang-apis — the project is TOUCHED, its Old.ts is not.
+        this.write('libs/apis/src/Touched.ts', 'export const touched = 1;\n');
     }
 
     write(relPath: string, content: string): void {
@@ -97,243 +61,179 @@ class Repo {
         fs.writeFileSync(path.join(this.root, relPath), content);
     }
 
-    /** A webpieces.config.json that loads: this repo's own, plus a seeded entry for every rule it lacks. */
-    writeConfig(): void {
-        const config = JSON.parse(fs.readFileSync(path.join(WORKSPACE_ROOT, 'webpieces.config.json'), 'utf-8')) as Record<string, Record<string, unknown>>;
+    /** A webpieces.config.json that validates: every rule OFF except the ones given. */
+    // webpieces-disable no-any-unknown -- raw config JSON is an opaque option bag, exactly as consumers write it
+    config(overrides: Record<string, Record<string, unknown>>): void {
+        // webpieces-disable no-any-unknown -- opaque option bags
+        const rules: Record<string, unknown> = {};
+        // webpieces-disable no-any-unknown -- opaque option bags
+        const hookGuards: Record<string, unknown> = {};
         for (const name of allRuleNames()) {
-            const section = config[sectionForRule(name)];
-            if (section[name] === undefined) section[name] = seedEntryForRule(name);
+            const entry = { ...seedEntryForRule(name), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+            const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+            target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
         }
-        config['rules']['one-enum-spelling-in-api-lib'] = seedEntryForRule('one-enum-spelling-in-api-lib');
-        // The review checklists name docs under THIS repo's .claude/review, which the fixture does not have.
-        (config['commands']['pr-gate'] as Record<string, unknown>)['checklists'] = [];
-        this.write('webpieces.config.json', JSON.stringify(config, null, 4));
-        this.git('add -A');
-        this.git('commit -q -m config');
-        process.env['NX_BASE'] = this.git('rev-parse HEAD');
+        this.write(CONFIG_FILENAME, JSON.stringify({
+            rules,
+            hookGuards,
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1 } },
+            excludePaths: [],
+            'match-rules': [],
+        }));
     }
 
     dispose(): void {
         delete process.env['NX_BASE'];
         fs.rmSync(this.root, { recursive: true, force: true });
     }
-}
 
-/** A rule factory for one of the three shapes under test. */
-class RuleUnderTest {
-    constructor(
-        readonly key: string,
-        readonly config: () => BaseRuleConfig,
-        readonly build: (config: BaseRuleConfig) => CodeValidator<BaseRuleConfig>,
-    ) {}
+    private project(dir: string, name: string, role: string): void {
+        this.write(`${dir}/project.json`, JSON.stringify({ name, tags: [role] }));
+    }
 
-    /** Run the rule at `mode` exactly as the engine does: planned config, inside its planned scope. */
-    async passes(root: string, mode: string): Promise<boolean> {
-        const committed = this.config();
-        committed.mode = mode;
-        const planner = new RuleScopePlanner(CodeRulesRunRequest.GATE, null);
-        const planned = planner.plan(this.key, committed, schemaModeValues(this.key) ?? []);
-        const validator = this.build(planned);
-        try {
-            const result: ExecutorResult = await new DiffScope().within(planner.result().of(this.key), () => validator.run(root));
-            return result.success;
-        } catch (err: unknown) {
-            const error = toError(err);
-            if (error instanceof RuleFailError) return false;
-            throw error;
-        }
+    private git(args: string): string {
+        return execSync(`git ${args}`, { cwd: this.root, encoding: 'utf-8' });
     }
 }
 
-const RULES: readonly RuleUnderTest[] = [
-    new RuleUnderTest('no-any-unknown', () => new NoAnyUnknownConfig(),
-        (c: BaseRuleConfig) => new NoAnyUnknownValidator(c as NoAnyUnknownConfig)),
-    new RuleUnderTest('max-method-lines', () => {
-        const c = new MaxMethodLinesConfig();
-        c.limit = 5;
-        return c;
-    }, (c: BaseRuleConfig) => new MaxMethodLinesValidator(c as MaxMethodLinesConfig)),
-    new RuleUnderTest('require-return-type', () => new RequireReturnTypeConfig(),
-        (c: BaseRuleConfig) => new RequireReturnTypeValidator(c as RequireReturnTypeConfig)),
-    new RuleUnderTest('no-inline-type-literals', () => new NoInlineTypeLiteralsConfig(),
-        (c: BaseRuleConfig) => new NoInlineTypeLiteralsValidator(c as NoInlineTypeLiteralsConfig)),
-    new RuleUnderTest('one-enum-spelling-in-api-lib', () => new OneEnumSpellingInApiLibConfig(),
-        (c: BaseRuleConfig) => new OneEnumSpellingInApiLibValidator(c as OneEnumSpellingInApiLibConfig, new ProjectRoleResolver(), new DiffScope())),
-    // #1037: `Old` (libs/apis/src/Old.ts) does not end in `Dto`.
-    new RuleUnderTest('required-type-suffix', () => {
-        const entry = new RequiredTypeSuffixEntry();
-        entry.paths = ['libs/apis/**'];
-        entry.suffixes = ['Dto'];
-        const c = new RequiredTypeSuffixConfig();
-        c.entries = [entry];
-        return c;
-    }, (c: BaseRuleConfig) => new RequiredTypeSuffixValidator(c as RequiredTypeSuffixConfig, new ProjectRoleResolver(), new DiffScope())),
-];
+function scanScope(projects?: string[]): ScanScope {
+    const diffScope = new DiffScope();
+    return new ScanScope(diffScope, new ProjectCatalog(diffScope), new ScanRestriction(projects));
+}
 
-describe('whole-scope modes judge a violating file the diff never touched', () => {
+function enumRule(mode: ModifiedCodeMode, scan: ScanScope = scanScope()): OneEnumSpellingInApiLibValidator {
+    const config = new OneEnumSpellingInApiLibConfig();
+    config.mode = mode;
+    return new OneEnumSpellingInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope(), scan);
+}
+
+function destructureRule(mode: ModifiedCodeMode): NoDestructureValidator {
+    const config = new NoDestructureConfig();
+    config.mode = mode;
+    config.turnOffRuleUntilEpoch = 0;
+    return new NoDestructureValidator(config, scanScope());
+}
+
+/** The files a failing enum run named, or [] when it passed. */
+async function enumFailures(rule: OneEnumSpellingInApiLibValidator, root: string): Promise<string[]> {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS what this helper returns
+    try {
+        await rule.run(root);
+        return [];
+    } catch (err: unknown) {
+        //const error = toError(err);
+        if (!(err instanceof RuleFailError)) throw err;
+        return err.fixOptions.map((o: { text: string }) => o.text.split(':')[0]!).sort();
+    }
+}
+
+describe('whole-scope modes (#1027): a violating file NOT in the diff', () => {
     let repo: Repo;
-    let quiet: ReturnType<typeof vi.spyOn>[];
-
     beforeEach(() => {
         repo = new Repo();
-        quiet = [vi.spyOn(console, 'log').mockImplementation(() => undefined), vi.spyOn(console, 'error').mockImplementation(() => undefined)];
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
-
     afterEach(() => {
-        for (const spy of quiet) spy.mockRestore();
+        vi.restoreAllMocks();
         repo.dispose();
     });
 
-    for (const rule of RULES) {
-        it(`${rule.key}: FAILS under RUN_EVERY_TIME and under MODIFIED_PROJECTS when its project is touched; PASSES under NEW_AND_MODIFIED_*`, async () => {
-            repo.write('libs/apis/src/Touch.ts', 'export const touch = 1;\n');
-            const diffModes = (schemaModeValues(rule.key) ?? []).filter((m: string) => m.startsWith('NEW_'));
-
-            expect(await rule.passes(repo.root, 'RUN_EVERY_TIME')).toBe(false);
-            expect(await rule.passes(repo.root, 'MODIFIED_PROJECTS')).toBe(false);
-            for (const mode of diffModes) {
-                expect(await rule.passes(repo.root, mode), mode).toBe(true);
-            }
-        });
-
-        it(`${rule.key}: MODIFIED_PROJECTS PASSES when the diff touches only another project`, async () => {
-            repo.write('libs/util/src/Util.ts', 'export const util = 1;\n');
-
-            expect(await rule.passes(repo.root, 'MODIFIED_PROJECTS')).toBe(true);
-            expect(await rule.passes(repo.root, 'RUN_EVERY_TIME')).toBe(false);
-        });
-    }
-});
-
-describe('every diff-scoped code rule offers both whole-scope modes, and no rule gained a default', () => {
-    it('each CONFIG_BINDINGS rule with a diff-scoped mode accepts MODIFIED_PROJECTS and RUN_EVERY_TIME', () => {
-        const diffScoped = CONFIG_BINDINGS.map((b: readonly [unknown, string]) => b[1])
-            .filter((key: string) => new WholeScopeModes().wholeFileJudgeMode(schemaModeValues(key) ?? []) !== null);
-
-        expect(diffScoped.length).toBeGreaterThan(20);
-        for (const key of diffScoped) {
-            expect(schemaModeValues(key), key).toEqual(expect.arrayContaining([...WHOLE_SCOPE_MODES]));
-        }
-    });
-});
-
-describe('RuleScopePlanner', () => {
-    it('leaves the gate path byte-identical: a diff-scoped mode keeps the committed config object', () => {
-        const config = new NoAnyUnknownConfig();
-        config.mode = 'NEW_AND_MODIFIED_CODE';
-        const planner = new RuleScopePlanner(CodeRulesRunRequest.GATE, null);
-
-        expect(planner.plan('no-any-unknown', config, schemaModeValues('no-any-unknown') ?? [])).toBe(config);
-        expect(planner.result().of('no-any-unknown')).toBe(FileScope.DIFF);
+    it('PASSES under both NEW_AND_MODIFIED_* modes — it is grandfathered', async () => {
+        expect(await enumFailures(enumRule('NEW_AND_MODIFIED_CODE'), repo.root)).toEqual([]);
+        expect(await enumFailures(enumRule('NEW_AND_MODIFIED_FILES'), repo.root)).toEqual([]);
     });
 
-    it('rewrites a whole-scope mode to the rule\'s per-file mode inside a widened scope, never mutating the committed config', () => {
-        const config = new NoAnyUnknownConfig();
-        config.mode = 'RUN_EVERY_TIME';
-        const planner = new RuleScopePlanner(CodeRulesRunRequest.GATE, null);
-        const planned = planner.plan('no-any-unknown', config, schemaModeValues('no-any-unknown') ?? []);
-
-        expect(planned.mode).toBe('NEW_AND_MODIFIED_FILES');
-        expect(planned).toBeInstanceOf(NoAnyUnknownConfig);
-        expect(config.mode).toBe('RUN_EVERY_TIME');
-        expect(planner.result().of('no-any-unknown').kind).toBe('RUN_EVERY_TIME');
+    it('FAILS under MODIFIED_PROJECTS when its project is touched — and only then', async () => {
+        expect(await enumFailures(enumRule('MODIFIED_PROJECTS'), repo.root)).toEqual(['libs/apis/src/Old.ts']);
     });
 
-    it('leaves a PROJECT_MODES rule\'s own MODIFIED_PROJECTS alone — it is native there, not a widening', () => {
-        const config = new FrameworkTagConfig();
-        config.mode = 'MODIFIED_PROJECTS';
-        const planner = new RuleScopePlanner(CodeRulesRunRequest.GATE, null);
-
-        expect(planner.plan('framework-tag', config, schemaModeValues('framework-tag') ?? [])).toBe(config);
+    it('FAILS under RUN_EVERY_TIME wherever it is in the repo', async () => {
+        expect(await enumFailures(enumRule('RUN_EVERY_TIME'), repo.root))
+            .toEqual(['libs/apis/src/Old.ts', 'libs/other/src/Other.ts']);
     });
 
-    it('a debug run takes --mode for its one rule, scopes it to --projects, and ignores the escape hatches', () => {
-        const config = new NoAnyUnknownConfig();
-        config.mode = 'NEW_AND_MODIFIED_CODE';
-        config.turnOffRuleUntilEpoch = 9999999999;
-        const planner = new RuleScopePlanner(new CodeRulesRunRequest('no-any-unknown', 'RUN_EVERY_TIME', ['apis']), ['libs/apis']);
-        const planned = planner.plan('no-any-unknown', config, schemaModeValues('no-any-unknown') ?? []);
-        const scopes = planner.result();
-
-        expect(planned.turnOffRuleUntilEpoch).toBe(0);
-        expect(scopes.of('no-any-unknown').projectRoots).toEqual(['libs/apis']);
-        expect(scopes.debugTarget?.committedMode).toBe('NEW_AND_MODIFIED_CODE');
-        expect(scopes.debugTarget?.mode).toBe('RUN_EVERY_TIME');
+    it('holds for a rule outside the api-lib family too (no-destructure)', async () => {
+        expect((await destructureRule('NEW_AND_MODIFIED_FILES').run(repo.root)).success).toBe(true);
+        expect((await destructureRule('MODIFIED_PROJECTS').run(repo.root)).success).toBe(true); // util untouched
+        expect((await destructureRule('RUN_EVERY_TIME').run(repo.root)).success).toBe(false);
+        repo.write('libs/util/README.md', 'touch the project with a non-ts file\n');
+        expect((await destructureRule('MODIFIED_PROJECTS').run(repo.root)).success).toBe(false);
     });
 
-    it('refuses a debug --mode the rule does not have, a committed OFF with no --mode, and an unknown rule', () => {
-        const off = new NoAnyUnknownConfig();
-        off.mode = 'OFF';
-        const modes = schemaModeValues('no-any-unknown') ?? [];
+    it('a --projects restriction narrows every mode to those projects, and counts per project', async () => {
+        const scan = scanScope(['other-apis']);
+        expect(await enumFailures(enumRule('RUN_EVERY_TIME', scan), repo.root)).toEqual(['libs/other/src/Other.ts']);
+        expect(Array.from(scan.countsByProject(repo.root).entries())).toEqual([['other-apis', 1]]);
+    });
 
-        expect(() => new RuleScopePlanner(new CodeRulesRunRequest('no-any-unknown', 'NEW_METHODS', null), null)
-            .plan('no-any-unknown', off, modes)).toThrow(/--mode=NEW_METHODS is not a mode of no-any-unknown/);
-        expect(() => new RuleScopePlanner(new CodeRulesRunRequest('no-any-unknown', null, null), null)
-            .plan('no-any-unknown', off, modes)).toThrow(/"mode": "OFF".*--mode=<MODE>/);
-        expect(() => new RuleScopePlanner(new CodeRulesRunRequest('no-such-rule', null, null), null).result())
+    it('fails loudly with the project.json path when a project identity cannot be parsed', () => {
+        repo.write('libs/apis/project.json', '{ not json');
+
+        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
             .toThrow(InformAiError);
+        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
+            .toThrow('libs/apis/project.json');
     });
 });
 
-describe('CodeRulesRunRequest', () => {
-    it('parses the bin\'s flags, and an empty argv is the gate', () => {
-        const request = new CodeRulesRunRequestParser().fromArgv(['--rule=no-any-unknown', '--mode=RUN_EVERY_TIME', '--projects=a, b']);
-
-        expect([request.rule, request.mode, request.projects]).toEqual(['no-any-unknown', 'RUN_EVERY_TIME', ['a', 'b']]);
-        expect(new CodeRulesRunRequestParser().fromArgv([])).toBe(CodeRulesRunRequest.GATE);
-        expect(new CodeRulesRunRequestParser().fromExecutorOptions({ projects: ['a', 'b'], rule: 'x' }).projects).toEqual(['a', 'b']);
-    });
-
-    it('refuses --mode / --projects without --rule, and an unknown flag', () => {
-        expect(() => new CodeRulesRunRequestParser().fromArgv(['--mode=RUN_EVERY_TIME'])).toThrow(/need --rule=<rule>/);
-        expect(() => new CodeRulesRunRequestParser().fromExecutorOptions({ projects: 'a' })).toThrow(/need --rule=<rule>/);
-        expect(() => new CodeRulesRunRequestParser().fromArgv(['--verbose'])).toThrow(/Unknown argument '--verbose'/);
-    });
-});
-
-describe('the debug run, end to end through validate-code', () => {
+describe('the DEBUG run (#1027): --rule / --mode / --projects, no config edit', () => {
     let repo: Repo;
-    let printed: string[];
-    let spies: ReturnType<typeof vi.spyOn>[];
-
+    let out: string[];
     beforeEach(() => {
         repo = new Repo();
-        repo.writeConfig();
-        printed = [];
-        const record = (...args: Parameters<typeof console.log>): void => {
-            printed.push(args.map(String).join(' '));
+        repo.config({ 'one-enum-spelling-in-api-lib': { mode: 'NEW_AND_MODIFIED_CODE' } });
+        out = [];
+        const capture = (...args: unknown[]): void => {
+            out.push(args.map(String).join(' '));
         };
-        spies = [vi.spyOn(console, 'log').mockImplementation(record), vi.spyOn(console, 'error').mockImplementation(record)];
+        vi.spyOn(console, 'log').mockImplementation(capture);
+        vi.spyOn(console, 'error').mockImplementation(capture);
     });
-
     afterEach(() => {
-        for (const spy of spies) spy.mockRestore();
+        vi.restoreAllMocks();
         repo.dispose();
     });
 
-    it('--mode=RUN_EVERY_TIME --projects=apis: labelled, prints the rule\'s own text, counts per project, fails', async () => {
-        const result = await runValidator(repo.root, new CodeRulesRunRequest('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', ['apis']));
-        const out = printed.join('\n');
+    function debug(rule: string | undefined, mode: string | undefined, projects: string | undefined): CodeRulesRunRequest {
+        return new RunRequestParser().parse(rule, mode, projects);
+    }
 
+    it('reports ONLY the named projects\' sites with the rule\'s own text, and exits non-zero', async () => {
+        const configBefore = fs.readFileSync(path.join(repo.root, CONFIG_FILENAME), 'utf-8');
+
+        const result = await new CodeRulesBootstrap().run(repo.root, debug('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', 'other-apis'));
+
+        const text = out.join('\n');
         expect(result.success).toBe(false);
-        expect(out).toContain('DEBUG RUN — not the gate');
-        expect(out).toContain('mode:     RUN_EVERY_TIME (committed: NEW_AND_MODIFIED_CODE)');
-        expect(out).toContain('libs/apis/src/Old.ts:1');
-        expect(out).toMatch(/apis\s+1\n\s+TOTAL\s+1/);
-        expect(out).not.toContain('Validating No Any/Unknown');
+        expect(text).toContain('DEBUG RUN of one-enum-spelling-in-api-lib');
+        expect(text).toContain('libs/other/src/Other.ts:1'); // the rule's OWN failure text
+        expect(text).toContain('export enum'); // …including its cure
+        expect(text).not.toContain('libs/apis/src/Old.ts');
+        expect(text).toContain('   other-apis: 1');
+        expect(fs.readFileSync(path.join(repo.root, CONFIG_FILENAME), 'utf-8')).toBe(configBefore); // nothing on disk
     });
 
-    it('--projects restricts the report to the named projects', async () => {
-        const result = await runValidator(repo.root, new CodeRulesRunRequest('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', ['util']));
+    it('without --mode it uses the COMMITTED mode, scoped to --projects', async () => {
+        const result = await new CodeRulesBootstrap().run(repo.root, debug('one-enum-spelling-in-api-lib', undefined, 'lang-apis,other-apis'));
 
         expect(result.success).toBe(true);
-        expect(printed.join('\n')).toMatch(/util\s+0\n\s+TOTAL\s+0/);
+        expect(out.join('\n')).toContain('Mode: NEW_AND_MODIFIED_CODE (committed: NEW_AND_MODIFIED_CODE)');
+        expect(out.join('\n')).toContain('   lang-apis: 0');
     });
 
-    it('without --mode it judges the COMMITTED mode over --projects — the grandfathered site is not reported', async () => {
-        const result = await runValidator(repo.root, new CodeRulesRunRequest('one-enum-spelling-in-api-lib', null, ['apis']));
+    it('the gate (no debug flags) keeps honouring the committed mode', async () => {
+        expect((await new CodeRulesBootstrap().run(repo.root, debug(undefined, undefined, undefined))).success).toBe(true);
+    });
 
-        expect(result.success).toBe(true);
-        expect(printed.join('\n')).toContain('mode:     NEW_AND_MODIFIED_CODE (committed)');
+    it('THROWS an InformAiError for an unknown project, a rule without the whole-scope modes, and flags without --rule', async () => {
+        await expect(new CodeRulesBootstrap().run(repo.root, debug('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', 'nope')))
+            .rejects.toThrow(InformAiError);
+        await expect(new CodeRulesBootstrap().run(repo.root, debug('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', 'nope')))
+            .rejects.toThrow('no such nx project: nope');
+        await expect(new CodeRulesBootstrap().run(repo.root, debug('max-method-lines', 'RUN_EVERY_TIME', undefined)))
+            .rejects.toThrow('is not a code rule that supports a debug run');
+        await expect(new CodeRulesBootstrap().run(repo.root, debug(undefined, 'RUN_EVERY_TIME', undefined)))
+            .rejects.toThrow('need --rule=<name>');
     });
 });

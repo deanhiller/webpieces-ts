@@ -8,15 +8,13 @@ import {
     RequiredTypeSuffixConfig,
     RequiredTypeSuffixEntry,
     RuleFailError,
-    schemaModeValues,
     specTempDirs,
     toError,
 } from '@webpieces/rules-config';
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
-import { CodeRulesRunRequest } from './code-rules-run-request';
 import { ProjectRoleResolver } from './project-role-resolver';
-import { RuleScopePlanner } from './rule-scope-plan';
+import { GateScanScope } from './scan-scope';
 import {
     ExportedTypeScanner,
     RequiredTypeSuffixValidator,
@@ -201,7 +199,7 @@ class Repo {
     }
 }
 
-/** Runs the rule at `mode` exactly as the engine does: planned config, inside its planned scope. */
+/** Runs the rule at `mode` exactly as the gate does, through its unrestricted ScanScope. */
 async function failureAt(
     root: string,
     mode: string,
@@ -212,11 +210,15 @@ async function failureAt(
     committed.mode = mode as RequiredTypeSuffixConfig['mode'];
     committed.entries = entries;
     committed.allowedPaths = allowedPaths;
-    const planner = new RuleScopePlanner(CodeRulesRunRequest.GATE, null);
-    const planned = planner.plan('required-type-suffix', committed, schemaModeValues('required-type-suffix') ?? []);
-    const validator = new RequiredTypeSuffixValidator(planned, new ProjectRoleResolver(), new DiffScope());
+    const validator = new RequiredTypeSuffixValidator(
+        committed,
+        new ProjectRoleResolver(),
+        new DiffScope(),
+        new GateScanScope(),
+    );
+    // webpieces-disable no-unmanaged-exceptions -- the thrown rule failure is this helper's return value
     try {
-        await new DiffScope().within(planner.result().of('required-type-suffix'), () => validator.run(root));
+        await validator.run(root);
         return undefined;
     } catch (err: unknown) {
         const error = toError(err);

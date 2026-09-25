@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { NoCustomCssConfig, specTempDirs } from '@webpieces/rules-config';
 import { NoCustomCssValidator } from '../validate-no-custom-css';
+import { GateScanScope } from '../scan-scope';
 
 let tmpDir: string;
 
@@ -22,7 +23,7 @@ function writeFile(relativePath: string, content: string): string {
 }
 
 function validator(): NoCustomCssValidator {
-    return new NoCustomCssValidator(new NoCustomCssConfig());
+    return new NoCustomCssValidator(new NoCustomCssConfig(), new GateScanScope());
 }
 
 describe('findHitsForFile (.ts @Component)', () => {

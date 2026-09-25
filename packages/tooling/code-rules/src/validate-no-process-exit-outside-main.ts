@@ -21,10 +21,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 const INSTRUCT_FILE = 'webpieces.noexitinmain.md';
 const EXIT_REGEX = /\bprocess\.exit\s*\(/;
@@ -160,7 +161,12 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
     return normalMode;
 }
 
-async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspaceRoot: string): Promise<ExecutorResult> {
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+async function runValidatorImpl(
+    scan: ScanScope,
+    options: NoProcessExitOutsideMainConfig,
+    workspaceRoot: string,
+): Promise<ExecutorResult> {
     const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
@@ -185,7 +191,7 @@ async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspa
     console.log(`   Base: ${base}`);
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = scan.files(workspaceRoot, mode, base, head);
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
         return { success: true };
@@ -196,7 +202,8 @@ async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspa
     let violations: ExitViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
+    } else {
+        // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
@@ -205,17 +212,18 @@ async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspa
         return { success: true };
     }
 
+    scan.recordSites('no-process-exit-outside-main', violations.map((v: ExitViolation) => v.file));
     reportViolations(workspaceRoot, violations, mode, disableAllowed);
     return { success: false };
 }
 
 @injectable(bindingScopeValues.Singleton)
 export class NoProcessExitOutsideMainValidator extends CodeValidator<NoProcessExitOutsideMainConfig> {
-    constructor(config: NoProcessExitOutsideMainConfig) {
+    constructor(config: NoProcessExitOutsideMainConfig, private readonly scanScope: ScanScope) {
         super(config, 'no-process-exit-outside-main', 'no-process-exit-outside-main');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runValidatorImpl(this.scanScope, this.config, workspaceRoot);
     }
 }

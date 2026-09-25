@@ -16,7 +16,7 @@ import { BaseRuleConfig, BASE_RULE_SCHEMA, ModifiedCodeMode, MODIFIED_CODE_MODES
  * Every field that decides behaviour is REQUIRED with no default (`.claude/rules/no-rule-defaults.md`):
  * - `mode` — OFF | NEW_AND_MODIFIED_CODE (only changed lines, so existing code is fixed as it is
  *   touched) | NEW_AND_MODIFIED_FILES (every occurrence in a changed file) | MODIFIED_PROJECTS /
- *   RUN_EVERY_TIME (every occurrence in each touched project / the whole repo — #1027).
+ *   RUN_EVERY_TIME (every occurrence in a touched project / in the repo — #1027).
  * - `paths` — the globs of the API contract libraries this rule judges, e.g. `["libraries/apis/**"]`.
  *   An empty list judges nothing.
  *

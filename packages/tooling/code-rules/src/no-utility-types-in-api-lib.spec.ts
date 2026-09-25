@@ -8,6 +8,7 @@ import { DiffScope, NoUtilityTypesInApiLibConfig, RuleFailError, specTempDirs } 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 import { NoUtilityTypesInApiLibValidator, UtilityTypeScanner } from './validate-no-utility-types-in-api-lib';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { GateScanScope } from './scan-scope';
 
 /**
  * `no-utility-types-in-api-lib` (#1026): every refused shape, the cure each prints, the allowed
@@ -158,7 +159,7 @@ function rule(
     config.mode = mode;
     config.paths = paths;
     config.allowedPaths = allowedPaths;
-    return new NoUtilityTypesInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope());
+    return new NoUtilityTypesInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope(), new GateScanScope());
 }
 
 describe('no-utility-types-in-api-lib — the validator, end to end', () => {

@@ -4,8 +4,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { MatchRuleConfig, specTempDirs } from '@webpieces/rules-config';
 import { MatchRulesChecker } from '../validate-match-rules';
+import { GateScanScope } from '../scan-scope';
 
-const checker = new MatchRulesChecker();
+const checker = new MatchRulesChecker(new GateScanScope());
 let tmpDir: string;
 
 beforeEach(() => {

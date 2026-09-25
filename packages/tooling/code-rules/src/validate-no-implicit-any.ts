@@ -28,10 +28,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
+import { ScanScope } from './scan-scope';
 
 interface ImplicitAnyViolation {
     file: string;
@@ -212,6 +213,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 async function runInternal(
+    scan: ScanScope,
     options: NoImplicitAnyConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
@@ -243,7 +245,7 @@ async function runInternal(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = scan.files(workspaceRoot, mode, base, head);
     if (changedFiles.length === 0) {
         console.log('\u2705 No TypeScript files changed');
         return { success: true };
@@ -254,7 +256,8 @@ async function runInternal(
     let violations: ImplicitAnyViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
+    } else {
+        // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
@@ -263,17 +266,19 @@ async function runInternal(
         return { success: true };
     }
 
+    scan.recordSites('no-implicit-any', violations.map((v: ImplicitAnyViolation) => v.file));
     reportViolations(violations, mode);
     return { success: false };
 }
 
 async function runValidatorImpl(
+    scan: ScanScope,
     options: NoImplicitAnyConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return await runInternal(options, workspaceRoot);
+        return await runInternal(scan, options, workspaceRoot);
     } catch (err: unknown) {
         //const error = toError(err);
         console.warn('\n\u23ed\ufe0f  Skipping no-implicit-any validation due to unexpected error\n');
@@ -283,11 +288,11 @@ async function runValidatorImpl(
 
 @injectable(bindingScopeValues.Singleton)
 export class NoImplicitAnyValidator extends CodeValidator<NoImplicitAnyConfig> {
-    constructor(config: NoImplicitAnyConfig) {
+    constructor(config: NoImplicitAnyConfig, private readonly scanScope: ScanScope) {
         super(config, 'no-implicit-any', 'no-implicit-any');
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runValidatorImpl(this.scanScope, this.config, workspaceRoot);
     }
 }

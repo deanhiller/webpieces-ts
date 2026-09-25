@@ -6,7 +6,7 @@
             "root": "CodeRulesApp",
             "rootKind": "controller",
             "file": "packages/tooling/code-rules/src/code-rules-app.ts",
-            "maxLevel": 3,
+            "maxLevel": 5,
             "nodes": [
                 {
                     "id": "AngularNoDirectApiInResolverConfig",
@@ -49,36 +49,12 @@
                     "level": 1
                 },
                 {
-                    "id": "CodeRulesRunRequest",
-                    "className": "CodeRulesRunRequest",
-                    "kind": "class",
-                    "scope": "transient",
-                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
-                    "level": 2
-                },
-                {
-                    "id": "DebugRunReport",
-                    "className": "DebugRunReport",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/code-rules/src/debug-run-report.ts",
-                    "level": 2
-                },
-                {
-                    "id": "DebugTarget | null",
-                    "className": "DebugTarget | null",
-                    "kind": "unresolved",
-                    "scope": "transient",
-                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
-                    "level": 3
-                },
-                {
                     "id": "DiffScope",
                     "className": "DiffScope",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
-                    "level": 3
+                    "level": 5
                 },
                 {
                     "id": "EnsureWeAreSecureConfig",
@@ -441,19 +417,19 @@
                     "level": 2
                 },
                 {
+                    "id": "ProjectCatalog",
+                    "className": "ProjectCatalog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/scan-scope.ts",
+                    "level": 4
+                },
+                {
                     "id": "ProjectRoleResolver",
                     "className": "ProjectRoleResolver",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/project-role-resolver.ts",
-                    "level": 3
-                },
-                {
-                    "id": "ReadonlyMap<string, FileScope>",
-                    "className": "ReadonlyMap<string, FileScope>",
-                    "kind": "unresolved",
-                    "scope": "transient",
-                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
                     "level": 3
                 },
                 {
@@ -510,15 +486,31 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/rule-reporter.ts",
-                    "level": 3
+                    "level": 2
                 },
                 {
-                    "id": "RuleScopes",
-                    "className": "RuleScopes",
+                    "id": "RuleSelection",
+                    "className": "RuleSelection",
                     "kind": "class",
                     "scope": "transient",
-                    "file": "packages/tooling/code-rules/src/rule-scope-plan.ts",
+                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
                     "level": 2
+                },
+                {
+                    "id": "ScanRestriction",
+                    "className": "ScanRestriction",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/scan-scope.ts",
+                    "level": 4
+                },
+                {
+                    "id": "ScanScope",
+                    "className": "ScanScope",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/scan-scope.ts",
+                    "level": 3
                 },
                 {
                     "id": "WorkspaceRoot",
@@ -537,12 +529,12 @@
                     "level": 3
                 },
                 {
-                    "id": "readonly string[] | null",
-                    "className": "readonly string[] | null",
+                    "id": "readonly string[] | undefined",
+                    "className": "readonly string[] | undefined",
                     "kind": "unresolved",
                     "scope": "transient",
-                    "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
-                    "level": 3
+                    "file": "packages/tooling/code-rules/src/scan-scope.ts",
+                    "level": 5
                 },
                 {
                     "id": "string",
@@ -553,8 +545,8 @@
                     "level": 3
                 },
                 {
-                    "id": "string | null",
-                    "className": "string | null",
+                    "id": "string | undefined",
+                    "className": "string | undefined",
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/tooling/code-rules/src/code-rules-run-request.ts",
@@ -570,6 +562,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#CatchErrorPatternConfig",
                     "paramName": "config",
                     "paramType": "CatchErrorPatternConfig"
+                },
+                {
+                    "from": "CatchErrorPatternValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "CodeRulesApp",
@@ -588,33 +589,6 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/validate-catch-error-pattern.ts#CatchErrorPatternValidator",
                     "paramName": "catchErrorPattern",
                     "paramType": "CatchErrorPatternValidator"
-                },
-                {
-                    "from": "CodeRulesEngine",
-                    "to": "CodeRulesRunRequest",
-                    "injection": "type",
-                    "token": "CodeRulesRunRequest",
-                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-run-request.ts#CodeRulesRunRequest",
-                    "paramName": "request",
-                    "paramType": "CodeRulesRunRequest"
-                },
-                {
-                    "from": "CodeRulesEngine",
-                    "to": "DebugRunReport",
-                    "injection": "type",
-                    "token": "DebugRunReport",
-                    "tokenKey": "class:packages/tooling/code-rules/src/debug-run-report.ts#DebugRunReport",
-                    "paramName": "debugReport",
-                    "paramType": "DebugRunReport"
-                },
-                {
-                    "from": "CodeRulesEngine",
-                    "to": "DiffScope",
-                    "injection": "type",
-                    "token": "DiffScope",
-                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
-                    "paramName": "diffScope",
-                    "paramType": "DiffScope"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -870,12 +844,12 @@
                 },
                 {
                     "from": "CodeRulesEngine",
-                    "to": "RuleScopes",
+                    "to": "RuleSelection",
                     "injection": "type",
-                    "token": "RuleScopes",
-                    "tokenKey": "class:packages/tooling/code-rules/src/rule-scope-plan.ts#RuleScopes",
-                    "paramName": "scopes",
-                    "paramType": "RuleScopes"
+                    "token": "RuleSelection",
+                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-run-request.ts#RuleSelection",
+                    "paramName": "selection",
+                    "paramType": "RuleSelection"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -885,42 +859,6 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/code-rules-context.ts#WorkspaceRoot",
                     "paramName": "workspace",
                     "paramType": "WorkspaceRoot"
-                },
-                {
-                    "from": "CodeRulesRunRequest",
-                    "to": "readonly string[] | null",
-                    "injection": "type",
-                    "token": "readonly string[] | null",
-                    "tokenKey": "type:readonly string[] | null",
-                    "paramName": "projects",
-                    "paramType": "readonly string[] | null"
-                },
-                {
-                    "from": "CodeRulesRunRequest",
-                    "to": "string | null",
-                    "injection": "type",
-                    "token": "string | null",
-                    "tokenKey": "type:string | null",
-                    "paramName": "mode",
-                    "paramType": "string | null"
-                },
-                {
-                    "from": "CodeRulesRunRequest",
-                    "to": "string | null",
-                    "injection": "type",
-                    "token": "string | null",
-                    "tokenKey": "type:string | null",
-                    "paramName": "rule",
-                    "paramType": "string | null"
-                },
-                {
-                    "from": "DebugRunReport",
-                    "to": "RuleReporter",
-                    "injection": "type",
-                    "token": "RuleReporter",
-                    "tokenKey": "class:packages/tooling/code-rules/src/rule-reporter.ts#RuleReporter",
-                    "paramName": "reporter",
-                    "paramType": "RuleReporter"
                 },
                 {
                     "from": "EnsureWeAreSecureValidator",
@@ -948,6 +886,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#InjectAnnotationNotNeededForConcreteClassConfig",
                     "paramName": "config",
                     "paramType": "InjectAnnotationNotNeededForConcreteClassConfig"
+                },
+                {
+                    "from": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
+                    "from": "MatchRulesChecker",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "MatchRulesHolder",
@@ -986,6 +942,15 @@
                     "paramType": "NoAnyUnknownConfig"
                 },
                 {
+                    "from": "NoAnyUnknownValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoClientCreationOutsideServerOrClientValidator",
                     "to": "NoClientCreationOutsideServerOrClientConfig",
                     "injection": "type",
@@ -1004,6 +969,15 @@
                     "paramType": "ProjectRoleResolver"
                 },
                 {
+                    "from": "NoClientCreationOutsideServerOrClientValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoCustomCssValidator",
                     "to": "NoCustomCssConfig",
                     "injection": "type",
@@ -1013,6 +987,15 @@
                     "paramType": "NoCustomCssConfig"
                 },
                 {
+                    "from": "NoCustomCssValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoDestructureValidator",
                     "to": "NoDestructureConfig",
                     "injection": "type",
@@ -1020,6 +1003,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoDestructureConfig",
                     "paramName": "config",
                     "paramType": "NoDestructureConfig"
+                },
+                {
+                    "from": "NoDestructureValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "NoDirectApiResolverValidator",
@@ -1040,6 +1032,15 @@
                     "paramType": "NoFunctionOutsideClassConfig"
                 },
                 {
+                    "from": "NoFunctionOutsideClassValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoImplicitAnyValidator",
                     "to": "NoImplicitAnyConfig",
                     "injection": "type",
@@ -1047,6 +1048,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoImplicitAnyConfig",
                     "paramName": "config",
                     "paramType": "NoImplicitAnyConfig"
+                },
+                {
+                    "from": "NoImplicitAnyValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "NoInlineImportInApiLibValidator",
@@ -1076,6 +1086,15 @@
                     "paramType": "ProjectRoleResolver"
                 },
                 {
+                    "from": "NoInlineImportInApiLibValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoInlineTypeLiteralsValidator",
                     "to": "NoInlineTypeLiteralsConfig",
                     "injection": "type",
@@ -1094,6 +1113,15 @@
                     "paramType": "NoProcessExitOutsideMainConfig"
                 },
                 {
+                    "from": "NoProcessExitOutsideMainValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoStatePathsInTemplatesValidator",
                     "to": "NoStatePathsInTemplatesConfig",
                     "injection": "type",
@@ -1101,6 +1129,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/no-state-paths-config.ts#NoStatePathsInTemplatesConfig",
                     "paramName": "config",
                     "paramType": "NoStatePathsInTemplatesConfig"
+                },
+                {
+                    "from": "NoStatePathsInTemplatesValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "NoSymbolDiTokensValidator",
@@ -1112,6 +1149,15 @@
                     "paramType": "NoSymbolDiTokensConfig"
                 },
                 {
+                    "from": "NoSymbolDiTokensValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "NoUnmanagedExceptionsValidator",
                     "to": "NoUnmanagedExceptionsConfig",
                     "injection": "type",
@@ -1119,6 +1165,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoUnmanagedExceptionsConfig",
                     "paramName": "config",
                     "paramType": "NoUnmanagedExceptionsConfig"
+                },
+                {
+                    "from": "NoUnmanagedExceptionsValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
                 },
                 {
                     "from": "NoUtilityTypesInApiLibValidator",
@@ -1148,6 +1203,15 @@
                     "paramType": "ProjectRoleResolver"
                 },
                 {
+                    "from": "NoUtilityTypesInApiLibValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "OneEnumSpellingInApiLibValidator",
                     "to": "DiffScope",
                     "injection": "type",
@@ -1175,6 +1239,15 @@
                     "paramType": "ProjectRoleResolver"
                 },
                 {
+                    "from": "OneEnumSpellingInApiLibValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "PrismaConverterValidator",
                     "to": "PrismaConverterConfig",
                     "injection": "type",
@@ -1191,6 +1264,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#PrismaValidateDtosConfig",
                     "paramName": "config",
                     "paramType": "PrismaValidateDtosConfig"
+                },
+                {
+                    "from": "ProjectCatalog",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
                 },
                 {
                     "from": "RequireReturnTypeValidator",
@@ -1229,6 +1311,15 @@
                     "paramType": "RequiredTypeSuffixConfig"
                 },
                 {
+                    "from": "RequiredTypeSuffixValidator",
+                    "to": "ScanScope",
+                    "injection": "type",
+                    "token": "ScanScope",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanScope",
+                    "paramName": "scanScope",
+                    "paramType": "ScanScope"
+                },
+                {
                     "from": "RoleTagValidator",
                     "to": "RoleTagConfig",
                     "injection": "type",
@@ -1238,22 +1329,49 @@
                     "paramType": "RoleTagConfig"
                 },
                 {
-                    "from": "RuleScopes",
-                    "to": "DebugTarget | null",
+                    "from": "RuleSelection",
+                    "to": "string | undefined",
                     "injection": "type",
-                    "token": "DebugTarget | null",
-                    "tokenKey": "type:DebugTarget | null",
-                    "paramName": "debugTarget",
-                    "paramType": "DebugTarget | null"
+                    "token": "string | undefined",
+                    "tokenKey": "type:string | undefined",
+                    "paramName": "onlyRule",
+                    "paramType": "string | undefined"
                 },
                 {
-                    "from": "RuleScopes",
-                    "to": "ReadonlyMap<string, FileScope>",
+                    "from": "ScanRestriction",
+                    "to": "readonly string[] | undefined",
                     "injection": "type",
-                    "token": "ReadonlyMap<string, FileScope>",
-                    "tokenKey": "type:ReadonlyMap<string, FileScope>",
-                    "paramName": "byKey",
-                    "paramType": "ReadonlyMap<string, FileScope>"
+                    "token": "readonly string[] | undefined",
+                    "tokenKey": "type:readonly string[] | undefined",
+                    "paramName": "projectNames",
+                    "paramType": "readonly string[] | undefined"
+                },
+                {
+                    "from": "ScanScope",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "ScanScope",
+                    "to": "ProjectCatalog",
+                    "injection": "type",
+                    "token": "ProjectCatalog",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ProjectCatalog",
+                    "paramName": "catalog",
+                    "paramType": "ProjectCatalog"
+                },
+                {
+                    "from": "ScanScope",
+                    "to": "ScanRestriction",
+                    "injection": "type",
+                    "token": "ScanRestriction",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanRestriction",
+                    "paramName": "restriction",
+                    "paramType": "ScanRestriction"
                 },
                 {
                     "from": "WorkspaceRoot",
@@ -1266,12 +1384,10 @@
                 }
             ],
             "unresolved": [
-                "DebugTarget | null",
-                "ReadonlyMap<string, FileScope>",
                 "readonly MatchRuleConfig[]",
-                "readonly string[] | null",
+                "readonly string[] | undefined",
                 "string",
-                "string | null"
+                "string | undefined"
             ]
         }
     ]

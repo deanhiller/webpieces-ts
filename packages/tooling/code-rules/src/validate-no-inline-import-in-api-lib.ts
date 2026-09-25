@@ -22,6 +22,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';
+import { ScanScope } from './scan-scope';
 
 /** Finds every inline `import()` in one parsed file. */
 export class InlineImportScanner {
@@ -83,8 +84,8 @@ export class InlineImportScanner {
 export class NoInlineImportInApiLibValidator extends ApiLibSourceRule<NoInlineImportInApiLibConfig> {
     private readonly scanner = new InlineImportScanner();
 
-    constructor(config: NoInlineImportInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope) {
-        super(config, RULE_NAMES.NO_INLINE_IMPORT_IN_API_LIB, roleResolver, diffScope);
+    constructor(config: NoInlineImportInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
+        super(config, RULE_NAMES.NO_INLINE_IMPORT_IN_API_LIB, roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

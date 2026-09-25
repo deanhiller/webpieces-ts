@@ -10,10 +10,11 @@ import { defaultRules } from './default-rules';
 // adopted gradually instead of all-at-once. When a rule offers one, recommend the first it
 // supports so a fresh config opts into a low-friction rollout rather than reflexively OFF.
 //
-// The project-wide modes come LAST. Since #1027 every diff-scoped rule also offers MODIFIED_PROJECTS
-// (and RUN_EVERY_TIME) as a whole-scope view, so listing it first would seed every such rule at the
-// project-wide scope instead of the diff-scoped one it arrived at before. A PROJECT_MODES rule offers
-// nothing narrower, so it still lands on MODIFIED_PROJECTS.
+// The two PROJECT-wide modes come LAST (#1027). A project rule offers nothing narrower, so it still
+// arrives as MODIFIED_PROJECTS; but a line/file-scoped rule that ALSO offers the whole-scope modes
+// (every MODIFIED_CODE_MODES rule, #1027) must keep arriving at its narrow mode — seeding it at
+// MODIFIED_PROJECTS would judge every file of every touched project on day one, the opposite of a
+// gradual rollout. RUN_EVERY_TIME is never a gradual mode and is not listed here at all.
 const GRADUAL_MODE_PREFERENCE = [
     'NEW_AND_MODIFIED_CODE',
     'NEW_AND_MODIFIED_METHODS',

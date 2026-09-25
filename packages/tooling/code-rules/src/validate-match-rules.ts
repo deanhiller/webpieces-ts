@@ -18,13 +18,13 @@ import {
     renderMatchRuleMessage,
     ModifiedCodeMode,
     detectBase,
-    getChangedFiles,
     getFileDiff,
     getChangedLineNumbers,
     shouldSkipRule,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ExecutorResult } from './code-validator';
+import { ScanScope } from './scan-scope';
 
 class MatchViolation {
     readonly file: string;
@@ -52,6 +52,8 @@ export class MatchViolationInfo {
 
 @injectable(bindingScopeValues.Singleton)
 export class MatchRulesChecker {
+    constructor(private readonly scanScope: ScanScope) {}
+
     /** True unless this entry is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
     shouldRun(config: MatchRuleConfig): boolean {
         if ((config.mode ?? 'OFF') === 'OFF') return false;
@@ -82,14 +84,14 @@ export class MatchRulesChecker {
         console.log(`   Base: ${base}`);
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head);
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
             return { success: true };
         }
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
-        const violations = mode === 'NEW_AND_MODIFIED_CODE'
+        const violations = this.scanScope.isLineScoped(mode)
             ? this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, config)
             : this.findViolationsForModifiedFiles(workspaceRoot, changedFiles, config);
 
@@ -98,6 +100,7 @@ export class MatchRulesChecker {
             return { success: true };
         }
 
+        this.scanScope.recordSites(config.name, violations.map((v: MatchViolation) => v.file));
         this.reportViolations(config, violations, mode);
         return { success: false };
     }

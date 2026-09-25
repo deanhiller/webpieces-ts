@@ -1,34 +1,50 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
-import { InformAiError, RuleFailError, renderRuleFailForHuman, toError, loadAndValidate, RepoRootFinder } from '@webpieces/rules-config';
+import {
+    CliArgs,
+    CliExitError,
+    CliFlag,
+    CliUsage,
+    InformAiError,
+    RuleFailError,
+    renderRuleFailForHuman,
+    toError,
+    RepoRootFinder,
+} from '@webpieces/rules-config';
 
-import { CodeRulesApp } from './code-rules-app';
 import { CodeRulesBootstrap } from './code-rules-bootstrap';
-import { CodeRulesRunRequestParser } from './code-rules-run-request';
+import { RunRequestParser } from './code-rules-run-request';
+
+const USAGE = new CliUsage(
+    'wp-validate-code',
+    'run the code rules against the diff, exactly as the gate does — or, with --rule, a DEBUG run of one rule',
+    [
+        new CliFlag('--rule', 'DEBUG: run only this rule (e.g. one-enum-spelling-in-api-lib). Nothing is written; the gate is unaffected.', true),
+        new CliFlag('--mode', 'DEBUG: run --rule at this mode instead of its committed one (e.g. RUN_EVERY_TIME, MODIFIED_PROJECTS).', true),
+        new CliFlag('--projects', 'DEBUG: judge only files owned by these nx projects, comma-separated (e.g. lang-apis,lang-fsdb-api).', true),
+    ],
+);
 
 async function main(): Promise<void> {
     // webpieces-disable no-unmanaged-exceptions -- global entry point for code-rules CLI
     try {
+        const args = new CliArgs().parse(USAGE);
+        const request = new RunRequestParser().parse(
+            args.has('--rule') ? args.value('--rule') : undefined,
+            args.has('--mode') ? args.value('--mode') : undefined,
+            args.has('--projects') ? args.value('--projects') : undefined,
+        );
         // Anchor at the repo root so `.webpieces/instruct-ai` docs land there, not in whatever subdir
         // this CLI ran from; load config from there.
         const workspaceRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
-        const loaded = loadAndValidate(workspaceRoot);
-        if (loaded.configPath === null) {
-            console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
-            process.exit(1);
-        }
-        console.log(`\n📄 Loaded config: ${loaded.configPath}`);
-
-        // Composition root: the shared bootstrap binds the runtime values (workspace root, the run
-        // request, each rule's planned config) and inversify builds the ENTIRE validator DAG.
-        const request = new CodeRulesRunRequestParser().fromArgv(process.argv.slice(2));
-        const container = new CodeRulesBootstrap().container(workspaceRoot, loaded, request);
-        const app = container.get(CodeRulesApp);
-        const result = await app.run();
+        const result = await new CodeRulesBootstrap().run(workspaceRoot, request);
         process.exit(result.success ? 0 : 1);
     } catch (err: unknown) {
         const error = toError(err);
-        if (error instanceof RuleFailError) {
+        if (error instanceof CliExitError) {
+            console.error(error.message);
+            process.exit(error.exitCode);
+        } else if (error instanceof RuleFailError) {
             console.error(renderRuleFailForHuman(error));
         } else if (err instanceof InformAiError) {
             console.error(error.message);
