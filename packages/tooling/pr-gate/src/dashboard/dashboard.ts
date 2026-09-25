@@ -149,7 +149,7 @@ export class DashboardInput {
         buildCommand: string,
         suppressedChecklistCount: number,
         author: AuthorIdentity,
-        hotfix = false,
+        hotfix: boolean,
     ) {
         this.title = title;
         this.gateResults = gateResults;

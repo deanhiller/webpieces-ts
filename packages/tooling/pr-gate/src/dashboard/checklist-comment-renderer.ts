@@ -62,7 +62,7 @@ export class ChecklistCommentRenderer {
         // independent subagent, verified" would be an outright untrue sentence under a PR nobody reviewed.
         // A defaulted 0 would let every existing caller keep printing it. See HOME_KEY_TURN_OFF_ALL_REVIEWERS.
         suppressedCount: number,
-        hotfix = false,
+        hotfix: boolean,
     ): string {
         if (hotfix) return this.hotfixComment(rows);
         if (suppressedCount > 0) return this.suppressedComment(rows, suppressedCount);

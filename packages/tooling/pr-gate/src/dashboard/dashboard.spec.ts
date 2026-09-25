@@ -34,7 +34,7 @@ function baseInput(
     // asserts about. A test that cares about `experimental.turnOffAllReviewers` passes a real count.
     suppressedChecklistCount = 0,
 ): DashboardInput {
-    return new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc', review(reviewOverrides), [], buildCommand, suppressedChecklistCount, AUTHOR);
+    return new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc', review(reviewOverrides), [], buildCommand, suppressedChecklistCount, AUTHOR, false);
 }
 
 // The four files every fixture roster was matched against, so "x of 4" is always honest.
@@ -95,7 +95,7 @@ describe('renderDetailComment', () => {
     it('renders the RISK section, yellow gates, and build status', () => {
         const gates = computeGateResults([new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')], ['src/FooApi.ts']);
         const disables = countAddedDisables('');
-        const input = new DashboardInput('My PR', gates, disables, true, 'aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc', review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR);
+        const input = new DashboardInput('My PR', gates, disables, true, 'aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc', review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const md = renderDetailComment(input);
 
         expect(md).toContain('🚦 PR Gate Dashboard');
@@ -129,6 +129,7 @@ describe('renderDetailComment', () => {
             'pnpm nx affected --target=ci',
             0,
             AUTHOR,
+            false,
         );
         const md = renderDetailComment(input);
 
@@ -205,6 +206,7 @@ describe('renderPrBody', () => {
             'pnpm nx affected --target=ci',
             0,
             AUTHOR,
+            false,
         );
         const body = renderPrBody(input, 'https://github.com/o/r/pull/42');
 
@@ -294,7 +296,7 @@ describe('renderPrBody', () => {
     it('lists every non-green flag (build, gates, violations, disables)', () => {
         const gates = computeGateResults([new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')], ['src/FooApi.ts']);
         const disables = countAddedDisables(['+++ b/a.ts', '+// webpieces-disable no-any-unknown -- x', '+// eslint-disable-next-line'].join('\n'));
-        const input = new DashboardInput('My PR', gates, disables, false, 'a', 'b', 'c', review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), [], 'pnpm nx affected --target=ci', 0, AUTHOR);
+        const input = new DashboardInput('My PR', gates, disables, false, 'a', 'b', 'c', review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
 
         expect(body).toContain('Non-green Flags (full list in first comment to avoid large git logs)');
@@ -309,7 +311,7 @@ describe('renderPrBody', () => {
     });
 
     it('caps the summary at 4 sentences', () => {
-        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review({ summary: 'S1. S2. S3. S4. S5. S6.' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR);
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review({ summary: 'S1. S2. S3. S4. S5. S6.' }), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
 
         expect(body).toContain('S1. S2. S3. S4.');
@@ -332,6 +334,7 @@ describe('renderPrBody', () => {
             'pnpm nx affected --target=ci',
             0,
             AUTHOR,
+            false,
         );
         const body = renderPrBody(input, '');
 
@@ -346,7 +349,7 @@ describe('renderPrBody', () => {
 const OVERRIDE_PROSE = 'HUMAN-APPROVED OVERRIDE (Dean Hiller, explicit, in-session). This branch is a THROWAWAY pr-gate ' + 'smoke test and is NOT for merge - the defects below were planted deliberately. Delete this branch ' + 'after the layout has been eyeballed.';
 
 function dashboardWith(rows: ChecklistRow[]): string {
-    const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR);
+    const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
     return renderDetailComment(input);
 }
 
@@ -354,7 +357,7 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
     // Nobody looked is NOT an all-clear. A green row (or, as before, no row at all) reads as "checked and
     // clean"; ⚪ says no reviewer was involved, which is precisely what a reader must be able to tell apart.
     it('renders a SKIPPED ⚪ row — never green, never nothing — when no checklist ran', () => {
-        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), [], 'pnpm nx affected --target=ci', 0, AUTHOR);
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), [], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const md = renderDetailComment(input);
         expect(md).toContain('**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment');
         expect(md).not.toContain('**Checklists:** 🟢');
@@ -412,7 +415,7 @@ describe('renderDetailComment checklists — the detail still lives in the comme
     // The compact commit body is a separate artifact and keeps its per-checklist flags.
     it('carries matched checklists into the compact commit body unchanged', () => {
         const rows = [new ChecklistRow('hasura-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit')];
-        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR);
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
         expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
