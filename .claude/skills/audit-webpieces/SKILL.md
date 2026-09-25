@@ -100,7 +100,7 @@ that says nothing. State the covered fraction of the window in the scope line.
 
 | Signal | What counts | Why it is MAJOR |
 |---|---|---|
-| **Wasted builds** | a `DONE-FAIL` with a SIGNAL exit — `exit=130` SIGINT (Ctrl-C, an agent watchdog, a closed terminal), `137` SIGKILL, `143` SIGTERM — followed by a near-identical re-run in the same repo+tree | the killed run produced **nothing**. Report the minutes burned and the total spent for ONE result. A build red because the code is red is not this — that build answered its question. |
+| **Wasted builds** | a `DONE-FAIL` that was provably KILLED — the row carries `signal=<name>`, or exits `137` SIGKILL / `143` SIGTERM — followed by a near-identical re-run in the same repo+tree. **`exit=130` with no `signal=` is NOT a kill:** nx 22 (`tasks-runner/run-command.js`) exits `signalToCode('SIGINT')` = 130 whenever a run is incomplete, which every failed task causes by leaving its dependents unrun — so it is an ordinary red build (issue #1043) | the killed run produced **nothing**. Report the minutes burned and the total spent for ONE result. A build red because the code is red is not this — that build answered its question. |
 | **Concurrency / contention** | STARTs whose `[start, start+took]` intervals overlap; report **max concurrent** and **total overlapped minutes** | this is the thing the ledger was built for. `.claude/rules/build-verification.md` records **~3.2x** slower total test time under agent contention, with individual suites 3x slower than the same suite minutes later on an idle box. Overlap minutes is the direct measurement of a cost that used to be folklore. |
 | **Orphaned builds** | a `START` with no `DONE-` row whose `pid` is **dead** (`kill -0` → ESRCH) | a build died without recording an outcome, so nobody — no agent, no gate — can tell whether it passed. A START with no DONE whose pid is **alive** is just a build running right now: report it separately, never as a finding. |
 | **Repeat builds** | same `repo=`+`branch=` built ≥3 times inside an hour | the "re-ran the build to see a different slice of the output" antipattern `.claude/rules/build-verification.md` names by measurement (23.9 minutes across nine builds, five with no code change between). The ledger cannot see whether a file changed in between, so this is a **candidate** list — confirm against the transcript collector's `redundant_builds` / file-edit history before calling it. |
@@ -289,8 +289,12 @@ Interpretation that matters:
   `max_concurrent` are the real number, and a window with zero overlap is a genuine finding in the
   other direction: it means the slowness has some other cause, and CPU contention is off the list.
 - **A killed build is worse than a failed one.** A red build answered its question. A build killed
-  by SIGINT/SIGKILL answered nothing and its entire `took=` is burned — count it whole, and add
-  the re-run's time to it to state what one result actually cost.
+  by a signal answered nothing and its entire `took=` is burned — count it whole, and add the
+  re-run's time to it to state what one result actually cost. **Killed means `signal=` on the row,
+  or exit 137/143 — never exit 130 alone.** nx 22 returns `signalToCode('SIGINT')` = 130 for any
+  run that did not complete, i.e. every red `nx affected --target=ci` build whose failed task left
+  dependents unrun; a real Ctrl-C through `sh -c` is indistinguishable from it by exit code. Reading
+  130 as SIGINT once turned 165 ordinary red builds into "killed builds" (issue #1043).
 - **Redundant builds are the headline metric.** A build re-run with no edit between cannot return a
   different answer — it is the agent re-running to see a different slice of output. Cross-check
   against `top_log_files`: did it read the log at all?

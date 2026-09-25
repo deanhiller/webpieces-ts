@@ -11,7 +11,10 @@ Rows are TSV, `<KIND>\t<k>=<v>\t...`:
 
   START         id t ms by repo tree cwd branch pid wp
   DONE-SUCCESS  id t ms by repo took pid
-  DONE-FAIL     id t ms by repo took exit pid
+  DONE-FAIL     id t ms by repo took exit [signal] pid
+
+`signal=<name>` is written ONLY when Node observed the build die on a real signal (its exit code is
+then `null`). It is the ledger's one trustworthy kill marker — see KILL_EXITS below.
 
 `by` is the build's CALLER — `build` (ad-hoc `pnpm wp-build`), `review` (stage 2) or `finish`
 (stage 3). `t`/`ms` are UTC. The file rotates at 1 MB into `builds.log.1` ... `.5`, oldest
@@ -33,10 +36,34 @@ DONE_SUCCESS = "DONE-SUCCESS"
 DONE_FAIL = "DONE-FAIL"
 GENERATIONS = 5
 
-# Exit codes that mean "something killed it", not "the build found a problem". 128+N is the
-# shell's encoding of "died on signal N": 130 = SIGINT (Ctrl-C, an agent's watchdog, a closed
-# terminal), 137 = SIGKILL, 143 = SIGTERM.
-SIGNAL_EXITS = {130: "SIGINT", 137: "SIGKILL", 143: "SIGTERM"}
+# Exit codes that are trustworthy evidence "something killed it", not "the build found a problem".
+# 128+N is the shell's encoding of "died on signal N": 137 = SIGKILL, 143 = SIGTERM.
+#
+# 130 (128+SIGINT) is DELIBERATELY ABSENT. nx 22 `tasks-runner/run-command.js` returns
+# `signalToCode('SIGINT')` = 130 whenever a run is not `completed` — i.e. any task was left with no
+# result, which is what happens to every dependent of a task that FAILED. The gate's buildCommand is
+# `nx affected --target=ci`, and every `ci` dependsOn `architecture:validate-complete`, so nearly every
+# ordinary red gate build exits 130 with no signal (issue #1043: 515 exit=130 rows, 0 `signal=` rows
+# across the whole ledger history). A real Ctrl-C delivered through `sh -c` also surfaces as 130 with
+# no signal, so the exit code alone cannot tell the two apart — and the overwhelming majority are red
+# builds, not kills. A build counts as KILLED only when the row carries `signal=`, or exits 137/143.
+KILL_EXITS = {137: "SIGKILL", 143: "SIGTERM"}
+
+
+def kill_signal(build):
+    """The signal that killed `build`, or None when it was not provably killed.
+
+    `signal=` on the DONE row wins; otherwise only exit 137/143 count. exit=130 with no `signal=` is
+    an ordinary RED build (nx's incomplete-run code), never a kill — see KILL_EXITS.
+    """
+    if build["outcome"] != "fail":
+        return None
+    if build.get("signal"):
+        return build["signal"]
+    try:
+        return KILL_EXITS.get(int(build["exit"] or "0"))
+    except (TypeError, ValueError):
+        return None
 
 
 def kv(line):
@@ -111,25 +138,25 @@ def build_records(rows, since_ms):
             "took_ms": took,
             "outcome": None if d is None else ("success" if d["kind"] == DONE_SUCCESS else "fail"),
             "exit": None if d is None else d.get("exit"),
+            "signal": None if d is None else d.get("signal"),
         })
     return builds
 
 
 def wasted(builds):
-    """A build KILLED (signal exit) whose work was then re-run: the whole first run is burned.
+    """A build provably KILLED whose work was then re-run: the whole first run is burned.
+
+    KILLED means `kill_signal()` is not None — a `signal=` field, or exit 137/143. An exit=130 row
+    with no `signal=` is nx reporting an incomplete (red) run, not a kill, and is NOT listed here:
+    that build answered its question.
 
     Pairing rule: the next START, in the same repo+tree, within 30 minutes. That is the
     "agent's build got interrupted and it just ran it again" shape.
     """
     out = []
     for i, b in enumerate(builds):
-        if b["outcome"] != "fail":
-            continue
-        try:
-            code = int(b["exit"] or "0")
-        except ValueError:
-            continue
-        if code not in SIGNAL_EXITS:
+        sig = kill_signal(b)
+        if sig is None:
             continue
         rerun = None
         for c in builds[i + 1:]:
@@ -140,7 +167,7 @@ def wasted(builds):
                 break
         out.append({
             "killed_id": b["id"], "repo": b["repo"], "tree": b["tree"], "branch": b["branch"],
-            "by": b["by"], "wp": b["wp"], "signal": SIGNAL_EXITS[code], "exit": code,
+            "by": b["by"], "wp": b["wp"], "signal": sig, "exit": b["exit"],
             "burned_min": round((b["took_ms"] or 0) / 60000, 1),
             "rerun_id": rerun["id"] if rerun else None,
             "rerun_outcome": rerun["outcome"] if rerun else None,
@@ -289,11 +316,8 @@ def by_version(builds):
         a["minutes"] += (b["took_ms"] or 0) / 60000
         if b["outcome"] == "fail":
             a["fail"] += 1
-        try:
-            if int(b["exit"] or 0) in SIGNAL_EXITS:
-                a["killed"] += 1
-        except (TypeError, ValueError):
-            pass
+        if kill_signal(b) is not None:
+            a["killed"] += 1
         a["repos"].add(Path(b["repo"] or "?").name)
         if a["first"] is None or b["start_ms"] < a["first"][0]:
             a["first"] = (b["start_ms"], b["start_t"])
