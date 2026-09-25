@@ -237,6 +237,14 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "required-type-suffix": {
+            "mode": "OFF",
+            "entries": [
+                { "paths": ["libraries/apis/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"] }
+            ],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "ensure-we-are-secure": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,

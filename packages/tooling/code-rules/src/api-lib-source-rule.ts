@@ -1,7 +1,8 @@
 /**
  * The shared half of the api-library source rules: the two `role:api-lib` spelling rules (#1023),
- * `no-inline-import-in-api-lib` and `one-enum-spelling-in-api-lib`, and `no-utility-types-in-api-lib`
- * (#1026), which scopes itself by its configured `paths` globs instead of the role tag.
+ * `no-inline-import-in-api-lib` and `one-enum-spelling-in-api-lib`, `no-utility-types-in-api-lib`
+ * (#1026), which scopes itself by its configured `paths` globs instead of the role tag, and
+ * `required-type-suffix` (#1037), which scopes itself by its configured entries' `paths` globs.
  *
  * Both judge the SOURCE of an api library — the contract every consumer and the OpenAPI / MCP
  * generator read — and both have the same rollout shape: `mode` NEW_AND_MODIFIED_CODE judges only the
@@ -24,6 +25,7 @@ import {
     NoUtilityTypesInApiLibConfig,
     OneEnumSpellingInApiLibConfig,
     Option,
+    RequiredTypeSuffixConfig,
     RuleFailError,
     hasDisable,
     isPathExcluded,
@@ -76,7 +78,11 @@ class FoundSite {
     ) {}
 }
 
-type ApiLibConfig = NoInlineImportInApiLibConfig | OneEnumSpellingInApiLibConfig | NoUtilityTypesInApiLibConfig;
+type ApiLibConfig =
+    | NoInlineImportInApiLibConfig
+    | OneEnumSpellingInApiLibConfig
+    | NoUtilityTypesInApiLibConfig
+    | RequiredTypeSuffixConfig;
 
 export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValidator<C> {
     constructor(

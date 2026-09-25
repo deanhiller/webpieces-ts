@@ -100,4 +100,19 @@ describe('a rule has no default', () => {
         expect(defaultRules['no-utility-types-in-api-lib']).toEqual({});
         expect(seedEntryForRule('no-utility-types-in-api-lib')['paths']).toEqual(['libraries/apis/**']);
     });
+
+    it('required-type-suffix demands `entries` as well as mode — which directories carry which suffixes is the consumer\'s call', () => {
+        const schema = RULE_SCHEMAS['required-type-suffix'];
+        expect(schema['mode'].optional).toBe(false);
+        expect(schema['entries'].optional).toBe(false);
+        expect(schema['entries'].nonEmpty).toBe(true);
+        expect(schema['entries'].elementSchema?.['paths'].optional).toBe(false);
+        expect(schema['entries'].elementSchema?.['suffixes'].optional).toBe(false);
+        expect(schema['allowedPaths'].optional).toBe(true);
+        expect(defaultRules['required-type-suffix']).toEqual({});
+        // A SEED is written into the consumer's own file, where it is read — not a default.
+        expect(seedEntryForRule('required-type-suffix')['entries']).toEqual([
+            { paths: ['libraries/apis/**'], suffixes: ['Request', 'Response', 'Event', 'Dto', 'Api'] },
+        ]);
+    });
 });

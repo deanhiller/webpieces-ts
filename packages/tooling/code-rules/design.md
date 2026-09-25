@@ -70,6 +70,8 @@ graph TD
     ReadonlyMap_string__FileScope_{{"ReadonlyMap<string, FileScope> ?"}}:::unresolved
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
     RequireReturnTypeValidator["RequireReturnTypeValidator"]
+    RequiredTypeSuffixConfig["RequiredTypeSuffixConfig"]:::many
+    RequiredTypeSuffixValidator["RequiredTypeSuffixValidator"]
     RoleTagConfig["RoleTagConfig"]:::many
     RoleTagValidator["RoleTagValidator"]
     RuleReporter["RuleReporter"]
@@ -110,6 +112,7 @@ graph TD
     CodeRulesEngine --> PrismaConverterValidator
     CodeRulesEngine --> PrismaValidateDtosValidator
     CodeRulesEngine --> RequireReturnTypeValidator
+    CodeRulesEngine --> RequiredTypeSuffixValidator
     CodeRulesEngine --> RoleTagValidator
     CodeRulesEngine --> RuleReporter
     CodeRulesEngine --> RuleScopes
@@ -149,6 +152,9 @@ graph TD
     PrismaConverterValidator --> PrismaConverterConfig
     PrismaValidateDtosValidator --> PrismaValidateDtosConfig
     RequireReturnTypeValidator --> RequireReturnTypeConfig
+    RequiredTypeSuffixValidator --> DiffScope
+    RequiredTypeSuffixValidator --> ProjectRoleResolver
+    RequiredTypeSuffixValidator --> RequiredTypeSuffixConfig
     RoleTagValidator --> RoleTagConfig
     RuleScopes --> DebugTarget___null
     RuleScopes --> ReadonlyMap_string__FileScope_

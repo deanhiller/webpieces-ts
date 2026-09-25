@@ -220,6 +220,16 @@ a field, an alias, a generic argument — because each turns a DTO's field list 
 another file. The cure is to write the fields out: a shared base interface both DTOs extend, or a flat
 interface or class. The wire JSON is unchanged.
 
+A fourth, `required-type-suffix` (#1037), names the LAYER: every exported interface, class, enum and
+type alias under an entry's `paths` must end in one of that entry's `suffixes` — e.g.
+`Request | Response | Event | Dto | Api` for `libraries/apis/internal/**` and `Fs` for the Firestore
+model libraries. `entries` is required and non-empty, each with non-empty `paths` and `suffixes`; when
+entries overlap the most specific glob wins (the full rule, and the example config, are in
+`docs/ENGINEERING-PRACTICE.md`, Part 3). Under `NEW_AND_MODIFIED_CODE` only a new or renamed type is
+judged, so legacy names are grandfathered.
+
 webpieces-ts's own `webpieces.config.json` states none of the three yet: it runs the previous published release,
 whose validator does not know the keys (`.claude/rules/published-vs-local-source.md`). The follow-up
 issue, [#1024](https://github.com/deanhiller/webpieces-ts/issues/1024), adds them with the pin bump to the release that ships them.
+`required-type-suffix` follows the same order: it ships in source first, and its live entry lands in a
+follow-up after the release that carries it is published.

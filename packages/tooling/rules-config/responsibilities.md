@@ -5,6 +5,8 @@ Shared config/schema layer: loads and validates webpieces.config.json, defines e
 ## In Scope
 
 - Loading, validating, and locating `webpieces.config.json` (`loadAndValidate`, `findConfigFile`, `validateWebpiecesConfig`).
+- Schema field types (`FieldDef`): scalars, `string[]`, and a non-empty `object[]` whose elements are
+  validated against their own schema (`required-type-suffix`'s `entries`, #1037).
 - Typed per-rule config classes (`*Config`), mode unions (`METHOD_LIMIT_MODES`, `ON_OFF_MODES`, etc.) and `defaultRules` — the canonical schema shared by all consumers.
 - The built-in `ensure-we-are-secure` schema, seeded in `MODIFIED_PROJECTS` mode with only the
   universal branch/epoch turn-offs (no annotation-level security bypass).

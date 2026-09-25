@@ -15,6 +15,8 @@ import {
     NoInlineTypeLiteralsConfig,
     OneEnumSpellingInApiLibConfig,
     RequireReturnTypeConfig,
+    RequiredTypeSuffixConfig,
+    RequiredTypeSuffixEntry,
     RuleFailError,
     schemaModeValues,
     sectionForRule,
@@ -34,6 +36,7 @@ import { NoAnyUnknownValidator } from './validate-no-any-unknown';
 import { NoInlineTypeLiteralsValidator } from './validate-no-inline-types';
 import { RequireReturnTypeValidator } from './validate-return-types';
 import { OneEnumSpellingInApiLibValidator } from './validate-one-enum-spelling-in-api-lib';
+import { RequiredTypeSuffixValidator } from './validate-required-type-suffix';
 import runValidator from './validate-code';
 
 /**
@@ -156,6 +159,15 @@ const RULES: readonly RuleUnderTest[] = [
         (c: BaseRuleConfig) => new NoInlineTypeLiteralsValidator(c as NoInlineTypeLiteralsConfig)),
     new RuleUnderTest('one-enum-spelling-in-api-lib', () => new OneEnumSpellingInApiLibConfig(),
         (c: BaseRuleConfig) => new OneEnumSpellingInApiLibValidator(c as OneEnumSpellingInApiLibConfig, new ProjectRoleResolver(), new DiffScope())),
+    // #1037: `Old` (libs/apis/src/Old.ts) does not end in `Dto`.
+    new RuleUnderTest('required-type-suffix', () => {
+        const entry = new RequiredTypeSuffixEntry();
+        entry.paths = ['libs/apis/**'];
+        entry.suffixes = ['Dto'];
+        const c = new RequiredTypeSuffixConfig();
+        c.entries = [entry];
+        return c;
+    }, (c: BaseRuleConfig) => new RequiredTypeSuffixValidator(c as RequiredTypeSuffixConfig, new ProjectRoleResolver(), new DiffScope())),
 ];
 
 describe('whole-scope modes judge a violating file the diff never touched', () => {

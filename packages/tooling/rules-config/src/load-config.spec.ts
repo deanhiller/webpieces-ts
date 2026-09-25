@@ -75,6 +75,7 @@ const CODE_RULE_NAMES = [
     'no-inline-import-in-api-lib',
     'one-enum-spelling-in-api-lib',
     'no-utility-types-in-api-lib',
+    'required-type-suffix',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
@@ -86,6 +87,8 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     'branch-creation-guard': { autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>' },
     // Schema-required (#1026): WHICH files are api contracts is the consumer's call.
     'no-utility-types-in-api-lib': { paths: ['libraries/apis/**'] },
+    // Schema-required (#1037): which directories carry which suffixes is the consumer's call.
+    'required-type-suffix': { entries: [{ paths: ['libraries/apis/**'], suffixes: ['Dto'] }] },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

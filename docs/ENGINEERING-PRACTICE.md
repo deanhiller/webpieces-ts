@@ -199,6 +199,33 @@ gate a fix-it loop. It writes nothing to `webpieces.config.json`, and it ignores
 `turnOffRuleWhileOnBranch` for that one run, because it is a measurement, not the gate. The build and
 `wp-build` keep judging the committed mode.
 
+**A rule configured per directory: `required-type-suffix`** (#1037). Its one entry-list shape is the
+worked example of a rule you adopt on a repo with hundreds of existing violations. Every EXPORTED
+`interface`, `class`, `enum` and `type` alias in a non-test `.ts` file under an entry's `paths` must end
+in one of that entry's `suffixes` (plain, case-sensitive `endsWith`; the suffix alone is not a name),
+because the suffix is what tells a reader which layer a type belongs to:
+
+```jsonc
+"required-type-suffix": {
+    "mode": "NEW_AND_MODIFIED_CODE",     // only a NEW or RENAMED type's declaration line is judged
+    "entries": [
+        { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"] },
+        { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"] }
+    ],
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+}
+```
+
+Those two entries are an EXAMPLE, not a default: `mode` and `entries` are required, `entries` must be
+non-empty, and each entry needs non-empty `paths` and `suffixes`. When entries overlap, the **most
+specific entry wins** and suffixes are never unioned: among the entries with a glob matching the file,
+the one whose matching glob has the longest literal prefix (the characters before its first `*`, `?`,
+`[` or `{`) governs it; a tie goes to the glob with more literal characters overall, then to the entry
+listed first. So `libraries/apis/internal/**` beats `libraries/apis/**` whichever is listed first. The
+failure names the type and file:line, the suffixes allowed at that path, and the rename to make; count
+what is left with `pnpm wp-validate-code --rule=required-type-suffix --mode=RUN_EVERY_TIME --projects=lang-apis`.
+
 `NEW_AND_MODIFIED_*` is the key idea: **legacy code is grandfathered, but the moment you touch it, it
 must comply.** No migration project, no 60%-finished cleanup epic, no allowlist that only grows. The
 codebase converges on the standard at exactly the rate it is being worked on — which is the rate at

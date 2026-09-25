@@ -92,6 +92,9 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // #1026: REQUIRES `mode` and `paths` — no entry here may carry either. A new key the
     // one-release-behind validator does not know yet, so THIS repo's config states it after publish.
     'no-utility-types-in-api-lib': {},
+    // #1037: REQUIRES `mode` and `entries` — no entry here may carry either. A new key the
+    // one-release-behind validator does not know yet, so THIS repo's config states it after publish.
+    'required-type-suffix': {},
     'branch-creation-guard': {},
     'pr-lifecycle-guard': {},
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and

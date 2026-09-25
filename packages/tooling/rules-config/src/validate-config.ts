@@ -70,9 +70,20 @@ function valueHint(def: FieldDef, key?: string): string {
     return def.enumValues
         ? `"${def.enumValues.join(' | ')}"`
         : def.type === 'string[]' ? '["<string>", ...]'
+        : def.type === 'object[]' ? objectListHint(def)
         : def.type === 'number'   ? '<number>'
         : def.type === 'boolean'  ? '<boolean>'
         : '"<string>"';
+}
+
+/** `[{ "paths": ["<string>", ...], "suffixes": ["<string>", ...] }, ...]` — one element spelled out from its schema. */
+// webpieces-disable no-function-outside-class -- module-scope sibling of valueHint
+function objectListHint(def: FieldDef): string {
+    const schema: Readonly<Record<string, FieldDef>> = def.elementSchema ?? {};
+    const fields = Object.keys(schema)
+        .filter((key: string) => !schema[key].optional)
+        .map((key: string) => `"${key}": ${valueHint(schema[key], key)}`);
+    return `[{ ${fields.join(', ')} }, ...]`;
 }
 
 /** A rollout hint for the copy-paste snippet: recommend the narrowest gradual mode the rule supports. */
@@ -222,9 +233,8 @@ function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: R
         }
         // A nullable field (e.g. turnOffRuleWhileOnBranch) accepts JSON null in addition to its type.
         if (value === null && fieldDef.nullable) continue;
-        if (fieldDef.type === 'string[]') {
-            if (!Array.isArray(value) || !value.every(v => typeof v === 'string'))
-                errors.push(`[${ruleName}] "${key}" must be string[], got ${typeof value}.`);
+        if (fieldDef.type === 'string[]' || fieldDef.type === 'object[]') {
+            errors.push(...arrayFieldErrors(`[${ruleName}] "${key}"`, value, fieldDef));
         } else if (typeof value !== fieldDef.type) {
             errors.push(`[${ruleName}] "${key}" must be ${fieldDef.type}, got ${typeof value}.`);
         } else if (fieldDef.enumValues && !fieldDef.enumValues.includes(value as string)) {
@@ -237,6 +247,48 @@ function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: R
             errors.push('[branch-state-guard] "maxCommitsBehind" must be a non-negative integer.');
         }
     }
+    return errors;
+}
+
+/**
+ * Errors for one array-typed field (`string[]` / `object[]`): the element type, `nonEmpty`, and — for
+ * `object[]` — every element against the field's `elementSchema` (unknown keys, missing required keys,
+ * and each element field checked recursively). `label` is `[rule] "field"`, extended per element
+ * (`[rule] "entries"[0].suffixes`) so an error names the exact spot to edit.
+ */
+// webpieces-disable no-any-unknown -- a config field value is opaque JSON until this checks its shape
+// webpieces-disable no-function-outside-class -- module-scope validator helper, matching every other check in this file
+function arrayFieldErrors(label: string, value: unknown, def: FieldDef): string[] {
+    const isObjects = def.type === 'object[]';
+    // webpieces-disable no-any-unknown -- one list element as opaque JSON; this line is what checks its shape
+    const elementOk = (v: unknown): boolean =>
+        isObjects ? typeof v === 'object' && v !== null && !Array.isArray(v) : typeof v === 'string';
+    if (!Array.isArray(value) || !value.every(elementOk)) {
+        const shape = isObjects ? 'a list of objects' : 'string[]';
+        return [`${label} must be ${shape}, got ${Array.isArray(value) ? 'a list holding something else' : typeof value}.`];
+    }
+    if (def.nonEmpty && value.length === 0) {
+        return [`${label} must not be empty — an empty list judges nothing while reading as configured. Add ${valueHint(def)}.`];
+    }
+    if (!isObjects || def.elementSchema === undefined) return [];
+    const errors: string[] = [];
+    const schema = def.elementSchema;
+    // webpieces-disable no-any-unknown -- an element's fields are opaque JSON until checked against its schema below
+    value.forEach((element: Record<string, unknown>, index: number) => {
+        const at = `${label}[${index}]`;
+        for (const key of Object.keys(element)) {
+            if (!(key in schema)) errors.push(`${at} Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].`);
+        }
+        for (const [key, fieldDef] of Object.entries(schema)) {
+            if (!(key in element)) {
+                if (!fieldDef.optional) errors.push(`${at} Missing required field "${key}". Add ${key}: ${valueHint(fieldDef, key)}.`);
+            } else if (fieldDef.type === 'string[]' || fieldDef.type === 'object[]') {
+                errors.push(...arrayFieldErrors(`${at}.${key}`, element[key], fieldDef));
+            } else if (typeof element[key] !== fieldDef.type) {
+                errors.push(`${at}.${key} must be ${fieldDef.type}, got ${typeof element[key]}.`);
+            }
+        }
+    });
     return errors;
 }
 
