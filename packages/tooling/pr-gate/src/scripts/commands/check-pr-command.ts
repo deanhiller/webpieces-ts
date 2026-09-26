@@ -1,11 +1,14 @@
 import { spawnSync } from 'child_process';
 import {
-    loadAndValidate, RepoRootFinder, GateTokenService, CliExitError,
+    loadAndValidate,
+    RepoRootFinder,
+    GateTokenService,
+    CliExitError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // The head sha + body of the PR under check, resolved from `gh`. Data-only.
-class PrUnderCheck {
+export class PrUnderCheck {
     number: string;
     headSha: string;
     body: string;
@@ -21,8 +24,8 @@ class PrUnderCheck {
  * `wp-check-pr` — the SERVER-SIDE half of the gate, meant to run as a required CI check. It is READ-ONLY:
  * it never touches git state, never pushes, never calls `gh pr create`. It recomputes
  * `HMAC(prGate.gateSalt, PR_head_sha)` from the committed salt and verifies the PR body carries that
- * token. Because `wp-finish-upsert-pr` refuses to mint the token unless the build gate + every BLOCK
- * checklist passed, a valid token IS proof the gated flow ran and passed on this exact commit.
+ * token. A valid token proves either that the automated gate passed on this exact commit, or that a human
+ * explicitly attested and posted it with `wp-human-post-pr`; the visible PR body identifies which path.
  *
  * This is what catches a PR opened OUTSIDE the gated flow — an unhooked teammate who `git push`ed and
  * clicked "Create pull request" in the web UI carries no valid token for its head sha and fails here.
@@ -49,21 +52,25 @@ export class CheckPrCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
         if (gateSalt.trim() === '') {
-            throw new CliExitError(0,
+            throw new CliExitError(
+                0,
                 'ℹ️  wp-check-pr: no prGate.gateSalt configured — server-side gate token enforcement is disabled. ' +
-                'Add a committed "gateSalt" under the pr-gate section of webpieces.config.json to enable it.');
+                    'Add a committed "gateSalt" under the pr-gate section of webpieces.config.json to enable it.',
+            );
         }
 
         let pr = this.resolvePr();
         if (pr.headSha === '') {
-            throw new CliExitError(1,
+            throw new CliExitError(
+                1,
                 '❌ wp-check-pr: could not resolve the PR head sha via `gh`. Ensure the workflow runs on a pull_request ' +
-                'event with `gh` authenticated (GH_TOKEN) and the PR number available (WP_PR_NUMBER or GITHUB_REF).');
+                    'event with `gh` authenticated (GH_TOKEN) and the PR number available (WP_PR_NUMBER or GITHUB_REF).',
+            );
         }
 
         pr = await this.verifyWithRetry(pr, gateSalt);
         if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) {
-            process.stdout.write(`✅ wp-check-pr: valid webpieces gate token for PR #${pr.number} @ ${pr.headSha.slice(0, 12)} — created through the gated flow.\n`);
+            process.stdout.write(this.successMessage(pr));
             return;
         }
 
@@ -78,7 +85,9 @@ export class CheckPrCommand {
     // single required check. It costs nothing on the success path. Returns the freshest PR.
     private async verifyWithRetry(pr: PrUnderCheck, gateSalt: string): Promise<PrUnderCheck> {
         if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) return pr;
-        process.stdout.write('… no valid token yet — waiting for the PR body edit to land, then re-checking once…\n');
+        process.stdout.write(
+            '… no valid token yet — waiting for the PR body edit to land, then re-checking once…\n',
+        );
         await this.delay(15000);
         const refreshed = this.resolvePr();
         return refreshed.headSha !== '' ? refreshed : pr;
@@ -91,15 +100,21 @@ export class CheckPrCommand {
     }
 
     // The actionable red-check message: this PR did not come through the gated flow (or hooks are missing).
-    private failureMessage(pr: PrUnderCheck): string {
+    protected successMessage(pr: PrUnderCheck): string {
+        return `✅ wp-check-pr: valid webpieces gate token for PR #${pr.number} @ ${pr.headSha.slice(0, 12)} — automated gate or explicit human escape hatch (see PR body).\n`;
+    }
+
+    protected failureMessage(pr: PrUnderCheck): string {
         return (
             `❌ wp-check-pr: PR #${pr.number} (head ${pr.headSha.slice(0, 12)}) has no valid webpieces gate token.\n\n` +
-            `This PR was NOT created through the webpieces gated flow — or was pushed after finishing without re-running it.\n` +
-            `Every commit that lands here must go through it, so:\n\n` +
+            `This PR was NOT posted through either supported token-minting path — or was pushed afterwards.\n` +
+            `Every commit that lands here needs a current token, so:\n\n` +
             `  1. Install the webpieces hooks if you don't have them.\n` +
             `  2. Recreate/update this PR by running the full gated flow, in order:\n` +
-            `       pnpm wp-start-upsert-pr → pnpm wp-review-upsert-pr → write summary.json → pnpm wp-finish-upsert-pr\n\n` +
-            `That re-stamps the PR title, body, and the gate token for the current head commit, and this check goes green.`
+            `       pnpm wp-start-upsert-pr → pnpm wp-review-upsert-pr → write summary.json → pnpm wp-finish-upsert-pr\n` +
+            `     A human who personally inspected the work may instead run interactive pnpm wp-human-post-pr.\n` +
+            `     AI must never answer its human-attestation prompt or run that escape hatch for a human.\n\n` +
+            `Either supported path re-stamps the PR title, body, and token for the current head commit.`
         );
     }
 
@@ -107,9 +122,25 @@ export class CheckPrCommand {
     // pull_request number in GITHUB_REF (refs/pull/<n>/merge), then `gh`'s current-branch detection.
     private resolvePr(): PrUnderCheck {
         const num = this.prNumber();
-        const args = num !== ''
-            ? ['pr', 'view', num, '--json', 'number,headRefOid,body', '--jq', '"\\(.number)\\t\\(.headRefOid)\\t\\(.body)"']
-            : ['pr', 'view', '--json', 'number,headRefOid,body', '--jq', '"\\(.number)\\t\\(.headRefOid)\\t\\(.body)"'];
+        const args =
+            num !== ''
+                ? [
+                      'pr',
+                      'view',
+                      num,
+                      '--json',
+                      'number,headRefOid,body',
+                      '--jq',
+                      '"\\(.number)\\t\\(.headRefOid)\\t\\(.body)"',
+                  ]
+                : [
+                      'pr',
+                      'view',
+                      '--json',
+                      'number,headRefOid,body',
+                      '--jq',
+                      '"\\(.number)\\t\\(.headRefOid)\\t\\(.body)"',
+                  ];
         const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 16 });
         if (result.status !== 0) return new PrUnderCheck(num, '', '');
         // jq joins body (which may contain tabs/newlines) last, so split on the FIRST two tabs only.

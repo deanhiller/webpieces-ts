@@ -50,20 +50,27 @@ export class GatedPrPublisher {
      *
      * @param bodyFile the rendered dashboard ALREADY carrying the gate token for the LOCAL head sha
      */
-    publish(baseBranch: string, title: string, bodyFile: string): PublishedPr {
+    publish(
+        baseBranch: string,
+        title: string,
+        bodyFile: string,
+        retryCommand = 'pnpm wp-finish-upsert-pr',
+    ): PublishedPr {
         const existing = this.findOpenPr(baseBranch);
 
         // 1. Body FIRST, so a `synchronize` read arriving the instant after the push finds the right token.
         if (existing !== '') {
-            process.stdout.write(`Updating PR #${existing} (body before push, so CI cannot read a stale token)...\n`);
-            this.editPrOrAbort(existing, title, bodyFile);
+            process.stdout.write(
+                `Updating PR #${existing} (body before push, so CI cannot read a stale token)...\n`,
+            );
+            this.editPrOrAbort(existing, title, bodyFile, retryCommand);
             // Say the consequence BEFORE the push can fail: from here the PR advertises a token for the
             // local HEAD, so a failed push leaves the PR pointing at the old commit and the gate check goes
             // RED. That is the deliberate fail-CLOSED direction, and it self-corrects on the next good run.
             process.stdout.write(
                 '   body updated. Pushing now — if this push FAILS, the PR advertises a token for a commit\n' +
-                '   the remote does not have, so the webpieces gate check goes RED (never falsely green)\n' +
-                '   until you fix the push and re-run pnpm wp-finish-upsert-pr.\n',
+                    '   the remote does not have, so the webpieces gate check goes RED (never falsely green)\n' +
+                    `   until you fix the push and re-run ${retryCommand}.\n`,
             );
         }
 
@@ -79,12 +86,19 @@ export class GatedPrPublisher {
     // Edit the PR body/title, aborting BEFORE the push if `gh` failed. Warning-and-continuing here would
     // push code that the PR body does not vouch for; aborting leaves the PR on its previous body, whose
     // token is still valid for the sha the remote still has. Nothing is half-done either way.
-    private editPrOrAbort(prNumber: string, title: string, bodyFile: string): void {
+    private editPrOrAbort(
+        prNumber: string,
+        title: string,
+        bodyFile: string,
+        retryCommand: string,
+    ): void {
         if (this.editPr(prNumber, title, bodyFile)) return;
-        throw new CliExitError(1,
+        throw new CliExitError(
+            1,
             `❌ gh pr edit failed on PR #${prNumber} — NOTHING was pushed, so the PR and the remote branch are\n` +
-            `   both unchanged and still consistent. Fix gh (auth / network / permissions) and re-run\n` +
-            `   pnpm wp-finish-upsert-pr. The new body is in:\n     ${bodyFile}`);
+                `   both unchanged and still consistent. Fix gh (auth / network / permissions) and re-run\n` +
+                `   ${retryCommand}. The new body is in:\n     ${bodyFile}`,
+        );
     }
 
     // The `gh`/push seams, protected so the spec can drive the ordering with no gh, no network, no repo.
@@ -92,16 +106,41 @@ export class GatedPrPublisher {
     // The open PR whose head is `baseBranch`, or '' when there is none (or `gh` failed — treated the same,
     // so the create path then fails loudly rather than silently editing the wrong PR).
     protected findOpenPr(baseBranch: string): string {
-        const result = spawnSync('gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'], { encoding: 'utf8' });
+        const result = spawnSync(
+            'gh',
+            ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
+            { encoding: 'utf8' },
+        );
         return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 
     protected editPr(prNumber: string, title: string, bodyFile: string): boolean {
-        return spawnSync('gh', ['pr', 'edit', prNumber, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' }).status === 0;
+        return (
+            spawnSync('gh', ['pr', 'edit', prNumber, '--title', title, '--body-file', bodyFile], {
+                stdio: 'inherit',
+            }).status === 0
+        );
     }
 
     protected createPr(baseBranch: string, title: string, bodyFile: string): boolean {
-        return spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', title, '--body-file', bodyFile], { stdio: 'inherit' }).status === 0;
+        return (
+            spawnSync(
+                'gh',
+                [
+                    'pr',
+                    'create',
+                    '--head',
+                    baseBranch,
+                    '--base',
+                    'main',
+                    '--title',
+                    title,
+                    '--body-file',
+                    bodyFile,
+                ],
+                { stdio: 'inherit' },
+            ).status === 0
+        );
     }
 
     // Throws (CliExitError, via runGitChecked) when the push fails — deliberately NOT caught here: the

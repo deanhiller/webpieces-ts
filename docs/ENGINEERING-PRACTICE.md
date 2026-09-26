@@ -81,8 +81,10 @@ Cloud Task. See [`architecture/context-propagation.md`](./architecture/context-p
 
 ### 4. A git workflow with no unattended sharp edges
 
-Branch off `main` before editing; PRs go through `wp-start-upsert-pr` → `wp-finish-upsert-pr` (an
-authoritative build gate, not an honour-system one); merged branches are reaped by `wp-cleanup`,
+Branch off `main` before editing; AI-authored PRs go through `wp-start-upsert-pr` →
+`wp-review-upsert-pr` → `wp-finish-upsert-pr` (an authoritative build gate, not an honour-system one).
+A separately interactive `wp-human-post-pr` lets a human attest that they inspected the work, choose a
+local `pnpm wp-build` with live log output or cloud CI, and visibly skip automated review without weakening the AI flow. Merged branches are reaped by `wp-cleanup`,
 which deletes only *provably* dead branches and logs a `recover=` command with the pre-delete SHA
 for each. Documented in [`git-workflow.md`](./git-workflow.md) and refreshed into the agent's
 context on every `wp-*` command — so the instructions cannot go stale relative to the tool.

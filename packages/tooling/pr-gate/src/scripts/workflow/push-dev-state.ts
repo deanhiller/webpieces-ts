@@ -35,7 +35,13 @@ export class PushDevState {
     current: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(originalBranch: string, tmpBranch: string, targetRef: string, queue: string[], current = '') {
+    constructor(
+        originalBranch: string,
+        tmpBranch: string,
+        targetRef: string,
+        queue: string[],
+        current = '',
+    ) {
         this.originalBranch = originalBranch;
         this.tmpBranch = tmpBranch;
         this.targetRef = targetRef;
@@ -53,9 +59,14 @@ export class PushDevState {
 // (the finishes), or deletes branches (cleanup) — and during a resolve the checkout is a throwaway
 // branch, not the feature branch any of them think they are acting on.
 const BLOCKED_DURING_RESOLVE: readonly string[] = [
-    'wp-start-update', 'wp-finish-update',
-    'wp-start-upsert-pr', 'wp-review-upsert-pr', 'wp-finish-upsert-pr',
-    'wp-land-pr', 'wp-cleanup',
+    'wp-start-update',
+    'wp-finish-update',
+    'wp-start-upsert-pr',
+    'wp-review-upsert-pr',
+    'wp-finish-upsert-pr',
+    'wp-human-post-pr',
+    'wp-land-pr',
+    'wp-cleanup',
 ];
 
 /**
@@ -87,13 +98,18 @@ export class PushDevStateStore {
         try {
             // webpieces-disable no-any-unknown -- JSON.parse is untyped until narrowed on the next line
             const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<PushDevState>;
-            if (typeof raw.originalBranch !== 'string' || typeof raw.tmpBranch !== 'string') return null;
+            if (typeof raw.originalBranch !== 'string' || typeof raw.tmpBranch !== 'string')
+                return null;
             return new PushDevState(
-                raw.originalBranch, raw.tmpBranch, raw.targetRef ?? '',
-                Array.isArray(raw.queue) ? raw.queue : [], raw.current ?? '');
-        // The parse error carries nothing a caller could act on: the ONLY meaningful reading of an
-        // unparseable state file is "no resolve in progress", which --abort and a fresh --resolve both
-        // recover from.
+                raw.originalBranch,
+                raw.tmpBranch,
+                raw.targetRef ?? '',
+                Array.isArray(raw.queue) ? raw.queue : [],
+                raw.current ?? '',
+            );
+            // The parse error carries nothing a caller could act on: the ONLY meaningful reading of an
+            // unparseable state file is "no resolve in progress", which --abort and a fresh --resolve both
+            // recover from.
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -115,12 +131,18 @@ export class PushDevStateStore {
     require(repoRoot: string): PushDevState {
         const state = this.read(repoRoot);
         if (state !== null) return state;
-        throw new CliExitError(2,
-            '\n' + SEP + '⛔ No dev-deploy resolve is in progress\n' + SEP + '\n'
-            + `${WP_FINISH_PUSH_DEV} resumes a resolve that \`${WP_PUSH_DEV} --resolve\` started, and there is no\n`
-            + `state file at:\n  ${this.path(repoRoot)}\n\n`
-            + 'If you meant to publish your branch to the shared dev server, that is the one-command form:\n'
-            + `  ${WP_PUSH_DEV}\n`);
+        throw new CliExitError(
+            2,
+            '\n' +
+                SEP +
+                '⛔ No dev-deploy resolve is in progress\n' +
+                SEP +
+                '\n' +
+                `${WP_FINISH_PUSH_DEV} resumes a resolve that \`${WP_PUSH_DEV} --resolve\` started, and there is no\n` +
+                `state file at:\n  ${this.path(repoRoot)}\n\n` +
+                'If you meant to publish your branch to the shared dev server, that is the one-command form:\n' +
+                `  ${WP_PUSH_DEV}\n`,
+        );
     }
 
     /**
@@ -130,16 +152,22 @@ export class PushDevStateStore {
     assertIdle(repoRoot: string, attempted: string): void {
         const state = this.read(repoRoot);
         if (state === null) return;
-        throw new CliExitError(2,
-            '\n' + SEP + `⛔ A dev-deploy resolve is in progress — \`pnpm ${attempted}\` is blocked\n` + SEP + '\n'
-            + `You are standing on the throwaway branch \`${state.tmpBranch}\`, not on \`${state.originalBranch}\`,\n`
-            + `so ${this.blockedCommandList()} would all act on the wrong branch.\n`
-            + 'That is the whole list; nothing else is blocked.\n\n'
-            + 'EXPECTED of you right now, and NOT blocked: read the conflicted files and edit them until every\n'
-            + 'conflict marker is gone. Then finish or bail out:\n'
-            + `  ${WP_FINISH_PUSH_DEV}            ← commit the resolution, resume the queue, publish the copy\n`
-            + `  ${WP_FINISH_PUSH_DEV} --abort    ← throw the resolution away and go back to \`${state.originalBranch}\`\n\n`
-            + `State file: ${this.path(repoRoot)}\n`);
+        throw new CliExitError(
+            2,
+            '\n' +
+                SEP +
+                `⛔ A dev-deploy resolve is in progress — \`pnpm ${attempted}\` is blocked\n` +
+                SEP +
+                '\n' +
+                `You are standing on the throwaway branch \`${state.tmpBranch}\`, not on \`${state.originalBranch}\`,\n` +
+                `so ${this.blockedCommandList()} would all act on the wrong branch.\n` +
+                'That is the whole list; nothing else is blocked.\n\n' +
+                'EXPECTED of you right now, and NOT blocked: read the conflicted files and edit them until every\n' +
+                'conflict marker is gone. Then finish or bail out:\n' +
+                `  ${WP_FINISH_PUSH_DEV}            ← commit the resolution, resume the queue, publish the copy\n` +
+                `  ${WP_FINISH_PUSH_DEV} --abort    ← throw the resolution away and go back to \`${state.originalBranch}\`\n\n` +
+                `State file: ${this.path(repoRoot)}\n`,
+        );
     }
 
     // Rendered from BLOCKED_DURING_RESOLVE, never hand-written — see that constant.

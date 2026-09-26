@@ -6,13 +6,14 @@ work that could not act on them anyway: step 3 needs a repo admin.
 
 ## What this is for
 
-Locally, `pr-creation-or-push-guard` blocks `gh pr create` and manual `git push`, so
-`wp-finish-upsert-pr` is the only way a PR gets opened — **for hooked developers**. The gap is an
-UNHOOKED teammate who pushes and opens a PR in the GitHub web UI. Nothing local can stop that.
+Locally, `pr-creation-or-push-guard` blocks direct `gh pr create` and manual `git push`. Hooked
+developers have two supported posters: the normal automated `wp-finish-upsert-pr`, and the interactive
+human-only `wp-human-post-pr` escape hatch, whose body visibly says review was skipped and whether its
+optional local `wp-build` ran or validation was deferred to cloud CI.
 
-This CI check closes it: `wp-finish-upsert-pr` writes `HMAC(gateSalt, HEAD_sha)` into the PR body, and
-the workflow recomputes it from the committed salt and the PR head sha. A PR opened outside the gated
-flow carries no valid token and fails the check.
+Both supported paths write the same `HMAC(gateSalt, HEAD_sha)` into the PR body, and the workflow
+recomputes it from the committed salt and PR head sha. The token proves a supported path minted it;
+the visible PR body distinguishes automated-gate success from explicit human attestation.
 
 ## The three steps
 

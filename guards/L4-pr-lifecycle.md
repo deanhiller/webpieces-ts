@@ -37,7 +37,7 @@ destination; the loader hands the resolved strings to the two rules at construct
 | guard | blocks | notably ALLOWS |
 |---|---|---|
 | `redirect-how-to-merge-main` | `git merge` and `git rebase` **in every form**, to protect the fork-point invariant | `--abort` / `--quit` (they UNDO, so cannot create a merge commit or rewrite history). `--continue` is deliberately blocked — it COMPLETES the operation. `--ff-only` is blocked too: *"a successful `--ff-only` IS the merge."* |
-| `pr-creation-or-push-guard` | every direct way to push or open/update a PR, so the only path left is the gated flow — whose internal `git push` / `gh pr create` run as child processes the hook never sees | read-only `gh pr list`, `gh api …/pulls` GET. Its hint now BRANCHES ON INTENT: a push whose refspec targets the dev namespace/branch gets the `wp-push-dev` remedy, everything else the `wp-start-upsert-pr` one |
+| `pr-creation-or-push-guard` | every direct way to push or open/update a PR, so AI uses the gated flow — whose internal `git push` / `gh pr create` run as child processes the hook never sees | read-only `gh pr list`, `gh api …/pulls` GET. Its hint branches by destination and mentions that a human may personally run interactive `wp-human-post-pr`; it never tells AI to attest |
 | `pr-merge-guard` | `gh pr merge` outside the flow | — |
 | `merge-in-progress-guard` | a named list of commands while a merge marker is unvalidated | its hint RENDERS ITSELF from those lists |
 
@@ -46,6 +46,9 @@ destination; the loader hands the resolved strings to the two rules at construct
 - **upsert-pr**: `wp-start-upsert-pr` ① → `wp-review-upsert-pr` ② → `wp-finish-upsert-pr` ③
 - **update**: `wp-start-update` ① → `wp-finish-update` ② (② only needed on conflict)
 - **dev-deploy**: `wp-push-dev` ① → `wp-finish-push-dev` ② (② only needed on conflict)
+- **human post**: interactive `wp-human-post-pr` (human attestation, clean/current branch + summary,
+  optional local `pnpm wp-build` with live `build.log` output or explicit deferral to cloud CI,
+  visible automated-gate bypass, post only; never an AI cure and never an automatic merge)
 
 Stage ② is where verification happens: it fails on an unresolved merge or a red build BEFORE any
 reviewer is spawned, records the sha it verified, and stage ③ skips its own build when HEAD has not

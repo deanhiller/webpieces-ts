@@ -142,7 +142,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/build-command.ts",
-                    "level": 1
+                    "level": 2
                 },
                 {
                     "id": "BuildGateLog",
@@ -449,6 +449,14 @@
                     "level": 2
                 },
                 {
+                    "id": "HumanPostPrCommand",
+                    "className": "HumanPostPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/human-post-pr-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "LandPrCommand",
                     "className": "LandPrCommand",
                     "kind": "class",
@@ -478,6 +486,22 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/main-checkout.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MainSyncFileStore",
+                    "className": "MainSyncFileStore",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/main-sync-file.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MainSyncStatusService",
+                    "className": "MainSyncStatusService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/main-sync-status.ts",
                     "level": 2
                 },
                 {
@@ -1955,6 +1979,114 @@
                     "paramType": "ReviewJsonService"
                 },
                 {
+                    "from": "HumanPostPrCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "BranchIdentity",
+                    "injection": "type",
+                    "token": "BranchIdentity",
+                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "paramName": "branchIdentity",
+                    "paramType": "BranchIdentity"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "BuildCommand",
+                    "injection": "type",
+                    "token": "BuildCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/build-command.ts#BuildCommand",
+                    "paramName": "buildCommand",
+                    "paramType": "BuildCommand"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "GateTokenService",
+                    "injection": "type",
+                    "token": "GateTokenService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/gate-token.ts#GateTokenService",
+                    "paramName": "gateTokenService",
+                    "paramType": "GateTokenService"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "GatedPrPublisher",
+                    "injection": "type",
+                    "token": "GatedPrPublisher",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/gated-pr-publisher.ts#GatedPrPublisher",
+                    "paramName": "publisher",
+                    "paramType": "GatedPrPublisher"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "MainSyncStatusService",
+                    "injection": "type",
+                    "token": "MainSyncStatusService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-status.ts#MainSyncStatusService",
+                    "paramName": "mainSyncStatus",
+                    "paramType": "MainSyncStatusService"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "HumanPostPrCommand",
+                    "to": "SquashSettingsEnforcer",
+                    "injection": "type",
+                    "token": "SquashSettingsEnforcer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/squash-settings-enforcer.ts#SquashSettingsEnforcer",
+                    "paramName": "squashSettings",
+                    "paramType": "SquashSettingsEnforcer"
+                },
+                {
                     "from": "LandPrCommand",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -2055,6 +2187,51 @@
                 },
                 {
                     "from": "LandedWorktreeReaper",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
+                },
+                {
+                    "from": "MainSyncFileStore",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "MainSyncFileStore",
+                    "injection": "type",
+                    "token": "MainSyncFileStore",
+                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-file.ts#MainSyncFileStore",
+                    "paramName": "store",
+                    "paramType": "MainSyncFileStore"
+                },
+                {
+                    "from": "MainSyncStatusService",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
@@ -2340,6 +2517,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/finish-upsert-pr-command.ts#FinishUpsertPrCommand",
                     "paramName": "finishUpsertPrCommand",
                     "paramType": "FinishUpsertPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "HumanPostPrCommand",
+                    "injection": "type",
+                    "token": "HumanPostPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/human-post-pr-command.ts#HumanPostPrCommand",
+                    "paramName": "humanPostPrCommand",
+                    "paramType": "HumanPostPrCommand"
                 },
                 {
                     "from": "PrGateApp",

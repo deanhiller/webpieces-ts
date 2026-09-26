@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames, specTempDirs } from '@webpieces/rules-config';
+import {
+    WEBPIECES_TMP_DIR,
+    MERGE_INFO_DIR,
+    MERGE_IN_PROGRESS_FILE,
+    PrLifecycleGuardConfig,
+    DEFAULT_UPSERT_PR_COMMAND,
+    DEFAULT_MERGE_COMPLETE_COMMAND,
+    allRuleNames,
+    specTempDirs,
+} from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
@@ -10,8 +19,14 @@ import { builtInConfigKeys } from './index';
 // The gated-command strings are handed in by the LOADER now, not read off the guard's config entry
 // (that field was a second spelling of commands.guardHints and beat it at the point of use). Tests
 // construct with the same defaults buildCommandsConfig resolves to when a repo configures nothing.
-const prCreationOrPushGuard = new PrCreationOrPushGuardRule(new PrLifecycleGuardConfig(), DEFAULT_UPSERT_PR_COMMAND);
-const mergeInProgressGuard = new MergeInProgressGuardRule(new PrLifecycleGuardConfig(), DEFAULT_MERGE_COMPLETE_COMMAND);
+const prCreationOrPushGuard = new PrCreationOrPushGuardRule(
+    new PrLifecycleGuardConfig(),
+    DEFAULT_UPSERT_PR_COMMAND,
+);
+const mergeInProgressGuard = new MergeInProgressGuardRule(
+    new PrLifecycleGuardConfig(),
+    DEFAULT_MERGE_COMPLETE_COMMAND,
+);
 
 function ctx(command: string, workspaceRoot: string): BashContext {
     return new BashContext(command, workspaceRoot);
@@ -37,8 +52,16 @@ describe('pr-creation-or-push-guard matches code, not prose about code', () => {
     // in a repo whose subject matter IS the git workflow. Stripping lives in BashContext.commandCode.
     it('does not block a commit message that merely mentions the blocked commands', () => {
         const root = tempRoot();
-        expect(prCreationOrPushGuard.check(ctx('git commit -m "document why git push is blocked"', root)).length).toBe(0);
-        expect(prCreationOrPushGuard.check(ctx("git commit -F - <<'EOF'\nwe now block gh pr create\nEOF", root)).length).toBe(0);
+        expect(
+            prCreationOrPushGuard.check(
+                ctx('git commit -m "document why git push is blocked"', root),
+            ).length,
+        ).toBe(0);
+        expect(
+            prCreationOrPushGuard.check(
+                ctx("git commit -F - <<'EOF'\nwe now block gh pr create\nEOF", root),
+            ).length,
+        ).toBe(0);
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -51,6 +74,14 @@ describe('pr-creation-or-push-guard matches code, not prose about code', () => {
 });
 
 describe('pr-creation-or-push-guard', () => {
+    it('keeps the human escape hatch human-only in its blocking hint', () => {
+        const hint = prCreationOrPushGuard.fixHint.mainMessage;
+        expect(hint).toContain('A HUMAN');
+        expect(hint).toContain('pnpm wp-human-post-pr');
+        expect(hint).toContain('AI must');
+        expect(hint).toContain('never run it for the human or answer `human`');
+    });
+
     it('writes the git-workflow doc it points the AI at (it may not exist yet)', () => {
         const root = tempRoot();
         const doc = path.join(root, WEBPIECES_TMP_DIR, 'instruct-ai', 'webpieces.git-workflow.md');
@@ -73,7 +104,9 @@ describe('pr-creation-or-push-guard', () => {
     it('blocks direct PR creation paths, allows read-only and the gated command', () => {
         const root = tempRoot();
         expect(prCreationOrPushGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
-        expect(prCreationOrPushGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length).toBe(1);
+        expect(
+            prCreationOrPushGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length,
+        ).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('gh pr list', root)).length).toBe(0);
         expect(prCreationOrPushGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
     });
@@ -82,7 +115,9 @@ describe('pr-creation-or-push-guard', () => {
         const root = tempRoot();
         expect(prCreationOrPushGuard.check(ctx('git push origin HEAD', root)).length).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('git push -u origin base', root)).length).toBe(1);
-        expect(prCreationOrPushGuard.check(ctx('git push --force-with-lease', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('git push --force-with-lease', root)).length).toBe(
+            1,
+        );
         // The gated flow pushes internally as a child process — its own invocation string has no push.
         expect(prCreationOrPushGuard.check(ctx('pnpm wp-start-upsert-pr', root)).length).toBe(0);
         expect(prCreationOrPushGuard.check(ctx('git status', root)).length).toBe(0);
@@ -104,8 +139,14 @@ describe('merge-in-progress-guard', () => {
         // `\bgit\s+merge\b` matched merge-base (the \b sits between `e` and `-`), so an in-progress
         // merge blocked the diff-scope lookup in this repo's own documented build command.
         const root = withMarker(false);
-        expect(mergeInProgressGuard.check(ctx('git merge-base origin/main HEAD', root)).length).toBe(0);
-        expect(mergeInProgressGuard.check(ctx('pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)', root)).length).toBe(0);
+        expect(
+            mergeInProgressGuard.check(ctx('git merge-base origin/main HEAD', root)).length,
+        ).toBe(0);
+        expect(
+            mergeInProgressGuard.check(
+                ctx('pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)', root),
+            ).length,
+        ).toBe(0);
         // ...but a real merge is still blocked.
         expect(mergeInProgressGuard.check(ctx('git merge main', root)).length).toBe(1);
     });
@@ -131,7 +172,13 @@ describe('merge-in-progress-guard fixHint tells the truth about what is blocked'
     const hint = mergeInProgressGuard.fixHint.mainMessage;
 
     it('names every command the guard actually blocks', () => {
-        for (const cmd of ['`git commit`', '`git push`', '`git merge`', '`git rebase`', '`gh pr create|edit|merge`']) {
+        for (const cmd of [
+            '`git commit`',
+            '`git push`',
+            '`git merge`',
+            '`git rebase`',
+            '`gh pr create|edit|merge`',
+        ]) {
             expect(hint).toContain(cmd);
         }
     });
@@ -150,12 +197,16 @@ describe('merge-in-progress-guard fixHint tells the truth about what is blocked'
     });
 
     it('only asks the agent to memorize a version-stable fact — never the blocked list', () => {
-        const memoryLines = hint.split('\n').filter((line: string): boolean => line.includes('Add to memory'));
+        const memoryLines = hint
+            .split('\n')
+            .filter((line: string): boolean => line.includes('Add to memory'));
         expect(memoryLines.length).toBe(1);
         const memorized = memoryLines[0];
         // A memorized sentence outlives the code. It must not name a command, a version, a config key
         // or a repo-specific path, because none of those are stable across sessions.
-        expect(memorized).toBe('Add to memory: finish a started merge before beginning other work.');
+        expect(memorized).toBe(
+            'Add to memory: finish a started merge before beginning other work.',
+        );
         expect(memorized).not.toMatch(/git |gh |pnpm |wp-/);
     });
 
@@ -163,11 +214,25 @@ describe('merge-in-progress-guard fixHint tells the truth about what is blocked'
         // Anything the hint names must genuinely be blocked, proven through check() rather than by
         // re-reading the same constant the hint used.
         const root = withMarkerRoot(false);
-        for (const cmd of ['git commit -m x', 'git push', 'git merge main', 'git rebase main', 'gh pr create', 'gh pr edit 1', 'gh pr merge 1']) {
+        for (const cmd of [
+            'git commit -m x',
+            'git push',
+            'git merge main',
+            'git rebase main',
+            'gh pr create',
+            'gh pr edit 1',
+            'gh pr merge 1',
+        ]) {
             expect(mergeInProgressGuard.check(ctx(cmd, root)).length).toBe(1);
         }
         // ...and everything the hint says is expected must genuinely run.
-        for (const cmd of ['git add src/foo.ts', 'git status', 'git diff', 'pnpm run build-all', 'cat src/foo.ts']) {
+        for (const cmd of [
+            'git add src/foo.ts',
+            'git status',
+            'git diff',
+            'pnpm run build-all',
+            'cat src/foo.ts',
+        ]) {
             expect(mergeInProgressGuard.check(ctx(cmd, root)).length).toBe(0);
         }
     });

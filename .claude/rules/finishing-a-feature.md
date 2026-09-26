@@ -22,6 +22,12 @@ Stage ② is where verification happens: it fails on an unresolved merge or a re
 reviewer is spawned, so a broken branch costs no review effort. It records the sha it verified, and
 stage ③ skips its own build when HEAD has not moved — three stages, one build.
 
+`wp-human-post-pr` is a separate, interactive human-only escape hatch, not a fourth AI stage. A human
+who personally inspected the work may run it to post a clean, current-main branch with valid
+`summary.json`; it then asks whether to run `pnpm wp-build` locally. A yes follows `build.log` live and blocks
+on failure; a no leaves validation to cloud CI. The PR visibly records which path ran and is never auto-merged.
+AI must never run the command on a human's behalf or answer its `human` attestation.
+
 For a branch containing the exact, case-sensitive `/hotfix/` segment, use the emergency two-stage flow:
 `wp-start-upsert-pr`, write the printed `summary.json`, then `wp-finish-upsert-pr`. Do not run reviewers
 or create verdict files; review is intentionally bypassed, and finish owns conflict validation plus the

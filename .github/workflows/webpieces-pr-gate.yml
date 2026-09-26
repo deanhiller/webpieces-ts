@@ -1,10 +1,8 @@
 # Webpieces PR gate — the SERVER-SIDE half of the gate.
 #
-# WHY: locally, pr-creation-or-push-guard blocks `gh pr create` / manual `git push`, so wp-finish-upsert-pr
-# is the sole PR opener FOR HOOKED developers. The gap is UNHOOKED teammates who push + open a PR in the
-# GitHub web UI — nothing local stops them. This required check closes that gap: wp-finish-upsert-pr writes
-# HMAC(prGate.gateSalt, HEAD_sha) into the PR body, and this job recomputes it from the committed salt and
-# the PR head sha. A PR opened outside the gated flow carries no valid token and fails here.
+# WHY: locally, pr-creation-or-push-guard blocks direct PR/push commands. The automated finish command and
+# the interactive, human-only wp-human-post-pr escape hatch both write HMAC(prGate.gateSalt, HEAD_sha) into
+# the PR body; the visible body identifies which path ran. This job verifies that current-head token.
 #
 # TO ENABLE (client repo):
 #   1. Copy this file to .github/workflows/webpieces-pr-gate.yml and commit it.
@@ -30,33 +28,33 @@
 
 name: Webpieces PR Gate
 on:
-  pull_request:
-    # `synchronize` is the primary trigger and catches an unhooked teammate pushing over a gated PR. The
-    # gated flow pushes exactly ONCE per cycle (from wp-finish-upsert-pr, after the PR body is written),
-    # so the synchronize run always reads the correct token.
-    #
-    # `edited` is the BODY-TAMPER guard: the token lives in the PR body, so an edit that strips it must
-    # re-run this check rather than leave a stale green. Keep it. Note it fires on wp-finish's body write,
-    # a beat BEFORE that push — so its run can briefly resolve the OLD head sha and go red. Harmless: that
-    # red is keyed to a sha that is no longer the PR head, and branch protection evaluates the current
-    # head, where the synchronize run lands green.
-    types: [opened, edited, synchronize, reopened]
+    pull_request:
+        # `synchronize` is the primary trigger and catches an unhooked teammate pushing over a gated PR. The
+        # supported posting flows push exactly ONCE per cycle, after an existing PR body is written,
+        # so the synchronize run always reads the correct token.
+        #
+        # `edited` is the BODY-TAMPER guard: the token lives in the PR body, so an edit that strips it must
+        # re-run this check rather than leave a stale green. Keep it. Note it fires on wp-finish's body write,
+        # a beat BEFORE that push — so its run can briefly resolve the OLD head sha and go red. Harmless: that
+        # red is keyed to a sha that is no longer the PR head, and branch protection evaluates the current
+        # head, where the synchronize run lands green.
+        types: [opened, edited, synchronize, reopened]
 permissions:
-  contents: read
-  pull-requests: read
+    contents: read
+    pull-requests: read
 jobs:
-  webpieces-pr-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Verify webpieces gate token
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WP_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm wp-check-pr
+    webpieces-pr-gate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Verify webpieces gate token
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  WP_PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: pnpm wp-check-pr

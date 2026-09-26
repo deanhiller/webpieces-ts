@@ -37,8 +37,8 @@ export class ChecklistResult {
     agent: string;
     model: string;
     id: string;
-    status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
-    output: string;    // what the reviewer found; printed verbatim when the checklist fails
+    status: string; // one of VERDICT_STATUSES; anything else is reported via `problem`
+    output: string; // what the reviewer found; printed verbatim when the checklist fails
     // The HUMAN's authorization loaded from `override-<id>.json` beside this verdict, or null when there is
     // none. Loaded alongside the verdict so `resolveVerdict` needs no second read of disk and every command
     // resolves the same outcome from the same bytes.
@@ -52,7 +52,15 @@ export class ChecklistResult {
     remediation: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agent: string, model: string, id: string, status: string, output: string, override: ChecklistOverride | null, problem = '') {
+    constructor(
+        agent: string,
+        model: string,
+        id: string,
+        status: string,
+        output: string,
+        override: ChecklistOverride | null,
+        problem = '',
+    ) {
         this.agent = agent;
         this.model = model;
         this.id = id;
@@ -74,9 +82,9 @@ export class ChecklistResult {
  * Whether the reviewer must actually run is the {@link RequiredChecklist.required} field below.
  */
 export class RequiredChecklist {
-    id: string;             // the checklist's name; keys review-<id>.json and its instructions file
+    id: string; // the checklist's name; keys review-<id>.json and its instructions file
     reviewer: ReviewerAgentPolicy; // the agent type to spawn (agentType the harness stamps) + the round cap
-    doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
+    doc: string; // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
     matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
     // Which of the checklist's OWN globs actually fired. Printed so a reviewer can judge how coarse the
     // match was — a precise `db/migrations/**` hit means something different from a blanket `**` — and the
@@ -89,7 +97,11 @@ export class RequiredChecklist {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
-        id: string, reviewer: ReviewerAgentPolicy, doc: string, matchedFiles: string[], matchedPatterns: string[] = [],
+        id: string,
+        reviewer: ReviewerAgentPolicy,
+        doc: string,
+        matchedFiles: string[],
+        matchedPatterns: string[] = [],
         // Defaulted to the BLOCKING value so any construction that forgets it fails closed — a test or a
         // future call site that silently produced an optional checklist would be a hole in the gate.
         required = true,
@@ -110,8 +122,8 @@ export class RequiredChecklist {
  * them over — so the printed block could not stand on its own. Data-only; empty = omit those lines.
  */
 export class ChecklistReviewContext {
-    baseSha: string;        // the 3-point merge-base sha
-    prContextPath: string;  // path of pr-context.json — the AUTHORITATIVE full changed-file set
+    baseSha: string; // the 3-point merge-base sha
+    prContextPath: string; // path of pr-context.json — the AUTHORITATIVE full changed-file set
     /**
      * The exact command that reproduces ONE file's diff, with a `-- <file>` tail — NOT assembled by the
      * caller. This used to be hardcoded as `git diff <baseSha> HEAD -- <file>`, which returns NOTHING on a
@@ -119,11 +131,17 @@ export class ChecklistReviewContext {
      * this string from the same range the file set came from.
      */
     fileDiffCommand: string;
-    diffDir: string;        // dir of the MATERIALIZED diff (diff/ALL.diff + diff/files/…); '' when not written
-    dirty: boolean;         // true ⇒ the range includes uncommitted + untracked work, and must be said out loud
+    diffDir: string; // dir of the MATERIALIZED diff (diff/ALL.diff + diff/files/…); '' when not written
+    dirty: boolean; // true ⇒ the range includes uncommitted + untracked work, and must be said out loud
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(baseSha = '', prContextPath = '', fileDiffCommand = '', diffDir = '', dirty = false) {
+    constructor(
+        baseSha = '',
+        prContextPath = '',
+        fileDiffCommand = '',
+        diffDir = '',
+        dirty = false,
+    ) {
         this.baseSha = baseSha;
         this.prContextPath = prContextPath;
         this.fileDiffCommand = fileDiffCommand;
@@ -132,9 +150,10 @@ export class ChecklistReviewContext {
     }
 }
 
-// The AI-authored PR summary (title, risk, summary). The AI writes summary.json itself between `wp-start-upsert-pr` (which
-// prints the schema) and `wp-finish-upsert-pr` (which reads it); reviewer subagents write the per-checklist
-// review-<id>.json files. Data-only (per CLAUDE.md).
+// The AI-authored PR summary (title, risk, summary). Normally the AI writes summary.json between
+// `wp-start-upsert-pr` (which prints the schema) and `wp-finish-upsert-pr` (which reads it), while reviewer
+// subagents write review-<id>.json. The human-only `wp-human-post-pr` escape hatch also requires and reads
+// this same summary shape, but deliberately skips reviewer verdicts. Data-only (per CLAUDE.md).
 export class PrSummary {
     agent: string;
     model: string;
@@ -150,7 +169,9 @@ export class PrSummary {
     mainAgentInstructions: string; // non-empty only for the opt-in single-round experiment
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agent: string, model: string,
+    constructor(
+        agent: string,
+        model: string,
         title: string,
         riskScore: number,
         riskLevel: string,
@@ -204,7 +225,7 @@ export class ChecklistVerdict {
 // reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
 // coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.
 export class PrContext {
-    base: string;          // the 3-point merge-base sha the gate diffs against
+    base: string; // the 3-point merge-base sha the gate diffs against
     /**
      * The real HEAD sha. This was once the literal string 'HEAD', which is not a fact — it cannot be
      * compared later to detect that the tree moved under a review, and it reads as a range that was never
@@ -212,11 +233,11 @@ export class PrContext {
      */
     head: string;
     changedFiles: string[]; // every file changed in the range (NOT tsOnly — includes .sql/.gql/Dockerfile/…)
-    dirty: boolean;         // true ⇒ changedFiles includes uncommitted + untracked work
-    dirtyFiles: string[];   // exactly which paths are uncommitted/untracked — why `dirty` is true
-    diffCommand: string;    // the command that reproduces the WHOLE diff (see DiffBasis; correct when dirty)
-    diffDir: string;        // dir holding the materialized per-file diffs + ALL.diff; '' when not materialized
-    generatedAt: string;    // ISO timestamp, so a stale context is detectable rather than silently trusted
+    dirty: boolean; // true ⇒ changedFiles includes uncommitted + untracked work
+    dirtyFiles: string[]; // exactly which paths are uncommitted/untracked — why `dirty` is true
+    diffCommand: string; // the command that reproduces the WHOLE diff (see DiffBasis; correct when dirty)
+    diffDir: string; // dir holding the materialized per-file diffs + ALL.diff; '' when not materialized
+    generatedAt: string; // ISO timestamp, so a stale context is detectable rather than silently trusted
     /**
      * Main's head as this clone last saw it — the THIRD hash point, matching the trio the 3-point merge
      * records in `merge-info/<branch>/updatemain-hashes.json`. `base`/`head` above are points A and B
@@ -230,8 +251,14 @@ export class PrContext {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
-        base: string, head: string, changedFiles: string[],
-        dirty = false, dirtyFiles: string[] = [], diffCommand = '', diffDir = '', generatedAt = '',
+        base: string,
+        head: string,
+        changedFiles: string[],
+        dirty = false,
+        dirtyFiles: string[] = [],
+        diffCommand = '',
+        diffDir = '',
+        generatedAt = '',
         hashMainHead = '',
     ) {
         this.hashMainHead = hashMainHead;

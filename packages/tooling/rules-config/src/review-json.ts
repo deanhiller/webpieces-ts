@@ -62,7 +62,7 @@ const ARCHIVE_NOTE =
     'ARCHIVE — this is the PR summary from the PREVIOUS wp-finish-upsert-pr run on this branch, kept for audit ' +
     'purposes only. It is NOT the summary for a new round: it describes the code as of the last PR ' +
     'update, which has since moved. If you are updating the PR again, write a FRESH summary.json at the path ' +
-    'pnpm wp-review-upsert-pr prints; do not copy this file\'s title, summary or risk level forward without ' +
+    "pnpm wp-review-upsert-pr prints; do not copy this file's title, summary or risk level forward without " +
     're-deciding each one. Overwritten by every finish, so only the most recent summary is ever here.';
 
 // The same stamp, for a retired per-checklist verdict. Verdict files get their OWN wording because the two
@@ -235,11 +235,10 @@ export class ReviewJsonService {
      * turns a bare "not found" — which reads as data loss, and invites hunting for the file — into the fact:
      * the last finish consumed it, and the archive is audit material, not a summary to reuse.
      */
-    private archivedSummaryHint(filePath: string): string {
+    private archivedSummaryHint(filePath: string, retryCommand: string): string {
         const archive = this.oldSummaryJsonPath(filePath);
         if (!fs.existsSync(archive)) return '';
-        return `\nA PREVIOUS PR summary was archived to ${archive} when the last pnpm wp-finish-upsert-pr consumed it.\n` +
-            `That file is for AUDIT ONLY — it describes code this branch has since moved past. Write a fresh one:`;
+        return `\nA PREVIOUS PR summary was archived to ${archive} when the last ${retryCommand} consumed it.\n` + `That file is for AUDIT ONLY — it describes code this branch has since moved past. Write a fresh one:`;
     }
 
     // Names summary.json when the author wrote its OLD name (review.json until #1033 — refused by Claude
@@ -247,8 +246,7 @@ export class ReviewJsonService {
     private renamedFileHint(filePath: string): string {
         const stale = path.join(path.dirname(filePath), 'review.json');
         if (!fs.existsSync(stale)) return '';
-        return `\n${stale} is IGNORED — the author's file was renamed to summary.json. ` +
-            `Write the same JSON to ${filePath} instead.`;
+        return `\n${stale} is IGNORED — the author's file was renamed to summary.json. ` + `Write the same JSON to ${filePath} instead.`;
     }
 
     // The per-checklist review file path that sits beside summary.json: review-<id>.json.
@@ -304,19 +302,9 @@ export class ReviewJsonService {
     loadSummaryJson(
         filePath: string, required: readonly RequiredChecklist[] = [], expectedMainAgentInstructions = '',
         remediations: Record<string, string> = {},
+        retryCommand = 'pnpm wp-finish-upsert-pr',
     ): PrSummary {
-        if (!fs.existsSync(filePath)) {
-            throw new InformAiError(
-                `Required summary.json not found.${this.renamedFileHint(filePath)}${this.archivedSummaryHint(filePath)}\n\n` +
-                `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
-                `Then re-run: pnpm wp-finish-upsert-pr`,
-            );
-        }
-        const raw = this.parseSummaryJson(fs.readFileSync(filePath, 'utf8'), filePath, expectedMainAgentInstructions);
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-            throw new InformAiError(
-                `summary.json must be a JSON object.\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
-        }
+        const raw = this.readSummaryObject(filePath, expectedMainAgentInstructions, retryCommand);
         const errors: string[] = [];
         for (const field of ['agent', 'model']) {
             if (typeof raw[field] !== 'string' || raw[field].trim() === '') {
@@ -328,7 +316,7 @@ export class ReviewJsonService {
             errors.push(`"riskScore" must be a number 0–100, got ${JSON.stringify(riskScore)}.`);
         }
         const riskLevel = raw['riskLevel'];
-        if (typeof riskLevel !== 'string' || !RISK_LEVELS.includes(riskLevel as typeof RISK_LEVELS[number])) {
+        if (typeof riskLevel !== 'string' || !RISK_LEVELS.includes(riskLevel as (typeof RISK_LEVELS)[number])) {
             errors.push(`"riskLevel" must be one of: ${RISK_LEVELS.join(', ')}.`);
         }
         const title = typeof raw['title'] === 'string' ? (raw['title'] as string).trim() : '';
@@ -341,40 +329,44 @@ export class ReviewJsonService {
         for (const result of results) result.remediation = remediations[result.id] ?? '';
         for (const err of this.requiredChecklistErrors(required, results, filePath)) errors.push(err);
 
-        if (errors.length > 0) {
-            throw new InformAiError(
-                `summary.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
-                errors.map((e: string): string => `  • ${e}`).join('\n') +
-                `\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`,
-            );
-        }
+        this.assertValidSummary(errors, filePath, expectedMainAgentInstructions, retryCommand);
 
         const level = riskLevel as string;
-        const emoji = typeof raw['riskEmoji'] === 'string' && raw['riskEmoji'] !== ''
-            ? (raw['riskEmoji'] as string)
-            : (EMOJI_FOR_LEVEL[level] ?? '🟡');
+        const emoji = typeof raw['riskEmoji'] === 'string' && raw['riskEmoji'] !== '' ? (raw['riskEmoji'] as string) : (EMOJI_FOR_LEVEL[level] ?? '🟡');
         const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
 
-        return new PrSummary((raw['agent'] as string).trim(), (raw['model'] as string).trim(),
-            title,
-            riskScore as number,
-            level,
-            emoji,
-            summary,
-            this.asStringArray(raw['violations']),
-            this.asStringArray(raw['risks']),
-            this.asStringArray(raw['filesToReview']),
-            results,
-            mainAgentInstructions,
-        );
+        return new PrSummary((raw['agent'] as string).trim(), (raw['model'] as string).trim(), title, riskScore as number, level, emoji, summary, this.asStringArray(raw['violations']), this.asStringArray(raw['risks']), this.asStringArray(raw['filesToReview']), results, mainAgentInstructions);
+    }
+
+    private assertValidSummary(errors: string[], filePath: string, expectedMainAgentInstructions: string, retryCommand: string): void {
+        if (errors.length === 0) return;
+        throw new InformAiError(`summary.json has ${errors.length} error(s) — fix ALL, then re-run ${retryCommand}:\n\n` + errors.map((e: string): string => `  • ${e}`).join('\n') + `\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
+    }
+
+    /** Load the raw object and render every parse/shape error for the command that called us. */
+    private readSummaryObject(
+        filePath: string,
+        expectedMainAgentInstructions: string,
+        retryCommand: string,
+        // webpieces-disable-next-line no-any-unknown -- opaque JSON is narrowed field-by-field by loadSummaryJson
+    ): Record<string, unknown> {
+        if (!fs.existsSync(filePath)) {
+            throw new InformAiError(`Required summary.json not found.${this.renamedFileHint(filePath)}${this.archivedSummaryHint(filePath, retryCommand)}\n\n` + `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` + `Then re-run: ${retryCommand}`);
+        }
+        const raw = this.parseSummaryJson(fs.readFileSync(filePath, 'utf8'), filePath, expectedMainAgentInstructions, retryCommand);
+        if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw;
+        throw new InformAiError(`summary.json must be a JSON object.\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}` + `\n\nThen re-run: ${retryCommand}`);
     }
 
     // webpieces-disable no-any-unknown -- AI-authored JSON boundary is validated before use
-    private validateMainAgentInstructions(raw: Record<string, unknown>, expected: string, errors: string[]): string {
-        const actual = typeof raw['main_agent_instructions'] === 'string'
-            ? (raw['main_agent_instructions'] as string).trim() : '';
-        if (expected !== '' && actual !== expected)
-            errors.push('"main_agent_instructions" must exactly preserve the single-round instructions printed by stage ②.');
+    private validateMainAgentInstructions(
+        // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence below
+        raw: Record<string, unknown>,
+        expected: string,
+        errors: string[],
+    ): string {
+        const actual = typeof raw['main_agent_instructions'] === 'string' ? (raw['main_agent_instructions'] as string).trim() : '';
+        if (expected !== '' && actual !== expected) errors.push('"main_agent_instructions" must exactly preserve the single-round instructions printed by stage ②.');
         return actual;
     }
 
@@ -407,8 +399,7 @@ export class ReviewJsonService {
      * command that gates and the dashboard that reports cannot disagree about which checklists were skipped.
      */
     optionalWithoutVerdict(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
-        return required.filter((req: RequiredChecklist): boolean =>
-            !req.required && this.resolveVerdict(req, results).status === CK_MISSING);
+        return required.filter((req: RequiredChecklist): boolean => !req.required && this.resolveVerdict(req, results).status === CK_MISSING);
     }
 
     /**
@@ -423,8 +414,7 @@ export class ReviewJsonService {
      * actual finding was never shown to anyone. A refusal is a RESULT, not a missing step.
      */
     refusedChecklists(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
-        return required.filter((req: RequiredChecklist): boolean =>
-            this.resolveVerdict(req, results).status === CK_FAIL);
+        return required.filter((req: RequiredChecklist): boolean => this.resolveVerdict(req, results).status === CK_FAIL);
     }
 
     /**
@@ -451,13 +441,14 @@ export class ReviewJsonService {
     refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, summaryJsonFilePath: string, archivedPath = ''): string {
         const finding = `${verdict.detail.split('\n').join('\n      ')}\n`;
         const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.reviewer.agentName}) wrote:\n      ` + finding;
-        const retired = archivedPath === ''
-            ? '      Fix it, then re-run.\n'
-            // Re-spawning is said only after the finding, because an instruction to spawn a subagent is the
-            // one line an AI acts on first — see refusedChecklists for what that cost.
-            : `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
-              `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
-              `"${req.reviewer.agentName}" subagent review again and write a new verdict.\n`;
+        const retired =
+            archivedPath === ''
+                ? '      Fix it, then re-run.\n'
+                : // Re-spawning is said only after the finding, because an instruction to spawn a subagent is the
+                  // one line an AI acts on first — see refusedChecklists for what that cost.
+                  `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
+                  `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
+                  `"${req.reviewer.agentName}" subagent review again and write a new verdict.\n`;
         return head + retired + this.overrideRoute(req, summaryJsonFilePath);
     }
 
@@ -469,11 +460,13 @@ export class ReviewJsonService {
      * command that had since been deleted.
      */
     private overrideRoute(req: RequiredChecklist, summaryJsonFilePath: string): string {
-        return `      To SHIP ANYWAY a human must decide it, and the decision is recorded in its own file — `
-            + `${this.overrides.overrideFileName(req.id)}, never inside the reviewer's verdict.\n`
-            + `      ${this.overrides.writerRule()}\n`
-            + '      Run exactly this, replacing only the "reason" with what the human actually said:\n\n'
-            + `${this.overrides.writeCommand(summaryJsonFilePath, req.id)}\n`;
+        return (
+            `      To SHIP ANYWAY a human must decide it, and the decision is recorded in its own file — ` +
+            `${this.overrides.overrideFileName(req.id)}, never inside the reviewer's verdict.\n` +
+            `      ${this.overrides.writerRule()}\n` +
+            '      Run exactly this, replacing only the "reason" with what the human actually said:\n\n' +
+            `${this.overrides.writeCommand(summaryJsonFilePath, req.id)}\n`
+        );
     }
 
     // Read the per-checklist verdict files `review-<id>.json` beside summary.json — one per matched checklist.
@@ -535,9 +528,7 @@ export class ReviewJsonService {
 
     // Every matched checklist whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
     // review-<id>.json written) → one error each, printing the reviewer's `output` verbatim.
-    private requiredChecklistErrors(
-        required: readonly RequiredChecklist[], results: readonly ChecklistResult[], filePath: string,
-    ): string[] {
+    private requiredChecklistErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[], filePath: string): string[] {
         // Format complaints come from the ONE renderer, so wp-review-upsert-pr and wp-finish word them identically.
         const errors: string[] = this.checklistFormatErrors(required, results);
         for (const req of required) {
@@ -555,10 +546,7 @@ export class ReviewJsonService {
                 // exemption: once an optional reviewer RUNS, its refusal counts.
                 if (!req.required) continue;
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
-                errors.push(
-                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.reviewer.agentName}" subagent to review it; ` +
-                    `IT submits the verdict with ${this.submitCommand(req.id)} — nobody writes ${this.checklistFileName(req.id)} by hand.${doc}`,
-                );
+                errors.push(`Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.reviewer.agentName}" subagent to review it; ` + `IT submits the verdict with ${this.submitCommand(req.id)} — nobody writes ${this.checklistFileName(req.id)} by hand.${doc}`);
             }
         }
         return errors;
@@ -601,10 +589,8 @@ export class ReviewJsonService {
             const status = typeof raw['status'] === 'string' ? (raw['status'] as string).trim().toLowerCase() : '';
             const agent = typeof raw['agent'] === 'string' ? raw['agent'].trim() : '';
             const model = typeof raw['model'] === 'string' ? raw['model'].trim() : '';
-            const identityProblem = agent === '' || model === ''
-                ? 'Both "agent" and "model" must be non-empty strings; use "unknown" when unavailable.' : '';
-            return new ChecklistResult(agent, model, id, status, output, override,
-                this.verdictProblem(filePath, id, status, raw) || identityProblem);
+            const identityProblem = agent === '' || model === '' ? 'Both "agent" and "model" must be non-empty strings; use "unknown" when unavailable.' : '';
+            return new ChecklistResult(agent, model, id, status, output, override, this.verdictProblem(filePath, id, status, raw) || identityProblem);
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -624,26 +610,31 @@ export class ReviewJsonService {
      * The legacy-`success` case keeps its OWN message for the same reason: `success` was removed outright
      * (no compatibility mode), and a reviewer cannot tell a wrong value from a field that no longer exists.
      */
-    // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence here
-    private verdictProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
+    private verdictProblem(
+        filePath: string,
+        id: string,
+        status: string,
+        // webpieces-disable-next-line no-any-unknown -- opaque parsed JSON; only tested for key presence here
+        raw: Record<string, unknown>,
+    ): string {
         // The ONE renderer — see renderVerdictSchema. A second copy here is what let the old `success` shape
         // survive in print after it was removed from the parser.
         const shape = this.renderVerdictSchema(id);
         if ('override' in raw) {
-            return `Checklist "${id}" wrote its verdict with the MOVED "override" field. A ship-anyway `
-                + 'authorization is no longer part of a reviewer\'s verdict: it MOVED to its own file, '
-                + `${this.overrides.overrideFileName(id)}, which only the coordinating agent writes and only on a `
-                + 'human\'s in-session instruction. There is no compatibility mode — DELETE the "override" key from '
-                + `${filePath} by resubmitting it:\n${shape}`;
+            return (
+                `Checklist "${id}" wrote its verdict with the MOVED "override" field. A ship-anyway ` +
+                "authorization is no longer part of a reviewer's verdict: it MOVED to its own file, " +
+                `${this.overrides.overrideFileName(id)}, which only the coordinating agent writes and only on a ` +
+                'human\'s in-session instruction. There is no compatibility mode — DELETE the "override" key from ' +
+                `${filePath} by resubmitting it:\n${shape}`
+            );
         }
         // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
         if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
         if ('success' in raw) {
-            return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` +
-                `"status" — there is no compatibility mode. Resubmit it as:\n${shape}`;
+            return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` + `"status" — there is no compatibility mode. Resubmit it as:\n${shape}`;
         }
-        return `Checklist "${id}" wrote a verdict with no valid "status" (got ${JSON.stringify(status)}). ` +
-            `It must be exactly one of ${VERDICT_STATUSES.join(', ')}:\n${shape}`;
+        return `Checklist "${id}" wrote a verdict with no valid "status" (got ${JSON.stringify(status)}). ` + `It must be exactly one of ${VERDICT_STATUSES.join(', ')}:\n${shape}`;
     }
 
     // webpieces-disable no-any-unknown -- opaque parsed JSON value, narrowed to string[] here
@@ -655,9 +646,7 @@ export class ReviewJsonService {
 
     // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError.
     // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadSummaryJson narrows each field
-    private parseSummaryJson(
-        raw: string, filePath: string, expectedMainAgentInstructions = '',
-    ): Record<string, unknown> {
+    private parseSummaryJson(raw: string, filePath: string, expectedMainAgentInstructions = '', retryCommand = 'pnpm wp-finish-upsert-pr'): Record<string, unknown> {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: convert JSON.parse SyntaxError to an InformAiError for the AI
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -665,11 +654,7 @@ export class ReviewJsonService {
             return JSON.parse(raw) as Record<string, unknown>;
         } catch (err: unknown) {
             const error = toError(err);
-            throw new InformAiError(
-                `summary.json is not valid JSON (${error.message}).\n\n` +
-                `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` +
-                `Then re-run: pnpm wp-finish-upsert-pr`,
-            );
+            throw new InformAiError(`summary.json is not valid JSON (${error.message}).\n\n` + `${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}\n\n` + `Then re-run: ${retryCommand}`);
         }
     }
 }
