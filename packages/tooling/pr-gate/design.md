@@ -96,6 +96,7 @@ graph TD
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
+    ReviewRoundStateService["ReviewRoundStateService"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
     ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
@@ -118,6 +119,7 @@ graph TD
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
     WriteReviewCommand["WriteReviewCommand"]
+    WriteReviewFixesCommand["WriteReviewFixesCommand"]
     ActiveHatchReport --> ConfigFile
     AiBranchName --> BranchNaming
     AwaitChecksCommand --> AwaitLoop
@@ -208,6 +210,7 @@ graph TD
     FinishUpsertPrCommand --> ProvenanceEnforcer
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
+    FinishUpsertPrCommand --> ReviewRoundStateService
     FinishUpsertPrCommand --> ReviewStageReceiptService
     FinishUpsertPrCommand --> ReviewerVerdictGate
     FinishUpsertPrCommand --> SquashSettingsEnforcer
@@ -290,6 +293,7 @@ graph TD
     PrGateApp --> StartUpsertPrCommand
     PrGateApp --> SyncMainCommand
     PrGateApp --> WriteReviewCommand
+    PrGateApp --> WriteReviewFixesCommand
     ProvenanceEnforcer --> AiBranchName
     ProvenanceEnforcer --> ReviewJsonService
     ProvenanceEnforcer --> ReviewProvenanceService
@@ -316,6 +320,9 @@ graph TD
     ReviewReport --> ChecklistInstructionsService
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewerInstructionsService
+    ReviewRoundStateService --> AtomicFile
+    ReviewRoundStateService --> ReviewJsonService
+    ReviewRoundStateService --> VerdictProvenanceService
     ReviewStageReceiptService --> ReviewJsonService
     ReviewUpsertPrCommand --> ActiveHatchReport
     ReviewUpsertPrCommand --> AiBranchName
@@ -332,6 +339,7 @@ graph TD
     ReviewUpsertPrCommand --> RepoRootFinder
     ReviewUpsertPrCommand --> ReviewJsonService
     ReviewUpsertPrCommand --> ReviewReport
+    ReviewUpsertPrCommand --> ReviewRoundStateService
     ReviewUpsertPrCommand --> ReviewStageReceiptService
     ReviewUpsertPrCommand --> ReviewerBriefingBuilder
     ReviewUpsertPrCommand --> ReviewerInstructionsService
@@ -377,9 +385,14 @@ graph TD
     WorktreeReaper --> WorktreeService
     WriteReviewCommand --> AiBranchName
     WriteReviewCommand --> RepoRootFinder
+    WriteReviewCommand --> ReviewRoundStateService
     WriteReviewCommand --> ReviewStageReceiptService
     WriteReviewCommand --> ReviewerIdentityResolver
     WriteReviewCommand --> VerdictProvenanceService
+    WriteReviewFixesCommand --> AiBranchName
+    WriteReviewFixesCommand --> RepoRootFinder
+    WriteReviewFixesCommand --> ReviewRoundStateService
+    WriteReviewFixesCommand --> ReviewStageReceiptService
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

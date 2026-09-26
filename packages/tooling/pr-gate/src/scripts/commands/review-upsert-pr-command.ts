@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService, BranchIdentity, summaryJsonPath } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
@@ -18,6 +19,9 @@ import { RefusedReviewer, ReviewReport, ReviewReportInput } from '../workflow/re
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { StageOutputLog, REVIEW_CONSOLE_LOG } from '../workflow/stage-output-log';
 import { HotfixInstructions } from '../workflow/hotfix-instructions';
+import {
+    ReviewRoundPlan, ReviewRoundStateService, ROUND_ACTION_REVIEW, ROUND_ACTION_RESUME,
+} from '../workflow/review-round-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -83,6 +87,7 @@ export class ReviewUpsertPrCommand {
         private readonly stageConsole: StageOutputLog,
         private readonly branchIdentity: BranchIdentity,
         private readonly hotfixInstructions: HotfixInstructions,
+        private readonly rounds: ReviewRoundStateService,
     ) {}
 
     /**
@@ -118,20 +123,23 @@ export class ReviewUpsertPrCommand {
 
         const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, '')); // '' — THIS command writes the context itself, after materializing
         const previousReceipt = this.receipts.read(repoRoot, featureName);
-        const singleRoundReviewers = previousReceipt?.reviewersBriefed ?? [];
-        const singleRoundRepeat = scan.singleRoundReview && singleRoundReviewers.length > 0;
-        // A second stage-② invocation in single-round mode must not create a fresh launch surface. The
-        // original generated instructions stay on disk; this run only refreshes the build receipt and gives
-        // the caller one explicit next action: finish.
-        const briefings = singleRoundRepeat ? [] : this.briefReviewers(repoRoot, featureName, scan, config);
-        const recordedReviewers = singleRoundRepeat ? singleRoundReviewers : briefings.map((b: ReviewerBriefing): string => b.checklistId);
-        const receipt = new ReviewStageReceipt(scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt, recordedReviewers);
-        // The hashes `wp-write-review` stamps into each verdict's provenance — what its reviewer was briefed
-        // on. A single-round repeat briefs nobody, so it keeps the round's original hashes with its reviewers.
-        receipt.scopeHashes = singleRoundRepeat ? (previousReceipt?.scopeHashes ?? {}) : scan.scopeHashes;
-        this.receipts.write(repoRoot, featureName, receipt);
+        const plan = this.rounds.plan(repoRoot, scan.summaryPath, previousReceipt, config.maxReviewerRounds, scan.basis);
+        const shouldBrief = plan.action === ROUND_ACTION_REVIEW || plan.action === ROUND_ACTION_RESUME;
+        const briefings = shouldBrief
+            ? this.briefReviewers(repoRoot, featureName, scan, config, plan)
+            : [];
+        const recordedReviewers = briefings.map((b: ReviewerBriefing): string => b.checklistId);
+        if (shouldBrief) {
+            const receipt = new ReviewStageReceipt(scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt, recordedReviewers);
+            receipt.scopeHashes = scan.scopeHashes;
+            // A global round begins only when a non-empty fixed roster is actually briefed.
+            receipt.round = recordedReviewers.length === 0 ? 0 : plan.round;
+            receipt.maxReviewerRounds = plan.maxRounds;
+            receipt.remediationFromHead = plan.round > 1 ? plan.basis.base : '';
+            this.receipts.write(repoRoot, featureName, receipt);
+        }
         this.reportActiveHatches(repoRoot);
-        this.report(repoRoot, featureName, scan, briefings, opts, singleRoundRepeat, recordedReviewers, config);
+        this.report(repoRoot, featureName, scan, briefings, opts, plan, config);
     }
 
     /**
@@ -191,15 +199,16 @@ export class ReviewUpsertPrCommand {
      * The changed-file set and the basis both come off the SCAN rather than being recomputed, so the diff a
      * reviewer reads covers exactly the files its checklist matched against.
      */
-    private briefReviewers(repoRoot: string, featureName: string, scan: ChecklistScan, config: PrGateConfig): ReviewerBriefing[] {
-        if (scan.basis.unresolved) return [];
-        const manifest = this.materializer.materialize(repoRoot, featureName, scan.basis, scan.changedFiles, config.reviewDiffExclude);
+    private briefReviewers(repoRoot: string, featureName: string, scan: ChecklistScan, config: PrGateConfig, plan: ReviewRoundPlan): ReviewerBriefing[] {
+        if (plan.basis.unresolved) return [];
+        const changedFiles = plan.round > 1 ? plan.changedFiles : scan.changedFiles;
+        const manifest = this.materializer.materialize(repoRoot, featureName, plan.basis, changedFiles, config.reviewDiffExclude);
         const diffDir = this.materializer.diffDirFor(repoRoot, featureName);
         // Write pr-context.json ONCE, here — after materializing, so `diffDir` is populated on the first
         // write. The scan deliberately did not write it (ChecklistScanOptions.contextStage === ''); it used
         // to, which meant this command wrote the same file twice, the first time with an empty diffDir.
         // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
-        scan.context = this.prContextWriter.ensure(repoRoot, featureName, scan.basis, 'stage2-review', scan.changedFiles, diffDir);
+        scan.context = this.prContextWriter.ensure(repoRoot, featureName, plan.basis, 'stage2-review', changedFiles, diffDir);
         // ONLY the checklists still owed a verdict (issue #863). A green or yellow whose in-scope diff is
         // unchanged since it was submitted CARRIES — the scan left it in `reviewed` — so briefing it again
         // would pay a reviewer to re-read code it already judged. Red, stale and never-run are briefed.
@@ -210,6 +219,13 @@ export class ReviewUpsertPrCommand {
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
         fs.mkdirSync(dir, { recursive: true });
         for (const b of briefings) {
+            b.round = plan.round;
+            b.maxRounds = plan.maxRounds;
+            b.remediationOnly = plan.round > 1;
+            if (b.remediationOnly) {
+                b.previousVerdictPath = path.join(this.rounds.roundDir(scan.summaryPath, plan.round - 1), `review-${b.checklistId}.json`);
+                b.remediationPath = this.rounds.remediationPath(scan.summaryPath, plan.round - 1);
+            }
             fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.checklistId), this.reviewerInstructions.render(b));
         }
         return briefings;
@@ -224,7 +240,7 @@ export class ReviewUpsertPrCommand {
      * obeyed the first line and posted a PR with no review at all.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[], opts: ReviewUpsertPrOptions, singleRoundRepeat: boolean, singleRoundReviewers: readonly string[], config: PrGateConfig): void {
+    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[], opts: ReviewUpsertPrOptions, plan: ReviewRoundPlan, config: PrGateConfig): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.summaryPath);
         input.definedCount = scan.defined.length;
         input.applicableCount = scan.applicable.length;
@@ -240,9 +256,10 @@ export class ReviewUpsertPrCommand {
         // was reviewed. See ChecklistScanner.
         input.reviewersSuppressed = scan.reviewersDisabled;
         input.suppressed = scan.suppressed.slice();
-        input.singleRoundReview = scan.singleRoundReview;
-        input.singleRoundRepeat = singleRoundRepeat;
-        input.singleRoundReviewers = singleRoundReviewers.slice();
+        input.round = plan.round;
+        input.maxReviewerRounds = plan.maxRounds;
+        input.roundAction = plan.action;
+        input.redChecklistIds = plan.redChecklistIds.slice();
         input.standings = scan.standings.slice();
         // `say`: this block IS the next action — which reviewers to spawn, where summary.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and

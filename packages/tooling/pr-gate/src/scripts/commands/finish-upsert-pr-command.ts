@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, BranchIdentity } from '@webpieces/rules-config';
+import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError, BranchIdentity } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -12,6 +12,7 @@ import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { BuildGateLog, FINISH_STAGE, REVIEW_STAGE } from '../workflow/build-gate-log';
 import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
+import { ReviewRoundStateService } from '../workflow/review-round-state';
 import { StageOutputLog, FINISH_CONSOLE_LOG } from '../workflow/stage-output-log';
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
@@ -143,6 +144,7 @@ export class FinishUpsertPrCommand {
         private readonly stageConsole: StageOutputLog,
         private readonly branchIdentity: BranchIdentity,
         private readonly hotfixFinish: HotfixFinishPreparer,
+        private readonly rounds: ReviewRoundStateService,
     ) {}
 
     /**
@@ -177,7 +179,12 @@ export class FinishUpsertPrCommand {
         // applicable set for free — an unchanged checklist needs no re-review, a newly-applicable one refuses
         // until its file is written.
         const featureName = this.aiBranchName.getFeatureName();
-        const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
+        const config = loadAndValidate(repoRoot).prGate;
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
+        const receipt = this.receipts.read(repoRoot, featureName);
+        const remediations = this.rounds.capRemediations(repoRoot, scan.summaryPath, receipt, config.maxReviewerRounds);
+        for (const result of scan.results) result.remediation = remediations[result.id] ?? '';
+        scan.outstanding = scan.outstanding.filter((req: RequiredChecklist): boolean => remediations[req.id] === undefined);
         const required = scan.applicable;
         // The applicable checklists that are supposed to HAVE a verdict — everything except the optional ones
         // nobody ran. Used for provenance and for the dashboard rows, both of which ask "who reviewed this?"
@@ -190,13 +197,14 @@ export class FinishUpsertPrCommand {
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
         // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, scan.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
+        const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, '', remediations);
+        this.applyRoundAudits(review, scan, receipt);
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a real reviewer
         //     SUBAGENT actually ran on this branch — the coding agent may not self-certify. Its NAME is not
         //     checked; see SubagentProvenanceService.isReviewerRun. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
+        const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, config);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -219,6 +227,15 @@ export class FinishUpsertPrCommand {
         // not-done outcome carries the commands that fix it. Neither may end up only in a log file.
         this.stageConsole.say(this.banner.render(bannerInput));
         this.stageConsole.say(this.banner.linkDirective(bannerInput));
+    }
+
+    private applyRoundAudits(review: PrSummary, scan: ChecklistScan, receipt: ReturnType<ReviewStageReceiptService['read']>): void {
+        for (const result of review.results) {
+            const trail = this.rounds.auditTrail(scan.summaryPath, result.id, receipt);
+            if (trail === '') continue;
+            result.output = trail;
+            if (result.remediation !== '') result.remediation = `${trail}\n\n#### Final state\n${result.remediation}`;
+        }
     }
 
     /** Hotfix finish owns every prerequisite normally split between stages ② and ③. */

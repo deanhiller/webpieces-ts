@@ -19,12 +19,6 @@ export const VERDICT_YELLOW = 'yellow';
 export const VERDICT_RED = 'red';
 export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
 
-/** The durable instruction embedded in single-round summary.json files for the fixing/coordinating AI. */
-export const SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS =
-    'DO NOT RERUN this reviewer. If red, fix every finding and change each addressed red result to yellow; ' +
-    'yellow is acceptable. If you genuinely disagree, leave it red and flag the human for a decision BEFORE ' +
-    'posting the PR. A remaining red overrides any instruction to continue or land on main.';
-
 // The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<featureSlug>/review-<id>.json`, one per
 // matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
 // file. It records the OUTCOME:
@@ -54,6 +48,8 @@ export class ChecklistResult {
     // data rather than thrown so the complaint can be reported by BOTH wp-review-upsert-pr and
     // wp-finish-upsert-pr in identical words, and so a legacy file is never silently mistaken for a missing one.
     problem: string;
+    /** Non-empty only when a valid SHA-bound author remediation resolves this red after the round cap. */
+    remediation: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(agent: string, model: string, id: string, status: string, output: string, override: ChecklistOverride | null, problem = '') {
@@ -64,6 +60,7 @@ export class ChecklistResult {
         this.output = output;
         this.override = override;
         this.problem = problem;
+        this.remediation = '';
     }
 }
 
@@ -185,13 +182,14 @@ export class PrSummary {
 export const CK_PASS = 'pass';               // review-<id>.json status:'green'
 export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
 export const CK_OVERRIDDEN = 'overridden';   // status:'red' + a human's override-<id>.json → 🟠
+export const CK_REMEDIATED = 'remediated';   // red + valid author remediation after reviewer round cap → 🟠
 export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
 export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
 export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)
 
 export class ChecklistVerdict {
     id: string;
-    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
+    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_REMEDIATED | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
     detail: string; // reviewer output / override justification / format complaint (dashboard + errors)
 
     constructor(id: string, status: string, detail: string) {

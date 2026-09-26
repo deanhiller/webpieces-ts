@@ -193,6 +193,7 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
 export const REVIEWER_AGENT_NAME_KEY = 'reviewerAgentName';
 export const OVERRIDE_REVIEWER_AGENT_KEY = 'overrideReviewerAgent';
 export const REVIEWER_AGENTS_KEY = 'reviewerAgents';
+export const MAX_REVIEWER_ROUNDS_KEY = 'maxReviewerRounds';
 
 /**
  * `overrideReviewerAgent` (optional boolean, absent == false), `reviewerAgentName` (only with the override)
@@ -241,6 +242,7 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
     }
     const agentKeysValid = errors.length === 0;
     errors.push(...reviewerAgentsErrors(s));
+    errors.push(...maxReviewerRoundsErrors(s));
     // A disabled project never spawns this agent, so requiring its file would make `0` an incomplete opt-out.
     if (repoRoot !== undefined && agentKeysValid && s[REVIEWER_AGENTS_KEY] !== 0) {
         const agentName = override === true ? (name as string).trim() : DEFAULT_REVIEWER_AGENT_NAME;
@@ -248,6 +250,28 @@ export function validateReviewerAgentKeys(s: Record<string, unknown>, repoRoot?:
             repoRoot, new ReviewerAgentPolicy(agentName, REVIEWER_AGENTS_PLACEHOLDER)));
     }
     return errors;
+}
+
+/** `maxReviewerRounds`: required positive integer. Zero cannot describe an enabled or disabled policy. */
+// webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; one key is read
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function maxReviewerRoundsErrors(s: Record<string, unknown>): string[] {
+    const max = s[MAX_REVIEWER_ROUNDS_KEY];
+    if (!(MAX_REVIEWER_ROUNDS_KEY in s)) {
+        return [
+            `[pr-gate] Missing required field "${MAX_REVIEWER_ROUNDS_KEY}" — the maximum number of complete ` +
+            `reviewer cycles one PR review state may start. Add this line beside "${REVIEWER_AGENTS_KEY}":\n` +
+            `    "${MAX_REVIEWER_ROUNDS_KEY}": 2,\n` +
+            '  1 = one full review followed by author remediation with no re-review. 2 = one full review plus ' +
+            'one remediation-only re-review. There is deliberately no default: this repository owns the review budget.',
+        ];
+    }
+    if (!(typeof max === 'number' && Number.isInteger(max) && max > 0)) {
+        return [
+            `[pr-gate] "${MAX_REVIEWER_ROUNDS_KEY}" = ${JSON.stringify(max)} is not valid — it must be a positive integer.`,
+        ];
+    }
+    return [];
 }
 
 /**

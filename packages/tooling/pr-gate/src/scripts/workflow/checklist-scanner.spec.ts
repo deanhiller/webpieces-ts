@@ -72,14 +72,14 @@ function newForkPoint(): ForkPoint {
  * `turnOffAllReviewers: true` in it — which would empty every expectation below for a reason that has
  * nothing to do with the code under test. Every construction states the flag out loud instead.
  */
-function homeConfigWith(turnOffAllReviewers: boolean, singleRoundReview = false): HomeConfigService {
+function homeConfigWith(turnOffAllReviewers: boolean): HomeConfigService {
     const service = new HomeConfigService();
     vi.spyOn(service, 'load').mockReturnValue(
-        new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, turnOffAllReviewers, singleRoundReview));
+        new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, turnOffAllReviewers));
     return service;
 }
 
-function scannerFor(turnOffAllReviewers = false, singleRoundReview = false): ChecklistScanner {
+function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
     const diffScope = new DiffScope();
     const reviewJson = new ReviewJsonService();
     // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
@@ -88,7 +88,7 @@ function scannerFor(turnOffAllReviewers = false, singleRoundReview = false): Che
         newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
         new DiffBasisResolver(newForkPoint(), new GitStatusParser()),
         new PrContextWriter(diffScope, reviewJson), reviewJson,
-        homeConfigWith(turnOffAllReviewers, singleRoundReview),
+        homeConfigWith(turnOffAllReviewers),
         new ChecklistScopeHasher(new DiffMaterializer(reviewJson)),
         new VerdictProvenanceService(reviewJson, new AtomicFile()),
     );
@@ -107,18 +107,6 @@ function submitVerdict(dir: string, checklists: ChecklistDefinition[], id: strin
         scan.summaryPath, new SubmittedVerdict(id, status, 'claude', 'opus', output),
         new VerdictProvenance(id, 'claude-code', 'sess-1', 'agent-1', 'webpieces-reviewer', scan.basis.headSha, scan.scopeHashes[id] ?? ''));
 }
-
-describe('ChecklistScanner — single-round mode', () => {
-    it('carries the machine opt-in into the shared stage-②/stage-③ scan', () => {
-        const dir = repoOnBranch();
-        const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
-        fs.writeFileSync(path.join(dir, 'change.sql'), 'SELECT 1;\n');
-        expect(scannerFor(false, true).scan(
-            dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(true);
-        expect(scannerFor(false, false).scan(
-            dir, checklists, new ChecklistScanOptions(false)).singleRoundReview).toBe(false);
-    });
-});
 
 describe('ChecklistScanner — reviewerAgents zero project policy', () => {
     it('suppresses matched required reviews while preserving what matched', () => {
@@ -676,17 +664,4 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         expect(changed.outstanding.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
     });
 
-    it('under singleRoundReview, never goes stale and accepts ONLY the addressed-red → yellow edit', () => {
-        const dir = repoForRoster();
-        submitVerdict(dir, MIXED, 'db-reviewer', 'red', 'drops a column');
-        fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'ALTER TABLE a;\n');
-        fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
-            JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'yellow', output: 'drops a column' }));
-        const single = scannerFor(false, true).scan(dir, MIXED, new ChecklistScanOptions(true));
-        expect(standingOf(single.standings, 'db-reviewer')?.standing).toBe(STANDING_CURRENT);
-        expect(single.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
-        // The same edit outside single-round mode is a forgery.
-        const normal = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
-        expect(standingOf(normal.standings, 'db-reviewer')?.standing).toBe(STANDING_REJECTED);
-    });
 });

@@ -274,32 +274,31 @@ describe('reviewers still owed', () => {
     });
 });
 
-describe('singleRoundReview experiment', () => {
-    it('keeps the first invocation normal while embedding durable fixing instructions in summary.json', () => {
+describe('bounded reviewer rounds', () => {
+    it('prints the repository-owned global round budget on the first invocation', () => {
         const input = withOneOwedReviewer();
-        input.singleRoundReview = true;
+        input.round = 1;
+        input.maxReviewerRounds = 2;
         const text = report.render(input);
         expect(text).toContain('subagent_type: db-migration-reviewer');
-        expect(text).toContain('"main_agent_instructions"');
-        expect(text).toContain('DO NOT RERUN this reviewer');
-        expect(text).toContain('change each addressed red result to yellow');
-        expect(text).toContain('flag the human for a decision BEFORE posting the PR');
+        expect(text).toContain('GLOBAL REVIEW ROUND 1 OF 2');
     });
 
-    it('on a repeat invocation names no reviewer and directs the caller straight to finish', () => {
+    it('at the cap directs the coordinator to finish without another reviewer', () => {
         const input = withOneOwedReviewer();
-        input.singleRoundReview = true;
-        input.singleRoundRepeat = true;
-        input.singleRoundReviewers = ['db-migration-reviewer'];
+        input.round = 2;
+        input.maxReviewerRounds = 2;
+        input.roundAction = 'finish';
+        input.redChecklistIds = ['db-migration-reviewer'];
+        input.briefings = [];
         const text = report.render(input);
-        expect(text).toContain('SKIP reviews');
+        expect(text).toContain('NOT re-reviewed');
         expect(text).toContain('pnpm wp-finish-upsert-pr');
-        expect(text).toContain('DO NOT spawn or re-spawn any reviewer');
         expect(text).not.toContain('subagent_type:');
         expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
     });
 
-    it('leaves the default multi-round output unchanged', () => {
+    it('leaves the default review output intact', () => {
         const text = oneOwed();
         expect(text).toContain('subagent_type: db-migration-reviewer');
         expect(text).not.toContain('main_agent_instructions');

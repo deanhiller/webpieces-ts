@@ -13,7 +13,6 @@ import {
     VERDICT_YELLOW,
     VERDICT_RED,
     VERDICT_STATUSES,
-    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
@@ -21,6 +20,7 @@ import {
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
+    CK_REMEDIATED,
     CK_FAIL,
     CK_MISSING,
     CK_BAD_FORMAT,
@@ -35,7 +35,6 @@ export {
     VERDICT_YELLOW,
     VERDICT_RED,
     VERDICT_STATUSES,
-    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS,
     ChecklistResult,
     RequiredChecklist,
     ChecklistReviewContext,
@@ -43,6 +42,7 @@ export {
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
+    CK_REMEDIATED,
     CK_FAIL,
     CK_MISSING,
     CK_BAD_FORMAT,
@@ -303,6 +303,7 @@ export class ReviewJsonService {
     // webpieces-disable max-lines-new-methods -- one cohesive load+validate pass over the review fields
     loadSummaryJson(
         filePath: string, required: readonly RequiredChecklist[] = [], expectedMainAgentInstructions = '',
+        remediations: Record<string, string> = {},
     ): PrSummary {
         if (!fs.existsSync(filePath)) {
             throw new InformAiError(
@@ -316,24 +317,20 @@ export class ReviewJsonService {
             throw new InformAiError(
                 `summary.json must be a JSON object.\n\n${this.summaryJsonSchemaHint(filePath, expectedMainAgentInstructions)}`);
         }
-
         const errors: string[] = [];
         for (const field of ['agent', 'model']) {
             if (typeof raw[field] !== 'string' || raw[field].trim() === '') {
                 errors.push(`"${field}" must be a non-empty string; use "unknown" when unavailable.`);
             }
         }
-
         const riskScore = raw['riskScore'];
         if (typeof riskScore !== 'number' || !Number.isFinite(riskScore) || riskScore < 0 || riskScore > 100) {
             errors.push(`"riskScore" must be a number 0–100, got ${JSON.stringify(riskScore)}.`);
         }
-
         const riskLevel = raw['riskLevel'];
         if (typeof riskLevel !== 'string' || !RISK_LEVELS.includes(riskLevel as typeof RISK_LEVELS[number])) {
             errors.push(`"riskLevel" must be one of: ${RISK_LEVELS.join(', ')}.`);
         }
-
         const title = typeof raw['title'] === 'string' ? (raw['title'] as string).trim() : '';
         if (title === '') {
             errors.push('"title" must be a non-empty, imperative PR title describing the change (no branch names).');
@@ -341,6 +338,7 @@ export class ReviewJsonService {
         const mainAgentInstructions = this.validateMainAgentInstructions(raw, expectedMainAgentInstructions, errors);
 
         const results = this.loadChecklistResults(filePath, required);
+        for (const result of results) result.remediation = remediations[result.id] ?? '';
         for (const err of this.requiredChecklistErrors(required, results, filePath)) errors.push(err);
 
         if (errors.length > 0) {
@@ -392,7 +390,7 @@ export class ReviewJsonService {
             // CK_WARN must be listed here beside PASS/OVERRIDDEN. A yellow verdict SHIPS — leaving it out
             // would mark the checklist owed forever, so `outstanding` never empties and the PR is refused
             // permanently no matter how many times the reviewer runs.
-            return status !== CK_PASS && status !== CK_WARN && status !== CK_OVERRIDDEN;
+            return status !== CK_PASS && status !== CK_WARN && status !== CK_OVERRIDDEN && status !== CK_REMEDIATED;
         });
     }
 
@@ -509,6 +507,7 @@ export class ReviewJsonService {
         if (result.problem !== '') return new ChecklistVerdict(req.id, CK_BAD_FORMAT, result.problem);
         if (result.status === VERDICT_GREEN) return new ChecklistVerdict(req.id, CK_PASS, result.output);
         if (result.status === VERDICT_YELLOW) return new ChecklistVerdict(req.id, CK_WARN, result.output);
+        if (result.remediation !== '') return new ChecklistVerdict(req.id, CK_REMEDIATED, result.remediation);
         const override = result.override;
         // A malformed authorization is reported as a FORMAT problem, never treated as one: an override with
         // no stated reason authorizes nothing, and silently ignoring it would tell the reader their decision

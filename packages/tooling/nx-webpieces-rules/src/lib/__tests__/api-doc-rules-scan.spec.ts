@@ -139,6 +139,7 @@ function writeConfig(overrides: Record<string, unknown>): string {
                     buildCommand: 'echo ci',
                     mergeMode: 'AUTO',
                     reviewerAgents: 1,
+                    maxReviewerRounds: 2,
                 },
             },
             excludePaths: [],

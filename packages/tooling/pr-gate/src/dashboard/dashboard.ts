@@ -1,5 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
+import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_REMEDIATED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AuthorIdentity } from './author-identity';
 
@@ -400,6 +400,7 @@ export class Dashboard {
             const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
             return `🟠 OVERRIDDEN${why}`;
         }
+        if (row.status === CK_REMEDIATED) return `🟠 AUTHOR-REMEDIATED AFTER REVIEW CAP — NOT RE-REVIEWED — ${row.detail}`;
         if (row.status === CK_WARN) return '🟡 passed with concerns';
         if (row.status === CK_FAIL) return '🔴 FAILED review';
         if (row.status === CK_MISSING) return '⚪ not reviewed';
@@ -537,16 +538,18 @@ export class Dashboard {
 
     private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {
         const blocking = new RollupBucket('blocking', '🔴', true);
+        const remediated = new RollupBucket('author-remediated after cap (not re-reviewed)', '🟠', true);
         const overridden = new RollupBucket('overridden', '🟠', true);
         const warned = new RollupBucket('with concerns', '🟡', true);
         const passed = new RollupBucket('passed', '🟢', false);
         for (const row of rows) {
             if (row.status === CK_PASS) passed.titles.push(row.title);
             else if (row.status === CK_WARN) warned.titles.push(row.title);
+            else if (row.status === CK_REMEDIATED) remediated.titles.push(row.title);
             else if (row.status === CK_OVERRIDDEN) overridden.titles.push(row.title);
             else blocking.titles.push(row.title);
         }
-        return [blocking, overridden, warned, passed];
+        return [blocking, remediated, overridden, warned, passed];
     }
 
     // `2 overridden (a, b)` for the buckets a reviewer must act on; a bare `3 passed` for the one they need

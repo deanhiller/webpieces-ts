@@ -14,6 +14,7 @@ import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
 import { WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
+import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/write-review-fixes-command';
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
@@ -43,6 +44,7 @@ export class PrGateApp {
         private readonly buildCommand: BuildCommand,
         private readonly awaitReviewsCommand: AwaitReviewsCommand,
         private readonly writeReviewCommand: WriteReviewCommand,
+        private readonly writeReviewFixesCommand: WriteReviewFixesCommand,
         private readonly awaitChecksCommand: AwaitChecksCommand,
         private readonly pushDevCommand: PushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
@@ -105,6 +107,11 @@ export class PrGateApp {
      */
     writeReview(opts: WriteReviewOptions): Promise<void> {
         return this.writeReviewCommand.run(opts);
+    }
+
+    /** `wp-write-review-fixes`: the coordinator records committed fixes without editing a reviewer verdict. */
+    writeReviewFixes(opts: WriteReviewFixesOptions): Promise<void> {
+        return this.writeReviewFixesCommand.run(opts);
     }
 
     /**

@@ -20,6 +20,12 @@ export class ReviewStageReceipt {
      * a green/yellow forward only while that hash is unchanged (issue #863). Assigned after construction.
      */
     scopeHashes: Record<string, string>;
+    /** Global reviewer round, owned by stage ②. Zero means no reviewer round has started. */
+    round: number;
+    /** Repository-owned cap copied from config so verdict provenance can audit the active budget. */
+    maxReviewerRounds: number;
+    /** Prior reviewed HEAD for remediation-only rounds; empty for the initial full review. */
+    remediationFromHead: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(headSha = '', mergeValidated = false, buildCommand = '', buildPassedAt = '', reviewersBriefed: string[] = []) {
@@ -29,6 +35,9 @@ export class ReviewStageReceipt {
         this.buildPassedAt = buildPassedAt;
         this.reviewersBriefed = reviewersBriefed;
         this.scopeHashes = {};
+        this.round = 0;
+        this.maxReviewerRounds = 0;
+        this.remediationFromHead = '';
     }
 }
 
@@ -79,6 +88,10 @@ export class ReviewStageReceiptService {
                 Array.isArray(raw['reviewersBriefed']) ? (raw['reviewersBriefed'] as string[]) : [],
             );
             receipt.scopeHashes = this.stringMap(raw['scopeHashes']);
+            receipt.round = typeof raw['round'] === 'number' && Number.isInteger(raw['round']) ? raw['round'] as number : 0;
+            receipt.maxReviewerRounds = typeof raw['maxReviewerRounds'] === 'number' && Number.isInteger(raw['maxReviewerRounds'])
+                ? raw['maxReviewerRounds'] as number : 0;
+            receipt.remediationFromHead = typeof raw['remediationFromHead'] === 'string' ? raw['remediationFromHead'] as string : '';
             return receipt;
         } catch (err: unknown) {
             const error = toError(err);

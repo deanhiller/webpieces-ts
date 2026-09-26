@@ -76,4 +76,8 @@ export const ENDED_EXPERIMENTS: readonly EndedExperiment[] = [
         'experimental.buildGateLogCapture', '0.4.693',
         'Capturing the build gate\'s output to a log file is UNCONDITIONAL now, so this flag switches ' +
         'nothing — you already have what it asked for. Delete the key.'),
+    new EndedExperiment(
+        'singleRoundReview', '0.4.816',
+        'A human ended this experiment in issue #1045. Delete the machine-local key and set the repository\'s ' +
+        'required commands.pr-gate.maxReviewerRounds to 1 for the supported one-review policy.'),
 ];

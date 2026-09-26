@@ -82,6 +82,11 @@ export class ReviewerBriefing {
     // spawned reviews the same way either way, and telling an optional one it was optional invites it to
     // grade itself softer.
     required: boolean;
+    round: number;
+    maxRounds: number;
+    remediationOnly: boolean;
+    previousVerdictPath: string;
+    remediationPath: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(agentName: string, checklistId: string, repoRoot: string) {
@@ -111,6 +116,11 @@ export class ReviewerBriefing {
         // Fails CLOSED, like RequiredChecklist.required: a briefing built without the flag being copied is
         // treated as a blocking reviewer, never as a skippable one.
         this.required = true;
+        this.round = 1;
+        this.maxRounds = 1;
+        this.remediationOnly = false;
+        this.previousVerdictPath = '';
+        this.remediationPath = '';
     }
 }
 
@@ -176,6 +186,8 @@ export class ReviewerInstructionsService {
         return [
             `# Checklist \`${b.checklistId}\` — reviewed by a \`${b.agentName}\` subagent`,
             '',
+            `Global reviewer round ${b.round} of ${b.maxRounds}.`,
+            '',
             'Review this diff against THIS checklist only — not as a general code reviewer — and only over the',
             'files in scope below. If you were handed several of these files, review each checklist separately',
             'and write each one its own verdict. Never write a verdict for a checklist you were not handed.',
@@ -233,6 +245,16 @@ export class ReviewerInstructionsService {
      */
     private diffSection(b: ReviewerBriefing): string[] {
         const lines = ['## The change you are reviewing', ''];
+        if (b.remediationOnly) {
+            lines.push(
+                'This is a REMEDIATION-ONLY re-review. Verify the claimed fixes and inspect the remediation',
+                'delta for regressions; do not restart a full review of the original branch diff.',
+                '',
+                `Previous reviewer verdict (verbatim): \`${b.previousVerdictPath}\``,
+                `Author remediation response: \`${b.remediationPath}\``,
+                '',
+            );
+        }
         if (b.dirty) {
             lines.push('> ⚠️ This diff INCLUDES uncommitted and untracked work, so it is not what a');
             lines.push('> commit-to-commit range would show. Judge it anyway — it is what your checklist matched.');
