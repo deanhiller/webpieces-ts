@@ -100,6 +100,7 @@ graph TD
     ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
     ReviewRoundStateService["ReviewRoundStateService"]
+    ReviewRoundText["ReviewRoundText"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
     ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
@@ -342,6 +343,7 @@ graph TD
     ReviewJsonService --> DotWebpieces
     ReviewReport --> ChecklistInstructionsService
     ReviewReport --> ChecklistNotice
+    ReviewReport --> ReviewRoundText
     ReviewReport --> ReviewerInstructionsService
     ReviewRoundStateService --> AtomicFile
     ReviewRoundStateService --> ReviewJsonService
@@ -408,7 +410,7 @@ graph TD
     WorktreeReaper --> WorktreeService
     WriteReviewCommand --> AiBranchName
     WriteReviewCommand --> RepoRootFinder
-    WriteReviewCommand --> ReviewRoundStateService
+    WriteReviewCommand --> ReviewJsonService
     WriteReviewCommand --> ReviewStageReceiptService
     WriteReviewCommand --> ReviewerIdentityResolver
     WriteReviewCommand --> VerdictProvenanceService

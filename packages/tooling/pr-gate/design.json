@@ -713,6 +713,14 @@
                     "level": 4
                 },
                 {
+                    "id": "ReviewRoundText",
+                    "className": "ReviewRoundText",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-round-text.ts",
+                    "level": 3
+                },
+                {
                     "id": "ReviewStageReceiptService",
                     "className": "ReviewStageReceiptService",
                     "kind": "class",
@@ -2871,6 +2879,15 @@
                 },
                 {
                     "from": "ReviewReport",
+                    "to": "ReviewRoundText",
+                    "injection": "type",
+                    "token": "ReviewRoundText",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-text.ts#ReviewRoundText",
+                    "paramName": "roundText",
+                    "paramType": "ReviewRoundText"
+                },
+                {
+                    "from": "ReviewReport",
                     "to": "ReviewerInstructionsService",
                     "injection": "type",
                     "token": "ReviewerInstructionsService",
@@ -3465,12 +3482,12 @@
                 },
                 {
                     "from": "WriteReviewCommand",
-                    "to": "ReviewRoundStateService",
+                    "to": "ReviewJsonService",
                     "injection": "type",
-                    "token": "ReviewRoundStateService",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
-                    "paramName": "rounds",
-                    "paramType": "ReviewRoundStateService"
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "WriteReviewCommand",
