@@ -22,6 +22,7 @@ import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/revie
 import { ReviewerIdentityResolver } from '../workflow/reviewer-identity';
 import { ReviewerVerdictGate } from '../workflow/reviewer-verdict-gate';
 import { HARNESS_TERMINAL, STANDING_CURRENT, VerdictProvenanceService } from '../workflow/verdict-provenance';
+import { ReviewRoundStateService } from '../workflow/review-round-state';
 
 /** The branch is fixed rather than read from the process cwd, which a spec does not own. */
 class FixedBranchName extends AiBranchName {
@@ -34,6 +35,7 @@ const reviewJson = new ReviewJsonService();
 const stamps = new ReviewIdentityStampService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
+const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile());
 const CHECKLISTS: ChecklistDefinition[] = [
     toChecklist({ id: 'security', patterns: ['**/*.sql'], required: true }, new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER)),
 ];
@@ -46,7 +48,7 @@ function git(cwd: string, cmd: string): void {
 function scanner(): ChecklistScanner {
     const diffScope = new DiffScope();
     const home = new HomeConfigService();
-    vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false, false));
+    vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
     return new ChecklistScanner(
         new FixedBranchName(new BranchNaming()), new ChecklistDetector(diffScope), diffScope,
         new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser()),
@@ -71,6 +73,8 @@ function briefedRepo(): string {
     const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(false, ''));
     const receipt = new ReviewStageReceipt(scan.basis.headSha, true, 'pnpm build', '', ['security']);
     receipt.scopeHashes = scan.scopeHashes;
+    receipt.round = 1;
+    receipt.maxReviewerRounds = 2;
     receipts.write(dir, 'dean-feat', receipt);
     return dir;
 }
@@ -78,7 +82,7 @@ function briefedRepo(): string {
 function command(): WriteReviewCommand {
     return new WriteReviewCommand(
         new RepoRootFinder(), new FixedBranchName(new BranchNaming()), receipts,
-        new ReviewerIdentityResolver(stamps), provenance);
+        new ReviewerIdentityResolver(stamps), provenance, rounds);
 }
 
 // What the PreToolUse hook writes for the Bash call that runs the bin.

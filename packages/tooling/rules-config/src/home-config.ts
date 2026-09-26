@@ -12,7 +12,7 @@ import {
 import {
     ALLOWED_EXPERIMENTAL, ALLOWED_TOP_LEVEL, DEFAULT_MAX_CONCURRENT_BUILDS, GUARD_OFF_WHEN_ABSENT,
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_MAX_CONCURRENT_BUILDS,
-    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_SINGLE_ROUND_REVIEW, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
+    HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
     HOME_KEY_WHOLE_REPO_BUILD_GUARD,
 } from './home-config-keys';
 
@@ -150,7 +150,6 @@ export { RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, EndedExperiment, ENDED_
  */
 export {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION,
-    HOME_KEY_SINGLE_ROUND_REVIEW,
     HOME_KEY_WHOLE_REPO_BUILD_GUARD, HOME_KEY_ORPHAN_DIR_SWEEP, HOME_KEY_TURN_OFF_ALL_REVIEWERS,
     HOME_KEY_MAX_CONCURRENT_BUILDS, DEFAULT_MAX_CONCURRENT_BUILDS,
     ALLOWED_TOP_LEVEL, ALLOWED_EXPERIMENTAL_BOOLEANS, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_EXPERIMENTAL,
@@ -187,8 +186,6 @@ const ABSENT_ERROR_CODES: readonly string[] = ['ENOENT', 'ENOTDIR', 'EACCES', 'E
 
 /** The parsed `~/.webpieces/config.json`. Data-only (per CLAUDE.md — classes, not interfaces, for data). */
 export class HomeConfig {
-    /** TOP-LEVEL opt-in. False/absent keeps the existing multi-round reviewer flow unchanged. */
-    singleRoundReview: boolean;
     /**
      * EXPERIMENTAL, and OFF unless this machine opts IN with an explicit `true`. When true,
      * `whole-repo-build-guard` BLOCKS a Bash command that would build the WHOLE monorepo and hands back
@@ -249,7 +246,7 @@ export class HomeConfig {
      */
     turnOffAllReviewers: boolean;
 
-    // ALL FIVE required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
+    // ALL FOUR required, no defaults. A defaulted parameter would leave `new HomeConfig(true)` compiling
     // after this class grew a second flag, silently meaning "guard off" — an old spelling that still
     // typechecks with a changed meaning is exactly the shim this repo does not ship. The 3-arg arity this
     // class had before `turnOffAllReviewers` is DELETED rather than overloaded, per
@@ -258,13 +255,12 @@ export class HomeConfig {
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         wholeRepoBuildGuard: boolean, orphanDirSweep: boolean, maxConcurrentBuilds: number,
-        turnOffAllReviewers: boolean, singleRoundReview: boolean,
+        turnOffAllReviewers: boolean,
     ) {
         this.wholeRepoBuildGuard = wholeRepoBuildGuard;
         this.orphanDirSweep = orphanDirSweep;
         this.maxConcurrentBuilds = maxConcurrentBuilds;
         this.turnOffAllReviewers = turnOffAllReviewers;
-        this.singleRoundReview = singleRoundReview;
     }
 }
 
@@ -302,7 +298,7 @@ export class HomeConfigService {
         if (raw === null) {
             return new HomeConfig(
                 GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT, DEFAULT_MAX_CONCURRENT_BUILDS,
-                GUARD_OFF_WHEN_ABSENT, GUARD_OFF_WHEN_ABSENT);
+                GUARD_OFF_WHEN_ABSENT);
         }
         return this.validate(this.parse(raw, this.configPath(homeDir)), this.configPath(homeDir));
     }
@@ -397,23 +393,7 @@ export class HomeConfigService {
             this.readOptionalPositiveInteger(
                 experimental, HOME_KEY_MAX_CONCURRENT_BUILDS, file, DEFAULT_MAX_CONCURRENT_BUILDS),
             this.readOptionalBoolean(experimental, HOME_KEY_TURN_OFF_ALL_REVIEWERS, file, GUARD_OFF_WHEN_ABSENT),
-            this.readOptionalTopLevelBoolean(raw, HOME_KEY_SINGLE_ROUND_REVIEW, file, GUARD_OFF_WHEN_ABSENT),
         );
-    }
-
-    // The single-round experiment intentionally uses the documented TOP-LEVEL spelling.
-    // webpieces-disable no-any-unknown -- JSON config boundary is validated before use
-    private readOptionalTopLevelBoolean(
-        raw: Record<string, unknown>, key: string, file: string, whenAbsent: boolean,
-    ): boolean {
-        const value = raw[key];
-        if (value === undefined) return whenAbsent;
-        if (typeof value !== 'boolean') {
-            throw new InformAiError(this.error(file,
-                `"${key}" must be the boolean true or false, not ${JSON.stringify(value)}. ` +
-                'Remove the quotes, or delete the key.'));
-        }
-        return value;
     }
 
     /**

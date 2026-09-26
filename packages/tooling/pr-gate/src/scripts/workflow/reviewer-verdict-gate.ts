@@ -1,6 +1,6 @@
 import {
     ChecklistInstructionsService, InformAiError, RequiredChecklist, ReviewJsonService,
-    SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, toError,
+    toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistScan } from './checklist-scanner';
@@ -56,10 +56,10 @@ export class ReviewerVerdictGate {
         throw new InformAiError(
             this.headline(scan, refused, neverRan)
             + this.unreadableSection(scan)
-            + this.refusedSection(refusals, scan.singleRoundReview)
+            + this.refusedSection(refusals)
             + this.discountedSection(scan, neverRan)
             + this.neverRanSection(scan, neverRan)
-            + this.footer(refused.length > 0, scan.singleRoundReview),
+            + this.footer(refused.length > 0),
         );
     }
 
@@ -111,13 +111,8 @@ export class ReviewerVerdictGate {
      * The refusals — SECOND, above anything that says to spawn a subagent, because a spawn instruction is the
      * one line an agent acts on first, and acting on it here IS the loop.
      */
-    private refusedSection(refusals: readonly string[], singleRoundReview: boolean): string {
+    private refusedSection(refusals: readonly string[]): string {
         if (refusals.length === 0) return '';
-        if (singleRoundReview) {
-            return '⛔ REFUSED — SINGLE-ROUND MODE. These reviewers ALREADY ANSWERED and MUST NOT be rerun.\n\n'
-                + refusals.map((r: string): string => `  • ${r}`).join('\n\n') + '\n\n'
-                + `   main_agent_instructions: ${SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS}\n\n`;
-        }
         return '⛔ REFUSED — these reviewers ALREADY ANSWERED. Re-spawning one against unchanged code only buys\n'
             + '   the same answer: fix what it found (or get a HUMAN to authorize an override), THEN review again.\n\n'
             + refusals.map((r: string): string => `  • ${r}`).join('\n\n') + '\n\n';
@@ -167,14 +162,6 @@ export class ReviewerVerdictGate {
      */
     private retireAndReport(scan: ChecklistScan, req: RequiredChecklist): string {
         const verdict = this.reviewJsonService.resolveVerdict(req, scan.results);
-        if (scan.singleRoundReview) {
-            const live = this.reviewJsonService.checklistResultPath(scan.summaryPath, req.id);
-            return `Checklist "${req.id}" FAILED review (status:"red"). The reviewer wrote:\n`
-                + `      ${verdict.detail}\n`
-                + `      DO NOT RERUN this reviewer. After fixing every finding, edit ${live}.\n`
-                + '      Change its addressed red status to "yellow". Yellow is accepted by the gate. If you genuinely\n'
-                + '      disagree, leave it red and flag the human BEFORE posting the PR; red remains blocking.';
-        }
         return this.reviewJsonService.refusalError(
             req, verdict, scan.summaryPath, this.archiveOrWarn(scan.summaryPath, req.id));
     }
@@ -197,15 +184,10 @@ export class ReviewerVerdictGate {
     // Re-running stage 2 is normally optional. It stops being optional after a refusal, because the only way
     // past one is to CHANGE the code — which is exactly the condition that makes the extracted diff and every
     // reviewer briefing stale.
-    private footer(anyRefused: boolean, singleRoundReview: boolean): string {
+    private footer(anyRefused: boolean): string {
         if (anyRefused) {
-            if (singleRoundReview) {
-                return 'Do NOT run pnpm wp-review-upsert-pr and do NOT re-run a reviewer. Fix the findings, change\n'
-                    + 'addressed red verdicts to yellow, then run: pnpm wp-finish-upsert-pr\n'
-                    + 'If any red remains because you disagree, STOP and ask the human before posting the PR.';
-            }
-            return 'Then re-run: pnpm wp-review-upsert-pr (the code changed, so the extracted diff and the reviewer\n'
-                + 'briefings are stale), re-run the reviewer(s) above, and finally: pnpm wp-finish-upsert-pr';
+            return 'Fix every finding, commit the remediation, record it with pnpm wp-write-review-fixes, then re-run:\n'
+                + 'pnpm wp-review-upsert-pr. The repository round budget decides whether a focused re-review remains.';
         }
         return 'Then re-run: pnpm wp-finish-upsert-pr\n'
             + '(Each reviewer\'s generated instructions file is already written — re-running pnpm wp-review-upsert-pr\n'

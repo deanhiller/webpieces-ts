@@ -131,7 +131,7 @@ describe('validateChecklistDocs validates a repo wired to files that exist', () 
             ['backwards-compatibility.md', 'error-output.md', 'experiment-lifecycle.md', 'ticket-required.md'],
             ['webpieces-reviewer']);
         fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
-            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', reviewerAgents: 1, checklists } },
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'x', mergeMode: 'NONE', reviewerAgents: 1, maxReviewerRounds: 2, checklists } },
         }));
         return dir;
     }

@@ -3,10 +3,11 @@ import { injectable, bindingScopeValues } from 'inversify';
 import {
     HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, summaryJsonSchemaHint,
     ChecklistInstructionsService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy,
-    ReviewerBriefing, ReviewerInstructionsService, SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS, VERDICT_RED,
+    ReviewerBriefing, ReviewerInstructionsService, VERDICT_RED,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
+import { ROUND_ACTION_FINISH, ROUND_ACTION_FIX, ROUND_ACTION_RECORD } from './review-round-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -72,9 +73,10 @@ export class ReviewReportInput {
      * WHICH required reviewer was killed.
      */
     suppressed: RequiredChecklist[];
-    singleRoundReview: boolean;
-    singleRoundRepeat: boolean;
-    singleRoundReviewers: string[];
+    round: number;
+    maxReviewerRounds: number;
+    roundAction: string;
+    redChecklistIds: string[];
     // The reviewer agent (webpieces-reviewer, or the overrideReviewerAgent name) + reviewerAgents: which agent
     // type to spawn, and the per-round cap.
     reviewer: ReviewerAgentPolicy;
@@ -97,9 +99,10 @@ export class ReviewReportInput {
         this.skipOptional = false;
         this.reviewersSuppressed = false;
         this.suppressed = [];
-        this.singleRoundReview = false;
-        this.singleRoundRepeat = false;
-        this.singleRoundReviewers = [];
+        this.round = 1;
+        this.maxReviewerRounds = 1;
+        this.roundAction = '';
+        this.redChecklistIds = [];
         this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_PLACEHOLDER);
         this.standings = [];
     }
@@ -152,12 +155,14 @@ export class ReviewReport {
      * single line most likely to make it do exactly that.
      */
     private header(input: ReviewReportInput): string {
-        if (input.singleRoundRepeat) return '② ⏭️ SINGLE-ROUND REVIEW ALREADY STARTED — skip reviews and finish\n';
+        if (input.roundAction === ROUND_ACTION_FIX) return `② ⛔ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} IS RED — remediate it\n`;
+        if (input.roundAction === ROUND_ACTION_RECORD) return `② ⛔ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} — record the committed remediation\n`;
+        if (input.roundAction === ROUND_ACTION_FINISH) return `② ✅ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} COMPLETE — finish\n`;
         // FIRST, and unconditional: with the kill switch on there is nothing to spawn and nothing to
         // offer, so every heading below would be true-but-misleading. The one thing a reader must take
         // from the first line of this block is that no reviewer looked at this branch.
         if (input.reviewersSuppressed) return '② ⚫ ALL REVIEWERS SUPPRESSED — write the PR summary, then finish\n';
-        if (this.requiredOwed(input).length > 0) return '② Write the PR summary, spawn subagent reviewers, then finish\n';
+        if (this.requiredOwed(input).length > 0) return `② GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} — write the PR summary, spawn reviewers, then finish\n`;
         if (this.offerableOwed(input).length > 0) return '② Write the PR summary, offer the optional reviewers, then finish\n';
         return '② Write the PR summary, then finish\n';
     }
@@ -168,11 +173,6 @@ export class ReviewReport {
      * mistaken for the next action.
      */
     private scanVerdict(input: ReviewReportInput): string {
-        if (input.singleRoundRepeat) {
-            return '\n⏭️  `singleRoundReview: true` is enabled and this branch already used its one review round.\n'
-                + `   Recorded reviewer(s): ${input.singleRoundReviewers.join(', ')}\n`
-                + '   DO NOT spawn or re-spawn any reviewer, regardless of later edits or an earlier red.\n';
-        }
         // BEFORE the zero-applicable notice, which would otherwise say "nothing matched this diff" — the
         // single most misleading sentence available here, because plenty matched and every one of them was
         // switched off.
@@ -356,14 +356,15 @@ export class ReviewReport {
      * can never drift from the shape `wp-finish-upsert-pr` validates.
      */
     private nextSteps(input: ReviewReportInput): string {
-        if (input.singleRoundRepeat) return this.singleRoundRepeatStep();
+        if (input.roundAction === ROUND_ACTION_FIX) return this.fixStep(input);
+        if (input.roundAction === ROUND_ACTION_RECORD) return this.recordStep(input);
+        if (input.roundAction === ROUND_ACTION_FINISH) return this.cappedFinishStep(input);
         const required = this.requiredOwed(input);
         const offerable = this.offerableOwed(input);
         // Numbered by what is actually PRINTED, so the numbers a reader sees are 1..n with no gaps: write
         // summary.json, then a spawn step only if anything must run, then an offer step only if anything may.
         let step = 1;
-        const write = this.writeSummaryStep(
-            input.summaryPath, step++, input.singleRoundReview ? SINGLE_ROUND_MAIN_AGENT_INSTRUCTIONS : '');
+        const write = this.writeSummaryStep(input.summaryPath, step++, '');
         // The wait block goes under the LAST reviewer-listing step, and only there. Printed under both
         // it would be two "what to do next" instructions in one output, which is the defect this
         // method's docstring describes — an agent reading top to bottom obeys the first one it meets.
@@ -385,13 +386,29 @@ export class ReviewReport {
         );
     }
 
-    private singleRoundRepeatStep(): string {
-        return '\n' + SEP
-            + '▶ NEXT — reviewers have already run once. SKIP reviews and run:\n' + SEP + '\n'
-            + '         pnpm wp-finish-upsert-pr\n\n'
-            + '   Do NOT invoke or re-run reviewer subagents. They are expensive and their one verdict\n'
-            + '   remains the review record for this PR. If a red remains, finish will block and tell you\n'
-            + '   how to fix it without another reviewer round.\n\n';
+    private fixStep(input: ReviewReportInput): string {
+        return '\n' + SEP + `▶ NEXT — fix every finding from round ${input.round} of ${input.maxReviewerRounds}\n` + SEP + '\n'
+            + `   Red checklist(s): ${input.redChecklistIds.join(', ')}\n`
+            + '   Commit every fix and leave the tree clean, then record one response per checklist with:\n'
+            + '         pnpm wp-write-review-fixes\n'
+            + '   Re-run pnpm wp-review-upsert-pr after that. It will start a focused remediation-only round\n'
+            + '   only when the configured round budget still has room.\n';
+    }
+
+    private recordStep(input: ReviewReportInput): string {
+        return '\n' + SEP + `▶ NEXT — record the committed fixes for round ${input.round} of ${input.maxReviewerRounds}\n` + SEP + '\n'
+            + '         pnpm wp-write-review-fixes\n\n'
+            + '   The command stamps the reviewed HEAD and current clean HEAD itself. Then re-run\n'
+            + '   pnpm wp-review-upsert-pr; do not edit or recolor the reviewer verdict.\n';
+    }
+
+    private cappedFinishStep(input: ReviewReportInput): string {
+        const capped = input.redChecklistIds.length > 0
+            ? `   Review cap reached. ${input.redChecklistIds.join(', ')} is author-remediated after the cap and was NOT re-reviewed.\n`
+            : '';
+        return '\n' + SEP + '▶ NEXT — write summary.json, then finish\n' + SEP + '\n'
+            + capped + this.writeSummaryStep(input.summaryPath, 1, '')
+            + 'STEP 2 — run: pnpm wp-finish-upsert-pr\n';
     }
 
     /**

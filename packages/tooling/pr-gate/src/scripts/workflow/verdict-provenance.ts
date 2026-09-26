@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    AtomicFile, ChecklistResult, ReviewJsonService, VERDICT_RED, VERDICT_YELLOW, WRITE_REVIEW_BIN, toError,
+    AtomicFile, ChecklistResult, ReviewJsonService, WRITE_REVIEW_BIN, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -52,6 +52,7 @@ export class VerdictProvenance {
     status: string;          // the status as submitted
     verdictHash: string;     // VerdictProvenanceService.canonicalHash of the verdict as submitted
     writtenAt: string;
+    round: number;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(checklistId: string, harness: string, sessionId: string, agentId: string, agentType: string, headSha: string, scopeHash: string) {
@@ -66,6 +67,7 @@ export class VerdictProvenance {
         this.status = '';
         this.verdictHash = '';
         this.writtenAt = '';
+        this.round = 0;
     }
 }
 
@@ -156,6 +158,7 @@ export class VerdictProvenanceService {
             record.status = this.str(raw['status']);
             record.verdictHash = this.str(raw['verdictHash']);
             record.writtenAt = this.str(raw['writtenAt']);
+            record.round = typeof raw['round'] === 'number' && Number.isInteger(raw['round']) ? raw['round'] as number : 0;
             return record;
         } catch (err: unknown) {
             const error = toError(err);
@@ -166,15 +169,10 @@ export class VerdictProvenanceService {
 
     /**
      * How one parsed verdict stands. `currentScopeHash` is this checklist's scope hash NOW ('' when it
-     * could not be computed, which never marks anything stale). `singleRound` is the machine's
-     * `singleRoundReview` opt-in, and it changes two things — both so that this check does not narrow what
-     * that experimental flag already promises:
-     *   - scope never goes STALE: one round means one round, and its verdicts are the review record;
-     *   - the one edit that mode tells the COORDINATOR to make — an addressed red changed to yellow in
-     *     place — is accepted, and nothing else is.
+     * could not be computed, which never marks anything stale).
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    assess(summaryPath: string, result: ChecklistResult, currentScopeHash: string, singleRound: boolean): VerdictStanding {
+    assess(summaryPath: string, result: ChecklistResult, currentScopeHash: string): VerdictStanding {
         const id = result.id;
         const record = this.read(summaryPath, id);
         const reject = (reason: string): VerdictStanding => new VerdictStanding(id, STANDING_REJECTED, result.status, '', reason);
@@ -190,10 +188,10 @@ export class VerdictProvenanceService {
             return reject(`review-${id}.json was submitted by the coordinating agent, not a reviewer subagent`);
         }
         const submitted = new SubmittedVerdict(id, result.status, result.agent, result.model, result.output);
-        if (!this.matchesSubmission(submitted, record, singleRound)) {
+        if (this.canonicalHash(submitted) !== record.verdictHash) {
             return reject(`review-${id}.json was EDITED after ${WRITE_REVIEW_BIN} wrote it — a verdict is the reviewer's words, not a draft`);
         }
-        if (!singleRound && currentScopeHash !== '' && record.scopeHash !== currentScopeHash) {
+        if (currentScopeHash !== '' && record.scopeHash !== currentScopeHash) {
             return new VerdictStanding(id, STANDING_STALE, result.status, record.headSha,
                 `in-scope files CHANGED since the verdict was written at ${this.short(record.headSha)}`);
         }
@@ -204,13 +202,6 @@ export class VerdictProvenanceService {
     /** The first 8 characters of a sha, the way every banner line prints one. */
     short(sha: string): string {
         return sha === '' ? '(unknown sha)' : sha.slice(0, 8);
-    }
-
-    private matchesSubmission(submitted: SubmittedVerdict, record: VerdictProvenance, singleRound: boolean): boolean {
-        if (this.canonicalHash(submitted) === record.verdictHash) return true;
-        if (!singleRound || record.status !== VERDICT_RED || submitted.status !== VERDICT_YELLOW) return false;
-        const asSubmitted = new SubmittedVerdict(submitted.id, VERDICT_RED, submitted.agent, submitted.model, submitted.output);
-        return this.canonicalHash(asSubmitted) === record.verdictHash;
     }
 
     // webpieces-disable no-any-unknown -- one opaque JSON value, narrowed to a string

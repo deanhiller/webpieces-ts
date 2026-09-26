@@ -119,8 +119,6 @@ export class ChecklistScan {
      * downstream would mean a second changed-file computation that can disagree with this one.
      */
     suppressed: RequiredChecklist[];
-    /** TRUE only for the top-level `singleRoundReview` machine opt-in. */
-    singleRoundReview: boolean;
     /**
      * How every EXISTING verdict file stands (issue #863): CURRENT (submitted through `wp-write-review` and
      * its checklist's in-scope diff is unchanged — it carries), STALE (in-scope diff changed since — re-brief)
@@ -155,7 +153,6 @@ export class ChecklistScan {
         // stays a one-liner; the scanner itself always passes the real set.
         results: ChecklistResult[] = [],
         optionalNotRun: RequiredChecklist[] = [],
-        singleRoundReview = false,
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -172,7 +169,6 @@ export class ChecklistScan {
         this.changedFiles = changedFiles;
         this.results = results;
         this.optionalNotRun = optionalNotRun;
-        this.singleRoundReview = singleRoundReview;
         this.standings = [];
         this.scopeHashes = {};
     }
@@ -250,12 +246,12 @@ export class ChecklistScanner {
             // WHAT was suppressed, which is the difference between an honest record and a silent one.
             return new ChecklistScan(
                 defined, [], [], [], context, summaryPath, base, roster, [], true, matched, basis,
-                changedFiles, [], [], homeConfig.singleRoundReview);
+                changedFiles, [], []);
         }
         const applicable = matched;
         const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
         const loaded = this.reviewJsonService.loadChecklistResults(summaryPath, applicable);
-        const standings = this.standingsOf(summaryPath, loaded, scopeHashes, homeConfig.singleRoundReview);
+        const standings = this.standingsOf(summaryPath, loaded, scopeHashes);
         const results = this.liveResults(loaded, standings);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -280,7 +276,6 @@ export class ChecklistScanner {
             changedFiles,
             results,
             optionalNotRun,
-            homeConfig.singleRoundReview,
         );
         scan.standings = standings;
         scan.scopeHashes = scopeHashes;
@@ -293,12 +288,12 @@ export class ChecklistScanner {
      */
     // eslint-disable-next-line @typescript-eslint/max-params
     private standingsOf(
-        summaryPath: string, loaded: readonly ChecklistResult[], scopeHashes: Record<string, string>, singleRound: boolean,
+        summaryPath: string, loaded: readonly ChecklistResult[], scopeHashes: Record<string, string>,
     ): VerdictStanding[] {
         return loaded
             .filter((r: ChecklistResult): boolean => r.problem === '')
             .map((r: ChecklistResult): VerdictStanding =>
-                this.verdictProvenance.assess(summaryPath, r, scopeHashes[r.id] ?? '', singleRound));
+                this.verdictProvenance.assess(summaryPath, r, scopeHashes[r.id] ?? ''));
     }
 
     /**

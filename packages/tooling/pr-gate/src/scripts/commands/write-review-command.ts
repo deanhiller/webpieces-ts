@@ -7,6 +7,7 @@ import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { ReviewerIdentity, ReviewerIdentityResolver } from '../workflow/reviewer-identity';
 import { SubmittedVerdict, VerdictProvenance, VerdictProvenanceService } from '../workflow/verdict-provenance';
+import { ReviewRoundStateService } from '../workflow/review-round-state';
 
 /** The only keys a verdict may carry. Anything else is somebody's second schema. */
 const VERDICT_KEYS = ['id', 'status', 'agent', 'model', 'output'] as const;
@@ -53,6 +54,7 @@ export class WriteReviewCommand {
         private readonly receipts: ReviewStageReceiptService,
         private readonly identity: ReviewerIdentityResolver,
         private readonly provenance: VerdictProvenanceService,
+        private readonly rounds: ReviewRoundStateService,
     ) {}
 
     run(opts: WriteReviewOptions): Promise<void> {
@@ -67,11 +69,13 @@ export class WriteReviewCommand {
         const verdict = this.parse(opts.json, id);
         const record = new VerdictProvenance(
             id, who.harness, who.sessionId, who.agentId, who.agentType, receipt.headSha, receipt.scopeHashes[id] ?? '');
+        record.round = receipt.round;
         const written = this.provenance.write(summaryJsonPath(repoRoot, featureName), verdict, record);
+        this.rounds.archiveVerdict(summaryJsonPath(repoRoot, featureName), id, receipt.round);
         process.stdout.write(
             `✅ ${verdict.status.toUpperCase()} verdict for "${id}" submitted → ${written}\n`
             + `   provenance: ${who.harness}${who.agentId === '' ? '' : ` agent ${who.agentId}`}, `
-            + `briefed at ${receipt.headSha.slice(0, 8)}\n`);
+            + `briefed at ${receipt.headSha.slice(0, 8)}, global round ${receipt.round} of ${receipt.maxReviewerRounds}\n`);
         return Promise.resolve();
     }
 

@@ -30,13 +30,13 @@ describe('validatePrGateSection — reviewerAgents (required cap)', () => {
 
     it('accepts zero and positive integers', () => {
         for (const reviewerAgents of [0, 1, 2, 7]) {
-            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents })).toEqual([]);
+            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents, maxReviewerRounds: 2 })).toEqual([]);
         }
     });
 
     it('rejects negatives, fractions, strings, null and booleans', () => {
         for (const reviewerAgents of [-1, 1.5, '1', null, true]) {
-            const errors = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents });
+            const errors = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents, maxReviewerRounds: 2 });
             expect(errors.some(e => e.includes('must be a nonnegative integer'))).toBe(true);
         }
     });

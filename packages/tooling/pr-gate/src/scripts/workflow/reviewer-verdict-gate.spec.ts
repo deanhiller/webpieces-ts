@@ -37,7 +37,7 @@ function writeVerdict(dir: string, id: string, status: string, output: string): 
  * through ReviewJsonService and `outstanding` derived from them — so the fixture cannot drift from what the
  * scanner actually hands the gate. Git is not involved: nothing the gate does depends on the diff.
  */
-function scanOver(dir: string, applicable: RequiredChecklist[], singleRoundReview = false): ChecklistScan {
+function scanOver(dir: string, applicable: RequiredChecklist[]): ChecklistScan {
     const summaryPath = reviewPathIn(dir);
     const results = svc.loadChecklistResults(summaryPath, applicable);
     // The optional-without-a-verdict subtraction is part of how `outstanding` is BUILT (ChecklistScanner
@@ -52,16 +52,16 @@ function scanOver(dir: string, applicable: RequiredChecklist[], singleRoundRevie
         new ChecklistReviewContext(), summaryPath, 'abc1234',
         new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
         false, [],
-        undefined, [], results, optionalNotRun, singleRoundReview,
+        undefined, [], results, optionalNotRun,
     );
 }
 
 // The refusal message, or '' if the gate let the PR through.
-function refusalOf(dir: string, applicable: RequiredChecklist[], singleRoundReview = false): string {
+function refusalOf(dir: string, applicable: RequiredChecklist[]): string {
     // webpieces-disable no-unmanaged-exceptions -- the thrown message IS the assertion subject here
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        gate.assertEveryReviewerRan(scanOver(dir, applicable, singleRoundReview));
+        gate.assertEveryReviewerRan(scanOver(dir, applicable));
         return '';
     } catch (err: unknown) {
         const error = toError(err);
@@ -152,29 +152,6 @@ describe('the refused verdict is RETIRED, one slot back', () => {
         expect(refusalOf(dir, [DB])).toBe('');                       // nothing outstanding ⇒ no throw at all
         expect(fs.readFileSync(live, 'utf8')).toBe(before);
         expect(fs.existsSync(svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer'))).toBe(false);
-    });
-});
-
-describe('singleRoundReview red remediation', () => {
-    it('keeps the one reviewer verdict live and instructs red-to-yellow remediation without rerunning', () => {
-        const dir = reviewDir();
-        writeVerdict(dir, 'db-reviewer', 'red', 'add a rollback path');
-        const message = refusalOf(dir, [DB], true);
-        expect(message).toContain('DO NOT RERUN this reviewer');
-        expect(message).toContain('Change its addressed red status to "yellow"');
-        expect(message).toContain('Yellow is accepted by the gate');
-        expect(message).toContain('flag the human BEFORE posting the PR');
-        expect(message).not.toContain('re-run the reviewer');
-        expect(fs.existsSync(svc.checklistResultPath(reviewPathIn(dir), 'db-reviewer'))).toBe(true);
-        expect(fs.existsSync(svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer'))).toBe(false);
-    });
-
-    it('preserves legacy retirement and rerun guidance when the opt-in is false', () => {
-        const dir = reviewDir();
-        writeVerdict(dir, 'db-reviewer', 'red', 'legacy finding');
-        const message = refusalOf(dir, [DB]);
-        expect(message).toContain('review again');
-        expect(fs.existsSync(svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer'))).toBe(true);
     });
 });
 

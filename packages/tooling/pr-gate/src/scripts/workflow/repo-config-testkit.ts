@@ -45,6 +45,8 @@ export class RepoConfigFixture {
         delete commands['pr-gate']['checklists'];
         delete commands['pr-gate']['checklistsWhy'];
         const prGate = commands['pr-gate'];
+        // Local source requires this before the published validator permits the live repo to add it.
+        prGate['maxReviewerRounds'] = 2;
         if (prGate['overrideReviewerAgent'] !== true && prGate['reviewerAgentName'] === DEFAULT_REVIEWER_AGENT_NAME) {
             delete prGate['reviewerAgentName'];
         }

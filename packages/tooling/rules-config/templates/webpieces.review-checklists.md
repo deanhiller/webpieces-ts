@@ -10,6 +10,7 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
 ```jsonc
 "commands": { "pr-gate": {
   "reviewerAgents": 1,                         // REQUIRED — 0 disables reviews; see below
+  "maxReviewerRounds": 2,                      // REQUIRED — complete global review rounds; see below
   "checklists": [
     { "id": "db-migrations",
       "doc": ".claude/review/db-migrations.md",
@@ -26,6 +27,11 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
 > `id`. There is no compatibility mode.
 
 ## `overrideReviewerAgent`, `reviewerAgentName` and `reviewerAgents` — who reviews, and how many of them
+
+`maxReviewerRounds` is a separate required positive integer. It caps complete global reviewer cycles for
+one PR review state. `1` buys the initial full review only; `2` buys that review plus one focused review of
+the author's remediation delta. Re-running stage ② while a round is still active resumes that round and
+does not consume another. The key remains explicit when `reviewerAgents` is `0`, though it is inactive.
 
 - **The reviewer agent** is the `subagent_type` every reviewer is spawned as. By default — write nothing —
   it is `webpieces-reviewer`, a generic, checklist-agnostic reviewer that webpieces owns:

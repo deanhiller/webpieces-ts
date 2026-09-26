@@ -181,6 +181,11 @@ export class PrGateConfig {
      * number buildPrGateConfig reads.
      */
     reviewer: ReviewerAgentPolicy = new ReviewerAgentPolicy(DEFAULT_REVIEWER_AGENT_NAME, REVIEWER_AGENTS_PLACEHOLDER);
+    /**
+     * REQUIRED positive integer: the maximum number of complete global reviewer rounds a PR review state
+     * may start. This is deliberately repository policy rather than a machine-local preference.
+     */
+    maxReviewerRounds!: number;
     // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
@@ -286,6 +291,7 @@ interface RawPrGateSection {
     overrideReviewerAgent?: boolean;
     reviewerAgentName?: string;
     reviewerAgents?: number;
+    maxReviewerRounds?: number;
     gateSalt?: string;
     checklistComments?: boolean;
     landPr?: RawLandPr;
@@ -355,6 +361,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const built = new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
     built.landPr = buildLandPrConfig(raw.landPr);
     built.reviewer = reviewer;
+    built.maxReviewerRounds = raw.maxReviewerRounds as number;
     // Review-context knobs. All optional and all defaulted, so a config that omits every one of them (which
     // is every consumer's config today) behaves exactly as it did before they existed.
     built.reviewDiffExclude = Array.isArray(raw.reviewDiffExclude) ? raw.reviewDiffExclude : defaults.reviewDiffExclude;

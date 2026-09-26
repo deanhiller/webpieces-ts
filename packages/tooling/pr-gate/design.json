@@ -681,6 +681,14 @@
                     "level": 2
                 },
                 {
+                    "id": "ReviewRoundStateService",
+                    "className": "ReviewRoundStateService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts",
+                    "level": 2
+                },
+                {
                     "id": "ReviewStageReceiptService",
                     "className": "ReviewStageReceiptService",
                     "kind": "class",
@@ -854,6 +862,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/write-review-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "WriteReviewFixesCommand",
+                    "className": "WriteReviewFixesCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/write-review-fixes-command.ts",
                     "level": 1
                 }
             ],
@@ -1670,6 +1686,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "ReviewRoundStateService",
+                    "injection": "type",
+                    "token": "ReviewRoundStateService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
+                    "paramName": "rounds",
+                    "paramType": "ReviewRoundStateService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "ReviewStageReceiptService",
                     "injection": "type",
                     "token": "ReviewStageReceiptService",
@@ -2407,6 +2432,15 @@
                     "paramType": "WriteReviewCommand"
                 },
                 {
+                    "from": "PrGateApp",
+                    "to": "WriteReviewFixesCommand",
+                    "injection": "type",
+                    "token": "WriteReviewFixesCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/write-review-fixes-command.ts#WriteReviewFixesCommand",
+                    "paramName": "writeReviewFixesCommand",
+                    "paramType": "WriteReviewFixesCommand"
+                },
+                {
                     "from": "ProvenanceEnforcer",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -2641,6 +2675,33 @@
                     "paramType": "ReviewerInstructionsService"
                 },
                 {
+                    "from": "ReviewRoundStateService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "ReviewRoundStateService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJson",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ReviewRoundStateService",
+                    "to": "VerdictProvenanceService",
+                    "injection": "type",
+                    "token": "VerdictProvenanceService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
+                    "paramName": "provenance",
+                    "paramType": "VerdictProvenanceService"
+                },
+                {
                     "from": "ReviewStageReceiptService",
                     "to": "ReviewJsonService",
                     "injection": "type",
@@ -2783,6 +2844,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-report.ts#ReviewReport",
                     "paramName": "reviewReport",
                     "paramType": "ReviewReport"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewRoundStateService",
+                    "injection": "type",
+                    "token": "ReviewRoundStateService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
+                    "paramName": "rounds",
+                    "paramType": "ReviewRoundStateService"
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
@@ -3191,6 +3261,15 @@
                 },
                 {
                     "from": "WriteReviewCommand",
+                    "to": "ReviewRoundStateService",
+                    "injection": "type",
+                    "token": "ReviewRoundStateService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
+                    "paramName": "rounds",
+                    "paramType": "ReviewRoundStateService"
+                },
+                {
+                    "from": "WriteReviewCommand",
                     "to": "ReviewStageReceiptService",
                     "injection": "type",
                     "token": "ReviewStageReceiptService",
@@ -3215,6 +3294,42 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
                     "paramName": "provenance",
                     "paramType": "VerdictProvenanceService"
+                },
+                {
+                    "from": "WriteReviewFixesCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "WriteReviewFixesCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "WriteReviewFixesCommand",
+                    "to": "ReviewRoundStateService",
+                    "injection": "type",
+                    "token": "ReviewRoundStateService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
+                    "paramName": "rounds",
+                    "paramType": "ReviewRoundStateService"
+                },
+                {
+                    "from": "WriteReviewFixesCommand",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
                 }
             ],
             "unresolved": []

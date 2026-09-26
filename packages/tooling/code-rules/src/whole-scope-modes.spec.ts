@@ -76,7 +76,7 @@ class Repo {
         this.write(CONFIG_FILENAME, JSON.stringify({
             rules,
             hookGuards,
-            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1 } },
+            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 } },
             excludePaths: [],
             'match-rules': [],
         }));

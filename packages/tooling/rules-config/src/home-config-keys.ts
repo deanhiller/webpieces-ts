@@ -15,13 +15,6 @@
  */
 export const HOME_CONFIG_DIR = '.webpieces';
 export const HOME_CONFIG_FILE = 'config.json';
-/**
- * Opt-in for the single-round reviewer experiment. This spelling is deliberately TOP-LEVEL: it is the
- * user-facing shape requested for the experiment (`{ "singleRoundReview": true }`), not an
- * `experimental.*` alias. Absent and false preserve the multi-round flow.
- */
-export const HOME_KEY_SINGLE_ROUND_REVIEW = 'singleRoundReview';
-
 // The `experimental` section and its keys. Named as constants because both the validator and its error
 // text must spell them identically — a validator whose message names a different key than the one it
 // checks is worse than no message.
@@ -128,7 +121,7 @@ export const DEFAULT_MAX_CONCURRENT_BUILDS = 3;
  * sample documents and to assert cross-version invariants, and every entry is assumed to be a setting
  * with a typed value. `warnUnknownKeys` accepts the documentation keys separately, everywhere.
  */
-export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION, HOME_KEY_SINGLE_ROUND_REVIEW];
+export const ALLOWED_TOP_LEVEL: readonly string[] = [HOME_EXPERIMENTAL_SECTION];
 /**
  * The understood `experimental.*` keys, SPLIT BY VALUE TYPE — because the spec walks these lists to build
  * a sample document, and a sample that wrote `false` into a numeric key would be rejected by the very
