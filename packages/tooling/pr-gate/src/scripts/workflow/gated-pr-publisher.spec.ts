@@ -97,6 +97,19 @@ describe('gh pr edit fails', () => {
         expect(fake.calls).toEqual(['findOpenPr', 'editPr']);
         expect(fake.calls).not.toContain('push');
     });
+
+    it('names the human caller when the shared publisher is used by wp-human-post-pr', () => {
+        const fake = new FakePublisher('42', false);
+        expect(
+            (): PublishedPr =>
+                fake.publish(
+                    'dean/feature',
+                    'My PR title',
+                    gatedBody(NEW_HEAD_SHA),
+                    'pnpm wp-human-post-pr',
+                ),
+        ).toThrowError(/pnpm wp-human-post-pr/);
+    });
 });
 
 describe('push fails after the body edit landed', () => {

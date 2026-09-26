@@ -67,10 +67,13 @@ graph TD
     HomeDocKeys["HomeDocKeys"]
     HotfixFinishPreparer["HotfixFinishPreparer"]
     HotfixInstructions["HotfixInstructions"]
+    HumanPostPrCommand["HumanPostPrCommand"]
     LandPrCommand["LandPrCommand"]
     LandedTreeResolver["LandedTreeResolver"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
+    MainSyncFileStore["MainSyncFileStore"]
+    MainSyncStatusService["MainSyncStatusService"]
     MergeBodyTempFile["MergeBodyTempFile"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
@@ -240,6 +243,18 @@ graph TD
     HotfixFinishPreparer --> PrContextWriter
     HotfixFinishPreparer --> ProvenanceEnforcer
     HotfixFinishPreparer --> ReviewJsonService
+    HumanPostPrCommand --> AiBranchName
+    HumanPostPrCommand --> BranchIdentity
+    HumanPostPrCommand --> BranchNaming
+    HumanPostPrCommand --> BuildCommand
+    HumanPostPrCommand --> GateTokenService
+    HumanPostPrCommand --> GatedPrPublisher
+    HumanPostPrCommand --> GitExec
+    HumanPostPrCommand --> MainSyncStatusService
+    HumanPostPrCommand --> MergeState
+    HumanPostPrCommand --> RepoRootFinder
+    HumanPostPrCommand --> ReviewJsonService
+    HumanPostPrCommand --> SquashSettingsEnforcer
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
@@ -252,6 +267,11 @@ graph TD
     LandedTreeResolver --> WorktreeService
     LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
+    MainSyncFileStore --> AtomicFile
+    MainSyncStatusService --> AtomicFile
+    MainSyncStatusService --> DotWebpieces
+    MainSyncStatusService --> MainSyncFileStore
+    MainSyncStatusService --> WorktreeService
     MergeBodyTempFile --> RepoRootFinder
     MergeBodyTempFile --> RepoScratchDirs
     MergeEnd --> BranchNaming
@@ -283,6 +303,7 @@ graph TD
     PrGateApp --> FinishPushDevCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
+    PrGateApp --> HumanPostPrCommand
     PrGateApp --> LandPrCommand
     PrGateApp --> PushDevCommand
     PrGateApp --> PushDevStateStore

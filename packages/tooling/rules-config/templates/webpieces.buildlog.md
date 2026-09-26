@@ -1,7 +1,9 @@
 # Where the build's output is — read the printed path, never a remembered one
 
 `pnpm wp-build` and the PR gate's build stages send the build's **entire** stdout and stderr to a FILE.
-Your terminal gets a heartbeat and a summary; it never gets the build output. So every question about a
+Your terminal gets a heartbeat and a summary; it normally never gets the build output. The deliberate
+exception is a human answering Y to the build prompt in `wp-human-post-pr`: that interactive command
+follows the same durable `build.log` live until `wp-build` completes. So every later question about a
 build ("what failed", "did the tests run", "what was that warning") is answered by reading a file — never
 by running the build again.
 

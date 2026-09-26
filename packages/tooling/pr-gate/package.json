@@ -25,6 +25,7 @@
         "bin": {
             "wp-build": "./src/scripts/wp-build.js",
             "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
+            "wp-human-post-pr": "./src/scripts/wp-human-post-pr.js",
             "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
             "wp-start-update": "./src/scripts/wp-start-update.js",
             "wp-finish-update": "./src/scripts/wp-finish-update.js",

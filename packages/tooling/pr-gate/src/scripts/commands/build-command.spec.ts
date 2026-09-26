@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-    BuildsLog, DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RepoRootFinder,
-    RunningBuild, RuleFailError, toError,
+    BuildsLog,
+    DEFAULT_MAX_CONCURRENT_BUILDS,
+    HomeConfig,
+    HomeConfigService,
+    RepoRootFinder,
+    RunningBuild,
+    RuleFailError,
+    toError,
 } from '@webpieces/rules-config';
 
 import { BuildCommand, BuildOptions, TOO_MANY_CONCURRENT_BUILDS } from './build-command';
@@ -29,9 +35,20 @@ class Harness {
  */
 /** N live builds, as `BuildsLog.running()` would report them. */
 function liveBuilds(count: number): RunningBuild[] {
-    return Array.from({ length: count }, (_unused: unknown, i: number): RunningBuild =>
-        new RunningBuild(`id-${String(i)}`, 'build', '/repo', 'primary', '/repo', 'dean/x', 999_000 + i,
-            Date.now() - 30_000));
+    return Array.from(
+        { length: count },
+        (_unused: unknown, i: number): RunningBuild =>
+            new RunningBuild(
+                `id-${String(i)}`,
+                'build',
+                '/repo',
+                'primary',
+                '/repo',
+                'dean/x',
+                999_000 + i,
+                Date.now() - 30_000,
+            ),
+    );
 }
 
 function harness(alreadyRunning = 0): Harness {
@@ -42,6 +59,10 @@ function harness(alreadyRunning = 0): Harness {
             calls.push(opts);
             return Promise.resolve();
         },
+        runBuildGateStreaming: (_root: string, opts: BuildGateOptions): Promise<void> => {
+            calls.push(opts);
+            return Promise.resolve();
+        },
     } as unknown as BuildAffected;
     // webpieces-disable no-any-unknown -- ditto; only resolveRepoRoot is exercised
     const roots = { resolveRepoRoot: (): string => '/repo' } as unknown as RepoRootFinder;
@@ -49,7 +70,9 @@ function harness(alreadyRunning = 0): Harness {
     // developer's real `~/.webpieces`, and so the refusal threshold is a fact of the test rather than of
     // whatever else the machine happens to be building.
     // webpieces-disable no-any-unknown -- test doubles for the injected collaborators
-    const buildsLog = { running: (): RunningBuild[] => liveBuilds(alreadyRunning) } as unknown as BuildsLog;
+    const buildsLog = {
+        running: (): RunningBuild[] => liveBuilds(alreadyRunning),
+    } as unknown as BuildsLog;
     // webpieces-disable no-any-unknown -- ditto
     const homeConfig = {
         load: (): HomeConfig => new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false),
@@ -94,6 +117,14 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
         expect(h.calls.length).toBe(1);
     });
 
+    it('offers a human-terminal form that uses the same gate options and streams its log', async () => {
+        const h = harness();
+        const streamed = vi.spyOn(h.gate, 'runBuildGateStreaming');
+        await h.command.runStreaming(unforced());
+        expect(streamed).toHaveBeenCalledOnce();
+        expect(h.calls[0].stage).toBe(BUILD_STAGE);
+    });
+
     it('tells the agent to re-run `pnpm wp-build`, the same verb it just ran', async () => {
         const h = harness();
         await h.command.run(unforced());
@@ -118,7 +149,9 @@ describe('wp-build runs the project build through the ONE shared gate', () => {
     // the call rather than as a rejection — and runMain, which invokes this, handles both alike.
     it('propagates a failing build rather than swallowing it', async () => {
         const h = harness();
-        vi.spyOn(h.gate, 'runBuildGate').mockImplementation((): Promise<void> => Promise.reject(new Error('build failed')));
+        vi.spyOn(h.gate, 'runBuildGate').mockImplementation(
+            (): Promise<void> => Promise.reject(new Error('build failed')),
+        );
         await expect(h.command.run(unforced())).rejects.toThrow('build failed');
     });
 });

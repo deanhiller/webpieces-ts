@@ -18,6 +18,7 @@ import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/wri
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
+import { HumanPostPrCommand } from './commands/human-post-pr-command';
 import { PushDevStateStore } from './workflow/push-dev-state';
 import { RepoRootFinder } from '@webpieces/rules-config';
 
@@ -48,6 +49,7 @@ export class PrGateApp {
         private readonly awaitChecksCommand: AwaitChecksCommand,
         private readonly pushDevCommand: PushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
+        private readonly humanPostPrCommand: HumanPostPrCommand,
         private readonly pushDevStateStore: PushDevStateStore,
         private readonly repoRootFinder: RepoRootFinder,
     ) {}
@@ -62,7 +64,10 @@ export class PrGateApp {
      */
     private assertNoResolveInProgress(command: string): void {
         if (!this.pushDevStateStore.isBlockedDuringResolve(command)) return;
-        this.pushDevStateStore.assertIdle(this.repoRootFinder.resolveRepoRoot(process.cwd()), command);
+        this.pushDevStateStore.assertIdle(
+            this.repoRootFinder.resolveRepoRoot(process.cwd()),
+            command,
+        );
     }
 
     /** `wp-push-dev`: publish a DISPOSABLE copy of this branch for the shared dev environment. No PR, no build. */
@@ -144,6 +149,12 @@ export class PrGateApp {
     finishUpsertPr(): Promise<void> {
         this.assertNoResolveInProgress('wp-finish-upsert-pr');
         return this.finishUpsertPrCommand.run();
+    }
+
+    /** `wp-human-post-pr`: human-attested post with optional local build and no automated review. */
+    humanPostPr(): Promise<void> {
+        this.assertNoResolveInProgress('wp-human-post-pr');
+        return this.humanPostPrCommand.run();
     }
 
     /**

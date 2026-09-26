@@ -128,18 +128,22 @@ cat .webpieces/main-sync-status.json                  # the tooling's own answer
 ### Creating a PR
 
 Manual `git push` and direct PR creation (`gh pr create`, `gh api .../pulls`, curl) are blocked by
-`pr-creation-or-push-guard`. Everything goes through the gated flow, which updates from main, runs the
-real build, and pushes for you:
+`pr-creation-or-push-guard`. AI uses the gated flow, which updates from main, runs the real build, and
+pushes for you:
 ```bash
-pnpm wp-start-upsert-pr    # update from main + advisory build, then tells you to write the PR summary (summary.json)
+pnpm wp-start-upsert-pr
 # resolve conflicts with /wp-merge if prompted
-pnpm wp-finish-upsert-pr   # authoritative build gate, push, create/update the PR + dashboard
+pnpm wp-review-upsert-pr   # authoritative build gate + reviewer briefing
+# run the required reviewers and write summary.json
+pnpm wp-finish-upsert-pr   # push, create/update the PR + dashboard
 ```
-This same pair is what you use to update from main once a PR exists — `wp-start-upsert-pr` runs the
-identical 3-point engine *and* re-points the PR afterwards.
+This same flow updates from main once a PR exists and re-points that PR afterwards.
 
-If a human genuinely needs an out-of-band push (no PR), they must run it themselves — a manual push
-bypasses the build gate, `summary.json`, and dashboard.
+A human who has personally inspected the work may instead run interactive `pnpm wp-human-post-pr`.
+That separate escape hatch requires a clean, current-main feature branch and valid `summary.json`, visibly
+offers to run `pnpm wp-build` locally (following `build.log` live until it completes) or defer the build to
+cloud CI, marks automated review and the chosen build path, and posts without merging. It preserves A/B/C and never runs a
+raw merge, squash update, or rebase. AI must not run it or answer its human attestation.
 
 ---
 

@@ -32,6 +32,15 @@ verified, and stage ③ re-runs the build ONLY if HEAD moved since — three sta
 All three stages are required and none may be skipped: stage ③ refuses to post a PR unless stage ② has
 run on this branch AND summary.json exists.
 
+### Separate human-only escape hatch
+
+`pnpm wp-human-post-pr` is not stage ④ and is never an AI cure. A human who has personally inspected the
+work may run it interactively and answer its attestation. It requires a clean feature branch, a freshly
+fetched `origin/main`, an exact pure-main fork point, and valid `summary.json`; it then creates or updates
+offers to run `pnpm wp-build` locally while following `build.log` live, or defer validation to cloud CI, then posts
+the PR with one push and a visible warning that automated reviewers were skipped and whether the local build ran. It never
+updates a stale branch and never merges the PR. AI must not run it for a human or answer `human`.
+
 ### Emergency `/hotfix/` branches
 
 An exact, case-sensitive `/hotfix/` path segment selects the auditable emergency profile. Its flow is:

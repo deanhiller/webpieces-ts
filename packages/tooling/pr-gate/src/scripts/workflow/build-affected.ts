@@ -1,4 +1,12 @@
-import { loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, BuildTermination, BranchIdentity, HOTFIX_BUILD_COMMAND } from '@webpieces/rules-config';
+import {
+    loadAndValidate,
+    CliExitError,
+    DEFAULT_BUILD_COMMAND,
+    BuildsLog,
+    BuildTermination,
+    BranchIdentity,
+    HOTFIX_BUILD_COMMAND,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 import { StageOutputLog } from './stage-output-log';
@@ -48,7 +56,9 @@ export class BuildAffected {
     resolveBuildCommand(repoRoot: string): string {
         if (this.branchIdentity.isHotfix()) return HOTFIX_BUILD_COMMAND;
         const configured = loadAndValidate(repoRoot).prGate.buildCommand;
-        return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
+        return configured !== undefined && configured.trim() !== ''
+            ? configured
+            : DEFAULT_BUILD_COMMAND;
     }
 
     /**
@@ -67,6 +77,15 @@ export class BuildAffected {
      * because a log file was busy.
      */
     async runBuildGate(repoRoot: string, opts: BuildGateOptions): Promise<void> {
+        return this.run(repoRoot, opts, false);
+    }
+
+    /** The human escape hatch uses the same gate but follows build.log on the terminal while it runs. */
+    async runBuildGateStreaming(repoRoot: string, opts: BuildGateOptions): Promise<void> {
+        return this.run(repoRoot, opts, true);
+    }
+
+    private async run(repoRoot: string, opts: BuildGateOptions, stream: boolean): Promise<void> {
         const buildCommand = this.resolveBuildCommand(repoRoot);
         // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
         // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
@@ -83,13 +102,19 @@ export class BuildAffected {
         // build passed, failed, or the spawn itself blew up; the throw is re-raised untouched below
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            termination = await this.buildLog.run(repoRoot, buildCommand, logPath);
+            termination = stream
+                ? await this.buildLog.runStreaming(repoRoot, buildCommand, logPath)
+                : await this.buildLog.run(repoRoot, buildCommand, logPath);
         } finally {
             this.buildsLog.finish(ticket, termination);
         }
-        const buildCode = termination.code === null || termination.signal !== null ? 1 : termination.code;
+        const buildCode =
+            termination.code === null || termination.signal !== null ? 1 : termination.code;
         if (buildCode !== 0) {
-            throw new CliExitError(buildCode, this.failureText(opts, buildCommand, logPath, termination));
+            throw new CliExitError(
+                buildCode,
+                this.failureText(opts, buildCommand, logPath, termination),
+            );
         }
         this.stageConsole.say(this.buildLog.successMessage(logPath));
     }
@@ -102,7 +127,16 @@ export class BuildAffected {
      * and the un-captured branch's advice was "run the build again yourself", which is the single most
      * expensive thing an agent can be told. Reading a FILE is now the only answer this gate gives.
      */
-    private failureText(opts: BuildGateOptions, buildCommand: string, logPath: string, termination: BuildTermination): string {
-        return `\n❌ ${opts.failureHeadline}\n` + this.buildLog.failureMessage(buildCommand, logPath, termination) + `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`;
+    private failureText(
+        opts: BuildGateOptions,
+        buildCommand: string,
+        logPath: string,
+        termination: BuildTermination,
+    ): string {
+        return (
+            `\n❌ ${opts.failureHeadline}\n` +
+            this.buildLog.failureMessage(buildCommand, logPath, termination) +
+            `Fix what that log shows, then re-run ${opts.rerunCommand}.\n`
+        );
     }
 }

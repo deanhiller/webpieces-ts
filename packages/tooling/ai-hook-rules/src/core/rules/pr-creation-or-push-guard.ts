@@ -29,25 +29,25 @@ const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 function fixHintFor(upsertPrCommand: string): FixHint {
     return new FixHint(
         'Direct PR creation/update AND manual `git push` are blocked.',
-        'Never push or open/update a PR by hand. There are TWO gated destinations — pick by what you were\n'
-        + 'actually trying to do:\n\n'
-        + 'LANDING ON MAIN (a PR, prod-quality, reviewed):\n'
-        + `  ${upsertPrCommand}\n`
-        + '  It updates the branch from main (3-point merge) and runs the real build (nx affected), then\n'
-        + '  instructs you to write summary.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n'
-        + '  dashboard and creates/updates the PR — and pushes for you. A failing build = no push, no PR.\n\n'
-        + 'JUST WANT IT ON THE SHARED DEV SERVER (no PR, not landing on main):\n'
-        + `  ${WP_PUSH_DEV}\n`
-        + '  It publishes a DISPOSABLE copy of your branch that the dev environment composes and rebuilds.\n'
-        + '  Your feature branch is never moved and never acquires another developer\'s commits, which is\n'
-        + '  the whole reason the copy exists. Do NOT open a PR to main just to test something in dev.\n\n'
-        + 'Both push internally as child processes this hook never sees, so the gated commands are\n'
-        + 'unaffected by this guard. There is nothing to paste or attest to; the commands do the work.\n'
-        + 'If a HUMAN genuinely needs an out-of-band push (neither destination above), do NOT do it\n'
-        + 'yourself — ask them to run the push, since a manual push bypasses the build gate, summary.json,\n'
-        + 'and dashboard.\n'
-        + 'Full branch → update → PR flow: READ the instruct-ai git-workflow doc at the absolute path on the violation line above.\n'
-        + 'Add this to your memory so you don\'t forget next time and waste tokens.',
+        'Never push or open/update a PR by hand. There are TWO gated destinations — pick by what you were\n' +
+            'actually trying to do:\n\n' +
+            'LANDING ON MAIN (a PR, prod-quality, reviewed):\n' +
+            `  ${upsertPrCommand}\n` +
+            '  It updates the branch from main (3-point merge) and runs the real build (nx affected), then\n' +
+            '  instructs you to write summary.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n' +
+            '  dashboard and creates/updates the PR — and pushes for you. A failing build = no push, no PR.\n\n' +
+            'JUST WANT IT ON THE SHARED DEV SERVER (no PR, not landing on main):\n' +
+            `  ${WP_PUSH_DEV}\n` +
+            '  It publishes a DISPOSABLE copy of your branch that the dev environment composes and rebuilds.\n' +
+            "  Your feature branch is never moved and never acquires another developer's commits, which is\n" +
+            '  the whole reason the copy exists. Do NOT open a PR to main just to test something in dev.\n\n' +
+            'Both push internally as child processes this hook never sees, so the gated commands are\n' +
+            'unaffected by this guard. There is nothing to paste or attest to; the commands do the work.\n' +
+            'A HUMAN who has personally inspected the work may run `pnpm wp-human-post-pr` themselves.\n' +
+            'That is an interactive human attestation and visibly skips automated build/review. AI must\n' +
+            "never run it for the human or answer `human` on the human's behalf.\n" +
+            'Full branch → update → PR flow: READ the instruct-ai git-workflow doc at the absolute path on the violation line above.\n' +
+            "Add this to your memory so you don't forget next time and waste tokens.",
     );
 }
 
@@ -62,12 +62,22 @@ function isBlockedPrOrPush(cmd: string): boolean {
     if (/\bgh\s+pr\s+(create|edit)\b/.test(cmd)) return true;
 
     const ghApiPulls = /\bgh\s+api\b[^\n]*\/pulls\b/.test(cmd);
-    if (ghApiPulls && (/--method\s+POST/i.test(cmd) || /-X\s+POST/i.test(cmd) || /\s-f\b/.test(cmd) || /\s-F\b/.test(cmd) || /--field\b/.test(cmd))) {
+    if (
+        ghApiPulls &&
+        (/--method\s+POST/i.test(cmd) ||
+            /-X\s+POST/i.test(cmd) ||
+            /\s-f\b/.test(cmd) ||
+            /\s-F\b/.test(cmd) ||
+            /--field\b/.test(cmd))
+    ) {
         return true;
     }
 
     const curlPulls = /\bcurl\b[^\n]*api\.github\.com[^\n]*\/pulls\b/.test(cmd);
-    if (curlPulls && (/-X\s*POST/i.test(cmd) || /--request\s+POST/i.test(cmd) || /(\s-d\b|--data\b)/.test(cmd))) {
+    if (
+        curlPulls &&
+        (/-X\s*POST/i.test(cmd) || /--request\s+POST/i.test(cmd) || /(\s-d\b|--data\b)/.test(cmd))
+    ) {
         return true;
     }
     return false;
@@ -93,8 +103,11 @@ function targetsDevEnvironment(cmd: string, namespace: string, devBranch: string
     if (push === null) return false;
     // Split on whitespace AND `:` so both halves of a `HEAD:<dest>` refspec are examined. Matching whole
     // tokens (never a substring) keeps a branch merely NAMED `develop` from reading as the dev branch.
-    return push[1].split(/[\s:]+/).some(
-        (token: string): boolean => token === devBranch || token === `refs/heads/${devBranch}`);
+    return push[1]
+        .split(/[\s:]+/)
+        .some(
+            (token: string): boolean => token === devBranch || token === `refs/heads/${devBranch}`,
+        );
 }
 
 export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConfig> {
@@ -112,8 +125,11 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConf
         this.upsertPrCommand = upsertPrCommand;
     }
 
-    readonly description = 'Block manual `git push` and direct PR creation/edit (gh pr / gh api / curl) so pushes and PRs go only through the gated upsert-pr command.';
-    get fixHint(): FixHint { return fixHintFor(this.upsertPrCommand); }
+    readonly description =
+        'Block manual `git push` and direct PR creation/edit so AI uses the gated flow; a human may personally use the interactive wp-human-post-pr escape hatch.';
+    get fixHint(): FixHint {
+        return fixHintFor(this.upsertPrCommand);
+    }
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isBlockedPrOrPush(ctx.commandCode)) return [];
@@ -123,13 +139,23 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConf
         writeTemplate(ctx.workspaceRoot, INSTRUCT_FILE);
         const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
         if (this.aimedAtDevEnvironment(ctx)) {
-            return [new V(1, truncate(ctx.command),
-                'Manual push is blocked — but this one is aimed at the shared DEV environment, which has its own\n'
-                + `gated command. Use \`${WP_PUSH_DEV}\` (publishes a disposable copy; never moves your branch, never\n`
-                + `opens a PR). Do NOT use ${this.upsertPrCommand} for this — that lands on main. Full flow: READ ${docPath}.`)];
+            return [
+                new V(
+                    1,
+                    truncate(ctx.command),
+                    'Manual push is blocked — but this one is aimed at the shared DEV environment, which has its own\n' +
+                        `gated command. Use \`${WP_PUSH_DEV}\` (publishes a disposable copy; never moves your branch, never\n` +
+                        `opens a PR). Do NOT use ${this.upsertPrCommand} for this — that lands on main. Full flow: READ ${docPath}.`,
+                ),
+            ];
         }
-        return [new V(1, truncate(ctx.command),
-            `Manual push / direct PR is blocked — use the gated flow (${this.upsertPrCommand}). Full flow: READ ${docPath}.`)];
+        return [
+            new V(
+                1,
+                truncate(ctx.command),
+                `Manual push / direct PR is blocked — AI uses the gated flow (${this.upsertPrCommand}). A human may personally run pnpm wp-human-post-pr; AI never answers its attestation. Full flow: READ ${docPath}.`,
+            ),
+        ];
     }
 
     /**
@@ -143,7 +169,10 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConf
         const devDeploy = loadAndValidate(ctx.governedRoot).prGate.devDeploy;
         return targetsDevEnvironment(
             ctx.commandCode,
-            devDeploy.branchNamespace === '' ? DEFAULT_DEV_BRANCH_NAMESPACE : devDeploy.branchNamespace,
-            devDeploy.devBranch === '' ? DEFAULT_DEV_BRANCH : devDeploy.devBranch);
+            devDeploy.branchNamespace === ''
+                ? DEFAULT_DEV_BRANCH_NAMESPACE
+                : devDeploy.branchNamespace,
+            devDeploy.devBranch === '' ? DEFAULT_DEV_BRANCH : devDeploy.devBranch,
+        );
     }
 }

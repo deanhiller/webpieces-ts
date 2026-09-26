@@ -5,6 +5,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { GateLogFile } from './gate-log-file';
 import { StageOutputLog } from './stage-output-log';
+import { BuildLogFollower } from './build-log-follower';
 
 // ─── Why ───────────────────────────────────────────────────────────────────────────────────────────────
 // The build gate already builds everything. When the output only ever went to the CONSOLE, an agent that
@@ -128,23 +129,47 @@ export class BuildGateLog {
     /**
      * Run `buildCommand` with its stdout AND stderr redirected in full to `logPath`, printing a heartbeat
      * every HEARTBEAT_MS so the caller can see it is alive. Returns the BUILD's raw termination facts.
-     * Nothing is truncated and nothing is streamed.
+     * Nothing is truncated. Ordinary AI-facing callers do not stream; the explicitly human-attested
+     * PR escape hatch may wrap this with runStreaming(), which follows the same durable file live.
      */
     async run(repoRoot: string, buildCommand: string, logPath: string): Promise<BuildTermination> {
         this.files.rotate(logPath);
         const fd = fs.openSync(logPath, 'w');
-        const heartbeat = new BuildLogHeartbeat(this.files, logPath, this.files.displayPath(repoRoot, logPath));
-        const timer = setInterval((): void => { this.stageConsole.say(`${heartbeat.tick()}\n`); }, HEARTBEAT_MS);
+        const heartbeat = new BuildLogHeartbeat(
+            this.files,
+            logPath,
+            this.files.displayPath(repoRoot, logPath),
+        );
+        const timer = setInterval((): void => {
+            this.stageConsole.say(`${heartbeat.tick()}\n`);
+        }, HEARTBEAT_MS);
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the timer and the fd MUST be released
         // whatever the child does, and the exit code is returned rather than thrown so runBuildGate owns
         // the one CliExitError.
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            return await this.awaitExit(spawn(buildCommand, { cwd: repoRoot, shell: true, stdio: ['ignore', fd, fd] }), fd);
+            return await this.awaitExit(
+                spawn(buildCommand, { cwd: repoRoot, shell: true, stdio: ['ignore', fd, fd] }),
+                fd,
+            );
         } finally {
             clearInterval(timer);
             fs.closeSync(fd);
         }
+    }
+
+    /** Human-only variant: preserve the durable log and follow its appended bytes live. */
+    runStreaming(
+        repoRoot: string,
+        buildCommand: string,
+        logPath: string,
+    ): Promise<BuildTermination> {
+        // run() synchronously rotates and opens the file before reaching its first await, so the follower
+        // cannot accidentally replay the previous build that was at this path.
+        const completion = this.run(repoRoot, buildCommand, logPath);
+        const follower = new BuildLogFollower(logPath, this.stageConsole);
+        follower.start();
+        return completion.finally((): void => follower.stop());
     }
 
     /**
@@ -164,11 +189,13 @@ export class BuildGateLog {
      * agent guessing or rebuilding — so it is told to surface the contradiction to the human and stop.
      */
     failureMessage(buildCommand: string, logPath: string, termination: BuildTermination): string {
-        return `\nBuild Failed: ${buildCommand}\n${this.files.pointer(logPath)}\n` +
+        return (
+            `\nBuild Failed: ${buildCommand}\n${this.files.pointer(logPath)}\n` +
             `${this.terminationRecord(termination)}\n` +
             `Last ${FAILURE_TAIL_LINES} lines of that log:\n${this.files.tail(logPath, FAILURE_TAIL_LINES)}\n` +
             `Read that FILE for the failures. Do NOT re-run the build to see them.\n` +
-            `If you do not see failures in that log, report that to the user and stop.\n`;
+            `If you do not see failures in that log, report that to the user and stop.\n`
+        );
     }
 
     // Resolve, and wait for, the child's close code AND signal. A spawn that never starts (a shell that is
@@ -176,22 +203,25 @@ export class BuildGateLog {
     // outcome that must be impossible — and the reason is APPENDED TO THE LOG, so the failure message's
     // pointer still leads to it rather than to an empty file.
     private awaitExit(child: ChildProcess, fd: number): Promise<BuildTermination> {
-        return new Promise<BuildTermination>((resolve: (termination: BuildTermination) => void): void => {
-            let settled = false;
-            child.on('error', (err: Error): void => {
-                if (settled) return;
-                settled = true;
-                fs.writeSync(fd, `\nThe build command could not be started: ${err.message}\n`);
-                resolve(new BuildTermination(1, null));
-            });
-            child.on('close', (code: number | null, signal: NodeJS.Signals | null): void => {
-                if (settled) return;
-                settled = true;
-                const termination = new BuildTermination(code, signal);
-                if (code === null || signal !== null) fs.writeSync(fd, `\n${this.terminationRecord(termination)}\n`);
-                resolve(termination);
-            });
-        });
+        return new Promise<BuildTermination>(
+            (resolve: (termination: BuildTermination) => void): void => {
+                let settled = false;
+                child.on('error', (err: Error): void => {
+                    if (settled) return;
+                    settled = true;
+                    fs.writeSync(fd, `\nThe build command could not be started: ${err.message}\n`);
+                    resolve(new BuildTermination(1, null));
+                });
+                child.on('close', (code: number | null, signal: NodeJS.Signals | null): void => {
+                    if (settled) return;
+                    settled = true;
+                    const termination = new BuildTermination(code, signal);
+                    if (code === null || signal !== null)
+                        fs.writeSync(fd, `\n${this.terminationRecord(termination)}\n`);
+                    resolve(termination);
+                });
+            },
+        );
     }
 
     /** One stable, human-readable spelling shared by the FullLog and the immediate failure output. */
@@ -205,7 +235,9 @@ export class BuildGateLog {
         const name = this.fileNameFor(repoRoot, stage);
         // `wp-build`'s log sits at the ROOT of the state dir, not under `logs/`, because it is the one log
         // path a person types from memory. Everything else keeps the per-commit names in `logs/`.
-        return stage === BUILD_STAGE ? this.files.localPath(repoRoot, name) : this.files.logsPath(repoRoot, name);
+        return stage === BUILD_STAGE
+            ? this.files.localPath(repoRoot, name)
+            : this.files.logsPath(repoRoot, name);
     }
 
     // Anything that is not a filename-safe character becomes '-', so `dean/feat` cannot create directories.

@@ -1,6 +1,11 @@
 import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
 import {
-    ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, toChecklist,
+    ChecklistDefinition,
+    DEFAULT_REVIEWER_AGENT_NAME,
+    RawChecklistItem,
+    REVIEWER_AGENTS_PLACEHOLDER,
+    ReviewerAgentPolicy,
+    toChecklist,
 } from './checklist-config';
 
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
@@ -20,7 +25,8 @@ import {
  * resolves because the gate spawns with `shell: true`; the guard resolves it itself before printing,
  * so the AI is never handed a template it might paste somewhere without a shell.
  */
-export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
+export const DEFAULT_BUILD_COMMAND =
+    'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
 
 export class GateDefinition {
     name: string;
@@ -113,7 +119,10 @@ export class DevDeployConfig {
     // The composed, CI-owned branch that actually deploys. Never a source, never pushed to by this flow.
     devBranch: string;
 
-    constructor(branchNamespace: string = DEFAULT_DEV_BRANCH_NAMESPACE, devBranch: string = DEFAULT_DEV_BRANCH) {
+    constructor(
+        branchNamespace: string = DEFAULT_DEV_BRANCH_NAMESPACE,
+        devBranch: string = DEFAULT_DEV_BRANCH,
+    ) {
         this.branchNamespace = branchNamespace;
         this.devBranch = devBranch;
     }
@@ -190,10 +199,10 @@ export class PrGateConfig {
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
     /**
-     * Shared secret used to mint the server-verifiable gate token. `wp-finish-upsert-pr` writes
-     * `HMAC(gateSalt, HEAD_sha)` as a hidden marker into the PR body (and REFUSES to mint it unless
-     * every BLOCK checklist passed), so a valid token IS proof the local gate ran and passed. A CI
-     * check (`wp-check-pr` + the scaffolded workflow) recomputes it from the PR head sha and this salt.
+     * Shared secret used to mint the server-verifiable gate token. `wp-finish-upsert-pr` writes it after
+     * the automated gate passes; `wp-human-post-pr` writes the same token after explicit human attestation
+     * and visibly labels review as skipped plus whether its optional local build ran. A CI check
+     * recomputes it from the PR head + salt.
      *
      * Optional, defaults to '' — empty means "no token minted, no CI enforcement" (byte-identical to
      * before this field existed). This is COMMITTED, obscurity-grade: it stops unhooked teammates who
@@ -247,7 +256,15 @@ export class PrGateConfig {
     devDeploy: DevDeployConfig = defaultDevDeployConfig();
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '', checklistComments = true) {
+    constructor(
+        mode: string,
+        buildCommand: string,
+        gates: GateDefinition[],
+        mergeMode: string,
+        checklists: ChecklistDefinition[] = [],
+        gateSalt = '',
+        checklistComments = true,
+    ) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
@@ -263,9 +280,21 @@ export class PrGateConfig {
 export function defaultGates(): GateDefinition[] {
     return [
         new GateDefinition('API Changed', ['libraries/apis/**', '**/*Api.ts'], 'yellow'),
-        new GateDefinition('Config Files Changed', ['**/package.json', '**/tsconfig*.json', 'nx.json', '**/*.config.*'], 'yellow'),
-        new GateDefinition('Dependency Graph Changed', ['architecture/dependencies.json'], 'yellow'),
-        new GateDefinition('Claude / Rules Changed', ['**/CLAUDE.md', '**/claude.*.md', '.claude/**', 'webpieces.config.json'], 'yellow'),
+        new GateDefinition(
+            'Config Files Changed',
+            ['**/package.json', '**/tsconfig*.json', 'nx.json', '**/*.config.*'],
+            'yellow',
+        ),
+        new GateDefinition(
+            'Dependency Graph Changed',
+            ['architecture/dependencies.json'],
+            'yellow',
+        ),
+        new GateDefinition(
+            'Claude / Rules Changed',
+            ['**/CLAUDE.md', '**/claude.*.md', '.claude/**', 'webpieces.config.json'],
+            'yellow',
+        ),
     ];
 }
 
@@ -317,7 +346,12 @@ interface RawReviewContext {
 }
 
 function toGate(raw: RawGate): GateDefinition {
-    return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.warningColor ?? 'yellow', raw.disabled ?? false);
+    return new GateDefinition(
+        raw.name ?? '',
+        raw.patterns ?? [],
+        raw.warningColor ?? 'yellow',
+        raw.disabled ?? false,
+    );
 }
 
 /**
@@ -343,31 +377,50 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     // The webpieces reviewer unless `overrideReviewerAgent` is true, in which case `reviewerAgentName` names the
     // agent (validatePrGateSection rejects a name without the override, and the override without a name).
     // Required nonnegative integer: 0 disables reviewer-agent reviews; positive values cap the round.
-    const agentName = raw.overrideReviewerAgent === true
-        ? (raw.reviewerAgentName ?? '').trim()
-        : DEFAULT_REVIEWER_AGENT_NAME;
+    const agentName =
+        raw.overrideReviewerAgent === true
+            ? (raw.reviewerAgentName ?? '').trim()
+            : DEFAULT_REVIEWER_AGENT_NAME;
     // `reviewerAgents` is REQUIRED and validated as a nonnegative integer before this runs, so the fallback is
     // unreachable in a loaded config and exists only to keep this total for a structure-only caller.
     const reviewer = new ReviewerAgentPolicy(
         agentName,
-        typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_PLACEHOLDER);
+        typeof raw.reviewerAgents === 'number' ? raw.reviewerAgents : REVIEWER_AGENTS_PLACEHOLDER,
+    );
     const checklists = Array.isArray(raw.checklists)
-        ? raw.checklists.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, reviewer))
+        ? raw.checklists.map(
+              (item: RawChecklistItem): ChecklistDefinition => toChecklist(item, reviewer),
+          )
         : defaults.checklists;
     // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
     // Optional — omitted ⇒ true ⇒ reviewer output published as a PR comment.
     const checklistComments = raw.checklistComments ?? defaults.checklistComments;
-    const built = new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
+    const built = new PrGateConfig(
+        mode,
+        buildCommand,
+        gates,
+        mergeMode,
+        checklists,
+        gateSalt,
+        checklistComments,
+    );
     built.landPr = buildLandPrConfig(raw.landPr);
     built.reviewer = reviewer;
     built.maxReviewerRounds = raw.maxReviewerRounds as number;
     // Review-context knobs. All optional and all defaulted, so a config that omits every one of them (which
     // is every consumer's config today) behaves exactly as it did before they existed.
-    built.reviewDiffExclude = Array.isArray(raw.reviewDiffExclude) ? raw.reviewDiffExclude : defaults.reviewDiffExclude;
-    built.reviewContextPackages = Array.isArray(raw.reviewContextPackages) ? raw.reviewContextPackages : defaults.reviewContextPackages;
+    built.reviewDiffExclude = Array.isArray(raw.reviewDiffExclude)
+        ? raw.reviewDiffExclude
+        : defaults.reviewDiffExclude;
+    built.reviewContextPackages = Array.isArray(raw.reviewContextPackages)
+        ? raw.reviewContextPackages
+        : defaults.reviewContextPackages;
     built.reviewContext = Array.isArray(raw.reviewContext)
-        ? raw.reviewContext.map((e: RawReviewContext): ReviewContextEntry => new ReviewContextEntry(e.label ?? '', e.path ?? ''))
+        ? raw.reviewContext.map(
+              (e: RawReviewContext): ReviewContextEntry =>
+                  new ReviewContextEntry(e.label ?? '', e.path ?? ''),
+          )
         : defaults.reviewContext;
     built.requireDiffEvidence = raw.requireDiffEvidence ?? defaults.requireDiffEvidence;
     built.devDeploy = buildDevDeployConfig(raw.devDeploy);
@@ -383,10 +436,14 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
 export function buildDevDeployConfig(raw: RawDevDeploy | undefined): DevDeployConfig {
     const defaults = defaultDevDeployConfig();
     if (raw === undefined || raw === null || typeof raw !== 'object') return defaults;
-    const namespace = typeof raw.branchNamespace === 'string' && raw.branchNamespace.trim() !== ''
-        ? raw.branchNamespace.trim() : defaults.branchNamespace;
-    const devBranch = typeof raw.devBranch === 'string' && raw.devBranch.trim() !== ''
-        ? raw.devBranch.trim() : defaults.devBranch;
+    const namespace =
+        typeof raw.branchNamespace === 'string' && raw.branchNamespace.trim() !== ''
+            ? raw.branchNamespace.trim()
+            : defaults.branchNamespace;
+    const devBranch =
+        typeof raw.devBranch === 'string' && raw.devBranch.trim() !== ''
+            ? raw.devBranch.trim()
+            : defaults.devBranch;
     return new DevDeployConfig(namespace, devBranch);
 }
 

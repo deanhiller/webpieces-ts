@@ -1,5 +1,10 @@
 import {
-    BuildsLog, HomeConfigService, Option, RepoRootFinder, RuleFailError, RunningBuild,
+    BuildsLog,
+    HomeConfigService,
+    Option,
+    RepoRootFinder,
+    RuleFailError,
+    RunningBuild,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -76,17 +81,29 @@ export class BuildCommand {
     ) {}
 
     run(opts: BuildOptions): Promise<void> {
+        return this.runGate(opts, false);
+    }
+
+    /** Human-terminal form used by wp-human-post-pr; build.log remains complete while output is live. */
+    runStreaming(opts: BuildOptions): Promise<void> {
+        return this.runGate(opts, true);
+    }
+
+    private runGate(opts: BuildOptions, stream: boolean): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         if (!opts.force) this.assertMachineHasRoom();
         // runBuildGate announces the resolved command, runs it, and throws CliExitError on failure so
         // runMain owns the exit — the same three things it does for stage ② and stage ③. It also writes
         // this build's START/DONE pair to the ledger the check above just read.
-        return this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+        const gateOptions = new BuildGateOptions(
             '🛠️  wp-build',
             'pnpm wp-build',
             'Build failed.',
             BUILD_STAGE,
-        ));
+        );
+        return stream
+            ? this.buildAffected.runBuildGateStreaming(repoRoot, gateOptions)
+            : this.buildAffected.runBuildGate(repoRoot, gateOptions);
     }
 
     /**
@@ -109,28 +126,33 @@ export class BuildCommand {
         throw new RuleFailError(
             TOO_MANY_CONCURRENT_BUILDS,
             `This machine is already running ${String(live.length)} build(s), and the limit is ` +
-            `${String(max)}. Starting another makes all of them slower — CPU contention between agents ` +
-            `building at once was measured at ~3.2x total test time.\n\n${this.describe(live)}`,
+                `${String(max)}. Starting another makes all of them slower — CPU contention between agents ` +
+                `building at once was measured at ~3.2x total test time.\n\n${this.describe(live)}`,
             undefined,
             undefined,
             [
                 new Option(
-                    'Re-use the gate you should be running anyway: `pnpm wp-start-upsert-pr` then\n'
-                    + '`pnpm wp-review-upsert-pr`. Stage ② runs the SAME `commands.pr-gate.buildCommand`\n'
-                    + 'this would have run, so its green is the same evidence — and it posts the PR.',
-                    true),
+                    'Re-use the gate you should be running anyway: `pnpm wp-start-upsert-pr` then\n' +
+                        '`pnpm wp-review-upsert-pr`. Stage ② runs the SAME `commands.pr-gate.buildCommand`\n' +
+                        'this would have run, so its green is the same evidence — and it posts the PR.',
+                    true,
+                ),
                 new Option(
-                    'Wait for one of the builds above to finish and run `pnpm wp-build` again. A build\n'
-                    + 'that has already died leaves no row: the count only holds live processes.'),
+                    'Wait for one of the builds above to finish and run `pnpm wp-build` again. A build\n' +
+                        'that has already died leaves no row: the count only holds live processes.',
+                ),
                 new Option(
-                    'Verify only what you are editing instead of the whole affected set:\n'
-                    + '`pnpm exec vitest run <one spec file>`, or `pnpm nx run <project>:test`.'),
+                    'Verify only what you are editing instead of the whole affected set:\n' +
+                        '`pnpm exec vitest run <one spec file>`, or `pnpm nx run <project>:test`.',
+                ),
                 new Option(
-                    'Raise the limit for THIS machine, if it genuinely has the cores: put\n'
-                    + '`{"experimental": {"maxConcurrentBuilds": <n>}}` in `~/.webpieces/config.json`.'),
+                    'Raise the limit for THIS machine, if it genuinely has the cores: put\n' +
+                        '`{"experimental": {"maxConcurrentBuilds": <n>}}` in `~/.webpieces/config.json`.',
+                ),
                 new Option(
-                    'If you are really stuck and cannot use a gate and really really need wp-build\n'
-                    + 'then use `pnpm wp-build --force`.'),
+                    'If you are really stuck and cannot use a gate and really really need wp-build\n' +
+                        'then use `pnpm wp-build --force`.',
+                ),
             ],
         );
     }
@@ -138,11 +160,15 @@ export class BuildCommand {
     // One line per live build: which repo, which worktree, on what branch, and how long it has been
     // going. Age is what tells a reader whether to wait thirty seconds or go and look at a stuck agent.
     private describe(live: readonly RunningBuild[]): string {
-        return live.map((build: RunningBuild): string => {
-            const age = Math.max(0, Math.round((Date.now() - build.startedMs) / 1000));
-            return `  • ${build.repo} [tree=${build.tree || 'primary'}] `
-                + `branch=${build.branch || '?'} by=${build.by} pid=${String(build.pid)} `
-                + `running for ${String(age)}s`;
-        }).join('\n');
+        return live
+            .map((build: RunningBuild): string => {
+                const age = Math.max(0, Math.round((Date.now() - build.startedMs) / 1000));
+                return (
+                    `  • ${build.repo} [tree=${build.tree || 'primary'}] ` +
+                    `branch=${build.branch || '?'} by=${build.by} pid=${String(build.pid)} ` +
+                    `running for ${String(age)}s`
+                );
+            })
+            .join('\n');
     }
 }
