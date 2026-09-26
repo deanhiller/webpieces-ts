@@ -33,6 +33,13 @@ one PR review state. `1` buys the initial full review only; `2` buys that review
 the author's remediation delta. Re-running stage ② while a round is still active resumes that round and
 does not consume another. The key remains explicit when `reviewerAgents` is `0`, though it is inactive.
 
+Once the last allowed round is complete the budget is SPENT, and nothing asks for another review: every
+green or yellow verdict is carried forward to later commits instead of going stale, each red is cleared by
+a committed fix recorded with `pnpm wp-write-review-fixes`, and `wp-write-review` refuses any verdict for a
+checklist already reviewed `maxReviewerRounds` times (a reviewer checks first with
+`pnpm wp-write-review --checklist <id> --check`). A human override (`override-<id>.json`) also keeps a
+verdict counting when its in-scope files change.
+
 - **The reviewer agent** is the `subagent_type` every reviewer is spawned as. By default — write nothing —
   it is `webpieces-reviewer`, a generic, checklist-agnostic reviewer that webpieces owns:
   `wp-install-ai-hooks` and `pnpm wp-upgrade-shim` write it to `.claude/agents/webpieces-reviewer.md`, and a

@@ -55,7 +55,7 @@ export class AwaitReviewsCommand {
         // contextStage '' — a WAIT must not write pr-context.json. That file records the diff a review
         // was briefed against, and rewriting it mid-review would restate the briefing under the
         // reviewers currently reading it.
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(true, ''));
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, true, ''));
         if (scan.reviewersDisabled) return this.reportDisabled(scan.suppressed);
         if (scan.applicable.length === 0) return this.reportNothingOwed();
         // WAIT on the set finish blocks on (`outstanding`), REPORT on everything that applies. The two

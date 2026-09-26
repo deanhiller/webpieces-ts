@@ -46,7 +46,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/atomic-file.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "AuthorIdentityResolver",
@@ -710,7 +710,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "ReviewStageReceiptService",
@@ -718,7 +718,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "ReviewUpsertPrCommand",
@@ -838,7 +838,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "WorkingTreeGate",
@@ -1275,6 +1275,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ReviewRoundStateService",
+                    "injection": "type",
+                    "token": "ReviewRoundStateService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-round-state.ts#ReviewRoundStateService",
+                    "paramName": "rounds",
+                    "paramType": "ReviewRoundStateService"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
                 },
                 {
                     "from": "ChecklistScanner",

@@ -91,6 +91,30 @@ export class ReviewRoundStateService {
             fs.existsSync(path.join(this.roundDir(summaryPath, receipt.round), `review-${id}.json`)));
     }
 
+    /**
+     * TRUE once the repository's reviewer-round budget is SPENT: the latest global round is complete and it
+     * was the last one `maxReviewerRounds` allows. From then on {@link plan} never briefs a reviewer again,
+     * so nothing downstream may demand one either (issue #1051) — with `maxReviewerRounds: 1` that is what
+     * "review → fix → submit" means. The scan uses it to CARRY every non-red verdict forward instead of
+     * marking it STALE, whatever changes afterwards (remediation commits, summary edits, gate re-runs).
+     */
+    capSpent(summaryPath: string, receipt: ReviewStageReceipt | null, maxRounds: number): boolean {
+        return receipt !== null && receipt.round >= maxRounds && this.roundComplete(summaryPath, receipt);
+    }
+
+    /**
+     * How many times ONE checklist has been reviewed on this branch: the global rounds 1..`throughRound` whose
+     * immutable snapshot holds a verdict for it (`wp-write-review` archives every submission there). A
+     * re-submission inside one round overwrites that round's snapshot, so it is one review, not two.
+     */
+    reviewCount(summaryPath: string, checklistId: string, throughRound: number): number {
+        let count = 0;
+        for (let round = 1; round <= throughRound; round++) {
+            if (fs.existsSync(path.join(this.roundDir(summaryPath, round), `review-${checklistId}.json`))) count++;
+        }
+        return count;
+    }
+
     redChecklistIds(summaryPath: string, receipt: ReviewStageReceipt): string[] {
         if (!this.roundComplete(summaryPath, receipt)) return [];
         return receipt.reviewersBriefed.filter((id: string): boolean => {
@@ -179,7 +203,7 @@ export class ReviewRoundStateService {
 
     capRemediations(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt | null, maxRounds: number): Record<string, string> {
         const out: Record<string, string> = {};
-        if (receipt === null || receipt.round < maxRounds) return out;
+        if (receipt === null || !this.capSpent(summaryPath, receipt, maxRounds)) return out;
         const remediation = this.validRemediation(repoRoot, summaryPath, receipt);
         if (remediation === null) return out;
         for (const response of remediation.responses) {

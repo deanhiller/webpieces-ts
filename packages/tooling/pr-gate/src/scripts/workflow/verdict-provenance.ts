@@ -77,6 +77,12 @@ export const STANDING_CURRENT = 'current';
 export const STANDING_STALE = 'stale';
 /** No bin provenance, or edited after submission: not a reviewer's verdict at all. */
 export const STANDING_REJECTED = 'rejected';
+/**
+ * Would be STALE, but still COUNTS (issue #1051): either the reviewer-round budget is spent, so no review
+ * round can ever re-judge it and demanding one would deadlock the branch, or a human override for its
+ * checklist stands. The reason says which, and is printed verbatim.
+ */
+export const STANDING_CARRIED = 'carried';
 
 /**
  * How ONE existing verdict file stands against the branch as it is now. Data-only. Carried on the
@@ -84,7 +90,7 @@ export const STANDING_REJECTED = 'rejected';
  */
 export class VerdictStanding {
     checklistId: string;
-    standing: string;   // STANDING_CURRENT | STANDING_STALE | STANDING_REJECTED
+    standing: string;   // STANDING_CURRENT | STANDING_STALE | STANDING_REJECTED | STANDING_CARRIED
     status: string;     // the verdict's own green | yellow | red
     fromSha: string;    // the commit it was briefed on ('' when rejected)
     reason: string;     // why — printed verbatim

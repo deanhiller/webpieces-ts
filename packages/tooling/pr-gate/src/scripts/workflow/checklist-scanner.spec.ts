@@ -15,6 +15,8 @@ import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
 import { DiffMaterializer } from './diff-materializer';
+import { ReviewStageReceiptService } from './review-stage-receipt';
+import { ReviewRoundStateService } from './review-round-state';
 import {
     STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, SubmittedVerdict, VerdictProvenance, VerdictProvenanceService, VerdictStanding,
 } from './verdict-provenance';
@@ -82,6 +84,7 @@ function homeConfigWith(turnOffAllReviewers: boolean): HomeConfigService {
 function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
     const diffScope = new DiffScope();
     const reviewJson = new ReviewJsonService();
+    const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
     // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
     // the basis is now part of that plumbing (it is what makes the printed command match the matched range).
     return new ChecklistScanner(
@@ -90,7 +93,9 @@ function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
         new PrContextWriter(diffScope, reviewJson), reviewJson,
         homeConfigWith(turnOffAllReviewers),
         new ChecklistScopeHasher(new DiffMaterializer(reviewJson)),
-        new VerdictProvenanceService(reviewJson, new AtomicFile()),
+        provenance,
+        new ReviewStageReceiptService(reviewJson),
+        new ReviewRoundStateService(reviewJson, provenance, new AtomicFile()),
     );
 }
 
@@ -101,7 +106,7 @@ function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
  */
 function submitVerdict(dir: string, checklists: ChecklistDefinition[], id: string, status: string, output: string): void {
     const reviewJson = new ReviewJsonService();
-    const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false, ''));
+    const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false, ''));
     fs.mkdirSync(path.dirname(scan.summaryPath), { recursive: true });
     new VerdictProvenanceService(reviewJson, new AtomicFile()).write(
         scan.summaryPath, new SubmittedVerdict(id, status, 'claude', 'opus', output),
@@ -116,7 +121,7 @@ describe('ChecklistScanner — reviewerAgents zero project policy', () => {
             [{ id: 'db-reviewer', patterns: ['**/*.sql'] }],
             new ReviewerAgentPolicy('webpieces-reviewer', 0));
 
-        const scan = scannerFor(false).scan(dir, disabled, new ChecklistScanOptions(true));
+        const scan = scannerFor(false).scan(dir, disabled, new ChecklistScanOptions(1, true));
 
         expect(scan.reviewersDisabled).toBe(true);
         expect(scan.applicable).toEqual([]);
@@ -131,7 +136,7 @@ describe('ChecklistScanner — reviewerAgents zero project policy', () => {
             [{ id: 'db-reviewer', patterns: ['**/*.sql'] }],
             new ReviewerAgentPolicy('webpieces-reviewer', 1));
 
-        const scan = scannerFor(false).scan(dir, enabled, new ChecklistScanOptions(true));
+        const scan = scannerFor(false).scan(dir, enabled, new ChecklistScanOptions(1, true));
 
         expect(scan.reviewersDisabled).toBe(false);
         expect(scan.applicable).toHaveLength(1);
@@ -160,7 +165,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
         git(dir, 'git add -A');
         git(dir, 'git commit -qm work');
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'CREATE TABLE a(); -- edited\n'); // NOT committed
-        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
 
@@ -169,7 +174,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
         const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.mkdirSync(path.join(dir, 'db'));
         fs.writeFileSync(path.join(dir, 'db', '002.sql'), 'CREATE TABLE b();\n'); // never `git add`ed
-        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
         expect(scan.applicable[0].matchedFiles).toContain('db/002.sql');
     });
@@ -183,7 +188,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
         fs.writeFileSync(path.join(dir, 'db', '003.sql'), 'CREATE TABLE c();\n');
         process.env['NX_BASE'] = 'main';
         process.env['NX_HEAD'] = 'HEAD';
-        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
 
@@ -193,7 +198,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
         const dir = repoOnBranch();
         const checklists = defs([{ id: 'ops-reviewer', patterns: ['**/Dockerfile', '**/.env*'] }]);
         fs.writeFileSync(path.join(dir, 'Dockerfile'), 'FROM node\n');
-        expect(scannerFor().scan(dir, checklists, new ChecklistScanOptions(false)).applicable).toHaveLength(1);
+        expect(scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false)).applicable).toHaveLength(1);
     });
 });
 
@@ -216,13 +221,13 @@ describe('ChecklistScanner — X / N / Z', () => {
     }
 
     it('reports X and N', () => {
-        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(1, false));
         expect(scan.defined).toHaveLength(4);
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id).sort()).toEqual(['db-reviewer', 'ops-reviewer']);
     });
 
     it('filterAlreadyReviewed:false leaves outstanding == applicable, so wp-review-upsert-pr LISTS them all', () => {
-        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(1, false));
         expect(scan.outstanding).toHaveLength(2);
         expect(scan.reviewed).toHaveLength(0);
     });
@@ -230,7 +235,7 @@ describe('ChecklistScanner — X / N / Z', () => {
     it('filterAlreadyReviewed:true narrows N to Z — only what still owes a verdict', () => {
         const dir = repoWithFour();
         submitVerdict(dir, FOUR, 'db-reviewer', 'green', 'ok');
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, true));
         expect(scan.applicable).toHaveLength(2);                                                         // N
         expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);   // Z
@@ -248,7 +253,7 @@ describe('ChecklistScanner — X / N / Z', () => {
         submitVerdict(dir, FOUR, 'ops-reviewer', 'red', 'bad');
         fs.writeFileSync(checklistOverrideService.overridePath(summaryPath, 'ops-reviewer'), JSON.stringify(
             new ChecklistOverride('ops-reviewer', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, JIRA-1')));
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, true));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
 
@@ -271,7 +276,7 @@ describe('ChecklistScanner — degenerate and always-write cases', () => {
 
     it('a repo with no checklists scans clean rather than erroring', () => {
         const dir = repoOnBranch();
-        const scan = scannerFor().scan(dir, defs([]), new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, defs([]), new ChecklistScanOptions(1, true));
         expect(scan.defined).toEqual([]);
         expect(scan.applicable).toEqual([]);
         expect(scan.outstanding).toEqual([]);
@@ -279,7 +284,7 @@ describe('ChecklistScanner — degenerate and always-write cases', () => {
 
     it('always writes pr-context.json, so no reviewer block can lose its diff command', () => {
         const dir = repoWithFour();
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, false));
         expect(fs.existsSync(scan.context.prContextPath)).toBe(true);
         expect(scan.context.baseSha).toBe(scan.forkPoint);
     });
@@ -292,7 +297,7 @@ describe('ChecklistScanner — degenerate and always-write cases', () => {
      */
     it('writes a per-stage snapshot beside pr-context.json, so earlier states survive for debugging', () => {
         const dir = repoWithFour();
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false, 'stage3-finish'));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, false, 'stage3-finish'));
         const snapshot = path.join(path.dirname(scan.context.prContextPath), 'stages', 'stage3-finish.json');
         expect(fs.existsSync(snapshot)).toBe(true);
         // The snapshot is a byte-for-byte copy of what pr-context.json said AT THAT STAGE — the point is
@@ -302,7 +307,7 @@ describe('ChecklistScanner — degenerate and always-write cases', () => {
 
     it('contextStage:"" skips the write, for the one caller that writes it itself afterwards', () => {
         const dir = repoWithFour();
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false, ''));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, false, ''));
         expect(fs.existsSync(scan.context.prContextPath)).toBe(false);
         // …but the context still names WHERE it will be, so a caller can point at it before it exists.
         expect(scan.context.prContextPath).not.toBe('');
@@ -355,7 +360,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
         git(dir, 'git add -A');
         git(dir, 'git commit -qm a');
         const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
-        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.forkPoint).toBe('');
         expect(scan.applicable).toEqual([]);
     });
@@ -392,7 +397,7 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
     const repoWithFour = repoForRoster;
 
     it('carries an entry for every DEFINED checklist, including the two that matched nothing', () => {
-        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(1, false));
         expect(scan.roster.entries.map((t: TriggeredChecklist): string => t.def.id))
             .toEqual(['db-reviewer', 'ops-reviewer', 'ui-reviewer', 'api-reviewer']);
         const skipped = scan.roster.entries.filter((t: TriggeredChecklist): boolean => t.matchedFiles.length === 0);
@@ -400,7 +405,7 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
     });
 
     it('counts the changed files considered, so "matched 0 of N" has an honest N', () => {
-        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(1, false));
         expect(scan.roster.changedFileCount).toBe(2);   // db/001.sql + Dockerfile (untracked, uncommitted)
         expect(scan.roster.baseResolved).toBe(true);
     });
@@ -415,7 +420,7 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
         fs.writeFileSync(path.join(dir, 'a.sql'), 'x\n');
         git(dir, 'git add -A');
         git(dir, 'git commit -qm a');
-        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, false));
         expect(scan.roster.baseResolved).toBe(false);
         expect(scan.roster.entries).toHaveLength(4);          // still fully listed
         expect(scan.roster.changedFileCount).toBe(0);
@@ -438,14 +443,14 @@ describe('ChecklistScanner — optional checklists', () => {
     ]);
 
     it('carries `required` from config through to the matched set', () => {
-        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): boolean => r.required)).toEqual([true, false]);
     });
 
     it('does NOT owe a verdict for an optional checklist nobody ran — that is the whole point', () => {
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(scan.outstanding).toEqual([]);
         // Reported as NOT RUN — never folded into `reviewed`, which would put a ✓ on a review that never happened.
         expect(scan.optionalNotRun.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
@@ -456,13 +461,13 @@ describe('ChecklistScanner — optional checklists', () => {
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
         submitVerdict(dir, MIXED, 'ops-reviewer', 'red', 'runs as root');
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
         expect(scan.optionalNotRun).toEqual([]);
     });
 
     it('a REQUIRED checklist with no verdict is still outstanding — the exemption is optional-only', () => {
-        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(1, true));
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
 
@@ -473,7 +478,7 @@ describe('ChecklistScanner — optional checklists', () => {
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
         fs.writeFileSync(verdictPath(dir, 'ops-reviewer'),
             JSON.stringify({ id: 'ops-reviewer', success: true, output: 'ok' }));
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(scan.formatErrors).toHaveLength(1);
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
         expect(scan.optionalNotRun).toEqual([]);
@@ -487,7 +492,7 @@ describe('ChecklistScanner — verdict file formats', () => {
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
             JSON.stringify({ id: 'db-reviewer', success: true, output: 'ok' }));
-        const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(1, true));
         expect(scan.formatErrors).toHaveLength(1);
         expect(scan.formatErrors[0]).toContain('"success"');
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id).sort())
@@ -497,7 +502,7 @@ describe('ChecklistScanner — verdict file formats', () => {
     it('has no format errors when every verdict uses the tri-state status', () => {
         const dir = repoForRoster();
         submitVerdict(dir, ROSTER_FOUR, 'db-reviewer', 'yellow', 'no CONCURRENTLY');
-        const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(1, true));
         expect(scan.formatErrors).toEqual([]);
         // yellow SHIPS — it must not be listed as still owing a verdict.
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
@@ -509,7 +514,7 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
         const dir = repoOnBranch();
         const checklists = defs([{ id: 'security-reviewer' }]);
         fs.writeFileSync(path.join(dir, 'anything.txt'), 'x\n');
-        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.applicable).toHaveLength(1);
         // [] matchedPatterns is what makes it render as ALWAYS RUNS rather than claiming a "match".
         expect(scan.applicable[0].matchedPatterns).toEqual([]);
@@ -518,7 +523,7 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
     it('carries the repo-wide reviewer policy onto every matched checklist', () => {
         const dir = repoOnBranch();
         fs.writeFileSync(path.join(dir, 'anything.txt'), 'x\n');
-        const scan = scannerFor().scan(dir, defs([{ id: 'a' }, { id: 'b' }]), new ChecklistScanOptions(false));
+        const scan = scannerFor().scan(dir, defs([{ id: 'a' }, { id: 'b' }]), new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.reviewer.agentName)).toEqual(['webpieces-reviewer', 'webpieces-reviewer']);
     });
 });
@@ -548,7 +553,7 @@ describe('ChecklistScanner — turnOffAllReviewers', () => {
     }
 
     it('OFF (the default): the two REQUIRED checklists apply and are outstanding — unchanged behaviour', () => {
-        const scan = scannerFor(false).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        const scan = scannerFor(false).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(1, true));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id).sort())
             .toEqual(['db-reviewer', 'ops-reviewer']);
         expect(scan.outstanding).toHaveLength(2);
@@ -557,7 +562,7 @@ describe('ChecklistScanner — turnOffAllReviewers', () => {
     });
 
     it('ON: applicable and outstanding are EMPTY even though both REQUIRED checklists match', () => {
-        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(1, true));
         expect(scan.applicable).toEqual([]);
         expect(scan.outstanding).toEqual([]);
         expect(scan.reviewed).toEqual([]);
@@ -569,7 +574,7 @@ describe('ChecklistScanner — turnOffAllReviewers', () => {
     // The whole point of carrying `suppressed`: an empty `applicable` is ambiguous on its own, and the
     // count + names are what stage ②, the dashboard and main's commit history all report from.
     it('ON: records WHAT was suppressed, by name, with `required` intact', () => {
-        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(1, true));
         expect(scan.reviewersDisabled).toBe(true);
         expect(scan.suppressed.map((r: RequiredChecklist): string => r.id).sort())
             .toEqual(['db-reviewer', 'ops-reviewer']);
@@ -579,7 +584,7 @@ describe('ChecklistScanner — turnOffAllReviewers', () => {
     // `defined`, `roster`, `changedFiles` and `basis` must survive: without them nothing downstream can
     // say WHAT was switched off, and the suppression becomes exactly the silent skip this must never be.
     it('ON: keeps defined, the roster and the changed-file set intact', () => {
-        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(true));
+        const scan = scannerFor(true).scan(repoWithBoth(), TWO_REQUIRED, new ChecklistScanOptions(1, true));
         expect(scan.defined).toHaveLength(2);
         expect(scan.roster.entries).toHaveLength(2);
         expect(scan.changedFiles).toContain('db/001.sql');
@@ -591,7 +596,7 @@ describe('ChecklistScanner — turnOffAllReviewers', () => {
     it('ON: a diff that matches NOTHING reports zero suppressed, not a phantom count', () => {
         const dir = repoOnBranch();
         fs.writeFileSync(path.join(dir, 'notes.md'), 'hi\n');
-        const scan = scannerFor(true).scan(dir, TWO_REQUIRED, new ChecklistScanOptions(true));
+        const scan = scannerFor(true).scan(dir, TWO_REQUIRED, new ChecklistScanOptions(1, true));
         expect(scan.reviewersDisabled).toBe(true);
         expect(scan.suppressed).toEqual([]);
     });
@@ -616,7 +621,7 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         const dir = repoForRoster();
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
             JSON.stringify({ agent: 'codex', model: 'gpt', id: 'db-reviewer', status: 'green', output: 'ok' }));
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_REJECTED);
         expect(standingOf(scan.standings, 'db-reviewer')?.reason).toContain('wp-write-review');
         expect(scan.reviewed).toEqual([]);
@@ -628,7 +633,7 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         submitVerdict(dir, MIXED, 'db-reviewer', 'red', 'drops a column');
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
             JSON.stringify({ agent: 'claude', model: 'opus', id: 'db-reviewer', status: 'green', output: 'drops a column' }));
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_REJECTED);
         expect(standingOf(scan.standings, 'db-reviewer')?.reason).toContain('EDITED');
     });
@@ -637,7 +642,7 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
         fs.writeFileSync(path.join(dir, 'Dockerfile'), 'FROM node:22\n'); // ops scope only
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_CURRENT);
         expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
@@ -646,7 +651,7 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'DROP TABLE a;\n');
-        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_STALE);
         expect(scan.reviewed).toEqual([]);
         expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
@@ -655,11 +660,11 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
     it('never carries a RED: unchanged scope or not, it stays owed and keeps refusing', () => {
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'red', 'drops a column');
-        const unchanged = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const unchanged = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(unchanged.reviewed).toEqual([]);
         expect(unchanged.outstanding.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'ALTER TABLE a;\n');
-        const changed = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        const changed = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
         expect(changed.results.map((r: ChecklistResult): string => r.id)).toContain('db-reviewer');
         expect(changed.outstanding.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
     });

@@ -55,7 +55,7 @@ export class HotfixFinishPreparer {
             throw new InformAiError('Hotfix HEAD changed while compilation/tests were running. Re-run pnpm wp-finish-upsert-pr so the build receipt covers the exact commit pushed.');
         }
         const config = loadAndValidate(repoRoot).prGate;
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, false, ''));
         if (!scan.basis.unresolved) {
             this.materializer.materialize(repoRoot, featureName, scan.basis, scan.changedFiles, config.reviewDiffExclude);
             this.prContextWriter.ensure(repoRoot, featureName, scan.basis, 'stage3-hotfix', scan.changedFiles, this.materializer.diffDirFor(repoRoot, featureName));

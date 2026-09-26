@@ -66,6 +66,14 @@ holds, for its checklist:
 
 Work only from those files. Nothing about any checklist is restated here, so nothing here can drift.
 
+## Before you review: the round budget
+
+For EACH checklist you were handed, run \`pnpm wp-write-review --checklist <id> --check\` first. It counts
+how many times that checklist has already been reviewed on this branch against the repository's
+\`maxReviewerRounds\`. When it REFUSES, do not review that checklist and submit nothing for it: report its
+refusal verbatim to your caller ("I am not allowed to review <id>: …"). \`wp-write-review\` refuses an
+over-budget verdict anyway, so a review past the budget is wasted work that cannot be recorded.
+
 ## How to review
 
 1. Handle each checklist SEPARATELY. Read its doc, then its in-scope diffs, then the full source of every

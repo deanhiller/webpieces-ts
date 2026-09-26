@@ -9,8 +9,10 @@ import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
 import {
-    STANDING_REJECTED, STANDING_STALE, VerdictProvenanceService, VerdictStanding,
+    STANDING_CARRIED, STANDING_REJECTED, STANDING_STALE, VerdictProvenanceService, VerdictStanding,
 } from './verdict-provenance';
+import { ReviewStageReceiptService } from './review-stage-receipt';
+import { ReviewRoundStateService } from './review-round-state';
 
 /** How a caller wants the scan filtered. Data-only (per CLAUDE.md). */
 export class ChecklistScanOptions {
@@ -34,8 +36,15 @@ export class ChecklistScanOptions {
      * visible act by a caller that takes responsibility for writing it later — not an omission.
      */
     contextStage: string;
+    /**
+     * `commands.pr-gate.maxReviewerRounds`, as the caller's validated config states it. REQUIRED and first:
+     * once the budget is spent a STALE green or yellow is CARRIED rather than owed (issue #1051), so a scan
+     * that did not know the budget would demand a review round the gate will never brief.
+     */
+    maxReviewerRounds: number;
 
-    constructor(filterAlreadyReviewed = false, contextStage = 'stage-scan') {
+    constructor(maxReviewerRounds: number, filterAlreadyReviewed = false, contextStage = 'stage-scan') {
+        this.maxReviewerRounds = maxReviewerRounds;
         this.filterAlreadyReviewed = filterAlreadyReviewed;
         this.contextStage = contextStage;
     }
@@ -124,7 +133,9 @@ export class ChecklistScan {
      * its checklist's in-scope diff is unchanged — it carries), STALE (in-scope diff changed since — re-brief)
      * or REJECTED (no bin provenance, or edited after submission — it is not a review). A REJECTED verdict,
      * and a STALE green or yellow one, is left OUT of `results`, so it is owed like one that never ran; a
-     * stale RED stays in `results` and keeps refusing. Empty under suppression.
+     * stale RED stays in `results` and keeps refusing. CARRIED (issue #1051) is a green or yellow that would
+     * be STALE but still counts — the reviewer-round budget is spent, or a human override for it stands.
+     * Empty under suppression.
      */
     standings: VerdictStanding[];
     /** checklist id → ChecklistScopeHasher's hash of its in-scope diff NOW. Recorded in the stage-② receipt. */
@@ -209,6 +220,8 @@ export class ChecklistScanner {
         private readonly homeConfig: HomeConfigService,
         private readonly scopeHasher: ChecklistScopeHasher,
         private readonly verdictProvenance: VerdictProvenanceService,
+        private readonly receipts: ReviewStageReceiptService,
+        private readonly rounds: ReviewRoundStateService,
     ) {}
 
     /**
@@ -251,7 +264,9 @@ export class ChecklistScanner {
         const applicable = matched;
         const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
         const loaded = this.reviewJsonService.loadChecklistResults(summaryPath, applicable);
-        const standings = this.standingsOf(summaryPath, loaded, scopeHashes);
+        const capSpent = this.rounds.capSpent(summaryPath, this.receipts.read(repoRoot, featureName), opts.maxReviewerRounds);
+        const standings = this.standingsOf(summaryPath, loaded, scopeHashes)
+            .map((s: VerdictStanding): VerdictStanding => this.carried(s, loaded, capSpent, opts.maxReviewerRounds));
         const results = this.liveResults(loaded, standings);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -294,6 +309,34 @@ export class ChecklistScanner {
             .filter((r: ChecklistResult): boolean => r.problem === '')
             .map((r: ChecklistResult): VerdictStanding =>
                 this.verdictProvenance.assess(summaryPath, r, scopeHashes[r.id] ?? ''));
+    }
+
+    /**
+     * A STALE green or yellow that must NOT be owed again (issue #1051), re-stood as CARRIED with the reason.
+     *
+     * 1. A human override for the checklist stands. Staleness is judged BEFORE the verdict is resolved, so
+     *    without this a stale verdict read as "never ran" and the override written for it was never looked
+     *    at — the human's in-session decision was shadowed by a hash comparison.
+     * 2. The reviewer-round budget is spent. The round planner never briefs a reviewer again, so a stale
+     *    verdict demanded here is a review nobody can ever supply: with `maxReviewerRounds: 1`, the author's
+     *    remediation commit marked every OTHER checklist stale and the branch could not be finished.
+     *
+     * A RED is never carried here: it keeps refusing until a fresh verdict, a recorded author remediation
+     * after the cap, or a human override clears it. A REJECTED verdict is never carried: it is not a review.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private carried(s: VerdictStanding, loaded: readonly ChecklistResult[], capSpent: boolean, maxRounds: number): VerdictStanding {
+        if (s.standing !== STANDING_STALE || s.status === VERDICT_RED) return s;
+        const result = loaded.find((r: ChecklistResult): boolean => r.id === s.checklistId);
+        const override = result?.override ?? null;
+        if (override !== null && override.problem === '') {
+            return new VerdictStanding(s.checklistId, STANDING_CARRIED, s.status, s.fromSha,
+                `${s.reason}, but a human override (authorized by ${override.authorizedBy}) stands — the verdict counts`);
+        }
+        if (!capSpent) return s;
+        return new VerdictStanding(s.checklistId, STANDING_CARRIED, s.status, s.fromSha,
+            `${s.reason}; CARRIED FORWARD without re-review — all ${maxRounds} reviewer round(s) are spent, `
+            + 'so no further round runs on this branch');
     }
 
     /**

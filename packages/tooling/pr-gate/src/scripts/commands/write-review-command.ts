@@ -29,6 +29,17 @@ export class WriteReviewOptions {
     }
 }
 
+/** What `wp-write-review --check` was asked: may this checklist still be reviewed? Data-only. */
+export class ReviewBudgetCheckOptions {
+    checklistId: string;
+    cwd: string;
+
+    constructor(checklistId: string, cwd: string) {
+        this.checklistId = checklistId;
+        this.cwd = cwd;
+    }
+}
+
 /**
  * `wp-write-review` — the ONE way any reviewer, Claude or Codex, submits a checklist verdict (issue #863).
  *
@@ -41,7 +52,10 @@ export class WriteReviewOptions {
  *      overwritten and a checklist that does not apply cannot be invented;
  *   3. the verdict is validated strictly — the five fields, nothing else;
  *   4. it is written WITH `review-<id>.provenance.json`: who, which commit, which in-scope diff, and a hash
- *      of the verdict. `wp-finish-upsert-pr` rejects a verdict without one, or one edited since.
+ *      of the verdict. `wp-finish-upsert-pr` rejects a verdict without one, or one edited since;
+ *   5. the checklist must still be inside the round budget (issue #1051): once it has been reviewed
+ *      `maxReviewerRounds` times on this branch, no further verdict is recorded, whoever spawned the
+ *      reviewer. `--check` asks the same question BEFORE a reviewer spends a review on it.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
  */
@@ -66,6 +80,7 @@ export class WriteReviewCommand {
         // Identity BEFORE parsing: a coordinator is refused whatever it submitted, and the stamp it
         // consumes must not survive to lend itself to a later call.
         const who: ReviewerIdentity = this.identity.resolve(cwd, id);
+        this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
         const verdict = this.parse(opts.json, id);
         const record = new VerdictProvenance(
             id, who.harness, who.sessionId, who.agentId, who.agentType, receipt.headSha, receipt.scopeHashes[id] ?? '');
@@ -77,6 +92,41 @@ export class WriteReviewCommand {
             + `   provenance: ${who.harness}${who.agentId === '' ? '' : ` agent ${who.agentId}`}, `
             + `briefed at ${receipt.headSha.slice(0, 8)}, global round ${receipt.round} of ${receipt.maxReviewerRounds}\n`);
         return Promise.resolve();
+    }
+
+    /**
+     * `wp-write-review --check`: the reviewer's FIRST step. Refuses exactly when {@link run} would refuse
+     * on the budget, so a reviewer past the budget learns it before it reviews rather than after.
+     */
+    check(opts: ReviewBudgetCheckOptions): Promise<void> {
+        const id = opts.checklistId.trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(opts.cwd);
+        const featureName = this.aiBranchName.getFeatureName();
+        const receipt = this.briefedReceipt(repoRoot, featureName, id);
+        const count = this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
+        process.stdout.write(
+            `✅ "${id}" may be reviewed: this is review ${count + 1} of at most ${receipt.maxReviewerRounds} on this branch `
+            + `(global round ${receipt.round}). Review it, then submit with pnpm ${WRITE_REVIEW_BIN} --checklist ${id}.\n`);
+        return Promise.resolve();
+    }
+
+    /**
+     * THE ROUND CAP, held by the reviewer's own submission path (issue #1051). The planner already never
+     * briefs past the cap, but an author agent could still spawn a reviewer from an old instructions file —
+     * the measured deadlock did exactly that — and the verdict it produced then had to be judged by
+     * everything downstream. Counting from the immutable round snapshots makes it mechanical: a checklist
+     * reviewed `maxReviewerRounds` times gets no further verdict. Returns how many reviews it already has.
+     */
+    private assertWithinBudget(summaryPath: string, receipt: ReviewStageReceipt, id: string): number {
+        const max = receipt.maxReviewerRounds;
+        const count = this.rounds.reviewCount(summaryPath, id, receipt.round);
+        if (count < max) return count;
+        throw new InformAiError(
+            `I am not allowed to review ${id}: maxReviewerRounds is ${max} and it has already been reviewed `
+            + `${count} time(s) on this branch.\n`
+            + `Do not review it and submit nothing for it; report this refusal, verbatim, to the agent that spawned you. `
+            + `The verdict already recorded for it stands (${this.rounds.roundDir(summaryPath, receipt.round)}), and `
+            + 'the author records any fix made after the cap with pnpm wp-write-review-fixes.');
     }
 
     /** The stage-② receipt, provided it briefed THIS checklist this round. */

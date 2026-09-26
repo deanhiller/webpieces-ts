@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ReviewJsonService } from './review-json';
+import { WRITE_REVIEW_BIN } from './review-identity-stamp';
 
 /** One pre-resolved place a reviewer would otherwise have to go hunting for. Data-only (per CLAUDE.md). */
 export class ContextEntry {
@@ -188,6 +189,7 @@ export class ReviewerInstructionsService {
             '',
             `Global reviewer round ${b.round} of ${b.maxRounds}.`,
             '',
+            ...this.budgetCheck(b),
             'Review this diff against THIS checklist only — not as a general code reviewer — and only over the',
             'files in scope below. If you were handed several of these files, review each checklist separately',
             'and write each one its own verdict. Never write a verdict for a checklist you were not handed.',
@@ -202,6 +204,25 @@ export class ReviewerInstructionsService {
             '',
             '_Generated per run by `wp-review-upsert-pr`. Everything below is already resolved for you; the',
             'paths are absolute because your working directory is not guaranteed to be the repo root._',
+            '',
+        ];
+    }
+
+    /**
+     * The FIRST thing a reviewer does (issue #1051): ask the gate whether this checklist may still be
+     * reviewed. An author agent can spawn a reviewer from this file long after the round budget is spent —
+     * the measured deadlock did — so the file itself carries the check, and `wp-write-review` enforces it.
+     */
+    private budgetCheck(b: ReviewerBriefing): string[] {
+        return [
+            '## FIRST — confirm this review is within the round budget',
+            '',
+            `Before you read anything else, run: \`pnpm ${WRITE_REVIEW_BIN} --checklist ${b.checklistId} --check\``,
+            '',
+            `It counts how many times \`${b.checklistId}\` has already been reviewed on this branch against`,
+            `\`maxReviewerRounds\` (${b.maxRounds}). If it REFUSES, do not review this checklist and submit nothing`,
+            'for it: report its refusal verbatim to the agent that spawned you. `wp-write-review` refuses an',
+            'over-budget verdict anyway, so a review past the budget is wasted work that cannot be recorded.',
             '',
         ];
     }
