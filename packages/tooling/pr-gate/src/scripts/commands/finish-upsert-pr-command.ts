@@ -167,7 +167,9 @@ export class FinishUpsertPrCommand {
         }
         // 1. REQUIRE stage ② — see assertStageTwoRan. Returns true when its receipt covers THIS commit,
         //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
-        const buildAlreadyGreen = this.assertStageTwoRan(repoRoot);
+        const featureName = this.aiBranchName.getFeatureName();
+        const config = loadAndValidate(repoRoot).prGate;
+        const buildAlreadyGreen = this.assertStageTwoRan(repoRoot, config.maxReviewerRounds);
 
         // 2. REQUIRE the AI-authored summary.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
@@ -178,9 +180,7 @@ export class FinishUpsertPrCommand {
         // persist locally, so a re-run re-validates the EXISTING verdicts against the (possibly changed)
         // applicable set for free — an unchanged checklist needs no re-review, a newly-applicable one refuses
         // until its file is written.
-        const featureName = this.aiBranchName.getFeatureName();
-        const config = loadAndValidate(repoRoot).prGate;
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, true, 'stage3-finish'));
         const receipt = this.receipts.read(repoRoot, featureName);
         const remediations = this.rounds.capRemediations(repoRoot, scan.summaryPath, receipt, config.maxReviewerRounds);
         for (const result of scan.results) result.remediation = remediations[result.id] ?? '';
@@ -291,9 +291,9 @@ export class FinishUpsertPrCommand {
      * The two stage-② preconditions, together: no unvalidated merge, and a receipt proving stage ② ran.
      * Returns true when that receipt covers the CURRENT HEAD, i.e. the build gate can be skipped.
      */
-    private assertStageTwoRan(repoRoot: string): boolean {
+    private assertStageTwoRan(repoRoot: string, maxReviewerRounds: number): boolean {
         this.assertNoUnvalidatedMerge(repoRoot);
-        return this.assertReviewStageRan(repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']));
+        return this.assertReviewStageRan(repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']), maxReviewerRounds);
     }
 
     /**
@@ -335,7 +335,8 @@ export class FinishUpsertPrCommand {
      * is vacuous, and summary.json — the only other interlock — is a file the AI writes itself. It could
      * write it and come straight here, skipping the merge validation and the build entirely.
      */
-    private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string): boolean {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string, maxReviewerRounds: number): boolean {
         const receipt = this.receipts.read(repoRoot, featureName);
         if (receipt === null) {
             throw new InformAiError(
@@ -346,6 +347,16 @@ export class FinishUpsertPrCommand {
             );
         }
         if (receipt.headSha === headSha) return true;
+        if (this.rounds.capSpent(summaryJsonPath(repoRoot, featureName), receipt, maxReviewerRounds)) {
+            // The budget is spent (issue #1051): no review round will run again, so suggesting one here is
+            // an instruction the gate itself would refuse. Say what the PR records instead.
+            process.stderr.write(
+                `\n⚠️  HEAD moved since the last reviewer round (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
+                    `   All ${maxReviewerRounds} reviewer round(s) are spent, so no further review runs: the build gate will\n` +
+                    '   re-run, and the PR records every verdict as carried forward from the reviewed tree.\n\n',
+            );
+            return false;
+        }
         // Not fatal. Re-reviewing on every follow-up commit would be intolerable, and most drift is a typo
         // fix. But it is never silent: the build re-runs here, and the PR says the reviewers saw an older tree.
         process.stderr.write(

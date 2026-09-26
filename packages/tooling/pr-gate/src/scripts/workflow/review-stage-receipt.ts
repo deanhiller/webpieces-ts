@@ -24,7 +24,12 @@ export class ReviewStageReceipt {
     round: number;
     /** Repository-owned cap copied from config so verdict provenance can audit the active budget. */
     maxReviewerRounds: number;
-    /** Prior reviewed HEAD for remediation-only rounds; empty for the initial full review. */
+    /**
+     * The reviewed HEAD the latest recorded author remediation starts from: stamped by stage ② when it opens
+     * a remediation-only round (the prior round's HEAD), and by `wp-write-review-fixes` the moment it accepts
+     * a remediation — including the one after the round cap, where no further round is ever opened to stamp
+     * it (issue #1051: it used to stay '' there). Empty while no remediation exists.
+     */
     remediationFromHead: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -68,6 +73,22 @@ export class ReviewStageReceiptService {
         const p = this.receiptPath(repoRoot, featureName);
         fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p, JSON.stringify(receipt, null, 2) + '\n');
+        return p;
+    }
+
+    /**
+     * Stamp an ACCEPTED author remediation onto the receipt (issue #1051), keeping the file's mtime.
+     *
+     * The mtime is kept deliberately: {@link writtenAtMs} answers "when did stage ② last brief anyone?",
+     * and recording a remediation briefs nobody. Moving it would make `wp-await-reviews` discount every
+     * verdict submitted before the remediation as though a new briefing had superseded it.
+     */
+    recordRemediation(repoRoot: string, featureName: string, receipt: ReviewStageReceipt): string {
+        const p = this.receiptPath(repoRoot, featureName);
+        const before = fs.statSync(p);
+        receipt.remediationFromHead = receipt.headSha;
+        this.write(repoRoot, featureName, receipt);
+        fs.utimesSync(p, before.atime, before.mtime);
         return p;
     }
 

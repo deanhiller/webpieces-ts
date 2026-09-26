@@ -31,6 +31,9 @@ export class WriteReviewFixesCommand {
         const receipt = this.receipts.read(repoRoot, featureName);
         if (receipt === null) throw new InformAiError('wp-write-review-fixes: no reviewer round has started on this branch.');
         const written = this.rounds.writeRemediation(repoRoot, summaryJsonPath(repoRoot, featureName), receipt, opts.json);
+        // The receipt names the reviewed HEAD this remediation starts from. After the round cap no later
+        // stage ② ever opens a round to stamp it, so the command that ACCEPTS the remediation does (#1051).
+        this.receipts.recordRemediation(repoRoot, featureName, receipt);
         process.stdout.write(`✅ SHA-bound remediation for global round ${receipt.round} recorded → ${written}\n`);
         return Promise.resolve();
     }

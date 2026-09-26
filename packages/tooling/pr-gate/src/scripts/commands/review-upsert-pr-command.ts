@@ -121,7 +121,7 @@ export class ReviewUpsertPrCommand {
         this.gitExec.assertCleanTree(repoRoot);
         const buildPassedAt = await this.runBuildGate(repoRoot);
 
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, '')); // '' — THIS command writes the context itself, after materializing
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, false, '')); // '' — THIS command writes the context itself, after materializing
         const previousReceipt = this.receipts.read(repoRoot, featureName);
         const plan = this.rounds.plan(repoRoot, scan.summaryPath, previousReceipt, config.maxReviewerRounds, scan.basis);
         const shouldBrief = plan.action === ROUND_ACTION_REVIEW || plan.action === ROUND_ACTION_RESUME;

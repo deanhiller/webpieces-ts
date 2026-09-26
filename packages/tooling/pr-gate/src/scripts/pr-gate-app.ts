@@ -13,7 +13,7 @@ import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
-import { WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
+import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
 import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/write-review-fixes-command';
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
@@ -112,6 +112,11 @@ export class PrGateApp {
      */
     writeReview(opts: WriteReviewOptions): Promise<void> {
         return this.writeReviewCommand.run(opts);
+    }
+
+    /** `wp-write-review --check`: may this checklist still be reviewed on this branch (issue #1051)? */
+    checkReviewBudget(opts: ReviewBudgetCheckOptions): Promise<void> {
+        return this.writeReviewCommand.check(opts);
     }
 
     /** `wp-write-review-fixes`: the coordinator records committed fixes without editing a reviewer verdict. */

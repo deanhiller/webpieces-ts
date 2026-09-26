@@ -6,7 +6,7 @@ import {
     ReviewerBriefing, ReviewerInstructionsService, VERDICT_RED,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
-import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
+import { STANDING_CARRIED, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { ROUND_ACTION_FINISH, ROUND_ACTION_FIX, ROUND_ACTION_RECORD } from './review-round-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -203,6 +203,10 @@ export class ReviewReport {
         const standing = input.standings.find((s: VerdictStanding): boolean => s.checklistId === r.id);
         if (standing === undefined) {
             return `  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`;
+        }
+        if (standing.standing === STANDING_CARRIED) {
+            return `  ✓ ${r.id} — carried ${standing.status.toUpperCase()} from ${this.short(standing.fromSha)}: `
+                + `${standing.reason}; verdict STANDS, do NOT re-spawn`;
         }
         return `  ✓ ${r.id} — carried ${standing.status.toUpperCase()} from ${this.short(standing.fromSha)}, `
             + `in-scope files unchanged; verdict STANDS, do NOT re-spawn`;
