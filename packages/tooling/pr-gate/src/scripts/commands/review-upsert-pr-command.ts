@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService, BranchIdentity, summaryJsonPath } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
@@ -82,7 +81,7 @@ export class ReviewUpsertPrCommand {
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly receipts: ReviewStageReceiptService,
         private readonly activeHatchReport: ActiveHatchReport,
-        // Injected only to RESOLVE + RENDER refusals (see refusals()). This stage never archives a verdict.
+        // Injected to RESOLVE + RENDER refusals (see refusals()) and to name each round's verdict file.
         private readonly reviewJsonService: ReviewJsonService,
         private readonly stageConsole: StageOutputLog,
         private readonly branchIdentity: BranchIdentity,
@@ -135,7 +134,6 @@ export class ReviewUpsertPrCommand {
             // A global round begins only when a non-empty fixed roster is actually briefed.
             receipt.round = recordedReviewers.length === 0 ? 0 : plan.round;
             receipt.maxReviewerRounds = plan.maxRounds;
-            receipt.remediationFromHead = plan.round > 1 ? plan.basis.base : '';
             this.receipts.write(repoRoot, featureName, receipt);
         }
         this.reportActiveHatches(repoRoot);
@@ -209,11 +207,13 @@ export class ReviewUpsertPrCommand {
         // to, which meant this command wrote the same file twice, the first time with an empty diffDir.
         // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
         scan.context = this.prContextWriter.ensure(repoRoot, featureName, plan.basis, 'stage2-review', changedFiles, diffDir);
-        // ONLY the checklists still owed a verdict (issue #863). A green or yellow whose in-scope diff is
-        // unchanged since it was submitted CARRIES — the scan left it in `reviewed` — so briefing it again
-        // would pay a reviewer to re-read code it already judged. Red, stale and never-run are briefed.
+        // ONLY the checklists still owed a verdict (issue #863). A green or yellow CARRIES whatever changed
+        // since (issue #1053) — the scan left it in `reviewed` — so briefing it again would pay a reviewer to
+        // re-read code it already judged. A later round re-briefs exactly the previous round's REDS.
         const reviewedIds = new Set(scan.reviewed.map((r: RequiredChecklist): string => r.id));
-        const owed = scan.applicable.filter((r: RequiredChecklist): boolean => !reviewedIds.has(r.id));
+        const owed = scan.applicable.filter((r: RequiredChecklist): boolean => plan.round > 1
+            ? plan.redChecklistIds.includes(r.id)
+            : !reviewedIds.has(r.id));
         const briefings = this.briefingBuilder.build(repoRoot, scan, owed, manifest, diffDir, config);
         const dir = this.reviewerInstructions.instructionsDirFor(repoRoot, featureName);
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
@@ -221,10 +221,11 @@ export class ReviewUpsertPrCommand {
         for (const b of briefings) {
             b.round = plan.round;
             b.maxRounds = plan.maxRounds;
+            b.verdictPath = this.reviewJsonService.checklistResultPath(scan.summaryPath, b.checklistId, plan.round);
             b.remediationOnly = plan.round > 1;
             if (b.remediationOnly) {
-                b.previousVerdictPath = path.join(this.rounds.roundDir(scan.summaryPath, plan.round - 1), `review-${b.checklistId}.json`);
-                b.remediationPath = this.rounds.remediationPath(scan.summaryPath, plan.round - 1);
+                b.previousVerdictPath = this.reviewJsonService.checklistResultPath(scan.summaryPath, b.checklistId, plan.round - 1);
+                b.remediationPath = this.rounds.fixesPath(scan.summaryPath, plan.round - 1);
             }
             fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.checklistId), this.reviewerInstructions.render(b));
         }
@@ -260,6 +261,8 @@ export class ReviewUpsertPrCommand {
         input.maxReviewerRounds = plan.maxRounds;
         input.roundAction = plan.action;
         input.redChecklistIds = plan.redChecklistIds.slice();
+        input.orangeChecklistIds = plan.orangeChecklistIds.slice();
+        input.notBriefed = scan.notBriefed.slice();
         input.standings = scan.standings.slice();
         // `say`: this block IS the next action — which reviewers to spawn, where summary.json goes, and
         // the command after that. Capturing it into the log would leave the terminal with a pointer and
@@ -276,14 +279,9 @@ export class ReviewUpsertPrCommand {
      * and an agent that obeys spawns it against unchanged code, gets the same refusal, and loops one stage
      * earlier than the loop that was reported.
      *
-     * NO archive path is passed, deliberately, and this stage moves nothing. Retiring a verdict is finish's
-     * act on the refusal it is actually enforcing; doing it here would delete the live verdict of a branch
-     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — "fix it, then
-     * re-run" — is only correct while that verdict file is still there, which here it is.
-     *
-     * The review path IS passed, because the ship-anyway route the refusal prints is a command that writes
-     * `override-<id>.json` beside it. That command is as correct at this stage as at finish: the override
-     * is a separate file with its own writer, so nothing about it depends on the verdict having been moved.
+     * Nothing is moved: a red verdict stays on disk as its round's record, and the next round's verdict is a
+     * new file (issue #1053). The review path IS passed, because the ship-anyway route the refusal prints is a
+     * command that writes `override-<id>.json` beside it.
      */
     private refusals(scan: ChecklistScan): RefusedReviewer[] {
         const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results);

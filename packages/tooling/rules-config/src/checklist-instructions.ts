@@ -29,7 +29,7 @@ export class ChecklistInstructionsService {
 
     /**
      * The full instruction block, or '' when nothing is pending (so a caller can concatenate it blindly).
-     * `summaryPath` is the branch's summary.json — each verdict file sits beside it as review-<id>.json.
+     * `summaryPath` is the branch's summary.json — each verdict file sits beside it as review-round<N>-<id>.json.
      */
     render(pending: readonly RequiredChecklist[], summaryPath: string, context: ChecklistReviewContext): string {
         if (pending.length === 0) return '';
@@ -91,7 +91,7 @@ export class ChecklistInstructionsService {
         if (req.doc.trim() !== '') lines.push(`      doc to read:  ${req.doc}`);
         for (const scopeLine of this.scope(req)) lines.push(`      ${scopeLine}`);
         lines.push(`      submits via:  ${this.reviewJsonService.submitCommand(req.id)}`);
-        lines.push(`      which writes: ${this.reviewJsonService.checklistResultPath(summaryPath, req.id)}`);
+        lines.push(`      which writes: ${this.reviewJsonService.checklistResultPathTemplate(summaryPath, req.id)}  (N = the round stage ② briefed)`);
         return lines;
     }
 
@@ -122,7 +122,7 @@ export class ChecklistInstructionsService {
     private verdictFormat(): string[] {
         return [
             'TELL EACH subagent to submit each of its verdicts with EXACTLY this format (there is NO "success" field —',
-            'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
+            'it was removed; "status" is a color so a reviewer can pass a change AND still raise a concern):',
             ...this.reviewJsonService.renderVerdictSchema('<the checklist id>', '  ').split('\n'),
         ];
     }

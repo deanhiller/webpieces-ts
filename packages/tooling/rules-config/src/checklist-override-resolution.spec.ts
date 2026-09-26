@@ -31,7 +31,7 @@ function tmpDirWith(id: string, verdict: unknown, override: unknown = null): str
     const dir = specTempDirs.make('wp-override-res-');
     const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, VALID_REVIEW);
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(verdict as object) }));
+    fs.writeFileSync(path.join(dir, `review-round1-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(verdict as object) }));
     if (override !== null) fs.writeFileSync(path.join(dir, `override-${id}.json`), JSON.stringify(override));
     return file;
 }

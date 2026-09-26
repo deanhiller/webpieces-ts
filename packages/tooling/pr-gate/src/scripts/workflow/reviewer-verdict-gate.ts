@@ -1,6 +1,5 @@
 import {
     ChecklistInstructionsService, InformAiError, RequiredChecklist, ReviewJsonService,
-    toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistScan } from './checklist-scanner';
@@ -10,10 +9,10 @@ import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-pr
  * The gate `wp-finish-upsert-pr` runs before it parses summary.json: REFUSE the PR while any applicable
  * checklist is not clear, and say — per checklist — which of three different things went wrong.
  *
- * It is its own class, not a private method on the command, for two reasons. It is the one piece of finish
- * that both MUTATES the branch (it retires red verdicts) and produces the text an AI acts on, so it is the
- * piece most worth asserting on directly; and the command it came out of is already the largest file in this
- * package, against a hard `@webpieces/max-file-lines` limit.
+ * It is its own class, not a private method on the command, for two reasons. It produces the text an AI acts
+ * on, so it is the piece most worth asserting on directly; and the command it came out of is already the
+ * largest file in this package, against a hard `@webpieces/max-file-lines` limit. It never moves or deletes
+ * a verdict: every round's verdict is its own file and stays on disk (issue #1053).
  *
  * THE BUG THIS EXISTS TO FIX. The message used to be one bucket and one imperative — "You MUST run these N
  * reviewer subagent(s)" — for three unrelated states. Handed to an agent, the literal, obedient response for
@@ -22,8 +21,9 @@ import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-pr
  * never printed at all. Three states, three actions, in this order:
  *
  *   1. UNREADABLE (`scan.formatErrors`) -> fix four characters of JSON. Not a reviewer problem.
- *   2. REFUSED (CK_FAIL)                -> fix the finding (or get a HUMAN override). Not a missing step.
- *   3. NEVER RAN (the rest)             -> spawn the subagent. The ONLY case where that is the right move.
+ *   2. ORANGE (CK_ORANGE)               -> the final round's must-fix: fix it, record the fix. Never a reviewer.
+ *   3. REFUSED (CK_FAIL)                -> fix the finding (or get a HUMAN override). Not a missing step.
+ *   4. NEVER RAN (the rest)             -> spawn the subagent. The ONLY case where that is the right move.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
  */
@@ -37,10 +37,6 @@ export class ReviewerVerdictGate {
     /**
      * Refuse the PR while ANY applicable checklist still owes a passing verdict — naming exactly what each
      * one needs. No-op for a repo with no applicable checklists.
-     *
-     * SIDE EFFECT, deliberately: every REFUSED checklist's verdict file is RETIRED to review-<id>.json.old on
-     * the way out (see {@link retireAndReport}). Only red verdicts are ever moved — a green, yellow or
-     * overridden one is reused across finish attempts and retiring it would force a needless subagent re-run.
      */
     assertEveryReviewerRan(scan: ChecklistScan): void {
         if (scan.outstanding.length === 0) return;
@@ -48,18 +44,19 @@ export class ReviewerVerdictGate {
         // a re-read here could disagree with the set that produced `outstanding`, and a checklist that is
         // "outstanding" per one read and "clear" per another belongs to neither section of the message.
         const refused = this.reviewJsonService.refusedChecklists(scan.outstanding, scan.results);
-        const refusedIds = new Set(refused.map((r: RequiredChecklist): string => r.id));
-        const neverRan = scan.outstanding.filter((r: RequiredChecklist): boolean => !refusedIds.has(r.id));
-        // Rendered BEFORE the throw and, per checklist, with the verdict resolved before its file is moved —
-        // the message quotes the reviewer's own words, so losing them to the move would defeat the point.
-        const refusals = refused.map((req: RequiredChecklist): string => this.retireAndReport(scan, req));
+        const oranges = this.reviewJsonService.orangeChecklists(scan.outstanding, scan.results);
+        const answered = new Set([...refused, ...oranges].map((r: RequiredChecklist): string => r.id));
+        const neverRan = scan.outstanding.filter((r: RequiredChecklist): boolean => !answered.has(r.id));
+        const refusals = refused.map((req: RequiredChecklist): string =>
+            this.reviewJsonService.refusalError(req, this.reviewJsonService.resolveVerdict(req, scan.results), scan.summaryPath));
         throw new InformAiError(
-            this.headline(scan, refused, neverRan)
+            this.headline(scan, refused, oranges, neverRan)
             + this.unreadableSection(scan)
+            + this.orangeSection(scan, oranges)
             + this.refusedSection(refusals)
             + this.discountedSection(scan, neverRan)
             + this.neverRanSection(scan, neverRan)
-            + this.footer(refused.length > 0),
+            + this.footer(refused.length > 0, oranges.length > 0),
         );
     }
 
@@ -69,10 +66,16 @@ export class ReviewerVerdictGate {
      * The old headline said all of them "have no passing verdict yet", which is technically true of a refusal
      * and reads as though nobody had looked. It is the sentence that framed a decision as an omission.
      */
-    private headline(scan: ChecklistScan, refused: readonly RequiredChecklist[], neverRan: readonly RequiredChecklist[]): string {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private headline(
+        scan: ChecklistScan, refused: readonly RequiredChecklist[], oranges: readonly RequiredChecklist[], neverRan: readonly RequiredChecklist[],
+    ): string {
         const lines = [
             `⛔ NO PR — ${scan.outstanding.length} of ${scan.applicable.length} review checklist(s) that apply to this branch are not clear:`,
         ];
+        if (oranges.length > 0) {
+            lines.push(`  • ${oranges.length} ORANGE — a final-round must-fix with no recorded fix yet: ${this.instructions.names(oranges)}`);
+        }
         if (refused.length > 0) {
             lines.push(`  • ${refused.length} REFUSED — a reviewer ran, judged this change, and said no: ${this.instructions.names(refused)}`);
         }
@@ -108,7 +111,21 @@ export class ReviewerVerdictGate {
     }
 
     /**
-     * The refusals — SECOND, above anything that says to spawn a subagent, because a spawn instruction is the
+     * The ORANGES (issue #1053) — above the refusals and everything that says to spawn, because the one move
+     * an orange must never get is a reviewer: the round cap is spent. Fixed code plus a recorded fix is the
+     * only way past it, and after that finish proceeds and stamps the orange with its resolution.
+     */
+    private orangeSection(scan: ChecklistScan, oranges: readonly RequiredChecklist[]): string {
+        if (oranges.length === 0) return '';
+        const findings = oranges.map((req: RequiredChecklist): string =>
+            `  • ${this.reviewJsonService.orangeError(req, this.reviewJsonService.resolveVerdict(req, scan.results))}`);
+        return '🟠 ORANGE — the FINAL review round found these, and nobody will review them again. Do NOT spawn a\n'
+            + '   reviewer: fix each finding, commit, and record the fixes with pnpm wp-write-review-fixes.\n\n'
+            + findings.join('\n') + '\n';
+    }
+
+    /**
+     * The refusals — above anything that says to spawn a subagent, because a spawn instruction is the
      * one line an agent acts on first, and acting on it here IS the loop.
      */
     private refusedSection(refusals: readonly string[]): string {
@@ -147,44 +164,14 @@ export class ReviewerVerdictGate {
             + `${this.instructions.render(neverRan, scan.summaryPath, scan.context)}\n\n`;
     }
 
-    /**
-     * Retire ONE refused checklist's verdict and render the refusal that reports it.
-     *
-     * ORDER IS LOAD-BEARING. The verdict is resolved from the already-loaded results, so the finding is in
-     * hand before the file moves; the move then happens; and only then is the message rendered, because it
-     * names the archive path and must not claim a move that did not happen.
-     *
-     * The move is NON-FATAL. A finish that died after retiring a verdict would leave the AI with a red
-     * verdict gone from the live path and no message saying where it went or why the PR was refused — a
-     * silent gap, and the worst possible outcome for a feature whose entire purpose is a durable record. So a
-     * failed move warns and the refusal is reported without an archive path (the file is then still live,
-     * which the un-archived wording of `refusalError` describes correctly).
-     */
-    private retireAndReport(scan: ChecklistScan, req: RequiredChecklist): string {
-        const verdict = this.reviewJsonService.resolveVerdict(req, scan.results);
-        return this.reviewJsonService.refusalError(
-            req, verdict, scan.summaryPath, this.archiveOrWarn(scan.summaryPath, req.id));
-    }
-
-    // The archive path, or '' when there was nothing to move or the move failed (see retireAndReport).
-    private archiveOrWarn(summaryPath: string, checklistId: string): string {
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: a failed archive must never swallow the refusal it belongs to
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return this.reviewJsonService.archiveChecklistResult(summaryPath, checklistId);
-        } catch (err: unknown) {
-            const error = toError(err);
-            process.stderr.write(
-                `⚠️  Could not retire the refused verdict for "${checklistId}" (non-fatal — the refusal is still `
-                + `reported below): ${error.message}\n`);
-            return '';
-        }
-    }
-
     // Re-running stage 2 is normally optional. It stops being optional after a refusal, because the only way
     // past one is to CHANGE the code — which is exactly the condition that makes the extracted diff and every
     // reviewer briefing stale.
-    private footer(anyRefused: boolean): string {
+    private footer(anyRefused: boolean, anyOrange: boolean): string {
+        if (anyOrange && !anyRefused) {
+            return 'Fix every orange finding, commit, record the fixes with pnpm wp-write-review-fixes, then re-run:\n'
+                + 'pnpm wp-finish-upsert-pr. No further review round runs.';
+        }
         if (anyRefused) {
             return 'Fix every finding, commit the remediation, record it with pnpm wp-write-review-fixes, then re-run:\n'
                 + 'pnpm wp-review-upsert-pr. The repository round budget decides whether a focused re-review remains.';

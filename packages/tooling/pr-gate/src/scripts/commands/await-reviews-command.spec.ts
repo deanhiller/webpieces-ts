@@ -19,12 +19,12 @@ function checklist(id: string, required = true): RequiredChecklist {
     return new RequiredChecklist(id, new ReviewerAgentPolicy(`${id}-agent`, REVIEWER_AGENTS_PLACEHOLDER), `.claude/review/${id}.md`, [], [], required);
 }
 
-function writeVerdict(id: string, status: string, output: string): void {
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', id, status, output }));
+function writeVerdict(id: string, status: string, output: string, round = 1): void {
+    fs.writeFileSync(path.join(dir, `review-round${round}-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', id, status, output }));
 }
 
 function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = waitedOn): ReviewerWaitProbe {
-    return new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, waitedOn, applicable, 0);
+    return new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, waitedOn, applicable, 1);
 }
 
 /**
@@ -107,17 +107,19 @@ describe('ReviewerWaitProbe timeout report', () => {
 });
 
 /**
- * Issue #863: stage ② now re-briefs a STALE green and a REJECTED (hand-written) verdict, and that file is
- * still on disk when the wait starts. It is not an answer to THIS round, so it must not end the wait.
+ * Issue #1053: round 2 re-briefs round 1's RED, and that round-1 file is still on disk when the wait starts.
+ * It is not an answer to THIS round, so it must not end the wait.
  */
-describe('ReviewerWaitProbe ignores a verdict file older than the last stage ②', () => {
-    it('keeps waiting on a verdict written before the round began, and ends on a fresh one', () => {
-        writeVerdict('a', 'green', 'judged the previous diff');
-        const old = new Date(Date.now() - 60_000);
-        fs.utimesSync(path.join(dir, 'review-a.json'), old, old);
-        const p = new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, [checklist('a')], [checklist('a')], Date.now() - 1_000);
+describe('ReviewerWaitProbe ignores a verdict from an earlier round than the one stage ② briefed', () => {
+    it('keeps waiting on a round-1 verdict during round 2, and ends on the round-2 one', () => {
+        writeVerdict('a', 'red', 'judged the previous diff', 1);
+        const p = new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, [checklist('a')], [checklist('a')], 2);
         expect(p.done()).toBe(false);
-        writeVerdict('a', 'green', 'judged this diff');
+        writeVerdict('a', 'orange', 'judged this diff', 2);
         expect(p.done()).toBe(true);
+        const report = p.verdictReport(new WaitOutcome(true, 1_000));
+        expect(report).toContain('🟠');
+        expect(report).toContain('wp-write-review-fixes');
+        expect(report).toContain('Do NOT spawn a reviewer');
     });
 });

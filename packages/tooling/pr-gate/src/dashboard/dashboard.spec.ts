@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, PrSummary } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
-import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
+import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
 import { ChecklistCommentRow } from './checklist-comment-row';
 import { AuthorIdentity } from './author-identity';
@@ -392,6 +392,26 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
     it('is ORANGE (never green) for an override, and YELLOW for a warn-only run', () => {
         expect(dashboardWith([new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210')])).toContain('**Checklists:** 🟠 1 ran — 1 overridden (hasura-reviewer)');
         expect(dashboardWith([new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route')])).toContain('**Checklists:** 🟡 1 ran — 1 with concerns (api-reviewer)');
+    });
+
+    // Issue #1053: an ORANGE whose fix the author recorded ships, stamped with its resolution, and reads as
+    // orange (never green) on BOTH the dashboard row and the squash-commit body.
+    it('stamps an author-fixed ORANGE with its resolution, and never renders it green', () => {
+        const stamp = 'orange at aaaaaaaa, author-fixed in bbbbbbbb, not re-reviewed: backfilled before NOT NULL';
+        const rows = [new ChecklistRow('db-reviewer', CK_ORANGE_FIXED, stamp)];
+        expect(dashboardWith(rows)).toContain('**Checklists:** 🟠 1 ran — 1 orange, author-fixed (not re-reviewed) (db-reviewer)');
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
+        expect(renderPrBody(input, '')).toContain(`Checklist — db-reviewer: 🟠 ${stamp}`);
+    });
+
+    // Issue #1053, section A: a checklist a later commit newly triggered is named on ONE non-blocking line.
+    it('names checklists first triggered after the briefing on one informational, non-blocking line', () => {
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), [new ChecklistRow('db-reviewer', CK_PASS)], 'pnpm nx affected --target=ci', 0, AUTHOR, false);
+        input.notBriefed = ['config-secrets-reviewer'];
+        const line = '⚪ not reviewed (not blocking): config-secrets-reviewer — first triggered after the review was briefed';
+        expect(renderDetailComment(input)).toContain(line);
+        expect(renderPrBody(input, '')).toContain(`Checklists — ${line}`);
+        expect(renderDetailComment(input)).toContain('**Checklists:** 🟢 1 ran — all passed');
     });
 
     // An unrecognized verdict is BLOCKING, not a silent pass — the same default the comment side uses.

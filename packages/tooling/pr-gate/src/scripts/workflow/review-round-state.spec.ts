@@ -2,7 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import { AtomicFile, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import {
+    AtomicFile, REVIEWER_AGENTS_PLACEHOLDER, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, specTempDirs,
+} from '@webpieces/rules-config';
 import { DiffBasis } from './diff-basis';
 import { ReviewRoundStateService, ROUND_ACTION_FINISH, ROUND_ACTION_RECORD, ROUND_ACTION_RESUME, ROUND_ACTION_REVIEW } from './review-round-state';
 import { ReviewStageReceipt } from './review-stage-receipt';
@@ -41,11 +43,10 @@ function summary(dir: string): string {
 }
 
 function archive(dir: string, receipt: ReviewStageReceipt, status: string): void {
-    const verdict = new SubmittedVerdict('security', status, 'reviewer', 'model', status === 'red' ? 'fix auth' : 'looks good');
+    const verdict = new SubmittedVerdict('security', status, 'reviewer', 'model', status === 'green' ? 'looks good' : 'fix auth');
     const record = new VerdictProvenance('security', 'terminal', '', '', 'human', receipt.headSha, 'scope');
     record.round = receipt.round;
     provenance.write(summary(dir), verdict, record);
-    rounds.archiveVerdict(summary(dir), 'security', receipt.round);
 }
 
 function basis(dir: string): DiffBasis {
@@ -89,16 +90,39 @@ describe('ReviewRoundStateService', () => {
         expect(plan.changedFiles).toEqual(['a.ts']);
     });
 
-    it('at cap accepts remediation as distinct not-re-reviewed state and never starts round 3', () => {
+    it('on the final round an ORANGE is fixed once, stamped "not re-reviewed", and never starts round 3', () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir, 2);
-        archive(dir, receipt, 'red');
+        archive(dir, receipt, 'orange');
         commitFix(dir, 3);
         rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
         const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_FINISH);
-        expect(rounds.capRemediations(dir, summary(dir), receipt, 2)['security']).toContain('NOT re-reviewed');
+        expect(plan.orangeChecklistIds).toEqual(['security']);
+        const results = reviewJson.loadChecklistResults(summary(dir), [new RequiredChecklist('security', new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER), '', [])]);
+        expect(rounds.orangeFixes(dir, summary(dir), results)['security']).toContain('not re-reviewed: restricted the grant');
+    });
+
+    it('a green round never opens another, even with rounds left and HEAD moved', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptAt(dir, 1);
+        archive(dir, receipt, 'green');
+        commitFix(dir, 3);
+        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_FINISH);
+    });
+
+    it('drops a recorded fix whose toHead is no longer in HEAD\'s history', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptAt(dir, 1);
+        archive(dir, receipt, 'red');
+        commitFix(dir, 3);
+        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        git(dir, 'reset', '-q', '--hard', 'HEAD~1');
+        commitFix(dir, 9);
+        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_RECORD);
     });
 
     it('refuses dirty remediation state, including untracked files', () => {
@@ -115,11 +139,12 @@ describe('ReviewRoundStateService', () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
-        const verdictPath = path.join(rounds.roundDir(summary(dir), receipt.round), 'review-security.json');
+        const verdictPath = reviewJson.checklistResultPath(summary(dir), 'security', receipt.round);
         fs.mkdirSync(path.dirname(verdictPath), { recursive: true });
         fs.writeFileSync(verdictPath, '{ not json');
 
-        expect((): string[] => rounds.redChecklistIds(summary(dir), receipt)).toThrow(`Could not read review state file ${verdictPath}`);
+        const snap = rounds.snapshot(summary(dir), receipt);
+        expect((): string[] => rounds.checklistIdsWithStatus(summary(dir), snap, 'red')).toThrow(`Could not read review state file ${verdictPath}`);
     });
 
     it('refuses a failed Git command instead of treating its output as empty', () => {

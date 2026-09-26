@@ -126,3 +126,7 @@ A diff passes when, for every rule it adds or changes:
 Name the file, the rule, the field, and the deletion that should have replaced it. If you are 🔴 on
 shape 4 or 5, say which field to make required and which `??` to delete — that is a one-line fix and
 the author should not have to work it out from a principle.
+
+On the FINAL review round (your instructions file says when it is) there is no 🔴: mark the same finding
+🟠 `orange` — a must-fix nobody re-reviews, which the author applies best effort before shipping.
+`wp-write-review` refuses red on the final round and refuses orange before it.

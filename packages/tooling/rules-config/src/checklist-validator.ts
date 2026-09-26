@@ -10,9 +10,15 @@ const AGENTS_DIR = path.join('.claude', 'agents');
 // ONE place checklists can be configured, so there is exactly one label.
 const SOURCE = 'pr-gate.checklists in webpieces.config.json';
 
-// A checklist id becomes a FILE NAME (review-<id>.json, <id>.instructions.md), so it is held to a
+// A checklist id becomes a FILE NAME (review-round<N>-<id>.json, <id>.instructions.md), so it is held to a
 // file-name-safe alphabet rather than trusted to not contain a slash.
 const CHECKLIST_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+// Ids whose verdict file would collide with another file in the same directory (issue #1053): the author's
+// recorded fixes are `review-round<N>-fixes.json`, and every verdict's provenance is
+// `review-round<N>-<id>.provenance.json`. A checklist named either way would read that file as its verdict.
+const RESERVED_ID = 'fixes';
+const RESERVED_ID_SUFFIX = '.provenance';
 
 /**
  * Validates the review checklists declared in `pr-gate.checklists`. The array in webpieces.config.json is
@@ -79,13 +85,17 @@ export class ChecklistValidator {
     // `id` keys every per-checklist file and the dashboard row, so it must be present, unique and file-safe.
     private validateId(def: ChecklistDefinition, i: number, seen: Set<string>): string[] {
         if (def.id === '') {
-            return [`[pr-gate] ${SOURCE} checklists[${i}].id must be a non-empty string — the checklist's name; it keys review-<id>.json.`];
+            return [`[pr-gate] ${SOURCE} checklists[${i}].id must be a non-empty string — the checklist's name; it keys review-round<N>-<id>.json.`];
         }
         if (!CHECKLIST_ID.test(def.id)) {
             return [`[pr-gate] ${SOURCE} checklists[${i}].id "${def.id}" must use only letters, digits, ".", "_" and "-" (it becomes a file name).`];
         }
+        if (def.id === RESERVED_ID || def.id.endsWith(RESERVED_ID_SUFFIX)) {
+            return [`[pr-gate] ${SOURCE} checklists[${i}].id "${def.id}" is reserved: review-round<N>-${RESERVED_ID}.json holds the author's recorded fixes and `
+                + `review-round<N>-<id>${RESERVED_ID_SUFFIX}.json each verdict's provenance. Rename the checklist.`];
+        }
         if (seen.has(def.id)) {
-            return [`[pr-gate] ${SOURCE} duplicate id "${def.id}" — every checklist needs its own id, because each writes its own review-<id>.json.`];
+            return [`[pr-gate] ${SOURCE} duplicate id "${def.id}" — every checklist needs its own id, because each writes its own review-round<N>-<id>.json.`];
         }
         seen.add(def.id);
         return [];

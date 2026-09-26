@@ -110,7 +110,7 @@ export class GitDirs {
  *
  * ─── Why aiWritable() is a third scope and not a spelling of local() ──────────────────────────────
  * `pr-review/<branch>/` is the one state directory a CODING AGENT writes into with its own file-write
- * tool: `summary.json` is authored by the agent running the flow, and `review-<id>.json` by each reviewer
+ * tool: `summary.json` is authored by the agent running the flow, and `review-round<N>-<id>.json` by each reviewer
  * subagent. A worktree-isolated agent may write ONLY inside its own worktree — its harness refuses any
  * Write/Edit whose path is under the shared checkout, with "This agent is isolated in the worktree …;
  * edit the worktree copy of this file instead". That refusal is not ours to relax.
@@ -120,7 +120,7 @@ export class GitDirs {
  * the agent's Write was refused at exactly that path, and the only way through was `cp`/`>` from Bash
  * (which is NOT blocked, so the refusal looks arbitrary rather than structural). Three separate agents
  * hit it, each concluded the tooling was printing a path it did not use, and each invented its own
- * workaround. Worse, the same refusal lands on every reviewer subagent's `review-<id>.json`, and
+ * workaround. Worse, the same refusal lands on every reviewer subagent's `review-round<N>-<id>.json`, and
  * `wp-finish-upsert-pr` REFUSES the PR while a required checklist has no verdict — so this was a
  * correctness bug, not an ergonomics one.
  *

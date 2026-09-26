@@ -15,7 +15,11 @@ export class WriteReviewFixesOptions {
     }
 }
 
-/** Coordinator-owned writer for the SHA-bound response to a completed red reviewer round. */
+/**
+ * Coordinator-owned writer for the SHA-bound response to a completed reviewer round: one fix per RED (a round
+ * that is not the last, re-reviewed next round) or per ORANGE (the final round, never re-reviewed — finish
+ * stamps each on the dashboard with its resolution). Written as `review-round<N>-fixes.json`, once.
+ */
 @injectable(bindingScopeValues.Singleton)
 export class WriteReviewFixesCommand {
     constructor(
@@ -31,10 +35,7 @@ export class WriteReviewFixesCommand {
         const receipt = this.receipts.read(repoRoot, featureName);
         if (receipt === null) throw new InformAiError('wp-write-review-fixes: no reviewer round has started on this branch.');
         const written = this.rounds.writeRemediation(repoRoot, summaryJsonPath(repoRoot, featureName), receipt, opts.json);
-        // The receipt names the reviewed HEAD this remediation starts from. After the round cap no later
-        // stage ② ever opens a round to stamp it, so the command that ACCEPTS the remediation does (#1051).
-        this.receipts.recordRemediation(repoRoot, featureName, receipt);
-        process.stdout.write(`✅ SHA-bound remediation for global round ${receipt.round} recorded → ${written}\n`);
+        process.stdout.write(`✅ SHA-bound fixes recorded → ${written}\n`);
         return Promise.resolve();
     }
 }

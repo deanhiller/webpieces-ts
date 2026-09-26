@@ -5,13 +5,14 @@ import {
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-report';
+import { ReviewRoundText } from './review-round-text';
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/summary.json';
 const report = new ReviewReport(
     new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
-    new ChecklistInstructionsService(new ReviewJsonService()));
+    new ChecklistInstructionsService(new ReviewJsonService()), new ReviewRoundText());
 
 const inputWith = (definedCount: number, applicableCount: number): ReviewReportInput => {
     const input = new ReviewReportInput('/repo', 'dean-feature', REVIEW_PATH);
@@ -284,18 +285,59 @@ describe('bounded reviewer rounds', () => {
         expect(text).toContain('GLOBAL REVIEW ROUND 1 OF 2');
     });
 
-    it('at the cap directs the coordinator to finish without another reviewer', () => {
+    it('at the cap with an ORANGE, directs the coordinator to fix and record it, then finish — never a reviewer', () => {
         const input = withOneOwedReviewer();
         input.round = 2;
         input.maxReviewerRounds = 2;
         input.roundAction = 'finish';
-        input.redChecklistIds = ['db-migration-reviewer'];
+        input.orangeChecklistIds = ['db-migration-reviewer'];
         input.briefings = [];
         const text = report.render(input);
-        expect(text).toContain('NOT re-reviewed');
-        expect(text).toContain('pnpm wp-finish-upsert-pr');
+        expect(text).toContain('FIX every ORANGE finding, best effort: db-migration-reviewer');
+        expect(text).toContain('pnpm wp-write-review-fixes');
+        expect(text).toContain('do NOT spawn a reviewer');
         expect(text).not.toContain('subagent_type:');
+        expect(text).not.toContain('LAST REVIEW THIS PR WILL EVER GET');
         expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
+        expect(text.indexOf('wp-write-review-fixes')).toBeLessThan(text.indexOf('pnpm wp-finish-upsert-pr'));
+    });
+
+    // Issue #1053, section 2: the coordinating agent learns this is the LAST review before anything else.
+    it('prints the final-round banner FIRST when it briefs round N of N', () => {
+        const input = withOneOwedReviewer();
+        input.round = 2;
+        input.maxReviewerRounds = 2;
+        const text = report.render(input);
+        expect(text.trimStart().startsWith('‼️ REVIEW ROUND 2 OF 2 — THIS IS THE LAST REVIEW THIS PR WILL EVER GET (maxReviewerRounds = 2).')).toBe(true);
+        expect(text).toContain('orange         → FIX the code best effort, record it with `pnpm wp-write-review-fixes`, then finish.');
+        expect(text).toContain('do not spawn a reviewer; report it as a webpieces bug.');
+        expect(text).not.toContain('STOP');
+        expect(text.indexOf('LAST REVIEW')).toBeLessThan(text.indexOf('subagent_type:'));
+    });
+
+    it('prints no final-round banner on an earlier round, or when nothing is briefed', () => {
+        const early = withOneOwedReviewer();
+        early.round = 1;
+        early.maxReviewerRounds = 2;
+        expect(report.render(early)).not.toContain('LAST REVIEW');
+        const done = withOneOwedReviewer();
+        done.round = 1;
+        done.maxReviewerRounds = 1;
+        done.roundAction = 'finish';
+        done.briefings = [];
+        expect(report.render(done)).not.toContain('LAST REVIEW');
+    });
+
+    // Issue #1053, section A: a checklist a later commit newly triggered is named, never owed.
+    it('names a checklist first triggered after the briefing as not reviewed and NOT blocking', () => {
+        const input = withOneOwedReviewer();
+        input.roundAction = 'finish';
+        input.briefings = [];
+        input.notBriefed = [new RequiredChecklist('config-secrets-reviewer', POLICY, '', ['app.env'])];
+        const text = report.render(input);
+        expect(text).toContain('Not reviewed, NOT blocking: config-secrets-reviewer');
+        expect(text).toContain('do NOT spawn a reviewer for these');
+        expect(text).not.toContain('subagent_type:');
     });
 
     it('leaves the default review output intact', () => {
@@ -481,12 +523,12 @@ describe('the carry-forward rule is stated, not left to be inferred', () => {
 
     it('names the rule and forbids re-spawning when everything is reused', () => {
         const text = reusedOnly();
-        expect(text).toContain('CARRIES FORWARD for as long as its checklist\'s in-scope files are unchanged');
+        expect(text).toContain('A passing verdict CARRIES FORWARD whatever changes afterwards');
         expect(text).toContain('Do NOT re-spawn');
     });
 
-    it('warns that a re-spawn overwrites the banked verdict, not just that it costs tokens', () => {
-        expect(reusedOnly()).toContain('replaces the verdict it already');
+    it('warns that a re-spawn records nothing, not just that it costs tokens', () => {
+        expect(reusedOnly()).toContain('refuses a second verdict for a round');
     });
 
     // The all-clear is NOT printed while anything is still owed, so a mixed run would otherwise carry the
@@ -523,14 +565,16 @@ describe('carried, stale and rejected verdicts are each printed with their reaso
             .toContain('security-auth-reviewer — carried GREEN from 5e57c16a, in-scope files unchanged');
     });
 
-    it('prints a STALE green and a REJECTED verdict as re-briefed, each with its reason', () => {
+    it('prints a STALE red (still refusing) and a REJECTED verdict (re-briefed), each with its reason', () => {
         const input = withOneOwedReviewer();
+        input.round = 1;
+        input.maxReviewerRounds = 2;
         input.standings = [
-            new VerdictStanding('db-migration-reviewer', STANDING_STALE, 'green', '1f75a798aaaa', 'in-scope files CHANGED since'),
+            new VerdictStanding('db-migration-reviewer', STANDING_STALE, 'red', '1f75a798aaaa', 'in-scope files CHANGED since'),
             new VerdictStanding('other-reviewer', STANDING_REJECTED, 'green', '', 'not submitted through pnpm wp-write-review'),
         ];
         const text = report.render(input);
-        expect(text).toContain('db-migration-reviewer — GREEN from 1f75a798 is STALE: in-scope files CHANGED since; re-briefed below');
+        expect(text).toContain('db-migration-reviewer — RED from 1f75a798: in-scope files CHANGED since; still refuses until the next round re-reviews it');
         expect(text).toContain('other-reviewer — verdict REJECTED: not submitted through pnpm wp-write-review; re-briefed below');
     });
 

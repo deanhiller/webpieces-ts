@@ -1,4 +1,4 @@
-import { VERDICT_GREEN, VERDICT_RED, VERDICT_YELLOW } from './review-json-data';
+import { VERDICT_GREEN, VERDICT_ORANGE, VERDICT_RED, VERDICT_YELLOW } from './review-json-data';
 import { WRITE_REVIEW_BIN } from './review-identity-stamp';
 
 /**
@@ -18,14 +18,17 @@ export class VerdictSchemaRenderer {
 
     render(id: string, indent: string): string {
         return [
-            `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
+            `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_ORANGE} | ${VERDICT_RED}", ` +
             `"agent": "claude | codex | unknown", "model": "opus | sonnet | actual readable model name | unknown", ` +
             `"output": "what you checked / found" }`,
             `${indent}Identity fields are REQUIRED non-empty strings. Use your own harness and model, never the parent's.`,
             `${indent}Use the literal "unknown" when unavailable; never guess. These are self-reported, not provenance.`,
             `${indent}  ${VERDICT_GREEN}  → passes, nothing to flag`,
             `${indent}  ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR`,
-            `${indent}  ${VERDICT_RED}    → REFUSES the PR; your "output" is printed verbatim`,
+            `${indent}  ${VERDICT_RED}    → REFUSES the PR and the author's fix is REVIEWED AGAIN next round; your "output" is printed verbatim.`,
+            `${indent}         NOT allowed on the FINAL review round (round N of maxReviewerRounds N): use ${VERDICT_ORANGE} there.`,
+            `${indent}  ${VERDICT_ORANGE} → FINAL ROUND ONLY: must-fix, and there is NO re-review. The author applies your fix`,
+            `${indent}         best effort and ships; put every finding in now, each with a concrete, actionable fix.`,
             `${indent}Prefer "${VERDICT_YELLOW}" over red when the change is acceptable but worth a human's attention —`,
             `${indent}a red a human then authorizes reads as a deliberately-accepted defect, a yellow reads as a note.`,
             // The one sentence that stops a reviewer doing what a reviewer did once: telling the human to run
@@ -35,7 +38,7 @@ export class VerdictSchemaRenderer {
             `${indent}The coordinating agent is the one with the human, and records that decision in override-${id}.json.`,
             `${indent}SUBMIT it — the reviewer itself, never the coordinating agent — with the JSON on stdin:`,
             `${indent}  ${this.submitCommand(id)}`,
-            `${indent}(or --file <path> naming a scratch file). A review-${id}.json written any other way is REJECTED.`,
+            `${indent}(or --file <path> naming a scratch file). A review-round<N>-${id}.json written any other way is REJECTED.`,
         ].join('\n');
     }
 }

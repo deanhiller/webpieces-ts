@@ -149,12 +149,17 @@ Check the removal is COMPLETE, because a half-removal is a shim by accident:
 
 ## Writing your verdict
 
-Per the review-checklist protocol, write `.webpieces/pr-review/<branch>/review-backwards-compat-reviewer.json`
-at the path your instructions file names.
+Per the review-checklist protocol, submit it through `pnpm wp-write-review`, which writes
+`.webpieces/pr-review/<branch>/review-round<N>-backwards-compat-reviewer.json` at the path your instructions
+file names.
 
 - 🟢 `green` — no surface changed, or the surface changed and the old spelling is gone
 - 🟡 `yellow` — a judgment call worth a human's eyes (a defensible runtime throw, a borderline
   two-spelling pair); publishes your reasoning on the PR without blocking
+- 🟠 `orange` — use it INSTEAD of red on the FINAL review round (your instructions file says when it
+  is): the same must-fix finding, but nobody re-reviews it — the author applies your fix best effort and
+  ships. `wp-write-review` refuses red on the final round and refuses orange before it. Everything below
+  about what a red's `output` must say applies to an orange's too.
 - 🔴 `red` — any of the six shapes above. Your `output` must name **the file, the old spelling, and the
   deletion or compile error that should have replaced it**, because that text is what the coding agent
   will act on.

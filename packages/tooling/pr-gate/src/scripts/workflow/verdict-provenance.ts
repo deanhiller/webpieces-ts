@@ -35,8 +35,8 @@ export class SubmittedVerdict {
 }
 
 /**
- * The record `wp-write-review` writes to `review-<id>.provenance.json`. Data-only; field names are the JSON
- * keys, `_WHAT_THIS_IS` first so a reader learns what the file is before anything it might act on.
+ * The record `wp-write-review` writes to `review-round<N>-<id>.provenance.json`. Data-only; field names are
+ * the JSON keys, `_WHAT_THIS_IS` first so a reader learns what the file is before anything it might act on.
  */
 export class VerdictProvenance {
     // webpieces-disable naming-convention -- the leading underscore marks a note-to-the-reader key, not data
@@ -52,7 +52,7 @@ export class VerdictProvenance {
     status: string;          // the status as submitted
     verdictHash: string;     // VerdictProvenanceService.canonicalHash of the verdict as submitted
     writtenAt: string;
-    round: number;
+    round: number;           // the N of review-round<N>-<id>.json — which review round this verdict belongs to
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(checklistId: string, harness: string, sessionId: string, agentId: string, agentType: string, headSha: string, scopeHash: string) {
@@ -78,9 +78,9 @@ export const STANDING_STALE = 'stale';
 /** No bin provenance, or edited after submission: not a reviewer's verdict at all. */
 export const STANDING_REJECTED = 'rejected';
 /**
- * Would be STALE, but still COUNTS (issue #1051): either the reviewer-round budget is spent, so no review
- * round can ever re-judge it and demanding one would deadlock the branch, or a human override for its
- * checklist stands. The reason says which, and is printed verbatim.
+ * Would be STALE, but still COUNTS: staleness never triggers a re-review (issue #1053) — a green, yellow or
+ * orange verdict stands whatever round it came from — and a human override for its checklist always wins
+ * (issue #1051). The reason says which, and is printed verbatim.
  */
 export const STANDING_CARRIED = 'carried';
 
@@ -91,7 +91,7 @@ export const STANDING_CARRIED = 'carried';
 export class VerdictStanding {
     checklistId: string;
     standing: string;   // STANDING_CURRENT | STANDING_STALE | STANDING_REJECTED | STANDING_CARRIED
-    status: string;     // the verdict's own green | yellow | red
+    status: string;     // the verdict's own green | yellow | orange | red
     fromSha: string;    // the commit it was briefed on ('' when rejected)
     reason: string;     // why — printed verbatim
 
@@ -123,9 +123,9 @@ export class VerdictProvenanceService {
         private readonly atomicFile: AtomicFile,
     ) {}
 
-    /** `review-<id>.provenance.json`, beside the verdict. */
-    provenancePath(summaryPath: string, checklistId: string): string {
-        return path.join(path.dirname(summaryPath), `review-${checklistId}.provenance.json`);
+    /** `review-round<N>-<id>.provenance.json`, beside the verdict of the same round. */
+    provenancePath(summaryPath: string, checklistId: string, round: number): string {
+        return path.join(path.dirname(summaryPath), `review-round${round}-${checklistId}.provenance.json`);
     }
 
     /**
@@ -137,20 +137,20 @@ export class VerdictProvenanceService {
         return crypto.createHash('sha256').update(canonical).digest('hex');
     }
 
-    /** Write the verdict, then its provenance. Returns the verdict path. */
+    /** Write the verdict, then its provenance, both for `provenance.round`. Returns the verdict path. */
     write(summaryPath: string, verdict: SubmittedVerdict, provenance: VerdictProvenance): string {
-        const verdictPath = this.reviewJsonService.checklistResultPath(summaryPath, verdict.id);
+        const verdictPath = this.reviewJsonService.checklistResultPath(summaryPath, verdict.id, provenance.round);
         provenance.status = verdict.status;
         provenance.verdictHash = this.canonicalHash(verdict);
         provenance.writtenAt = new Date().toISOString();
         this.atomicFile.writeJsonAtomic(verdictPath, verdict);
-        this.atomicFile.writeJsonAtomic(this.provenancePath(summaryPath, verdict.id), provenance);
+        this.atomicFile.writeJsonAtomic(this.provenancePath(summaryPath, verdict.id, provenance.round), provenance);
         return verdictPath;
     }
 
-    /** The provenance for one checklist, or null when there is none (or it is unreadable). */
-    read(summaryPath: string, checklistId: string): VerdictProvenance | null {
-        const file = this.provenancePath(summaryPath, checklistId);
+    /** The provenance for one checklist's verdict in one round, or null when there is none (or it is unreadable). */
+    read(summaryPath: string, checklistId: string, round: number): VerdictProvenance | null {
+        const file = this.provenancePath(summaryPath, checklistId, round);
         if (!fs.existsSync(file)) return null;
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable record is treated as no record, which REJECTS the verdict
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -180,22 +180,24 @@ export class VerdictProvenanceService {
     // eslint-disable-next-line @typescript-eslint/max-params
     assess(summaryPath: string, result: ChecklistResult, currentScopeHash: string): VerdictStanding {
         const id = result.id;
-        const record = this.read(summaryPath, id);
+        const round = result.round;
+        const verdictFile = path.basename(this.reviewJsonService.checklistResultPath(summaryPath, id, round));
+        const record = this.read(summaryPath, id, round);
         const reject = (reason: string): VerdictStanding => new VerdictStanding(id, STANDING_REJECTED, result.status, '', reason);
         if (record === null) {
-            const file = this.provenancePath(summaryPath, id);
+            const file = this.provenancePath(summaryPath, id, round);
             const why = fs.existsSync(file) ? `${path.basename(file)} is unreadable` : `no ${path.basename(file)}`;
-            return reject(`review-${id}.json was not submitted through pnpm ${WRITE_REVIEW_BIN} (${why}) — a hand-written verdict is not a review`);
+            return reject(`${verdictFile} was not submitted through pnpm ${WRITE_REVIEW_BIN} (${why}) — a hand-written verdict is not a review`);
         }
-        if (record.writer !== WRITE_REVIEW_BIN || record.checklistId !== id) {
-            return reject(`review-${id}.provenance.json was not written by ${WRITE_REVIEW_BIN} for this checklist`);
+        if (record.writer !== WRITE_REVIEW_BIN || record.checklistId !== id || record.round !== round) {
+            return reject(`${path.basename(this.provenancePath(summaryPath, id, round))} was not written by ${WRITE_REVIEW_BIN} for this checklist and round`);
         }
         if (record.agentId.trim() === '' && record.harness !== HARNESS_TERMINAL) {
-            return reject(`review-${id}.json was submitted by the coordinating agent, not a reviewer subagent`);
+            return reject(`${verdictFile} was submitted by the coordinating agent, not a reviewer subagent`);
         }
         const submitted = new SubmittedVerdict(id, result.status, result.agent, result.model, result.output);
         if (this.canonicalHash(submitted) !== record.verdictHash) {
-            return reject(`review-${id}.json was EDITED after ${WRITE_REVIEW_BIN} wrote it — a verdict is the reviewer's words, not a draft`);
+            return reject(`${verdictFile} was EDITED after ${WRITE_REVIEW_BIN} wrote it — a verdict is the reviewer's words, not a draft`);
         }
         if (currentScopeHash !== '' && record.scopeHash !== currentScopeHash) {
             return new VerdictStanding(id, STANDING_STALE, result.status, record.headSha,

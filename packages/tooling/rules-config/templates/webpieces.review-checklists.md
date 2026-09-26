@@ -2,7 +2,7 @@
 
 Your repo defines company review checklists in `pr-gate.checklists` in `webpieces.config.json` — an
 array of `{ id, doc, required, patterns? }`, and that is the **only** accepted shape. Each has an `id`
-(its name; it keys `review-<id>.json`), a **repo-relative** `doc` it is reviewed against, says whether it
+(its name; it keys `review-round<N>-<id>.json`), a **repo-relative** `doc` it is reviewed against, says whether it
 **blocks**, and optionally carries path `patterns`. Checklists do not pick an agent type: every one is
 reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override it (webpieces verifies
 `.claude/agents/<name>.md` exists):
@@ -28,17 +28,31 @@ reviewed by the ONE reviewer agent — `webpieces-reviewer` unless you override 
 
 ## `overrideReviewerAgent`, `reviewerAgentName` and `reviewerAgents` — who reviews, and how many of them
 
-`maxReviewerRounds` is a separate required positive integer. It caps complete global reviewer cycles for
-one PR review state. `1` buys the initial full review only; `2` buys that review plus one focused review of
-the author's remediation delta. Re-running stage ② while a round is still active resumes that round and
+`maxReviewerRounds` is a separate required positive integer, and it is a HARD CEILING: 1 round means 1
+round. `1` buys the initial full review only; `2` buys that review plus one focused review of the author's
+fixes for round 1's RED checklists. Re-running stage ② while a round is still active resumes that round and
 does not consume another. The key remains explicit when `reviewerAgents` is `0`, though it is inactive.
 
-Once the last allowed round is complete the budget is SPENT, and nothing asks for another review: every
-green or yellow verdict is carried forward to later commits instead of going stale, each red is cleared by
-a committed fix recorded with `pnpm wp-write-review-fixes`, and `wp-write-review` refuses any verdict for a
-checklist already reviewed `maxReviewerRounds` times (a reviewer checks first with
-`pnpm wp-write-review --checklist <id> --check`). A human override (`override-<id>.json`) also keeps a
-verdict counting when its in-scope files change.
+Nothing in the gate ever demands a review the cap does not allow:
+
+- **The checklist set is FROZEN at the briefing.** Once a round has started, `wp-finish-upsert-pr` judges only
+  the checklists stage ② briefed. One a later commit newly triggers is named on the dashboard as
+  "not reviewed (not blocking)" and never blocks.
+- **Staleness never triggers a re-review.** A green or yellow verdict stands whatever round it came from and
+  whatever changes afterwards. A new round starts ONLY when the previous round has a RED and rounds remain,
+  and it re-briefs only those reds.
+- **The FINAL round has no red — it has ORANGE.** On round `maxReviewerRounds`, `wp-write-review` refuses
+  `red` and names `orange`: a must-fix that is never re-reviewed. The author fixes it best effort, records
+  the fix with `pnpm wp-write-review-fixes`, and finish then proceeds and stamps each orange on the dashboard
+  as "orange at <sha>, author-fixed in <sha>, not re-reviewed: <resolution>". Before the final round orange
+  is refused and red is named instead.
+
+Every round's files are kept beside `summary.json` and none is ever overwritten: `review-round<N>-<id>.json`
+and `review-round<N>-<id>.provenance.json` per verdict, `review-round<N>-fixes.json` per recorded fix. The
+gate reads the HIGHEST round per checklist, and the round the branch is on is derived from the files, so
+there is no counter to reset. `wp-write-review` refuses a round above the cap and a second verdict for a
+round (a reviewer checks first with `pnpm wp-write-review --checklist <id> --check`). A human override
+(`override-<id>.json`) always keeps a red verdict counting.
 
 - **The reviewer agent** is the `subagent_type` every reviewer is spawned as. By default — write nothing —
   it is `webpieces-reviewer`, a generic, checklist-agnostic reviewer that webpieces owns:
@@ -167,21 +181,22 @@ When `reviewerAgents` is positive, for each matched **required** checklist — a
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **submit its verdict** with `pnpm wp-write-review --checklist <id>` (the JSON on stdin, or
-   `--file <path>`). The bin writes `review-<id>.json` beside the branch's `summary.json` — one file per
-   checklist, so concurrent reviewers never clobber each other — plus `review-<id>.provenance.json`
+   `--file <path>`). The bin writes `review-round<N>-<id>.json` beside the branch's `summary.json` — one
+   file per checklist per round, so concurrent reviewers never clobber each other and no round overwrites
+   another — plus `review-round<N>-<id>.provenance.json`
    recording WHO submitted it (the harness's own session/agent ids, stamped by the PreToolUse hook), the
    commit it was briefed on, and a hash of the checklist's in-scope diff. It is the ONLY way a verdict is
-   written: it refuses the coordinating agent, and `wp-finish-upsert-pr` rejects a `review-<id>.json` that
+   written: it refuses the coordinating agent, and `wp-finish-upsert-pr` rejects a verdict file that
    has no provenance or was edited after submission. There is no second route.
 
 **Codex has no agent types**, so spawn a generic subagent with NO forked turns — fresh context, never a fork
 of your own conversation — and hand it only the instructions files. The brief on disk is its whole input;
 a forked conversation hands a reviewer the author's reasoning, which costs tokens and its independence.
 
-**Verdicts CARRY while their scope is unchanged.** On a re-run, `wp-review-upsert-pr` keeps a checklist's
-green or yellow verdict while the hash of that checklist's in-scope diff is the one its provenance
-recorded, and prints it as `<id> — carried GREEN from <sha>, in-scope files unchanged`. It briefs only the
-checklists that are red, never ran, were rejected, or whose in-scope files changed. A red is never carried.
+**Verdicts CARRY.** On a re-run, `wp-review-upsert-pr` keeps every green and yellow verdict — printed as
+`<id> — carried GREEN from <sha>` with the reason — whether or not its in-scope files changed since. A later
+round briefs only the previous round's reds; a checklist that never ran or whose verdict was rejected is
+briefed within its own round. A red is never carried: it refuses until the next round's verdict clears it.
 
 **How to ask about the optional ones.** `wp-review-upsert-pr` prints them as their own step, listing each
 with the files it matched and the doc it reviews against. Put them to the human in **ONE multi-select
@@ -191,7 +206,7 @@ cheap answer is yes to everything — which is exactly the state `required: fals
 pick none, that is a complete answer; go straight to finish.
 
 **You may never write or submit a reviewer's verdict yourself.** `wp-write-review` refuses the
-coordinating agent, and a hand-written `review-<id>.json` is rejected at finish. If the reviewer agent cannot
+coordinating agent, and a hand-written verdict file is rejected at finish. If the reviewer agent cannot
 be spawned, that is a config bug, not your cue to self-certify — report it to the human.
 
 **From a plain terminal** (no AI harness in the environment, no hook stamp) `wp-write-review` records the
@@ -203,7 +218,7 @@ the review state is local and never committed.
 ```json
 {
   "id": "<the checklist id>",
-  "status": "green | yellow | red",
+  "status": "green | yellow | orange | red",
   "output": "what you checked and what you found"
 }
 ```
@@ -212,8 +227,9 @@ the review state is local and never committed.
 | --- | --- |
 | `green` | 🟢 passes, nothing to flag |
 | `yellow` | 🟡 **passes with concerns.** Blocks nothing; your `output` is published on the PR for a human to read |
-| `red` | 🔴 **`wp-finish` refuses to open the PR** and prints your `output` verbatim |
+| `red` | 🔴 **`wp-finish` refuses to open the PR** and prints your `output` verbatim; the author's fix is reviewed again next round. **Refused on the FINAL round** |
 | `red` + an `override-<id>.json` | 🟠 ships anyway; the human's stated reason is published on the PR |
+| `orange` | 🟠 **FINAL ROUND ONLY — must fix, never re-reviewed.** `wp-finish` refuses until the author records a fix with `pnpm wp-write-review-fixes`, then ships with the finding and the fix stamped on the PR. **Refused before the final round** |
 
 > **The `success` boolean is REMOVED — there is no compatibility mode.** A verdict file still using it is
 > rejected with a message naming the replacement. It was removed because a boolean gave a reviewer no way
@@ -242,7 +258,7 @@ of its own, beside the verdict:
 }
 ```
 
-**Two files because they are two different acts.** `review-<id>.json` is a REVIEWER's verdict — *what I
+**Two files because they are two different acts.** `review-round<N>-<id>.json` is a REVIEWER's verdict — *what I
 found* — and an agent editing a reviewer's verdict is (correctly) refused by the harness. `override-<id>.json`
 is the coordinating agent recording *the human saw this and said ship it*. While the justification lived
 inside the verdict, the one participant who actually hears the human was the one participant that could not
@@ -293,8 +309,9 @@ review must not read as a fully-reviewed one.
 ```
 
 Then run `pnpm wp-finish-upsert-pr`. It re-computes the matched checklists, requires a well-formed,
-passing (or overridden) `review-<id>.json` for each — submitted through `wp-write-review`, unedited, and
-judging the in-scope diff as it is now — verifies a reviewer subagent ran for each, and
+passing (or overridden, or author-fixed orange) verdict for each briefed checklist — its highest
+`review-round<N>-<id>.json`, submitted through `wp-write-review` and unedited — verifies a reviewer subagent
+ran for each, and
 only then opens/updates the PR.
 
 > Provenance is verified from Claude Code's own subagent records — it is not tamper-proof (a determined
@@ -324,7 +341,7 @@ Every path in the file is derived by the tooling from Claude Code's own artifact
 
 ### Review identity
 
-New `summary.json` and `review-<id>.json` files require non-empty string fields `agent` and `model`.
+New `summary.json` and `review-round<N>-<id>.json` files require non-empty string fields `agent` and `model`.
 Use your harness (`claude` or `codex`) and readable model name (for example `opus` or `sonnet`).
 Use the literal `unknown` when a value is unavailable; never guess or inherit the parent reviewer’s model.
 These self-reported labels appear in the PR dashboard and each checklist review comment; they do not

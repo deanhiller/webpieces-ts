@@ -302,7 +302,7 @@ past too. None of the following is your finding:
 ## Writing your verdict
 
 Per the review-checklist protocol, write your verdict to the path your instructions file names — the
-`review-experiment-lifecycle-reviewer.json` under the branch's review directory. Do not guess the path;
+`review-round<N>-experiment-lifecycle-reviewer.json` under the branch's review directory. Do not guess the path;
 the instructions file is regenerated each run and is authoritative.
 
 - 🟢 `green` — no `experimental.*` flag's lifecycle changed, OR one did and the diff quotes human
@@ -310,6 +310,10 @@ the instructions file is regenerated each run and is authoritative.
 - 🟡 `yellow` — a judgment call worth a human's eyes: a numeric default tuned without a stated reason, a
   reader count that dropped for a reason you could not determine, an `ENDED_EXPERIMENTS` note whose
   `endedIn` release you could not verify. Publishes your reasoning without blocking.
+- 🟠 `orange` — use it INSTEAD of red on the FINAL review round (your instructions file says when it
+  is): the same must-fix finding, but nobody re-reviews it — the author applies your fix best effort and
+  ships. `wp-write-review` refuses red on the final round and refuses orange before it. Everything below
+  about what a red's `output` must say applies to an orange's too.
 - 🔴 `red` — any of the seven shapes without a passing citation. **A red BLOCKS the PR**, so your
   `output` must be actionable on its own: name the **flag**, the **file and line**, the **shape it
   matched**, and the **restoration** — which constant, list entry, read path or OFF branch goes back —

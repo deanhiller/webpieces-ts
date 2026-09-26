@@ -42,6 +42,12 @@ export class ChecklistCommentRow {
      * to set it is reported as the stricter of the two.
      */
     required: boolean = true;
+    /**
+     * The diff matches this checklist, but it was first triggered by a commit AFTER the review was briefed,
+     * so no round ever reviewed it (issue #1053). Informational and never blocking — the checklist set is
+     * frozen at the briefing. Defaulted, so every existing construction site is unchanged.
+     */
+    notBriefed: boolean = false;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(agent: string, model: string,

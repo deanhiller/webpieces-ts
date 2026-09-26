@@ -212,7 +212,9 @@ Short list, absolute:
 - **Never comment on an unrelated issue or PR** to announce what you did. Your verdict is where you
   report.
 - **Never go red for a missing ticket.** Restated here because it is the one rule most likely to be
-  eroded by a reviewer's instinct to enforce.
+  eroded by a reviewer's instinct to enforce. On the FINAL review round there is no red at all: the two
+  shapes that stay blocking are marked `orange` there — a must-fix nobody re-reviews — and
+  `wp-write-review` refuses red on that round.
 
 ## What is NOT in scope
 
@@ -244,7 +246,7 @@ Both are rare. Name the reference and the correction.
 ## Writing your verdict
 
 Per the review-checklist protocol, write your verdict JSON as
-`review-ticket-required-reviewer.json` under the branch's review directory. Do not guess the path; the
+`review-round<N>-ticket-required-reviewer.json` under the branch's review directory. Do not guess the path; the
 instructions file your caller named prints it, along with the schema.
 
 Your `output` should be three or four sentences and must contain, literally:

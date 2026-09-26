@@ -75,7 +75,7 @@ export class CodexSubagentSharedTreeGuard {
             CODEX_SUBAGENT_RULE,
             `A Codex subagent is writing review state directly: ${targets}\n\n` +
             `A reviewer verdict is never written as a file. Submit it through ${WRITE_REVIEW_BIN}, which ` +
-            `validates it and records who wrote it — a review-<id>.json written any other way is rejected ` +
+            `validates it and records who wrote it — a review-round<N>-<id>.json written any other way is rejected ` +
             `by pnpm wp-finish-upsert-pr.`,
             undefined,
             undefined,

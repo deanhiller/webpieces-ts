@@ -10,20 +10,32 @@
 import { ReviewerAgentPolicy } from './checklist-config';
 import { ChecklistOverride } from './checklist-override';
 
-// The three colors a reviewer subagent may report in `review-<id>.json`. A TRI-state, not a boolean,
-// because the boolean it replaced gave a reviewer no way to say "this passes, but a human should look at
-// X" — the only way to raise a concern was to FAIL the PR and then override your own failure, which reads
-// on the dashboard as a deliberately-accepted defect rather than as a note.
+// The colors a reviewer subagent may report in `review-round<N>-<id>.json`. Not a boolean, because the
+// boolean it replaced gave a reviewer no way to say "this passes, but a human should look at X" — the only
+// way to raise a concern was to FAIL the PR and then override your own failure, which reads on the
+// dashboard as a deliberately-accepted defect rather than as a note.
+//
+// RED and ORANGE are the two blocking colors, and WHICH one a reviewer may use is decided by the round
+// (issue #1053). `commands.pr-gate.maxReviewerRounds` is a hard ceiling: red means "fix it and it will be
+// reviewed again", which is only true while a round remains. On the FINAL round `wp-write-review` refuses
+// red and the reviewer marks the finding ORANGE instead — "must fix, and nobody re-reviews it". The author
+// fixes it best effort, records the fix with `wp-write-review-fixes`, and the PR ships with the finding and
+// its claimed fix stamped on the dashboard. Before the final round orange is refused the other way round.
 export const VERDICT_GREEN = 'green';
 export const VERDICT_YELLOW = 'yellow';
+export const VERDICT_ORANGE = 'orange';
 export const VERDICT_RED = 'red';
-export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
+export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_ORANGE, VERDICT_RED] as const;
 
-// The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<featureSlug>/review-<id>.json`, one per
-// matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
-// file. It records the OUTCOME:
+// The verdict a reviewer SUBAGENT submits into `.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json`,
+// one per briefed checklist per round. One file per checklist per ROUND, so N concurrent reviewer subagents
+// never clobber a shared file and no round's verdict is ever overwritten by a later one (issue #1053): the
+// gate reads the HIGHEST round per checklist, and the earlier rounds stay on disk as the audit trail. It
+// records the OUTCOME:
 //   status:'green'                       → PASS
 //   status:'yellow'                      → WARN (passes; the concern is published on the PR, nothing is blocked)
+//   status:'orange' + a recorded fix     → ORANGE_FIXED (ships, stamped "author-fixed, not re-reviewed")
+//   status:'orange' + no recorded fix    → ORANGE (refuse until the author records a fix)
 //   status:'red' + an override-<id>.json → OVERRIDDEN (pass; the human's stated reason reaches the PR)
 //   status:'red' + no override file      → FAIL (refuse; `output` is printed verbatim)
 //
@@ -48,8 +60,13 @@ export class ChecklistResult {
     // data rather than thrown so the complaint can be reported by BOTH wp-review-upsert-pr and
     // wp-finish-upsert-pr in identical words, and so a legacy file is never silently mistaken for a missing one.
     problem: string;
-    /** Non-empty only when a valid SHA-bound author remediation resolves this red after the round cap. */
+    /**
+     * Non-empty only for an ORANGE whose final-round fix the author recorded with `wp-write-review-fixes`:
+     * the dashboard line "orange at <fromHead>, author-fixed in <toHead>, not re-reviewed: <resolution>".
+     */
     remediation: string;
+    /** The review round this verdict was submitted in — the N of `review-round<N>-<id>.json`. */
+    round: number;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -69,12 +86,13 @@ export class ChecklistResult {
         this.override = override;
         this.problem = problem;
         this.remediation = '';
+        this.round = 0;
     }
 }
 
 /**
  * What the pr-gate command computed from the diff: a checklist this branch MATCHED (its patterns hit the
- * diff, so its reviewer subagent is in scope). Drives review-<id>.json enforcement, provenance, the schema
+ * diff, so its reviewer subagent is in scope). Drives review-round<N>-<id>.json enforcement, provenance, the schema
  * hint, and the dashboard. Data-only.
  *
  * NAME NOTE: "Required" here means MATCHED, not mandatory — it predates `required` by a long way and is
@@ -82,7 +100,7 @@ export class ChecklistResult {
  * Whether the reviewer must actually run is the {@link RequiredChecklist.required} field below.
  */
 export class RequiredChecklist {
-    id: string; // the checklist's name; keys review-<id>.json and its instructions file
+    id: string; // the checklist's name; keys review-round<N>-<id>.json and its instructions file
     reviewer: ReviewerAgentPolicy; // the agent type to spawn (agentType the harness stamps) + the round cap
     doc: string; // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
     matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
@@ -152,7 +170,7 @@ export class ChecklistReviewContext {
 
 // The AI-authored PR summary (title, risk, summary). Normally the AI writes summary.json between
 // `wp-start-upsert-pr` (which prints the schema) and `wp-finish-upsert-pr` (which reads it), while reviewer
-// subagents write review-<id>.json. The human-only `wp-human-post-pr` escape hatch also requires and reads
+// subagents write review-round<N>-<id>.json. The human-only `wp-human-post-pr` escape hatch also requires and reads
 // this same summary shape, but deliberately skips reviewer verdicts. Data-only (per CLAUDE.md).
 export class PrSummary {
     agent: string;
@@ -165,7 +183,7 @@ export class PrSummary {
     violations: string[]; // pattern/architecture violations; length = the Pattern Violations count
     risks: string[];
     filesToReview: string[];
-    results: ChecklistResult[]; // resolved per-checklist verdicts (from review-<id>.json); [] when none
+    results: ChecklistResult[]; // resolved per-checklist verdicts (from review-round<N>-<id>.json); [] when none
     mainAgentInstructions: string; // non-empty only for the opt-in single-round experiment
 
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -199,18 +217,19 @@ export class PrSummary {
 }
 
 // A checklist's resolved outcome, shared by summary.json enforcement and the dashboard so both agree.
-// PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
-export const CK_PASS = 'pass';               // review-<id>.json status:'green'
-export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
+// PASS, WARN, ORANGE_FIXED and OVERRIDDEN all ship; ORANGE, FAIL, MISSING and BAD_FORMAT all refuse the PR.
+export const CK_PASS = 'pass';               // latest verdict status:'green'
+export const CK_WARN = 'warn';               // latest verdict status:'yellow' → 🟡 passes WITH concerns
+export const CK_ORANGE_FIXED = 'orange-fixed'; // status:'orange' + a recorded author fix → 🟠 ships, NOT re-reviewed
+export const CK_ORANGE = 'orange';           // status:'orange' + no recorded fix → refuse until one is recorded
 export const CK_OVERRIDDEN = 'overridden';   // status:'red' + a human's override-<id>.json → 🟠
-export const CK_REMEDIATED = 'remediated';   // red + valid author remediation after reviewer round cap → 🟠
-export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
-export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
+export const CK_FAIL = 'fail';               // latest verdict status:'red' + no override → refuse
+export const CK_MISSING = 'missing';         // no verdict submitted → refuse
 export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)
 
 export class ChecklistVerdict {
     id: string;
-    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_REMEDIATED | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
+    status: string; // one of CK_PASS | CK_WARN | CK_ORANGE_FIXED | CK_ORANGE | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
     detail: string; // reviewer output / override justification / format complaint (dashboard + errors)
 
     constructor(id: string, status: string, detail: string) {

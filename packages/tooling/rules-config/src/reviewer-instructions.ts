@@ -61,7 +61,7 @@ export class ReviewerBriefing {
     matchedPatterns: string[];    // [] ⇒ patternless: the whole diff is in scope
     sourceDirs: string[];         // deduped ABSOLUTE parent dirs of myFiles
     contextEntries: ContextEntry[];
-    verdictPath: string;          // ABSOLUTE review-<id>.json
+    verdictPath: string;          // ABSOLUTE review-round<N>-<id>.json
     checklistId: string;
     fileDiffCommand: string;
     dirty: boolean;
@@ -185,6 +185,7 @@ export class ReviewerInstructionsService {
 
     private identity(b: ReviewerBriefing): string[] {
         return [
+            ...this.finalRoundHeader(b),
             `# Checklist \`${b.checklistId}\` — reviewed by a \`${b.agentName}\` subagent`,
             '',
             `Global reviewer round ${b.round} of ${b.maxRounds}.`,
@@ -209,6 +210,21 @@ export class ReviewerInstructionsService {
     }
 
     /**
+     * The FINAL round's header (issue #1053), FIRST in the file so nothing above it can be read as the rule.
+     * On the last round `wp-write-review` refuses red, so a reviewer that learned this only at submission time
+     * would have written its findings for a re-review that never happens.
+     */
+    private finalRoundHeader(b: ReviewerBriefing): string[] {
+        if (b.round < b.maxRounds) return [];
+        return [
+            'THIS IS THE FINAL REVIEW ROUND. There is no re-review. You may NOT mark red.',
+            'Mark anything that must be fixed as ORANGE, with a concrete, actionable fix. The author will apply it',
+            'best effort and ship without another review, so put every finding in now.',
+            '',
+        ];
+    }
+
+    /**
      * The FIRST thing a reviewer does (issue #1051): ask the gate whether this checklist may still be
      * reviewed. An author agent can spawn a reviewer from this file long after the round budget is spent —
      * the measured deadlock did — so the file itself carries the check, and `wp-write-review` enforces it.
@@ -219,10 +235,10 @@ export class ReviewerInstructionsService {
             '',
             `Before you read anything else, run: \`pnpm ${WRITE_REVIEW_BIN} --checklist ${b.checklistId} --check\``,
             '',
-            `It counts how many times \`${b.checklistId}\` has already been reviewed on this branch against`,
-            `\`maxReviewerRounds\` (${b.maxRounds}). If it REFUSES, do not review this checklist and submit nothing`,
-            'for it: report its refusal verbatim to the agent that spawned you. `wp-write-review` refuses an',
-            'over-budget verdict anyway, so a review past the budget is wasted work that cannot be recorded.',
+            `It confirms that round ${b.round} is within \`maxReviewerRounds\` (${b.maxRounds}) and that`,
+            `\`${b.checklistId}\` has no verdict yet in this round. If it REFUSES, do not review this checklist and`,
+            'submit nothing for it: report its refusal verbatim to the agent that spawned you. `wp-write-review`',
+            'refuses an over-budget verdict anyway, so a review past the budget is wasted work that cannot be recorded.',
             '',
         ];
     }
@@ -476,7 +492,7 @@ export class ReviewerInstructionsService {
             'reports a verdict written without opening the diff. It also records the path of that transcript,',
             'beside what you were offered and what you read, in `provenance.json` next to your verdict file —',
             'so the review is auditable after the fact. You do not write that file, or the',
-            '`review-<id>.provenance.json` wp-write-review writes beside your verdict; the tooling does.',
+            '`review-round<N>-<id>.provenance.json` wp-write-review writes beside your verdict; the tooling does.',
         ];
     }
 }

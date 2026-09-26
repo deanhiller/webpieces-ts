@@ -4,6 +4,7 @@ import {
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { ReviewReport, ReviewReportInput } from './review-report';
+import { ReviewRoundText } from './review-round-text';
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
 import {
@@ -52,7 +53,7 @@ const OUTCOMES = new Map<string, MergeOutcome>([
 
 const report = new ReviewReport(
     new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
-    new ChecklistInstructionsService(new ReviewJsonService()));
+    new ChecklistInstructionsService(new ReviewJsonService()), new ReviewRoundText());
 
 const reviewInput = (definedCount: number, applicableCount: number, briefings: ReviewerBriefing[]): ReviewReportInput => {
     const built = new ReviewReportInput('/repo', 'dean-feature', '/repo/.webpieces/pr-review/dean-feature/summary.json');
@@ -90,13 +91,25 @@ const emitted = (): Map<string, string> => {
         new VerdictStanding('error-reviewer', STANDING_REJECTED, 'green', '', 'hand-written'),
     ];
     rendered.set('review-report: carried + stale + rejected verdicts', report.render(carried));
+    // Issue #1053: the final round's banner (the one that says "report it as a webpieces bug"), and the
+    // finish step for a final round that came back orange.
+    const finalRound = reviewInput(1, 1, [owedReviewer()]);
+    finalRound.round = 2;
+    finalRound.maxReviewerRounds = 2;
+    rendered.set('review-report: final-round banner', report.render(finalRound));
+    const orange = reviewInput(1, 1, []);
+    orange.round = 1;
+    orange.maxReviewerRounds = 1;
+    orange.roundAction = 'finish';
+    orange.orangeChecklistIds = ['db-migration-reviewer'];
+    rendered.set('review-report: final round came back orange', report.render(orange));
     return rendered;
 };
 
 describe('no string the gate prints tells an AI to end its turn', () => {
     it('renders something for every case, so an empty map cannot pass this file', () => {
         const rendered = emitted();
-        expect(rendered.size).toBe(OUTCOMES.size * 2 + 5);
+        expect(rendered.size).toBe(OUTCOMES.size * 2 + 7);
         expect([...rendered.values()].filter((text: string): boolean => text.length > 0).length)
             .toBeGreaterThan(OUTCOMES.size);
     });

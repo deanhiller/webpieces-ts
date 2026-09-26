@@ -52,7 +52,7 @@ describe('summaryJsonPath in a LINKED worktree', () => {
         const svc = new ReviewJsonService(new DotWebpieces());
         expect(svc.summaryJsonPath(worktree, 'feature')).toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'summary.json'));
         // A verdict file sits beside it, so a reviewer subagent can write its own answer too.
-        expect(svc.checklistResultPath(svc.summaryJsonPath(worktree, 'feature'), 'backwards-compat-reviewer')).toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review-backwards-compat-reviewer.json'));
+        expect(svc.checklistResultPath(svc.summaryJsonPath(worktree, 'feature'), 'backwards-compat-reviewer', 1)).toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'review-round1-backwards-compat-reviewer.json'));
         // And nothing about it is under the primary clone.
         expect(svc.prDirFor(worktree, 'feature').startsWith(primary + path.sep)).toBe(false);
         fs.rmSync(tmp, { recursive: true, force: true });
@@ -241,7 +241,7 @@ function tmpReviewWith(results: Record<string, unknown>): string {
     const file = path.join(dir, 'summary.json');
     fs.writeFileSync(file, validReview());
     for (const [id, body] of Object.entries(results)) {
-        fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(body as object) }));
+        fs.writeFileSync(path.join(dir, `review-round1-${id}.json`), JSON.stringify({ agent: 'claude', model: 'opus', ...(body as object) }));
     }
     return file;
 }
@@ -332,7 +332,7 @@ describe('loadSummaryJson — the removed `success` field', () => {
     });
     it('prints the replacement shape, so the fix needs no doc lookup', () => {
         const file = tmpReviewWith({ migrations: { success: false, output: 'bad' } });
-        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/green \| yellow \| red/);
+        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/green \| yellow \| orange \| red/);
     });
     it('reports an INVALID status as invalid — not as a legacy file and not as a missing one', () => {
         const file = tmpReviewWith({
@@ -348,7 +348,7 @@ describe('loadSummaryJson — the removed `success` field', () => {
         const dir = specTempDirs.make('wp-review-bad-');
         const file = path.join(dir, 'summary.json');
         fs.writeFileSync(file, validReview());
-        fs.writeFileSync(path.join(dir, 'review-migrations.json'), '{ not json');
+        fs.writeFileSync(path.join(dir, 'review-round1-migrations.json'), '{ not json');
         expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
     });
 });
@@ -402,7 +402,7 @@ describe('ChecklistInstructionsService', () => {
         const text = inst.render([req], REVIEW, CTX);
         expect(text).toContain('• checklist db');
         expect(text).toContain('doc to read:  .claude/review/db.md');
-        expect(text).toContain('/repo/.webpieces/pr-review/feat/review-db.json');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/review-round<N>-db.json');
     });
     it('states the ONE verdict format once, not repeated under every reviewer', () => {
         const two = [new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**']), new RequiredChecklist('b', agentPolicy('b'), '', ['x'], ['**'])];
@@ -491,71 +491,68 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
     });
 });
 /**
- * The verdict-file half of the archiving story. `summary.json` already gets a one-generation archive; its
- * siblings got none, so the healthy workflow — reviewer refuses → author fixes it → reviewer re-runs and
- * passes — ERASED the refusal by writing over the same path. The refusal is the interesting event and the
- * pass is the expected one, so the tree ended up keeping exactly the wrong half.
+ * Round-numbered verdict files (issue #1053). Every round's verdict is its own `review-round<N>-<id>.json`
+ * and nothing is ever moved or overwritten: the healthy workflow — reviewer refuses → author fixes → the
+ * next round passes — keeps BOTH, and the gate reads the highest round.
  */
-describe('archiveChecklistResult', () => {
+describe('round-numbered verdict files', () => {
     const svc = new ReviewJsonService();
-    // A real ChecklistResult, not an object literal (CLAUDE.md), serialized by tmpReviewWith.
-    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('unknown', 'unknown', 'migrations', 'red', output, null);
-    it('moves a red verdict to review-<id>.json.old — the live file no longer exists', () => {
-        const file = tmpReviewWith({ migrations: redVerdict('NOT NULL without backfill') });
-        const archived = svc.archiveChecklistResult(file, 'migrations');
-        expect(archived).toBe(path.join(path.dirname(file), 'review-migrations.json.old'));
-        expect(fs.existsSync(svc.checklistResultPath(file, 'migrations'))).toBe(false);
-        const parsed = JSON.parse(fs.readFileSync(archived, 'utf8')) as Record<string, unknown>;
-        expect(parsed['status']).toBe('red');
-        expect(parsed['output']).toBe('NOT NULL without backfill');
-    });
-    it('stamps the audit-only note as the FIRST key, saying it is not a live verdict', () => {
-        const file = tmpReviewWith({ migrations: redVerdict('bad') });
-        const body = fs.readFileSync(svc.archiveChecklistResult(file, 'migrations'), 'utf8');
-        const keys = Object.keys(JSON.parse(body) as Record<string, unknown>);
-        expect(keys[0]).toBe('_ARCHIVED_AUDIT_ONLY');
-        expect(keys).toContain('status');
-        expect(body).toContain('audit');
-        expect(body).toContain('NOT a live verdict');
-    });
-    /**
-     * ONE slot is the design. An accumulating `.old.old` series is the failure mode being avoided: it reads
-     * as though the NUMBER of retirements meant something, and nothing downstream can interpret that.
-     */
-    it('overwrites the .old on a second cycle — no .old.old, and the newer body wins', () => {
-        const file = tmpReviewWith({ migrations: redVerdict('first refusal') });
+    const verdict = (status: string, output: string): string =>
+        JSON.stringify(new ChecklistResult('claude', 'opus', 'migrations', status, output, null));
+    it('reads the HIGHEST round as the live verdict, and keeps every earlier round on disk', () => {
+        const file = tmpReviewWith({});
         const dir = path.dirname(file);
-        svc.archiveChecklistResult(file, 'migrations');
-        fs.writeFileSync(svc.checklistResultPath(file, 'migrations'), JSON.stringify(redVerdict('second refusal')));
-        svc.archiveChecklistResult(file, 'migrations');
-        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'review-migrations.json.old'), 'utf8')) as Record<string, unknown>;
-        expect(parsed['output']).toBe('second refusal');
-        expect(fs.existsSync(path.join(dir, 'review-migrations.json.old.old'))).toBe(false);
-        expect(fs.readdirSync(dir).sort()).toEqual(['review-migrations.json.old', 'summary.json']);
+        fs.writeFileSync(svc.checklistResultPath(file, 'migrations', 1), verdict('red', 'NOT NULL without backfill'));
+        fs.writeFileSync(svc.checklistResultPath(file, 'migrations', 2), verdict('green', 'backfill added'));
+        const results = svc.loadChecklistResults(file, [REQ('migrations')]);
+        expect(results.map((r: ChecklistResult): string => `${r.round}:${r.status}`)).toEqual(['2:green']);
+        expect(svc.latestVerdictRound(file, 'migrations')).toBe(2);
+        expect(svc.latestChecklistResultPath(file, 'migrations')).toBe(path.join(dir, 'review-round2-migrations.json'));
+        expect(fs.existsSync(path.join(dir, 'review-round1-migrations.json'))).toBe(true);
     });
-    it('is a no-op returning "" when there is no live verdict to retire', () => {
+    it('never reads the fixes record or a provenance file as a verdict', () => {
         const file = tmpReviewWith({});
-        expect(svc.archiveChecklistResult(file, 'migrations')).toBe('');
-        expect(fs.readdirSync(path.dirname(file))).toEqual(['summary.json']);
-    });
-    // The archive exists to BE the record, so unstampable bytes are kept verbatim rather than dropped.
-    it('archives non-object / unparseable verdict bytes verbatim rather than losing them', () => {
-        const file = tmpReviewWith({});
-        fs.writeFileSync(svc.checklistResultPath(file, 'migrations'), '{ half-writ');
-        expect(fs.readFileSync(svc.archiveChecklistResult(file, 'migrations'), 'utf8')).toBe('{ half-writ');
-    });
-    /**
-     * THE containment guarantee for the move. `loadChecklistResults` looks up the exact `review-<id>.json`
-     * name, never a scan of the directory — so a retired refusal sitting right beside the live path can
-     * never be handed back as the current state, which would undo the entire point of retiring it.
-     */
-    it('loadChecklistResults ignores a .old file beside it — with no live file it is still MISSING', () => {
-        const file = tmpReviewWith({ migrations: redVerdict('refused') });
-        svc.archiveChecklistResult(file, 'migrations');
+        const dir = path.dirname(file);
+        fs.writeFileSync(path.join(dir, 'review-round3-fixes.json'), '{}');
+        fs.writeFileSync(path.join(dir, 'review-round4-migrations.provenance.json'), '{}');
+        expect(svc.latestVerdictRound(file, 'migrations')).toBe(0);
+        expect(svc.latestVerdictRound(file, 'fixes')).toBe(3);
         expect(svc.loadChecklistResults(file, [REQ('migrations')])).toEqual([]);
-        expect(() => new ReviewJsonService().loadSummaryJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+        expect(svc.latestChecklistResultPath(file, 'migrations')).toBe('');
+    });
+    it('matches the id exactly — `db` never picks up `db-migrations`', () => {
+        const file = tmpReviewWith({});
+        fs.writeFileSync(svc.checklistResultPath(file, 'db-migrations', 5), verdict('green', 'ok'));
+        expect(svc.latestVerdictRound(file, 'db')).toBe(0);
+        expect(svc.latestVerdictRound(file, 'db-migrations')).toBe(5);
     });
 });
+
+/** ORANGE — the final round's must-fix, never re-reviewed (issue #1053). */
+describe('orange verdicts', () => {
+    const svc = new ReviewJsonService();
+    it('an ORANGE with no recorded fix REFUSES, names the fix recorder and never a reviewer', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'orange', output: 'add the backfill' } });
+        expect(svc.orangeChecklists([REQ('migrations')], svc.loadChecklistResults(file, [REQ('migrations')])).map((r): string => r.id)).toEqual(['migrations']);
+        expect(() => svc.loadSummaryJson(file, [REQ('migrations')])).toThrowError(/ORANGE/);
+        expect(() => svc.loadSummaryJson(file, [REQ('migrations')])).toThrowError(/wp-write-review-fixes/);
+        expect(() => svc.loadSummaryJson(file, [REQ('migrations')])).toThrowError(/Do NOT spawn a reviewer/);
+    });
+    it('an ORANGE whose fix was recorded SHIPS, carrying the stamp for the dashboard', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'orange', output: 'add the backfill' } });
+        const stamp = 'orange at aaaaaaaa, author-fixed in bbbbbbbb, not re-reviewed: added the backfill';
+        const summary = svc.loadSummaryJson(file, [REQ('migrations')], '', { migrations: stamp });
+        const verdict = svc.resolveVerdict(REQ('migrations'), summary.results);
+        expect(verdict.status).toBe('orange-fixed');
+        expect(verdict.detail).toBe(stamp);
+    });
+    it('the recorded-fix stamp NEVER turns a red into a pass — only an orange ships on a fix', () => {
+        const results = [new ChecklistResult('claude', 'opus', 'migrations', 'red', 'refused', null)];
+        results[0].remediation = 'orange at a, author-fixed in b, not re-reviewed: x';
+        expect(svc.resolveVerdict(REQ('migrations'), results).status).toBe('fail');
+    });
+});
+
 // A refusal is a RESULT, not a missing step. These two exist so every command says so in the same words —
 // when "refused" was computed ad hoc it merged with "never ran" and produced "you MUST run these N reviewer
 // subagent(s)", which an AI obeys by re-spawning a reviewer that already answered, forever.
@@ -574,21 +571,15 @@ describe('refusedChecklists / refusalError', () => {
         expect(text).toContain('a-reviewer');
         expect(text).toContain('FAILED review');
     });
-    /**
-     * With an archive path the escape hatch must change. "Set override in review-<id>.json" is unfollowable
-     * after the move — that file does not exist — so the text has to ask for a FRESH verdict file instead.
-     */
-    it('names the archive and asks for a FRESH verdict file when the verdict was retired', () => {
+    // A red is never moved (issue #1053): the next round's verdict is a new file, so the text names the fix
+    // recorder and the override file, and never a retired archive.
+    it('names the fix recorder and the override file, and no archive', () => {
         const results = [new ChecklistResult('unknown', 'unknown', 'a', 'red', 'refused', null)];
-        const archived = '/repo/.webpieces/pr-review/feat/review-a.json.old';
-        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH, archived);
-        expect(text).toContain(archived);
-        expect(text).toContain('RETIRED');
-        expect(text).toContain('FRESH review-a.json');
-        // The AUTHORIZATION is a different file and survives the retirement, so the retired-verdict wording
-        // must still route to override-a.json rather than back into a verdict file.
+        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), REVIEW_PATH);
+        expect(text).toContain('wp-write-review-fixes');
         expect(text).toContain('override-a.json');
-        expect(text).not.toContain('human-authored "override"');
+        expect(text).not.toContain('RETIRED');
+        expect(text).not.toContain('.old');
     });
     // No regression in the summary.json validation path: it now renders through refusalError, and must still
     // produce the same FAIL wording it always did, un-archived form.
@@ -655,7 +646,7 @@ describe('loadSummaryJson — optional checklists', () => {
     it('still refuses an optional checklist that RAN and went red', () => {
         const file = tmpFile(VALID);
         fs.writeFileSync(
-            svc.checklistResultPath(file, 'ops-reviewer'),
+            svc.checklistResultPath(file, 'ops-reviewer', 1),
             JSON.stringify({
                 agent: 'claude',
                 model: 'opus',

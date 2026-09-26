@@ -61,6 +61,16 @@ describe('ChecklistValidator', () => {
         expect(errors.some((e: string): boolean => /must use only letters/.test(e))).toBe(true);
     });
 
+    // Issue #1053: review-round<N>-fixes.json and review-round<N>-<id>.provenance.json share the directory.
+    it('rejects an id whose verdict file would collide with the fixes record or a provenance file', () => {
+        const dir = repoWith(['a.md']);
+        for (const id of ['fixes', 'db.provenance']) {
+            const errors = svc.validate(dir, defs([{ id, doc: '.claude/review/a.md' }]));
+            expect(errors.some((e: string): boolean => e.includes(`"${id}" is reserved`))).toBe(true);
+        }
+        expect(svc.validate(dir, defs([{ id: 'fixes-reviewer', doc: '.claude/review/a.md' }]))).toEqual([]);
+    });
+
     it('rejects a doc that does not exist, and says paths are repo-relative', () => {
         const errors = svc.validate(repoWith(), defs([{ id: 'r', doc: '.claude/review/gone.md' }]));
         expect(errors.some((e: string): boolean => e.includes('.claude/review/gone.md'))).toBe(true);
