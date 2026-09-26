@@ -165,6 +165,8 @@ graph TD
     ChecklistScanner --> HomeConfigService
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
+    ChecklistScanner --> ReviewRoundStateService
+    ChecklistScanner --> ReviewStageReceiptService
     ChecklistScanner --> VerdictProvenanceService
     ChecklistScopeHasher --> DiffMaterializer
     CleanTmp --> AgedTreeSweeper
