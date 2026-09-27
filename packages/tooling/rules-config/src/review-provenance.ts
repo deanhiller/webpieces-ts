@@ -26,7 +26,7 @@ const WHAT_THIS_IS =
 
 /** Where ONE reviewer's inputs and output live on disk. Data-only (per CLAUDE.md). */
 export class ReviewerPaths {
-    verdictFile: string;       // the review-<id>.json this reviewer was told to write
+    verdictFile: string;       // the review-round<N>-<id>.json this reviewer was told to write
     instructionsFile: string;  // its checklist's generated <id>.instructions.md
     docPath: string;           // its checklist's guidance doc ('' when the checklist names none)
 
@@ -179,7 +179,7 @@ export class ReviewProvenance {
  * The subagent half is already resolved by {@link SubagentProvenanceService}; this carries it to disk and
  * adds the session-level facts (which session, how long the links live).
  *
- * Deliberately a SEPARATE file from summary.json / review-<id>.json: those are AI-authored and stay
+ * Deliberately a SEPARATE file from summary.json / review-round<N>-<id>.json: those are AI-authored and stay
  * byte-untouched, so nothing here can be confused for something a reviewer claimed about itself.
  *
  * Best-effort throughout — an unreadable config tree degrades the record to empty links, never fails a PR.

@@ -107,14 +107,14 @@ export class ProvenanceEnforcer {
     }
 
     /**
-     * Evidence from `review-<id>.provenance.json` when there are no Claude transcripts to read: the harness,
+     * Evidence from `review-round<N>-<id>.provenance.json` when there are no Claude transcripts to read: the harness,
      * session and agent `wp-write-review` recorded. Read-counters stay at zero — the bin cannot know them.
      */
     private binEvidence(repoRoot: string, expected: readonly ExpectedReviewer[]): ReviewerEvidence[] {
         const summaryPath = summaryJsonPath(repoRoot, this.aiBranchName.getFeatureName());
         const out: ReviewerEvidence[] = [];
         for (const want of expected) {
-            const record = this.verdictProvenance.read(summaryPath, want.checklistId);
+            const record = this.verdictProvenance.read(summaryPath, want.checklistId, this.reviewJsonService.latestVerdictRound(summaryPath, want.checklistId));
             if (record === null) continue;
             out.push(new ReviewerEvidence(
                 want.checklistId, record.agentType === '' ? want.agentType : record.agentType, record.agentId));
@@ -228,7 +228,7 @@ export class ProvenanceEnforcer {
         const verdictPaths: Record<string, string> = {};
         for (const req of required) {
             docPaths[req.id] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
-            verdictPaths[req.id] = this.reviewJsonService.checklistResultPath(summaryJsonPath(repoRoot, featureName), req.id);
+            verdictPaths[req.id] = this.reviewJsonService.latestChecklistResultPath(summaryJsonPath(repoRoot, featureName), req.id);
         }
         return new ReviewerContext(branch, path.join(prDirFor(repoRoot, featureName), 'diff'), docPaths, verdictPaths);
     }
@@ -242,7 +242,7 @@ export class ProvenanceEnforcer {
      * must be comparing a dash-form name against a slash-form git branch — see
      * ProvenanceWriteRequest.featureSlug, whose field carried the same mislabel.
      *
-     * A SEPARATE file rather than a field inside summary.json / review-<id>.json, for two reasons. The
+     * A SEPARATE file rather than a field inside summary.json / review-round<N>-<id>.json, for two reasons. The
      * reviewer cannot supply this itself — a subagent's environment exposes the PARENT session id and no
      * agent id, so a self-reported transcript link would be invented — and keeping the AI-authored files
      * byte-untouched means nothing in the record can be mistaken for something a reviewer claimed about
@@ -270,7 +270,7 @@ export class ProvenanceEnforcer {
         const req = required.find((r: RequiredChecklist): boolean => r.id === checklistId);
         const doc = req !== undefined && req.doc.trim() !== '' ? path.resolve(repoRoot, req.doc) : '';
         return new ReviewerPaths(
-            this.reviewJsonService.checklistResultPath(summaryJsonPath(repoRoot, featureName), checklistId),
+            this.reviewJsonService.latestChecklistResultPath(summaryJsonPath(repoRoot, featureName), checklistId),
             this.reviewerInstructions.pathFor(repoRoot, featureName, checklistId),
             doc,
         );

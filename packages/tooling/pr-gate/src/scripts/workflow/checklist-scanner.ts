@@ -4,7 +4,7 @@ import {
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
-import { ChecklistDetector, ChecklistRoster } from './checklist-detector';
+import { ChecklistDetector, ChecklistRoster, TriggeredChecklist } from './checklist-detector';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
@@ -37,9 +37,9 @@ export class ChecklistScanOptions {
      */
     contextStage: string;
     /**
-     * `commands.pr-gate.maxReviewerRounds`, as the caller's validated config states it. REQUIRED and first:
-     * once the budget is spent a STALE green or yellow is CARRIED rather than owed (issue #1051), so a scan
-     * that did not know the budget would demand a review round the gate will never brief.
+     * `commands.pr-gate.maxReviewerRounds`, as the caller's validated config states it. REQUIRED and first,
+     * so a scan always states the budget its CARRIED verdicts were judged under (issue #1053: a stale green
+     * or yellow is carried whatever round it came from, and the reason names the budget).
      */
     maxReviewerRounds: number;
 
@@ -60,7 +60,7 @@ export class ChecklistScanOptions {
 export class ChecklistScan {
     defined: ChecklistDefinition[];      // X
     applicable: RequiredChecklist[];     // N
-    reviewed: RequiredChecklist[];       // N − Z: already have a passing/warned/overridden review-<id>.json
+    reviewed: RequiredChecklist[];       // N − Z: already have a passing/warned/overridden verdict
     outstanding: RequiredChecklist[];    // Z (== applicable when not filtering)
     context: ChecklistReviewContext;     // fork-point sha + pr-context.json path
     summaryPath: string;                  // the branch's summary.json; verdict files sit beside it
@@ -130,16 +130,28 @@ export class ChecklistScan {
     suppressed: RequiredChecklist[];
     /**
      * How every EXISTING verdict file stands (issue #863): CURRENT (submitted through `wp-write-review` and
-     * its checklist's in-scope diff is unchanged — it carries), STALE (in-scope diff changed since — re-brief)
-     * or REJECTED (no bin provenance, or edited after submission — it is not a review). A REJECTED verdict,
-     * and a STALE green or yellow one, is left OUT of `results`, so it is owed like one that never ran; a
-     * stale RED stays in `results` and keeps refusing. CARRIED (issue #1051) is a green or yellow that would
-     * be STALE but still counts — the reviewer-round budget is spent, or a human override for it stands.
-     * Empty under suppression.
+     * its checklist's in-scope diff is unchanged), CARRIED (its in-scope diff changed since, but it counts
+     * anyway — staleness never re-reviews, issue #1053, and a human override always wins, issue #1051),
+     * STALE (a red whose in-scope diff changed: it still refuses) or REJECTED (no bin provenance, or edited
+     * after submission — it is not a review, and is left OUT of `results` so it is owed like one that never
+     * ran). Empty under suppression.
      */
     standings: VerdictStanding[];
     /** checklist id → ChecklistScopeHasher's hash of its in-scope diff NOW. Recorded in the stage-② receipt. */
     scopeHashes: Record<string, string>;
+    /**
+     * The checklists this diff matches NOW that were never briefed, because a review round had already
+     * started when a later commit first triggered them (issue #1053). The checklist set is FROZEN at the
+     * briefing, so these never block and are never owed a reviewer: the dashboard names them on one
+     * informational line. Empty before any round starts, and under suppression.
+     */
+    notBriefed: RequiredChecklist[];
+    /**
+     * checklist id → the dashboard stamp of every ORANGE whose final-round fix the author recorded (issue
+     * #1053). Already folded into `results` (as `remediation`) — carried out so `wp-finish-upsert-pr` hands
+     * the identical stamps to its summary.json load, which reads the verdicts afresh.
+     */
+    orangeFixes: Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -182,6 +194,19 @@ export class ChecklistScan {
         this.optionalNotRun = optionalNotRun;
         this.standings = [];
         this.scopeHashes = {};
+        this.notBriefed = [];
+        this.orangeFixes = {};
+    }
+}
+
+/** The checklists a scan JUDGES, and the ones the diff matches that it deliberately does not (#1053). Data-only. */
+export class JudgedScope {
+    applicable: RequiredChecklist[];
+    notBriefed: RequiredChecklist[];
+
+    constructor(applicable: RequiredChecklist[], notBriefed: RequiredChecklist[]) {
+        this.applicable = applicable;
+        this.notBriefed = notBriefed;
     }
 }
 
@@ -261,12 +286,14 @@ export class ChecklistScanner {
                 defined, [], [], [], context, summaryPath, base, roster, [], true, matched, basis,
                 changedFiles, [], []);
         }
-        const applicable = matched;
+        const judged = this.judgedScope(repoRoot, summaryPath, roster, matched);
+        const applicable = judged.applicable;
         const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
         const loaded = this.reviewJsonService.loadChecklistResults(summaryPath, applicable);
-        const capSpent = this.rounds.capSpent(summaryPath, this.receipts.read(repoRoot, featureName), opts.maxReviewerRounds);
+        const orangeFixes = this.rounds.orangeFixes(repoRoot, summaryPath, loaded);
+        for (const result of loaded) result.remediation = orangeFixes[result.id] ?? '';
         const standings = this.standingsOf(summaryPath, loaded, scopeHashes)
-            .map((s: VerdictStanding): VerdictStanding => this.carried(s, loaded, capSpent, opts.maxReviewerRounds));
+            .map((s: VerdictStanding): VerdictStanding => this.carried(s, loaded, opts.maxReviewerRounds));
         const results = this.liveResults(loaded, standings);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -294,7 +321,27 @@ export class ChecklistScanner {
         );
         scan.standings = standings;
         scan.scopeHashes = scopeHashes;
+        scan.notBriefed = judged.notBriefed;
+        scan.orangeFixes = orangeFixes;
         return scan;
+    }
+
+    /**
+     * FROZEN at the briefing (issue #1053): once a review round has started, the checklists this branch owes
+     * are the ones that were briefed (still defined, with whatever the current diff matches for each) — never
+     * ones a later commit newly triggers, which no round will ever brief. Recomputing them from the current
+     * diff is exactly the deadlock that drove an agent to move the review directory aside to get unstuck.
+     * Before any round starts, the set is simply what the diff matches.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private judgedScope(repoRoot: string, summaryPath: string, roster: ChecklistRoster, matched: RequiredChecklist[]): JudgedScope {
+        const receipt = this.receipts.read(repoRoot, this.aiBranchName.getFeatureName());
+        if (!this.rounds.roundStarted(summaryPath, receipt)) return new JudgedScope(matched, []);
+        const briefedIds = new Set(this.rounds.briefedChecklistIds(summaryPath, receipt));
+        const briefed = roster.entries.filter((t: TriggeredChecklist): boolean => briefedIds.has(t.def.id));
+        return new JudgedScope(
+            this.checklistDetector.toRequired(briefed),
+            matched.filter((r: RequiredChecklist): boolean => !briefedIds.has(r.id)));
     }
 
     /**
@@ -312,43 +359,40 @@ export class ChecklistScanner {
     }
 
     /**
-     * A STALE green or yellow that must NOT be owed again (issue #1051), re-stood as CARRIED with the reason.
+     * A STALE verdict that must NOT be owed again, re-stood as CARRIED with the reason.
      *
-     * 1. A human override for the checklist stands. Staleness is judged BEFORE the verdict is resolved, so
-     *    without this a stale verdict read as "never ran" and the override written for it was never looked
-     *    at — the human's in-session decision was shadowed by a hash comparison.
-     * 2. The reviewer-round budget is spent. The round planner never briefs a reviewer again, so a stale
-     *    verdict demanded here is a review nobody can ever supply: with `maxReviewerRounds: 1`, the author's
-     *    remediation commit marked every OTHER checklist stale and the branch could not be finished.
+     * 1. A human override for the checklist stands (issue #1051). Staleness is judged BEFORE the verdict is
+     *    resolved, so without this a stale verdict read as "never ran" and the override written for it was
+     *    never looked at — the human's in-session decision was shadowed by a hash comparison.
+     * 2. Otherwise a green, yellow or orange ALWAYS carries (issue #1053): staleness never triggers a
+     *    re-review. `maxReviewerRounds` is a hard ceiling, and the only thing that ever opens another round is
+     *    a RED with a round left — a verdict that went stale because the author kept working is not one.
      *
-     * A RED is never carried here: it keeps refusing until a fresh verdict, a recorded author remediation
-     * after the cap, or a human override clears it. A REJECTED verdict is never carried: it is not a review.
+     * A RED stays STALE: it still refuses, and stage ② re-briefs it while a round remains. A REJECTED verdict
+     * is never carried: it is not a review.
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private carried(s: VerdictStanding, loaded: readonly ChecklistResult[], capSpent: boolean, maxRounds: number): VerdictStanding {
-        if (s.standing !== STANDING_STALE || s.status === VERDICT_RED) return s;
+    private carried(s: VerdictStanding, loaded: readonly ChecklistResult[], maxRounds: number): VerdictStanding {
+        if (s.standing !== STANDING_STALE) return s;
         const result = loaded.find((r: ChecklistResult): boolean => r.id === s.checklistId);
         const override = result?.override ?? null;
         if (override !== null && override.problem === '') {
             return new VerdictStanding(s.checklistId, STANDING_CARRIED, s.status, s.fromSha,
                 `${s.reason}, but a human override (authorized by ${override.authorizedBy}) stands — the verdict counts`);
         }
-        if (!capSpent) return s;
+        if (s.status === VERDICT_RED) return s;
         return new VerdictStanding(s.checklistId, STANDING_CARRIED, s.status, s.fromSha,
-            `${s.reason}; CARRIED FORWARD without re-review — all ${maxRounds} reviewer round(s) are spent, `
-            + 'so no further round runs on this branch');
+            `${s.reason}; CARRIED FORWARD without re-review — a ${s.status} verdict stands whatever round it came from, `
+            + `and only a red opens another of the ${maxRounds} allowed round(s)`);
     }
 
     /**
-     * The verdicts that still COUNT. A rejected one never does. A stale green or yellow judged code that
-     * has since changed, so it is owed again; a stale RED still refuses — a refusal is not lifted by
-     * changing other code in its scope, only by a fresh verdict — and it is re-briefed anyway because it
-     * is red.
+     * The verdicts that still COUNT: every one except a REJECTED verdict, which is not a review. A stale
+     * verdict still counts (see {@link carried}): a stale green, yellow or orange stands, and a stale red
+     * still refuses — a refusal is not lifted by changing other code in its scope.
      */
     private liveResults(loaded: readonly ChecklistResult[], standings: readonly VerdictStanding[]): ChecklistResult[] {
         const dropped = new Set(standings
-            .filter((s: VerdictStanding): boolean =>
-                s.standing === STANDING_REJECTED || (s.standing === STANDING_STALE && s.status !== VERDICT_RED))
+            .filter((s: VerdictStanding): boolean => s.standing === STANDING_REJECTED)
             .map((s: VerdictStanding): string => s.checklistId));
         return loaded.filter((r: ChecklistResult): boolean => !dropped.has(r.id));
     }

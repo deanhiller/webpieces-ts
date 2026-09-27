@@ -193,7 +193,7 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
     new RetiredConfigKey(
         RETIRED_SCOPE_KEY, 'subagent', 'id',
         'Rename "subagent" to "id" in EVERY commands.pr-gate.checklists entry, keeping its value (it still ' +
-        'names the checklist and keys review-<id>.json). Checklists no longer choose an agent type: every one ' +
+        'names the checklist and keys review-round<N>-<id>.json). Checklists no longer choose an agent type: every one ' +
         'is reviewed by the webpieces-reviewer agent (or your own, via "overrideReviewerAgent": true + ' +
         '"reviewerAgentName" in commands.pr-gate).',
         '[pr-gate.checklists]', false,

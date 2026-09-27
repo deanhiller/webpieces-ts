@@ -36,6 +36,8 @@ const stamps = new ReviewIdentityStampService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
 const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile());
+const RED = JSON.stringify({ id: 'security', status: 'red', agent: 'codex', model: 'gpt-5-codex', output: 'GRANT ALL is too wide' });
+const ORANGE = JSON.stringify({ id: 'security', status: 'orange', agent: 'codex', model: 'gpt-5-codex', output: 'narrow GRANT ALL to SELECT' });
 const CHECKLISTS: ChecklistDefinition[] = [
     toChecklist({ id: 'security', patterns: ['**/*.sql'], required: true }, new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER)),
 ];
@@ -82,7 +84,7 @@ function briefedRepo(maxRounds = 2): string {
 function command(): WriteReviewCommand {
     return new WriteReviewCommand(
         new RepoRootFinder(), new FixedBranchName(new BranchNaming()), receipts,
-        new ReviewerIdentityResolver(stamps), provenance, rounds);
+        new ReviewerIdentityResolver(stamps), provenance, reviewJson);
 }
 
 // What the PreToolUse hook writes for the Bash call that runs the bin.
@@ -97,7 +99,7 @@ describe('wp-write-review — the one way a reviewer submits a verdict (issue #8
         await command().run(new WriteReviewOptions('security', GREEN, dir));
 
         const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
-        const record = provenance.read(summaryPath, 'security');
+        const record = provenance.read(summaryPath, 'security', 1);
         expect(record?.harness).toBe('codex');
         expect(record?.agentId).toBe('agent-9');
         expect(record?.scopeHash).toBe(receipts.read(dir, 'dean-feat')?.scopeHashes['security']);
@@ -111,7 +113,7 @@ describe('wp-write-review — the one way a reviewer submits a verdict (issue #8
         const dir = briefedRepo();
         hookStamp(dir, 'codex', '');
         expect(() => command().run(new WriteReviewOptions('security', GREEN, dir))).toThrow(/COORDINATING agent/);
-        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security'))).toBe(false);
+        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1))).toBe(false);
     });
 
     it('refuses a checklist stage ② did not brief — a carried verdict cannot be overwritten', () => {
@@ -147,7 +149,7 @@ describe('wp-finish-upsert-pr rejects a hand-written verdict (issue #863)', () =
         const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
         fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
         // Exactly what the Codex coordinator did on #1093 and #1095: the right shape, at the right path.
-        fs.writeFileSync(reviewJson.checklistResultPath(summaryPath, 'security'), GREEN);
+        fs.writeFileSync(reviewJson.checklistResultPath(summaryPath, 'security', 1), GREEN);
         const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, true, ''));
         const gate = new ReviewerVerdictGate(reviewJson, new ChecklistInstructionsService(reviewJson));
         expect(() => gate.assertEveryReviewerRan(scan)).toThrow(/NOT COUNTED/);
@@ -156,11 +158,11 @@ describe('wp-finish-upsert-pr rejects a hand-written verdict (issue #863)', () =
 });
 
 /**
- * Issue #1051: the round cap is held by the REVIEWER'S own path, not only by the planner — an author agent
- * spawned a reviewer after the cap was spent, and nothing refused it.
+ * Issues #1051 and #1053: the round cap is held by the REVIEWER'S own path, not only by the planner — an
+ * author agent spawned a reviewer after the cap was spent, and nothing refused it. Every round's verdict is
+ * its own file, and none is ever overwritten.
  */
-describe('wp-write-review holds the reviewer-round budget (issue #1051)', () => {
-    const OVER_CAP = 'I am not allowed to review security: maxReviewerRounds is 1 and it has already been reviewed 1 time(s) on this branch.';
+describe('wp-write-review holds the reviewer-round budget (issues #1051, #1053)', () => {
     const YELLOW = GREEN.replace('"green"', '"yellow"');
 
     function quietly(fn: () => Promise<void>): Promise<void> {
@@ -168,44 +170,95 @@ describe('wp-write-review holds the reviewer-round budget (issue #1051)', () => 
         return fn().finally((): void => out.mockRestore());
     }
 
-    it('an IN-cap run proceeds: --check says so, and the verdict is recorded', async () => {
+    function atRound(dir: string, round: number): void {
+        const receipt = receipts.read(dir, 'dean-feat') as ReviewStageReceipt;
+        receipt.round = round;
+        receipts.write(dir, 'dean-feat', receipt);
+    }
+
+    it('an IN-cap run proceeds: --check says so (and that it is the FINAL round), and the verdict is recorded', async () => {
         const dir = briefedRepo(1);
         const out = vi.spyOn(process.stdout, 'write').mockImplementation((): boolean => true);
         await command().check(new ReviewBudgetCheckOptions('security', dir));
-        expect(String(out.mock.calls[0]?.[0])).toContain('may be reviewed: this is review 1 of at most 1');
+        expect(String(out.mock.calls[0]?.[0])).toContain('may be reviewed: this is review round 1 of at most 1');
+        expect(String(out.mock.calls[0]?.[0])).toContain('FINAL round');
         out.mockRestore();
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', GREEN, dir)));
-        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security'))).toBe(true);
+        expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1))).toBe(true);
     });
 
-    it('an OVER-cap run is refused — by --check before reviewing, and by the submission itself — and records nothing', async () => {
+    it('a second verdict for the same round is refused — by --check and by the submission — and overwrites nothing', async () => {
         const dir = briefedRepo(1);
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', GREEN, dir)));
-        const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security');
+        const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
         const before = fs.readFileSync(verdictPath, 'utf8');
 
-        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).toThrow(OVER_CAP);
+        const refusal = 'I am not allowed to review security: it already has a verdict for review round 1';
+        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).toThrow(refusal);
         hookStamp(dir, 'claude-code', 'agent-2');
-        expect(() => command().run(new WriteReviewOptions('security', YELLOW, dir))).toThrow(OVER_CAP);
+        expect(() => command().run(new WriteReviewOptions('security', YELLOW, dir))).toThrow(refusal);
         expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).toThrow(/report this refusal, verbatim/);
         expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).not.toThrow(/end (your|the) turn/i);
         expect(fs.readFileSync(verdictPath, 'utf8')).toBe(before);
     });
 
-    it('counts reviews across rounds: round 2 of 2 may review a checklist round 1 already reviewed once', async () => {
+    it('refuses a round above maxReviewerRounds and records nothing', () => {
+        const dir = briefedRepo(1);
+        atRound(dir, 2);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        expect(() => command().run(new WriteReviewOptions('security', GREEN, dir)))
+            .toThrow('this briefing is for review round 2, above maxReviewerRounds (1)');
+        expect(reviewJson.latestVerdictRound(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security')).toBe(0);
+    });
+
+    it('round 2 of 2 records a NEW file beside round 1 — every round is kept', async () => {
         const dir = briefedRepo(2);
         hookStamp(dir, 'claude-code', 'agent-1');
-        await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', GREEN, dir)));
-        const receipt = receipts.read(dir, 'dean-feat') as ReviewStageReceipt;
-        receipt.round = 2;
-        receipts.write(dir, 'dean-feat', receipt);
-
+        await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', RED, dir)));
+        atRound(dir, 2);
         hookStamp(dir, 'claude-code', 'agent-2');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', YELLOW, dir)));
-        expect(rounds.reviewCount(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 2)).toBe(2);
-        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir)))
-            .toThrow('maxReviewerRounds is 2 and it has already been reviewed 2 time(s)');
+        const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
+        expect(JSON.parse(fs.readFileSync(reviewJson.checklistResultPath(summaryPath, 'security', 1), 'utf8')).status).toBe('red');
+        expect(JSON.parse(fs.readFileSync(reviewJson.checklistResultPath(summaryPath, 'security', 2), 'utf8')).status).toBe('yellow');
+        expect(provenance.read(summaryPath, 'security', 2)?.round).toBe(2);
+        expect(rounds.highestRound(summaryPath)).toBe(2);
+    });
+});
+
+/** Issue #1053, section 1: the LAST allowed round has no red — it has orange. */
+describe('wp-write-review fits the color to the round (issue #1053)', () => {
+    function quietly(fn: () => Promise<void>): Promise<void> {
+        const out = vi.spyOn(process.stdout, 'write').mockImplementation((): boolean => true);
+        return fn().finally((): void => out.mockRestore());
+    }
+
+    it('with maxReviewerRounds: 1, refuses RED and names ORANGE — and records nothing', () => {
+        const dir = briefedRepo(1);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        expect(() => command().run(new WriteReviewOptions('security', RED, dir))).toThrow(/"status": "red" is not allowed: review round 1 of 1 is the FINAL round/);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        expect(() => command().run(new WriteReviewOptions('security', RED, dir))).toThrow(/Mark anything that must be fixed "orange"/);
+        expect(reviewJson.latestVerdictRound(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security')).toBe(0);
+    });
+
+    it('with maxReviewerRounds: 1, accepts ORANGE', async () => {
+        const dir = briefedRepo(1);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', ORANGE, dir)));
+        const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
+        expect(JSON.parse(fs.readFileSync(verdictPath, 'utf8')).status).toBe('orange');
+    });
+
+    it('before the final round, refuses ORANGE and names RED — a re-review is still paid for', async () => {
+        const dir = briefedRepo(2);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        expect(() => command().run(new WriteReviewOptions('security', ORANGE, dir))).toThrow(/"status": "orange" is only for the FINAL review round/);
+        hookStamp(dir, 'claude-code', 'agent-1');
+        await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', RED, dir)));
+        const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
+        expect(JSON.parse(fs.readFileSync(verdictPath, 'utf8')).status).toBe('red');
     });
 });

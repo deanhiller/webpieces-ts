@@ -20,17 +20,15 @@ export class ReviewStageReceipt {
      * a green/yellow forward only while that hash is unchanged (issue #863). Assigned after construction.
      */
     scopeHashes: Record<string, string>;
-    /** Global reviewer round, owned by stage ②. Zero means no reviewer round has started. */
-    round: number;
-    /** Repository-owned cap copied from config so verdict provenance can audit the active budget. */
-    maxReviewerRounds: number;
     /**
-     * The reviewed HEAD the latest recorded author remediation starts from: stamped by stage ② when it opens
-     * a remediation-only round (the prior round's HEAD), and by `wp-write-review-fixes` the moment it accepts
-     * a remediation — including the one after the round cap, where no further round is ever opened to stamp
-     * it (issue #1051: it used to stay '' there). Empty while no remediation exists.
+     * The round stage ② BRIEFED `reviewersBriefed` for, and so the N every verdict submitted against this
+     * receipt is written as (`review-round<N>-<id>.json`). Zero means no reviewer round has started. The
+     * round the branch is on is DERIVED from the round-numbered files (issue #1053); this only says which
+     * round the latest briefing opened.
      */
-    remediationFromHead: string;
+    round: number;
+    /** Repository-owned cap copied from config, so `wp-write-review` refuses a round above it. */
+    maxReviewerRounds: number;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(headSha = '', mergeValidated = false, buildCommand = '', buildPassedAt = '', reviewersBriefed: string[] = []) {
@@ -42,7 +40,6 @@ export class ReviewStageReceipt {
         this.scopeHashes = {};
         this.round = 0;
         this.maxReviewerRounds = 0;
-        this.remediationFromHead = '';
     }
 }
 
@@ -76,22 +73,6 @@ export class ReviewStageReceiptService {
         return p;
     }
 
-    /**
-     * Stamp an ACCEPTED author remediation onto the receipt (issue #1051), keeping the file's mtime.
-     *
-     * The mtime is kept deliberately: {@link writtenAtMs} answers "when did stage ② last brief anyone?",
-     * and recording a remediation briefs nobody. Moving it would make `wp-await-reviews` discount every
-     * verdict submitted before the remediation as though a new briefing had superseded it.
-     */
-    recordRemediation(repoRoot: string, featureName: string, receipt: ReviewStageReceipt): string {
-        const p = this.receiptPath(repoRoot, featureName);
-        const before = fs.statSync(p);
-        receipt.remediationFromHead = receipt.headSha;
-        this.write(repoRoot, featureName, receipt);
-        fs.utimesSync(p, before.atime, before.mtime);
-        return p;
-    }
-
     /** The receipt, or null when stage ② never ran (or left something unreadable behind). */
     read(repoRoot: string, featureName: string): ReviewStageReceipt | null {
         const p = this.receiptPath(repoRoot, featureName);
@@ -112,19 +93,12 @@ export class ReviewStageReceiptService {
             receipt.round = typeof raw['round'] === 'number' && Number.isInteger(raw['round']) ? raw['round'] as number : 0;
             receipt.maxReviewerRounds = typeof raw['maxReviewerRounds'] === 'number' && Number.isInteger(raw['maxReviewerRounds'])
                 ? raw['maxReviewerRounds'] as number : 0;
-            receipt.remediationFromHead = typeof raw['remediationFromHead'] === 'string' ? raw['remediationFromHead'] as string : '';
             return receipt;
         } catch (err: unknown) {
             const error = toError(err);
             void error; // unreadable ⇒ treated as absent, which re-runs stage ② (the safe direction)
             return null;
         }
-    }
-
-    /** The receipt file's mtime in epoch ms, or 0 when there is none — when stage ② last briefed anyone. */
-    writtenAtMs(repoRoot: string, featureName: string): number {
-        const p = this.receiptPath(repoRoot, featureName);
-        return fs.existsSync(p) ? fs.statSync(p).mtimeMs : 0;
     }
 
     // webpieces-disable no-any-unknown -- one opaque JSON value, narrowed to string→string

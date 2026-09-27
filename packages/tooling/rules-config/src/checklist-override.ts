@@ -11,15 +11,15 @@ const REASON_FILL_IN = 'REPLACE THIS with the human\'s own words, verbatim';
  * The HUMAN's ship-anyway decision for ONE checklist, recorded in its own file beside the verdict:
  * `.webpieces/pr-review/<feature>/override-<id>.json`. Data-only (per CLAUDE.md).
  *
- * WHY IT IS A SEPARATE FILE FROM THE VERDICT. `review-<id>.json` is a REVIEWER's verdict file, and a
+ * WHY IT IS A SEPARATE FILE FROM THE VERDICT. `review-round<N>-<id>.json` is a REVIEWER's verdict file, and a
  * coding agent editing a reviewer's verdict is refused by the harness — correctly, and by every route
  * (heredoc, `sed -i`, a rewrite). While the ship-anyway justification lived inside that same file as an
  * `override` field, the ONE participant who genuinely hears the human — the coordinating agent — was the
  * one participant physically unable to record what it heard, and a human had to hand-edit JSON. Meanwhile
  * the reviewer subagent refuses to write its own override, also correctly. Two acts, two files:
  *
- *   review-<id>.json    written by the reviewer subagent, once      — "what I found"
- *   override-<id>.json  written by the COORDINATING agent           — "the human saw this and said ship it"
+ *   review-round<N>-<id>.json    written by the reviewer subagent, once      — "what I found"
+ *   override-<id>.json           written by the COORDINATING agent           — "the human saw this and said ship it"
  *
  * The name says what the file is, so nothing has to infer intent from a field inside a verdict.
  *
@@ -69,7 +69,7 @@ export class ChecklistOverrideService {
         return `override-${checklistId}.json`;
     }
 
-    /** Absolute path of the override file, beside summary.json and review-<id>.json in the AI-WRITABLE dir. */
+    /** Absolute path of the override file, beside summary.json and review-round<N>-<id>.json in the AI-WRITABLE dir. */
     overridePath(summaryJsonFilePath: string, checklistId: string): string {
         return path.join(path.dirname(summaryJsonFilePath), this.overrideFileName(checklistId));
     }

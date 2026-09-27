@@ -1,5 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_REMEDIATED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
+import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AuthorIdentity } from './author-identity';
 
@@ -134,6 +134,12 @@ export class DashboardInput {
     suppressedChecklistCount: number;
     author: AuthorIdentity;
     hotfix: boolean;
+    /**
+     * Checklists the final diff matches that were never briefed, because a review round had already started
+     * when a later commit first triggered them (issue #1053). NON-BLOCKING and informational: the checklist
+     * set is frozen at the briefing. Assigned after construction; empty on most PRs.
+     */
+    notBriefed: string[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -164,6 +170,7 @@ export class DashboardInput {
         this.suppressedChecklistCount = suppressedChecklistCount;
         this.author = author;
         this.hotfix = hotfix;
+        this.notBriefed = [];
     }
 }
 
@@ -236,6 +243,7 @@ export class Dashboard {
         // looked at this PR" is a fact a reader must be told, and an absent row silently reads as a green
         // all-clear (see checklistRollupLine).
         lines.push(input.hotfix ? '**Checklists:** ⚫ BYPASSED by /hotfix/ convention · 0 reviewer agents ran' : this.checklistRollupLine(input.checklists, input.suppressedChecklistCount));
+        if (input.notBriefed.length > 0) lines.push(this.notBriefedLine(input.notBriefed));
         lines.push('');
         if (input.review.summary.trim() !== '') {
             lines.push('### Summary');
@@ -388,7 +396,16 @@ export class Dashboard {
         for (const row of input.checklists) {
             flags.push(`Checklist — ${row.title}: ${this.checklistStatusText(row)}`);
         }
+        if (input.notBriefed.length > 0) flags.push(`Checklists — ${this.notBriefedLine(input.notBriefed)}`);
         return flags;
+    }
+
+    /**
+     * The ONE informational line for checklists first triggered after the review was briefed (issue #1053).
+     * ⚪ and "not blocking" both, so it can be read neither as a pass nor as something the PR still owes.
+     */
+    private notBriefedLine(ids: readonly string[]): string {
+        return `⚪ not reviewed (not blocking): ${ids.join(', ')} — first triggered after the review was briefed`;
     }
 
     // Emoji + words for a checklist verdict, shared by the dashboard row and the commit-body flag.
@@ -400,7 +417,7 @@ export class Dashboard {
             const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
             return `🟠 OVERRIDDEN${why}`;
         }
-        if (row.status === CK_REMEDIATED) return `🟠 AUTHOR-REMEDIATED AFTER REVIEW CAP — NOT RE-REVIEWED — ${row.detail}`;
+        if (row.status === CK_ORANGE_FIXED) return `🟠 ${row.detail}`;
         if (row.status === CK_WARN) return '🟡 passed with concerns';
         if (row.status === CK_FAIL) return '🔴 FAILED review';
         if (row.status === CK_MISSING) return '⚪ not reviewed';
@@ -538,18 +555,18 @@ export class Dashboard {
 
     private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {
         const blocking = new RollupBucket('blocking', '🔴', true);
-        const remediated = new RollupBucket('author-remediated after cap (not re-reviewed)', '🟠', true);
+        const orangeFixed = new RollupBucket('orange, author-fixed (not re-reviewed)', '🟠', true);
         const overridden = new RollupBucket('overridden', '🟠', true);
         const warned = new RollupBucket('with concerns', '🟡', true);
         const passed = new RollupBucket('passed', '🟢', false);
         for (const row of rows) {
             if (row.status === CK_PASS) passed.titles.push(row.title);
             else if (row.status === CK_WARN) warned.titles.push(row.title);
-            else if (row.status === CK_REMEDIATED) remediated.titles.push(row.title);
+            else if (row.status === CK_ORANGE_FIXED) orangeFixed.titles.push(row.title);
             else if (row.status === CK_OVERRIDDEN) overridden.titles.push(row.title);
             else blocking.titles.push(row.title);
         }
-        return [blocking, remediated, overridden, warned, passed];
+        return [blocking, orangeFixed, overridden, warned, passed];
     }
 
     // `2 overridden (a, b)` for the buckets a reviewer must act on; a bare `3 passed` for the one they need

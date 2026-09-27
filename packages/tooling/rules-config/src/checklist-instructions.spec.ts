@@ -46,7 +46,7 @@ describe('ChecklistInstructionsService — reviewerAgents grouping', () => {
         expect(text).toContain('using AT MOST 1 `webpieces-reviewer` subagent(s)');
         expect(text).toContain('Use ONE subagent for all of them.');
         expect(text).toContain('it submits ONE verdict');
-        for (let i = 0; i < 4; i += 1) expect(text).toContain(`review-c${i}.json`);
+        for (let i = 0; i < 4; i += 1) expect(text).toContain(`review-round<N>-c${i}.json`);
         expect(text).not.toContain('SEPARATE');
     });
 

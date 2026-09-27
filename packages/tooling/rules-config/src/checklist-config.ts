@@ -47,7 +47,7 @@ export class ReviewerAgentPolicy {
 // PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist has an
 // `id` and the doc its reviewer reads; when the diff matches the checklist's `patterns`,
 // wp-review-upsert-pr tells the AI to spawn the repo's reviewer agent (`webpieces-reviewer`, or an override)
-// over it, and wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json
+// over it, and wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-round<N>-<id>.json
 // exists AND a reviewer subagent is proven (from the harness's own artifacts) to have actually run.
 //
 // Checklists are configured as an ARRAY in `pr-gate.checklists` in webpieces.config.json — the ONLY
@@ -55,7 +55,7 @@ export class ReviewerAgentPolicy {
 // config, so they live where every tool that reads webpieces.config.json can see, grep and schema them.
 // Data-only.
 export class ChecklistDefinition {
-    id: string;                    // keys review-<id>.json, its instructions file and its dashboard row
+    id: string;                    // keys review-round<N>-<id>.json, its instructions file and its dashboard row
     reviewer: ReviewerAgentPolicy; // repo-wide: which agent type reviews it, and the per-round cap
     // REPO-RELATIVE guidance doc the reviewer reads. REQUIRED: with one generic reviewer agent the doc is
     // the whole checklist. Repo-relative because this value is printed verbatim to a reviewer subagent as

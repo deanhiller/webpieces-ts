@@ -27,8 +27,8 @@ function reviewPathIn(dir: string): string {
     return path.join(dir, 'summary.json');
 }
 
-function writeVerdict(dir: string, id: string, status: string, output: string): void {
-    fs.writeFileSync(svc.checklistResultPath(reviewPathIn(dir), id),
+function writeVerdict(dir: string, id: string, status: string, output: string, round = 1): void {
+    fs.writeFileSync(svc.checklistResultPath(reviewPathIn(dir), id, round),
         JSON.stringify({ agent: 'claude', model: 'opus', id, status, output }));
 }
 
@@ -95,12 +95,11 @@ describe('a REFUSED checklist reads as a refusal, not as a reviewer that never r
         expect(msg).not.toContain('have no passing verdict yet');
     });
 
-    it('tells the reader to fix the finding and get a fresh verdict, with a human-override escape hatch', () => {
+    it('tells the reader to fix the finding and record the fix, with a human-override escape hatch', () => {
         const dir = reviewDir();
         writeVerdict(dir, 'db-reviewer', 'red', 'gate 1 failed');
         const msg = refusalOf(dir, [DB]);
-        expect(msg).toContain('review again');
-        expect(msg).toContain('A FRESH review-db-reviewer.json is now required');
+        expect(msg).toContain('record it with pnpm wp-write-review-fixes');
         // The escape hatch is a SEPARATE file with a named writer, and the command that writes it is printed
         // ready to run — the whole point of the split. It must survive the trip through the gate, which is
         // the surface an agent actually reads.
@@ -112,46 +111,49 @@ describe('a REFUSED checklist reads as a refusal, not as a reviewer that never r
 });
 
 /**
- * The DURABLE half (see backlog/bug-per-checklist-verdict-files-are-overwritten-with-no-archive…). The point
- * is the MOVE: a red left on the live path is re-read as the current state, and the eventual fix overwrites
- * the only record that the gate ever refused anything.
+ * The DURABLE half (issue #1053). A refusal is never moved or deleted: every round's verdict is its own
+ * `review-round<N>-<id>.json`, so the refusal survives the fix that the next round passes.
  */
-describe('the refused verdict is RETIRED, one slot back', () => {
-    it('moves the red verdict to review-<id>.json.old and leaves no live verdict', () => {
+describe('a refused verdict stays on disk as its round\'s record', () => {
+    it('refuses without moving, renaming or deleting the red verdict', () => {
         const dir = reviewDir();
         writeVerdict(dir, 'db-reviewer', 'red', 'first refusal');
+        const before = fs.readdirSync(dir).sort();
+        expect(refusalOf(dir, [DB])).toContain('first refusal');
+        expect(fs.readdirSync(dir).sort()).toEqual(before);
+        expect(fs.readdirSync(dir).some((f: string): boolean => f.endsWith('.old'))).toBe(false);
+    });
+
+    it('the next round\'s green clears it, and the round-1 refusal is still there', () => {
+        const dir = reviewDir();
+        writeVerdict(dir, 'db-reviewer', 'red', 'first refusal', 1);
+        writeVerdict(dir, 'db-reviewer', 'green', 'fixed', 2);
+        expect(refusalOf(dir, [DB])).toBe('');
+        expect(fs.readFileSync(svc.checklistResultPath(reviewPathIn(dir), 'db-reviewer', 1), 'utf8')).toContain('first refusal');
+    });
+});
+
+/** ORANGE (issue #1053) — the final round's must-fix. Its only cure is a fix and a record of it, never a reviewer. */
+describe('an ORANGE checklist reads as a final-round must-fix', () => {
+    it('refuses with the finding, names wp-write-review-fixes, and never asks for a reviewer', () => {
+        const dir = reviewDir();
+        writeVerdict(dir, 'db-reviewer', 'orange', 'add the backfill before the NOT NULL');
         const msg = refusalOf(dir, [DB]);
-        const live = svc.checklistResultPath(reviewPathIn(dir), 'db-reviewer');
-        const archived = svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer');
-        expect(fs.existsSync(live)).toBe(false);
-        expect(fs.readFileSync(archived, 'utf8')).toContain('first refusal');
-        // Naming the archive is what keeps the move from reading as data loss.
-        expect(msg).toContain(archived);
+        expect(msg).toContain('1 ORANGE');
+        expect(msg).toContain('add the backfill before the NOT NULL');
+        expect(msg).toContain('pnpm wp-write-review-fixes');
+        expect(msg).toContain('Do NOT spawn a');
+        expect(msg).not.toContain(SPAWN_IMPERATIVE);
+        expect(msg).not.toContain('REFUSED');
     });
 
-    it('OVERWRITES the archive on a second red-then-refuse cycle — one slot, never a .old.old series', () => {
+    it('lets the PR through once the fix is recorded (the scan folds it into the result)', () => {
         const dir = reviewDir();
-        writeVerdict(dir, 'db-reviewer', 'red', 'first refusal');
-        refusalOf(dir, [DB]);
-        writeVerdict(dir, 'db-reviewer', 'red', 'second refusal');
-        refusalOf(dir, [DB]);
-        const archived = svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer');
-        expect(fs.readFileSync(archived, 'utf8')).toContain('second refusal');
-        expect(fs.readFileSync(archived, 'utf8')).not.toContain('first refusal');
-        expect(fs.existsSync(`${archived}.old`)).toBe(false);
-        expect(fs.readdirSync(dir).filter((f: string): boolean => f.endsWith('.old'))).toHaveLength(1);
-    });
-
-    // The case reuse depends on: stage ② prints "already reviewed on this branch (reusing its
-    // review-<id>.json)", and retiring a passing verdict would force a needless subagent re-run.
-    it('leaves a GREEN verdict completely untouched', () => {
-        const dir = reviewDir();
-        writeVerdict(dir, 'db-reviewer', 'green', 'looks fine');
-        const live = svc.checklistResultPath(reviewPathIn(dir), 'db-reviewer');
-        const before = fs.readFileSync(live, 'utf8');
-        expect(refusalOf(dir, [DB])).toBe('');                       // nothing outstanding ⇒ no throw at all
-        expect(fs.readFileSync(live, 'utf8')).toBe(before);
-        expect(fs.existsSync(svc.oldChecklistResultPath(reviewPathIn(dir), 'db-reviewer'))).toBe(false);
+        writeVerdict(dir, 'db-reviewer', 'orange', 'add the backfill');
+        const scan = scanOver(dir, [DB]);
+        scan.results[0].remediation = 'orange at aaaaaaaa, author-fixed in bbbbbbbb, not re-reviewed: backfilled';
+        scan.outstanding = svc.pendingChecklists(scan.applicable, scan.results);
+        expect((): void => gate.assertEveryReviewerRan(scan)).not.toThrow();
     });
 });
 

@@ -15,7 +15,7 @@ function briefing(): ReviewerBriefing {
         'db/001.sql', '/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff', '/repo/db/001.sql', 'M', 4096)];
     b.matchedPatterns = ['db/**/*.sql'];
     b.sourceDirs = ['/repo/db'];
-    b.verdictPath = '/repo/.webpieces/pr-review/feat/review-db-reviewer.json';
+    b.verdictPath = '/repo/.webpieces/pr-review/feat/review-round1-db-reviewer.json';
     b.fileDiffCommand = 'git diff abc123 def456 -- <file>';
     b.changedFileCount = 1;
     b.allDiffLines = 582;
@@ -37,7 +37,30 @@ describe('ReviewerInstructionsService — the file that replaces context archaeo
         expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
         expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff');
         expect(md).toContain('/repo/db');
-        expect(md).toContain('/repo/.webpieces/pr-review/feat/review-db-reviewer.json');
+        expect(md).toContain('/repo/.webpieces/pr-review/feat/review-round1-db-reviewer.json');
+    });
+
+    // Issue #1053, section 2: a reviewer on the LAST round learns it before anything else in the file.
+    it('opens the FINAL round\'s instructions with the no-red header, and no earlier round\'s', () => {
+        const last = briefing();
+        last.round = 2;
+        last.maxRounds = 2;
+        const md = svc.render(last);
+        expect(md.startsWith('THIS IS THE FINAL REVIEW ROUND. There is no re-review. You may NOT mark red.\n'
+            + 'Mark anything that must be fixed as ORANGE, with a concrete, actionable fix. The author will apply it\n'
+            + 'best effort and ship without another review, so put every finding in now.\n')).toBe(true);
+        const early = briefing();
+        early.round = 1;
+        early.maxRounds = 2;
+        expect(svc.render(early)).not.toContain('FINAL REVIEW ROUND');
+        expect(svc.render(early).startsWith('# Checklist')).toBe(true);
+    });
+
+    it('teaches all four colors, and that red is not allowed on the final round', () => {
+        const md = svc.render(briefing());
+        expect(md).toContain('green | yellow | orange | red');
+        expect(md).toContain('NOT allowed on the FINAL review round');
+        expect(md).toContain('FINAL ROUND ONLY: must-fix, and there is NO re-review');
     });
 
     /**

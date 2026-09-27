@@ -62,7 +62,7 @@ export class ReviewerEvidence {
     readDiff: boolean;       // opened the materialized diff dir (or its own instructions file)
     readDoc: boolean;        // opened its checklist's guidance doc
     /**
-     * Named its own verdict file — `.webpieces/pr-review/<featureSlug>/review-<id>.json` — in a tool input.
+     * Named its own verdict file — `.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json` — in a tool input.
      *
      * Recorded, not just consumed, because it is the field that answers "who wrote this verdict?" for an
      * auditor reading provenance.json later. It is also a CREDIT channel: see
@@ -146,7 +146,7 @@ export class ReviewerContext {
     docPaths: Record<string, string>; // checklist id → its checklist doc path ('' when none)
     /**
      * checklist id → the absolute path of the verdict file THAT checklist must write on THIS branch
-     * (`.webpieces/pr-review/<featureSlug>/review-<id>.json`). '' when unknown.
+     * (`.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json`). '' when unknown.
      *
      * The strongest attribution signal available, and stronger than `diffDir`: the path is
      * worktree-absolute (naming the tree), per-branch (naming the featureSlug) AND per-checklist (naming
@@ -232,7 +232,7 @@ export class SubagentProvenanceService {
     // Scoped by BRANCH across ALL sessions (not the current session): once a reviewer ran on this branch in
     // any session, a later re-push in a NEW session still finds it, so the review is NOT forced to re-run.
     // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
-    // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
+    // still has no review-round<N>-<id>.json, so wp-finish forces the review regardless of provenance.
     verifyReviewers(expected: readonly ExpectedReviewer[], context: ReviewerContext): ProvenanceResult {
         if (expected.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required', {}, []);
         if (!this.inClaudeSession()) return this.skipped('reviewer subagents');

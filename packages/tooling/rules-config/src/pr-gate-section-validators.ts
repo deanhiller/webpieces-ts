@@ -51,7 +51,7 @@ const CHECKLIST_EXAMPLE = (
     '        "patterns": ["**/migrations/**", "**/*.sql"],\n' +
     '        "required": true }\n' +
     '    ]\n' +
-    '  "id" names the checklist and keys its review-<id>.json. Every checklist is reviewed by the\n' +
+    '  "id" names the checklist and keys its review-round<N>-<id>.json. Every checklist is reviewed by the\n' +
     '  webpieces-reviewer agent (or your own: "overrideReviewerAgent": true + "reviewerAgentName"), against\n' +
     '  its own "doc" (REQUIRED, REPO-relative). Omit "patterns" (or use []) to run on every PR.\n' +
     '  "required" is MANDATORY on every entry: true blocks the PR until the reviewer passes; false makes\n' +
@@ -146,7 +146,7 @@ function requiredKeyErrors(e: Record<string, unknown>, i: number): string[] {
 function checklistEntryErrors(e: Record<string, unknown>, i: number): string[] {
     const errors = retiredKeyErrorsIn(e, CHECKLIST_ENTRY_LABEL).map((m: string): string => `checklists[${i}] ${m}`);
     if (e['id'] !== undefined && typeof e['id'] !== 'string') {
-        errors.push(`[pr-gate] checklists[${i}].id must be a string — the checklist's name; it keys review-<id>.json.`);
+        errors.push(`[pr-gate] checklists[${i}].id must be a string — the checklist's name; it keys review-round<N>-<id>.json.`);
     }
     if (e['doc'] !== undefined && typeof e['doc'] !== 'string') {
         errors.push(`[pr-gate] checklists[${i}].doc must be a string — the REPO-relative path to the checklist's guidance doc.`);

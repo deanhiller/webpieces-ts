@@ -1,13 +1,13 @@
 import * as fs from 'fs';
 import {
-    InformAiError, RepoRootFinder, VERDICT_STATUSES, WRITE_REVIEW_BIN, checklistOverrideService, summaryJsonPath, toError,
+    InformAiError, RepoRootFinder, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED, VERDICT_STATUSES, WRITE_REVIEW_BIN, checklistOverrideService,
+    summaryJsonPath, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { ReviewerIdentity, ReviewerIdentityResolver } from '../workflow/reviewer-identity';
 import { SubmittedVerdict, VerdictProvenance, VerdictProvenanceService } from '../workflow/verdict-provenance';
-import { ReviewRoundStateService } from '../workflow/review-round-state';
 
 /** The only keys a verdict may carry. Anything else is somebody's second schema. */
 const VERDICT_KEYS = ['id', 'status', 'agent', 'model', 'output'] as const;
@@ -51,11 +51,15 @@ export class ReviewBudgetCheckOptions {
  *   2. the checklist must be one stage ② briefed this round (its receipt), so a carried verdict cannot be
  *      overwritten and a checklist that does not apply cannot be invented;
  *   3. the verdict is validated strictly — the five fields, nothing else;
- *   4. it is written WITH `review-<id>.provenance.json`: who, which commit, which in-scope diff, and a hash
- *      of the verdict. `wp-finish-upsert-pr` rejects a verdict without one, or one edited since;
- *   5. the checklist must still be inside the round budget (issue #1051): once it has been reviewed
- *      `maxReviewerRounds` times on this branch, no further verdict is recorded, whoever spawned the
- *      reviewer. `--check` asks the same question BEFORE a reviewer spends a review on it.
+ *   4. it is written as `review-round<N>-<id>.json` WITH `review-round<N>-<id>.provenance.json`: who, which
+ *      commit, which in-scope diff, and a hash of the verdict. `wp-finish-upsert-pr` rejects a verdict
+ *      without one, or one edited since;
+ *   5. the round must be inside the budget (issues #1051, #1053): a round above `maxReviewerRounds` records
+ *      nothing, and a round's verdict is never overwritten, whoever spawned the reviewer. `--check` asks the
+ *      same question BEFORE a reviewer spends a review on it;
+ *   6. the color must fit the round (issue #1053): the FINAL round has no red — its must-fix color is
+ *      orange, never re-reviewed — and orange is refused before the final round, where red still means
+ *      "fix it and it will be reviewed again".
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
  */
@@ -68,7 +72,7 @@ export class WriteReviewCommand {
         private readonly receipts: ReviewStageReceiptService,
         private readonly identity: ReviewerIdentityResolver,
         private readonly provenance: VerdictProvenanceService,
-        private readonly rounds: ReviewRoundStateService,
+        private readonly reviewJsonService: ReviewJsonService,
     ) {}
 
     run(opts: WriteReviewOptions): Promise<void> {
@@ -81,12 +85,11 @@ export class WriteReviewCommand {
         // consumes must not survive to lend itself to a later call.
         const who: ReviewerIdentity = this.identity.resolve(cwd, id);
         this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
-        const verdict = this.parse(opts.json, id);
+        const verdict = this.parse(opts.json, id, receipt);
         const record = new VerdictProvenance(
             id, who.harness, who.sessionId, who.agentId, who.agentType, receipt.headSha, receipt.scopeHashes[id] ?? '');
         record.round = receipt.round;
         const written = this.provenance.write(summaryJsonPath(repoRoot, featureName), verdict, record);
-        this.rounds.archiveVerdict(summaryJsonPath(repoRoot, featureName), id, receipt.round);
         process.stdout.write(
             `✅ ${verdict.status.toUpperCase()} verdict for "${id}" submitted → ${written}\n`
             + `   provenance: ${who.harness}${who.agentId === '' ? '' : ` agent ${who.agentId}`}, `
@@ -103,30 +106,40 @@ export class WriteReviewCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(opts.cwd);
         const featureName = this.aiBranchName.getFeatureName();
         const receipt = this.briefedReceipt(repoRoot, featureName, id);
-        const count = this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
+        this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
+        const final = this.isFinalRound(receipt)
+            ? ` This is the FINAL round: there is no re-review, so you may NOT mark ${VERDICT_RED} — mark every must-fix finding ${VERDICT_ORANGE}.`
+            : '';
         process.stdout.write(
-            `✅ "${id}" may be reviewed: this is review ${count + 1} of at most ${receipt.maxReviewerRounds} on this branch `
-            + `(global round ${receipt.round}). Review it, then submit with pnpm ${WRITE_REVIEW_BIN} --checklist ${id}.\n`);
+            `✅ "${id}" may be reviewed: this is review round ${receipt.round} of at most ${receipt.maxReviewerRounds}.${final} `
+            + `Review it, then submit with pnpm ${WRITE_REVIEW_BIN} --checklist ${id}.\n`);
         return Promise.resolve();
     }
 
+    /** The last round `maxReviewerRounds` allows — the one with no red (issue #1053). */
+    private isFinalRound(receipt: ReviewStageReceipt): boolean {
+        return receipt.round >= receipt.maxReviewerRounds;
+    }
+
     /**
-     * THE ROUND CAP, held by the reviewer's own submission path (issue #1051). The planner already never
-     * briefs past the cap, but an author agent could still spawn a reviewer from an old instructions file —
-     * the measured deadlock did exactly that — and the verdict it produced then had to be judged by
-     * everything downstream. Counting from the immutable round snapshots makes it mechanical: a checklist
-     * reviewed `maxReviewerRounds` times gets no further verdict. Returns how many reviews it already has.
+     * THE ROUND CAP, held by the reviewer's own submission path (issues #1051, #1053). The planner already
+     * never briefs past the cap, but an author agent could still spawn a reviewer from an old instructions
+     * file — the measured deadlock did exactly that. Two refusals make it mechanical: a round above
+     * `maxReviewerRounds` records nothing, and a checklist that already has a verdict in this round (or a
+     * later one) gets no second one — a round's verdict is never overwritten.
      */
-    private assertWithinBudget(summaryPath: string, receipt: ReviewStageReceipt, id: string): number {
+    private assertWithinBudget(summaryPath: string, receipt: ReviewStageReceipt, id: string): void {
         const max = receipt.maxReviewerRounds;
-        const count = this.rounds.reviewCount(summaryPath, id, receipt.round);
-        if (count < max) return count;
+        const latest = this.reviewJsonService.latestVerdictRound(summaryPath, id);
+        if (receipt.round <= max && latest < receipt.round) return;
+        const why = receipt.round > max
+            ? `this briefing is for review round ${receipt.round}, above maxReviewerRounds (${max})`
+            : `it already has a verdict for review round ${latest} (maxReviewerRounds is ${max}), and a round's verdict is never overwritten`;
         throw new InformAiError(
-            `I am not allowed to review ${id}: maxReviewerRounds is ${max} and it has already been reviewed `
-            + `${count} time(s) on this branch.\n`
+            `I am not allowed to review ${id}: ${why}.\n`
             + `Do not review it and submit nothing for it; report this refusal, verbatim, to the agent that spawned you. `
-            + `The verdict already recorded for it stands (${this.rounds.roundDir(summaryPath, receipt.round)}), and `
-            + 'the author records any fix made after the cap with pnpm wp-write-review-fixes.');
+            + `The verdict already recorded for it stands (${this.reviewJsonService.latestChecklistResultPath(summaryPath, id) || 'none'}), and `
+            + 'the author records any fix with pnpm wp-write-review-fixes.');
     }
 
     /** The stage-② receipt, provided it briefed THIS checklist this round. */
@@ -146,8 +159,11 @@ export class WriteReviewCommand {
         return receipt;
     }
 
-    /** Strict: an object with exactly the verdict's five fields, every one a string, status one of three. */
-    private parse(json: string, id: string): SubmittedVerdict {
+    /**
+     * Strict: an object with exactly the verdict's five fields, every one a string, and a status that fits
+     * the round — red only BEFORE the final round, orange only ON it (issue #1053).
+     */
+    private parse(json: string, id: string, receipt: ReviewStageReceipt): SubmittedVerdict {
         const raw = this.parseObject(json);
         const problems: string[] = [];
         const extra = Object.keys(raw).filter((k: string): boolean => !(VERDICT_KEYS as readonly string[]).includes(k));
@@ -159,6 +175,7 @@ export class WriteReviewCommand {
         const status = this.text(raw, 'status').toLowerCase();
         // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
         if (!(VERDICT_STATUSES as readonly string[]).includes(status)) problems.push(`"status" must be one of ${VERDICT_STATUSES.join(', ')}`);
+        problems.push(...this.colorForRound(status, receipt));
         for (const key of ['agent', 'model', 'output']) {
             if (this.text(raw, key) === '') problems.push(`"${key}" must be a non-empty string${key === 'output' ? '' : ' (use "unknown" when unavailable)'}`);
         }
@@ -167,6 +184,25 @@ export class WriteReviewCommand {
                 + problems.map((p: string): string => `  • ${p}`).join('\n'));
         }
         return new SubmittedVerdict(id, status, this.text(raw, 'agent'), this.text(raw, 'model'), raw['output'] as string);
+    }
+
+    /**
+     * The round decides which blocking color exists. The FINAL round's red would mean "fix it and it will be
+     * reviewed again", and there is no again — so it is refused and orange named. Orange before the final
+     * round would waive a re-review that the budget still pays for — so it is refused and red named.
+     */
+    private colorForRound(status: string, receipt: ReviewStageReceipt): string[] {
+        const round = `review round ${receipt.round} of ${receipt.maxReviewerRounds}`;
+        if (status === VERDICT_RED && this.isFinalRound(receipt)) {
+            return [`"status": "${VERDICT_RED}" is not allowed: ${round} is the FINAL round, and there is no re-review. `
+                + `Mark anything that must be fixed "${VERDICT_ORANGE}", with a concrete, actionable fix in "output" — the author applies it `
+                + 'best effort and ships without another review.'];
+        }
+        if (status === VERDICT_ORANGE && !this.isFinalRound(receipt)) {
+            return [`"status": "${VERDICT_ORANGE}" is only for the FINAL review round, and ${round} is not it. `
+                + `Use "${VERDICT_RED}" for a must-fix finding: the author's fix will be reviewed again next round.`];
+        }
+        return [];
     }
 
     // webpieces-disable no-any-unknown -- one field of the opaque submitted object, narrowed to a trimmed string

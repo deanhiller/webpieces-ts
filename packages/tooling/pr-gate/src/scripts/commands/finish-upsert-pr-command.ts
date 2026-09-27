@@ -169,22 +169,20 @@ export class FinishUpsertPrCommand {
         //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
         const featureName = this.aiBranchName.getFeatureName();
         const config = loadAndValidate(repoRoot).prGate;
-        const buildAlreadyGreen = this.assertStageTwoRan(repoRoot, config.maxReviewerRounds);
+        const buildAlreadyGreen = this.assertStageTwoRan(repoRoot);
 
         // 2. REQUIRE the AI-authored summary.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
         // The SAME scan wp-review-upsert-pr runs, with filterAlreadyReviewed:true so `outstanding` is exactly what
         // still owes a verdict (Z of N of X). Sharing the computation is the point: the command that REPORTS
-        // and the command that GATES must not be able to disagree about what is owed. review-<id>.json files
+        // and the command that GATES must not be able to disagree about what is owed. review-round<N>-<id>.json files
         // persist locally, so a re-run re-validates the EXISTING verdicts against the (possibly changed)
         // applicable set for free — an unchanged checklist needs no re-review, a newly-applicable one refuses
         // until its file is written.
+        // The scan judges ONLY the checklists that were briefed (issue #1053) — never one a later commit newly
+        // triggered — and it has already folded every recorded orange fix into its results.
         const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, true, 'stage3-finish'));
-        const receipt = this.receipts.read(repoRoot, featureName);
-        const remediations = this.rounds.capRemediations(repoRoot, scan.summaryPath, receipt, config.maxReviewerRounds);
-        for (const result of scan.results) result.remediation = remediations[result.id] ?? '';
-        scan.outstanding = scan.outstanding.filter((req: RequiredChecklist): boolean => remediations[req.id] === undefined);
         const required = scan.applicable;
         // The applicable checklists that are supposed to HAVE a verdict — everything except the optional ones
         // nobody ran. Used for provenance and for the dashboard rows, both of which ask "who reviewed this?"
@@ -195,10 +193,10 @@ export class FinishUpsertPrCommand {
         // FAIL FAST on an unclear checklist, BEFORE summary.json is parsed and before the build gate runs. A
         // missing reviewer is not a summary.json defect (folding it in made the AI fix the wrong thing), and
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
-        // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
+        // distinction between unreadable / ORANGE / REFUSED / never-ran.
         this.verdictGate.assertEveryReviewerRan(scan);
-        const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, '', remediations);
-        this.applyRoundAudits(review, scan, receipt);
+        const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, '', scan.orangeFixes);
+        this.applyRoundAudits(review, scan, config.maxReviewerRounds);
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a real reviewer
         //     SUBAGENT actually ran on this branch — the coding agent may not self-certify. Its NAME is not
@@ -229,9 +227,9 @@ export class FinishUpsertPrCommand {
         this.stageConsole.say(this.banner.linkDirective(bannerInput));
     }
 
-    private applyRoundAudits(review: PrSummary, scan: ChecklistScan, receipt: ReturnType<ReviewStageReceiptService['read']>): void {
+    private applyRoundAudits(review: PrSummary, scan: ChecklistScan, maxReviewerRounds: number): void {
         for (const result of review.results) {
-            const trail = this.rounds.auditTrail(scan.summaryPath, result.id, receipt);
+            const trail = this.rounds.auditTrail(scan.summaryPath, result.id, maxReviewerRounds);
             if (trail === '') continue;
             result.output = trail;
             if (result.remediation !== '') result.remediation = `${trail}\n\n#### Final state\n${result.remediation}`;
@@ -291,9 +289,9 @@ export class FinishUpsertPrCommand {
      * The two stage-② preconditions, together: no unvalidated merge, and a receipt proving stage ② ran.
      * Returns true when that receipt covers the CURRENT HEAD, i.e. the build gate can be skipped.
      */
-    private assertStageTwoRan(repoRoot: string, maxReviewerRounds: number): boolean {
+    private assertStageTwoRan(repoRoot: string): boolean {
         this.assertNoUnvalidatedMerge(repoRoot);
-        return this.assertReviewStageRan(repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']), maxReviewerRounds);
+        return this.assertReviewStageRan(repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']));
     }
 
     /**
@@ -335,8 +333,7 @@ export class FinishUpsertPrCommand {
      * is vacuous, and summary.json — the only other interlock — is a file the AI writes itself. It could
      * write it and come straight here, skipping the merge validation and the build entirely.
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string, maxReviewerRounds: number): boolean {
+    private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string): boolean {
         const receipt = this.receipts.read(repoRoot, featureName);
         if (receipt === null) {
             throw new InformAiError(
@@ -347,22 +344,13 @@ export class FinishUpsertPrCommand {
             );
         }
         if (receipt.headSha === headSha) return true;
-        if (this.rounds.capSpent(summaryJsonPath(repoRoot, featureName), receipt, maxReviewerRounds)) {
-            // The budget is spent (issue #1051): no review round will run again, so suggesting one here is
-            // an instruction the gate itself would refuse. Say what the PR records instead.
-            process.stderr.write(
-                `\n⚠️  HEAD moved since the last reviewer round (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
-                    `   All ${maxReviewerRounds} reviewer round(s) are spent, so no further review runs: the build gate will\n` +
-                    '   re-run, and the PR records every verdict as carried forward from the reviewed tree.\n\n',
-            );
-            return false;
-        }
-        // Not fatal. Re-reviewing on every follow-up commit would be intolerable, and most drift is a typo
-        // fix. But it is never silent: the build re-runs here, and the PR says the reviewers saw an older tree.
+        // Not fatal, and never a re-review (issue #1053): a green or yellow verdict stands whatever changed
+        // since, and only a RED with a round left ever opens another round. Suggesting a re-review here
+        // would be an instruction the gate itself refuses. It is never silent either: the build re-runs.
         process.stderr.write(
             `\n⚠️  HEAD moved since stage ② ran (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
-                '   The build gate will re-run, and the PR will record that reviewers judged an earlier tree.\n' +
-                '   If the change was substantive, re-run pnpm wp-review-upsert-pr and re-spawn the reviewers.\n\n',
+                '   The build gate will re-run. No further review runs for this: every verdict is carried forward\n' +
+                '   from the reviewed tree, and the PR records that the reviewers judged an earlier commit.\n\n',
         );
         return false;
     }
@@ -431,7 +419,9 @@ export class FinishUpsertPrCommand {
         // `scan.suppressed.length`, never `scan.reviewersDisabled` alone: the dashboard and the commit
         // body have to state HOW MANY reviewers were killed, because a suppressed 4 and an applicable 0
         // are different facts that both render as an empty `rows`. See DashboardInput.
-        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows, this.buildAffected.resolveBuildCommand(repoRoot), scan.suppressed.length, this.authorIdentity.resolve(review.model), hotfix);
+        const input = new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows, this.buildAffected.resolveBuildCommand(repoRoot), scan.suppressed.length, this.authorIdentity.resolve(review.model), hotfix);
+        input.notBriefed = scan.notBriefed.map((r: RequiredChecklist): string => r.id);
+        return input;
     }
 
     /**
@@ -472,15 +462,20 @@ export class FinishUpsertPrCommand {
         // checklist id -> did its reviewer open the diff. Absent ⇒ not assessed, which prints nothing (see ChecklistCommentRow.diffRead).
         const readByChecklist = new Map<string, boolean>();
         for (const e of provenance.evidence) readByChecklist.set(e.checklistId, e.readDiff);
+        const judged = new Set(scan.applicable.map((r: RequiredChecklist): string => r.id));
+        const notBriefed = new Set(scan.notBriefed.map((r: RequiredChecklist): string => r.id));
         return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
-            const ran = entry.matchedFiles.length > 0;
+            // A briefed checklist is judged whether or not the final diff still matches it (the set is
+            // frozen at the briefing, issue #1053); a newly-triggered one is shown, never judged.
+            const ran = judged.has(entry.def.id) || entry.matchedFiles.length > 0;
             const req = new RequiredChecklist(entry.def.id, entry.def.reviewer, entry.def.doc, entry.matchedFiles, entry.matchedPatterns, entry.def.required);
             // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
             // i.e. as an unreviewed obligation, when in fact it never had one.
-            const verdict = ran ? this.reviewJsonService.resolveVerdict(req, review.results) : new ChecklistVerdict(entry.def.id, '', '');
+            const verdict = ran && !notBriefed.has(entry.def.id) ? this.reviewJsonService.resolveVerdict(req, review.results) : new ChecklistVerdict(entry.def.id, '', '');
             const identity = review.results.find((result): boolean => result.id === entry.def.id);
             const row = new ChecklistCommentRow(identity?.agent ?? 'unknown', identity?.model ?? 'unknown', entry.def.id, verdict.status, verdict.detail, ran, entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
             row.required = entry.def.required;
+            row.notBriefed = notBriefed.has(entry.def.id);
             const read = readByChecklist.get(entry.def.id);
             row.diffRead = read === undefined ? '' : read ? 'yes' : 'no';
             return row;

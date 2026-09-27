@@ -1,5 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import { formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_REMEDIATED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
+import { formatFileList, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistCommentRow } from './checklist-comment-row';
 
@@ -185,7 +185,7 @@ export class ChecklistCommentRenderer {
     private rollupCounts(ran: readonly ChecklistCommentRow[]): string[] {
         const counts: string[] = [];
         const emojiFor: string[] = ['🟢', '🟡', '🟠', '🟠'];
-        const statusFor: string[] = [CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_REMEDIATED];
+        const statusFor: string[] = [CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED];
         statusFor.forEach((status: string, i: number): void => {
             const n = ran.filter((r: ChecklistCommentRow): boolean => r.status === status).length;
             if (n > 0) counts.push(`${emojiFor[i]} ${n}`);
@@ -209,7 +209,7 @@ export class ChecklistCommentRenderer {
      * reviewer section on a review that nobody performed.
      */
     private reviewerRan(row: ChecklistCommentRow): boolean {
-        return row.ran && !this.declined(row);
+        return row.ran && !this.declined(row) && !row.notBriefed;
     }
 
     // Applied, optional, and carrying no verdict — i.e. the human was offered this review and said no (or
@@ -239,7 +239,7 @@ export class ChecklistCommentRenderer {
         if (!this.reviewerRan(row)) return '⚪';
         if (row.status === CK_PASS) return '🟢';
         if (row.status === CK_WARN) return '🟡';
-        if (row.status === CK_OVERRIDDEN || row.status === CK_REMEDIATED) return '🟠';
+        if (row.status === CK_OVERRIDDEN || row.status === CK_ORANGE_FIXED) return '🟠';
         if (row.status === CK_FAIL) return '🔴';
         return '⚪';
     }
@@ -251,6 +251,7 @@ export class ChecklistCommentRenderer {
         // "not run" is a person's, and reporting the second as the first would quietly credit a review that
         // a human deliberately declined.
         if (this.declined(row)) return 'OPTIONAL — applied to this diff but was NOT run (not selected)';
+        if (row.notBriefed) return 'NOT REVIEWED, not blocking — first triggered after the review was briefed';
         if (!row.ran) return 'skipped, not applicable to this diff (expected ✅)';
         if (row.status === CK_PASS) return 'passed';
         if (row.status === CK_WARN) return 'passed with concerns';
@@ -260,7 +261,7 @@ export class ChecklistCommentRenderer {
         if (row.status === CK_OVERRIDDEN) {
             return `OVERRIDDEN — a human authorized shipping it (recorded in override-${row.checklistId}.json)`;
         }
-        if (row.status === CK_REMEDIATED) return 'AUTHOR-REMEDIATED AFTER REVIEW CAP — NOT RE-REVIEWED';
+        if (row.status === CK_ORANGE_FIXED) return 'ORANGE on the final round — author-fixed, NOT re-reviewed';
         if (row.status === CK_FAIL) return 'FAILED review';
         if (row.status === CK_MISSING) return 'no verdict written';
         return `unknown verdict (${row.status})`;
@@ -295,7 +296,7 @@ export class ChecklistCommentRenderer {
     // Reviewers that ran, exceptions first (overridden → warned → passed) so a reader meets what needs
     // attention before a wall of green.
     private ranOrdered(rows: readonly ChecklistCommentRow[]): ChecklistCommentRow[] {
-        const rank: string[] = [CK_REMEDIATED, CK_OVERRIDDEN, CK_WARN, CK_PASS];
+        const rank: string[] = [CK_ORANGE_FIXED, CK_OVERRIDDEN, CK_WARN, CK_PASS];
         return rows
             .filter((r: ChecklistCommentRow): boolean => this.reviewerRan(r))
             .slice()

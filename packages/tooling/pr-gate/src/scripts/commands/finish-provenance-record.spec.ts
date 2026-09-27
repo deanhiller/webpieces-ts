@@ -101,6 +101,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f2';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
+        writeVerdict(repoRoot, 'envvars-reviewer');
         enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', agent('envvars-reviewer'), 'docs/env.md', [])]);
 
         const parsed = provenanceIn(repoRoot);
@@ -110,7 +111,7 @@ describe('FinishUpsertPrCommand provenance record', () => {
         expect(reviewers).toHaveLength(1);
         expect(reviewers[0]?.['agentId']).toBe('r1');
         expect(reviewers[0]?.['transcript']).toMatch(/subagents[/\\]agent-r1\.jsonl$/);
-        expect(reviewers[0]?.['verdictFile']).toMatch(/review-envvars-reviewer\.json$/);
+        expect(reviewers[0]?.['verdictFile']).toMatch(/review-round1-envvars-reviewer\.json$/);
         expect(reviewers[0]?.['instructionsFile']).toMatch(/envvars-reviewer\.instructions\.md$/);
         expect(reviewers[0]?.['docPath']).toBe(path.resolve(repoRoot, 'docs/env.md'));
     });
@@ -200,7 +201,7 @@ function unattributableHarness(sessionId: string, agentType: string): string {
 function writeVerdict(repoRoot: string, id: string): void {
     const dir = path.join(repoRoot, '.webpieces', 'pr-review', 'dean/feat');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify({ verdict: 'green' }));
+    fs.writeFileSync(path.join(dir, `review-round1-${id}.json`), JSON.stringify({ verdict: 'green' }));
 }
 
 function refusalFor(repoRoot: string, required: RequiredChecklist[]): string {

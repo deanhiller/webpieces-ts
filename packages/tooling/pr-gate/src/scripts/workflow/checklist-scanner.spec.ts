@@ -6,7 +6,7 @@ import {
     AtomicFile, ChecklistDefinition, ChecklistOverride, ChecklistResult, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig,
     HomeConfigService, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, toChecklist, specTempDirs } from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
-import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
+import { ChecklistScan, ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
 import { GitStatusParser } from './git-status';
 import { DiffBasisResolver } from './diff-basis';
@@ -15,10 +15,10 @@ import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
 import { DiffMaterializer } from './diff-materializer';
-import { ReviewStageReceiptService } from './review-stage-receipt';
+import { ReviewStageReceipt, ReviewStageReceiptService } from './review-stage-receipt';
 import { ReviewRoundStateService } from './review-round-state';
 import {
-    STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, SubmittedVerdict, VerdictProvenance, VerdictProvenanceService, VerdictStanding,
+    STANDING_CARRIED, STANDING_CURRENT, STANDING_REJECTED, SubmittedVerdict, VerdictProvenance, VerdictProvenanceService, VerdictStanding,
 } from './verdict-provenance';
 
 function git(cwd: string, cmd: string): void {
@@ -104,13 +104,33 @@ function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
  * the checklist's CURRENT scope hash so it stands. A bare JSON file is now a hand-written verdict, and the
  * scan rejects it — see the provenance describe below.
  */
-function submitVerdict(dir: string, checklists: ChecklistDefinition[], id: string, status: string, output: string): void {
-    const reviewJson = new ReviewJsonService();
+/** Stage ②'s round-1 receipt, briefing every checklist that applies now (written once). */
+function briefRound1(dir: string, checklists: ChecklistDefinition[]): ChecklistScan {
+    const receipts = new ReviewStageReceiptService(new ReviewJsonService());
     const scan = scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false, ''));
     fs.mkdirSync(path.dirname(scan.summaryPath), { recursive: true });
+    if (receipts.read(dir, newAiBranchName().getFeatureName()) === null) {
+        const receipt = new ReviewStageReceipt(scan.basis.headSha, true, 'pnpm build', 'now',
+            scan.applicable.map((r: RequiredChecklist): string => r.id));
+        receipt.round = 1;
+        receipt.maxReviewerRounds = 1;
+        receipt.scopeHashes = scan.scopeHashes;
+        receipts.write(dir, newAiBranchName().getFeatureName(), receipt);
+    }
+    return scan;
+}
+
+/**
+ * What stage ② + `wp-write-review` leave behind: a round-1 receipt briefing every applicable checklist
+ * (written once), and one bin-submitted round-1 verdict with its provenance.
+ */
+function submitVerdict(dir: string, checklists: ChecklistDefinition[], id: string, status: string, output: string): void {
+    const reviewJson = new ReviewJsonService();
+    const scan = briefRound1(dir, checklists);
+    const record = new VerdictProvenance(id, 'claude-code', 'sess-1', 'agent-1', 'webpieces-reviewer', scan.basis.headSha, scan.scopeHashes[id] ?? '');
+    record.round = 1;
     new VerdictProvenanceService(reviewJson, new AtomicFile()).write(
-        scan.summaryPath, new SubmittedVerdict(id, status, 'claude', 'opus', output),
-        new VerdictProvenance(id, 'claude-code', 'sess-1', 'agent-1', 'webpieces-reviewer', scan.basis.headSha, scan.scopeHashes[id] ?? ''));
+        scan.summaryPath, new SubmittedVerdict(id, status, 'claude', 'opus', output), record);
 }
 
 describe('ChecklistScanner — reviewerAgents zero project policy', () => {
@@ -388,7 +408,7 @@ function verdictPath(dir: string, id: string): string {
     const svc = new ReviewJsonService();
     const summaryPath = svc.summaryJsonPath(dir, newAiBranchName().getFeatureName());
     fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
-    return svc.checklistResultPath(summaryPath, id);
+    return svc.checklistResultPath(summaryPath, id, 1);
 }
 
 // The roster is what the PR comment publishes: every defined checklist, matched or not.
@@ -490,6 +510,7 @@ describe('ChecklistScanner — verdict file formats', () => {
     // a reviewer that already ran instead of correcting four characters of JSON.
     it('reports a legacy `success` verdict file as a format error, and still owes the review', () => {
         const dir = repoForRoster();
+        briefRound1(dir, ROSTER_FOUR);
         fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
             JSON.stringify({ id: 'db-reviewer', success: true, output: 'ok' }));
         const scan = scannerFor().scan(dir, ROSTER_FOUR, new ChecklistScanOptions(1, true));
@@ -647,14 +668,16 @@ describe('ChecklistScanner — verdict provenance and carry-over (issue #863)', 
         expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
     });
 
-    it('re-briefs a green whose in-scope files CHANGED — it judged other code', () => {
+    // Issue #1053: staleness never triggers a re-review. The green judged earlier code and says so, and stands.
+    it('CARRIES a green whose in-scope files CHANGED — staleness never re-reviews', () => {
         const dir = repoForRoster();
         submitVerdict(dir, MIXED, 'db-reviewer', 'green', 'ok');
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'DROP TABLE a;\n');
         const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(1, true));
-        expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_STALE);
-        expect(scan.reviewed).toEqual([]);
-        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
+        expect(standingOf(scan.standings, 'db-reviewer')?.standing).toBe(STANDING_CARRIED);
+        expect(standingOf(scan.standings, 'db-reviewer')?.reason).toContain('CARRIED FORWARD without re-review');
+        expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toContain('db-reviewer');
+        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).not.toContain('db-reviewer');
     });
 
     it('never carries a RED: unchanged scope or not, it stays owed and keeps refusing', () => {

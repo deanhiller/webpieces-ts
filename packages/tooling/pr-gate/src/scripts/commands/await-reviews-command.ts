@@ -1,6 +1,5 @@
-import * as fs from 'fs';
 import {
-    ChecklistResult, ChecklistVerdict, CK_FAIL, CK_MISSING, CK_BAD_FORMAT, loadAndValidate,
+    ChecklistResult, ChecklistVerdict, CK_FAIL, CK_MISSING, CK_BAD_FORMAT, CK_ORANGE, loadAndValidate,
     RepoRootFinder, RequiredChecklist, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -23,7 +22,7 @@ import { StageOutputLog } from '../workflow/stage-output-log';
  *
  * ─── It INVENTS NO STATE ───────────────────────────────────────────────────────────────────────────
  * The set of reviewers a branch owes is `ChecklistScanner`'s answer — the SAME one `wp-review-upsert-pr`
- * lists and `wp-finish-upsert-pr` blocks on — and the verdicts are the `review-<id>.json` files those
+ * lists and `wp-finish-upsert-pr` blocks on — and the verdicts are the `review-round<N>-<id>.json` files those
  * two already read. Nothing here writes anything, and there is no third opinion about who is owed: a
  * waiter that computed its own set could finish while finish still refused, which is the one outcome
  * that would make waiting worse than not waiting.
@@ -63,11 +62,11 @@ export class AwaitReviewsCommand {
         // not wait for them, and a wait that did would never end, because nothing is ever going to write
         // a verdict for a reviewer that was deliberately never spawned. (The SET is shared with finish;
         // the PREDICATE is not — see `done()` for why a wait ends on arrival and finish does not.)
-        // A verdict file older than the last stage ② is NOT an arrival: it is the stale green or rejected
-        // file that stage just re-briefed (issue #863), and counting it would end the wait on the spot.
-        const since = this.receipts.writtenAtMs(repoRoot, this.aiBranchName.getFeatureName());
+        // A verdict from an EARLIER round than the one stage ② last briefed is NOT an arrival: it is the red
+        // that round re-briefed (issue #1053), and counting it would end the wait on the spot.
+        const round = this.receipts.read(repoRoot, this.aiBranchName.getFeatureName())?.round ?? 0;
         const probe = new ReviewerWaitProbe(
-            this.reviewJsonService, scan.summaryPath, scan.outstanding, scan.applicable, since);
+            this.reviewJsonService, scan.summaryPath, scan.outstanding, scan.applicable, round);
         const outcome = await this.awaitLoop.run(probe);
         this.report(probe, outcome);
     }
@@ -108,8 +107,8 @@ export class ReviewerWaitProbe implements WaitProbe {
         private readonly summaryPath: string,
         private readonly waitedOn: readonly RequiredChecklist[],
         private readonly applicable: readonly RequiredChecklist[],
-        // Epoch ms of the last stage ② (0 = none): a verdict file last written before it is not an answer.
-        private readonly sinceMs: number,
+        // The round stage ② last briefed (0 = none): a verdict from an earlier round is not an answer.
+        private readonly briefedRound: number,
     ) {
         this.reload();
     }
@@ -173,12 +172,13 @@ export class ReviewerWaitProbe implements WaitProbe {
     // Only a NON-passing verdict's detail is printed. A green reviewer's output is already on the PR,
     // and reprinting four of them here would bury the one line that needs acting on.
     private detail(verdict: ChecklistVerdict): string {
-        if (verdict.status !== CK_FAIL || verdict.detail === '') return '';
+        if ((verdict.status !== CK_FAIL && verdict.status !== CK_ORANGE) || verdict.detail === '') return '';
         return `\n      ${verdict.detail.split('\n').join('\n      ')}`;
     }
 
     private icon(verdict: ChecklistVerdict): string {
         if (verdict.status === CK_FAIL) return '🔴';
+        if (verdict.status === CK_ORANGE) return '🟠';
         if (verdict.status === CK_MISSING || verdict.status === CK_BAD_FORMAT) return '❓';
         return '🟢';
     }
@@ -186,12 +186,17 @@ export class ReviewerWaitProbe implements WaitProbe {
     // Named because a wait that ends without saying what it unblocked leaves the agent to guess, and
     // guessing here means spinning again. A red verdict changes the next move, so it is called out.
     private nextStep(): string {
-        const anyRed = this.applicable.some((req: RequiredChecklist): boolean =>
-            this.reviewJsonService.resolveVerdict(req, this.results).status === CK_FAIL);
-        return anyRed
-            ? '\n   A reviewer REFUSED. Fix what it found — re-spawning it against unchanged code buys the\n'
-                + '   same answer — then re-run the review stage.\n'
-            : '\n   Nothing is owed on the review front.\n';
+        const statuses = this.applicable.map((req: RequiredChecklist): string =>
+            this.reviewJsonService.resolveVerdict(req, this.results).status);
+        if (statuses.includes(CK_FAIL)) {
+            return '\n   A reviewer REFUSED. Fix what it found — re-spawning it against unchanged code buys the\n'
+                + '   same answer — then re-run the review stage.\n';
+        }
+        if (statuses.includes(CK_ORANGE)) {
+            return '\n   A final-round reviewer marked ORANGE. Fix what it found, best effort, commit, and record the\n'
+                + '   fixes with pnpm wp-write-review-fixes. Do NOT spawn a reviewer: that was the last review round.\n';
+        }
+        return '\n   Nothing is owed on the review front.\n';
     }
 
     // The awaited checklists whose verdict file has not appeared yet — see `done()` for why this is
@@ -202,9 +207,8 @@ export class ReviewerWaitProbe implements WaitProbe {
     }
 
     private predates(req: RequiredChecklist): boolean {
-        if (this.sinceMs === 0) return false;
-        const file = this.reviewJsonService.checklistResultPath(this.summaryPath, req.id);
-        return fs.existsSync(file) && fs.statSync(file).mtimeMs < this.sinceMs;
+        const result = this.results.find((r: ChecklistResult): boolean => r.id === req.id);
+        return result !== undefined && result.round < this.briefedRound;
     }
 
     private reload(): void {

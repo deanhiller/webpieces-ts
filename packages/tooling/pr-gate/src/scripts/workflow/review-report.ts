@@ -8,6 +8,7 @@ import {
 import { ChecklistNotice } from './checklist-notice';
 import { STANDING_CARRIED, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { ROUND_ACTION_FINISH, ROUND_ACTION_FIX, ROUND_ACTION_RECORD } from './review-round-state';
+import { ReviewRoundText } from './review-round-text';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -77,6 +78,13 @@ export class ReviewReportInput {
     maxReviewerRounds: number;
     roundAction: string;
     redChecklistIds: string[];
+    /** The final round's ORANGE checklists: the author fixes and records each, and nobody re-reviews it. */
+    orangeChecklistIds: string[];
+    /**
+     * Checklists the diff matches now that were never briefed, because a round had already started when a
+     * later commit first triggered them (issue #1053). Informational only — they are never owed a reviewer.
+     */
+    notBriefed: RequiredChecklist[];
     // The reviewer agent (webpieces-reviewer, or the overrideReviewerAgent name) + reviewerAgents: which agent
     // type to spawn, and the per-round cap.
     reviewer: ReviewerAgentPolicy;
@@ -103,6 +111,8 @@ export class ReviewReportInput {
         this.maxReviewerRounds = 1;
         this.roundAction = '';
         this.redChecklistIds = [];
+        this.orangeChecklistIds = [];
+        this.notBriefed = [];
         this.reviewer = new ReviewerAgentPolicy('', REVIEWER_AGENTS_PLACEHOLDER);
         this.standings = [];
     }
@@ -135,10 +145,17 @@ export class ReviewReport {
         private readonly checklistNotice: ChecklistNotice,
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly checklistInstructions: ChecklistInstructionsService,
+        private readonly roundText: ReviewRoundText,
     ) {}
 
+    /**
+     * The final round's banner comes BEFORE everything else (issue #1053): the coordinating agent has to know
+     * this is the last review the PR will ever get before it reads which reviewers to spawn, not after.
+     */
     render(input: ReviewReportInput): string {
-        return '\n' + SEP + this.header(input) + SEP
+        const briefsFinalRound = input.briefings.length > 0 && input.round >= input.maxReviewerRounds;
+        return (briefsFinalRound ? this.roundText.finalRoundBanner(input.round, input.maxReviewerRounds) : '')
+            + '\n' + SEP + this.header(input) + SEP
             + this.scanVerdict(input)
             + this.nextSteps(input);
     }
@@ -157,6 +174,9 @@ export class ReviewReport {
     private header(input: ReviewReportInput): string {
         if (input.roundAction === ROUND_ACTION_FIX) return `② ⛔ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} IS RED — remediate it\n`;
         if (input.roundAction === ROUND_ACTION_RECORD) return `② ⛔ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} — record the committed remediation\n`;
+        if (input.roundAction === ROUND_ACTION_FINISH && input.orangeChecklistIds.length > 0) {
+            return `② 🟠 REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} COMPLETE — fix the orange findings, then finish\n`;
+        }
         if (input.roundAction === ROUND_ACTION_FINISH) return `② ✅ GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} COMPLETE — finish\n`;
         // FIRST, and unconditional: with the kill switch on there is nothing to spawn and nothing to
         // offer, so every heading below would be true-but-misleading. The one thing a reader must take
@@ -177,7 +197,7 @@ export class ReviewReport {
         // single most misleading sentence available here, because plenty matched and every one of them was
         // switched off.
         if (input.reviewersSuppressed) return '\n' + this.suppressionBanner(input);
-        if (input.applicableCount === 0) return '\n' + this.checklistNotice.build(input.definedCount);
+        if (input.applicableCount === 0) return '\n' + this.checklistNotice.build(input.definedCount) + this.notBriefedBlock(input);
         const lines: string[] = [];
         // The prohibition rides on the REUSE line itself, not only in the all-clear below, because the
         // all-clear is not printed when anything is still owed — and "some reviewers are reused, others
@@ -189,9 +209,19 @@ export class ReviewReport {
         // correcting the file sitting right there.
         for (const e of input.formatErrors) lines.push(`  ⛔ ${e}`);
         lines.push(...this.skippedLines(input));
+        lines.push(...this.notBriefedLines(input));
         if (this.actionableOwed(input).length === 0) lines.push('', this.allClear(input));
         if (lines.length === 0) return '';
         return '\n' + lines.join('\n') + '\n';
+    }
+
+    private notBriefedLines(input: ReviewReportInput): string[] {
+        return this.roundText.notBriefedLines(input.notBriefed.map((r: RequiredChecklist): string => r.id));
+    }
+
+    private notBriefedBlock(input: ReviewReportInput): string {
+        const lines = this.notBriefedLines(input);
+        return lines.length === 0 ? '' : lines.join('\n') + '\n';
     }
 
     /**
@@ -202,7 +232,7 @@ export class ReviewReport {
     private carriedLine(input: ReviewReportInput, r: RequiredChecklist): string {
         const standing = input.standings.find((s: VerdictStanding): boolean => s.checklistId === r.id);
         if (standing === undefined) {
-            return `  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`;
+            return `  ✓ ${r.id} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-round<N>-${r.id}.json)`;
         }
         if (standing.standing === STANDING_CARRIED) {
             return `  ✓ ${r.id} — carried ${standing.status.toUpperCase()} from ${this.short(standing.fromSha)}: `
@@ -220,8 +250,8 @@ export class ReviewReport {
     private rebriefedLines(input: ReviewReportInput): string[] {
         const lines: string[] = [];
         for (const s of input.standings) {
-            if (s.standing === STANDING_STALE && s.status !== VERDICT_RED) {
-                lines.push(`  ↻ ${s.checklistId} — ${s.status.toUpperCase()} from ${this.short(s.fromSha)} is STALE: ${s.reason}; re-briefed below`);
+            if (s.standing === STANDING_STALE && s.status === VERDICT_RED && input.round < input.maxReviewerRounds) {
+                lines.push(`  ↻ ${s.checklistId} — RED from ${this.short(s.fromSha)}: ${s.reason}; still refuses until the next round re-reviews it`);
             }
             if (s.standing === STANDING_REJECTED) {
                 lines.push(`  ⛔ ${s.checklistId} — verdict REJECTED: ${s.reason}; re-briefed below`);
@@ -305,13 +335,13 @@ export class ReviewReport {
      * "nothing to spawn" on its own is a description of the current state, and an agent that has just been
      * told a state — rather than a rule — treats re-spawning as a judgement call it is entitled to make. It
      * then makes it, reasoning (correctly, on the facts) that the carried-forward verdicts judged an earlier
-     * tree. Reviews here are once per branch BY CONSTRUCTION: a passing review-<id>.json satisfies its
-     * checklist for the branch's whole life, and `wp-finish-upsert-pr` never archives one the way it archives
-     * summary.json. So the reuse is deliberate — it is what keeps post-PR iteration from re-paying for every
+     * tree. Reviews here are bounded BY CONSTRUCTION: a passing verdict satisfies its checklist for the
+     * branch's whole life, whatever changes afterwards, and only a red with a round left opens another round
+     * (issue #1053). So the reuse is deliberate — it is what keeps post-PR iteration from re-paying for every
      * matched reviewer — and the output has to say so, because the alternative reading is the expensive one.
      *
-     * The overwrite warning is not decoration. A re-spawned reviewer writes to the SAME verdict path, so a
-     * gratuitous re-run does not merely cost a subagent — it destroys the verdict that was already banked.
+     * The refusal warning is not decoration: `wp-write-review` refuses a second verdict for a round, so a
+     * gratuitous re-spawn costs a whole subagent run and records nothing.
      *
      * It must NOT claim everything was reviewed when optional reviews were skipped — that is the one sentence
      * that would turn a deliberate skip into a false record of a review that happened.
@@ -331,11 +361,11 @@ export class ReviewReport {
      */
     private oncePerBranchRule(): string {
         return (
-            '   A passing verdict CARRIES FORWARD for as long as its checklist\'s in-scope files are unchanged,\n' +
-            '   deliberately, so edits elsewhere cost no reviewer tokens. When those files DO change, this\n' +
-            '   stage re-briefs that checklist itself and names it in a STEP below. Do NOT re-spawn a reviewer\n' +
-            '   listed above to "re-check" — it burns a full subagent run AND replaces the verdict it already\n' +
-            '   submitted. The only reviewers you may spawn are ones a STEP below names.'
+            '   A passing verdict CARRIES FORWARD whatever changes afterwards, deliberately: maxReviewerRounds is a\n' +
+            '   hard ceiling, and only a RED with a round left ever opens another round — this stage then names\n' +
+            '   the reds in a STEP below. Do NOT re-spawn a reviewer listed above to "re-check": it burns a full\n' +
+            '   subagent run, and pnpm wp-write-review refuses a second verdict for a round anyway. The only\n' +
+            '   reviewers you may spawn are ones a STEP below names.'
         );
     }
 
@@ -360,8 +390,8 @@ export class ReviewReport {
      * can never drift from the shape `wp-finish-upsert-pr` validates.
      */
     private nextSteps(input: ReviewReportInput): string {
-        if (input.roundAction === ROUND_ACTION_FIX) return this.fixStep(input);
-        if (input.roundAction === ROUND_ACTION_RECORD) return this.recordStep(input);
+        if (input.roundAction === ROUND_ACTION_FIX) return this.roundText.fixStep(input.round, input.maxReviewerRounds, input.redChecklistIds);
+        if (input.roundAction === ROUND_ACTION_RECORD) return this.roundText.recordStep(input.round, input.maxReviewerRounds);
         if (input.roundAction === ROUND_ACTION_FINISH) return this.cappedFinishStep(input);
         const required = this.requiredOwed(input);
         const offerable = this.offerableOwed(input);
@@ -390,29 +420,19 @@ export class ReviewReport {
         );
     }
 
-    private fixStep(input: ReviewReportInput): string {
-        return '\n' + SEP + `▶ NEXT — fix every finding from round ${input.round} of ${input.maxReviewerRounds}\n` + SEP + '\n'
-            + `   Red checklist(s): ${input.redChecklistIds.join(', ')}\n`
-            + '   Commit every fix and leave the tree clean, then record one response per checklist with:\n'
-            + '         pnpm wp-write-review-fixes\n'
-            + '   Re-run pnpm wp-review-upsert-pr after that. It will start a focused remediation-only round\n'
-            + '   only when the configured round budget still has room.\n';
-    }
-
-    private recordStep(input: ReviewReportInput): string {
-        return '\n' + SEP + `▶ NEXT — record the committed fixes for round ${input.round} of ${input.maxReviewerRounds}\n` + SEP + '\n'
-            + '         pnpm wp-write-review-fixes\n\n'
-            + '   The command stamps the reviewed HEAD and current clean HEAD itself. Then re-run\n'
-            + '   pnpm wp-review-upsert-pr; do not edit or recolor the reviewer verdict.\n';
-    }
-
+    /**
+     * The round is complete and no further round runs. An ORANGE is the final round's must-fix: its step
+     * comes FIRST, because finish refuses until each one has a recorded fix — and it names no reviewer,
+     * because none may be spawned for it (issue #1053).
+     */
     private cappedFinishStep(input: ReviewReportInput): string {
-        const capped = input.redChecklistIds.length > 0
-            ? `   Review cap reached. ${input.redChecklistIds.join(', ')} is author-remediated after the cap and was NOT re-reviewed.\n`
-            : '';
-        return '\n' + SEP + '▶ NEXT — write summary.json, then finish\n' + SEP + '\n'
-            + capped + this.writeSummaryStep(input.summaryPath, 1, '')
-            + 'STEP 2 — run: pnpm wp-finish-upsert-pr\n';
+        const oranges = input.orangeChecklistIds;
+        let step = 1;
+        const fix = oranges.length === 0 ? '' : this.roundText.orangeFixStep(step++, input.round, input.maxReviewerRounds, oranges);
+        const write = this.writeSummaryStep(input.summaryPath, step++, '');
+        return '\n' + SEP + `▶ NEXT — ${oranges.length === 0 ? 'write summary.json, then finish' : 'fix the orange findings, write summary.json, then finish'}\n` + SEP + '\n'
+            + fix + write
+            + `STEP ${step} — run: pnpm wp-finish-upsert-pr\n`;
     }
 
     /**

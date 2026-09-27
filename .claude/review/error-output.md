@@ -274,7 +274,7 @@ docstring in the same diff still teaching the removed spelling.
 ## Writing your verdict
 
 Per the review-checklist protocol, write your verdict to the path your instructions file names — the
-`review-error-output-reviewer.json` under the branch's review directory. Do not guess the path; the
+`review-round<N>-error-output-reviewer.json` under the branch's review directory. Do not guess the path; the
 instructions file is regenerated each run and is authoritative.
 
 - 🟢 `green` — the diff introduces none of the five shapes. Pre-existing instances the diff merely
@@ -282,6 +282,10 @@ instructions file is regenerated each run and is authoritative.
 - 🟡 `yellow` — a judgment call: an isolation catch missing its annotation, a borderline
   progress-vs-failure `console.*`, a plain `Error` on an invariant that could arguably be a user-facing
   verdict. Publishes your reasoning without blocking.
+- 🟠 `orange` — use it INSTEAD of red on the FINAL review round (your instructions file says when it
+  is): the same must-fix finding, but nobody re-reviews it — the author applies your fix best effort and
+  ships. `wp-write-review` refuses red on the final round and refuses orange before it. Everything below
+  about what a red's `output` must say applies to an orange's too.
 - 🔴 `red` — any of the five. **A red BLOCKS the PR**, so your `output` must be actionable on its own:
   name the **file and line**, the **shape it matched**, and the **exact replacement** — which type to
   throw, which `Option[]` to carry, or which catch to delete. That text is what the coding agent will
