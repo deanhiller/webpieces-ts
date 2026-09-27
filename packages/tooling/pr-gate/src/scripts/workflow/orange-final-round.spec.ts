@@ -118,6 +118,11 @@ function submit(dir: string, receipt: ReviewStageReceipt, id: string, status: st
 /** The author fixes `ids` and records it through the real `pnpm wp-write-review-fixes` command. */
 async function fixAndRecord(dir: string, ids: string[], body: string): Promise<void> {
     commit(dir, 'store.ts', body);
+    await record(dir, ids);
+}
+
+/** `pnpm wp-write-review-fixes` alone, over whatever HEAD is now. */
+async function record(dir: string, ids: string[]): Promise<void> {
     const json = JSON.stringify({
         agent: 'claude', model: 'opus',
         responses: ids.map((id: string): Record<string, unknown> => ({ checklistId: id, resolution: `fixed ${id}: corrupt JSON now throws`, files: ['store.ts'] })),
@@ -206,13 +211,33 @@ describe('maxReviewerRounds: 1 — round 1 is the final round, and it ends orang
         expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 
-    it('never re-records: a second wp-write-review-fixes for the same round is refused', async () => {
+    it('never overwrites a record that still holds: a second wp-write-review-fixes is refused', async () => {
         const dir = repo();
         const receipt = brief(dir, 1, 1, [ERRORS]);
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
         await expect(fixAndRecord(dir, [ERRORS], 'export function load(): string { return read() ?? ""; }\n'))
-            .rejects.toThrow(/already recorded .* never overwritten/);
+            .rejects.toThrow(/already recorded .* still holds/);
+    });
+
+    // The shape every PR update takes: wp-start-upsert-pr rebuilds the branch as ONE squash commit off main,
+    // so the recorded fix commit leaves HEAD's history. Re-recording must be the way past it, never a loop.
+    it('after a squash-update, the stale record stops counting, re-recording is accepted, and the old one is kept', async () => {
+        const dir = repo();
+        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        submit(dir, receipt, ISSUE, 'green', 'ok');
+        submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
+        await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
+        git(dir, 'git reset -q --soft main');
+        git(dir, 'git commit -qm "Squash merge of dean/feat"');
+
+        expect(refusal(finishScan(dir, 1))).toContain('1 ORANGE');
+        await record(dir, [ERRORS]);
+        expect(refusal(finishScan(dir, 1))).toBe('');
+        const fixes = rounds.fixesPath(summaryPath(dir), 1);
+        expect(fs.existsSync(`${fixes}.superseded-1`)).toBe(true);
+        expect(rounds.highestRound(summaryPath(dir))).toBe(1);
+        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 });
 

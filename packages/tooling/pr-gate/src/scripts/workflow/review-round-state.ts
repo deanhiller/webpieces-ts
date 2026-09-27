@@ -230,8 +230,12 @@ export class ReviewRoundStateService {
 
     /**
      * Record the author's fixes for the latest completed round — one response per RED (a round that is not
-     * the last) or ORANGE (the final round) — as `review-round<N>-fixes.json`. Never overwrites: a round's
-     * record is written once.
+     * the last) or ORANGE (the final round) — as `review-round<N>-fixes.json`.
+     *
+     * A record that still HOLDS is never overwritten. One that no longer holds — its `toHead` left HEAD's
+     * history, which every `wp-start-upsert-pr` squash-update does — is kept beside it as
+     * `review-round<N>-fixes.json.superseded-<k>` and a fresh record is written, so re-recording is always
+     * the way past a stale record and nothing is ever lost.
      */
     writeRemediation(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt, json: string): string {
         const snap = this.snapshot(summaryPath, receipt);
@@ -243,9 +247,11 @@ export class ReviewRoundStateService {
             throw new InformAiError(`wp-write-review-fixes: round ${snap.round} has no red or orange verdict to fix.`);
         }
         const out = this.fixesPath(summaryPath, snap.round);
-        if (fs.existsSync(out)) {
-            throw new InformAiError(`wp-write-review-fixes: the fixes for round ${snap.round} are already recorded in ${out}, `
-                + 'and a round\'s record is never overwritten. That record stands; re-run the stage you were running.');
+        const holding = this.validFixes(repoRoot, summaryPath, snap);
+        if (holding !== null) {
+            throw new InformAiError(`wp-write-review-fixes: the fixes for round ${snap.round} are already recorded in ${out}, and `
+                + `that record still holds (its fixed commit ${holding.toHead.slice(0, 8)} is in HEAD's history), so it is not `
+                + 'overwritten. Nothing more to record: re-run pnpm wp-review-upsert-pr, or pnpm wp-finish-upsert-pr after the last round.');
         }
         this.assertClean(repoRoot);
         const currentHead = this.git(repoRoot, ['rev-parse', 'HEAD']);
@@ -263,8 +269,20 @@ export class ReviewRoundStateService {
             throw new InformAiError(`wp-write-review-fixes: responses must cover exactly the red/orange checklist(s) of round ${snap.round}. `
                 + `Unknown: ${unknown.join(', ') || '(none)'}. Missing: ${missing.join(', ') || '(none)'}.`);
         }
+        this.supersede(out);
         this.atomicFile.writeJsonAtomic(out, new ReviewRemediation(agent, model, snap.headSha, currentHead, responses));
         return out;
+    }
+
+    /**
+     * Keep a record that no longer holds beside the new one, as `<file>.superseded-<k>` — a name no round
+     * scan reads, so it is history and never a live record.
+     */
+    private supersede(file: string): void {
+        if (!fs.existsSync(file)) return;
+        let k = 1;
+        while (fs.existsSync(`${file}.superseded-${k}`)) k++;
+        fs.renameSync(file, `${file}.superseded-${k}`);
     }
 
     /**
@@ -428,10 +446,19 @@ export class ReviewRoundStateService {
         if (status !== '') throw new InformAiError('wp-write-review-fixes: commit every remediation and leave no staged, unstaged, or untracked files first.');
     }
 
-    /** `git merge-base --is-ancestor`: exit 0 = yes, 1 = no; anything else is a real failure. */
+    /**
+     * `git merge-base --is-ancestor`: exit 0 = yes, 1 = no. A `sha` git does not know (exit 128 with
+     * "Not a valid commit name") is also no — the commit is gone from this clone, so it is not in HEAD's
+     * history. Anything else is a real failure and refuses.
+     */
     private isAncestorOfHead(repoRoot: string, sha: string): boolean {
         const result = spawnSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
-        return result.status === 0;
+        if (result.status === 0) return true;
+        if (result.status === 1 || /not a valid (commit|object) name/i.test(result.stderr ?? '')) return false;
+        const detail = (result.stderr ?? '').trim() || result.error?.message || `exit ${result.status ?? 'unknown'}`;
+        const message = `Review-round Git command failed: git merge-base --is-ancestor ${sha} HEAD\n${detail}`;
+        if (result.error !== undefined) throw new InformAiError(message, { cause: result.error });
+        throw new InformAiError(message);
     }
 
     private git(repoRoot: string, args: string[]): string {
