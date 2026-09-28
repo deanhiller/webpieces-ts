@@ -22,5 +22,6 @@ export type {
     ReindexResponse,
     ScheduledWindow,
 } from './PartnerOrdersApi';
+export type { StoreScopedRequest, WindowedStoreRequest } from './OrderRequestBases';
 export { PartnerDeliveryWebhookApi } from './PartnerDeliveryWebhookApi';
 export type { OrderStateChangedEvent } from './PartnerDeliveryWebhookApi';

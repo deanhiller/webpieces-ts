@@ -33,7 +33,10 @@ const log = LogManager.getLogger('WpMcpErrorTranslator');
  *
  * Classification and published text are the shared {@link ApiErrorBoundary} rules. Operator logging
  * is NOT here: `LogApiCall` wraps each of those boundaries in `WpMcpServer`, so every failure gets
- * exactly one `[API-server-resp-*]` line with the request and the identity on it.
+ * exactly one `[API-server-resp-*]` line with the request and the identity on it — and
+ * `WpMcpServer` adds one `log.error` with the stack and requestId for an IMPLEMENTATION-kind failure
+ * at tools/list and tools/call before handing it here, because this class renders that kind as
+ * "Internal Error" and nothing else records WHERE it broke (#1055).
  */
 export class WpMcpErrorTranslator {
     private readonly boundary = new ApiErrorBoundary();

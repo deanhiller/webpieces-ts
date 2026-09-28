@@ -233,6 +233,13 @@ repo's one line on logging; `tools/call` dispatches through the ordinary filter 
 the request, the identity and the timing on it, and none of the barer second line
 `ApiErrorBoundary.logOperatorDetail` used to add.
 
+The one addition is for failures that are THIS server's bug. Before `tools/list` or `tools/call`
+hands an `implementation`-kind failure to the translator, `WpMcpServer` writes one `log.error` with
+the error's stack and `requestId=<id>` — the same id the caller is told to give support (#1055). An
+MCP output-schema violation needs it most: it is raised after the controller returned, so the only
+`LogApiCall` line for that call reads `resp-SUCCESS`. Caller-kind failures (bad-request, end-user,
+dependency, ...) get no such line.
+
 `subscriptions/listen` is served entirely by the SDK's listen router, so Webpieces has no handler there.
 
 `requestId` comes from `RequestContext` and the JSON-RPC id and tool name from the request scope,

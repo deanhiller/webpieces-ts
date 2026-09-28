@@ -365,4 +365,9 @@ export class RecordingLoggerFactory implements LoggerFactory {
     containing(text: string): RecordedLogLine[] {
         return this.lines.filter((line: RecordedLogLine) => line.rendered().includes(text));
     }
+
+    /** The lines ONE logger wrote that mention `text` — to count each owner's line separately. */
+    fromLogger(logger: string, text: string): RecordedLogLine[] {
+        return this.containing(text).filter((line: RecordedLogLine) => line.logger === logger);
+    }
 }

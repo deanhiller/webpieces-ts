@@ -134,6 +134,31 @@ describe('ApiJsonSchemaValidator', () => {
             '$.name must not be null',
         );
     });
+
+    /**
+     * #1055: a key HOLDING `undefined` is ABSENT, exactly as `JSON.stringify` and the `required`
+     * check read it. Server code builds `{ next: hasMore ? cursor : undefined }` idiomatically, and
+     * its JSON is valid — refusing the in-memory object failed every such MCP response.
+     */
+    it('treats an optional key holding undefined as ABSENT, as JSON.stringify does', () => {
+        expect(validator.validate(schema, { name: 'a', count: undefined })).toBe(undefined);
+    });
+
+    it('treats an undeclared key holding undefined as ABSENT on a closed schema', () => {
+        expect(validator.validate(schema, { name: 'a', other: undefined })).toBe(undefined);
+    });
+
+    it('still reports a REQUIRED key holding undefined as missing', () => {
+        expect(messageOf(validator.validate(schema, { name: undefined }))).toBe(
+            '$.name is required',
+        );
+    });
+
+    it('still refuses null on a non-nullable optional field — null is a value, not an absence', () => {
+        expect(messageOf(validator.validate(schema, { name: 'a', count: null }))).toBe(
+            '$.count must not be null',
+        );
+    });
 });
 
 /**

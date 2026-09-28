@@ -87,18 +87,18 @@ function described(type: 'string' | 'boolean', description: string): ApiJsonSche
 
 const LOCK_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('LockApi', [
-    new McpToolDefinition(
-        'passage_open',
-        'open',
-        'Open a passage for editing.',
-        new WpMcpToolHints(false, true, true, false),
-        new ObjectSchemaBuilder()
-            .required('passageId', described('string', 'Passage identifier'))
-            .build(),
-        new ObjectSchemaBuilder()
-            .required('open', described('boolean', 'Whether the passage is open'))
-            .build(),
-    ),
+        new McpToolDefinition(
+            'passage_open',
+            'open',
+            'Open a passage for editing.',
+            new WpMcpToolHints(false, true, true, false),
+            new ObjectSchemaBuilder()
+                .required('passageId', described('string', 'Passage identifier'))
+                .build(),
+            new ObjectSchemaBuilder()
+                .required('open', described('boolean', 'Whether the passage is open'))
+                .build(),
+        ),
     ]),
     IN_MEMORY,
 );
@@ -246,12 +246,18 @@ describe('application-owned tools/call error translation', () => {
         expect(String(visible['message'])).toContain('passage_open');
     });
 
-    it('logs the operator detail exactly once even when the app renders the reply', async () => {
+    it('logs the operator detail once per owner even when the app renders the reply', async () => {
         await open('locked');
-        const failures = allLines('passage locked is locked');
+        const failures = logs.fromLogger('LogApiCall', 'passage locked is locked');
         expect(failures).toHaveLength(1);
         expect(failures[0]?.level).toBe('error');
-        expect(failures[0]?.logger).toBe('LogApiCall');
+        // #1055: plus ONE line from the MCP boundary carrying the stack and the requestId, because
+        // the LogApiCall line has the message only. Nothing else writes it.
+        const boundary = logs.fromLogger('WpMcpServer', 'passage locked is locked');
+        expect(boundary).toHaveLength(1);
+        expect(boundary[0]?.level).toBe('error');
+        expect(boundary[0]?.message).toMatch(/requestId=\S+/);
+        expect(allLines('passage locked is locked')).toHaveLength(2);
     });
 
     it('a translator that throws is reported and the ORIGINAL error still renders', async () => {
@@ -261,8 +267,11 @@ describe('application-owned tools/call error translation', () => {
         expect(JSON.stringify(payload)).not.toContain('SECRET-translator-bug');
         // The app's OWN bug is a second, different failure, so it gets its own single line.
         expect(allLines('Application McpErrorTranslator.toWire threw')).toHaveLength(1);
-        // ...and the original failure is still reported exactly once, by the filter above.
-        expect(allLines('passage translator-bug is locked')).toHaveLength(1);
+        // ...and the original failure is still reported exactly once by the filter above, plus the
+        // MCP boundary's one stack-and-requestId line (#1055).
+        expect(logs.fromLogger('LogApiCall', 'passage translator-bug is locked')).toHaveLength(1);
+        expect(logs.fromLogger('WpMcpServer', 'passage translator-bug is locked')).toHaveLength(1);
+        expect(allLines('passage translator-bug is locked')).toHaveLength(2);
     });
 
     it('the app translator is handed the RAW error, and reads requestId from the result _meta', async () => {

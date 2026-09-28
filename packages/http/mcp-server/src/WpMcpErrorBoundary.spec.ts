@@ -103,21 +103,21 @@ function sentenceSchema(): ApiJsonSchema {
 
 const PASSAGE_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('PassageApi', [
-    new McpToolDefinition(
-        'passages_find',
-        'passages',
-        'Find passages with their translations keyed by locale.',
-        new WpMcpToolHints(true, false, true, false),
-        new ObjectSchemaBuilder()
-            .optional(
-                'minWordsByLocale',
-                typedMap('Requested word counts by locale', new ApiJsonSchema('integer')),
-            )
-            .build(),
-        new ObjectSchemaBuilder()
-            .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
-            .build(),
-    ),
+        new McpToolDefinition(
+            'passages_find',
+            'passages',
+            'Find passages with their translations keyed by locale.',
+            new WpMcpToolHints(true, false, true, false),
+            new ObjectSchemaBuilder()
+                .optional(
+                    'minWordsByLocale',
+                    typedMap('Requested word counts by locale', new ApiJsonSchema('integer')),
+                )
+                .build(),
+            new ObjectSchemaBuilder()
+                .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
+                .build(),
+        ),
     ]),
     IN_MEMORY,
 );
@@ -269,14 +269,19 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(JSON.stringify(reply)).not.toContain('private-host');
         expect(JSON.stringify(reply)).not.toContain('connection');
         // Exactly one boundary line, and it still names the class that actually failed.
-        // EXACTLY ONE operator line for this failure, across ALL loggers — LogApiFilter's, which
+        // EXACTLY ONE LogApiCall line for this failure — LogApiFilter's, which
         // carries the request, the identity and the timing. `ApiErrorBoundary.logOperatorDetail`
         // used to write a second, barer one right here (#961 item 5).
-        const lines = logs.containing('ECONNREFUSED private-host:8443');
+        // #1055 adds ONE more, from the MCP boundary, carrying the stack and requestId that line
+        // lacks — a connection failure is implementation-kind, so it is this server's bug.
+        const lines = logs.fromLogger('LogApiCall', 'ECONNREFUSED private-host:8443');
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
-        expect(lines[0].logger).toBe('LogApiCall');
         expect(lines[0].message).toContain('errorType=ApiConnectionError');
+        const boundary = logs.fromLogger('WpMcpServer', 'ECONNREFUSED private-host:8443');
+        expect(boundary).toHaveLength(1);
+        expect(boundary[0].level).toBe('error');
+        expect(logs.containing('ECONNREFUSED private-host:8443')).toHaveLength(2);
         expect(logs.containing('name=ApiImplementationError')).toHaveLength(0);
     });
 
@@ -454,25 +459,77 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(reply.payload.error).toMatchObject({ code: -32_603, message: 'Internal Error' });
         expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
         expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
-        const lines = secretLines();
+        const lines = logs.fromLogger('LogApiCall', 'SECRET-internal-detail');
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
-        expect(lines[0].logger).toBe('LogApiCall');
         expect(lines[0].message).toContain('McpEndpoint.tools/list');
+        // #1055: plus the MCP boundary's one line with the stack and the requestId the caller got.
+        const boundary = logs.fromLogger('WpMcpServer', 'SECRET-internal-detail');
+        expect(boundary).toHaveLength(1);
+        expect(boundary[0].level).toBe('error');
+        expect(boundary[0].message).toContain('MCP tools/list failed with an implementation error');
+        expect(boundary[0].message).toContain(
+            `requestId=${String(reply.payload.error?.data?.['requestId'])}`,
+        );
+        expect(boundary[0].error?.stack).toEqual(expect.stringMatching(/\S/));
+        expect(secretLines()).toHaveLength(2);
     });
 
-    it('never leaks a raw tools/call exception and logs it exactly once, from the filter above it', async () => {
+    it('never leaks a raw tools/call exception; logs the filter line and ONE stack line with the requestId', async () => {
         logs.lines.length = 0;
         const reply = await callTool('account_search', { query: 'internal' });
 
         expect(JSON.stringify(reply)).not.toContain('database password');
-        expect(modelErrorOf(reply)).toMatchObject({ kind: 'implementation' });
-        // tools/call dispatches through the ordinary filter chain, so LogApiFilter owns the line and
-        // the MCP boundary adds none. Counted across ALL loggers, not one filtered logger.
-        const lines = logs.containing('database password appeared here');
+        const visible = modelErrorOf(reply);
+        expect(visible).toMatchObject({ kind: 'implementation' });
+        // tools/call dispatches through the ordinary filter chain, so LogApiFilter owns the
+        // request/identity/timing line — which carries the message but not the stack.
+        const lines = logs.fromLogger('LogApiCall', 'database password appeared here');
         expect(lines).toHaveLength(1);
-        expect(lines[0].logger).toBe('LogApiCall');
         expect(lines[0].message).toContain('[API-server-resp-FAIL] SearchApi.search');
+        // #1055: the MCP boundary adds exactly one error line with the stack and the SAME requestId
+        // the model was told to hand to support. Counted across ALL loggers.
+        const boundary = logs.fromLogger('WpMcpServer', 'database password appeared here');
+        expect(boundary).toHaveLength(1);
+        expect(boundary[0].level).toBe('error');
+        expect(boundary[0].message).toContain(
+            'MCP tools/call account_search failed with an implementation error',
+        );
+        expect(boundary[0].message).toContain(`requestId=${String(visible['requestId'])}`);
+        expect(boundary[0].error?.stack).toEqual(expect.stringMatching(/\S/));
+        expect(logs.containing('database password appeared here')).toHaveLength(2);
+    });
+
+    /**
+     * #1055, the case that motivated it: an OUTPUT-schema violation is raised after the controller
+     * RETURNED, so the only LogApiCall line for the call is a `resp-SUCCESS`. Without the boundary's
+     * line, the requestId the model hands to support led to a log with no error in it.
+     */
+    it('logs an MCP output-schema violation at error level, with its stack and the requestId', async () => {
+        logs.lines.length = 0;
+        const reply = await callTool('passages_find', { minWordsByLocale: { xx: 1 } });
+
+        const visible = modelErrorOf(reply);
+        expect(visible).toMatchObject({ kind: 'implementation' });
+        expect(logs.containing('[API-server-resp-FAIL]')).toHaveLength(0);
+        const boundary = logs.fromLogger('WpMcpServer', 'MCP output schema violation');
+        expect(boundary).toHaveLength(1);
+        expect(boundary[0].level).toBe('error');
+        expect(boundary[0].message).toContain(`requestId=${String(visible['requestId'])}`);
+        expect(boundary[0].error?.message).toContain(
+            'MCP output schema violation for PassageApi.passages: $.sentencesByLocale.xx.translations.es must be a string',
+        );
+        expect(boundary[0].error?.stack).toEqual(expect.stringMatching(/\S/));
+    });
+
+    it('does NOT add the boundary line for a caller-kind failure — LogApiCall already owns it', async () => {
+        logs.lines.length = 0;
+        await callTool('account_search', { query: 'malformed' });
+        await callTool('account_search', { query: 'human' });
+
+        expect(logs.lines.filter((line: RecordedLogLine) => line.logger === 'WpMcpServer')).toEqual(
+            [],
+        );
     });
 
     it('a rejected bearer is logged once as a caller error, with its operator message', async () => {

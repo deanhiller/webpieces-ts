@@ -13,6 +13,7 @@ import {
     WpMcpAuthJwt,
     WpMcpTool,
 } from '@webpieces/core-util';
+import { WindowedStoreRequest } from './OrderRequestBases';
 
 /**
  * Both credentials of the `partner` regime, written ONCE and named per method.
@@ -87,10 +88,10 @@ export interface Order {
     labels: Record<string, string>;
 }
 
-export interface FetchOrdersRequest {
-    /** The store to read. */
-    storeId: string;
-
+// `storeId` is inherited from StoreScopedRequest two levels up, and `from` REDECLARES
+// WindowedStoreRequest's field — the golden's inheritance case (#1055). A line comment, not JSDoc,
+// because JSDoc here would publish as this schema's description.
+export interface FetchOrdersRequest extends WindowedStoreRequest {
     /**
      * Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely.
      * @format date-time
