@@ -28,6 +28,10 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
   its body must stay JSON-RPC shaped or the `401 + WWW-Authenticate` OAuth discovery signal breaks.
 - Wrap the edges with no filter chain above them — bearer, `Origin`, body, `tools/list` — in
   `LogApiCall`, so every failure gets exactly one operator line and the error boundary writes none.
+- `log.error` an IMPLEMENTATION-kind failure at `tools/list` and `tools/call`, with its stack and the
+  requestId, before the translator reduces it to "Internal Error" (#1055). It is not the bare second
+  line below: an output-schema violation is raised after the controller RETURNED, so its only
+  `LogApiCall` line reads `resp-SUCCESS`, and a `resp-FAIL` line carries the message but no stack.
 
 ## Out of scope
 

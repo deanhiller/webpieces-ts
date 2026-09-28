@@ -153,6 +153,43 @@ describe('the OpenAPI documents generated from the example contract', () => {
         expect(fetch!.outputSchema.oneOf).toBeUndefined();
     });
 
+    /**
+     * #1055: `FetchOrdersRequest extends WindowedStoreRequest extends StoreScopedRequest`, the bases
+     * in another file. Inherited fields are FLATTENED into `properties` + `required` — no `allOf`,
+     * no base schema of their own — and `from`, which the request REDECLARES, publishes the
+     * redeclaration's prose. Before #1055 both documents held `from` and `states` only, and the
+     * closed MCP schema refused every real call with `$.storeId is not allowed`.
+     */
+    it('flattens a two-level extends chain, with the override winning, into BOTH documents', () => {
+        const ownProse =
+            'Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely.';
+        const full = JSON.parse(golden.golden('full-private-openapi.json')) as {
+            components: { schemas: Record<string, Record<string, unknown>> };
+        };
+        const request = full.components.schemas['FetchOrdersRequest'];
+        const properties = request['properties'] as Record<string, Record<string, unknown>>;
+        expect(Object.keys(properties)).toEqual(['storeId', 'from', 'states']);
+        expect(request['required']).toEqual(['storeId']);
+        expect(request['allOf']).toBeUndefined();
+        expect(properties['storeId']['description']).toBe('The store to read.');
+        expect(properties['from']['description']).toBe(ownProse);
+        for (const base of ['StoreScopedRequest', 'WindowedStoreRequest']) {
+            expect(full.components.schemas[base]).toBeUndefined();
+        }
+
+        const fetch = McpToolCatalogFile.fromJsonText(MCP_CATALOG, golden.golden(MCP_CATALOG)).find(
+            'fetch_orders',
+        )!;
+        expect(Object.keys(fetch.inputSchema.properties ?? {})).toEqual([
+            'storeId',
+            'from',
+            'states',
+        ]);
+        expect(fetch.inputSchema.required).toEqual(['storeId']);
+        expect(fetch.inputSchema.additionalProperties).toBe(false);
+        expect(fetch.inputSchema.properties?.['from']?.description).toBe(ownProse);
+    });
+
     it('the hidden method is absent from the customer document by TYPE NAME, not only by path', () => {
         const published = golden.golden('public-openapi.json');
         const full = JSON.parse(golden.golden('full-private-openapi.json')) as Record<

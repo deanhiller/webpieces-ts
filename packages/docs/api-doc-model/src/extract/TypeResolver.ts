@@ -9,6 +9,7 @@ import {
 import { PrimitiveKind, TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { JsDoc } from './JsDoc';
+import { ObjectShape, ObjectShapeBases } from './ObjectShapeBases';
 import { SourceLocation } from './SourceLocation';
 import { StringValueSets } from './StringValueSets';
 
@@ -62,7 +63,11 @@ export class TypeResolver {
     /** Anonymous type literals currently being expanded — the cycle stop for the ANONYMOUS case. */
     private readonly expandingAnonymous = new Set<ts.TypeNode>();
 
-    constructor(private readonly checker: ts.TypeChecker) {}
+    private readonly bases: ObjectShapeBases;
+
+    constructor(checker: ts.TypeChecker) {
+        this.bases = new ObjectShapeBases(checker);
+    }
 
     /** Every named type reached so far, by name. */
     collectedTypes(): ReadonlyMap<string, DocumentedType> {
@@ -81,6 +86,16 @@ export class TypeResolver {
         }
         if (ts.isArrayTypeNode(node)) {
             return TypeRef.array(this.resolve(node.elementType, ownerName));
+        }
+        // `readonly X[]` is a TypeOperator wrapping the array. `readonly` is a compile-time promise
+        // about the HOLDER, not the wire: the JSON is the same array, so it resolves exactly like
+        // `X[]` — as `ReadonlyArray<X>` already does in resolveReference (#1055).
+        if (
+            ts.isTypeOperatorNode(node) &&
+            node.operator === ts.SyntaxKind.ReadonlyKeyword &&
+            ts.isArrayTypeNode(node.type)
+        ) {
+            return this.resolve(node.type, ownerName);
         }
         if (ts.isUnionTypeNode(node)) {
             return this.resolveUnion(node, ownerName);
@@ -397,36 +412,25 @@ export class TypeResolver {
      * Register a named object shape, RESERVING THE NAME BEFORE walking its fields. That order is the
      * whole cycle story: a type that refers back to itself meets `registered.has(name)` on the second
      * visit and resolves to a `$ref`, so the walk terminates with no counter and no truncation.
+     *
+     * The fields are the shape's WHOLE document — every field it inherits through `extends` as well
+     * as its own. See {@link collectFields}.
      */
-    private registerNamedObject(
-        name: string,
-        shape: ts.InterfaceDeclaration | ts.ClassDeclaration | ts.TypeLiteralNode,
-        docSource?: ts.Node,
-    ): TypeRef {
+    private registerNamedObject(name: string, shape: ObjectShape, docSource?: ts.Node): TypeRef {
         if (this.registered.has(name)) {
             return TypeRef.ref(name);
         }
         this.registered.add(name);
 
-        const fields: DocumentedField[] = [];
-        let indexSignature: TypeRef | undefined;
-        for (const member of shape.members) {
-            if (ts.isIndexSignatureDeclaration(member)) {
-                indexSignature = this.resolve(member.type, name);
-                continue;
-            }
-            const field = this.fieldOf(member, name);
-            if (field !== undefined) {
-                fields.push(field);
-            }
-        }
+        const fields = new Map<string, DocumentedField>();
+        const indexSignature = this.collectFields(shape, name, fields, new Set<ObjectShape>());
 
         this.types.set(
             name,
             new DocumentedType(
                 name,
                 JsDoc.read(docSource ?? shape).description,
-                fields,
+                Array.from(fields.values()),
                 [],
                 [],
                 undefined,
@@ -434,6 +438,56 @@ export class TypeResolver {
             ),
         );
         return TypeRef.ref(name);
+    }
+
+    /**
+     * Collect `shape`'s fields into `fields`, FLATTENING every base it `extends` (#1055).
+     *
+     * A subclass's JSON carries its base's fields, so a document that published only the subclass's
+     * own members was a CLOSED schema (`additionalProperties: false`) that refused every real call.
+     * The rules are TypeScript's own:
+     *
+     * - bases first, in `extends` order (`interface X extends A, B`), each walked recursively, so a
+     *   two-level chain flattens completely;
+     * - a redeclared field WINS — `Map.set` replaces the inherited entry in its original position —
+     *   and it is the redeclaration's type, optionality, prose and bounds that publish, because
+     *   required/optional belongs to whichever type DECLARES the field;
+     * - a base may live in another file or package (source or a published `.d.ts`); its JSDoc is
+     *   read from there.
+     *
+     * Flattened, not `allOf: [{$ref: Base}, {...}]`: an MCP client reads `properties` + `required`
+     * directly, and a base is an implementation detail of the TypeScript, not a wire concept. So a
+     * base is NOT registered as a model entry of its own; it appears only if something refers to it.
+     *
+     * Which bases count, and why an unresolvable one is a build failure, is {@link ObjectShapeBases}.
+     */
+    private collectFields(
+        shape: ObjectShape,
+        ownerName: string,
+        fields: Map<string, DocumentedField>,
+        visiting: Set<ObjectShape>,
+    ): TypeRef | undefined {
+        visiting.add(shape);
+        let indexSignature: TypeRef | undefined;
+        for (const baseShape of this.bases.of(shape)) {
+            if (visiting.has(baseShape)) {
+                continue;
+            }
+            indexSignature =
+                this.collectFields(baseShape, ownerName, fields, visiting) ?? indexSignature;
+        }
+        for (const member of shape.members) {
+            if (ts.isIndexSignatureDeclaration(member)) {
+                indexSignature = this.resolve(member.type, ownerName);
+                continue;
+            }
+            const field = this.fieldOf(member, ownerName);
+            if (field !== undefined) {
+                fields.set(field.name, field);
+            }
+        }
+        visiting.delete(shape);
+        return indexSignature;
     }
 
     /**
@@ -620,12 +674,7 @@ export class TypeResolver {
 
     /** The declaration a type name points at, through imports and aliases. */
     private declarationOf(name: ts.EntityName): ts.Declaration | undefined {
-        const symbol = this.checker.getSymbolAtLocation(name);
-        const resolved =
-            symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
-                ? this.checker.getAliasedSymbol(symbol)
-                : symbol;
-        return resolved?.declarations?.[0];
+        return this.bases.declarationOf(name);
     }
 
     private recordUnmapped(node: ts.Node, reason: string): TypeRef {

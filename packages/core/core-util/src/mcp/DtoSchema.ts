@@ -300,6 +300,12 @@ export class ApiJsonSchemaValidator {
         const extra = schema.additionalProperties;
         for (const key of Object.keys(value)) {
             const entry: DtoValue = Object.getOwnPropertyDescriptor(value, key)?.value;
+            // A key HOLDING `undefined` is ABSENT: `JSON.stringify` drops it, so the document the
+            // caller receives never carries it, and the `required` loop below already reads
+            // `=== undefined` as missing. Validating it here made the two halves of this one walk
+            // disagree — `{ next: hasMore ? cursor : undefined }` was refused as "must be a string"
+            // although its JSON is valid (#1055). `null` is a VALUE and is still checked.
+            if ((entry as DtoValue | undefined) === undefined) continue;
             const declared = Object.getOwnPropertyDescriptor(properties, key)?.value as
                 | ApiJsonSchema
                 | undefined;

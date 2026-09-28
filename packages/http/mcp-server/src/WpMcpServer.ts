@@ -18,6 +18,7 @@ import { NodeMcpRequestHandler, toNodeHandler } from '@modelcontextprotocol/node
 import { Express, json, NextFunction, Request, Response } from 'express';
 import {
     ApiBadRequestError,
+    ApiErrorBoundary,
     ApiForbiddenError,
     ApiImplementationError,
     ApiJsonSchemaValidator,
@@ -110,9 +111,16 @@ class WpSdkMcpServer extends McpServer {
  * `subscriptions/listen` is served entirely by the SDK's listen router, so Webpieces has no handler
  * (and no catch) there. The external bearer is verified exactly once per POST, at the HTTP
  * boundary, before the SDK is involved.
+ *
+ * Before tools/list and tools/call hand an IMPLEMENTATION-kind failure to the translator, they
+ * `log.error` it with its stack and the requestId ({@link logImplementationFailure}, #1055). The
+ * translator reduces such a failure to "Internal Error" for the caller, so that line is the only place
+ * its cause exists.
  */
 export class WpMcpServer<TGrant, TMintRequest> {
     private readonly dispatcher = new McpApiDispatcher();
+    /** Classifies a failure exactly as the translator will render it, so the two cannot disagree. */
+    private readonly boundary = new ApiErrorBoundary();
     private readonly outputSchemas = new ApiJsonSchemaValidator();
     /**
      * These edges have NO filter chain above them — `LogApiFilter` never sees a rejected bearer, a
@@ -388,6 +396,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
             );
         } catch (err: unknown) {
             const error = toError(err);
+            this.logImplementationFailure('tools/list', error);
             this.translator.toListError(error);
         }
     }
@@ -436,8 +445,31 @@ export class WpMcpServer<TGrant, TMintRequest> {
             );
         } catch (err: unknown) {
             const error = toError(err);
+            this.logImplementationFailure(`tools/call ${name}`, error);
             return this.translator.toToolCallResult(error);
         }
+    }
+
+    /**
+     * ONE `log.error` line, with the stack and the requestId, for a failure that is THIS server's bug
+     * — the `implementation` kind, which the translator reduces to "Internal Error" and a requestId
+     * for the caller (#1055).
+     *
+     * `LogApiCall` does not cover this. An MCP output-schema violation is raised AFTER the controller
+     * returned, so the only `LogApiCall` line for that call reads `resp-SUCCESS`; before this line
+     * existed, the requestId support was handed led to a log with no error in it. Where a
+     * `[API-*-resp-FAIL]` line does exist it carries the error's message, not its stack. So this line
+     * is not the bare duplicate `ApiErrorBoundary` stopped writing: it is the one that says WHERE.
+     *
+     * Every other kind (bad-request, end-user, dependency, ...) is a caller's or a downstream's
+     * failure, published to the caller with its own text, and `LogApiCall` already records it.
+     */
+    private logImplementationFailure(entryPoint: string, error: Error): void {
+        if (this.boundary.encode(error).kind !== 'implementation') return;
+        log.error(
+            `MCP ${entryPoint} failed with an implementation error requestId=${McpCorrelation.requestId()}`,
+            error,
+        );
     }
 
     /** Everything a tool call does. No catch in here: failures propagate to handleCallTool. */

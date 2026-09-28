@@ -6,6 +6,7 @@ import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { ApiDocModel, DocumentedEndpoint } from '../model/ApiDocModel';
 import { McpRenderError } from '../render/McpRenderError';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
+import { InheritanceFixturePaths } from './fixtures/inheritance/InheritanceFixturePaths';
 
 /**
  * THE REPO SWEEP: every `@WpMcpTool` under `packages/**` and `apps/**`, rendered.
@@ -158,7 +159,9 @@ class Sweep {
     private static compilerOptions(): ts.CompilerOptions {
         const base = ts.readConfigFile(path.join(REPO_ROOT, 'tsconfig.base.json'), ts.sys.readFile);
         const parsed = ts.parseJsonConfigFileContent(base.config, ts.sys, REPO_ROOT);
-        return { ...parsed.options, noEmit: true, skipLibCheck: true, types: [] };
+        // Plus the inheritance fixture's two fixture PACKAGES (#1055), which only exist for its spec.
+        const paths = { ...parsed.options.paths, ...InheritanceFixturePaths.paths() };
+        return { ...parsed.options, paths, noEmit: true, skipLibCheck: true, types: [] };
     }
 }
 
@@ -176,6 +179,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/inheritance/InheritanceApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
@@ -209,6 +213,9 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             // the OpenAI and Anthropic function-calling APIs reject a top-level oneOf, and a server
             // sends its whole tool list on every request, so one of these 400s the whole session.
             "McpUnionApi/move_window: an MCP tool's request is itself a union (McpUnionApi.moveWindow)",
+            // Inherited fields through `extends`, across files and packages, and readonly arrays (#1055).
+            'InheritanceApi/render_lesson',
+            'InheritanceApi/lookup_learner',
             'WidgetsApi/list_widgets',
             'RemoteMcpApi/remote_integration_search',
             'MissingRemoteMcpApi/missing_remote_integration_search',
