@@ -12,6 +12,10 @@
  * a contract document before the library document it references exists, and the generator's
  * fail-closed refusal ("never generated") fires intermittently, mostly in CI. So it is refused here,
  * on the resolved graph, with the exact `dependsOn` to write.
+ *
+ * The tag itself is allowed only on a `role:api-lib` project (#1064, D5): a components document puts a
+ * library's types on the wire, and every wire type is declared in an api library. Tagging a general
+ * library such as `company-core` must not be a way out of moving the type.
  */
 
 import type { ProjectConfiguration, TargetConfiguration, TargetDependencyConfig } from '@nx/devkit';
@@ -25,6 +29,7 @@ type DependsOnEntry = string | TargetDependencyConfig;
 const BUILD_TARGET = 'build';
 const COMPONENTS_TARGET = GeneratedApiDocsLayout.COMPONENTS_TARGET;
 const UPSTREAM_COMPONENTS = `^${COMPONENTS_TARGET}`;
+const API_LIB_ROLE_TAG = 'role:api-lib';
 
 /** The targets that READ upstream components documents, and so must run after them. */
 const READING_TARGETS: readonly string[] = [COMPONENTS_TARGET, GeneratedApiDocsLayout.OPENAPI_TARGET];
@@ -46,7 +51,7 @@ export class ComponentsWiring {
     problems(): GenerateWiringProblem[] {
         const libraries = new Set(this.libraries());
         const problems: GenerateWiringProblem[] = [];
-        for (const name of this.libraries()) problems.push(...this.shapeOf(name));
+        for (const name of this.libraries()) problems.push(...this.roleOf(name), ...this.shapeOf(name));
         for (const name of Object.keys(this.projects).sort()) {
             const upstream = this.librariesUpstreamOf(name, libraries);
             if (upstream.length === 0) continue;
@@ -57,6 +62,22 @@ export class ComponentsWiring {
             }
         }
         return problems;
+    }
+
+    /** Only a `role:api-lib` publishes a components document (D5). */
+    private roleOf(name: string): GenerateWiringProblem[] {
+        const project = this.projects[name]!;
+        const tags = project.tags ?? [];
+        if (tags.includes(API_LIB_ROLE_TAG)) return [];
+        const carried = tags.filter((tag: string) => tag.startsWith('role:')).join(', ') || 'no role tag';
+        return [new GenerateWiringProblem(
+            name,
+            `${name} is tagged "${GENERATE_OPENAPI_COMPONENTS_TAG}" but carries ${carried} — only a role:api-lib ` +
+                'publishes a components document, because every type a contract reaches is declared in an api library.',
+            `${name}: in ${project.root}/project.json, drop "${GENERATE_OPENAPI_COMPONENTS_TAG}" and move the wire ` +
+                `types into a role:api-lib DTO library tagged with it — or, when ${name} holds only contracts and ` +
+                'wire types, retag it role:api-lib.',
+        )];
     }
 
     /** `openapi-components-generate` dependsOn exactly the library's own `build`, the tsc target. */

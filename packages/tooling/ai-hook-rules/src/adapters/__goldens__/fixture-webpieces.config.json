@@ -245,6 +245,40 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "api-lib-dependencies": {
+            "mode": "OFF",
+            "apiLibPackages": ["@webpieces/core-util", "tslib"],
+            "apiClients": [],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "api-lib-path": {
+            "mode": "OFF",
+            "paths": ["libraries/apis/**"],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "framework-folder": {
+            "mode": "OFF",
+            "entries": [
+                { "paths": ["libraries/node/**"], "frameworkSets": ["node", "express"], "roles": ["lib", "designed-lib"] }
+            ],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "framework-tsconfig": {
+            "mode": "OFF",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
+        "framework-packages": {
+            "mode": "OFF",
+            "entries": [
+                { "packages": ["@angular/*"], "frameworks": ["angular"] }
+            ],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "ensure-we-are-secure": {
             "mode": "MODIFIED_PROJECTS",
             "turnOffRuleUntilEpoch": 0,

@@ -20,8 +20,12 @@ graph TD
     DiffScope["DiffScope"]
     EnsureWeAreSecureConfig["EnsureWeAreSecureConfig"]:::many
     EnsureWeAreSecureValidator["EnsureWeAreSecureValidator"]
+    FrameworkPackagesConfig["FrameworkPackagesConfig"]:::many
+    FrameworkPackagesValidator["FrameworkPackagesValidator"]
     FrameworkTagConfig["FrameworkTagConfig"]:::many
     FrameworkTagValidator["FrameworkTagValidator"]
+    FrameworkTsconfigConfig["FrameworkTsconfigConfig"]:::many
+    FrameworkTsconfigValidator["FrameworkTsconfigValidator"]
     InjectAnnotationNotNeededForConcreteClassConfig["InjectAnnotationNotNeededForConcreteClassConfig"]:::many
     InjectAnnotationNotNeededForConcreteClassValidator["InjectAnnotationNotNeededForConcreteClassValidator"]
     MatchRulesChecker["MatchRulesChecker"]
@@ -65,6 +69,7 @@ graph TD
     PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
     ProjectCatalog["ProjectCatalog"]
     ProjectRoleResolver["ProjectRoleResolver"]
+    ProjectScanTargets["ProjectScanTargets"]
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
     RequireReturnTypeValidator["RequireReturnTypeValidator"]
     RequiredTypeSuffixConfig["RequiredTypeSuffixConfig"]:::many
@@ -85,7 +90,9 @@ graph TD
     CodeRulesApp --> CodeRulesEngine
     CodeRulesEngine --> CatchErrorPatternValidator
     CodeRulesEngine --> EnsureWeAreSecureValidator
+    CodeRulesEngine --> FrameworkPackagesValidator
     CodeRulesEngine --> FrameworkTagValidator
+    CodeRulesEngine --> FrameworkTsconfigValidator
     CodeRulesEngine --> InjectAnnotationNotNeededForConcreteClassValidator
     CodeRulesEngine --> MatchRulesChecker
     CodeRulesEngine --> MatchRulesHolder
@@ -115,7 +122,11 @@ graph TD
     CodeRulesEngine --> RuleSelection
     CodeRulesEngine --> WorkspaceRoot
     EnsureWeAreSecureValidator --> EnsureWeAreSecureConfig
+    FrameworkPackagesValidator --> FrameworkPackagesConfig
+    FrameworkPackagesValidator --> ProjectScanTargets
     FrameworkTagValidator --> FrameworkTagConfig
+    FrameworkTsconfigValidator --> FrameworkTsconfigConfig
+    FrameworkTsconfigValidator --> ProjectScanTargets
     InjectAnnotationNotNeededForConcreteClassValidator --> InjectAnnotationNotNeededForConcreteClassConfig
     InjectAnnotationNotNeededForConcreteClassValidator --> ScanScope
     MatchRulesChecker --> ScanScope
@@ -160,6 +171,9 @@ graph TD
     PrismaConverterValidator --> PrismaConverterConfig
     PrismaValidateDtosValidator --> PrismaValidateDtosConfig
     ProjectCatalog --> DiffScope
+    ProjectScanTargets --> DiffScope
+    ProjectScanTargets --> ProjectCatalog
+    ProjectScanTargets --> ScanRestriction
     RequireReturnTypeValidator --> RequireReturnTypeConfig
     RequiredTypeSuffixValidator --> DiffScope
     RequiredTypeSuffixValidator --> ProjectRoleResolver

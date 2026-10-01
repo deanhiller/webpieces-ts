@@ -73,6 +73,22 @@
                     "level": 2
                 },
                 {
+                    "id": "FrameworkPackagesConfig",
+                    "className": "FrameworkPackagesConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/tag-truth-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "FrameworkPackagesValidator",
+                    "className": "FrameworkPackagesValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-framework-packages.ts",
+                    "level": 2
+                },
+                {
                     "id": "FrameworkTagConfig",
                     "className": "FrameworkTagConfig",
                     "kind": "class",
@@ -86,6 +102,22 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-framework-tag.ts",
+                    "level": 2
+                },
+                {
+                    "id": "FrameworkTsconfigConfig",
+                    "className": "FrameworkTsconfigConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/tag-truth-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "FrameworkTsconfigValidator",
+                    "className": "FrameworkTsconfigValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-framework-tsconfig.ts",
                     "level": 2
                 },
                 {
@@ -433,6 +465,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ProjectScanTargets",
+                    "className": "ProjectScanTargets",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/project-scan-targets.ts",
+                    "level": 3
+                },
+                {
                     "id": "RequireReturnTypeConfig",
                     "className": "RequireReturnTypeConfig",
                     "kind": "class",
@@ -601,12 +641,30 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "FrameworkPackagesValidator",
+                    "injection": "type",
+                    "token": "FrameworkPackagesValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-framework-packages.ts#FrameworkPackagesValidator",
+                    "paramName": "frameworkPackages",
+                    "paramType": "FrameworkPackagesValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "FrameworkTagValidator",
                     "injection": "type",
                     "token": "FrameworkTagValidator",
                     "tokenKey": "class:packages/tooling/code-rules/src/validate-framework-tag.ts#FrameworkTagValidator",
                     "paramName": "frameworkTag",
                     "paramType": "FrameworkTagValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "FrameworkTsconfigValidator",
+                    "injection": "type",
+                    "token": "FrameworkTsconfigValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-framework-tsconfig.ts#FrameworkTsconfigValidator",
+                    "paramName": "frameworkTsconfig",
+                    "paramType": "FrameworkTsconfigValidator"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -870,6 +928,24 @@
                     "paramType": "EnsureWeAreSecureConfig"
                 },
                 {
+                    "from": "FrameworkPackagesValidator",
+                    "to": "FrameworkPackagesConfig",
+                    "injection": "type",
+                    "token": "FrameworkPackagesConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/tag-truth-configs.ts#FrameworkPackagesConfig",
+                    "paramName": "config",
+                    "paramType": "FrameworkPackagesConfig"
+                },
+                {
+                    "from": "FrameworkPackagesValidator",
+                    "to": "ProjectScanTargets",
+                    "injection": "type",
+                    "token": "ProjectScanTargets",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-scan-targets.ts#ProjectScanTargets",
+                    "paramName": "targets",
+                    "paramType": "ProjectScanTargets"
+                },
+                {
                     "from": "FrameworkTagValidator",
                     "to": "FrameworkTagConfig",
                     "injection": "type",
@@ -877,6 +953,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#FrameworkTagConfig",
                     "paramName": "config",
                     "paramType": "FrameworkTagConfig"
+                },
+                {
+                    "from": "FrameworkTsconfigValidator",
+                    "to": "FrameworkTsconfigConfig",
+                    "injection": "type",
+                    "token": "FrameworkTsconfigConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/tag-truth-configs.ts#FrameworkTsconfigConfig",
+                    "paramName": "config",
+                    "paramType": "FrameworkTsconfigConfig"
+                },
+                {
+                    "from": "FrameworkTsconfigValidator",
+                    "to": "ProjectScanTargets",
+                    "injection": "type",
+                    "token": "ProjectScanTargets",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-scan-targets.ts#ProjectScanTargets",
+                    "paramName": "targets",
+                    "paramType": "ProjectScanTargets"
                 },
                 {
                     "from": "InjectAnnotationNotNeededForConcreteClassValidator",
@@ -1273,6 +1367,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
                     "paramName": "diffScope",
                     "paramType": "DiffScope"
+                },
+                {
+                    "from": "ProjectScanTargets",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "ProjectScanTargets",
+                    "to": "ProjectCatalog",
+                    "injection": "type",
+                    "token": "ProjectCatalog",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ProjectCatalog",
+                    "paramName": "catalog",
+                    "paramType": "ProjectCatalog"
+                },
+                {
+                    "from": "ProjectScanTargets",
+                    "to": "ScanRestriction",
+                    "injection": "type",
+                    "token": "ScanRestriction",
+                    "tokenKey": "class:packages/tooling/code-rules/src/scan-scope.ts#ScanRestriction",
+                    "paramName": "restriction",
+                    "paramType": "ScanRestriction"
                 },
                 {
                     "from": "RequireReturnTypeValidator",

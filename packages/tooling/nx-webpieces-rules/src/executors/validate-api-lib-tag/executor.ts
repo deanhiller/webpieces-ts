@@ -1,9 +1,11 @@
 /**
  * Validate API-lib Tag Executor
  *
- * Fails when the `role:api-lib` tag and the code disagree, in either direction:
- * a project tagged role:api-lib that exports no API contract, or a project that
- * exports an @ApiPath/@Rpc/@PubSub abstract class but is not tagged role:api-lib.
+ * Fails when the api roles and the code disagree, in either direction: a project
+ * tagged role:api-lib that exports neither a contract (@ApiPath/@Rpc/@PubSub,
+ * @WpInternal/@WpIpcEndpoint, or an in-process abstract …Api) nor only wire types,
+ * a role:api-client that exports no contract, or a project that exports an
+ * @ApiPath/@Rpc/@PubSub abstract class but carries neither api role (#1064, D3).
  *
  * Usage:
  * nx run architecture:validate-api-lib-tag
@@ -36,10 +38,10 @@ export default async function runExecutor(
     try {
         const projectInfos = await collectProjectInfo();
         const scan = new ApiUsageScanner(workspaceRoot, projectInfos).scan();
-        const violations = findApiLibTagViolations(projectInfos, scan);
+        const violations = findApiLibTagViolations(projectInfos, scan, workspaceRoot);
 
         if (violations.length === 0) {
-            console.log('✅ role:api-lib matches the code (every api-lib exports a contract, and vice-versa).');
+            console.log('✅ role:api-lib / role:api-client match the code (every api library exports a contract or only wire types, and vice-versa).');
             return { success: true };
         }
 

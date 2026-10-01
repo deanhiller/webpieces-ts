@@ -396,6 +396,10 @@ describe('fail closed — OpenAPI documents only', () => {
         expect(failure.pointers.join('\n')).toContain('has no openapi-components-generate target');
         expect(failure.cure).toContain('`…Dto` string enum');
         expect(failure.cure).toContain('"generate:openapi-components"');
+        // #1064 D5: tagging is offered only to a package that is already a role:api-lib DTO library.
+        expect(failure.cure).toContain('Move each type into a role:api-lib DTO library');
+        expect(failure.cure).toContain('Only when the declaring package is ITSELF a role:api-lib DTO library');
+        expect(failure.cure).not.toContain('— or tag its package');
         expect(failure.cure).toContain('"kind": "components" openapi.manifest.json');
         expect(fs.existsSync(chain.outDir('settings-api'))).toBe(false);
     });

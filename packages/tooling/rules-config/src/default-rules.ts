@@ -62,10 +62,10 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': {
-        knownTypes: ['browser', 'react', 'angular', 'node', 'express'],
+        knownTypes: ['browser', 'react', 'angular', 'node', 'express', 'react-native'],
     },
     'role-tag': {
-        knownTypes: ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'],
+        knownTypes: ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib', 'api-client'],
     },
     'ensure-we-are-secure': {},
     'nx-wiring': {},
@@ -95,6 +95,14 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // #1037: REQUIRES `mode` and `entries` — no entry here may carry either. A new key the
     // one-release-behind validator does not know yet, so THIS repo's config states it after publish.
     'required-type-suffix': {},
+    // #1064: every field of these five that decides behaviour is REQUIRED — no entry here may carry
+    // one. New keys the one-release-behind validator does not know yet, so THIS repo's config states
+    // them after publish (.claude/rules/published-vs-local-source.md).
+    'api-lib-dependencies': {},
+    'api-lib-path': {},
+    'framework-folder': {},
+    'framework-tsconfig': {},
+    'framework-packages': {},
     'branch-creation-guard': {},
     'pr-lifecycle-guard': {},
     // NOTE: `whole-repo-build-guard` is deliberately ABSENT from this table, and from RULE_SCHEMAS and

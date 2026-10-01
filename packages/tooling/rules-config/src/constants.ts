@@ -43,6 +43,11 @@ export const RULE_NAMES = {
     ONE_ENUM_SPELLING_IN_API_LIB: 'one-enum-spelling-in-api-lib',
     NO_UTILITY_TYPES_IN_API_LIB: 'no-utility-types-in-api-lib',
     REQUIRED_TYPE_SUFFIX: 'required-type-suffix',
+    API_LIB_DEPENDENCIES: 'api-lib-dependencies',
+    API_LIB_PATH: 'api-lib-path',
+    FRAMEWORK_FOLDER: 'framework-folder',
+    FRAMEWORK_TSCONFIG: 'framework-tsconfig',
+    FRAMEWORK_PACKAGES: 'framework-packages',
 } as const;
 
 // Merge-state convention shared by the pr-gate scripts (which WRITE the marker during a

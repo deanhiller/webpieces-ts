@@ -16,6 +16,7 @@ import { ProjectCycleDetector } from '../../lib/graph-cycles';
 import { saveGraph, DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { ApiContractFiles } from '../../lib/api-contract-files';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
+import { TagTruthCheck } from '../../lib/tag-truth';
 import { ProjectInfo } from '../../lib/project-info';
 import {
     scanAndAttachApiRelations,
@@ -185,6 +186,7 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
     const projectInfos = await collectProjectInfo();
     enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+    new TagTruthCheck().assertTrue(enhancedGraph, projectInfos, workspaceRoot); // #1064, before any write
 
     // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
     // scanning source, so dependencies.json + the viz + the runtime graph all

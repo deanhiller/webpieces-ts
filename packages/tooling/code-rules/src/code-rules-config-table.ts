@@ -27,6 +27,8 @@ import {
     OneEnumSpellingInApiLibConfig,
     NoUtilityTypesInApiLibConfig,
     RequiredTypeSuffixConfig,
+    FrameworkTsconfigConfig,
+    FrameworkPackagesConfig,
 } from '@webpieces/rules-config';
 
 /** A rule config class usable as an inversify inject-by-type token. */
@@ -71,4 +73,6 @@ export const CONFIG_BINDINGS: ReadonlyArray<ConfigBinding> = [
     [OneEnumSpellingInApiLibConfig, 'one-enum-spelling-in-api-lib'],
     [NoUtilityTypesInApiLibConfig, 'no-utility-types-in-api-lib'],
     [RequiredTypeSuffixConfig, 'required-type-suffix'],
+    [FrameworkTsconfigConfig, 'framework-tsconfig'],
+    [FrameworkPackagesConfig, 'framework-packages'],
 ];

@@ -377,11 +377,12 @@ export class InjectAnnotationNotNeededForConcreteClassConfig extends BaseRuleCon
 }
 
 // framework-tag — every project that a changed source file belongs to must carry >=1
-// `framework:<browser|react|angular|node|express>` nx tag in its project.json. Those tags are the
+// `framework:<browser|react|angular|node|express|react-native>` nx tag in its project.json. Those tags are the
 // project's "libType" — the SET of runtime environments it runs in — and the source of truth for
 // the dependencies.json `framework` field and the `library-types-match-client` rule. Multiple tags
 // are allowed (the env set) and values are validated against the known set (`framework:all` is a
-// hard error). `knownTypes` customizes that set (defaults to browser, react, angular, node, express).
+// hard error). `knownTypes` customizes that set (defaults to browser, react, angular, node, express,
+// react-native — the last a first-class runtime, not a browser, #1064).
 export class FrameworkTagConfig extends BaseRuleConfig {
     declare mode?: ProjectMode;
     knownTypes?: string[];
@@ -394,7 +395,7 @@ export class FrameworkTagConfig extends BaseRuleConfig {
 }
 
 // role-tag — every project that a changed source file belongs to must carry a
-// `role:<server|designed-lib|lib|client>` nx tag in its project.json. That tag is the project's
+// `role:<server|app|bundle|designed-lib|lib|client|api-lib|api-client>` nx tag in its project.json. That tag is the project's
 // ROLE (orthogonal to `framework` libType) — the source of truth for the dependencies.json `role`
 // field, the `role-dependency` edge rule (apps are never depended upon), and DI-design generation
 // (server→@Controller, designed-lib→@ApiImplementation, lib→none, client→angular design).

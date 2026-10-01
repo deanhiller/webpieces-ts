@@ -40,6 +40,7 @@ const FAKE_DOCS_SITE = [
 class Workspace {
     readonly root = fs.realpathSync(specTempDirs.make('wp-generated-docs-'));
     readonly targets: Record<string, TargetConfiguration> = {};
+    tags: string[] = [];
 
     constructor(readonly projectRoot: string, outputPath: string | undefined) {
         this.targets['build'] = { executor: '@nx/js:tsc', options: outputPath === undefined ? {} : { outputPath } };
@@ -59,7 +60,10 @@ class Workspace {
             isVerbose: false,
             projectName: 'partner',
             targetName,
-            projectsConfigurations: { version: 2, projects: { partner: { root: this.projectRoot, targets: this.targets } } },
+            projectsConfigurations: {
+                version: 2,
+                projects: { partner: { root: this.projectRoot, targets: this.targets, tags: this.tags } },
+            },
             nxJsonConfiguration: {},
             projectGraph: { nodes: {}, dependencies: {} },
         };
@@ -221,6 +225,7 @@ const FAKE_COMPONENTS = [
 describe('openapi-components-generate (#1058)', () => {
     function dtoLibrary(version: string): Workspace {
         const ws = new Workspace('libraries/dtos', 'dist/libraries/dtos');
+        ws.tags = ['role:api-lib', 'generate:openapi-components'];
         ws.install('@webpieces/openapi-generator', 'wp-openapi', version, FAKE_COMPONENTS);
         ws.targets['openapi-components-generate'] = {
             executor: '@webpieces/nx-webpieces-rules:openapi-components-generate',
@@ -238,6 +243,15 @@ describe('openapi-components-generate (#1058)', () => {
         const written = new OpenApiGenerate(COMPONENTS_DOCUMENT).run(COMPONENTS_OPTIONS, ws.context('openapi-components-generate'));
 
         expect(written.map((file: string) => path.relative(ws.root, file))).toEqual(['dist/libraries/dtos/components.openapi.json']);
+    });
+
+    it('refuses to publish a components document from a project that is not role:api-lib (#1064 D5)', () => {
+        const ws = dtoLibrary('0.4.830');
+        ws.tags = ['role:lib', 'generate:openapi-components'];
+
+        expect(() => new OpenApiGenerate(COMPONENTS_DOCUMENT).run(COMPONENTS_OPTIONS, ws.context('openapi-components-generate')))
+            .toThrow(/partner runs openapi-components-generate but carries role:lib — a components document is published only by a role:api-lib project/);
+        expect(ws.exists('dist/libraries/dtos/components.openapi.json')).toBe(false);
     });
 
     it('refuses a generator older than the first release that renders a components manifest', async () => {

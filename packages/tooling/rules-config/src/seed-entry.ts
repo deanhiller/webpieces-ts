@@ -83,6 +83,34 @@ const SEED_VALUES: Record<string, unknown> = {
     'required-type-suffix.entries': [
         { paths: ['libraries/apis/**'], suffixes: ['Request', 'Response', 'Event', 'Dto', 'Api'] },
     ],
+    // #1064 — the reference consumer's layout (ctoteachings/monorepo), documented in
+    // .claude/rules/framework-tags.md. A consumer edits each to its own.
+    'api-lib-dependencies.apiLibPackages': ['@webpieces/core-util', 'tslib'],
+    'api-lib-dependencies.apiClients': [],
+    'api-lib-path.paths': ['libraries/apis/**'],
+    'framework-folder.entries': [
+        { paths: ['libraries/angular/**'], frameworkSets: ['angular'], roles: ['lib', 'designed-lib'] },
+        { paths: ['libraries/node/**'], frameworkSets: ['node', 'express'], roles: ['lib', 'designed-lib'] },
+        {
+            paths: ['libraries/universal/**'],
+            frameworkSets: ['browser+node+react-native'],
+            roles: ['lib', 'designed-lib'],
+        },
+        { paths: ['libraries/rn-browser/**'], frameworkSets: ['browser+react-native'], roles: ['lib', 'designed-lib'] },
+        { paths: ['libraries/react-native/**'], frameworkSets: ['react-native'], roles: ['lib', 'designed-lib'] },
+        { paths: ['libraries/apis/internal/**'], frameworkSets: ['browser+node+react-native'], roles: ['api-lib'] },
+        { paths: ['libraries/apis/external-node/**'], frameworkSets: ['node'], roles: ['api-client'] },
+        { paths: ['libraries/apis/external-rn-browser/**'], frameworkSets: ['browser+react-native'], roles: ['api-lib'] },
+    ],
+    'framework-packages.entries': [
+        { packages: ['@angular/*'], frameworks: ['angular'] },
+        { packages: ['react', 'react-native', 'expo*', '@expo/*', '@sentry/react-native'], frameworks: ['react', 'react-native'] },
+        {
+            packages: ['express', 'firebase-admin', 'googleapis', 'google-auth-library', '@google-cloud/*'],
+            frameworks: ['node', 'express'],
+        },
+        { packages: ['firebase'], frameworks: ['browser', 'angular', 'react'] },
+    ],
 };
 
 // The value a seeded entry gets for ONE required field. Order matters and is deliberate:

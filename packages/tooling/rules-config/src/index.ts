@@ -287,6 +287,18 @@ export { NoRootUnionApiTypeConfig } from './no-root-union-config';
 export { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
 export { NoUtilityTypesInApiLibConfig } from './no-utility-types-config';
 export { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from './required-type-suffix-config';
+export {
+    ApiClientPackagesEntry,
+    ApiLibDependenciesConfig,
+    ApiLibPathConfig,
+    FrameworkFolderConfig,
+    FrameworkFolderEntry,
+    FrameworkPackagesConfig,
+    FrameworkPackagesEntry,
+    FrameworkTsconfigConfig,
+    PROJECT_SCAN_MODES,
+} from './tag-truth-configs';
+export type { ProjectScanMode } from './tag-truth-configs';
 export { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig, API_DOC_MODES } from './api-doc-rules-config';
 export type { ApiDocMode } from './api-doc-rules-config';
 // Mode unions + their value arrays — the single source of truth shared with code-rules.

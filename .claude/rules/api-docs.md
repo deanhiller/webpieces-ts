@@ -171,9 +171,12 @@ types and `$ref`s every other package's into that package's components document:
   workspace source directory's `openapi-components-generate` dependsOn. Never an assumed `dist/`.
 - **Fail-closed, for OpenAPI documents only.** A `full-private` / `public` document reaching a type
   declared in a package with no components document is a generation error naming the type, its package
-  and the fix: move it into a DTO library (as a `…Dto` string enum when it is a literal union), or tag
-  that package `generate:openapi-components`. There is no inline allow-list. A referenced schema missing from
-  an existing document is refused as stale.
+  and the fix: move it into a `role:api-lib` DTO library (as a `…Dto` string enum when it is a literal
+  union). Tagging is offered only when the declaring package is ITSELF a `role:api-lib` DTO library:
+  `generate:openapi-components` is refused on any other role, by `validate-nx-wiring` and by the
+  `openapi-components-generate` executor (#1064, D5), so tagging a general library like `company-core` is
+  not a way out. There is no inline allow-list. A referenced schema missing from an existing document is
+  refused as stale.
 - **MCP never requires a components document.** `mcp-openapi.json` and every `mcp-*-tools.json` inline
   every schema from any package, exactly as before, so an MCP-only consumer tags nothing — and a shared
   DTO renders byte-identically in every catalog.
@@ -247,6 +250,24 @@ links the generator as `workspace:*` source, which the handshake refuses by desi
 wiring rules are proven by `generated-docs-executors.spec.ts` and `generate-targets.spec.ts`
 (nx-webpieces-rules), the loader by `McpToolCatalog.spec.ts` (mcp-server, both layouts), and the
 generator by `openapi-golden.spec.ts` (partner-api) in the meantime.
+
+## Two api roles, and the wire closure (#1064)
+
+`role:api-lib` is a boundary contract and/or its DTOs, with the implementation living elsewhere: an
+`@ApiPath`/`@Rpc`/`@PubSub` contract, an IPC contract (`@WpInternal` / `@WpIpcEndpoint`), an in-process
+abstract `…Api` behind a DI token, or a DTO-only library. `role:api-client` is a contract PLUS its bundled
+default implementation that talks to an outside system through its SDK (`XxxApi` + `XxxClient` with
+`@provideSingletonDefaultForApi`). `validate-api-lib-tag` keeps both honest; the lattice, the folder map
+and the dependency rule for them are in `.claude/rules/framework-tags.md`.
+
+**The wire closure.** Inside the `api-rules-for-openapi` / `api-rules-for-mcp` scan — which already walks
+every `@ApiPath` contract through the compiler, no generate tag needed — every named type a contract
+reaches must be DECLARED in a `role:api-lib` project and must end in a suffix its `required-type-suffix`
+entry demands (when that rule is not OFF). It catches what the dependency rule cannot: a relative-path
+import into another library, or a DTO library reaching outside itself. The refusal names the type, its
+declaring package and project, and the fix — move it into an api library, as a `…Dto` string enum when it
+is a literal union. A type declared in a published package under `node_modules` is that package's to own
+and is not judged here.
 
 ## One spelling in an api library: string enums, top-of-file imports
 

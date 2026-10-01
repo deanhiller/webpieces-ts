@@ -47,6 +47,13 @@ import { RequiredTypeSuffixConfig } from './required-type-suffix-config';
 import { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig } from './api-doc-rules-config';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
+import {
+    ApiLibDependenciesConfig,
+    ApiLibPathConfig,
+    FrameworkFolderConfig,
+    FrameworkPackagesConfig,
+    FrameworkTsconfigConfig,
+} from './tag-truth-configs';
 
 // Thin lookup table — each entry delegates to the class's own SCHEMA.
 // No field lists here; all schemas live with their config class.
@@ -103,6 +110,12 @@ export const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'one-enum-spelling-in-api-lib': OneEnumSpellingInApiLibConfig.SCHEMA,
     'no-utility-types-in-api-lib': NoUtilityTypesInApiLibConfig.SCHEMA,
     'required-type-suffix': RequiredTypeSuffixConfig.SCHEMA,
+    // #1064: the five rules that make framework:* / role:* tags true. See tag-truth-configs.ts.
+    'api-lib-dependencies': ApiLibDependenciesConfig.SCHEMA,
+    'api-lib-path': ApiLibPathConfig.SCHEMA,
+    'framework-folder': FrameworkFolderConfig.SCHEMA,
+    'framework-tsconfig': FrameworkTsconfigConfig.SCHEMA,
+    'framework-packages': FrameworkPackagesConfig.SCHEMA,
 };
 
 /**
