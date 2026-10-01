@@ -108,18 +108,9 @@ file" charges a one-line bug fix the same dozen subagent reviews as a schema mig
 answer for the migration and an absurd one for the typo, and the only party who can tell the two apart is
 the human looking at the diff. `required: false` is how they get asked.
 
-### Skipping the offer entirely
-
-If the human has **already** said to submit without the optional reviews:
-
-```bash
-pnpm wp-review-upsert-pr --no-optional
-```
-
-The offer block disappears and the skipped checklists are named in the output and on the PR. Pass this
-**only** on their instruction — never on your own judgement, and never to save a round-trip. Required
-checklists are unaffected, and an optional checklist that already carries a red verdict on this branch
-still blocks the PR.
+**An optional checklist that is not run never holds up a review round.** A round is complete once every
+**required** checklist briefed in it has a verdict; an optional one joins the round only if its reviewer
+actually submitted — and then a red from it opens the next round like any other red.
 
 > **The old `checklists: { "doc": "..." }` shape is REMOVED.** It hid this array in a
 > `<!-- webpieces:checklists [...] -->` HTML comment inside a markdown doc, where no schema, editor, or `jq`

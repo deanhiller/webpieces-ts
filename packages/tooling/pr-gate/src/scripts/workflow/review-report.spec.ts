@@ -466,44 +466,28 @@ describe('required reviewers are spawned; optional ones are only offered', () =>
 });
 
 /**
- * `--no-optional`: the human said up front to submit without the optional reviews.
- *
- * It removes the OFFER and nothing else. The skipped checklists are still named — a human who meant "not
- * the slow ones" and gets "none of them" can only catch that if the output says which ones went unreviewed.
+ * Issue #1062: there is no flag that skips the offer. The batched question is the ONE way an optional
+ * checklist is declined, and an optional checklist nobody runs never holds up a round — so the report must
+ * never teach a flag that no longer exists.
  */
-describe('--no-optional suppresses the offer without hiding what was skipped', () => {
-    const skipped = (): string => {
-        const input = withMixedReviewers();
-        input.skipOptional = true;
-        return report.render(input);
-    };
+describe('the optional offer has no skip flag (issue #1062)', () => {
+    // Built from two halves so the removed spelling appears nowhere in the tree, not even in this spec.
+    const REMOVED_FLAG = '--no-' + 'optional';
 
-    it('prints no ask step and no spawn coordinates for the optional reviewer', () => {
-        const text = skipped();
-        expect(text).not.toContain('ASK THE HUMAN');
-        expect(text).not.toContain('subagent_type: frontend-reviewer');
-        expect(text).toContain('▶ NEXT — 3 steps');
+    it('never names the removed skip flag, in any shape of the report', () => {
+        const mixedText = mixed();
+        const optionalOnly = withMixedReviewers();
+        optionalOnly.briefings = optionalOnly.briefings.filter((b: ReviewerBriefing): boolean => !b.required);
+        for (const text of [mixedText, report.render(optionalOnly), oneOwed()]) {
+            expect(text).not.toContain(REMOVED_FLAG);
+        }
     });
 
-    it('still spawns the REQUIRED reviewer — the flag is not a way past the gate', () => {
-        expect(skipped()).toContain('subagent_type: db-migration-reviewer');
-    });
-
-    it('names the skipped checklists rather than only counting them', () => {
-        const text = skipped();
-        expect(text).toContain('OPTIONAL checklist(s) matched this diff and were SKIPPED (--no-optional)');
-        expect(text).toContain('frontend-reviewer');
-        expect(text).toContain('Drop the flag and re-run');
-    });
-
-    // The false all-clear this feature could most easily introduce.
-    it('never claims everything was reviewed when optional reviews were skipped', () => {
-        const input = withMixedReviewers();
-        input.skipOptional = true;
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
-        const text = report.render(input);
-        expect(text).not.toContain('Every checklist that applies is already reviewed');
-        expect(text).toContain('every REQUIRED checklist is reviewed (optional ones skipped above)');
+    it('still asks the human ONE multi-select question with an explicit None choice', () => {
+        const text = mixed();
+        expect(text).toContain('ASK THE HUMAN, in ONE multi-select question');
+        expect(text).toContain('"None — required only"');
+        expect(text).toContain('optional checklist that is not run never holds up a review round');
     });
 });
 
@@ -541,14 +525,6 @@ describe('the carry-forward rule is stated, not left to be inferred', () => {
         expect(text).not.toContain('nothing to spawn');
         expect(text).toContain('verdict STANDS, do NOT re-spawn');
         expect(text).toContain('subagent_type: db-migration-reviewer');
-    });
-
-    // Skipping optional reviews and reusing verdicts are different things; the rule belongs to the reuse.
-    it('carries the rule in the --no-optional all-clear too', () => {
-        const input = withMixedReviewers();
-        input.skipOptional = true;
-        input.reviewed = [new RequiredChecklist('db-migration-reviewer', POLICY, '', [])];
-        expect(report.render(input)).toContain('CARRIES FORWARD');
     });
 });
 

@@ -15,6 +15,13 @@ export class ReviewStageReceipt {
     buildPassedAt: string;    // ISO; '' when the gate was skipped (mode OFF / no command)
     reviewersBriefed: string[];
     /**
+     * The OPTIONAL subset of `reviewersBriefed` (issue #1062). Every briefed checklist may submit a verdict,
+     * but only the REQUIRED ones hold a round open: an optional checklist joins the round's roster only when
+     * it actually submitted in that round, so one the human chose not to run never deadlocks the round.
+     * Assigned after construction; a receipt written without the field reads as [].
+     */
+    optionalBriefed: string[];
+    /**
      * checklist id → the hash of its in-scope diff at `headSha` (ChecklistScopeHasher). `wp-write-review`
      * stamps a verdict's provenance with the hash its reviewer was BRIEFED on, and the next stage ② carries
      * a green/yellow forward only while that hash is unchanged (issue #863). Assigned after construction.
@@ -37,6 +44,7 @@ export class ReviewStageReceipt {
         this.buildCommand = buildCommand;
         this.buildPassedAt = buildPassedAt;
         this.reviewersBriefed = reviewersBriefed;
+        this.optionalBriefed = [];
         this.scopeHashes = {};
         this.round = 0;
         this.maxReviewerRounds = 0;
@@ -89,6 +97,8 @@ export class ReviewStageReceiptService {
                 typeof raw['buildPassedAt'] === 'string' ? (raw['buildPassedAt'] as string) : '',
                 Array.isArray(raw['reviewersBriefed']) ? (raw['reviewersBriefed'] as string[]) : [],
             );
+            receipt.optionalBriefed = Array.isArray(raw['optionalBriefed'])
+                ? (raw['optionalBriefed'] as string[]).filter((id: string): boolean => typeof id === 'string') : [];
             receipt.scopeHashes = this.stringMap(raw['scopeHashes']);
             receipt.round = typeof raw['round'] === 'number' && Number.isInteger(raw['round']) ? raw['round'] as number : 0;
             receipt.maxReviewerRounds = typeof raw['maxReviewerRounds'] === 'number' && Number.isInteger(raw['maxReviewerRounds'])

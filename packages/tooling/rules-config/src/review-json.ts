@@ -404,8 +404,8 @@ export class ReviewJsonService {
      * The OPTIONAL checklists (`required: false`) that matched the diff but have no verdict file at all.
      *
      * This is the ONE set that separates "nobody ran it" from "it failed", and the distinction is the whole
-     * feature: an optional checklist with no verdict was legitimately not run — declined by the human, or
-     * skipped via `--no-optional` — so it must NOT block. An optional checklist with a RED verdict is not in
+     * feature: an optional checklist with no verdict was legitimately not run — the human declined it — so
+     * it must NOT block. An optional checklist with a RED verdict is not in
      * here (it resolves to CK_FAIL) and blocks exactly like a required one: choosing to run a reviewer and
      * then ignoring its answer would make the whole thing theater.
      *
@@ -551,7 +551,7 @@ export class ReviewJsonService {
                 errors.push(this.orangeError(req, verdict));
             } else if (verdict.status === CK_MISSING) {
                 // An OPTIONAL checklist with no verdict was legitimately not run — the human was offered it
-                // and declined (or `--no-optional` skipped the offer). Demanding it here would make
+                // and declined. Demanding it here would make
                 // `required: false` mean nothing. Note the CK_FAIL branch above deliberately has no such
                 // exemption: once an optional reviewer RUNS, its refusal counts.
                 if (!req.required) continue;

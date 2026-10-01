@@ -42,9 +42,9 @@ function summary(dir: string): string {
     return reviewJson.summaryJsonPath(dir, 'feature');
 }
 
-function archive(dir: string, receipt: ReviewStageReceipt, status: string): void {
-    const verdict = new SubmittedVerdict('security', status, 'reviewer', 'model', status === 'green' ? 'looks good' : 'fix auth');
-    const record = new VerdictProvenance('security', 'terminal', '', '', 'human', receipt.headSha, 'scope');
+function archive(dir: string, receipt: ReviewStageReceipt, status: string, checklistId = 'security'): void {
+    const verdict = new SubmittedVerdict(checklistId, status, 'reviewer', 'model', status === 'green' ? 'looks good' : 'fix auth');
+    const record = new VerdictProvenance(checklistId, 'terminal', '', '', 'human', receipt.headSha, 'scope');
     record.round = receipt.round;
     provenance.write(summary(dir), verdict, record);
 }
@@ -60,8 +60,18 @@ function commitFix(dir: string, value: number): void {
     git(dir, 'commit', '-qm', `fix ${value}`);
 }
 
-function remediationJson(): string {
-    return JSON.stringify({ agent: 'codex', model: 'gpt', responses: [{ checklistId: 'security', resolution: 'restricted the grant', files: ['a.ts'] }] });
+function remediationJson(checklistIds: string[] = ['security']): string {
+    const responses = checklistIds.map((checklistId: string): object => ({ checklistId, resolution: 'restricted the grant', files: ['a.ts'] }));
+    return JSON.stringify({ agent: 'codex', model: 'gpt', responses });
+}
+
+/** A round-1 receipt briefing `security` (required) plus the given OPTIONAL checklists (issue #1062). */
+function receiptWithOptionals(dir: string, required: string[], optional: string[]): ReviewStageReceipt {
+    const receipt = new ReviewStageReceipt(git(dir, 'rev-parse', 'HEAD'), true, 'pnpm build', 'now', [...required, ...optional]);
+    receipt.optionalBriefed = optional.slice();
+    receipt.round = 1;
+    receipt.maxReviewerRounds = 2;
+    return receipt;
 }
 
 describe('ReviewRoundStateService', () => {
@@ -155,5 +165,67 @@ describe('ReviewRoundStateService', () => {
 
         expect((): string => rounds.writeRemediation(path.join(dir, 'missing'), summary(dir), receipt, remediationJson()))
             .toThrow('Review-round Git command failed: git status --porcelain --untracked-files=all');
+    });
+});
+
+/**
+ * Issue #1062: an OPTIONAL checklist the human did not choose to run must never hold a round open. Before the
+ * fix every briefed checklist was on the roster, so a required red plus two unrun optionals left the round
+ * "not complete" forever: wp-write-review-fixes refused, and the next commit hit "still active".
+ */
+describe('optional checklists never block a review round (issue #1062)', () => {
+    it('a required red with unrun optionals completes the round, accepts the fix, and re-briefs only the red', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptWithOptionals(dir, ['security'], ['docs', 'style']);
+        archive(dir, receipt, 'red');
+        const snap = rounds.snapshot(summary(dir), receipt);
+        expect(snap.complete).toBe(true);
+        expect(snap.roster).toEqual(['security']);
+        commitFix(dir, 3);
+        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        expect(plan.action).toBe(ROUND_ACTION_REVIEW);
+        expect(plan.round).toBe(2);
+        expect(plan.redChecklistIds).toEqual(['security']);
+    });
+
+    it('an optional checklist that RAN and came back red is on the roster, blocks, and is re-briefed', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptWithOptionals(dir, ['security'], ['docs', 'style']);
+        archive(dir, receipt, 'green');
+        archive(dir, receipt, 'red', 'docs');
+        const snap = rounds.snapshot(summary(dir), receipt);
+        expect(snap.complete).toBe(true);
+        expect(snap.roster).toEqual(['security', 'docs']);
+        expect(rounds.checklistIdsWithStatus(summary(dir), snap, 'red')).toEqual(['docs']);
+        commitFix(dir, 3);
+        expect((): string => rounds.writeRemediation(dir, summary(dir), receipt, remediationJson()))
+            .toThrow(/Missing: docs/);
+        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson(['docs']));
+        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        expect(plan.action).toBe(ROUND_ACTION_REVIEW);
+        expect(plan.redChecklistIds).toEqual(['docs']);
+    });
+
+    it('a round still waits on a REQUIRED checklist that has no verdict, whatever the optionals did', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptWithOptionals(dir, ['security'], ['docs']);
+        archive(dir, receipt, 'green', 'docs');
+        expect(rounds.snapshot(summary(dir), receipt).complete).toBe(false);
+        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_RESUME);
+    });
+
+    it('an all-optional briefing nobody ran does not deadlock the next commit', () => {
+        const dir = repo();
+        commitFix(dir, 2);
+        const receipt = receiptWithOptionals(dir, [], ['docs']);
+        commitFix(dir, 3);
+        const snap = rounds.snapshot(summary(dir), receipt);
+        expect(snap.complete).toBe(true);
+        expect(snap.roster).toEqual([]);
+        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_FINISH);
     });
 });

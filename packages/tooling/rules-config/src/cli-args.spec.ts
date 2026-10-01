@@ -73,22 +73,22 @@ describe('CliArgs.assertNoArgs', () => {
  */
 describe('CliArgs with declared flags', () => {
     const flagUsage = new CliUsage(
-        'wp-review-upsert-pr', 'Brief the reviewer subagents.',
-        [new CliFlag('--no-optional', 'Skip offering the optional reviews.')]);
+        'wp-example', 'An example command with one flag.',
+        [new CliFlag('--dry-run', 'Print what would happen without doing it.')]);
 
     it('accepts a DECLARED flag', () => {
-        expect(cliArgs.classify(['--no-optional'], flagUsage).ok).toBe(true);
+        expect(cliArgs.classify(['--dry-run'], flagUsage).ok).toBe(true);
     });
 
     it('still rejects an undeclared token — a typo must never be silently ignored', () => {
-        const check = cliArgs.classify(['--no-optionl'], flagUsage);
+        const check = cliArgs.classify(['--dry-rn'], flagUsage);
         expect(check.ok).toBe(false);
         expect(check.exitCode).toBe(2);
-        expect(check.message).toContain('--no-optionl');
+        expect(check.message).toContain('--dry-rn');
     });
 
     it('rejects only the undeclared tokens, naming them and not the valid one', () => {
-        const check = cliArgs.classify(['--no-optional', '--force'], flagUsage);
+        const check = cliArgs.classify(['--dry-run', '--force'], flagUsage);
         expect(check.exitCode).toBe(2);
         expect(check.message).toContain('Unknown argument(s): --force');
     });
@@ -97,18 +97,18 @@ describe('CliArgs with declared flags', () => {
         const check = cliArgs.classify(['--help'], flagUsage);
         expect(check.exitCode).toBe(0);
         expect(check.message).not.toContain('takes no arguments');
-        expect(check.message).toContain('--no-optional');
-        expect(check.message).toContain('Skip offering the optional reviews.');
+        expect(check.message).toContain('--dry-run');
+        expect(check.message).toContain('Print what would happen without doing it.');
     });
 
     it('parse() reports which declared flags were actually passed', () => {
         const argv = process.argv;
         // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
         try {
-            process.argv = ['node', 'wp-review-upsert-pr', '--no-optional'];
-            expect(cliArgs.parse(flagUsage).has('--no-optional')).toBe(true);
-            process.argv = ['node', 'wp-review-upsert-pr'];
-            expect(cliArgs.parse(flagUsage).has('--no-optional')).toBe(false);
+            process.argv = ['node', 'wp-example', '--dry-run'];
+            expect(cliArgs.parse(flagUsage).has('--dry-run')).toBe(true);
+            process.argv = ['node', 'wp-example'];
+            expect(cliArgs.parse(flagUsage).has('--dry-run')).toBe(false);
         } finally {
             process.argv = argv;
         }
@@ -118,7 +118,7 @@ describe('CliArgs with declared flags', () => {
         const argv = process.argv;
         // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
         try {
-            process.argv = ['node', 'wp-review-upsert-pr', '--nope'];
+            process.argv = ['node', 'wp-example', '--nope'];
             expect((): unknown => cliArgs.parse(flagUsage)).toThrow(CliExitError);
         } finally {
             process.argv = argv;
