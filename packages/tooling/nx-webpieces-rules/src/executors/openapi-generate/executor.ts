@@ -71,7 +71,8 @@ export const CONTRACT_DOCUMENTS = new GenerateSpec(GeneratedApiDocsLayout.OPENAP
 /** Everything except the process-facing reporting, so the suite drives it exactly as nx does. */
 export class OpenApiGenerate {
     constructor(
-        private readonly spec: GenerateSpec = CONTRACT_DOCUMENTS,
+        /** Which generating target this run is — stated by every caller, never implied. */
+        private readonly spec: GenerateSpec,
         private readonly resolver: ConsumerBinResolver = new ConsumerBinResolver(),
         private readonly runner: GeneratorRunner = new GeneratorRunner(),
         private readonly scratch: RepoScratchDirs = new RepoScratchDirs(),

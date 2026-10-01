@@ -1,10 +1,12 @@
 /**
- * The shared half of the `openapi-generate` and `docs-generate` executors: WHERE a generated document
+ * The shared half of the `openapi-generate`, `openapi-components-generate` and `docs-generate`
+ * executors: WHERE a generated document
  * goes, and the proof that the target is wired so that nx both orders and caches it correctly.
  *
  * Both halves read the project's own declarations and never supply a value of their own:
  *
- * - the documents' directory is the `outputPath` of the target `openapi-generate` dependsOn — the api
+ * - the documents' directory is the `outputPath` of the target the generating target
+ *   (`openapi-generate`, or a DTO library's `openapi-components-generate`) dependsOn — the api
  *   library's `build` (tsc) step, which writes the directory the package is packed from, so the
  *   documents ship INSIDE the published package. It is ASKED of nx through `GeneratedApiDocsLayout`
  *   (`@webpieces/core-util`), the same lookup `McpToolCatalog.fromPackages` reads with, and never

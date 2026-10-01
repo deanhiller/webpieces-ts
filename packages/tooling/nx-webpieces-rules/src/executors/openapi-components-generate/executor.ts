@@ -19,7 +19,7 @@
  *
  * where the manifest declares `"kind": "components"` and names the library's entry files. The
  * `^openapi-components-generate` edge orders a chain of DTO libraries; a contract library's
- * `openapi-generate` carries the same edge. validate-nx-wiring enforces both (GenerateWiring).
+ * `openapi-generate` carries the same edge. validate-nx-wiring enforces both (ComponentsWiring).
  *
  * It is the openapi-generate executor body with its own target name and generator minimum: `wp-openapi`
  * reads the manifest's `kind` and decides what to render.

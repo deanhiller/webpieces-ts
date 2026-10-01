@@ -3,7 +3,7 @@ import type { ExecutorContext, TargetConfiguration } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RuleFailError, specTempDirs } from '@webpieces/rules-config';
-import runOpenApiGenerate, { OpenApiGenerate } from '../../executors/openapi-generate/executor';
+import runOpenApiGenerate, { CONTRACT_DOCUMENTS, OpenApiGenerate } from '../../executors/openapi-generate/executor';
 import runComponentsGenerate, { COMPONENTS_DOCUMENT } from '../../executors/openapi-components-generate/executor';
 import { DocsGenerate } from '../../executors/docs-generate/executor';
 
@@ -97,7 +97,7 @@ describe('openapi-generate', () => {
     it('writes into a workspace-ROOT build outputPath (this repo’s layout)', () => {
         const ws = rootDist();
 
-        new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'));
+        new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate'));
 
         for (const file of ['public-openapi.json', 'public-openapi.yaml', 'full-private-openapi.json', 'mcp-PartnerOrdersApi-tools.json']) {
             expect(ws.exists(`dist/apps/partner/${file}`), file).toBe(true);
@@ -113,7 +113,7 @@ describe('openapi-generate', () => {
             dependsOn: ['build'], outputs: ['{projectRoot}/dist/*.json', '{projectRoot}/dist/*.yaml'], options: OPTIONS,
         };
 
-        new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'));
+        new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate'));
 
         expect(ws.exists('libraries/apis/partner/dist/public-openapi.json')).toBe(true);
         expect(ws.exists('dist')).toBe(false);
@@ -123,8 +123,8 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         ws.targets['openapi-generate']!.dependsOn = [];
 
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'))).toThrow(RuleFailError);
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate'))).toThrow(RuleFailError);
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')))
             .toThrow(/must dependsOn exactly ONE target[\s\S]*names none/);
     });
 
@@ -132,7 +132,7 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         ws.targets['openapi-generate']!.dependsOn = [{ target: 'build' }];
 
-        expect(new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')).length).toBe(5);
+        expect(new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')).length).toBe(5);
     });
 
     it('writes into whichever target it dependsOn — the NAME is read, never hardcoded', () => {
@@ -141,7 +141,7 @@ describe('openapi-generate', () => {
         ws.targets['openapi-generate']!.dependsOn = ['tsc', '^build'];
         ws.targets['openapi-generate']!.outputs = ['{workspaceRoot}/out/partner/*'];
 
-        new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'));
+        new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate'));
 
         expect(ws.exists('out/partner/mcp-PartnerOrdersApi-tools.json')).toBe(true);
     });
@@ -150,7 +150,7 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         ws.targets['openapi-generate']!.dependsOn = ['build', 'lint'];
 
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')))
             .toThrow(/names build, lint/);
     });
 
@@ -158,7 +158,7 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         ws.targets['openapi-generate']!.outputs = ['{workspaceRoot}/dist/apps/partner/*openapi.json', '{workspaceRoot}/dist/apps/partner/*.yaml'];
 
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')))
             .toThrow(/declared outputs do not cover[\s\S]*dist\/apps\/partner\/mcp-PartnerOrdersApi-tools\.json/);
     });
 
@@ -166,14 +166,14 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         ws.targets['build'] = { executor: '@nx/js:tsc', options: {} };
 
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')))
             .toThrow(/partner:build — the target openapi-generate dependsOn — declares no options\.outputPath/);
     });
 
     it('names the option key when a required option is missing — there is no default', () => {
         const ws = rootDist();
 
-        expect(() => new OpenApiGenerate().run({ manifest: OPTIONS.manifest }, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run({ manifest: OPTIONS.manifest }, ws.context('openapi-generate')))
             .toThrow(/has no options\.format\. It is required and has no default/);
     });
 
@@ -181,7 +181,7 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         fs.rmSync(path.join(ws.root, 'node_modules'), { recursive: true });
 
-        expect(() => new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate')))
             .toThrow(/@webpieces\/openapi-generator is not installed/);
     });
 
@@ -204,7 +204,7 @@ describe('openapi-generate', () => {
         const ws = rootDist();
         const options = { manifest: 'apps/partner/missing.json', format: 'json' };
 
-        expect(() => new OpenApiGenerate().run(options, ws.context('openapi-generate')))
+        expect(() => new OpenApiGenerate(CONTRACT_DOCUMENTS).run(options, ws.context('openapi-generate')))
             .toThrow(/refused apps\/partner\/missing\.json:[\s\S]*wp-openapi refused: no manifest/);
         expect(ws.exists('dist/apps/partner')).toBe(false);
     });
@@ -274,7 +274,7 @@ describe('docs-generate', () => {
             outputs: ['{projectRoot}/{options.siteDir}'],
             options: DOCS,
         };
-        new OpenApiGenerate().run(OPTIONS, ws.context('openapi-generate'));
+        new OpenApiGenerate(CONTRACT_DOCUMENTS).run(OPTIONS, ws.context('openapi-generate'));
         return ws;
     }
 
