@@ -91,6 +91,50 @@ never reads, and nothing could contradict it.
 is a copy that a rename leaves silently stale. The generator folds the const and hard-fails if it
 cannot.
 
+## DTO libraries: chained documents, one owner per schema (#1058)
+
+A schema is defined in exactly ONE document: the one belonging to the package whose source declares
+the TypeScript type (the nearest `package.json` above the declaration). A contract document defines its
+own package's types and **references** every other package's with a package-qualified `$ref`:
+
+```json
+{ "$ref": "@myorg/lang-api-dtos/components.openapi.json#/components/schemas/PassageItemDto" }
+```
+
+So a DTO library publishes a **components-only** document. Its manifest declares `"kind": "components"`
+and names entry files instead of contracts:
+
+```json
+{ "kind": "components", "title": "Lang DTOs", "entries": ["src/index.ts"] }
+```
+
+`wp-openapi` then writes `components.openapi.json` — `openapi`, `info` (whose `version` IS the package
+version), `x-webpieces-id` (the URI above; OpenAPI 3.1's root admits no `$id`) and `components.schemas`
+holding **every type the library exports and declares**. A DTO library that uses another DTO library
+references it the same way, so chains have any depth. It needs `--format json` or `both`.
+
+The referenced documents are found by the same package lookup `McpToolCatalog.fromPackages` uses:
+node resolution from the manifest, then the file beside a built package's `package.json`, or — for a
+workspace source directory — the `outputPath` of the target its `openapi-components-generate` dependsOn.
+
+**It FAILS CLOSED.** A `full-private` / `public` document that reaches a type declared in a package
+publishing no components document is refused, naming the type, its package and the fix: move the type
+into a DTO library (as a `…Dto` string enum when it is a literal union), or give that package a
+components document. There is no allow-list. A referenced schema missing from an existing document is
+refused as stale. Two DIFFERENT types of one name in one package are refused too; two packages'
+same-named types are simply two schemas in two documents.
+
+Inheritance is FLATTENED in every form — a base declared in another package contributes its fields;
+there is no `allOf`.
+
+**Every split document has a `*.bundled.json` sibling** (`public-openapi.bundled.json`, …) with every
+schema pulled into its own `components.schemas` and no external reference, for code generators,
+gateways and docs sites that read one file. A schema keeps its name there unless two packages' types of
+one name meet, when the other package's is qualified (`myorg.lang-api-dtos.LocalizedDescriptionsDto`).
+
+**`mcp-openapi.json` and the MCP tool catalogs never reference anything** — they inline every schema
+from any package, exactly as before, and require no components document anywhere.
+
 ## MCP
 
 `MCP` in `@ApiType` requires `@WpMcpTool` on at least one method, and `@WpMcpTool` on a contract that
@@ -118,7 +162,9 @@ is no flag to switch that off — the cure is at the contract, by naming the typ
 ## Worked example
 
 `apps/app-example/partner-api` in this repo: a real contract, its manifest, golden documents under
-`src/__tests__/goldens/`, and a spec that regenerates and diffs them.
+`src/__tests__/goldens/`, and a spec that regenerates and diffs them. The chained form is proven by
+`src/__tests__/ChainedComponents.spec.ts` here: a three-level chain (contract → DTO library A → DTO
+library B), every document checked by an OpenAPI 3.1 validator.
 
 ## In an nx workspace
 

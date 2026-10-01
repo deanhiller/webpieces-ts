@@ -43,6 +43,7 @@
     "@nx/eslint-plugin": "22.2.1",
     "@nx/js": "22.0.2",
     "@playwright/test": "1.57.0",
+    "@seriousme/openapi-schema-validator": "catalog:",
     "@swc-node/register": "1.9.1",
     "@swc/core": "1.15.30",
     "@swc/helpers": "0.5.17",

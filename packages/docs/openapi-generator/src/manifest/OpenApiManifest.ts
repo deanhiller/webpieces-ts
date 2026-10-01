@@ -109,3 +109,20 @@ export class OpenApiManifest {
         readonly responseHeaders: readonly ResponseHeaderEntry[],
     ) {}
 }
+
+/**
+ * A DTO library's `openapi.manifest.json` — `"kind": "components"` (#1058).
+ *
+ * It names the library's ENTRY FILES instead of contracts: the document it produces is
+ * components-only — `openapi`, `info` and `components.schemas`, no paths — holding every type the
+ * library exports and declares, which contract documents `$ref` instead of copying. There is no
+ * `version` here: a library document's `info.version` IS the package version, read from its
+ * `package.json`, so the two cannot disagree.
+ */
+export class ComponentsManifest {
+    constructor(
+        readonly title: string,
+        /** The library's entry files (usually `src/index.ts`), relative to the manifest's directory. */
+        readonly entries: readonly string[],
+    ) {}
+}

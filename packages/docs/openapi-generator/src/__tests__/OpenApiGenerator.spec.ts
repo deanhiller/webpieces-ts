@@ -105,6 +105,10 @@ class Sink {
 describe('which documents are written', () => {
     it('writes one per @ApiType some contract declares, in both formats by default', () => {
         expect(Array.from(harness.run('single.manifest.json').keys()).sort()).toEqual([
+            // Each SPLIT document has a self-contained .bundled sibling (#1058); the MCP projection
+            // is self-contained already, so it has none.
+            'full-private-openapi.bundled.json',
+            'full-private-openapi.bundled.yaml',
             'full-private-openapi.json',
             'full-private-openapi.yaml',
             // NOT a document: the runtime catalog WpMcpServer boots from — ONE PER CONTRACT, named
@@ -112,6 +116,8 @@ describe('which documents are written', () => {
             'mcp-WidgetsApi-tools.json',
             'mcp-openapi.json',
             'mcp-openapi.yaml',
+            'public-openapi.bundled.json',
+            'public-openapi.bundled.yaml',
             'public-openapi.json',
             'public-openapi.yaml',
         ]);
@@ -121,6 +127,8 @@ describe('which documents are written', () => {
         // The fail-closed default, from the other side: a document nobody asked for is not written
         // empty, it is not written. There is no second "is it empty?" rule to keep in step with this.
         expect(Array.from(harness.run('internal-only.manifest.json').keys()).sort()).toEqual([
+            'full-private-openapi.bundled.json',
+            'full-private-openapi.bundled.yaml',
             'full-private-openapi.json',
             'full-private-openapi.yaml',
         ]);
@@ -129,10 +137,20 @@ describe('which documents are written', () => {
     it('--format chooses the SERIALIZATION and nothing else', () => {
         expect(
             Array.from(harness.run('mixed.manifest.json', '--format', 'json').keys()).sort(),
-        ).toEqual(['full-private-openapi.json', 'public-openapi.json']);
+        ).toEqual([
+            'full-private-openapi.bundled.json',
+            'full-private-openapi.json',
+            'public-openapi.bundled.json',
+            'public-openapi.json',
+        ]);
         expect(
             Array.from(harness.run('mixed.manifest.json', '--format', 'yaml').keys()).sort(),
-        ).toEqual(['full-private-openapi.yaml', 'public-openapi.yaml']);
+        ).toEqual([
+            'full-private-openapi.bundled.yaml',
+            'full-private-openapi.yaml',
+            'public-openapi.bundled.yaml',
+            'public-openapi.yaml',
+        ]);
     });
 
     it('REFUSES an unknown --format rather than silently writing the default', () => {
@@ -471,9 +489,11 @@ describe('the unmapped-type guard', () => {
         expect(code).toBe(0);
         expect(sink.text()).toContain('full-private-openapi.json');
         expect(fs.readdirSync(out).sort()).toEqual([
+            'full-private-openapi.bundled.json',
             'full-private-openapi.json',
             'mcp-WidgetsApi-tools.json',
             'mcp-openapi.json',
+            'public-openapi.bundled.json',
             'public-openapi.json',
         ]);
     });

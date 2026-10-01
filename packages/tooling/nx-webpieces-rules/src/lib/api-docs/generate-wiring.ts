@@ -204,7 +204,8 @@ export class GenerateWiring {
     private shapeOf(name: string): GenerateWiringProblem[] {
         const project = this.projects[name]!;
         const where = `${project.root}/project.json`;
-        const lookup = new GeneratedApiDocsLayout(project.root, name, project.targets ?? {}).outputTarget();
+        const lookup = new GeneratedApiDocsLayout(project.root, name, project.targets ?? {})
+            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET);
         if (lookup.found === undefined) {
             return [new GenerateWiringProblem(name, lookup.problem!.problem, `${name}: ${lookup.problem!.cure}`)];
         }

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { GeneratedApiDocsLayout, GenerateOutputLookup, LayoutTargets } from './GeneratedApiDocsLayout';
 
 function lookup(targets: LayoutTargets, projectRoot = 'libraries/apis'): GenerateOutputLookup {
-    return new GeneratedApiDocsLayout(projectRoot, 'apis', targets).outputTarget();
+    return new GeneratedApiDocsLayout(projectRoot, 'apis', targets).outputTarget(
+        GeneratedApiDocsLayout.OPENAPI_TARGET,
+    );
 }
 
 describe('GeneratedApiDocsLayout — the ONE answer to "where do the generated documents live?"', () => {
@@ -40,5 +42,24 @@ describe('GeneratedApiDocsLayout — the ONE answer to "where do the generated d
             'Declare targets.build.options.outputPath in libraries/apis/project.json.',
         );
         expect(lookup({}).problem?.cure).toContain('Tag the project "generate:openapi"');
+    });
+
+    it('answers the same question for a DTO library\'s openapi-components-generate (#1058)', () => {
+        const layout = new GeneratedApiDocsLayout('libraries/dtos', 'dtos', {
+            build: { options: { outputPath: 'dist/libraries/dtos' } },
+            'openapi-components-generate': { dependsOn: ['build'] },
+        });
+        expect(layout.outputTarget(GeneratedApiDocsLayout.COMPONENTS_TARGET).found?.outputPath).toBe(
+            'dist/libraries/dtos',
+        );
+        // The CONTRACT target is a different question: this library does not generate one.
+        expect(layout.outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET).problem?.problem).toBe(
+            'dtos has no openapi-generate target.',
+        );
+        expect(
+            new GeneratedApiDocsLayout('libraries/dtos', 'dtos', {}).outputTarget(
+                GeneratedApiDocsLayout.COMPONENTS_TARGET,
+            ).problem?.cure,
+        ).toContain('Tag the project "generate:openapi-components"');
     });
 });

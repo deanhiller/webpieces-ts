@@ -59,7 +59,8 @@ export class GeneratorTarget {
      * `openapi-generate` dependsOn — the directory the package is packed from.
      */
     documentsDir(): string {
-        const lookup = new GeneratedApiDocsLayout(this.projectRoot, this.projectName, this.targets).outputTarget();
+        const lookup = new GeneratedApiDocsLayout(this.projectRoot, this.projectName, this.targets)
+            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET);
         if (lookup.found === undefined) {
             throw new RuleFailError(
                 this.ruleName,

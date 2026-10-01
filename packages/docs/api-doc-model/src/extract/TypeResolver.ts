@@ -3,6 +3,7 @@ import { WpInt, WpMax, WpMin } from '@webpieces/core-util';
 import {
     DocumentedField,
     DocumentedType,
+    TypeNameCollision,
     UnionDiscriminator,
     UnmappedType,
 } from '../model/ApiDocModel';
@@ -10,6 +11,9 @@ import { PrimitiveKind, TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { JsDoc } from './JsDoc';
 import { ObjectShape, ObjectShapeBases } from './ObjectShapeBases';
+import { FieldDecorators } from './FieldDecorators';
+import { PackageOfFile } from './PackageOfFile';
+import { TypeRegistry } from './TypeRegistry';
 import { SourceLocation } from './SourceLocation';
 import { StringValueSets } from './StringValueSets';
 
@@ -54,29 +58,52 @@ const INTEGER_ALIAS = 'Integer';
  * truncating one would silently publish an incomplete document. The ONLY thing that is cut is a
  * self-referential ANONYMOUS type, and it is cut by NODE IDENTITY (it has no name to `$ref`), with an
  * {@link UnmappedType} recorded so #982's guard has something to name.
+ *
+ * ## Every type is keyed by its DECLARING PACKAGE too (#1058)
+ *
+ * A type is registered under {@link DocumentedType.keyOf}: its bare name when the HOME package (the
+ * one whose file is being extracted) declares it, `<package>:<name>` otherwise. Two packages'
+ * same-named types are therefore two entries rather than one silently standing in for the other, and
+ * a renderer can tell which document owns each schema. The name is always the DECLARATION's own, never
+ * an import alias, so one type reached under two spellings is still one entry.
  */
 export class TypeResolver {
-    private readonly types = new Map<string, DocumentedType>();
     private readonly unmapped: UnmappedType[] = [];
-    /** Named types already registered (or mid-registration) — the cycle stop for the NAMED case. */
-    private readonly registered = new Set<string>();
+    /** Every named type, its key and the declaration that claimed it — see {@link TypeRegistry}. */
+    private readonly registry: TypeRegistry;
     /** Anonymous type literals currently being expanded — the cycle stop for the ANONYMOUS case. */
     private readonly expandingAnonymous = new Set<ts.TypeNode>();
 
     private readonly bases: ObjectShapeBases;
 
-    constructor(checker: ts.TypeChecker) {
+    constructor(
+        checker: ts.TypeChecker,
+        packages: PackageOfFile,
+        /** The package of the file being extracted — its types are keyed by their bare name. */
+        homePackage: string | undefined,
+    ) {
         this.bases = new ObjectShapeBases(checker);
+        this.registry = new TypeRegistry(packages, homePackage);
     }
 
-    /** Every named type reached so far, by name. */
+    /** Every named type reached so far, by key — see {@link DocumentedType.keyOf}. */
     collectedTypes(): ReadonlyMap<string, DocumentedType> {
-        return this.types;
+        return this.registry.types;
     }
 
     /** Everything that could not be represented — recorded, never dropped. */
     collectedUnmapped(): readonly UnmappedType[] {
         return this.unmapped;
+    }
+
+    /** Same-named, different declarations in one package — see {@link TypeNameCollision}. */
+    collectedCollisions(): readonly TypeNameCollision[] {
+        return this.registry.collisions;
+    }
+
+    /** The key `name`, declared at `node`, is registered under. */
+    keyFor(name: string, node: ts.Node): string {
+        return this.registry.keyFor(name, node);
     }
 
     /** Resolve one written type, registering whatever named types it reaches. */
@@ -200,7 +227,7 @@ export class TypeResolver {
         }
 
         const refs: TypeRef[] = branches.map((t: ts.TypeNode) => this.resolve(t, ownerName));
-        const values = new StringValueSets(this.types).valuesOfAll(refs);
+        const values = new StringValueSets(this.registry.types).valuesOfAll(refs);
         if (values !== undefined) {
             return TypeRef.enumOf(values);
         }
@@ -212,7 +239,7 @@ export class TypeResolver {
         }
 
         const names = refs.map((r: TypeRef) => r.refName!);
-        const discriminator = new StringValueSets(this.types).derive(names);
+        const discriminator = new StringValueSets(this.registry.types).derive(names);
         if (discriminator === undefined) {
             return this.recordUnmapped(
                 node,
@@ -247,14 +274,16 @@ export class TypeResolver {
             return;
         }
         const name = alias.name.text;
-        if (this.registered.has(name)) {
+        const key = this.registry.keyFor(name, alias);
+        if (this.registry.alreadyRegistered(key, name, alias)) {
             return;
         }
-        this.registered.add(name);
-        this.types.set(
-            name,
-            new DocumentedType(
+        this.registry.registered.add(key);
+        this.registry.types.set(
+            key,
+            this.registry.documented(
                 name,
+                alias,
                 JsDoc.read(alias).description,
                 [],
                 [],
@@ -294,7 +323,25 @@ export class TypeResolver {
         if (declaration === undefined) {
             return this.recordUnmapped(node, `no declaration found for '${name}'`);
         }
-        return this.resolveDeclaration(name, declaration, ownerName);
+        return this.resolveDeclaration(
+            TypeResolver.declaredName(declaration, name),
+            declaration,
+            ownerName,
+        );
+    }
+
+    /**
+     * The DECLARATION's own name, not the spelling at the use site: `import { Foo as Bar }` still
+     * reaches the type `Foo`, which is what its owning package's document calls it (#1058).
+     */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static declaredName(declaration: ts.Declaration, written: string): string {
+        const named =
+            ts.isInterfaceDeclaration(declaration) ||
+            ts.isClassDeclaration(declaration) ||
+            ts.isTypeAliasDeclaration(declaration) ||
+            ts.isEnumDeclaration(declaration);
+        return named && declaration.name !== undefined ? declaration.name.text : written;
     }
 
     /**
@@ -326,20 +373,22 @@ export class TypeResolver {
 
     /** `type X = ...` — registered under X when it has a shape of its own, else transparent. */
     private resolveAlias(name: string, alias: ts.TypeAliasDeclaration, ownerName: string): TypeRef {
-        if (this.registered.has(name)) {
-            return this.types.get(name)?.unionRefNames.length
-                ? TypeRef.union(this.types.get(name)!.unionRefNames)
-                : TypeRef.ref(name);
+        const key = this.registry.keyFor(name, alias);
+        if (this.registry.alreadyRegistered(key, name, alias)) {
+            return this.registry.types.get(key)?.unionRefNames.length
+                ? TypeRef.union(this.registry.types.get(key)!.unionRefNames)
+                : TypeRef.ref(key);
         }
 
         if (ts.isUnionTypeNode(alias.type)) {
             const resolved = this.resolve(alias.type, ownerName);
             if (resolved.kind === 'enum') {
-                this.registered.add(name);
-                this.types.set(
-                    name,
-                    new DocumentedType(
+                this.registry.registered.add(key);
+                this.registry.types.set(
+                    key,
+                    this.registry.documented(
                         name,
+                        alias,
                         JsDoc.read(alias).description,
                         [],
                         resolved.enumValues,
@@ -348,7 +397,7 @@ export class TypeResolver {
                         undefined,
                     ),
                 );
-                return TypeRef.ref(name);
+                return TypeRef.ref(key);
             }
             return resolved;
         }
@@ -377,8 +426,9 @@ export class TypeResolver {
 
     /** A TS `enum` of string members — the one non-union enum shape a document can carry. */
     private registerStringEnum(name: string, declaration: ts.EnumDeclaration): TypeRef {
-        if (this.registered.has(name)) {
-            return TypeRef.ref(name);
+        const key = this.registry.keyFor(name, declaration);
+        if (this.registry.alreadyRegistered(key, name, declaration)) {
+            return TypeRef.ref(key);
         }
         const values: string[] = [];
         for (const member of declaration.members) {
@@ -392,11 +442,12 @@ export class TypeResolver {
                 `enum '${name}' has members that are not string literals`,
             );
         }
-        this.registered.add(name);
-        this.types.set(
-            name,
-            new DocumentedType(
+        this.registry.registered.add(key);
+        this.registry.types.set(
+            key,
+            this.registry.documented(
                 name,
+                declaration,
                 JsDoc.read(declaration).description,
                 [],
                 values,
@@ -405,7 +456,7 @@ export class TypeResolver {
                 undefined,
             ),
         );
-        return TypeRef.ref(name);
+        return TypeRef.ref(key);
     }
 
     /**
@@ -417,19 +468,28 @@ export class TypeResolver {
      * as its own. See {@link collectFields}.
      */
     private registerNamedObject(name: string, shape: ObjectShape, docSource?: ts.Node): TypeRef {
-        if (this.registered.has(name)) {
-            return TypeRef.ref(name);
+        const declaration = docSource ?? shape;
+        const key = this.registry.keyFor(name, declaration);
+        if (this.registry.registered.has(key)) {
+            // An ANONYMOUS `{ ... }` is named after where it is written, so two of them can share an
+            // owner-derived name; that was never a declared-name collision and is not recorded as one.
+            if (!ts.isTypeLiteralNode(declaration)) {
+                this.registry.alreadyRegistered(key, name, declaration);
+            }
+            return TypeRef.ref(key);
         }
-        this.registered.add(name);
+        this.registry.claimedBy.set(key, declaration);
+        this.registry.registered.add(key);
 
         const fields = new Map<string, DocumentedField>();
         const indexSignature = this.collectFields(shape, name, fields, new Set<ObjectShape>());
 
-        this.types.set(
-            name,
-            new DocumentedType(
+        this.registry.types.set(
+            key,
+            this.registry.documented(
                 name,
-                JsDoc.read(docSource ?? shape).description,
+                declaration,
+                JsDoc.read(declaration).description,
                 Array.from(fields.values()),
                 [],
                 [],
@@ -437,7 +497,7 @@ export class TypeResolver {
                 indexSignature,
             ),
         );
-        return TypeRef.ref(name);
+        return TypeRef.ref(key);
     }
 
     /**
@@ -539,18 +599,18 @@ export class TypeResolver {
         }
 
         const optional =
-            member.questionToken !== undefined || TypeResolver.declaresUndefined(member.type);
-        const nullable = TypeResolver.declaresNull(member.type);
+            member.questionToken !== undefined || FieldDecorators.declaresUndefined(member.type);
+        const nullable = FieldDecorators.declaresNull(member.type);
 
         let type = this.resolve(member.type, `${ownerName}.${name}`);
-        if (TypeResolver.hasDecorator(member, INT_DECORATOR)) {
-            type = TypeResolver.markInteger(type);
+        if (FieldDecorators.hasDecorator(member, INT_DECORATOR)) {
+            type = FieldDecorators.markInteger(type);
         }
 
         const doc = JsDoc.read(member);
-        const min = this.numericArgument(member, MIN_DECORATOR);
-        const max = this.numericArgument(member, MAX_DECORATOR);
-        this.assertNumericConstraintsFit(member, name, type, min, max);
+        const min = FieldDecorators.numericArgument(member, MIN_DECORATOR);
+        const max = FieldDecorators.numericArgument(member, MAX_DECORATOR);
+        FieldDecorators.assertNumericConstraintsFit(member, name, type, min, max);
 
         return new DocumentedField(
             name,
@@ -564,111 +624,6 @@ export class TypeResolver {
             max,
             doc.mcpHeader,
             SourceLocation.of(member),
-        );
-    }
-
-    /**
-     * `@WpMin` / `@WpMax` on a non-numeric field is a BUILD FAILURE, not a warning. A minimum on a
-     * string is not something a renderer can emit sensibly, and a document that silently dropped it
-     * would publish a contract weaker than the one its author wrote down.
-     */
-    private assertNumericConstraintsFit(
-        member: ts.Node,
-        name: string,
-        type: TypeRef,
-        min: number | undefined,
-        max: number | undefined,
-    ): void {
-        if (min === undefined && max === undefined) {
-            return;
-        }
-        const numeric = type.isNumeric() || (type.kind === 'array' && type.items!.isNumeric());
-        if (numeric) {
-            return;
-        }
-        throw new ApiDocExtractionError(
-            `@${MIN_DECORATOR}/@${MAX_DECORATOR} on non-numeric field '${name}'`,
-            SourceLocation.of(member),
-            'Put the constraint on a `number` / `Integer` field, or drop it.',
-        );
-    }
-
-    /** `@WpInt()` decorates the FIELD, so the integer flag is pushed onto the right leaf. */
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static markInteger(type: TypeRef): TypeRef {
-        if (type.kind === 'array') {
-            return TypeRef.array(type.items!.asInteger());
-        }
-        if (type.kind === 'openMap') {
-            return TypeRef.openMap(type.values!.asInteger());
-        }
-        return type.asInteger();
-    }
-
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static declaresUndefined(node: ts.TypeNode): boolean {
-        return (
-            ts.isUnionTypeNode(node) &&
-            node.types.some((t: ts.TypeNode) => t.kind === ts.SyntaxKind.UndefinedKeyword)
-        );
-    }
-
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static declaresNull(node: ts.TypeNode): boolean {
-        return (
-            ts.isUnionTypeNode(node) &&
-            node.types.some(
-                (t: ts.TypeNode) =>
-                    t.kind === ts.SyntaxKind.NullKeyword ||
-                    (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword),
-            )
-        );
-    }
-
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static hasDecorator(node: ts.Node, decoratorName: string): boolean {
-        return TypeResolver.decoratorCall(node, decoratorName) !== undefined;
-    }
-
-    // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static decoratorCall(
-        node: ts.Node,
-        decoratorName: string,
-    ): ts.CallExpression | undefined {
-        const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
-        for (const decorator of decorators) {
-            const call = decorator.expression;
-            if (
-                ts.isCallExpression(call) &&
-                ts.isIdentifier(call.expression) &&
-                call.expression.text === decoratorName
-            ) {
-                return call;
-            }
-        }
-        return undefined;
-    }
-
-    private numericArgument(node: ts.Node, decoratorName: string): number | undefined {
-        const call = TypeResolver.decoratorCall(node, decoratorName);
-        const argument = call?.arguments[0];
-        if (argument === undefined) {
-            return undefined;
-        }
-        if (ts.isNumericLiteral(argument)) {
-            return Number(argument.text);
-        }
-        if (
-            ts.isPrefixUnaryExpression(argument) &&
-            argument.operator === ts.SyntaxKind.MinusToken &&
-            ts.isNumericLiteral(argument.operand)
-        ) {
-            return -Number(argument.operand.text);
-        }
-        throw new ApiDocExtractionError(
-            `@${decoratorName} argument is not a numeric literal: '${argument.getText()}'`,
-            SourceLocation.of(argument),
-            'Write the bound as a numeric literal. A value only known at runtime cannot be published.',
         );
     }
 

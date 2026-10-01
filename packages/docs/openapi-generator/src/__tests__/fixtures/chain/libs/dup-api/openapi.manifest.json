@@ -1,0 +1,11 @@
+{
+    "title": "Dup API",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "src/DupApi.ts",
+            "tag": "Dup"
+        }
+    ],
+    "securitySchemeNames": []
+}

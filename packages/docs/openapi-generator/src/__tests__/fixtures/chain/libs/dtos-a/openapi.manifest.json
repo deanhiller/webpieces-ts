@@ -1,0 +1,7 @@
+{
+    "kind": "components",
+    "title": "Shared lesson DTOs",
+    "entries": [
+        "src/index.ts"
+    ]
+}

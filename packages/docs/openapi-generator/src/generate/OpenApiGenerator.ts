@@ -4,12 +4,14 @@ import {
     DocumentedEndpoint,
     DocumentedField,
     DocumentedType,
+    TypeNameCollision,
     TypeRef,
 } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { ServerEntry } from '../manifest/OpenApiManifest';
 import {
+    ComponentsInputs,
     ContractModel,
     GeneratedDocument,
     GeneratedDocuments,
@@ -17,8 +19,38 @@ import {
 } from './GenerationInputs';
 import { DocumentSelection } from './DocumentSelection';
 import { OperationRenderer, ResponseContract } from './OperationRenderer';
+import {
+    BundledNames,
+    BundledPlacement,
+    ComponentsReference,
+    DiscoveryPlacement,
+    SchemaPlacement,
+    SplitPlacement,
+} from './SchemaPlacement';
 import { SchemaRenderer, UnmappedField } from './SchemaRenderer';
 import { SecurityDeriver } from './SecurityDeriver';
+import { UpstreamComponentsIndex } from './UpstreamComponents';
+
+/** One rendered document, and the renderer that built its schemas — what it defined and referenced. */
+class RenderedDocument {
+    constructor(
+        readonly document: JsonObject,
+        readonly schemas: SchemaRenderer,
+    ) {}
+}
+
+/** The suffix of a split document's self-contained sibling: `public-openapi.bundled.json`. */
+const BUNDLED_SUFFIX = '.bundled';
+
+/** The document a DTO library publishes, without its extension (#1058). */
+const COMPONENTS_DOCUMENT = 'components.openapi';
+
+/** Every cure for a type reached in a package that publishes no components document. */
+const PUBLISH_COMPONENTS_CURE =
+    'Move each type into a DTO library that publishes a components document — as a `…Dto` string ' +
+    'enum when it is a string-literal union — or tag its package "generate:openapi-components" so ' +
+    'it publishes one (a "kind": "components" openapi.manifest.json naming its entry files). A ' +
+    "document references another package's schema; it never copies one in.";
 
 /** The OpenAPI version this generator writes. See the class doc for why 3.1 and not 3.0. */
 const OPENAPI_VERSION = '3.1.0';
@@ -73,14 +105,105 @@ export class OpenApiGenerator {
             if (contracts.length === 0) {
                 continue;
             }
+            if (selection.inlinesEveryPackage) {
+                documents.push(
+                    new GeneratedDocument(
+                        selection.fileName,
+                        this.bundled(inputs, contracts, selection),
+                    ),
+                );
+                continue;
+            }
+            this.refuseCollisions(this.collisionsOf(inputs, contracts), inputs.manifestPath);
+            const split = this.render(
+                inputs,
+                contracts,
+                selection,
+                new SplitPlacement(inputs.homePackage),
+            );
+            this.refuseUnpublished(
+                split.schemas,
+                this.mergedTypes(inputs),
+                inputs.upstream,
+                selection.fileName,
+                inputs.manifestPath,
+            );
+            documents.push(new GeneratedDocument(selection.fileName, split.document));
             documents.push(
                 new GeneratedDocument(
-                    selection.fileName,
-                    this.render(inputs, contracts, selection),
+                    `${selection.fileName}${BUNDLED_SUFFIX}`,
+                    this.bundled(inputs, contracts, selection),
                 ),
             );
         }
         return new GeneratedDocuments(documents);
+    }
+
+    /**
+     * A DTO library's COMPONENTS-ONLY document (#1058): `openapi`, `info`, `x-webpieces-id` and
+     * `components.schemas` — every type the library exports and declares, with every OTHER package's
+     * type a `$ref` into that package's own components document, so a chain of DTO libraries is a
+     * chain of documents of any depth.
+     *
+     * `info.version` is the PACKAGE version. The package-qualified URI downstream documents reference
+     * it by (`@scope/pkg/components.openapi.json`) is stated as `x-webpieces-id`, because OpenAPI 3.1's
+     * root object admits no `$id` — a 3.1 validator rejects one — and the document must validate on its
+     * own.
+     */
+    components(inputs: ComponentsInputs): GeneratedDocument {
+        const model = inputs.model;
+        const where = inputs.manifestPath;
+        this.refuseCollisions(model.collisions, where);
+        const schemas = new SchemaRenderer(model.types, new SplitPlacement(model.packageName));
+        for (const key of model.exported) {
+            schemas.define(key);
+        }
+        const rendered = schemas.components();
+        this.refuseUnmapped(schemas.unmapped(), COMPONENTS_DOCUMENT, where);
+        this.refuseUnpublished(schemas, model.types, inputs.upstream, COMPONENTS_DOCUMENT, where);
+        if (rendered.isEmpty()) {
+            throw new OpenApiGenerationError(
+                `${model.packageName}'s entries export no type with a schema`,
+                where,
+                'Name the entry files that export the library\'s DTOs and enums — usually "src/index.ts".',
+            );
+        }
+        return new GeneratedDocument(
+            COMPONENTS_DOCUMENT,
+            new JsonObject()
+                .set('openapi', OPENAPI_VERSION)
+                .set(
+                    'info',
+                    new JsonObject()
+                        .set('title', inputs.manifest.title)
+                        .set('version', model.packageVersion),
+                )
+                .set('x-webpieces-id', ComponentsReference.documentUri(model.packageName))
+                .set('components', new JsonObject().set('schemas', rendered)),
+        );
+    }
+
+    /**
+     * The SELF-CONTAINED form of a document: every reached schema defined locally, whichever package
+     * declares it — the `*.bundled.json` sibling of a split document, and the MCP projection.
+     *
+     * Two passes, because a schema's NAME depends on which other schemas the document reaches: the
+     * first renders with every type under its unique model key just to learn the reached set, and the
+     * second renders with the names {@link BundledNames} assigns from it. Rendering is a pure walk of
+     * the model, so the second pass reaches exactly what the first did.
+     */
+    private bundled(
+        inputs: GenerationInputs,
+        contracts: readonly ContractModel[],
+        selection: DocumentSelection,
+    ): JsonObject {
+        const discovery = this.render(inputs, contracts, selection, new DiscoveryPlacement());
+        const names = BundledNames.assign(
+            discovery.schemas.reachedTypes(),
+            this.mergedTypes(inputs),
+            inputs.homePackage,
+        );
+        return this.render(inputs, contracts, selection, new BundledPlacement(names)).document;
     }
 
     /** ONE document, from the operations this selection accepts and nothing else. */
@@ -88,9 +211,10 @@ export class OpenApiGenerator {
         inputs: GenerationInputs,
         contracts: readonly ContractModel[],
         selection: DocumentSelection,
-    ): JsonObject {
+        placement: SchemaPlacement,
+    ): RenderedDocument {
         const types = this.mergedTypes(inputs);
-        const schemas = new SchemaRenderer(types);
+        const schemas = new SchemaRenderer(types, placement);
         const operations = new OperationRenderer(
             schemas,
             selection.includeMcpExtensions,
@@ -130,7 +254,7 @@ export class OpenApiGenerator {
         // DTO's fields — and an unmapped field can only be found by that walk. A guard that ran
         // before it would see only the top-level request and response refs and miss every one.
         const renderedSchemas = schemas.components().orUndefined();
-        this.refuseUnmappedFields(schemas.unmapped(), inputs, selection);
+        this.refuseUnmapped(schemas.unmapped(), selection.fileName, inputs.manifestPath);
 
         const components = new JsonObject()
             .set('schemas', renderedSchemas)
@@ -142,7 +266,7 @@ export class OpenApiGenerator {
             )
             .set('headers', this.headers(inputs));
 
-        return new JsonObject()
+        const document = new JsonObject()
             .set('openapi', OPENAPI_VERSION)
             .set('info', this.info(inputs, selection))
             .set('servers', this.servers(inputs))
@@ -151,6 +275,90 @@ export class OpenApiGenerator {
             .set('paths', paths)
             .set('webhooks', webhooks.orUndefined())
             .set('components', components.orUndefined());
+        return new RenderedDocument(document, schemas);
+    }
+
+    /** Same-named, different declarations in one package, across every contract a document reads. */
+    private collisionsOf(
+        inputs: GenerationInputs,
+        contracts: readonly ContractModel[],
+    ): readonly TypeNameCollision[] {
+        const models = contracts.map((each: ContractModel) => each.model);
+        const all = inputs.errorType === undefined ? models : models.concat([inputs.errorType]);
+        return all.flatMap((model: ApiDocModel) => Array.from(model.collisions));
+    }
+
+    /**
+     * Two DIFFERENT declarations of one name in one package. A document defines each of its
+     * package's schemas under its bare name, so one of the two would be published as the other's
+     * shape. (Two packages' same-named types are not this: each is defined in its own package's
+     * document — #1058's `LocalizedDescriptionsDto` case.)
+     */
+    private refuseCollisions(collisions: readonly TypeNameCollision[], where: string): void {
+        if (collisions.length === 0) {
+            return;
+        }
+        throw new OpenApiGenerationError(
+            `${collisions.length} name(s) are declared twice in one package, so one document would ` +
+                'publish two different types under one name',
+            where,
+            'Rename one declaration of each. Within one package a schema name is one type.',
+            collisions.map(
+                (each: TypeNameCollision) =>
+                    `${each.name} (${each.packageName ?? 'no package'}): ${each.firstLocation} and ${each.secondLocation}`,
+            ),
+        );
+    }
+
+    /**
+     * FAIL CLOSED (#1058): every type this document references in another package must be a schema
+     * of that package's published components document. A package that publishes none is refused —
+     * naming the type, its package and the fix — rather than copied in, because silent copying is
+     * exactly the duplication this replaces. A document that exists but lacks the schema is stale.
+     */
+    private refuseUnpublished(
+        schemas: SchemaRenderer,
+        types: ReadonlyMap<string, DocumentedType>,
+        upstream: UpstreamComponentsIndex,
+        fileName: string,
+        where: string,
+    ): void {
+        const unpublished: string[] = [];
+        const stale: string[] = [];
+        for (const key of Array.from(schemas.externalTypes()).sort()) {
+            const type = types.get(key)!;
+            const owner = type.packageName;
+            const declared = `${type.name} — declared in ${owner ?? 'no package'} (${type.location})`;
+            if (owner === undefined) {
+                unpublished.push(`${declared}: its file belongs to no package, so no document can own its schema`);
+                continue;
+            }
+            const published = upstream.publishedBy(owner);
+            if (published === undefined) {
+                const reason = upstream.missingFor(owner)?.reason ?? 'it was never located';
+                unpublished.push(`${declared}: ${owner} publishes no components document — ${reason}`);
+            } else if (!published.schemaNames.has(type.name)) {
+                stale.push(`${declared}: ${published.documentPath} has no schema '${type.name}'`);
+            }
+        }
+        if (unpublished.length > 0) {
+            throw new OpenApiGenerationError(
+                `${unpublished.length} type(s) ${fileName} reaches are declared in a package that ` +
+                    'publishes no components document',
+                where,
+                PUBLISH_COMPONENTS_CURE,
+                unpublished,
+            );
+        }
+        if (stale.length > 0) {
+            throw new OpenApiGenerationError(
+                `${stale.length} type(s) ${fileName} references are missing from their package's components document`,
+                where,
+                'Regenerate the upstream components document — it is older than its source ' +
+                    '(nx orders it first through "^openapi-components-generate").',
+                stale,
+            );
+        }
     }
 
     /**
@@ -221,9 +429,10 @@ export class OpenApiGenerator {
     }
 
     /**
-     * Every named type from every contract, merged.
+     * Every named type from every contract, merged by MODEL KEY — which carries the declaring
+     * package, so two packages' same-named types never meet here (#1058).
      *
-     * Two contracts declaring DIFFERENT types under one name is a hard failure, not a first-wins
+     * Two contracts declaring DIFFERENT types under one key is a hard failure, not a first-wins
      * merge: `components.schemas` is keyed by name, so one of the two would be published as the
      * other's shape, and the operation referring to it would be quietly wrong.
      */
@@ -240,7 +449,7 @@ export class OpenApiGenerator {
                     this.signature(existing) !== this.signature(incoming)
                 ) {
                     throw new OpenApiGenerationError(
-                        `two different types are both named '${name}'`,
+                        `two different types are both named '${incoming.name}'`,
                         `${model.contractName} (${inputs.manifestPath})`,
                         'Rename one of them. `components.schemas` is keyed by name, so one shape ' +
                             'would be published as the other.',
@@ -389,6 +598,7 @@ export class OpenApiGenerator {
         }
         // Rendering the reference is what puts the error body into `components.schemas`, so the
         // published shape is the compiler's answer about that TS type and not a hand-copied one.
+        // The model key of a type its own file declares is its bare name (`DocumentedType.keyOf`).
         return schemas.type(TypeRef.ref(errors.type), '#/components/schemas/error');
     }
 
@@ -422,10 +632,10 @@ export class OpenApiGenerator {
      * The guard. An unmapped field is a published partner-facing field with no shape, and there is
      * deliberately no flag to switch this off — the cure is at the contract, by naming the type.
      */
-    private refuseUnmappedFields(
+    private refuseUnmapped(
         unmapped: readonly UnmappedField[],
-        inputs: GenerationInputs,
-        selection: DocumentSelection,
+        fileName: string,
+        manifestPath: string,
     ): void {
         if (unmapped.length === 0) {
             return;
@@ -434,8 +644,8 @@ export class OpenApiGenerator {
             (field: UnmappedField) => `${field.pointer} (${field.typeText})`,
         );
         throw new OpenApiGenerationError(
-            `${unmapped.length} field(s) in ${selection.fileName} have no schema it can state`,
-            inputs.manifestPath,
+            `${unmapped.length} field(s) in ${fileName} have no schema it can state`,
+            manifestPath,
             'Give each one a type a document can carry — a named DTO, an array of one, a ' +
                 'string-literal union, or Record<string, X>. An untyped field publishes as "anything".',
             pointers,

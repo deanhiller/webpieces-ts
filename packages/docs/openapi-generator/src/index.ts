@@ -16,6 +16,7 @@ export { YamlWriter } from './json/YamlWriter';
 export { YamlReader } from './json/YamlReader';
 export {
     ApiEntry,
+    ComponentsManifest,
     ErrorResponseEntry,
     ErrorsEntry,
     OpenApiManifest,
@@ -25,6 +26,7 @@ export {
 export { JsonReader } from './manifest/JsonReader';
 export { ManifestLoader } from './manifest/ManifestLoader';
 export {
+    ComponentsInputs,
     ContractModel,
     GeneratedDocument,
     GeneratedDocuments,
@@ -39,6 +41,20 @@ export {
 export { OpenApiGenerator } from './generate/OpenApiGenerator';
 export { OperationRenderer, ResponseContract } from './generate/OperationRenderer';
 export { SchemaRenderer, UnmappedField } from './generate/SchemaRenderer';
+export {
+    BundledNames,
+    BundledPlacement,
+    ComponentsReference,
+    DiscoveryPlacement,
+    SplitPlacement,
+} from './generate/SchemaPlacement';
+export type { SchemaPlacement } from './generate/SchemaPlacement';
+export {
+    MissingComponents,
+    PublishedComponents,
+    UpstreamComponentsIndex,
+} from './generate/UpstreamComponents';
+export { ComponentsLocator, LocatedComponents } from './load/ComponentsLocator';
 export { SecurityDeriver } from './generate/SecurityDeriver';
 export { ExportedConstantFolder } from './load/ExportedConstantFolder';
 export { ForeignFailure } from './load/ForeignFailure';

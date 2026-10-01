@@ -107,6 +107,7 @@ class Sweep {
             [endpoint],
             model.types,
             model.unmapped,
+            model.collisions,
         );
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the measurement
         try {
@@ -154,13 +155,32 @@ class Sweep {
         }
     }
 
+    /** `@fixture/*` → `ChainedComponents.spec.ts`'s DTO libraries, read as SOURCE. */
+    // webpieces-disable no-function-outside-class -- private static configuration of this class
+    private static chainFixturePaths(): Record<string, string[]> {
+        const libs = path.join(
+            REPO_ROOT,
+            'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs',
+        );
+        const paths: Record<string, string[]> = {};
+        for (const name of ['dtos-a', 'dtos-b', 'company-core']) {
+            paths[`@fixture/${name}`] = [path.join(libs, name, 'src', 'index.ts')];
+        }
+        return paths;
+    }
+
     /** `tsconfig.base.json`'s `paths`, so an `@webpieces/*` import in a swept file RESOLVES. */
     // webpieces-disable no-function-outside-class -- private static configuration of this class
     private static compilerOptions(): ts.CompilerOptions {
         const base = ts.readConfigFile(path.join(REPO_ROOT, 'tsconfig.base.json'), ts.sys.readFile);
         const parsed = ts.parseJsonConfigFileContent(base.config, ts.sys, REPO_ROOT);
-        // Plus the inheritance fixture's two fixture PACKAGES (#1055), which only exist for its spec.
-        const paths = { ...parsed.options.paths, ...InheritanceFixturePaths.paths() };
+        // Plus the inheritance fixture's two fixture PACKAGES (#1055), and the chained-generation
+        // fixture's three DTO packages (#1058), which only exist for their specs.
+        const paths = {
+            ...parsed.options.paths,
+            ...InheritanceFixturePaths.paths(),
+            ...Sweep.chainFixturePaths(),
+        };
         return { ...parsed.options, paths, noEmit: true, skipLibCheck: true, types: [] };
     }
 }
@@ -181,6 +201,9 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/inheritance/InheritanceApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/agent-api/src/AgentApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/fsdb-api/src/FsdbApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/lang-apis/src/LangLessonApi.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
         ]);
@@ -217,6 +240,10 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'InheritanceApi/render_lesson',
             'InheritanceApi/lookup_learner',
             'WidgetsApi/list_widgets',
+            // Chained OpenAPI generation (#1058): DTOs from other packages, inlined here as always.
+            'AgentApi/ask_provider',
+            'FsdbApi/read_passage',
+            'LangLessonApi/list_passages',
             'RemoteMcpApi/remote_integration_search',
             'MissingRemoteMcpApi/missing_remote_integration_search',
             'RefusedRemoteApi/refused_remote',

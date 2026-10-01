@@ -43,6 +43,12 @@ const GOLDENS = path.join(__dirname, 'goldens');
 const DOCUMENTS = ['full-private-openapi', 'public-openapi', 'mcp-openapi'];
 
 /**
+ * The SPLIT documents, each of which has a self-contained `.bundled.json` sibling (#1058). The MCP
+ * projection is self-contained already and has none.
+ */
+const BUNDLED = ['full-private-openapi', 'public-openapi'];
+
+/**
  * The MCP tool catalog: ONE FILE PER CONTRACT (#1021). Only `PartnerOrdersApi` declares `MCP`, so it is
  * the only one — `PartnerDeliveryWebhookApi` is a partner contract with no agent tools.
  */
@@ -103,8 +109,25 @@ describe('the OpenAPI documents generated from the example contract', () => {
         // The per-contract MCP catalog is not a DOCUMENT — it is the RUNTIME catalog, not serialized
         // by --format — but it is pinned exactly like one.
         expect(json).toEqual(
-            [...DOCUMENTS.map((name: string) => `${name}.json`), MCP_CATALOG].sort(),
+            [
+                ...DOCUMENTS.map((name: string) => `${name}.json`),
+                ...BUNDLED.map((name: string) => `${name}.bundled.json`),
+                MCP_CATALOG,
+            ].sort(),
         );
+    });
+
+    /**
+     * Every split document gets a self-contained `.bundled.json` sibling (#1058). This contract
+     * reaches no other package's type, so there is nothing to pull in: the bundled document is the
+     * split one, byte for byte — which is why it has no golden of its own.
+     */
+    it('writes a .bundled.json beside each split document, identical when nothing is referenced', () => {
+        for (const name of BUNDLED) {
+            expect(golden.fresh.get(`${name}.bundled.json`), name).toBe(
+                golden.fresh.get(`${name}.json`),
+            );
+        }
     });
 
     it('the YAML parses back to the SAME document as its JSON counterpart', () => {

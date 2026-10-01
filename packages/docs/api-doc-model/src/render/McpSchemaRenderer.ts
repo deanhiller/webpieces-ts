@@ -349,8 +349,11 @@ export class McpSchemaRenderer {
         if (type.discriminator !== undefined) {
             const mapping: Record<string, string> = {};
             for (const branch of type.unionRefNames) {
+                // The branch's NAME, never its model key: a branch declared by another package is
+                // keyed `<package>:<name>` (#1058), and the published mapping names the type.
+                const branchName = this.namedType(branch, type.name).name;
                 for (const value of type.discriminator.branchValues.get(branch) ?? []) {
-                    mapping[value] = branch;
+                    mapping[value] = branchName;
                 }
             }
             schema.discriminator = new ApiJsonSchemaDiscriminator(

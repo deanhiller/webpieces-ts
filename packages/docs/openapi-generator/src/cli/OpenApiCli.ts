@@ -2,7 +2,11 @@ import * as path from 'node:path';
 import { MCP, McpToolCatalogFile } from '@webpieces/core-util';
 import { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from '@webpieces/api-doc-model';
 import { ArtifactWriter, GeneratedArtifact, OutputFormat } from '../emit/ArtifactWriter';
-import { ContractModel, GenerationInputs } from '../generate/GenerationInputs';
+import {
+    ContractModel,
+    GeneratedDocuments,
+    GenerationInputs,
+} from '../generate/GenerationInputs';
 import { OpenApiGenerator } from '../generate/OpenApiGenerator';
 import { InputsLoader } from '../load/InputsLoader';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
@@ -28,6 +32,14 @@ export const USAGE = [
     'Alongside them, one mcp-<ContractClass>-tools.json is written per contract that declares MCP',
     'and has an @WpMcpTool: the RUNTIME catalogs WpMcpServer boots from. They are not documents, so',
     '--format does not apply.',
+    '',
+    'Those documents are SPLIT: a schema another package declares is a $ref into that package\'s',
+    'components.openapi.json, and generation FAILS when that package publishes none. Each one also',
+    'gets a <name>.bundled.json sibling with every schema defined locally and no external reference.',
+    'mcp-openapi and the MCP tool catalogs stay fully inlined and require no components document.',
+    '',
+    'A manifest declaring "kind": "components" is a DTO LIBRARY\'s: it writes components.openapi.json,',
+    'every type its "entries" export, versioned as the package. It needs --format json or both.',
     '',
     'A document no contract asked for is not written. --format chooses the serialization of',
     'whichever documents were written, and defaults to both.',
@@ -79,7 +91,11 @@ export class OpenApiCli {
                 `Run: wp-openapi ${MANIFEST} <openapi.manifest.json> ${OUT} <dir>`,
             );
         }
-        const inputs = this.loader.load(path.resolve(cwd, manifest));
+        const manifestPath = path.resolve(cwd, manifest);
+        if (this.loader.isComponents(manifestPath)) {
+            return this.components(manifestPath, path.resolve(cwd, out), this.formatOf(argv));
+        }
+        const inputs = this.loader.load(manifestPath);
         const documents = this.generator.generate(inputs);
         const mcp = OpenApiCli.mcpCatalog(inputs);
         const artifacts = [
@@ -91,6 +107,24 @@ export class OpenApiCli {
             artifacts,
             mcp.skipped,
         );
+    }
+
+    /**
+     * A DTO library's `components.openapi.json` (#1058). JSON is required: downstream documents `$ref`
+     * it by that file name, so a YAML-only run would publish a library nothing can reference.
+     */
+    private components(manifestPath: string, outDir: string, format: OutputFormat): CliResult {
+        if (format === 'yaml') {
+            throw new OpenApiGenerationError(
+                `${FORMAT} yaml writes no components.openapi.json`,
+                manifestPath,
+                `A components document is referenced by its .json name — use ${FORMAT} json or both.`,
+            );
+        }
+        const inputs = this.loader.loadComponents(manifestPath);
+        const document = this.generator.components(inputs);
+        const artifacts = this.writer.artifacts(new GeneratedDocuments([document]), format);
+        return new CliResult(this.writer.write(outDir, artifacts), artifacts);
     }
 
     wantsHelp(argv: readonly string[]): boolean {

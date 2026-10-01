@@ -1,0 +1,55 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Shared voice DTOs",
+        "version": "2.1.0"
+    },
+    "x-webpieces-id": "@fixture/dtos-b/components.openapi.json",
+    "components": {
+        "schemas": {
+            "LocalizedDescriptionsDto": {
+                "type": "object",
+                "description": "Descriptions in every supported language — the SHARED one. `lang-apis` and `fsdb-api` each declare\na DIFFERENT type of this same name, which is the `LocalizedDescriptionsDto` case of #1058.",
+                "properties": {
+                    "en": {
+                        "type": "string",
+                        "description": "The English description."
+                    },
+                    "es": {
+                        "type": "string",
+                        "description": "The Spanish description."
+                    }
+                },
+                "required": [
+                    "en"
+                ]
+            },
+            "SpeakerGenderDto": {
+                "type": "string",
+                "description": "The gender a voice speaks as.",
+                "enum": [
+                    "female",
+                    "male"
+                ]
+            },
+            "VoiceChoiceDto": {
+                "type": "object",
+                "description": "One voice a lesson can be read in.",
+                "properties": {
+                    "voiceId": {
+                        "type": "string",
+                        "description": "The voice's identifier."
+                    },
+                    "gender": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Who the voice sounds like."
+                    }
+                },
+                "required": [
+                    "voiceId",
+                    "gender"
+                ]
+            }
+        }
+    }
+}

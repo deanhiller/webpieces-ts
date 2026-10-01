@@ -4,6 +4,7 @@ import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { JsonReader } from './JsonReader';
 import {
     ApiEntry,
+    ComponentsManifest,
     ErrorResponseEntry,
     ErrorsEntry,
     OpenApiManifest,
@@ -15,6 +16,22 @@ import {
 const WEBHOOK = 'webhook';
 
 /**
+ * The only `kind` a MANIFEST may declare (#1058): a DTO library's components-only document. A
+ * manifest with no `kind` is a contract library's, exactly as before.
+ */
+const COMPONENTS = 'components';
+
+/** Keys a components manifest must not carry, each with why — a contract-manifest key is a mix-up. */
+const NOT_IN_COMPONENTS: ReadonlyMap<string, string> = new Map<string, string>([
+    ['apis', 'a components document has no paths; list the library\'s entry files in "entries"'],
+    ['version', "a library document's info.version is the package version, read from its package.json"],
+    ['servers', 'a components document has no operations to serve'],
+    ['errors', 'the error contract belongs to a contract document'],
+    ['responseHeaders', 'response headers belong to a contract document'],
+    ['securitySchemeNames', 'security belongs to a contract document'],
+]);
+
+/**
  * Read `openapi.manifest.json` into {@link OpenApiManifest}.
  *
  * It deals only in {@link JsonReader}, which is where the "came off disk, not yet checked" state is
@@ -24,8 +41,50 @@ const WEBHOOK = 'webhook';
  * is indistinguishable, from outside, from an API that genuinely has no error contract.
  */
 export class ManifestLoader {
-    /** @param manifestPath absolute path to `openapi.manifest.json`. */
-    load(manifestPath: string): OpenApiManifest {
+    /**
+     * True for a DTO library's `"kind": "components"` manifest, false for a contract library's (no
+     * `kind`). Any other `kind` is refused: a typo there would otherwise render the wrong document.
+     */
+    isComponents(manifestPath: string): boolean {
+        const kind = this.read(manifestPath).optionalString('kind');
+        if (kind === undefined) {
+            return false;
+        }
+        if (kind !== COMPONENTS) {
+            throw new OpenApiGenerationError(
+                `unknown manifest kind '${kind}'`,
+                manifestPath,
+                `The only manifest kind is "${COMPONENTS}", for a DTO library's components document. ` +
+                    "Leave it out for a contract library's manifest.",
+            );
+        }
+        return true;
+    }
+
+    /** A DTO library's components manifest. See {@link ComponentsManifest}. */
+    loadComponents(manifestPath: string): ComponentsManifest {
+        const raw = this.read(manifestPath);
+        for (const [key, why] of NOT_IN_COMPONENTS) {
+            if (raw.has(key)) {
+                throw new OpenApiGenerationError(
+                    `a "kind": "${COMPONENTS}" manifest declares '${key}'`,
+                    raw.where,
+                    `Delete it — ${why}.`,
+                );
+            }
+        }
+        const entries = raw.strings('entries');
+        if (entries.length === 0) {
+            throw new OpenApiGenerationError(
+                "'entries' is empty",
+                raw.where,
+                'Name the library\'s entry files, e.g. "entries": ["src/index.ts"]; the document holds every type they export.',
+            );
+        }
+        return new ComponentsManifest(raw.string('title'), entries);
+    }
+
+    private read(manifestPath: string): JsonReader {
         if (!fs.existsSync(manifestPath)) {
             throw new OpenApiGenerationError(
                 'no manifest at this path',
@@ -33,7 +92,19 @@ export class ManifestLoader {
                 'Pass --manifest pointing at an openapi.manifest.json that exists.',
             );
         }
-        const raw = JsonReader.parseFile(fs.readFileSync(manifestPath, 'utf8'), manifestPath);
+        return JsonReader.parseFile(fs.readFileSync(manifestPath, 'utf8'), manifestPath);
+    }
+
+    /** @param manifestPath absolute path to a CONTRACT library's `openapi.manifest.json`. */
+    load(manifestPath: string): OpenApiManifest {
+        if (this.isComponents(manifestPath)) {
+            throw new OpenApiGenerationError(
+                `this is a "kind": "${COMPONENTS}" manifest, not a contract manifest`,
+                manifestPath,
+                'Render it as a components document (wp-openapi does so on its own when it reads the kind).',
+            );
+        }
+        const raw = this.read(manifestPath);
         return new OpenApiManifest(
             raw.string('title'),
             raw.string('version'),

@@ -1,0 +1,61 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Shared lesson DTOs",
+        "version": "1.4.0"
+    },
+    "x-webpieces-id": "@fixture/dtos-a/components.openapi.json",
+    "components": {
+        "schemas": {
+            "LessonScopedDto": {
+                "type": "object",
+                "description": "The fields every lesson request carries — extended across a package boundary.",
+                "properties": {
+                    "lessonNumber": {
+                        "type": "number",
+                        "description": "The lesson, 1-100."
+                    },
+                    "lessonType": {
+                        "$ref": "#/components/schemas/LessonTypeDto",
+                        "description": "How the lesson is built."
+                    }
+                },
+                "required": [
+                    "lessonNumber",
+                    "lessonType"
+                ]
+            },
+            "LessonTypeDto": {
+                "type": "string",
+                "description": "How a lesson is built.",
+                "enum": [
+                    "training",
+                    "numbered"
+                ]
+            },
+            "PassageItemDto": {
+                "type": "object",
+                "description": "One passage of a lesson.",
+                "properties": {
+                    "passageId": {
+                        "type": "string",
+                        "description": "The passage's identifier."
+                    },
+                    "voice": {
+                        "$ref": "@fixture/dtos-b/components.openapi.json#/components/schemas/VoiceChoiceDto",
+                        "description": "The voice it is read in."
+                    },
+                    "narrator": {
+                        "$ref": "@fixture/dtos-b/components.openapi.json#/components/schemas/SpeakerGenderDto",
+                        "description": "Who narrates it."
+                    }
+                },
+                "required": [
+                    "passageId",
+                    "voice",
+                    "narrator"
+                ]
+            }
+        }
+    }
+}

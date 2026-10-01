@@ -103,6 +103,46 @@ export class DocumentedType {
         readonly discriminator: UnionDiscriminator | undefined,
         /** An index signature (`[k: string]: X`) — the OPEN-MAP half of an object that also has fields. */
         readonly indexSignatureValue: TypeRef | undefined,
+        /**
+         * The npm package whose source DECLARES this type — the nearest `package.json` above the
+         * declaring file (#1058). It decides which OpenAPI document OWNS the schema: a contract
+         * document defines the schemas its own package declares and `$ref`s every other one into
+         * that package's `components.openapi.json`. Undefined when the file belongs to no package.
+         *
+         * The MCP projection ignores it: a tool schema is always fully inlined.
+         */
+        readonly packageName: string | undefined,
+        /** Pointer-style `path/to/File.ts:12:5` of the declaration, for a refusal that names it. */
+        readonly location: string,
+    ) {}
+
+    /**
+     * The key this type is registered under in {@link ApiDocModel.types} and named by every
+     * {@link TypeRef.refName}: the bare name for a type its model's HOME package declares, and
+     * `<package>:<name>` for every other one, so two packages' same-named types are two entries.
+     */
+    // webpieces-disable no-function-outside-class -- static helper on the class whose key it computes
+    static keyOf(name: string, packageName: string | undefined, homePackage: string | undefined): string {
+        return packageName === homePackage ? name : `${packageName ?? '<no package>'}:${name}`;
+    }
+}
+
+/**
+ * Two DIFFERENT declarations of one name in one package, both reached by one model (#1058).
+ *
+ * Recorded rather than thrown, because the MCP projection inlines every schema and never cared which
+ * of the two it was handed — it keeps rendering exactly as before. An OpenAPI document defines each
+ * schema of a package under its bare name, so it REFUSES a model carrying one of these: the second
+ * declaration would be published as the first one's shape.
+ */
+export class TypeNameCollision {
+    constructor(
+        readonly name: string,
+        readonly packageName: string | undefined,
+        /** Where the declaration that won the name is. */
+        readonly firstLocation: string,
+        /** Where the declaration that was conflated into it is. */
+        readonly secondLocation: string,
     ) {}
 }
 
@@ -267,5 +307,30 @@ export class ApiDocModel {
         readonly types: ReadonlyMap<string, DocumentedType>,
         /** Everything that could not be represented — recorded, not dropped. */
         readonly unmapped: readonly UnmappedType[],
+        /** Same-named, different declarations in one package — see {@link TypeNameCollision}. */
+        readonly collisions: readonly TypeNameCollision[],
+    ) {}
+}
+
+/**
+ * ONE extraction pass over a DTO LIBRARY: every type it exports and declares, for the
+ * components-only OpenAPI document it publishes (#1058). Data-only.
+ *
+ * A components document contains EVERY exported type the library declares — not only the ones some
+ * contract reaches — so its contents are a property of the library alone and do not move when a
+ * downstream contract changes.
+ */
+export class ApiComponentsModel {
+    constructor(
+        /** The library's package name — every type in {@link exported} is declared by it. */
+        readonly packageName: string,
+        /** The library's package version, published as the document's `info.version`. */
+        readonly packageVersion: string,
+        /** The {@link ApiDocModel.types} keys of the exported declarations, in export order. */
+        readonly exported: readonly string[],
+        /** Every named type reached from the exports — the library's own and other packages'. */
+        readonly types: ReadonlyMap<string, DocumentedType>,
+        readonly unmapped: readonly UnmappedType[],
+        readonly collisions: readonly TypeNameCollision[],
     ) {}
 }

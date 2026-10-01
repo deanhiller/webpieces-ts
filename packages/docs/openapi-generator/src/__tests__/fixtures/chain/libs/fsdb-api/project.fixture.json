@@ -1,0 +1,15 @@
+{
+    "name": "fsdb-api",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/fsdb-api"
+            }
+        },
+        "openapi-generate": {
+            "dependsOn": [
+                "build"
+            ]
+        }
+    }
+}

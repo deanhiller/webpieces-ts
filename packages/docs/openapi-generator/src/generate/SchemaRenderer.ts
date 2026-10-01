@@ -1,5 +1,6 @@
 import { DocumentedField, DocumentedType, TypeRef } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
+import { SchemaPlacement } from './SchemaPlacement';
 
 /** ONE field the renderer could not give a shape to, and WHERE in the document it would have sat. */
 export class UnmappedField {
@@ -31,16 +32,33 @@ export class UnmappedField {
  * An unmapped type yields an EMPTY schema, which in JSON Schema means "anything". That is precisely
  * the green-build-publishes-a-shapeless-field defect the guard exists to stop, so every one is
  * recorded with the pointer it would have occupied and {@link OpenApiGenerator} refuses on the set.
+ *
+ * ## WHERE a schema is defined is the placement's answer, not this class's (#1058)
+ *
+ * The {@link SchemaPlacement} decides, per type, whether its schema is defined in THIS document's
+ * `components.schemas` (and under which name) or referenced in another package's components
+ * document. Every `$ref` — a field, an array item, a union branch, a discriminator `mapping` entry —
+ * is written through it, so the split, the bundled and the MCP document are one renderer.
  */
 export class SchemaRenderer {
     private readonly reached = new Set<string>();
+    private readonly external = new Set<string>();
     private readonly unmappedFields: UnmappedField[] = [];
 
-    constructor(private readonly types: ReadonlyMap<string, DocumentedType>) {}
+    constructor(
+        /** The model's named types, by key (`DocumentedType.keyOf`). */
+        private readonly types: ReadonlyMap<string, DocumentedType>,
+        private readonly placement: SchemaPlacement,
+    ) {}
 
-    /** Named types this renderer has been asked for, directly or through another schema. */
+    /** Keys of the named types this document DEFINES, reached directly or through another schema. */
     reachedTypes(): ReadonlySet<string> {
         return this.reached;
+    }
+
+    /** Keys of the named types this document REFERENCES in another package's components document. */
+    externalTypes(): ReadonlySet<string> {
+        return this.external;
     }
 
     /** Every field with no shape, with its pointer. Empty means the document is fully typed. */
@@ -61,13 +79,14 @@ export class SchemaRenderer {
         let grew = true;
         while (grew) {
             grew = false;
-            for (const name of Array.from(this.reached)) {
+            for (const key of Array.from(this.reached)) {
+                const type = this.types.get(key);
+                const name = type === undefined ? key : this.placement.localName(key, type);
                 if (rendered.has(name)) {
                     continue;
                 }
-                const type = this.types.get(name);
                 // Rendering it can add MORE names to `reached`, which is what the outer loop is for.
-                rendered.set(name, type === undefined ? undefined : this.namedType(type));
+                rendered.set(name, type === undefined ? undefined : this.namedType(key, type));
                 grew = true;
             }
         }
@@ -80,9 +99,20 @@ export class SchemaRenderer {
         return schemas;
     }
 
+    /**
+     * Mark `key` as DEFINED by this document even when nothing in it refers to the type — the
+     * components document of a DTO library publishes every type the library exports (#1058).
+     */
+    define(key: string): void {
+        const type = this.types.get(key);
+        if (type !== undefined && this.placement.isLocal(key, type)) {
+            this.reached.add(key);
+        }
+    }
+
     /** One named type: an object DTO, a string enum, or a union with its DERIVED discriminator. */
-    private namedType(type: DocumentedType): JsonObject {
-        const pointer = `#/components/schemas/${type.name}`;
+    private namedType(key: string, type: DocumentedType): JsonObject {
+        const pointer = `#/components/schemas/${this.placement.localName(key, type)}`;
         if (type.enumValues.length > 0) {
             return new JsonObject()
                 .set('type', 'string')
@@ -134,7 +164,7 @@ export class SchemaRenderer {
         // entries pointing at one schema, which OpenAPI's mapping allows (#1023).
         for (const branch of type.unionRefNames) {
             for (const value of type.discriminator.branchValues.get(branch) ?? []) {
-                mapping.set(value, `#/components/schemas/${branch}`);
+                mapping.set(value, this.pointerTo(branch));
             }
         }
         return schema.set(
@@ -250,9 +280,28 @@ export class SchemaRenderer {
         return new JsonObject().set('type', ref.integer ? 'integer' : ref.primitive!);
     }
 
-    private reference(name: string): JsonObject {
-        this.reached.add(name);
-        return new JsonObject().set('$ref', `#/components/schemas/${name}`);
+    /**
+     * A `$ref` to the type registered under `key`, recording whether this document defines it or
+     * references it in its declaring package's components document.
+     */
+    private reference(key: string): JsonObject {
+        return new JsonObject().set('$ref', this.pointerTo(key));
+    }
+
+    private pointerTo(key: string): string {
+        const type = this.types.get(key);
+        if (type === undefined) {
+            // Not in the model at all (a manifest naming an error type that does not exist): keep it
+            // local so `components()` writes the hole the guards then name.
+            this.reached.add(key);
+            return `#/components/schemas/${key}`;
+        }
+        if (this.placement.isLocal(key, type)) {
+            this.reached.add(key);
+        } else {
+            this.external.add(key);
+        }
+        return this.placement.pointer(key, type);
     }
 
     /** Empty prose is ABSENT prose. An empty `description` key is noise in every rendered page. */

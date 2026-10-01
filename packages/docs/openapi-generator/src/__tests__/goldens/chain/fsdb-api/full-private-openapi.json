@@ -1,0 +1,97 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Fsdb API",
+        "version": "1.0.0",
+        "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+    },
+    "tags": [
+        {
+            "name": "Storage",
+            "description": "Storage."
+        }
+    ],
+    "paths": {
+        "/fsdb/passage": {
+            "post": {
+                "operationId": "FsdbApi_readPassage",
+                "summary": "readPassage",
+                "description": "Reads one stored passage.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Storage"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoredPassageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoredPassageResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "LocalizedDescriptionsDto": {
+                "type": "object",
+                "description": "Descriptions as stored — fsdb-api's OWN type of this name, a third shape.",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "The storage key."
+                    }
+                },
+                "required": [
+                    "key"
+                ]
+            },
+            "StoredPassageRequest": {
+                "type": "object",
+                "description": "A stored passage lookup.",
+                "properties": {
+                    "passageId": {
+                        "type": "string",
+                        "description": "The passage's identifier."
+                    }
+                },
+                "required": [
+                    "passageId"
+                ]
+            },
+            "StoredPassageResponse": {
+                "type": "object",
+                "description": "A stored passage.",
+                "properties": {
+                    "passage": {
+                        "$ref": "@fixture/dtos-a/components.openapi.json#/components/schemas/PassageItemDto",
+                        "description": "The passage, exactly as lang-apis publishes it."
+                    },
+                    "descriptions": {
+                        "$ref": "#/components/schemas/LocalizedDescriptionsDto",
+                        "description": "Where its descriptions are stored."
+                    }
+                },
+                "required": [
+                    "passage",
+                    "descriptions"
+                ]
+            }
+        }
+    }
+}

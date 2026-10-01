@@ -1,0 +1,11 @@
+{
+    "title": "Fsdb API",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "src/FsdbApi.ts",
+            "tag": "Storage"
+        }
+    ],
+    "securitySchemeNames": []
+}

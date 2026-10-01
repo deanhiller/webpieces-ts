@@ -1,0 +1,193 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Lang API",
+        "version": "1.0.0",
+        "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+    },
+    "tags": [
+        {
+            "name": "Lessons",
+            "description": "Lessons."
+        }
+    ],
+    "paths": {
+        "/lang/passages": {
+            "post": {
+                "operationId": "LangLessonApi_listPassages",
+                "summary": "listPassages",
+                "description": "Lists a lesson's passages.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
+                "tags": [
+                    "Lessons"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PassageListRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PassageListResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "LessonTypeDto": {
+                "type": "string",
+                "description": "How a lesson is built.",
+                "enum": [
+                    "training",
+                    "numbered"
+                ]
+            },
+            "LocalizedDescriptionsDto": {
+                "type": "object",
+                "description": "Descriptions of a lesson, by audience — lang-apis' OWN type of this name.",
+                "properties": {
+                    "learner": {
+                        "type": "string",
+                        "description": "What a learner reads."
+                    },
+                    "teacher": {
+                        "type": "string",
+                        "description": "What a teacher reads."
+                    }
+                },
+                "required": [
+                    "learner",
+                    "teacher"
+                ]
+            },
+            "PassageItemDto": {
+                "type": "object",
+                "description": "One passage of a lesson.",
+                "properties": {
+                    "passageId": {
+                        "type": "string",
+                        "description": "The passage's identifier."
+                    },
+                    "voice": {
+                        "$ref": "#/components/schemas/VoiceChoiceDto",
+                        "description": "The voice it is read in."
+                    },
+                    "narrator": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Who narrates it."
+                    }
+                },
+                "required": [
+                    "passageId",
+                    "voice",
+                    "narrator"
+                ]
+            },
+            "PassageListRequest": {
+                "type": "object",
+                "description": "A request for one lesson's passages. Its base lives in ANOTHER package, and is flattened.",
+                "properties": {
+                    "lessonNumber": {
+                        "type": "number",
+                        "description": "The lesson, 1-100."
+                    },
+                    "lessonType": {
+                        "$ref": "#/components/schemas/LessonTypeDto",
+                        "description": "How the lesson is built."
+                    },
+                    "narrator": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Only passages narrated as this gender."
+                    }
+                },
+                "required": [
+                    "lessonNumber",
+                    "lessonType"
+                ]
+            },
+            "PassageListResponse": {
+                "type": "object",
+                "description": "One lesson's passages.",
+                "properties": {
+                    "passages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PassageItemDto"
+                        },
+                        "description": "Every passage, in reading order."
+                    },
+                    "descriptions": {
+                        "$ref": "#/components/schemas/LocalizedDescriptionsDto",
+                        "description": "This library's own descriptions of the lesson."
+                    },
+                    "translations": {
+                        "$ref": "#/components/schemas/fixture.dtos-b.LocalizedDescriptionsDto",
+                        "description": "The shared, per-language descriptions — a DIFFERENT type with the same name."
+                    }
+                },
+                "required": [
+                    "passages",
+                    "descriptions",
+                    "translations"
+                ]
+            },
+            "SpeakerGenderDto": {
+                "type": "string",
+                "description": "The gender a voice speaks as.",
+                "enum": [
+                    "female",
+                    "male"
+                ]
+            },
+            "VoiceChoiceDto": {
+                "type": "object",
+                "description": "One voice a lesson can be read in.",
+                "properties": {
+                    "voiceId": {
+                        "type": "string",
+                        "description": "The voice's identifier."
+                    },
+                    "gender": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Who the voice sounds like."
+                    }
+                },
+                "required": [
+                    "voiceId",
+                    "gender"
+                ]
+            },
+            "fixture.dtos-b.LocalizedDescriptionsDto": {
+                "type": "object",
+                "description": "Descriptions in every supported language — the SHARED one. `lang-apis` and `fsdb-api` each declare\na DIFFERENT type of this same name, which is the `LocalizedDescriptionsDto` case of #1058.",
+                "properties": {
+                    "en": {
+                        "type": "string",
+                        "description": "The English description."
+                    },
+                    "es": {
+                        "type": "string",
+                        "description": "The Spanish description."
+                    }
+                },
+                "required": [
+                    "en"
+                ]
+            }
+        }
+    }
+}
