@@ -21,6 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as ts from 'typescript';
 import { toError } from '../toError';
 
 /** Directories never worth scanning (build output, vendored code, VCS). */
@@ -37,16 +38,7 @@ const SKIP_DIRS = new Set([
 ]);
 
 /** Source extensions whose imports we understand. */
-const SOURCE_EXTENSIONS = new Set([
-    '.ts',
-    '.tsx',
-    '.mts',
-    '.cts',
-    '.js',
-    '.jsx',
-    '.mjs',
-    '.cjs',
-]);
+const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 
 /**
  * Directory names whose contents SHIP to consumers as scaffolding (copied into a consumer repo by the
@@ -56,9 +48,7 @@ const SOURCE_EXTENSIONS = new Set([
  * `@webpieces/eslint-rules`, which those very templates import) as "test-only in dependencies".
  * A `templates/` segment therefore short-circuits isDevFile to production, ahead of the name heuristics.
  */
-const SHIPPED_DIR_NAMES = new Set([
-    'templates',
-]);
+const SHIPPED_DIR_NAMES = new Set(['templates']);
 
 /**
  * Directory names that make everything below them test/dev-only.
@@ -84,10 +74,6 @@ const DEV_CONFIG_RE =
 
 /** `jest.setup.ts`, `vitest.setup.ts`, `test-setup.ts`, ... */
 const DEV_SETUP_RE = /^([\w-]*[.-])?(setup|test-setup)\.[cm]?[jt]s$/;
-
-/** Bare-import extraction: `from 'x'`, `import 'x'`, `import('x')`, `require('x')`. */
-const IMPORT_RE =
-    /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/g;
 
 /**
  * Which packages a project reaches from production code vs. only from test/dev code.
@@ -149,15 +135,21 @@ export class DepUsageScanner {
     }
 
     /**
-     * The package a bare specifier belongs to, or null for relative/absolute
-     * paths and node: builtins. `@scope/pkg/sub` → `@scope/pkg`; `pkg/sub` → `pkg`.
+     * The package a bare specifier belongs to, or null for relative/absolute paths.
+     * `@scope/pkg/sub` → `@scope/pkg`; `pkg/sub` → `pkg`; `node:fs/promises` → `fs`.
+     *
+     * Node builtins deliberately stay in the result: api-lib-dependencies treats them as outside
+     * runtime dependencies, and one allow-list spelling must govern both `fs` and `node:fs`.
      */
     toPackageName(specifier: string): string | null {
         if (specifier.length === 0) return null;
         if (specifier.startsWith('.') || specifier.startsWith('/')) return null;
-        if (specifier.startsWith('node:')) return null;
-        const parts = specifier.split('/');
-        if (specifier.startsWith('@')) {
+        const normalized = specifier.startsWith('node:')
+            ? specifier.slice('node:'.length)
+            : specifier;
+        if (normalized.length === 0) return null;
+        const parts = normalized.split('/');
+        if (normalized.startsWith('@')) {
             if (parts.length < 2) return null;
             return `${parts[0]}/${parts[1]}`;
         }
@@ -184,20 +176,40 @@ export class DepUsageScanner {
         if (source === null) return;
         const relPath = path.relative(projectRoot, absPath);
         const bucket = this.isDevFile(relPath) ? usage.testPackages : usage.prodPackages;
-        for (const packageName of this.extractPackageNames(source)) {
+        for (const packageName of this.extractPackageNames(source, absPath)) {
             bucket.add(packageName);
         }
     }
 
-    private extractPackageNames(source: string): string[] {
+    /** Parse real syntax so prose such as `different from "no field"` cannot become a phantom import. */
+    private extractPackageNames(source: string, fileName: string): string[] {
         const names: string[] = [];
-        IMPORT_RE.lastIndex = 0;
-        let match = IMPORT_RE.exec(source);
-        while (match !== null) {
-            const packageName = this.toPackageName(match[1]);
+        const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+        const add = (specifier: ts.Expression | undefined): void => {
+            if (specifier === undefined || !ts.isStringLiteralLike(specifier)) return;
+            const packageName = this.toPackageName(specifier.text);
             if (packageName !== null) names.push(packageName);
-            match = IMPORT_RE.exec(source);
-        }
+        };
+        const visit = (node: ts.Node): void => {
+            if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+                add(node.moduleSpecifier);
+            } else if (
+                ts.isImportEqualsDeclaration(node) &&
+                ts.isExternalModuleReference(node.moduleReference)
+            ) {
+                add(node.moduleReference.expression);
+            } else if (ts.isCallExpression(node)) {
+                const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+                const isRequire =
+                    ts.isIdentifier(node.expression) && node.expression.text === 'require';
+                if (isDynamicImport || isRequire) add(node.arguments[0]);
+            } else if (ts.isImportTypeNode(node)) {
+                const argument = node.argument;
+                if (ts.isLiteralTypeNode(argument)) add(argument.literal);
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sourceFile);
         return names;
     }
 

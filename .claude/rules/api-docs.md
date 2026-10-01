@@ -255,8 +255,10 @@ generator by `openapi-golden.spec.ts` (partner-api) in the meantime.
 
 `role:api-lib` is a boundary contract and/or its DTOs, with the implementation living elsewhere: an
 `@ApiPath`/`@Rpc`/`@PubSub` contract, an IPC contract (`@WpInternal` / `@WpIpcEndpoint`), an in-process
-abstract `…Api` behind a DI token, or a DTO-only library. `role:api-client` is a contract PLUS its bundled
-default implementation that talks to an outside system through its SDK (`XxxApi` + `XxxClient` with
+abstract `…Api` behind a DI token, or a DTO-only library. Data-only protocol constants may accompany the
+contract; executable functions and concrete implementation classes may not. `role:api-client` is a
+contract PLUS its bundled default implementation that talks to an outside system through its SDK (an
+abstract `XxxApi`, or an exported `XxxApi` interface implemented by an `XxxClient` registered with
 `@provideSingletonDefaultForApi`). `validate-api-lib-tag` keeps both honest; the lattice, the folder map
 and the dependency rule for them are in `.claude/rules/framework-tags.md`.
 

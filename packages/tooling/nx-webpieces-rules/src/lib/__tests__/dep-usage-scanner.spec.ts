@@ -48,7 +48,9 @@ describe('DepUsageScanner.toPackageName', () => {
         expect(scanner.toPackageName('@webpieces/core-util/sub/path')).toBe('@webpieces/core-util');
         expect(scanner.toPackageName('express/lib/x')).toBe('express');
         expect(scanner.toPackageName('./relative')).toBe(null);
-        expect(scanner.toPackageName('node:fs')).toBe(null);
+        expect(scanner.toPackageName('fs')).toBe('fs');
+        expect(scanner.toPackageName('node:fs')).toBe('fs');
+        expect(scanner.toPackageName('node:fs/promises')).toBe('fs');
     });
 });
 
@@ -77,6 +79,43 @@ describe('DepUsageScanner.scan', () => {
         });
         const usage = new DepUsageScanner().scan(tmpDir);
         expect(usage.prodPackages.has('@webpieces/lazy-dep')).toBe(true);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('reads real import syntax and ignores comments and arbitrary strings', () => {
+        const tmpDir = writeTree({
+            'src/imports.ts': `
+                import value from '@scope/static/subpath';
+                import 'side-effect';
+                export { other } from 'exported-package/subpath';
+                import legacy = require('legacy-package');
+                const lazy = import('lazy-package');
+                const required = require('required-package');
+                type External = import('type-package').External;
+                const prose = 'do not import "not-a-package"';
+                // indistinguishable from "no fixed level"
+                /* never require('comment-package') or import('comment-lazy') */
+                void value; void legacy; void lazy; void required; void prose;
+            `,
+        });
+        const usage = new DepUsageScanner().scan(tmpDir);
+        expect([...usage.prodPackages].sort()).toEqual([
+            '@scope/static',
+            'exported-package',
+            'lazy-package',
+            'legacy-package',
+            'required-package',
+            'side-effect',
+            'type-package',
+        ]);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('normalizes bare and node-prefixed builtins to one allow-list spelling', () => {
+        const tmpDir = writeTree({
+            'src/builtins.ts': `import fs from 'fs'; import { readFile } from 'node:fs/promises'; void fs; void readFile;`,
+        });
+        expect([...new DepUsageScanner().scan(tmpDir).prodPackages]).toEqual(['fs']);
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 });

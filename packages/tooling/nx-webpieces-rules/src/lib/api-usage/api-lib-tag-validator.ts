@@ -8,9 +8,10 @@
  *   - a project tagged `role:api-lib` MUST export a contract or ONLY wire types — else the tag is a lie.
  *     A contract is any of: an `@ApiPath`/`@Rpc`/`@PubSub` class (from the scan), an IPC contract
  *     (`@WpInternal` / `@WpIpcEndpoint`), or an in-process abstract `…Api` behind a DI token. A DTO-only
- *     library exports interfaces, type aliases, enums and data classes (no methods) and nothing else;
- *   - a project tagged `role:api-client` MUST export a contract (its abstract `XxxApi`) — the bundled
- *     `XxxClient` beside it is the point of the role, so it is not judged as a wire type.
+ *     library exports interfaces, type aliases, enums, data classes (no methods), and data-only constants;
+ *   - a project tagged `role:api-client` MUST export a contract: either an abstract `XxxApi`, or an
+ *     exported `XxxApi` interface implemented by a client registered with `@provideSingletonDefaultForApi`.
+ *     The bundled client beside it is the point of the role, so it is not judged as a wire type.
  *
  * "Exports an @ApiPath contract" is answered by the same source scan that owns apiRelations
  * (scan.apiLibProjects), so the tag can never drift from the code. The IPC / in-process / DTO-only
@@ -72,7 +73,12 @@ export class ApiLibExportShape {
         if (fs.existsSync(srcDir)) {
             for (const file of collectTsFiles(srcDir)) {
                 if (isTestFile(file)) continue;
-                const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+                const source = ts.createSourceFile(
+                    file,
+                    fs.readFileSync(file, 'utf8'),
+                    ts.ScriptTarget.Latest,
+                    true,
+                );
                 for (const statement of source.statements) acc.add(statement, file);
             }
         }
@@ -85,19 +91,25 @@ class ExportShapeAccumulator {
     private contract = false;
     private wire = false;
     private readonly offenders: string[] = [];
+    private readonly apiInterfaces = new Set<string>();
+    private readonly registeredApiImplementations = new Set<string>();
 
     constructor(private readonly projectDir: string) {}
 
     add(statement: ts.Statement, file: string): void {
         if (!this.isExported(statement)) return;
         const where = path.relative(this.projectDir, file);
-        if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) {
+        if (ts.isInterfaceDeclaration(statement)) {
+            this.wire = true;
+            if (statement.name.text.endsWith('Api')) this.apiInterfaces.add(statement.name.text);
+        } else if (ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) {
             this.wire = true;
         } else if (ts.isClassDeclaration(statement)) {
             this.addClass(statement, where);
         } else if (ts.isVariableStatement(statement)) {
             for (const decl of statement.declarationList.declarations) {
-                if (this.isDiToken(decl.initializer)) continue;
+                if (this.isDiToken(decl.initializer) || this.isDataConstant(decl.initializer))
+                    continue;
                 this.offenders.push(`const ${decl.name.getText()} (${where})`);
             }
         } else if (ts.isFunctionDeclaration(statement)) {
@@ -106,12 +118,31 @@ class ExportShapeAccumulator {
     }
 
     shape(): ApiLibExportShape {
-        return new ApiLibExportShape(this.contract, this.wire, [...this.offenders].sort());
+        const registeredInterface = [...this.apiInterfaces].some((name: string) =>
+            this.registeredApiImplementations.has(name),
+        );
+        return new ApiLibExportShape(
+            this.contract || registeredInterface,
+            this.wire,
+            [...this.offenders].sort(),
+        );
     }
 
     private addClass(cls: ts.ClassDeclaration, where: string): void {
         const name = cls.name?.text ?? '<default>';
-        const isAbstract = (ts.getModifiers(cls) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.AbstractKeyword);
+        if (this.hasDecorator(cls, 'provideSingletonDefaultForApi')) {
+            for (const heritage of cls.heritageClauses ?? []) {
+                if (heritage.token !== ts.SyntaxKind.ImplementsKeyword) continue;
+                for (const type of heritage.types) {
+                    const implemented = type.expression.getText().split('.').pop();
+                    if (implemented !== undefined)
+                        this.registeredApiImplementations.add(implemented);
+                }
+            }
+        }
+        const isAbstract = (ts.getModifiers(cls) ?? []).some(
+            (m: ts.Modifier) => m.kind === ts.SyntaxKind.AbstractKeyword,
+        );
         if (isAbstract && (name.endsWith('Api') || this.carriesIpc(cls))) {
             this.contract = true;
             return;
@@ -119,35 +150,116 @@ class ExportShapeAccumulator {
         const hasMethod = cls.members.some(
             (member: ts.ClassElement) =>
                 ts.isMethodDeclaration(member) &&
-                !(ts.getModifiers(member) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.StaticKeyword),
+                !(ts.getModifiers(member) ?? []).some(
+                    (m: ts.Modifier) => m.kind === ts.SyntaxKind.StaticKeyword,
+                ),
         );
-        if (hasMethod) this.offenders.push(`class ${name} (${where}) — it has methods, so it is an implementation`);
+        if (hasMethod)
+            this.offenders.push(
+                `class ${name} (${where}) — it has methods, so it is an implementation`,
+            );
         else this.wire = true;
     }
 
     /** `@WpInternal(...)` on the class or `@WpIpcEndpoint(...)` on any member. */
     private carriesIpc(cls: ts.ClassDeclaration): boolean {
         const named = (node: ts.Node): boolean =>
-            (ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : []).some((d: ts.Decorator) => {
-                const expr = ts.isCallExpression(d.expression) ? d.expression.expression : d.expression;
-                const text = ts.isPropertyAccessExpression(expr) ? expr.name.text : expr.getText();
-                return IPC_DECORATORS.includes(text);
-            });
+            IPC_DECORATORS.some((name: string) => this.hasDecorator(node, name));
         return named(cls) || cls.members.some((member: ts.ClassElement) => named(member));
+    }
+
+    private hasDecorator(node: ts.Node, expected: string): boolean {
+        return (ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : []).some(
+            (decorator: ts.Decorator) => {
+                const expr = ts.isCallExpression(decorator.expression)
+                    ? decorator.expression.expression
+                    : decorator.expression;
+                const name = ts.isPropertyAccessExpression(expr) ? expr.name.text : expr.getText();
+                return name === expected;
+            },
+        );
+    }
+
+    /** Literal/structural protocol data is contract support, not an executable implementation. */
+    private isDataConstant(init: ts.Expression | undefined): boolean {
+        if (init === undefined) return false;
+        const expr = this.unwrap(init);
+        if (
+            ts.isStringLiteralLike(expr) ||
+            ts.isNumericLiteral(expr) ||
+            expr.kind === ts.SyntaxKind.TrueKeyword ||
+            expr.kind === ts.SyntaxKind.FalseKeyword ||
+            expr.kind === ts.SyntaxKind.NullKeyword ||
+            ts.isIdentifier(expr) ||
+            ts.isPropertyAccessExpression(expr)
+        ) {
+            return true;
+        }
+        if (ts.isPrefixUnaryExpression(expr)) return this.isDataConstant(expr.operand);
+        if (ts.isBinaryExpression(expr)) {
+            return this.isDataConstant(expr.left) && this.isDataConstant(expr.right);
+        }
+        if (ts.isConditionalExpression(expr)) {
+            return (
+                this.isDataConstant(expr.condition) &&
+                this.isDataConstant(expr.whenTrue) &&
+                this.isDataConstant(expr.whenFalse)
+            );
+        }
+        if (ts.isTemplateExpression(expr)) {
+            return expr.templateSpans.every((span: ts.TemplateSpan) =>
+                this.isDataConstant(span.expression),
+            );
+        }
+        if (ts.isArrayLiteralExpression(expr)) {
+            return expr.elements.every(
+                (element: ts.Expression) =>
+                    ts.isOmittedExpression(element) ||
+                    (ts.isSpreadElement(element)
+                        ? this.isDataConstant(element.expression)
+                        : this.isDataConstant(element)),
+            );
+        }
+        if (ts.isObjectLiteralExpression(expr)) {
+            return expr.properties.every((prop: ts.ObjectLiteralElementLike) => {
+                if (ts.isPropertyAssignment(prop)) return this.isDataConstant(prop.initializer);
+                if (ts.isShorthandPropertyAssignment(prop)) return true;
+                if (ts.isSpreadAssignment(prop)) return this.isDataConstant(prop.expression);
+                return false;
+            });
+        }
+        return false;
+    }
+
+    private unwrap(expr: ts.Expression): ts.Expression {
+        if (
+            ts.isAsExpression(expr) ||
+            ts.isTypeAssertionExpression(expr) ||
+            ts.isSatisfiesExpression(expr) ||
+            ts.isParenthesizedExpression(expr) ||
+            ts.isNonNullExpression(expr)
+        ) {
+            return this.unwrap(expr.expression);
+        }
+        return expr;
     }
 
     /** `Symbol('x')`, `Symbol.for('x')`, or an object literal of them — the token an abstract `…Api` binds behind. */
     private isDiToken(init: ts.Expression | undefined): boolean {
         if (init === undefined) return false;
-        const expr = ts.isAsExpression(init) || ts.isSatisfiesExpression(init) ? init.expression : init;
+        const expr =
+            ts.isAsExpression(init) || ts.isSatisfiesExpression(init) ? init.expression : init;
         if (ts.isCallExpression(expr)) {
             const callee = expr.expression.getText();
             return callee === 'Symbol' || callee === 'Symbol.for';
         }
         if (ts.isObjectLiteralExpression(expr)) {
-            return expr.properties.length > 0 && expr.properties.every(
-                (prop: ts.ObjectLiteralElementLike) =>
-                    ts.isPropertyAssignment(prop) && this.isDiToken(prop.initializer),
+            return (
+                expr.properties.length > 0 &&
+                expr.properties.every(
+                    (prop: ts.ObjectLiteralElementLike) =>
+                        ts.isPropertyAssignment(prop) && this.isDiToken(prop.initializer),
+                )
             );
         }
         return false;
@@ -155,7 +267,9 @@ class ExportShapeAccumulator {
 
     private isExported(statement: ts.Statement): boolean {
         if (!ts.canHaveModifiers(statement)) return false;
-        return (ts.getModifiers(statement) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.ExportKeyword);
+        return (ts.getModifiers(statement) ?? []).some(
+            (m: ts.Modifier) => m.kind === ts.SyntaxKind.ExportKeyword,
+        );
     }
 }
 
@@ -181,9 +295,14 @@ export function findApiLibTagViolations(
         if (!isApiRole || exportsApi || !scan.scannedProjects.has(projectName)) continue;
         const shape = ApiLibExportShape.read(path.resolve(workspaceRoot, info.root));
         const ok = role === API_CLIENT_ROLE ? shape.exportsContract : shape.isApiLib();
-        if (!ok) violations.push(new ApiLibTagViolation(projectName, 'unnecessary-tag', role, shape.offenders));
+        if (!ok)
+            violations.push(
+                new ApiLibTagViolation(projectName, 'unnecessary-tag', role, shape.offenders),
+            );
     }
-    return violations.sort((a: ApiLibTagViolation, b: ApiLibTagViolation) => a.project.localeCompare(b.project));
+    return violations.sort((a: ApiLibTagViolation, b: ApiLibTagViolation) =>
+        a.project.localeCompare(b.project),
+    );
 }
 
 /** Human-readable, fix-oriented report for one tag/code mismatch. */
@@ -200,9 +319,10 @@ export function describeApiLibTagViolation(violation: ApiLibTagViolation): strin
     if (violation.role === API_CLIENT_ROLE) {
         return (
             `  ❌ '${violation.project}' is tagged 'role:api-client' but exports NO contract (no abstract ` +
-            `…Api class, no @WpInternal/@WpIpcEndpoint contract).\n` +
-            `     An api-client is a contract PLUS its default implementation: export the abstract XxxApi it ` +
-            `implements, or retag it (e.g. "role:lib").`
+            `…Api class, no @WpInternal/@WpIpcEndpoint contract, and no exported …Api interface implemented ` +
+            `by an @provideSingletonDefaultForApi client).\n` +
+            `     An api-client is a contract PLUS its default implementation: export the XxxApi the registered ` +
+            `client implements, or retag it (e.g. "role:lib").`
         );
     }
     const offenders =
