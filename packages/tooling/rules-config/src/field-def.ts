@@ -39,6 +39,12 @@ export class FieldDef {
         return new FieldDef('string[]', undefined, false, false, true);
     }
 
+    /** A REQUIRED list of objects (possibly empty), each validated against `elementSchema`. */
+    // webpieces-disable no-function-outside-class -- static factory, matches sibling FieldDef.optional
+    static objects(elementSchema: Readonly<Record<string, FieldDef>>): FieldDef {
+        return new FieldDef('object[]', undefined, false, false, false, elementSchema);
+    }
+
     /** A REQUIRED, non-empty list of objects, each validated against `elementSchema`. */
     // webpieces-disable no-function-outside-class -- static factory, matches sibling FieldDef.optional
     static nonEmptyObjects(elementSchema: Readonly<Record<string, FieldDef>>): FieldDef {

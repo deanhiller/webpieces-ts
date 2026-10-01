@@ -7,14 +7,17 @@
  * from the atomic values:
  *
  *   framework:browser | framework:react | framework:angular
- *   framework:node    | framework:express
+ *   framework:node    | framework:express | framework:react-native
  *
  * A project lists EVERY environment it promises to run in (e.g.
  * `framework:browser` + `framework:node`). This env set is the source of truth
  * for the `framework` field written into architecture/dependencies.json and for
  * the `library-types-match-client` rule, which uses the compatibility lattice
  * (react/angular→browser, express→node) to keep an express project from
- * depending on a browser-only library (and vice-versa).
+ * depending on a browser-only library (and vice-versa). `react-native` is its own
+ * runtime, NOT a browser (#1064): it has no DOM, IndexedDB or OPFS, so a
+ * react-native project consumes only libraries that are themselves tagged
+ * `framework:react-native`.
  *
  * The legacy single-value `framework:all` "usable by any side" bucket is
  * REMOVED — it is a hard error, and the author must declare the actual env set.
@@ -63,8 +66,9 @@ function reportViolations(untagged: MissingTagProject[], knownTypes: string[], m
     console.error('❌ Every modified project must declare the env set it runs in (>=1 framework tag)!');
     console.error('');
     console.error(`   Add ONE OR MORE of these to the project's project.json "tags" array: ${suggestion}`);
-    console.error('   (react/angular specialize browser; express specializes node. A project that runs in');
-    console.error('    both the browser and node declares BOTH, e.g. framework:browser + framework:node.)');
+    console.error('   (react/angular specialize browser; express specializes node; react-native is its own runtime,');
+    console.error('    NOT a browser — no DOM, IndexedDB or OPFS. A project that runs in several declares EVERY one,');
+    console.error('    e.g. framework:browser + framework:node + framework:react-native for a universal library.)');
     console.error('   This libType drives architecture/dependencies.json and the library-types-match-client rule.');
     console.error('');
 

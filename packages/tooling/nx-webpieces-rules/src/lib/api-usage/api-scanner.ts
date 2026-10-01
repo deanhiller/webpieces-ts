@@ -67,6 +67,7 @@ import {
 import { RootUnionFindings, RootUnionRule, RootUnionScan } from './root-union-scan';
 import { ApiDocRule, ApiDocRulesFindings, MCP_RULE, OPENAPI_RULE } from './api-doc-rules';
 import { ApiDocRulesScan } from './api-doc-rules-scan';
+import { WireClosureRule } from './wire-closure';
 import {
     DecoratorArgDiagnostics,
     apiClassInfoFrom,
@@ -312,6 +313,7 @@ export class ApiUsageScanner {
         private readonly openApiRule: ApiDocRule = ApiDocRule.off(OPENAPI_RULE),
         /** `api-rules-for-mcp`'s switches — read from the config, which MUST state them (#1017). */
         private readonly mcpRule: ApiDocRule = ApiDocRule.off(MCP_RULE),
+        private readonly wireClosureRule: WireClosureRule = WireClosureRule.withoutSuffixes(), // #1064 D4
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);
         this.decoratorArgDiagnostics = new DecoratorArgDiagnostics(workspaceRoot);
@@ -351,7 +353,7 @@ export class ApiUsageScanner {
                 this.workspaceRoot,
                 this.projectInfos,
                 this.openApiRule,
-                this.mcpRule,
+                this.mcpRule, this.wireClosureRule,
             ).run(),
         };
     }
@@ -530,6 +532,7 @@ export function scanAndAttachApiRelations(
         RootUnionRule.fromConfig(workspaceRoot),
         ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
         ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
+        WireClosureRule.fromConfig(workspaceRoot),
     ).scan();
     for (const projectName of result.relationsByProject.keys()) {
         const entry = graph[projectName];

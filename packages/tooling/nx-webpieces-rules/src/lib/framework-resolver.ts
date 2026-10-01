@@ -6,7 +6,7 @@
  * architecture/dependencies.json. A project carries a MULTI-VALUE env set drawn
  * from the atomic values:
  *
- *   browser · react · angular · node · express
+ *   browser · react · angular · node · express · react-native
  *
  * A project lists every environment it promises to run in, e.g.
  * `framework:browser` + `framework:node`. This is the field the
@@ -43,10 +43,13 @@ class FrameworkMarker {
 }
 
 /**
- * Dependency name → framework, checked in order (first match wins).
+ * Dependency name → framework, checked in order (first match wins). `react-native` comes BEFORE
+ * `react` because every react-native project also depends on `react`, and inferring `react` would
+ * place it under browser in the lattice — the exact mistake #1064 (D6) removes.
  */
 const FRAMEWORK_DEPENDENCY_MARKERS: ReadonlyArray<FrameworkMarker> = [
     new FrameworkMarker('@angular/core', 'angular'),
+    new FrameworkMarker('react-native', 'react-native'),
     new FrameworkMarker('react', 'react'),
     new FrameworkMarker('express', 'express'),
 ];

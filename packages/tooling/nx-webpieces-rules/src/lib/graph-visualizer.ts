@@ -155,6 +155,7 @@ export class GraphVisualizer {
         if (role === 'bundle') return ', color="#6A1B9A", penwidth=3';
         if (role === 'client') return ', color="red", penwidth=3';
         if (role === 'api-lib') return ', color="#EF6C00", penwidth=2';
+        if (role === 'api-client') return ', color="#00838F", penwidth=2';
         if (role === 'designed-lib') return ', penwidth=2';
         return '';
     }
@@ -577,6 +578,10 @@ export class GraphVisualizer {
         <div class="legend-item">
             <span class="legend-box" style="border: 2px solid #EF6C00;"></span>
             <strong>api-lib:</strong> API-contract library (defines <code>@ApiPath</code>/<code>@Rpc</code>/<code>@PubSub</code> <code>*Api</code> classes)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 2px solid #00838F;"></span>
+            <strong>api-client:</strong> a contract plus its default implementation that talks to an outside system through its SDK
         </div>`;
     }
 

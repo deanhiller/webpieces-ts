@@ -367,7 +367,7 @@ describe('WiringSourceReader reads what the resolved graph merged away', () => {
 
 /** A DTO library publishing components.openapi.json, wired the way #1058 prescribes. */
 function dtoLibrary(root: string, dependsOn: string[]): ProjectConfiguration {
-    return project(root, ['generate:openapi-components'], {
+    return project(root, ['role:api-lib', 'generate:openapi-components'], {
         build: { executor: '@nx/js:tsc', options: { outputPath: `dist/${root}` } },
         'openapi-components-generate': { dependsOn },
     });
@@ -435,6 +435,17 @@ describe('ComponentsWiring (validate-nx-wiring) orders a chain of components doc
         expect(found).toHaveLength(1);
         expect(found[0]).toContain('must dependsOn exactly ONE target');
         expect(found[0]).toContain('"^openapi-components-generate" in nx.json targetDefaults');
+    });
+
+    it('refuses generate:openapi-components on a project that is not role:api-lib (#1064 D5)', () => {
+        const general = dtoLibrary('libraries/company-core', ['build']);
+        general.tags = ['role:lib', 'generate:openapi-components'];
+        const found = rendered(new ComponentsWiring({ 'company-core': general }, {}, new DeclaredDependsOn({})));
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain(
+            'company-core: company-core is tagged "generate:openapi-components" but carries role:lib — only a role:api-lib publishes a components document',
+        );
+        expect(found[0]).toContain('drop "generate:openapi-components" and move the wire types into a role:api-lib DTO library');
     });
 
     it('does not flag the inferred components executor on a TAGGED library as hand-written', () => {

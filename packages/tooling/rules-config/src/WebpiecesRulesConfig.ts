@@ -35,6 +35,13 @@ import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './a
 import { NoUtilityTypesInApiLibConfig } from './no-utility-types-config';
 import { RequiredTypeSuffixConfig } from './required-type-suffix-config';
 import { NoStatePathsInTemplatesConfig } from './no-state-paths-config';
+import {
+    ApiLibDependenciesConfig,
+    ApiLibPathConfig,
+    FrameworkFolderConfig,
+    FrameworkPackagesConfig,
+    FrameworkTsconfigConfig,
+} from './tag-truth-configs';
 
 export class WebpiecesRulesConfig {
     'max-method-lines'?: MaxMethodLinesConfig;
@@ -64,6 +71,11 @@ export class WebpiecesRulesConfig {
     'one-enum-spelling-in-api-lib'?: OneEnumSpellingInApiLibConfig;
     'no-utility-types-in-api-lib'?: NoUtilityTypesInApiLibConfig;
     'required-type-suffix'?: RequiredTypeSuffixConfig;
+    'api-lib-dependencies'?: ApiLibDependenciesConfig;
+    'api-lib-path'?: ApiLibPathConfig;
+    'framework-folder'?: FrameworkFolderConfig;
+    'framework-tsconfig'?: FrameworkTsconfigConfig;
+    'framework-packages'?: FrameworkPackagesConfig;
     // The THREE hookGuards keys, complete. It used to list five of the nine class-named keys — both
     // bash guards were simply missing — and nothing caught it, because this class is populated by
     // dynamic key assignment in the loader. One key per POLICY makes completeness checkable by eye.

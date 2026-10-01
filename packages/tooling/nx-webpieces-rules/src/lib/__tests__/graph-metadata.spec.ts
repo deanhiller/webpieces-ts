@@ -120,6 +120,11 @@ describe('resolveFramework', () => {
         expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['react']);
     });
 
+    it('infers react-native (not react) when both react and react-native are dependencies', () => {
+        const info = writeProject('rn', { dependencies: { react: '19.0.0', 'react-native': '0.80.0' } });
+        expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['react-native']);
+    });
+
     it('infers express from express dependency', () => {
         const info = writeProject('ex', { dependencies: { express: '5.0.0' } });
         expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['express']);
@@ -203,6 +208,39 @@ describe('validateLibraryTypesMatch (up-set lattice on env sets)', () => {
         expect(problems).toHaveLength(1);
         // the node env is unsatisfiable by a browser-only dep
         expect(problems[0]).toContain('node');
+    });
+
+    it('refuses a react-native consumer depending on a browser-only lib — react-native is not a browser (#1064 D6)', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ shell: { framework: ['react-native'], dependsOn: ['idb'] }, idb: { framework: ['browser'], dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'shell' [react-native] must not depend on 'idb' [browser]");
+        expect(problems[0]).toContain('react-native→react-native only');
+    });
+
+    it('refuses a react-native consumer depending on a react (web) lib', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ shell: { framework: ['react-native'], dependsOn: ['web'] }, web: { framework: ['react'], dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+    });
+
+    it('lets a react-native consumer depend on a universal (browser+node+react-native) lib and a browser+react-native lib', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({
+                shell: { framework: ['react-native'], dependsOn: ['universal', 'rnBrowser'] },
+                universal: { framework: ['browser', 'node', 'react-native'], dependsOn: [] },
+                rnBrowser: { framework: ['browser', 'react-native'], dependsOn: [] },
+            }),
+            problems
+        );
+        expect(problems).toEqual([]);
     });
 
     it('skips edges where either endpoint has no resolved framework', () => {

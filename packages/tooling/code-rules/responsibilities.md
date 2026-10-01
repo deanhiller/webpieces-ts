@@ -23,6 +23,14 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   governs a file, so a narrower entry is listed first): every
   exported interface / class / enum / type alias must end in an allowed suffix, and the failure prints
   the rename.
+- The two PROJECT rules that make a `framework:` tag true (#1064), sharing `ProjectScanTargets`
+  (MODIFIED_PROJECTS / RUN_EVERY_TIME, `--projects`-restrictable): `framework-tsconfig` checks a
+  library's `tsconfig.lib.json` (with its `extends` chain) resolves to the `lib` / `types` its framework
+  set's runtime allows — `dom` only for browser-only, `node` types only for node-only, neither for
+  universal / browser + react-native / react-native — so the COMPILER refuses `window` in a node library
+  and `fs` in a universal one; `framework-packages` refuses a production import of a configured framework
+  package (`@angular/*`, `react`, `express`, `firebase-admin`, …) in a project any of whose framework tags
+  its entry does not allow. Both THROW one `RuleFailError`; every behavioural field is required.
 - CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 

@@ -45,6 +45,20 @@ export {
     GoverningGlob,
 } from './validate-required-type-suffix';
 export { ApiLibEnumIndex } from './api-lib-enum-index';
+export { ProjectScanTargets, ScannedProject } from './project-scan-targets';
+export {
+    FrameworkTsconfigValidator,
+    FrameworkTsconfigAudit,
+    RuntimeCompilerOptions,
+    TsconfigRuntimeViolation,
+    frameworkTsconfigError,
+} from './validate-framework-tsconfig';
+export {
+    FrameworkPackagesValidator,
+    FrameworkPackagesAudit,
+    FrameworkPackageViolation,
+    frameworkPackagesError,
+} from './validate-framework-packages';
 export { EnumText } from './api-lib-enum-text';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';

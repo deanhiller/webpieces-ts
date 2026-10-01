@@ -18,9 +18,15 @@
  *   - `lib`          — a plain library; no DI design is generated.
  *   - `client`       — a client app (e.g. angular-site); angular apps keep their
  *                      component/route design, others get none.
- *   - `api-lib`      — an API-contract library: exports `@ApiPath`/`@Rpc`/`@PubSub`
- *                      abstract `*Api` classes that servers implement and clients
- *                      generate typed clients from. No DI design of its own.
+ *   - `api-lib`      — a boundary contract and/or its wire types, with the implementation
+ *                      living elsewhere: an `@ApiPath`/`@Rpc`/`@PubSub` contract, an IPC
+ *                      contract (`@WpInternal`/`@WpIpcEndpoint`), an in-process abstract
+ *                      `…Api` behind a DI token, or a DTO-only library. No DI design of its own.
+ *   - `api-client`   — a contract PLUS its bundled default implementation that talks to an
+ *                      outside system through that system's SDK (`XxxApi` + `XxxClient` with
+ *                      `@provideSingletonDefaultForApi`), e.g. gmail, firestore, gcp-tts. No
+ *                      DI design of its own. A separate role so "talks to an outside system"
+ *                      is visible on the architecture graph (#1064, D1).
  *
  * Resolution order:
  * 1. Explicit nx tag `role:<value>` on the project (project.json tags) — the
@@ -35,7 +41,9 @@ import { ProjectInfo } from './project-info';
 export const ROLE_TAG_PREFIX = 'role:';
 
 /** The roles the `role-tag` rule and the DI-graph analyzer understand. */
-export const KNOWN_ROLES: ReadonlyArray<string> = ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib'];
+export const KNOWN_ROLES: ReadonlyArray<string> = [
+    'server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib', 'api-client',
+];
 
 /** Default role for a project with no explicit `role:` tag. */
 export const DEFAULT_ROLE = 'lib';

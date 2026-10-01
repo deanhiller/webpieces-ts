@@ -39,6 +39,12 @@
  * expressible, by which time it is in partners' generated clients. So every check below runs on every
  * contract in scope, opted in or not — `@ApiType` narrows nothing here.
  *
+ * ## The wire closure (#1064, D4)
+ *
+ * Every named type a contract reaches must be DECLARED in a `role:api-lib` project and end in the
+ * suffix its `required-type-suffix` entry demands — see `wire-closure.ts`. It is a shared defect: a type
+ * declared in a general library is wrong on the wire whichever document it would have been in.
+ *
  * ## Root-level unions are NOT re-checked here
  *
  * `no-root-union-api-type` (#1009) already refuses them, workspace-wide, with its own config key and
@@ -85,6 +91,7 @@ import {
     isVoidLike,
     toolFailures,
 } from './api-doc-rules-verdicts';
+import { WireClosure, WireClosureRule } from './wire-closure';
 
 /** `@ApiPath(` at COLUMN ZERO — a docstring that TALKS about a contract declares none. */
 const DECLARES_CONTRACT = /^@ApiPath\(/m;
@@ -233,6 +240,8 @@ export class ApiDocRulesScan {
         /** OFF unless a caller read otherwise out of webpieces.config.json, which MUST state it. */
         private readonly openApiRule: ApiDocRule = ApiDocRule.off(OPENAPI_RULE),
         private readonly mcpRule: ApiDocRule = ApiDocRule.off(MCP_RULE),
+        /** The suffix half of the wire closure; the role half always runs when either rule does. */
+        private readonly wireClosureRule: WireClosureRule = WireClosureRule.withoutSuffixes(),
     ) {}
 
     run(): ApiDocRulesFindings {
@@ -247,12 +256,13 @@ export class ApiDocRulesScan {
             this.compilerOptions(),
         );
         const toolNames = new Map<string, string>();
+        const closure = new WireClosure(this.workspaceRoot, this.projectInfos, this.wireClosureRule);
         for (const file of files) {
             const sink = new DefectSink(
                 file.openApi ? openApi : undefined,
                 file.mcp ? mcp : undefined,
             );
-            this.judgeFile(file, program, sink, toolNames);
+            this.judgeFile(file, program, sink, toolNames, closure);
         }
         return new ApiDocRulesFindings(
             openApi?.findings() ?? new ApiRuleFindings([], []),
@@ -267,6 +277,7 @@ export class ApiDocRulesScan {
         program: ts.Program,
         sink: DefectSink,
         toolNames: Map<string, string>,
+        closure: WireClosure,
     ): void {
         if (!sink.anyRuleRuns()) return;
         const source = program.getSourceFile(file.absPath);
@@ -275,6 +286,7 @@ export class ApiDocRulesScan {
         try {
             for (const model of new ApiDocExtractor().extractAllFrom(program, source)) {
                 this.judgeModel(model, source, sink, toolNames);
+                this.judgeWireClosure(model, sink, source.fileName, closure);
             }
         } catch (err: unknown) {
             //const error = toError(err);
@@ -320,6 +332,29 @@ export class ApiDocRulesScan {
         this.judgeUnknownValues(model, sink, source.fileName);
         this.judgeAnsweringResponses(model, source, lines, sink);
         this.judgeTools(model, source, lines, sink, toolNames);
+    }
+
+    /**
+     * D4 — every named type the contract reaches is declared in a `role:api-lib` project and carries its
+     * suffix. Shared: a type that should never have left a general library blocks every document.
+     */
+    private judgeWireClosure(model: ApiDocModel, sink: DefectSink, fallback: string, closure: WireClosure): void {
+        for (const type of model.types.values()) {
+            const site = Site.parse(type.location, fallback);
+            for (const verdict of closure.judge(type, site.absPath)) {
+                sink.shared(
+                    (): ApiContractDefect => new ApiContractDefect(
+                        model.contractName,
+                        '',
+                        verdict.what,
+                        site.relativeTo(this.workspaceRoot),
+                        verdict.cure,
+                        model.apiTypes,
+                    ),
+                    site,
+                );
+            }
+        }
     }
 
     /** Everything `TypeResolver` could not represent — the generator's OWN verdict, re-worded. */

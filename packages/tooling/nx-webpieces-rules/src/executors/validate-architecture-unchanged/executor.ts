@@ -16,6 +16,7 @@ import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
 import type { DependenciesFile } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
+import { TagTruthCheck } from '../../lib/tag-truth';
 import { scanAndAttachApiRelations, buildApiContracts } from '../../lib/api-usage/api-scanner';
 import { buildExternalSystems } from '../../lib/api-usage/external-systems';
 import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
@@ -129,6 +130,7 @@ async function buildCurrentGraph(workspaceRoot: string): Promise<CurrentArchitec
     console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
     const projectInfos = await collectProjectInfo();
     enrichGraph(currentGraph, projectInfos, workspaceRoot);
+    new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
     console.log('🔎 Scanning source for implements/uses API relations...');
     // The SAME externalApiPaths the generator uses: scanning without them would drop every vendor
     // relation from the regenerated graph and report drift against a perfectly fresh file.

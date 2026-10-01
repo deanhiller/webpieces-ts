@@ -76,6 +76,11 @@ const CODE_RULE_NAMES = [
     'one-enum-spelling-in-api-lib',
     'no-utility-types-in-api-lib',
     'required-type-suffix',
+    'api-lib-dependencies',
+    'api-lib-path',
+    'framework-folder',
+    'framework-tsconfig',
+    'framework-packages',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
@@ -89,6 +94,12 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     'no-utility-types-in-api-lib': { paths: ['libraries/apis/**'] },
     // Schema-required (#1037): which directories carry which suffixes is the consumer's call.
     'required-type-suffix': { entries: [{ paths: ['libraries/apis/**'], suffixes: ['Dto'] }] },
+    // Schema-required (#1064): what an api library may import, where each runtime lives, and which
+    // framework packages belong to which runtime are the consumer's layout.
+    'api-lib-dependencies': { apiLibPackages: ['tslib'], apiClients: [] },
+    'api-lib-path': { paths: ['libraries/apis/**'] },
+    'framework-folder': { entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }] },
+    'framework-packages': { entries: [{ packages: ['@angular/*'], frameworks: ['angular'] }] },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

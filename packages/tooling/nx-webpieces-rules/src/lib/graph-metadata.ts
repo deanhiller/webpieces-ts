@@ -172,6 +172,11 @@ export const APP_ROLES: ReadonlyArray<string> = ['server', 'app', 'client'];
  * PLUS every ancestor it can legally consume code from (specialization edges
  * child → parent: react → browser, angular → browser, express → node). A
  * consumer promising env `c` can be satisfied by any dependency env in `up(c)`.
+ *
+ * `react-native` is a first-class runtime and NOT a specialisation of browser (#1064, D6): it has no
+ * DOM, no IndexedDB and no OPFS, so a react-native consumer may only consume libraries that are
+ * themselves tagged `framework:react-native` (a universal browser+node+react-native library, a
+ * browser+react-native one, or a react-native-only one).
  */
 export const ENV_UP_SETS: Readonly<Record<string, ReadonlyArray<string>>> = {
     react: ['react', 'browser'],
@@ -179,6 +184,7 @@ export const ENV_UP_SETS: Readonly<Record<string, ReadonlyArray<string>>> = {
     browser: ['browser'],
     express: ['express', 'node'],
     node: ['node'],
+    'react-native': ['react-native'],
 };
 
 /** The up-set of an env (env itself + ancestors); unknown envs map to just themselves. */
@@ -191,7 +197,7 @@ function upSet(env: string): ReadonlyArray<string> {
  *
  * A project's `framework` field is its libType — the SET of runtime
  * environments it is validated to run in (browser | react | angular | node |
- * express). For a dependency edge Consumer C → Library L, the edge is LEGAL iff
+ * express | react-native). For a dependency edge Consumer C → Library L, the edge is LEGAL iff
  * for EVERY env `c` in C's set, up(c) ∩ L's set ≠ ∅ — i.e. every environment
  * the consumer promises to run in can be satisfied by the dependency. This keeps
  * an express app from depending on a browser-only lib, and lets a `browser+node`
@@ -217,7 +223,8 @@ export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string
                 `library-types-match-client: '${projectName}' [${fromSet.join(', ')}] must not depend on ` +
                     `'${dep}' [${toSet.join(', ')}] — the consumer env(s) ${unsatisfied.join(', ')} cannot be ` +
                     `satisfied by the dependency (each consumer env must resolve to itself or an ancestor it ` +
-                    `consumes from: react/angular→browser, express→node). Widen '${dep}' framework tags or ` +
+                    `consumes from: react/angular→browser, express→node, react-native→react-native only). ` +
+                    `Widen '${dep}' framework tags or ` +
                     `remove the dependency.`
             );
         }
@@ -227,7 +234,9 @@ export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string
 /**
  * `role-dependency` rule.
  *
- * A project's `role` is its function (server | designed-lib | lib | client).
+ * A project's `role` is its function (server | app | bundle | designed-lib | lib | client |
+ * api-lib | api-client). The two api roles are libraries, never apps, so this rule leaves them alone;
+ * what THEY may depend on is `api-lib-dependencies` (tag-truth.ts).
  * Apps are terminal — libraries and clients consume them, never the reverse:
  *   - a `client` is fully terminal: NOTHING may depend on it.
  *   - a `server` may only be depended upon by another `server` — the one

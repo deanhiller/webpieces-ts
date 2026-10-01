@@ -17,7 +17,8 @@
  *     }
  *   }
  *
- * where the manifest declares `"kind": "components"` and names the library's entry files. The
+ * where the manifest declares `"kind": "components"` and names the library's entry files. Only a
+ * `role:api-lib` project may carry the tag (#1064, D5) — it is refused here and in validate-nx-wiring. The
  * `^openapi-components-generate` edge orders a chain of DTO libraries; a contract library's
  * `openapi-generate` carries the same edge. validate-nx-wiring enforces both (ComponentsWiring).
  *
@@ -39,6 +40,8 @@ import {
 export const COMPONENTS_DOCUMENT = new GenerateSpec(
     GeneratedApiDocsLayout.COMPONENTS_TARGET,
     OPENAPI_COMPONENTS_GENERATOR,
+    // #1064 (D5): only a role:api-lib publishes the schemas contract documents $ref.
+    'api-lib',
 );
 
 // webpieces-disable no-function-outside-class -- nx executor module: nx resolves a default-export function here

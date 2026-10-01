@@ -115,4 +115,25 @@ describe('a rule has no default', () => {
             { paths: ['libraries/apis/**'], suffixes: ['Request', 'Response', 'Event', 'Dto', 'Api'] },
         ]);
     });
+
+    it('the five tag-truth rules (#1064) demand every field that decides behaviour, and default none of them', () => {
+        const required: Record<string, string[]> = {
+            'api-lib-dependencies': ['mode', 'apiLibPackages', 'apiClients'],
+            'api-lib-path': ['mode', 'paths'],
+            'framework-folder': ['mode', 'entries'],
+            'framework-tsconfig': ['mode'],
+            'framework-packages': ['mode', 'entries'],
+        };
+        for (const [rule, fields] of Object.entries(required)) {
+            const schema = RULE_SCHEMAS[rule];
+            for (const field of fields) expect(schema[field].optional, `${rule}.${field}`).toBe(false);
+            expect(defaultRules[rule], rule).toEqual({});
+            const errors = validateWebpiecesConfig({ [rule]: seedEntryForRule(rule) })
+                .filter((e: string) => e.includes(`[${rule}]`));
+            expect(errors, rule).toEqual([]);
+        }
+        expect(RULE_SCHEMAS['api-lib-path']['paths'].nonEmpty).toBe(true);
+        expect(RULE_SCHEMAS['framework-folder']['entries'].nonEmpty).toBe(true);
+        expect(RULE_SCHEMAS['framework-packages']['entries'].nonEmpty).toBe(true);
+    });
 });

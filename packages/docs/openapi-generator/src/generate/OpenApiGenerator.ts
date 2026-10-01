@@ -45,13 +45,20 @@ const BUNDLED_SUFFIX = '.bundled';
 /** The document a DTO library publishes, without its extension (#1058). */
 const COMPONENTS_DOCUMENT = 'components.openapi';
 
-/** Every cure for a type reached in a package that publishes no components document. */
+/**
+ * Every cure for a type reached in a package that publishes no components document.
+ *
+ * Tagging is offered ONLY for a package that is already a role:api-lib DTO library (#1064, D5): a
+ * general library such as `company-core` is refused the tag by validate-nx-wiring and by the
+ * openapi-components-generate executor, so "tag the package" is never a way out of moving the type.
+ */
 const PUBLISH_COMPONENTS_CURE =
-    'Move each type into a DTO library that publishes a components document — as a `…Dto` string ' +
-    'enum when it is a string-literal union — or tag its package "generate:openapi-components" so ' +
-    'it publishes one (with a "kind": "components" openapi.manifest.json naming its entry files; ' +
-    'outside nx, render that manifest with wp-openapi into the directory the package is packed ' +
-    "from). A document references another package's schema; it never copies one in.";
+    'Move each type into a role:api-lib DTO library that publishes a components document — as a ' +
+    '`…Dto` string enum when it is a string-literal union. Only when the declaring package is ITSELF a ' +
+    'role:api-lib DTO library, tag it "generate:openapi-components" so it publishes one (with a ' +
+    '"kind": "components" openapi.manifest.json naming its entry files; outside nx, render that manifest ' +
+    'with wp-openapi into the directory the package is packed from); a general library is refused the ' +
+    "tag. A document references another package's schema; it never copies one in.";
 
 /** The OpenAPI version this generator writes. See the class doc for why 3.1 and not 3.0. */
 const OPENAPI_VERSION = '3.1.0';

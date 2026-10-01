@@ -5,7 +5,8 @@
  * `role:<value>` nx tag in its project.json. That tag is the project's ROLE
  * (orthogonal to its `framework` libType):
  *
- *   role:server | role:designed-lib | role:lib | role:client
+ *   role:server | role:app | role:bundle | role:designed-lib | role:lib | role:client
+ *   role:api-lib | role:api-client
  *
  * It is the source of truth for the `role` field written into
  * architecture/dependencies.json, for the `role-dependency` edge rule (apps are
@@ -23,7 +24,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const ROLE_TAG_PREFIX = 'role:';
-const DEFAULT_KNOWN_TYPES = ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib'];
+const DEFAULT_KNOWN_TYPES = ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib', 'api-client'];
 
 /** The role-tag flavor of the shared missing-tag scan (exported for tests). */
 export function findRoleUntaggedProjects(workspaceRoot: string, changedFiles: string[]): MissingTagProject[] {
@@ -38,7 +39,9 @@ function reportViolations(untagged: MissingTagProject[], knownTypes: string[], m
     console.error(`   Add ONE of these to the project's project.json "tags" array: ${suggestion}`);
     console.error('   (server = runnable HTTP app · app = runnable non-HTTP app via container.get(XxxApp) ·');
     console.error('    designed-lib = library with a @DocumentDesign DI design ·');
-    console.error('    lib = plain library, no design · client = client app e.g. angular.)');
+    console.error('    lib = plain library, no design · client = client app e.g. angular ·');
+    console.error('    api-lib = a boundary contract and/or its DTOs, implementation elsewhere ·');
+    console.error('    api-client = a contract PLUS its default implementation talking to an outside system via its SDK.)');
     console.error('   This role drives DI-design generation, the arch graph, and the role-dependency rule.');
     console.error('');
 

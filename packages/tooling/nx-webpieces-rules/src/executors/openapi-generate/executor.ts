@@ -33,7 +33,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { GeneratedApiDocsLayout } from '@webpieces/core-util';
-import { RepoScratchDirs, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import { Option, RepoScratchDirs, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ExecutorResult } from '../../executor-result';
@@ -62,11 +62,17 @@ export class GenerateSpec {
     constructor(
         readonly targetName: string,
         readonly generator: GeneratorPackage,
+        /**
+         * The `role:` tag the project must carry, or null when any role may run it. A components
+         * document is published only by a `role:api-lib` (#1064, D5): tagging a general library so its
+         * types can be `$ref`ed is not a way to put them on the wire.
+         */
+        readonly requiredRole: string | null,
     ) {}
 }
 
 /** `openapi-generate`: a contract library's documents and MCP tool catalogs. */
-export const CONTRACT_DOCUMENTS = new GenerateSpec(GeneratedApiDocsLayout.OPENAPI_TARGET, OPENAPI_GENERATOR);
+export const CONTRACT_DOCUMENTS = new GenerateSpec(GeneratedApiDocsLayout.OPENAPI_TARGET, OPENAPI_GENERATOR, null);
 
 /** Everything except the process-facing reporting, so the suite drives it exactly as nx does. */
 export class OpenApiGenerate {
@@ -82,6 +88,7 @@ export class OpenApiGenerate {
     run(options: OpenApiGenerateOptions, context: ExecutorContext): string[] {
         const ruleName = this.spec.targetName;
         const target = GeneratorTarget.of(ruleName, context);
+        this.assertRole(context);
         const outDir = target.documentsDir(ruleName);
         const manifest = target.requiredOption(options.manifest, 'manifest');
         const format = target.requiredOption(options.format, 'format');
@@ -108,6 +115,35 @@ export class OpenApiGenerate {
         } finally {
             fs.rmSync(staging, { recursive: true, force: true });
         }
+    }
+
+    /** Refuses to run for a project that does not carry the spec's required role. */
+    private assertRole(context: ExecutorContext): void {
+        const required = this.spec.requiredRole;
+        if (required === null) return;
+        const projectName = context.projectName ?? '';
+        const tags = context.projectsConfigurations?.projects[projectName]?.tags ?? [];
+        if (tags.includes(`role:${required}`)) return;
+        const carried = tags.filter((tag: string) => tag.startsWith('role:')).join(', ') || 'no role tag';
+        throw new RuleFailError(
+            this.spec.targetName,
+            `${projectName} runs ${this.spec.targetName} but carries ${carried} — a components document is ` +
+                `published only by a role:${required} project. Tagging a general library is not a way to put ` +
+                'its types on the wire: every type a contract reaches is declared in an api library.',
+            undefined,
+            undefined,
+            [
+                new Option(
+                    `Move the wire types into a role:${required} DTO library and tag THAT one ` +
+                        '"generate:openapi-components"; drop the tag from this project.',
+                    true,
+                ),
+                new Option(
+                    `If this project holds only contracts and wire types, retag it role:${required} ` +
+                        '(validate-api-lib-tag checks that it does).',
+                ),
+            ],
+        );
     }
 }
 
