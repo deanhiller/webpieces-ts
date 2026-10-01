@@ -136,7 +136,8 @@ export class BundledNames {
             byName.set(type.name, group);
         }
         const names = new Map<string, string>();
-        for (const [name, keys] of byName) {
+        for (const name of byName.keys()) {
+            const keys = byName.get(name)!;
             for (const key of keys) {
                 const type = types.get(key)!;
                 const keepsBareName = keys.length === 1 || type.packageName === homePackage;

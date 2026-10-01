@@ -10,7 +10,9 @@ type ProjectJson = { readonly name?: string; readonly targets?: LayoutTargets };
 
 /** The fields of a components document this lookup reads. */
 type ComponentsDocumentJson = {
+    // webpieces-disable no-any-unknown -- a file off disk: compared by value, never trusted as a string
     readonly 'x-webpieces-id'?: unknown;
+    // webpieces-disable no-any-unknown -- only the schema NAMES are read; the schemas stay opaque
     readonly components?: { readonly schemas?: Record<string, unknown> };
 };
 

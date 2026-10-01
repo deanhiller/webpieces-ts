@@ -64,7 +64,8 @@ export class ManifestLoader {
     /** A DTO library's components manifest. See {@link ComponentsManifest}. */
     loadComponents(manifestPath: string): ComponentsManifest {
         const raw = this.read(manifestPath);
-        for (const [key, why] of NOT_IN_COMPONENTS) {
+        for (const key of NOT_IN_COMPONENTS.keys()) {
+            const why = NOT_IN_COMPONENTS.get(key)!;
             if (raw.has(key)) {
                 throw new OpenApiGenerationError(
                     `a "kind": "${COMPONENTS}" manifest declares '${key}'`,

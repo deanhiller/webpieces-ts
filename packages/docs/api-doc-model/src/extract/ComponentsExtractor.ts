@@ -4,6 +4,14 @@ import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { DeclaringPackage, PackageOfFile } from './PackageOfFile';
 import { TypeResolver } from './TypeResolver';
 
+/** One exported type: its declared name and its declaration. Data-only. */
+class ExportedDeclaration {
+    constructor(
+        readonly name: string,
+        readonly declaration: ts.Declaration,
+    ) {}
+}
+
 /**
  * The DTO-LIBRARY half of {@link ApiDocExtractor} (#1058): every type a library's entry files export
  * and its own package declares, resolved by the same {@link TypeResolver} a contract uses, for the
@@ -46,7 +54,9 @@ export class ComponentsExtractor {
         const resolver = new TypeResolver(checker, this.packages, home.name);
         const exported: string[] = [];
         for (const source of sources) {
-            for (const [name, declaration] of this.exportedDeclarations(checker, source)) {
+            for (const each of this.exportedDeclarations(checker, source)) {
+                const name = each.name;
+                const declaration = each.declaration;
                 if (this.packages.of(declaration.getSourceFile().fileName)?.name !== home.name) {
                     continue;
                 }
@@ -106,12 +116,12 @@ export class ComponentsExtractor {
     private exportedDeclarations(
         checker: ts.TypeChecker,
         source: ts.SourceFile,
-    ): Array<[string, ts.Declaration]> {
+    ): ExportedDeclaration[] {
         const moduleSymbol = checker.getSymbolAtLocation(source);
         if (moduleSymbol === undefined) {
             return [];
         }
-        const found: Array<[string, ts.Declaration]> = [];
+        const found: ExportedDeclaration[] = [];
         for (const exported of checker.getExportsOfModule(moduleSymbol)) {
             const symbol =
                 (exported.flags & ts.SymbolFlags.Alias) !== 0
@@ -132,7 +142,7 @@ export class ComponentsExtractor {
             const generic =
                 !ts.isEnumDeclaration(declaration) && (declaration.typeParameters?.length ?? 0) > 0;
             if (!generic) {
-                found.push([declaration.name.text, declaration]);
+                found.push(new ExportedDeclaration(declaration.name.text, declaration));
             }
         }
         return found;

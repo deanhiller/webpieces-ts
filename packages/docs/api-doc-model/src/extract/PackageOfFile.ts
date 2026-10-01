@@ -13,7 +13,8 @@ export class DeclaringPackage {
     ) {}
 }
 
-/** The two fields of a `package.json` this lookup reads. */
+/** The two fields of a `package.json` this lookup reads — raw JSON, narrowed where they are read. */
+// webpieces-disable no-any-unknown -- a file off disk: each field is narrowed with typeof before use
 type PackageJsonFields = { readonly name?: unknown; readonly version?: unknown };
 
 /**
