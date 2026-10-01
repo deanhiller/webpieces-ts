@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Option, specTempDirs } from '@webpieces/rules-config';
 import { createNodesV2 } from '../../plugin';
+import { ComponentsWiring } from '../api-docs/components-wiring';
 import {
     DeclaredDependsOn,
     GenerateWiring,
@@ -61,8 +62,12 @@ describe('tag-inferred API document targets', () => {
             outputs: [
                 '{workspaceRoot}/dist/libraries/lang-apis/*openapi.json',
                 '{workspaceRoot}/dist/libraries/lang-apis/*openapi.yaml',
+                '{workspaceRoot}/dist/libraries/lang-apis/*openapi.bundled.json',
+                '{workspaceRoot}/dist/libraries/lang-apis/*openapi.bundled.yaml',
                 '{workspaceRoot}/dist/libraries/lang-apis/mcp-*-tools.json',
             ],
+            // A document rendered FROM upstream components documents is invalidated by them (#1058).
+            inputs: ['default', '^default', { dependentTasksOutputFiles: '**/components.openapi.json', transitive: true }],
         });
         // No options are inferred: every value is the consumer's to state (no defaults).
         expect(targets['openapi-generate']!.options).toBeUndefined();
@@ -81,6 +86,35 @@ describe('tag-inferred API document targets', () => {
         });
         expect(targets['docs-generate']!.options).toBeUndefined();
         expect(targets['ci']!.dependsOn).toContain('docs-generate');
+    });
+
+    it('generate:openapi-components infers openapi-components-generate, into the build outputPath (#1058)', async () => {
+        const project = {
+            name: 'lang-apis',
+            tags: ['generate:openapi-components'],
+            targets: {
+                build: { executor: '@nx/js:tsc', options: { outputPath: 'dist/libraries/lang-apis' } },
+                'openapi-components-generate': {
+                    dependsOn: ['build', '^openapi-components-generate'],
+                    options: { manifest: 'libraries/lang-apis/openapi.manifest.json', format: 'json' },
+                },
+            },
+        };
+        const targets = await inferred(project);
+
+        expect(targets['openapi-components-generate']).toMatchObject({
+            executor: '@webpieces/nx-webpieces-rules:openapi-components-generate',
+            cache: true,
+            inputs: ['default', '^default', { dependentTasksOutputFiles: '**/components.openapi.json', transitive: true }],
+            outputs: [
+                '{workspaceRoot}/dist/libraries/lang-apis/components.openapi.json',
+                '{workspaceRoot}/dist/libraries/lang-apis/components.openapi.yaml',
+            ],
+        });
+        expect(targets['openapi-components-generate']!.options).toBeUndefined();
+        // A DTO library is not a contract library: no openapi-generate unless it is tagged for one too.
+        expect(targets['openapi-generate']).toBeUndefined();
+        expect(targets['ci']!.dependsOn).toContain('openapi-components-generate');
     });
 
     it('infers no outputs while dependsOn is unstated — the executor then names the missing key', async () => {
@@ -328,5 +362,88 @@ describe('WiringSourceReader reads what the resolved graph merged away', () => {
         expect(declared.declares('srv', 'test')).toBe(true);
         expect(declared.declares('srv', 'build')).toBe(false);
         expect(declared.declares('inferred', 'test')).toBe(false);
+    });
+});
+
+/** A DTO library publishing components.openapi.json, wired the way #1058 prescribes. */
+function dtoLibrary(root: string, dependsOn: string[]): ProjectConfiguration {
+    return project(root, ['generate:openapi-components'], {
+        build: { executor: '@nx/js:tsc', options: { outputPath: `dist/${root}` } },
+        'openapi-components-generate': { dependsOn },
+    });
+}
+
+/** contract lib (lang-apis) → DTO lib A (dtos-a) → DTO lib B (dtos-b). */
+const CHAIN_DEPS = {
+    'lang-apis': [new ProjectDependency('dtos-a')],
+    'dtos-a': [new ProjectDependency('dtos-b')],
+};
+
+function chain(apiDependsOn: TargetConfiguration['dependsOn'], aDependsOn: string[]): ComponentsWiring {
+    const api = structuredClone(GOOD_API);
+    api.targets!['openapi-generate'] = { dependsOn: apiDependsOn };
+    return new ComponentsWiring(
+        {
+            'lang-apis': api,
+            'dtos-a': dtoLibrary('libraries/dtos-a', aDependsOn),
+            'dtos-b': dtoLibrary('libraries/dtos-b', ['build']),
+        },
+        CHAIN_DEPS,
+        new DeclaredDependsOn({ 'lang-apis': ['openapi-generate'], 'dtos-a': ['openapi-components-generate'] }),
+    );
+}
+
+function rendered(wiring: ComponentsWiring): string[] {
+    return wiring.problems().map((each: GenerateWiringProblem) => `${each.project}: ${each.problem} FIX: ${each.cure}`);
+}
+
+describe('ComponentsWiring (validate-nx-wiring) orders a chain of components documents (#1058)', () => {
+    const UPSTREAM = '^openapi-components-generate';
+
+    it('passes a THREE-level chain wired with ^openapi-components-generate at both edges', () => {
+        expect(rendered(chain(['build', UPSTREAM], ['build', UPSTREAM]))).toEqual([]);
+    });
+
+    it("refuses a contract library's openapi-generate without the edge, printing the exact dependsOn", () => {
+        const found = rendered(chain(['build'], ['build', UPSTREAM]));
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('lang-apis:openapi-generate: references the components documents of dtos-a, dtos-b');
+        expect(found[0]).toContain(
+            'FIX: In libraries/lang-apis/project.json, set targets.openapi-generate.dependsOn to ["build", "^openapi-components-generate"].',
+        );
+    });
+
+    it('refuses a DTO library in the MIDDLE of the chain without the edge', () => {
+        const found = rendered(chain(['build', UPSTREAM], ['build']));
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('dtos-a:openapi-components-generate: references the components document of dtos-b');
+        expect(found[0]).toContain('set targets.openapi-components-generate.dependsOn to ["build", "^openapi-components-generate"]');
+    });
+
+    it("accepts nx's object form of the edge, and asks nothing of a library with no components upstream", () => {
+        const wiring = chain([{ target: 'openapi-components-generate', dependencies: true }, 'build'], ['build', UPSTREAM]);
+        expect(rendered(wiring)).toEqual([]);
+    });
+
+    it('refuses a DTO library whose openapi-components-generate does not dependsOn its build', () => {
+        const wiring = new ComponentsWiring(
+            { 'dtos-b': dtoLibrary('libraries/dtos-b', []) },
+            {},
+            new DeclaredDependsOn({}),
+        );
+        const found = rendered(wiring);
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('must dependsOn exactly ONE target');
+        expect(found[0]).toContain('"^openapi-components-generate" in nx.json targetDefaults');
+    });
+
+    it('does not flag the inferred components executor on a TAGGED library as hand-written', () => {
+        const tagged = dtoLibrary('libraries/dtos-b', ['build']);
+        tagged.targets!['openapi-components-generate']!.executor = '@webpieces/nx-webpieces-rules:openapi-components-generate';
+        expect(new Wiring({ 'dtos-b': tagged }).problems()).toEqual([]);
+        const untagged = project('libraries/dtos-b', [], tagged.targets!);
+        const found = new Wiring({ 'dtos-b': untagged }).problems();
+        expect(found).toHaveLength(1);
+        expect(found[0]).toContain('add "generate:openapi-components"');
     });
 });

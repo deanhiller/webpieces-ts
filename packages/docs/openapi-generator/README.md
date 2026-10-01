@@ -120,7 +120,7 @@ workspace source directory — the `outputPath` of the target its `openapi-compo
 **It FAILS CLOSED.** A `full-private` / `public` document that reaches a type declared in a package
 publishing no components document is refused, naming the type, its package and the fix: move the type
 into a DTO library (as a `…Dto` string enum when it is a literal union), or give that package a
-components document. There is no allow-list. A referenced schema missing from an existing document is
+components document (in nx: tag it `generate:openapi-components`). There is no allow-list. A referenced schema missing from an existing document is
 refused as stale. Two DIFFERENT types of one name in one package are refused too; two packages'
 same-named types are simply two schemas in two documents.
 
@@ -168,7 +168,9 @@ library B), every document checked by an OpenAPI 3.1 validator.
 
 ## In an nx workspace
 
-Inside nx, nobody chooses `--out`. Tag the api library `generate:openapi` and the
+Inside nx, nobody chooses `--out`. A DTO library tagged `generate:openapi-components` gets an inferred
+`openapi-components-generate` target the same way, and every generating target that references one
+dependsOn `^openapi-components-generate`. Tag the api library `generate:openapi` and the
 `@webpieces/nx-webpieces-rules` plugin infers an `openapi-generate` target that writes into the
 outputPath of the library's `build` (the @nx/js:tsc target it dependsOn), so the documents are packed and published inside the api
 library's package, and are never committed. It runs THIS package from the consumer's `node_modules`

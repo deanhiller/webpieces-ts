@@ -98,9 +98,7 @@ export class ComponentsLocator {
                 `${packageDir} has a project.json but no nx.json above it, so there is no build outputPath to read it from`,
             );
         }
-        const project = JSON.parse(
-            fs.readFileSync(path.join(packageDir, 'project.json'), 'utf8'),
-        ) as ProjectJson;
+        const project = this.readJson(path.join(packageDir, 'project.json')) as ProjectJson;
         const projectRoot = path.relative(workspaceRoot, packageDir).split(path.sep).join('/');
         const lookup = new GeneratedApiDocsLayout(
             projectRoot,
@@ -146,7 +144,7 @@ export class ComponentsLocator {
      * every `$ref` at the wrong owner.
      */
     private read(packageName: string, file: string): LocatedComponents {
-        const document = JSON.parse(fs.readFileSync(file, 'utf8')) as ComponentsDocumentJson;
+        const document = this.readJson(file) as ComponentsDocumentJson;
         const expected = ComponentsReference.documentUri(packageName);
         if (document['x-webpieces-id'] !== expected) {
             throw new OpenApiGenerationError(
@@ -161,6 +159,21 @@ export class ComponentsLocator {
             new PublishedComponents(packageName, file, new Set<string>(schemas)),
             undefined,
         );
+    }
+
+    /** A JSON file this lookup reads, or the ONE error type of this package naming it. */
+    private readJson(file: string): object {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- re-thrown as the ONE error type of this package, naming the file
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8')) as object;
+        } catch (err: unknown) {
+            //const error = toError(err);
+            throw new OpenApiGenerationError(
+                `${file} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+                file,
+                'Fix or regenerate that file; a components lookup reads it as JSON.',
+            );
+        }
     }
 
     private missing(packageName: string, reason: string): LocatedComponents {

@@ -24,6 +24,11 @@
  *    `^openapi-generate` in the effective dependsOn of its `build` and `test`. A failure names the
  *    nx.json targetDefaults key to edit and the exact line. See GenerateWiring for why.
  *
+ * 4. Chained API documents (#1058): a DTO library tagged `generate:openapi-components` has
+ *    `openapi-components-generate` dependsOn its own `build`, and every `openapi-generate` /
+ *    `openapi-components-generate` reaching such a library — transitively — names
+ *    `^openapi-components-generate`, so a chain of any depth renders in order. See ComponentsWiring.
+ *
  * Conservative by design: only REQUIRES wiring on compile executors actually in use
  * (@nx/js:tsc, @angular/build:application). A repo that uses neither passes.
  *
@@ -39,6 +44,7 @@ import type {
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
+import { ComponentsWiring } from '../../lib/api-docs/components-wiring';
 import { GenerateWiring, WiringSourceReader } from '../../lib/api-docs/generate-wiring';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -237,13 +243,16 @@ export default async function runExecutor(
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
 
     const sources = new WiringSourceReader(context.root);
+    const declared = sources.declaredDependsOn(projectsConfig.projects);
     const generateWiring = new GenerateWiring(
         projectsConfig.projects,
         projectGraph.dependencies,
         sources.targetDefaults(),
-        sources.declaredDependsOn(projectsConfig.projects),
+        declared,
     );
-    const generateProblems = generateWiring.problems();
+    // The chained half (#1058): a document that $refs a DTO library's components document runs after it.
+    const componentsWiring = new ComponentsWiring(projectsConfig.projects, projectGraph.dependencies, declared);
+    const generateProblems = [...generateWiring.problems(), ...componentsWiring.problems()];
 
     const inUse = findCompileExecutorsInUse(projectsConfig, compileExecutors);
     const relevantExecutors = compileExecutors.filter((executorName: string) =>

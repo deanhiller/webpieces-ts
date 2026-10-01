@@ -31,7 +31,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GeneratedApiDocsLayout } from '@webpieces/core-util';
 import { Option, RuleFailError, matchesAnyGlob, renderRuleFailForHuman } from '@webpieces/rules-config';
-import { GENERATE_DOCS_SITE_TAG, GENERATE_OPENAPI_TAG } from '../../generate-targets';
+import {
+    GENERATE_DOCS_SITE_TAG,
+    GENERATE_OPENAPI_COMPONENTS_TAG,
+    GENERATE_OPENAPI_TAG,
+} from '../../generate-targets';
 
 /** One wiring defect, and the exact edit that fixes it. Data-only. */
 export class GenerateWiringProblem {
@@ -108,6 +112,7 @@ export class WiringSourceReader {
 /** The executors the plugin infers from a tag — a project.json naming one by hand is a second opt-in. */
 const INFERRED_EXECUTORS: readonly string[] = [
     '@webpieces/nx-webpieces-rules:openapi-generate',
+    '@webpieces/nx-webpieces-rules:openapi-components-generate',
     '@webpieces/nx-webpieces-rules:docs-generate',
 ];
 
@@ -170,7 +175,11 @@ export class GenerateWiring {
 
     problems(): GenerateWiringProblem[] {
         const generating = this.generating();
-        const problems: GenerateWiringProblem[] = this.handWritten(new Set(generating));
+        const tagged = new Set(generating);
+        for (const name of Object.keys(this.projects)) {
+            if ((this.projects[name]!.tags ?? []).includes(GENERATE_OPENAPI_COMPONENTS_TAG)) tagged.add(name);
+        }
+        const problems: GenerateWiringProblem[] = this.handWritten(tagged);
         for (const name of generating) problems.push(...this.shapeOf(name));
         problems.push(...this.dependentsOf(new Set(generating)));
         return problems;
@@ -190,9 +199,9 @@ export class GenerateWiring {
                 problems.push(new GenerateWiringProblem(
                     name,
                     `targets.${targetName} names the executor ${target.executor} by hand, and the project has no ` +
-                        `"${GENERATE_OPENAPI_TAG}" / "${GENERATE_DOCS_SITE_TAG}" tag. Opting in is the tag; the plugin ` +
-                        'infers the executor.',
-                    `${name}: add "${targetName === GeneratedApiDocsLayout.DOCS_TARGET ? GENERATE_DOCS_SITE_TAG : GENERATE_OPENAPI_TAG}" ` +
+                        `"${GENERATE_OPENAPI_TAG}" / "${GENERATE_OPENAPI_COMPONENTS_TAG}" / "${GENERATE_DOCS_SITE_TAG}" tag. ` +
+                        'Opting in is the tag; the plugin infers the executor.',
+                    `${name}: add "${targetName === GeneratedApiDocsLayout.DOCS_TARGET ? GENERATE_DOCS_SITE_TAG : GeneratedApiDocsLayout.tagOf(targetName)}" ` +
                         `to "tags" in ${project.root}/project.json and delete the "executor" line of targets.${targetName}.`,
                 ));
             }

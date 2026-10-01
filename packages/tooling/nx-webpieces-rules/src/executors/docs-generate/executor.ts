@@ -61,7 +61,7 @@ export class DocsGenerate {
         target.assertDependsOn(GeneratedApiDocsLayout.OPENAPI_TARGET);
         const document = target.requiredOption(options.document, 'document');
         const siteOut = target.insideProject(target.requiredOption(options.siteDir, 'siteDir'), 'siteDir');
-        const documentsDir = target.documentsDir();
+        const documentsDir = target.documentsDir(GeneratedApiDocsLayout.OPENAPI_TARGET);
         const spec = path.join(documentsDir, document);
         if (!fs.existsSync(spec)) {
             throw new RuleFailError(

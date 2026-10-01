@@ -1,10 +1,12 @@
 /**
- * The shared half of the `openapi-generate` and `docs-generate` executors: WHERE a generated document
+ * The shared half of the `openapi-generate`, `openapi-components-generate` and `docs-generate`
+ * executors: WHERE a generated document
  * goes, and the proof that the target is wired so that nx both orders and caches it correctly.
  *
  * Both halves read the project's own declarations and never supply a value of their own:
  *
- * - the documents' directory is the `outputPath` of the target `openapi-generate` dependsOn — the api
+ * - the documents' directory is the `outputPath` of the target the generating target
+ *   (`openapi-generate`, or a DTO library's `openapi-components-generate`) dependsOn — the api
  *   library's `build` (tsc) step, which writes the directory the package is packed from, so the
  *   documents ship INSIDE the published package. It is ASKED of nx through `GeneratedApiDocsLayout`
  *   (`@webpieces/core-util`), the same lookup `McpToolCatalog.fromPackages` reads with, and never
@@ -56,11 +58,12 @@ export class GeneratorTarget {
 
     /**
      * Absolute path to the directory the documents live in: the `outputPath` of the target
-     * `openapi-generate` dependsOn — the directory the package is packed from.
+     * `generateTarget` dependsOn — the directory the package is packed from. `generateTarget` is
+     * `openapi-generate` for a contract library and `openapi-components-generate` for a DTO library.
      */
-    documentsDir(): string {
+    documentsDir(generateTarget: string): string {
         const lookup = new GeneratedApiDocsLayout(this.projectRoot, this.projectName, this.targets)
-            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET);
+            .outputTarget(generateTarget);
         if (lookup.found === undefined) {
             throw new RuleFailError(
                 this.ruleName,

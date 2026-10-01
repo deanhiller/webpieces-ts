@@ -30,6 +30,7 @@ from tags (`generate-targets.ts`):
 | tag | inferred |
 |---|---|
 | `generate:openapi` | `openapi-generate` |
+| `generate:openapi-components` | `openapi-components-generate` — a DTO library's `components.openapi.json` (#1058) |
 | `generate:docs-site` | `openapi-generate` + `docs-generate` (a site is rendered from a document) |
 
 The plugin owns the executor, `cache`, `inputs` and `outputs`. The consumer states every VALUE in its
@@ -58,6 +59,26 @@ after #1021's `compile` split broke the first real consumer:
   }
 }
 ```
+
+A DTO library that contract documents reference (#1058) is tagged `generate:openapi-components`, and
+every generating target that READS an upstream components document carries `^openapi-components-generate`
+— which is what orders a chain of any depth (contract lib → DTO lib A → DTO lib B):
+
+```json
+"tags": ["generate:openapi-components"],
+"targets": {
+  "build": { "executor": "@nx/js:tsc", "outputs": ["{options.outputPath}"], "options": { "outputPath": "dist/libraries/apis/my-dtos", "...": "..." } },
+  "openapi-components-generate": {
+    "dependsOn": ["build", "^openapi-components-generate"],
+    "options": { "manifest": "libraries/apis/my-dtos/openapi.manifest.json", "format": "json" }
+  }
+}
+```
+
+with `{ "kind": "components", "title": "My DTOs", "entries": ["src/index.ts"] }` as its manifest, and the
+contract library's `"openapi-generate": { "dependsOn": ["build", "^openapi-components-generate"], … }`.
+Both targets take the upstream `components.openapi.json` as a cache input, so a change to a DTO library
+regenerates every document downstream of it.
 
 and ONE repo-wide `nx.json` line per targetDefaults entry that governs a `build` or `test` a consumer
 runs — keyed the way nx reads it, the EXECUTOR key when one exists, else the target name:
@@ -88,7 +109,10 @@ its build output.
 
 `validate-nx-wiring` checks this on the RESOLVED project graph: (a) a `generate:openapi` project's
 `openapi-generate` dependsOn exactly its own `build`; (b) every project that depends — transitively — on
-one has `^openapi-generate` in the effective `dependsOn` of its `build` and `test`. A failure names the
+one has `^openapi-generate` in the effective `dependsOn` of its `build` and `test`; (c) a
+`generate:openapi-components` project's `openapi-components-generate` dependsOn exactly its own `build`;
+(d) every `openapi-generate` and `openapi-components-generate` that reaches — transitively — a
+components-publishing library names `^openapi-components-generate`. A failure names the
 `nx.json` targetDefaults key to edit and prints the exact line — or the project.json to edit, when the
 project states its own `dependsOn` (nx does not merge it with targetDefaults).
 
@@ -147,8 +171,8 @@ types and `$ref`s every other package's into that package's components document:
   workspace source directory's `openapi-components-generate` dependsOn. Never an assumed `dist/`.
 - **Fail-closed, for OpenAPI documents only.** A `full-private` / `public` document reaching a type
   declared in a package with no components document is a generation error naming the type, its package
-  and the fix: move it into a DTO library (as a `…Dto` string enum when it is a literal union), or give
-  that package a components document. There is no inline allow-list. A referenced schema missing from
+  and the fix: move it into a DTO library (as a `…Dto` string enum when it is a literal union), or tag
+  that package `generate:openapi-components`. There is no inline allow-list. A referenced schema missing from
   an existing document is refused as stale.
 - **MCP never requires a components document.** `mcp-openapi.json` and every `mcp-*-tools.json` inline
   every schema from any package, exactly as before, so an MCP-only consumer tags nothing — and a shared
@@ -173,7 +197,9 @@ deployed, not installed.
 ```
 
 `document` should be the PARTNER-facing document: a site built from `full-private-openapi.json`
-publishes exactly the operations somebody decided not to publish. `siteDir` must lie strictly inside the
+publishes exactly the operations somebody decided not to publish. When the contracts reference DTO
+libraries, name the self-contained `public-openapi.bundled.json`: the split document's `$ref`s point
+into other packages, which a site does not fetch. `siteDir` must lie strictly inside the
 project, because it is emptied on every run.
 
 ## The MCP server loads the catalogs with ONE call

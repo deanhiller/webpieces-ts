@@ -155,6 +155,11 @@
             "schema": "./src/executors/openapi-generate/schema.json",
             "description": "Per-project, inferred from the generate:openapi tag: render the contracts to OpenAPI + one mcp-<ContractClass>-tools.json per MCP contract into the build (tsc) target outputPath, with the consumer's own @webpieces/openapi-generator"
         },
+        "openapi-components-generate": {
+            "implementation": "./src/executors/openapi-components-generate/executor",
+            "schema": "./src/executors/openapi-components-generate/schema.json",
+            "description": "Inferred on generate:openapi-components: write a DTO library's components.openapi.json into its build outputPath"
+        },
         "docs-generate": {
             "implementation": "./src/executors/docs-generate/executor",
             "schema": "./src/executors/docs-generate/schema.json",

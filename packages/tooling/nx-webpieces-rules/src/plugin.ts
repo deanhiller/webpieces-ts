@@ -5,7 +5,9 @@
  * 1. Workspace-level architecture validation (generate, visualize, validate-*)
  * 2. Per-project circular dependency checking
  * 3. Per-project API documents, opted into with a TAG: `generate:openapi` infers `openapi-generate`,
- *    `generate:docs-site` infers `openapi-generate` + `docs-generate` (see generate-targets.ts)
+ *    `generate:openapi-components` infers `openapi-components-generate` (a DTO library's
+ *    components.openapi.json), `generate:docs-site` infers `openapi-generate` + `docs-generate`
+ *    (see generate-targets.ts)
  *
  * Install with: nx add @webpieces/nx-webpieces-rules
  *
