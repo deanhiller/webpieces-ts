@@ -36,13 +36,15 @@ one, or a react-native-only one. Inferred from package.json, `react-native` wins
 
 | role | is |
 |---|---|
-| `role:api-lib` | a boundary contract and/or its DTOs, implementation elsewhere: `@ApiPath`/`@Rpc`/`@PubSub`, an IPC contract (`@WpInternal`/`@WpIpcEndpoint`), an in-process abstract `…Api` behind a DI token, or a DTO-only library |
-| `role:api-client` | a contract PLUS its bundled default implementation that talks to an outside system through its SDK (`XxxApi` + `XxxClient` with `@provideSingletonDefaultForApi`, each method through `LogApiCallImpl.execute`) |
+| `role:api-lib` | a boundary contract and/or its DTOs, implementation elsewhere: `@ApiPath`/`@Rpc`/`@PubSub`, an IPC contract (`@WpInternal`/`@WpIpcEndpoint`), an in-process abstract `…Api` behind a DI token, or a DTO-only library; data-only protocol constants may accompany the contract |
+| `role:api-client` | a contract PLUS its bundled default implementation that talks to an outside system through its SDK (`XxxApi` abstract class, or exported `XxxApi` interface implemented by an `XxxClient` registered with `@provideSingletonDefaultForApi`; each method through `LogApiCallImpl.execute`) |
 
 The split is deliberate (D1): it puts "talks to an outside system" on the architecture graph.
 `validate-api-lib-tag` keeps both honest — an `@ApiPath` contract must carry one of the two roles; a
-`role:api-lib` must export a contract or only wire types (interfaces, aliases, enums, data classes); a
-`role:api-client` must export its contract. Streaming / listening external APIs are not supported yet.
+`role:api-lib` must export a contract or only wire types (interfaces, aliases, enums, data classes); it may
+also export literal/structural protocol data, but not functions, function-valued constants, or concrete
+classes with behavior. `role:api-client` must export its proven contract. Streaming / listening external
+APIs are not supported yet.
 
 ## The five tag-truth rules
 
@@ -54,8 +56,9 @@ consumer's layout.
 
 A `role:api-lib` depends only on other `role:api-lib` projects plus `apiLibPackages`; a
 `role:api-client` may also import what its own `apiClients` entry lists. A `role:api-client` with no
-entry is itself refused. Production imports are read from source (specs do not count), so a node builtin
-(`fs`) is an outside package like any other.
+entry is itself refused. Production imports are parsed from source syntax (specs do not count and prose
+cannot become an import), so a node builtin is an outside package like any other; `node:fs` canonicalizes
+to the allow-list spelling `fs`.
 
 ```json
 "api-lib-dependencies": {

@@ -13,7 +13,9 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
   its SDK adapter) beside `api-lib` (a contract and/or its DTOs). `tag-truth.ts` runs three graph rules
   after enrichGraph in `architecture:generate` and `validate-architecture-unchanged` —
   `api-lib-dependencies`, `api-lib-path`, `framework-folder` — and `validate-api-lib-tag` accepts a DTO-only,
-  IPC or in-process contract library. Inside the `api-rules-for-openapi` / `api-rules-for-mcp` scan, the
+  IPC or in-process contract library (including data-only protocol constants), recognizes an exported
+  `…Api` interface implemented by its registered default api-client, and refuses executable implementation
+  exports from `role:api-lib`. Inside the `api-rules-for-openapi` / `api-rules-for-mcp` scan, the
   WIRE CLOSURE (`wire-closure.ts`) requires every type a contract reaches to be declared in a
   `role:api-lib` project and to carry its `required-type-suffix` suffix; `generate:openapi-components` is
   refused on anything but a `role:api-lib` (`ComponentsWiring` and the executor). See
