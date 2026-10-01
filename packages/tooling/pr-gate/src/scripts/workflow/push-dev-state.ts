@@ -65,6 +65,7 @@ const BLOCKED_DURING_RESOLVE: readonly string[] = [
     'wp-review-upsert-pr',
     'wp-finish-upsert-pr',
     'wp-human-post-pr',
+    'wp-upsert-hotfix-pr',
     'wp-land-pr',
     'wp-cleanup',
 ];

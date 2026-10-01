@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService, BranchIdentity, summaryJsonPath } from '@webpieces/rules-config';
+import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -17,7 +17,7 @@ import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
 import { RefusedReviewer, ReviewReport, ReviewReportInput } from '../workflow/review-report';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { StageOutputLog, REVIEW_CONSOLE_LOG } from '../workflow/stage-output-log';
-import { HotfixInstructions } from '../workflow/hotfix-instructions';
+import { HotfixRedirect } from '../workflow/hotfix-redirect';
 import {
     ReviewRoundPlan, ReviewRoundStateService, ROUND_ACTION_REVIEW, ROUND_ACTION_RESUME,
 } from '../workflow/review-round-state';
@@ -84,8 +84,7 @@ export class ReviewUpsertPrCommand {
         // Injected to RESOLVE + RENDER refusals (see refusals()) and to name each round's verdict file.
         private readonly reviewJsonService: ReviewJsonService,
         private readonly stageConsole: StageOutputLog,
-        private readonly branchIdentity: BranchIdentity,
-        private readonly hotfixInstructions: HotfixInstructions,
+        private readonly hotfixRedirect: HotfixRedirect,
         private readonly rounds: ReviewRoundStateService,
     ) {}
 
@@ -101,16 +100,13 @@ export class ReviewUpsertPrCommand {
      * output would only have traded that kill for a flooded context.
      */
     async run(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
+        // A /hotfix/ branch has no review stage — it publishes with wp-upsert-hotfix-pr (issue #1057).
+        this.hotfixRedirect.assertNotHotfix('wp-review-upsert-pr');
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         await this.stageConsole.withCapture(repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot, opts));
     }
 
     private async runStage(repoRoot: string, opts: ReviewUpsertPrOptions): Promise<void> {
-        if (this.branchIdentity.isHotfix()) {
-            const summaryPath = summaryJsonPath(repoRoot, this.aiBranchName.getFeatureName());
-            this.stageConsole.say(this.hotfixInstructions.reviewNoOp(summaryPath));
-            return;
-        }
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         const featureName = this.aiBranchName.getFeatureName();

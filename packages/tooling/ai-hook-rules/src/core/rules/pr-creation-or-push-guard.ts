@@ -41,7 +41,11 @@ function fixHintFor(upsertPrCommand: string): FixHint {
             '  It publishes a DISPOSABLE copy of your branch that the dev environment composes and rebuilds.\n' +
             "  Your feature branch is never moved and never acquires another developer's commits, which is\n" +
             '  the whole reason the copy exists. Do NOT open a PR to main just to test something in dev.\n\n' +
-            'Both push internally as child processes this hook never sees, so the gated commands are\n' +
+            'ON A /hotfix/ BRANCH (cut from the production sha, so it must NOT take main):\n' +
+            '  pnpm wp-upsert-hotfix-pr\n' +
+            '  One command: hotfix-ci (build + test), no merge from main, one fast-forward push, then it\n' +
+            '  creates or updates the bannered PR to main and never auto-merges it.\n\n' +
+            'All of them push internally as child processes this hook never sees, so the gated commands are\n' +
             'unaffected by this guard. There is nothing to paste or attest to; the commands do the work.\n' +
             'A HUMAN who has personally inspected the work may run `pnpm wp-human-post-pr` themselves.\n' +
             'That is an interactive human attestation and visibly skips automated build/review. AI must\n' +

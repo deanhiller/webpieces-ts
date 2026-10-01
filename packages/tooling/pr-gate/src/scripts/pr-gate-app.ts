@@ -19,6 +19,7 @@ import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-
 import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { HumanPostPrCommand } from './commands/human-post-pr-command';
+import { UpsertHotfixPrCommand } from './commands/upsert-hotfix-pr-command';
 import { PushDevStateStore } from './workflow/push-dev-state';
 import { RepoRootFinder } from '@webpieces/rules-config';
 
@@ -50,6 +51,7 @@ export class PrGateApp {
         private readonly pushDevCommand: PushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
         private readonly humanPostPrCommand: HumanPostPrCommand,
+        private readonly upsertHotfixPrCommand: UpsertHotfixPrCommand,
         private readonly pushDevStateStore: PushDevStateStore,
         private readonly repoRootFinder: RepoRootFinder,
     ) {}
@@ -160,6 +162,15 @@ export class PrGateApp {
     humanPostPr(): Promise<void> {
         this.assertNoResolveInProgress('wp-human-post-pr');
         return this.humanPostPrCommand.run();
+    }
+
+    /**
+     * `wp-upsert-hotfix-pr`: the one command for a `/hotfix/` branch — `hotfix-ci` gate, no merge from
+     * main, one fast-forward push, upsert the bannered PR, never auto-merge (issue #1057).
+     */
+    upsertHotfixPr(): Promise<void> {
+        this.assertNoResolveInProgress('wp-upsert-hotfix-pr');
+        return this.upsertHotfixPrCommand.run();
     }
 
     /**

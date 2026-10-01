@@ -549,6 +549,13 @@ describe('stale-main-bash-guard — a bare checkout of main is blocked before it
         expect(blocked('git checkout deanhiller/some-branch')).toBe(false);
     });
 
+    // Issue #1057: a hotfix is cut from the production sha, not from origin/main. Even on a main far
+    // beyond maxCommitsBehind, creating that branch is a way OUT of main and must stay allowed.
+    it('allows cutting a /hotfix/ branch from a non-main sha on a stale main', () => {
+        expect(blocked('git checkout -b dean/hotfix/fix-timeout 1a2b3c4d')).toBe(false);
+        expect(blocked('git switch -c dean/1057/hotfix/fix-timeout 1a2b3c4d5e6f')).toBe(false);
+    });
+
     /**
      * Flags do not change which branch you land on, so they must not change the verdict — in EITHER
      * direction. The shared BranchSwitchScan is what makes this rule and redirect-how-to-merge-main

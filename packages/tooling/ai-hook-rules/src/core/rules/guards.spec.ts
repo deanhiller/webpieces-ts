@@ -82,6 +82,14 @@ describe('pr-creation-or-push-guard', () => {
         expect(hint).toContain('never run it for the human or answer `human`');
     });
 
+    // Issue #1057: a /hotfix/ branch has its own one-command push path, which never takes main.
+    it('names the hotfix command as the push path for a /hotfix/ branch', () => {
+        const hint = prCreationOrPushGuard.fixHint.mainMessage;
+        expect(hint).toContain('ON A /hotfix/ BRANCH');
+        expect(hint).toContain('pnpm wp-upsert-hotfix-pr');
+        expect(hint).toContain('never auto-merges');
+    });
+
     it('writes the git-workflow doc it points the AI at (it may not exist yet)', () => {
         const root = tempRoot();
         const doc = path.join(root, WEBPIECES_TMP_DIR, 'instruct-ai', 'webpieces.git-workflow.md');

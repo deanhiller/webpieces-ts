@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError, BranchIdentity } from '@webpieces/rules-config';
+import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -26,7 +26,7 @@ import { Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER } from '
 import { ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
-import { HotfixFinishPreparer } from '../workflow/hotfix-finish-preparer';
+import { HotfixRedirect } from '../workflow/hotfix-redirect';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -142,8 +142,7 @@ export class FinishUpsertPrCommand {
         // rendered. Server-side, so no config can express them — see SquashSettingsEnforcer.
         private readonly squashSettings: SquashSettingsEnforcer,
         private readonly stageConsole: StageOutputLog,
-        private readonly branchIdentity: BranchIdentity,
-        private readonly hotfixFinish: HotfixFinishPreparer,
+        private readonly hotfixRedirect: HotfixRedirect,
         private readonly rounds: ReviewRoundStateService,
     ) {}
 
@@ -154,6 +153,8 @@ export class FinishUpsertPrCommand {
      * comment upserts are in the file.
      */
     async run(): Promise<void> {
+        // A /hotfix/ branch is published by wp-upsert-hotfix-pr, never by this stage (issue #1057).
+        this.hotfixRedirect.assertNotHotfix('wp-finish-upsert-pr');
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         await this.stageConsole.withCapture(repoRoot, FINISH_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot));
     }
@@ -161,10 +162,6 @@ export class FinishUpsertPrCommand {
     private async runStage(repoRoot: string): Promise<void> {
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
-        if (this.branchIdentity.isHotfix()) {
-            await this.runHotfixStage(repoRoot);
-            return;
-        }
         // 1. REQUIRE stage ② — see assertStageTwoRan. Returns true when its receipt covers THIS commit,
         //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
         const featureName = this.aiBranchName.getFeatureName();
@@ -234,20 +231,6 @@ export class FinishUpsertPrCommand {
             result.output = trail;
             if (result.remediation !== '') result.remediation = `${trail}\n\n#### Final state\n${result.remediation}`;
         }
-    }
-
-    /** Hotfix finish owns every prerequisite normally split between stages ② and ③. */
-    private async runHotfixStage(repoRoot: string): Promise<void> {
-        const state = await this.hotfixFinish.prepare(repoRoot);
-        const base = this.branchNaming.baseBranchName(state.currentBranch);
-        const title = this.prTitleFrom(state.review);
-        const input = this.computeDashboardInput(repoRoot, true, state.review, title, [], state.scan, true);
-        const sources = new PrCommentSources(state.scan, state.review, state.provenance);
-        const result = this.publishAll(repoRoot, base, input, sources);
-        this.archiveConsumedReview(repoRoot, state.featureName, result);
-        const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge);
-        this.stageConsole.say(this.banner.render(bannerInput));
-        this.stageConsole.say(this.banner.linkDirective(bannerInput));
     }
 
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
@@ -399,7 +382,7 @@ export class FinishUpsertPrCommand {
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: PrSummary, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan, hotfix = false): DashboardInput {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: PrSummary, title: string, required: readonly RequiredChecklist[], scan: ChecklistScan): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -419,7 +402,7 @@ export class FinishUpsertPrCommand {
         // `scan.suppressed.length`, never `scan.reviewersDisabled` alone: the dashboard and the commit
         // body have to state HOW MANY reviewers were killed, because a suppressed 4 and an applicable 0
         // are different facts that both render as an empty `rows`. See DashboardInput.
-        const input = new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows, this.buildAffected.resolveBuildCommand(repoRoot), scan.suppressed.length, this.authorIdentity.resolve(review.model), hotfix);
+        const input = new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows, this.buildAffected.resolveBuildCommand(repoRoot), scan.suppressed.length, this.authorIdentity.resolve(review.model), false);
         input.notBriefed = scan.notBriefed.map((r: RequiredChecklist): string => r.id);
         return input;
     }
@@ -506,7 +489,7 @@ export class FinishUpsertPrCommand {
         const request = new PrCommentRequest();
         request.prNumber = prNumber;
         request.marker = CHECKLIST_COMMENT_MARKER;
-        request.body = this.checklistComment.render(this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved, scan.suppressed.length, this.branchIdentity.isHotfix());
+        request.body = this.checklistComment.render(this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved, scan.suppressed.length, false);
         request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         request.payloadName = 'checklist-comment.json';
         request.label = 'checklist review comment';
@@ -664,7 +647,7 @@ export class FinishUpsertPrCommand {
         request.prNumber = prNumber;
         request.marker = DETAIL_COMMENT_MARKER;
         const detail = this.dashboard.renderDetailComment(input);
-        request.body = input.hotfix ? detail + '\n\n' + DETAIL_COMMENT_MARKER : DETAIL_COMMENT_MARKER + '\n' + detail;
+        request.body = DETAIL_COMMENT_MARKER + '\n' + detail;
         request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         request.payloadName = 'detail-comment.json';
         request.label = 'full dashboard comment';

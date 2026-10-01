@@ -188,9 +188,10 @@ Give the subagent: the task, **the ticket number from the section above** (Linea
 > ```
 >
 > **Hotfix branch exception.** If the branch contains the exact, case-sensitive `/hotfix/` segment,
-> stage ① prints the emergency two-stage flow: write its `summary.json`, then run
-> `pnpm wp-finish-upsert-pr`. Do not run stage ②, do not spawn reviewers, and do not manufacture verdicts;
-> finish runs compilation + tests and publishes the permanent bypass audit banner.
+> do not run the three stages — they refuse on it. Run the one command `pnpm wp-upsert-hotfix-pr`
+> (write the `summary.json` it asks for, then run it again). Do not spawn reviewers and do not
+> manufacture verdicts; it runs compilation + tests, never merges main into the branch, pushes once,
+> and posts the permanently-bannered PR without enabling auto-merge.
 >
 > **Read what each command prints on THIS run and obey that** — webpieces owns the sequence and the file paths, and changes them between releases. Do not follow a remembered version.
 >
