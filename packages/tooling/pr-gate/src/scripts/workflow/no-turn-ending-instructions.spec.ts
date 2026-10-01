@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
-    ChecklistInstructionsService, RequiredChecklist, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
+    BranchIdentity, ChecklistInstructionsService, RequiredChecklist, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { ReviewReport, ReviewReportInput } from './review-report';
 import { ReviewRoundText } from './review-round-text';
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
+import { HotfixRedirect } from './hotfix-redirect';
 import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
     MERGE_RESULT_BEHIND_CLEAN, MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN,
@@ -103,13 +104,18 @@ const emitted = (): Map<string, string> => {
     orange.roundAction = 'finish';
     orange.orangeChecklistIds = ['db-migration-reviewer'];
     rendered.set('review-report: final round came back orange', report.render(orange));
+    // Issue #1057: the refusal each of the three PR stages prints on a /hotfix/ branch.
+    const redirect = new HotfixRedirect(new BranchIdentity());
+    for (const stage of ['wp-start-upsert-pr', 'wp-review-upsert-pr', 'wp-finish-upsert-pr']) {
+        rendered.set(`hotfix-redirect: ${stage}`, redirect.message(stage, 'dean/hotfix/fix-timeout'));
+    }
     return rendered;
 };
 
 describe('no string the gate prints tells an AI to end its turn', () => {
     it('renders something for every case, so an empty map cannot pass this file', () => {
         const rendered = emitted();
-        expect(rendered.size).toBe(OUTCOMES.size * 2 + 7);
+        expect(rendered.size).toBe(OUTCOMES.size * 2 + 10);
         expect([...rendered.values()].filter((text: string): boolean => text.length > 0).length)
             .toBeGreaterThan(OUTCOMES.size);
     });

@@ -173,6 +173,19 @@ describe('branch-creation-guard', () => {
         expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/hotfix/fix-timeout'))).toEqual([]);
     });
 
+    // Issue #1057: a hotfix branch is cut from the EXACT sha running in production, never from fresh
+    // main. That base is the whole point of the branch, so a non-main sha must not be refused — from a
+    // feature branch, or from a main that is itself behind origin.
+    it('permits cutting a /hotfix/ branch from a non-main sha, from main or from a feature branch', () => {
+        git.branch = 'dean/existing';
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/hotfix/fix-timeout 1a2b3c4d'))).toEqual([]);
+        expect(rule('ON').check(ctx('git switch -c dean/1057/hotfix/fix-timeout 1a2b3c4d5e6f'))).toEqual([]);
+        git.branch = 'main';
+        git.behind = 12;
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/hotfix/fix-timeout 1a2b3c4d'))).toEqual([]);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/feature 1a2b3c4d'))).toHaveLength(1);
+    });
+
     it('does not relax lookalike or differently-cased branch names', () => {
         git.branch = 'dean/existing';
         expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/Hotfix/fix-timeout'))).toHaveLength(1);

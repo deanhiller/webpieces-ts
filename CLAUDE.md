@@ -173,8 +173,9 @@ Commit your work (the tooling never commits for you), then run the gated flow �
 obeying what each command prints on THIS run. What each stage does, and what to spawn between ② and ③,
 is in `.claude/rules/finishing-a-feature.md`.
 
-Exception: an exact `/hotfix/` branch segment is explicit emergency authorization. Follow the two-stage
-instructions printed by start: write `summary.json` and go directly to finish; never spawn reviewers.
+Exception: an exact `/hotfix/` branch segment is explicit emergency authorization. Publish it with the
+one command `pnpm wp-upsert-hotfix-pr` (it prints the `summary.json` path and schema when the file is
+missing); never spawn reviewers, and never run the three stages on it.
 
 **The ONLY reasons to stop before posting the PR:**
 - The human explicitly said "don't open a PR yet."

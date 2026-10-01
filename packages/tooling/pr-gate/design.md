@@ -65,8 +65,8 @@ graph TD
     HarnessAgentActivityReader["HarnessAgentActivityReader"]
     HomeConfigService["HomeConfigService"]
     HomeDocKeys["HomeDocKeys"]
-    HotfixFinishPreparer["HotfixFinishPreparer"]
-    HotfixInstructions["HotfixInstructions"]
+    HotfixPrPublisher["HotfixPrPublisher"]
+    HotfixRedirect["HotfixRedirect"]
     HumanPostPrCommand["HumanPostPrCommand"]
     LandPrCommand["LandPrCommand"]
     LandedTreeResolver["LandedTreeResolver"]
@@ -116,6 +116,7 @@ graph TD
     SubagentProvenanceService["SubagentProvenanceService"]
     SyncMainCommand["SyncMainCommand"]
     TmpScratchSweeper["TmpScratchSweeper"]
+    UpsertHotfixPrCommand["UpsertHotfixPrCommand"]
     VerdictProvenanceService["VerdictProvenanceService"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
@@ -197,7 +198,6 @@ graph TD
     FinishUpdateCommand --> RepoRootFinder
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> AuthorIdentityResolver
-    FinishUpsertPrCommand --> BranchIdentity
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> BuildGateLog
@@ -208,7 +208,7 @@ graph TD
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
-    FinishUpsertPrCommand --> HotfixFinishPreparer
+    FinishUpsertPrCommand --> HotfixRedirect
     FinishUpsertPrCommand --> MergeBodyTempFile
     FinishUpsertPrCommand --> MergeState
     FinishUpsertPrCommand --> PrCommentUpserter
@@ -234,18 +234,8 @@ graph TD
     GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
     HomeConfigService --> HomeDocKeys
-    HotfixFinishPreparer --> AiBranchName
-    HotfixFinishPreparer --> BranchIdentity
-    HotfixFinishPreparer --> BuildAffected
-    HotfixFinishPreparer --> BuildArtifactGate
-    HotfixFinishPreparer --> ChecklistScanner
-    HotfixFinishPreparer --> DiffMaterializer
-    HotfixFinishPreparer --> GitExec
-    HotfixFinishPreparer --> MergeEnd
-    HotfixFinishPreparer --> MergeState
-    HotfixFinishPreparer --> PrContextWriter
-    HotfixFinishPreparer --> ProvenanceEnforcer
-    HotfixFinishPreparer --> ReviewJsonService
+    HotfixPrPublisher --> GitExec
+    HotfixRedirect --> BranchIdentity
     HumanPostPrCommand --> AiBranchName
     HumanPostPrCommand --> BranchIdentity
     HumanPostPrCommand --> BranchNaming
@@ -316,6 +306,7 @@ graph TD
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
     PrGateApp --> SyncMainCommand
+    PrGateApp --> UpsertHotfixPrCommand
     PrGateApp --> WriteReviewCommand
     PrGateApp --> WriteReviewFixesCommand
     ProvenanceEnforcer --> AiBranchName
@@ -351,13 +342,12 @@ graph TD
     ReviewStageReceiptService --> ReviewJsonService
     ReviewUpsertPrCommand --> ActiveHatchReport
     ReviewUpsertPrCommand --> AiBranchName
-    ReviewUpsertPrCommand --> BranchIdentity
     ReviewUpsertPrCommand --> BuildAffected
     ReviewUpsertPrCommand --> BuildArtifactGate
     ReviewUpsertPrCommand --> ChecklistScanner
     ReviewUpsertPrCommand --> DiffMaterializer
     ReviewUpsertPrCommand --> GitExec
-    ReviewUpsertPrCommand --> HotfixInstructions
+    ReviewUpsertPrCommand --> HotfixRedirect
     ReviewUpsertPrCommand --> MergeEnd
     ReviewUpsertPrCommand --> MergeState
     ReviewUpsertPrCommand --> PrContextWriter
@@ -383,11 +373,10 @@ graph TD
     StartUpdateCommand --> RepoRootFinder
     StartUpdateCommand --> RunUpdate
     StartUpsertPrCommand --> AiBranchName
-    StartUpsertPrCommand --> BranchIdentity
     StartUpsertPrCommand --> BranchNaming
     StartUpsertPrCommand --> DiffBasisResolver
     StartUpsertPrCommand --> GitExec
-    StartUpsertPrCommand --> HotfixInstructions
+    StartUpsertPrCommand --> HotfixRedirect
     StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate
@@ -396,6 +385,22 @@ graph TD
     SyncMainCommand --> OrphanDirSweeper
     SyncMainCommand --> RepoRootFinder
     SyncMainCommand --> WorkingTreeGate
+    UpsertHotfixPrCommand --> AiBranchName
+    UpsertHotfixPrCommand --> AuthorIdentityResolver
+    UpsertHotfixPrCommand --> BranchIdentity
+    UpsertHotfixPrCommand --> BuildAffected
+    UpsertHotfixPrCommand --> BuildArtifactGate
+    UpsertHotfixPrCommand --> ChecklistCommentRenderer
+    UpsertHotfixPrCommand --> ChecklistScanner
+    UpsertHotfixPrCommand --> Dashboard
+    UpsertHotfixPrCommand --> GateTokenService
+    UpsertHotfixPrCommand --> GitExec
+    UpsertHotfixPrCommand --> HotfixPrPublisher
+    UpsertHotfixPrCommand --> MergeState
+    UpsertHotfixPrCommand --> PrCommentUpserter
+    UpsertHotfixPrCommand --> RepoRootFinder
+    UpsertHotfixPrCommand --> ReviewJsonService
+    UpsertHotfixPrCommand --> SquashSettingsEnforcer
     VerdictProvenanceService --> AtomicFile
     VerdictProvenanceService --> ReviewJsonService
     WorktreeCleanupSection --> BranchMutationLog

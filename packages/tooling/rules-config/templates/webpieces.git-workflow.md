@@ -43,18 +43,25 @@ updates a stale branch and never merges the PR. AI must not run it for a human o
 
 ### Emergency `/hotfix/` branches
 
-An exact, case-sensitive `/hotfix/` path segment selects the auditable emergency profile. Its flow is:
+An exact, case-sensitive `/hotfix/` path segment selects the auditable emergency profile. A hotfix
+branch is cut from the exact sha running in production (`git checkout -b <you>/hotfix/<name> <prod-sha>`)
+so that it ships production plus the fix and nothing else. Its whole flow is ONE command:
 
 ```bash
-pnpm wp-start-upsert-pr
-# write summary.json at the path and schema stage ① prints
-pnpm wp-finish-upsert-pr
+pnpm wp-upsert-hotfix-pr
+# summary.json missing? it prints the path and schema and exits — write it, then run it again
 ```
 
-Do not run or manufacture reviewer verdicts. `wp-review-upsert-pr` is a successful no-op if invoked by
-mistake. Finish validates any conflict resolution, requires a clean tree and meaningful summary, runs
-affected `hotfix-ci` (build + tests only), materializes the diff, and posts the permanently-bannered audit
-surfaces. Normal branches retain the three-stage flow above.
+It requires a clean tree and a meaningful `summary.json`, runs affected `hotfix-ci` (build + tests only;
+red means nothing is pushed), **never merges main into the branch and never rewrites it**, pushes once
+(fast-forward only), and creates or updates the permanently-bannered PR to `main`. It **never enables
+auto-merge**: the PR merges after the hotfix is deployed and verified, with `pnpm wp-land-pr`. Commit
+another fix and re-run it to push again and update the same PR.
+
+Do not run or manufacture reviewer verdicts. On a `/hotfix/` branch `wp-start-upsert-pr`,
+`wp-review-upsert-pr` and `wp-finish-upsert-pr` refuse, change nothing, and name `wp-upsert-hotfix-pr` —
+stage ① would merge main in, which is exactly what a hotfix must not ship. Normal branches retain the
+three-stage flow above.
 
 The tooling never commits for you (see the golden rule below), so **commit your work first**, then run
 `pnpm wp-start-upsert-pr`. The only reasons to stop *before* posting are: the human explicitly said "don't

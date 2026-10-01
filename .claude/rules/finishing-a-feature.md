@@ -28,10 +28,15 @@ who personally inspected the work may run it to post a clean, current-main branc
 on failure; a no leaves validation to cloud CI. The PR visibly records which path ran and is never auto-merged.
 AI must never run the command on a human's behalf or answer its `human` attestation.
 
-For a branch containing the exact, case-sensitive `/hotfix/` segment, use the emergency two-stage flow:
-`wp-start-upsert-pr`, write the printed `summary.json`, then `wp-finish-upsert-pr`. Do not run reviewers
-or create verdict files; review is intentionally bypassed, and finish owns conflict validation plus the
-build-and-test-only `hotfix-ci` gate. `wp-review-upsert-pr` is a successful no-op on such a branch.
+For a branch containing the exact, case-sensitive `/hotfix/` segment, use the one emergency command
+`pnpm wp-upsert-hotfix-pr`. A hotfix branch is cut from the sha running in production, so it must ship
+production plus the fix and nothing else: the command never merges main into the branch and never
+rewrites it. It requires a clean tree and `summary.json` (a missing one prints its path and schema),
+runs only the build-and-test `hotfix-ci` gate, pushes once (fast-forward only), and creates or updates
+the audit-bannered PR to main. It never enables auto-merge, because the PR merges after the hotfix has
+been deployed and verified. Re-run it after another commit to push again and update the same PR. Do not
+run reviewers or create verdict files. On such a branch `wp-start-upsert-pr`, `wp-review-upsert-pr` and
+`wp-finish-upsert-pr` refuse, change nothing, and name `wp-upsert-hotfix-pr`.
 
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
