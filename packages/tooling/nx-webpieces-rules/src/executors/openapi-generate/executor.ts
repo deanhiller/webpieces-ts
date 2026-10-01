@@ -38,7 +38,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ExecutorResult } from '../../executor-result';
 import { ConsumerBinRequest, ConsumerBinResolver } from '../../lib/api-docs/consumer-bin-resolver';
-import { OPENAPI_GENERATOR } from '../../lib/api-docs/generator-package';
+import { GeneratorPackage, OPENAPI_GENERATOR } from '../../lib/api-docs/generator-package';
 import { GeneratorRunner } from '../../lib/api-docs/generator-runner';
 import { GeneratorTarget, StagedOutput } from '../../lib/api-docs/generator-target';
 import { toError } from '../../toError';
@@ -50,11 +50,28 @@ export interface OpenApiGenerateOptions {
     format?: string;
 }
 
-const RULE_NAME = GeneratedApiDocsLayout.OPENAPI_TARGET;
+/**
+ * WHICH generating target an {@link OpenApiGenerate} runs as: the target name (what its refusals are
+ * reported under, and whose dependsOn names the output directory) and the oldest generator release
+ * carrying what that target needs. Data-only.
+ *
+ * `wp-openapi` decides what to render from the manifest's own `kind`, so the contract documents and a
+ * DTO library's components document (#1058) are one executor body with two of these.
+ */
+export class GenerateSpec {
+    constructor(
+        readonly targetName: string,
+        readonly generator: GeneratorPackage,
+    ) {}
+}
+
+/** `openapi-generate`: a contract library's documents and MCP tool catalogs. */
+export const CONTRACT_DOCUMENTS = new GenerateSpec(GeneratedApiDocsLayout.OPENAPI_TARGET, OPENAPI_GENERATOR);
 
 /** Everything except the process-facing reporting, so the suite drives it exactly as nx does. */
 export class OpenApiGenerate {
     constructor(
+        private readonly spec: GenerateSpec = CONTRACT_DOCUMENTS,
         private readonly resolver: ConsumerBinResolver = new ConsumerBinResolver(),
         private readonly runner: GeneratorRunner = new GeneratorRunner(),
         private readonly scratch: RepoScratchDirs = new RepoScratchDirs(),
@@ -62,12 +79,13 @@ export class OpenApiGenerate {
 
     /** @returns the files written, absolute. Throws RuleFailError on every refusal. */
     run(options: OpenApiGenerateOptions, context: ExecutorContext): string[] {
-        const target = GeneratorTarget.of(RULE_NAME, context);
-        const outDir = target.documentsDir();
+        const ruleName = this.spec.targetName;
+        const target = GeneratorTarget.of(ruleName, context);
+        const outDir = target.documentsDir(ruleName);
         const manifest = target.requiredOption(options.manifest, 'manifest');
         const format = target.requiredOption(options.format, 'format');
         const bin = this.resolver.resolve(new ConsumerBinRequest(
-            RULE_NAME, OPENAPI_GENERATOR, [path.join(context.root, target.projectRoot), context.root]));
+            ruleName, this.spec.generator, [path.join(context.root, target.projectRoot), context.root]));
 
         const staging = this.scratch.make(context.root, 'wp-openapi-generate-');
         // webpieces-disable no-unmanaged-exceptions -- try/FINALLY only, nothing is caught: the staging
@@ -79,7 +97,7 @@ export class OpenApiGenerate {
             ], context.root);
             if (!run.ok) {
                 throw new RuleFailError(
-                    RULE_NAME,
+                    ruleName,
                     `${bin.packageName} ${bin.version} refused ${manifest}:\n${run.output}`,
                 );
             }
@@ -92,19 +110,27 @@ export class OpenApiGenerate {
     }
 }
 
+/** The single top-level handler both generating executors report through. */
+export class GenerateExecutorMain {
+    // webpieces-disable no-function-outside-class -- static entry point of this class
+    static async run(spec: GenerateSpec, options: OpenApiGenerateOptions, context: ExecutorContext): Promise<ExecutorResult> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this IS the executor's single top-level handler
+        try {
+            const written = new OpenApiGenerate(spec).run(options, context);
+            for (const file of written) console.log(`wrote ${path.relative(context.root, file)}`);
+            return new ExecutorResult(true);
+        } catch (err: unknown) {
+            const error = toError(err);
+            console.error(`❌ ${spec.targetName}: ${error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message}`);
+            return new ExecutorResult(false);
+        }
+    }
+}
+
 // webpieces-disable no-function-outside-class -- nx executor module: nx resolves a default-export function here
 export default async function runExecutor(
     options: OpenApiGenerateOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this IS the executor's single top-level handler
-    try {
-        const written = new OpenApiGenerate().run(options, context);
-        for (const file of written) console.log(`wrote ${path.relative(context.root, file)}`);
-        return new ExecutorResult(true);
-    } catch (err: unknown) {
-        const error = toError(err);
-        console.error(`❌ ${RULE_NAME}: ${error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message}`);
-        return new ExecutorResult(false);
-    }
+    return GenerateExecutorMain.run(CONTRACT_DOCUMENTS, options, context);
 }

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ApiDocExtractionError } from './ApiDocExtractionError';
 
 /** The npm package a source file belongs to: the nearest `package.json` above it. Data-only. */
 export class DeclaringPackage {
@@ -55,13 +56,29 @@ export class PackageOfFile {
         return parent === directory ? undefined : this.ofDirectory(parent);
     }
 
+    /** A `package.json`, or the ONE error type of this package naming it when it is not JSON. */
+    // webpieces-disable no-function-outside-class -- private static reader of this class
+    private static parse(file: string): PackageJsonFields {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- re-thrown as the ONE error type of this package, naming the file
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8')) as PackageJsonFields;
+        } catch (err: unknown) {
+            //const error = toError(err);
+            throw new ApiDocExtractionError(
+                `package.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+                file,
+                'Fix that package.json — the package a type is declared in is read from it.',
+            );
+        }
+    }
+
     /** The package whose `package.json` sits in `directory`, when it is one with a name. */
     private read(directory: string): DeclaringPackage | undefined {
         const file = path.join(directory, 'package.json');
         if (!fs.existsSync(file)) {
             return undefined;
         }
-        const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as PackageJsonFields;
+        const raw = PackageOfFile.parse(file);
         if (typeof raw.name !== 'string' || raw.name.trim() === '') {
             return undefined;
         }

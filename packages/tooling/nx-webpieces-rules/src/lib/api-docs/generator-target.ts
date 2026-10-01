@@ -56,11 +56,12 @@ export class GeneratorTarget {
 
     /**
      * Absolute path to the directory the documents live in: the `outputPath` of the target
-     * `openapi-generate` dependsOn — the directory the package is packed from.
+     * `generateTarget` dependsOn — the directory the package is packed from. `generateTarget` is
+     * `openapi-generate` for a contract library and `openapi-components-generate` for a DTO library.
      */
-    documentsDir(): string {
+    documentsDir(generateTarget: string): string {
         const lookup = new GeneratedApiDocsLayout(this.projectRoot, this.projectName, this.targets)
-            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET);
+            .outputTarget(generateTarget);
         if (lookup.found === undefined) {
             throw new RuleFailError(
                 this.ruleName,

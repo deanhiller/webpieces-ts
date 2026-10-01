@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { RuleFailError, specTempDirs } from '@webpieces/rules-config';
 import runOpenApiGenerate, { OpenApiGenerate } from '../../executors/openapi-generate/executor';
+import runComponentsGenerate, { COMPONENTS_DOCUMENT } from '../../executors/openapi-components-generate/executor';
 import { DocsGenerate } from '../../executors/docs-generate/executor';
 
 /**
@@ -206,6 +207,59 @@ describe('openapi-generate', () => {
         expect(() => new OpenApiGenerate().run(options, ws.context('openapi-generate')))
             .toThrow(/refused apps\/partner\/missing\.json:[\s\S]*wp-openapi refused: no manifest/);
         expect(ws.exists('dist/apps/partner')).toBe(false);
+    });
+});
+
+/** A stand-in `wp-openapi` reading a `"kind": "components"` manifest: one components document. */
+const FAKE_COMPONENTS = [
+    "const fs = require('fs'); const path = require('path');",
+    'const argv = process.argv.slice(2); const value = (flag) => argv[argv.indexOf(flag) + 1];',
+    "const out = value('--out'); fs.mkdirSync(out, { recursive: true });",
+    "fs.writeFileSync(path.join(out, 'components.openapi.json'), '{}');",
+].join('\n');
+
+describe('openapi-components-generate (#1058)', () => {
+    function dtoLibrary(version: string): Workspace {
+        const ws = new Workspace('libraries/dtos', 'dist/libraries/dtos');
+        ws.install('@webpieces/openapi-generator', 'wp-openapi', version, FAKE_COMPONENTS);
+        ws.targets['openapi-components-generate'] = {
+            executor: '@webpieces/nx-webpieces-rules:openapi-components-generate',
+            dependsOn: ['build', '^openapi-components-generate'],
+            outputs: ['{workspaceRoot}/dist/libraries/dtos/components.openapi.json'],
+            options: COMPONENTS_OPTIONS,
+        };
+        return ws;
+    }
+    const COMPONENTS_OPTIONS = { manifest: 'libraries/dtos/openapi.manifest.json', format: 'json' };
+
+    it("writes components.openapi.json into the outputPath of the build its target dependsOn", () => {
+        const ws = dtoLibrary('0.4.830');
+
+        const written = new OpenApiGenerate(COMPONENTS_DOCUMENT).run(COMPONENTS_OPTIONS, ws.context('openapi-components-generate'));
+
+        expect(written.map((file: string) => path.relative(ws.root, file))).toEqual(['dist/libraries/dtos/components.openapi.json']);
+    });
+
+    it('refuses a generator older than the first release that renders a components manifest', async () => {
+        const ws = dtoLibrary('0.4.829');
+        const printed: string[] = [];
+        vi.spyOn(console, 'error').mockImplementation((line: string): void => {
+            printed.push(line);
+        });
+
+        const result = await runComponentsGenerate(COMPONENTS_OPTIONS, ws.context('openapi-components-generate'));
+
+        expect(result.success).toBe(false);
+        expect(printed.join('\n')).toContain('@webpieces/openapi-generator >= 0.4.830');
+        expect(printed.join('\n')).toContain('openapi-components-generate');
+    });
+
+    it('names the components target when it has no dependsOn — never assuming ./dist', () => {
+        const ws = dtoLibrary('0.4.830');
+        ws.targets['openapi-components-generate']!.dependsOn = [];
+
+        expect(() => new OpenApiGenerate(COMPONENTS_DOCUMENT).run(COMPONENTS_OPTIONS, ws.context('openapi-components-generate')))
+            .toThrow(/partner:openapi-components-generate must dependsOn exactly ONE target/);
     });
 });
 

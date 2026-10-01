@@ -22,5 +22,12 @@ export class GeneratorPackage {
  */
 export const OPENAPI_GENERATOR = new GeneratorPackage('@webpieces/openapi-generator', 'wp-openapi', '0.4.812');
 
+/**
+ * `wp-openapi` reading a `"kind": "components"` manifest into a DTO library's
+ * `components.openapi.json` (#1058). 0.4.830 is the first release carrying it: an older generator
+ * refuses the manifest's missing `apis`.
+ */
+export const OPENAPI_COMPONENTS_GENERATOR = new GeneratorPackage('@webpieces/openapi-generator', 'wp-openapi', '0.4.830');
+
 /** `wp-docs-site --spec/--prose/--out`: 0.4.807 is the first release carrying the docs site (#1007). */
 export const DOCS_SITE = new GeneratorPackage('@webpieces/docs-site', 'wp-docs-site', '0.4.807');

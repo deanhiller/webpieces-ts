@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "OpenAPI Components Generate Executor",
+    "description": "Inferred on a project tagged generate:openapi-components. Render the DTO library's components-only components.openapi.json (every exported type it declares, info.version = package version) with the consumer's own @webpieces/openapi-generator, into the outputPath of the ONE target this target dependsOn (the library's build).",
+    "type": "object",
+    "properties": {
+        "manifest": {
+            "type": "string",
+            "description": "Workspace-relative path to the library's \"kind\": \"components\" openapi.manifest.json. No default."
+        },
+        "format": {
+            "type": "string",
+            "enum": ["json", "both"],
+            "description": "Which serializations to write. components.openapi.json is what contract documents $ref, so JSON is always written. No default."
+        }
+    },
+    "required": ["manifest", "format"]
+}
