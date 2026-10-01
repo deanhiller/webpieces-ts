@@ -1,0 +1,97 @@
+[
+  {
+    "name": "read_passage",
+    "methodName": "readPassage",
+    "description": "Reads one stored passage.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "passageId": {
+          "type": "string",
+          "description": "The passage's identifier."
+        }
+      },
+      "required": [
+        "passageId"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "passage": {
+          "type": "object",
+          "description": "The passage, exactly as lang-apis publishes it.",
+          "properties": {
+            "passageId": {
+              "type": "string",
+              "description": "The passage's identifier."
+            },
+            "voice": {
+              "type": "object",
+              "description": "The voice it is read in.",
+              "properties": {
+                "voiceId": {
+                  "type": "string",
+                  "description": "The voice's identifier."
+                },
+                "gender": {
+                  "type": "string",
+                  "description": "Who the voice sounds like.",
+                  "enum": [
+                    "female",
+                    "male"
+                  ]
+                }
+              },
+              "required": [
+                "voiceId",
+                "gender"
+              ],
+              "additionalProperties": false
+            },
+            "narrator": {
+              "type": "string",
+              "description": "Who narrates it.",
+              "enum": [
+                "female",
+                "male"
+              ]
+            }
+          },
+          "required": [
+            "passageId",
+            "voice",
+            "narrator"
+          ],
+          "additionalProperties": false
+        },
+        "descriptions": {
+          "type": "object",
+          "description": "Where its descriptions are stored.",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The storage key."
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "passage",
+        "descriptions"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

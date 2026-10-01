@@ -1,0 +1,153 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Fsdb API",
+        "version": "1.0.0",
+        "description": "Every operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+    },
+    "tags": [
+        {
+            "name": "Storage",
+            "description": "Storage."
+        }
+    ],
+    "paths": {
+        "/fsdb/passage": {
+            "post": {
+                "operationId": "FsdbApi_readPassage",
+                "summary": "readPassage",
+                "description": "Reads one stored passage.\n\nSafe to retry: this operation is read-only and idempotent.",
+                "tags": [
+                    "Storage"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoredPassageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoredPassageResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [],
+                "x-mcp-tool": "read_passage",
+                "x-mcp-hints": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "LocalizedDescriptionsDto": {
+                "type": "object",
+                "description": "Descriptions as stored — fsdb-api's OWN type of this name, a third shape.",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "The storage key."
+                    }
+                },
+                "required": [
+                    "key"
+                ]
+            },
+            "PassageItemDto": {
+                "type": "object",
+                "description": "One passage of a lesson.",
+                "properties": {
+                    "passageId": {
+                        "type": "string",
+                        "description": "The passage's identifier."
+                    },
+                    "voice": {
+                        "$ref": "#/components/schemas/VoiceChoiceDto",
+                        "description": "The voice it is read in."
+                    },
+                    "narrator": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Who narrates it."
+                    }
+                },
+                "required": [
+                    "passageId",
+                    "voice",
+                    "narrator"
+                ]
+            },
+            "SpeakerGenderDto": {
+                "type": "string",
+                "description": "The gender a voice speaks as.",
+                "enum": [
+                    "female",
+                    "male"
+                ]
+            },
+            "StoredPassageRequest": {
+                "type": "object",
+                "description": "A stored passage lookup.",
+                "properties": {
+                    "passageId": {
+                        "type": "string",
+                        "description": "The passage's identifier."
+                    }
+                },
+                "required": [
+                    "passageId"
+                ]
+            },
+            "StoredPassageResponse": {
+                "type": "object",
+                "description": "A stored passage.",
+                "properties": {
+                    "passage": {
+                        "$ref": "#/components/schemas/PassageItemDto",
+                        "description": "The passage, exactly as lang-apis publishes it."
+                    },
+                    "descriptions": {
+                        "$ref": "#/components/schemas/LocalizedDescriptionsDto",
+                        "description": "Where its descriptions are stored."
+                    }
+                },
+                "required": [
+                    "passage",
+                    "descriptions"
+                ]
+            },
+            "VoiceChoiceDto": {
+                "type": "object",
+                "description": "One voice a lesson can be read in.",
+                "properties": {
+                    "voiceId": {
+                        "type": "string",
+                        "description": "The voice's identifier."
+                    },
+                    "gender": {
+                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                        "description": "Who the voice sounds like."
+                    }
+                },
+                "required": [
+                    "voiceId",
+                    "gender"
+                ]
+            }
+        }
+    }
+}

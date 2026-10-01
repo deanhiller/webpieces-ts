@@ -28,6 +28,7 @@ import {
     WpMcpTool,
 } from '@webpieces/core-util';
 import {
+    ApiComponentsModel,
     ApiDocModel,
     DocumentedApiKey,
     DocumentedApiKeyCredential,
@@ -42,6 +43,8 @@ import { ConstantFolder } from './ConstantFolder';
 import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
 import { assertApiTypeMatchesMcpTools } from './McpMembership';
+import { ComponentsExtractor } from './ComponentsExtractor';
+import { PackageOfFile } from './PackageOfFile';
 import { TypeResolver } from './TypeResolver';
 
 /**
@@ -142,6 +145,14 @@ const DEFAULT_API_TYPES: readonly string[] = [SVC_TO_SVC];
  * render out means the two renderers cannot drift apart about what the contract SAYS.
  */
 export class ApiDocExtractor {
+    /** Which package declares each file — the owner of every schema (#1058). Cached per directory. */
+    private readonly packages = new PackageOfFile();
+    /** A resolver whose HOME is the package declaring `source` — see {@link TypeResolver}. */
+    private resolverFor(program: ts.Program, source: ts.SourceFile): TypeResolver {
+        const home = this.packages.of(source.fileName)?.name;
+        return new TypeResolver(program.getTypeChecker(), this.packages, home);
+    }
+
     /**
      * Extract the contract in `entryFile`.
      *
@@ -217,7 +228,7 @@ export class ApiDocExtractor {
     private extractContract(program: ts.Program, contract: ts.ClassDeclaration): ApiDocModel {
         const checker = program.getTypeChecker();
         const folder = new ConstantFolder(checker);
-        const resolver = new TypeResolver(checker);
+        const resolver = this.resolverFor(program, contract.getSourceFile());
 
         const pathDecorator = ApiDocExtractor.decoratorCall(contract, API_PATH)!;
         const basePathArgument = pathDecorator.arguments[0];
@@ -244,6 +255,7 @@ export class ApiDocExtractor {
             endpoints,
             resolver.collectedTypes(),
             resolver.collectedUnmapped(),
+            resolver.collectedCollisions(),
         );
     }
 
@@ -271,7 +283,7 @@ export class ApiDocExtractor {
                 'Pass an absolute path to a .ts file that exists.',
             );
         }
-        const resolver = new TypeResolver(program.getTypeChecker());
+        const resolver = this.resolverFor(program, source);
         const declaration = ApiDocExtractor.declarationNamed(source, typeName);
         if (declaration === undefined) {
             throw new ApiDocExtractionError(
@@ -289,7 +301,16 @@ export class ApiDocExtractor {
             [],
             resolver.collectedTypes(),
             resolver.collectedUnmapped(),
+            resolver.collectedCollisions(),
         );
+    }
+
+    /** A DTO library's exported types, for its components document (#1058). */
+    extractComponents(
+        entryFiles: readonly string[],
+        compilerOptions: ts.CompilerOptions = {},
+    ): ApiComponentsModel {
+        return new ComponentsExtractor(this.packages).extract(entryFiles, compilerOptions);
     }
 
     /** The interface / class / type alias / enum declared under `name` at the file's top level. */

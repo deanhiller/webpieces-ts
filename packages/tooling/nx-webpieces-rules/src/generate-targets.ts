@@ -79,7 +79,7 @@ export class GenerateTargets {
      */
     private openApiGenerate(): TargetConfiguration {
         const found = new GeneratedApiDocsLayout(this.projectRoot, this.project.name, this.project.targets)
-            .outputTarget().found;
+            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET).found;
         const outputs = found === undefined
             ? []
             : [

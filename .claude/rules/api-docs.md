@@ -117,10 +117,50 @@ manifest stays beside the SOURCE — it is hand-authored input and carries no ou
   `mcp-LangCourseAuthorApi-tools.json`) for each contract that declares `MCP` and has an `@WpMcpTool`.
   One library holds many contracts; a server binds contracts, so each binding is checked against the file
   generated from exactly its own contract.
+- Beside each SPLIT document (`full-private-openapi`, `public-openapi`), its `*.bundled.json` (#1058):
+  every schema defined locally, no external reference, valid on its own — for code generators,
+  gateways and docs sites that read one file. A docs site reaching DTO libraries is built from the
+  bundled document.
+- For a DTO library (`"kind": "components"` manifest), `components.openapi.json` alone.
 
 `outputs` are CHECKED, not trusted: the executor generates into a staging directory, so it knows what it
 wrote, and refuses when a written file is not covered — a cache hit would otherwise restore a package
 without it.
+
+## How generation works: one owner per schema, chained through DTO libraries (#1058)
+
+A schema is defined in exactly ONE document — the one of the package whose source DECLARES the type
+(the nearest `package.json` above the declaration). A contract document defines its own package's
+types and `$ref`s every other package's into that package's components document:
+
+```json
+{ "$ref": "@myorg/lang-api-dtos/components.openapi.json#/components/schemas/PassageItemDto" }
+```
+
+- **A DTO library publishes `components.openapi.json`**: `openapi`, `info` (`version` = the package
+  version), `x-webpieces-id` (that URI — OpenAPI 3.1's root admits no `$id`, and a 3.1 validator
+  rejects one) and `components.schemas` holding EVERY type the library exports and declares. Its
+  manifest is `{ "kind": "components", "title": "…", "entries": ["src/index.ts"] }`. A DTO library
+  referencing another DTO library does so the same way, so a chain has any depth.
+- **The upstream document is located by the `McpToolCatalog.fromPackages` lookup** — node resolution
+  from the manifest, then beside a built package's `package.json`, or the `outputPath` of the target a
+  workspace source directory's `openapi-components-generate` dependsOn. Never an assumed `dist/`.
+- **Fail-closed, for OpenAPI documents only.** A `full-private` / `public` document reaching a type
+  declared in a package with no components document is a generation error naming the type, its package
+  and the fix: move it into a DTO library (as a `…Dto` string enum when it is a literal union), or give
+  that package a components document. There is no inline allow-list. A referenced schema missing from
+  an existing document is refused as stale.
+- **MCP never requires a components document.** `mcp-openapi.json` and every `mcp-*-tools.json` inline
+  every schema from any package, exactly as before, so an MCP-only consumer tags nothing — and a shared
+  DTO renders byte-identically in every catalog.
+- **Inheritance is FLATTENED in all three forms** (split, bundled, MCP), consistent with #1056; no
+  `allOf`. A base declared in another package contributes its fields to the subclass's own schema.
+- Two packages' same-named types are two schemas in two documents; two DIFFERENT types of one name in
+  ONE package are still an error. In a bundled document, where both meet, the other package's is
+  qualified (`myorg.lang-api-dtos.LocalizedDescriptionsDto`).
+
+`ChainedComponents.spec.ts` (openapi-generator) proves it on a three-level chain, every document
+checked by `@seriousme/openapi-schema-validator`.
 
 ## The docs site is for HOSTING, not for the package
 

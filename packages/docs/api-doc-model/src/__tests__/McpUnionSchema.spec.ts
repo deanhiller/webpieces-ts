@@ -136,6 +136,8 @@ function unnarrowableModel(): ApiDocModel {
             ['Left', 'Right'],
             undefined,
             undefined,
+            undefined,
+            'McpUnionSchema.spec.ts',
         ),
     );
     types.set(
@@ -148,10 +150,12 @@ function unnarrowableModel(): ApiDocModel {
             [],
             undefined,
             undefined,
+            undefined,
+            'McpUnionSchema.spec.ts',
         ),
     );
     types.set('Ask', objectType('Ask', 'question'));
-    return new ApiDocModel('EitherApi', ['mcp'], '/either', 'Either.', [endpoint()], types, []);
+    return new ApiDocModel('EitherApi', ['mcp'], '/either', 'Either.', [endpoint()], types, [], []);
 }
 
 // webpieces-disable no-function-outside-class -- spec fixture builder
@@ -164,6 +168,8 @@ function objectType(name: string, fieldName: string): DocumentedType {
         [],
         undefined,
         undefined,
+        undefined,
+        'McpUnionSchema.spec.ts',
     );
 }
 

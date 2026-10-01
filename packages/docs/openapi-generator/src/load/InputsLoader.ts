@@ -1,17 +1,33 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as ts from 'typescript';
-import { ApiDocExtractor } from '@webpieces/api-doc-model';
+import {
+    ApiComponentsModel,
+    ApiDocExtractor,
+    DocumentedType,
+    PackageOfFile,
+} from '@webpieces/api-doc-model';
+import { EXTERNAL_CUSTOMER, SVC_TO_SVC } from '@webpieces/core-util';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { ManifestLoader } from '../manifest/ManifestLoader';
 import { ApiEntry, OpenApiManifest, ResponseHeaderEntry } from '../manifest/OpenApiManifest';
 import {
+    ComponentsInputs,
     ContractModel,
     GenerationInputs,
     ResolvedResponseHeader,
 } from '../generate/GenerationInputs';
+import {
+    MissingComponents,
+    PublishedComponents,
+    UpstreamComponentsIndex,
+} from '../generate/UpstreamComponents';
+import { ComponentsLocator } from './ComponentsLocator';
 import { ExportedConstantFolder } from './ExportedConstantFolder';
 import { ForeignFailure } from './ForeignFailure';
+
+/** A `path/to/File.ts:12:5` location's FILE. */
+const LINE_AND_COLUMN = /:\d+:\d+$/;
 
 /**
  * The compiler options the contracts are read with, when the project has no `tsconfig.json` of its
@@ -44,19 +60,116 @@ export class InputsLoader {
     private readonly manifests = new ManifestLoader();
     private readonly constants = new ExportedConstantFolder();
     private readonly extractor = new ApiDocExtractor();
+    private readonly packages = new PackageOfFile();
+    private readonly locator = new ComponentsLocator();
     private options: ts.CompilerOptions = FALLBACK_OPTIONS;
+
+    /** True when `manifestPath` is a DTO library's `"kind": "components"` manifest. */
+    isComponents(manifestPath: string): boolean {
+        return this.manifests.isComponents(manifestPath);
+    }
 
     load(manifestPath: string): GenerationInputs {
         const manifest = this.manifests.load(manifestPath);
         this.options = this.compilerOptions(manifestPath);
+        const contracts = this.contracts(manifestPath, manifest);
+        const errorType = this.errorType(manifestPath, manifest);
+        const homePackage = this.packages.of(manifestPath)?.name;
+        // Only the SPLIT documents reference other packages' components documents. A contract that
+        // feeds nothing but the MCP projection inlines every schema, so it requires no DTO library to
+        // publish one (#1058) — and it is not asked to.
+        const split = contracts
+            .filter(
+                (contract: ContractModel) =>
+                    contract.model.apiTypes.includes(SVC_TO_SVC) ||
+                    contract.model.apiTypes.includes(EXTERNAL_CUSTOMER),
+            )
+            .map((contract: ContractModel) => contract.model.types);
+        const reached = errorType === undefined ? split : split.concat([errorType.types]);
         return new GenerationInputs(
             manifestPath,
             manifest,
-            this.contracts(manifestPath, manifest),
-            this.errorType(manifestPath, manifest),
+            contracts,
+            errorType,
             this.responseHeaders(manifestPath, manifest),
             this.description(manifestPath, manifest),
+            homePackage,
+            this.upstream(manifestPath, homePackage, reached),
         );
+    }
+
+    /** A DTO library's components manifest, its exported types, and the libraries THEY reach. */
+    loadComponents(manifestPath: string): ComponentsInputs {
+        const manifest = this.manifests.loadComponents(manifestPath);
+        this.options = this.compilerOptions(manifestPath);
+        const files = manifest.entries.map((entry: string) => {
+            const file = this.manifests.resolve(manifestPath, entry);
+            this.mustExist(file, entry, manifestPath);
+            return file;
+        });
+        const model = this.extractComponents(files, manifestPath);
+        const manifestPackage = this.packages.of(manifestPath)?.name;
+        if (manifestPackage !== model.packageName) {
+            throw new OpenApiGenerationError(
+                `the entries belong to ${model.packageName}, and the manifest to ${manifestPackage ?? 'no package'}`,
+                manifestPath,
+                "Keep a DTO library's manifest beside its own package.json, naming that library's entry files.",
+            );
+        }
+        return new ComponentsInputs(
+            manifestPath,
+            manifest,
+            model,
+            this.upstream(manifestPath, model.packageName, [model.types]),
+        );
+    }
+
+    private extractComponents(files: readonly string[], manifestPath: string): ApiComponentsModel {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- re-thrown as the ONE error type of this package
+        try {
+            return this.extractor.extractComponents(files, this.options);
+        } catch (err: unknown) {
+            //const error = toError(err);
+            throw this.rethrow(err, files[0] ?? manifestPath);
+        }
+    }
+
+    /**
+     * The components document of EVERY OTHER package these types are declared in, located once each
+     * by {@link ComponentsLocator}. A package that publishes none is recorded, not refused, here: the
+     * generator refuses only when a document it renders actually reaches one of its types.
+     */
+    private upstream(
+        manifestPath: string,
+        homePackage: string | undefined,
+        typeMaps: readonly ReadonlyMap<string, DocumentedType>[],
+    ): UpstreamComponentsIndex {
+        const declaredIn = new Map<string, string>();
+        for (const types of typeMaps) {
+            for (const type of types.values()) {
+                if (type.packageName === undefined || type.packageName === homePackage) {
+                    continue;
+                }
+                if (!declaredIn.has(type.packageName)) {
+                    declaredIn.set(type.packageName, type.location.replace(LINE_AND_COLUMN, ''));
+                }
+            }
+        }
+        const published = new Map<string, PublishedComponents>();
+        const missing = new Map<string, MissingComponents>();
+        for (const packageName of Array.from(declaredIn.keys()).sort()) {
+            const located = this.locator.locate(
+                packageName,
+                path.dirname(manifestPath),
+                this.packages.of(declaredIn.get(packageName)!)?.directory,
+            );
+            if (located.published !== undefined) {
+                published.set(packageName, located.published);
+            } else {
+                missing.set(packageName, located.missing!);
+            }
+        }
+        return new UpstreamComponentsIndex(published, missing);
     }
 
     /**

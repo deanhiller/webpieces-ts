@@ -1,0 +1,10 @@
+{
+    "name": "company-core",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/company-core"
+            }
+        }
+    }
+}

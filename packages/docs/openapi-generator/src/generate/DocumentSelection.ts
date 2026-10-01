@@ -87,18 +87,26 @@ export class DocumentSelection {
          * whether ours fires on a clock or off a queue is our business.
          */
         readonly internalNotice: boolean,
+        /**
+         * Define EVERY reached schema locally, whichever package declares it, and write no bundled
+         * sibling — the MCP projection (#1058). The MCP document is the agent-facing view our own MCP
+         * tooling reads, and MCP never requires a DTO library to publish a components document: an
+         * MCP-only consumer is not forced to tag anything. The other two documents are SPLIT — they
+         * `$ref` every other package's schema, and fail closed when that package publishes none.
+         */
+        readonly inlinesEveryPackage: boolean,
     ) {}
 
     /** Every contract declaring `SVC_TO_SVC` — which, by the fail-closed default, is every contract. */
     // webpieces-disable no-function-outside-class -- static factory; the private constructor is what stops a fourth, unnamed selection being invented at a call site
     static internal(): DocumentSelection {
-        return new DocumentSelection('full-private-openapi', SVC_TO_SVC, false, false, true);
+        return new DocumentSelection('full-private-openapi', SVC_TO_SVC, false, false, true, false);
     }
 
     /** Every contract declaring `EXTERNAL_CUSTOMER`, minus its hidden methods. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static customer(): DocumentSelection {
-        return new DocumentSelection('public-openapi', EXTERNAL_CUSTOMER, true, false, false);
+        return new DocumentSelection('public-openapi', EXTERNAL_CUSTOMER, true, false, false, false);
     }
 
     /**
@@ -108,7 +116,7 @@ export class DocumentSelection {
      */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static mcp(): DocumentSelection {
-        return new DocumentSelection('mcp-openapi', MCP, false, true, false);
+        return new DocumentSelection('mcp-openapi', MCP, false, true, false, true);
     }
 
     /** Every document this generator knows how to write, in the order it writes them. */

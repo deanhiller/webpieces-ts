@@ -1,0 +1,15 @@
+{
+    "name": "lang-apis",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/lang-apis"
+            }
+        },
+        "openapi-generate": {
+            "dependsOn": [
+                "build"
+            ]
+        }
+    }
+}

@@ -1,6 +1,7 @@
-import { ApiDocModel } from '@webpieces/api-doc-model';
+import { ApiComponentsModel, ApiDocModel } from '@webpieces/api-doc-model';
 import { JsonObject } from '../json/JsonObject';
-import { ApiEntry, OpenApiManifest } from '../manifest/OpenApiManifest';
+import { ApiEntry, ComponentsManifest, OpenApiManifest } from '../manifest/OpenApiManifest';
+import { UpstreamComponentsIndex } from './UpstreamComponents';
 
 /** One manifest entry, paired with the model extracted from the file it names. */
 export class ContractModel {
@@ -42,6 +43,27 @@ export class GenerationInputs {
         readonly responseHeaders: readonly ResolvedResponseHeader[],
         /** The markdown preamble's TEXT, already read from `descriptionFile`. */
         readonly description: string | undefined,
+        /**
+         * The package this document is published by — the nearest `package.json` above the manifest.
+         * Its own types are defined in the document; every other package's are `$ref`s (#1058).
+         */
+        readonly homePackage: string | undefined,
+        /** The components documents of every other package the split documents reach. */
+        readonly upstream: UpstreamComponentsIndex,
+    ) {}
+}
+
+/**
+ * Everything a DTO library's components document needs, every file already read (#1058). Data-only.
+ */
+export class ComponentsInputs {
+    constructor(
+        readonly manifestPath: string,
+        readonly manifest: ComponentsManifest,
+        /** Every type the library exports and declares, and what they reach. */
+        readonly model: ApiComponentsModel,
+        /** The components documents of the OTHER packages those types reach — a chain of any depth. */
+        readonly upstream: UpstreamComponentsIndex,
     ) {}
 }
 

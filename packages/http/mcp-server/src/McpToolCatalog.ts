@@ -65,6 +65,14 @@ export class McpToolCatalog {
      *   `nx.json`), and read the files there. That is the SAME lookup the executor used to decide where
      *   to write them (`GeneratedApiDocsLayout`).
      *
+     * The catalogs are SELF-CONTAINED: every schema a tool reaches is inlined, whichever package
+     * declares it, so a catalog never needs another document to be read with it. That stays true under
+     * chained OpenAPI generation (#1058), where a contract library's OpenAPI documents `$ref` its DTO
+     * libraries' `components.openapi.json` instead of copying their schemas: the generator locates
+     * those documents with this SAME lookup — node resolution, then a built directory or a workspace
+     * source directory's `outputPath` (there, the target `openapi-components-generate` dependsOn) — and
+     * a catalog renders a shared DTO byte-identically to every other catalog that inlines it.
+     *
      * @param resolveFrom where node resolution starts — pass `__dirname` of the calling file. It is
      *   required because the right answer is the CALLER's `node_modules`: in a pnpm workspace the api
      *   library is linked into the server project's own `node_modules`, which neither the process's cwd
@@ -131,7 +139,7 @@ class McpPackageCatalogs {
         const project = JSON.parse(fs.readFileSync(path.join(packageDir, 'project.json'), 'utf8')) as ProjectJson;
         const projectRoot = path.relative(workspaceRoot, packageDir).split(path.sep).join('/');
         const lookup = new GeneratedApiDocsLayout(projectRoot, project.name ?? projectRoot, project.targets ?? {})
-            .outputTarget();
+            .outputTarget(GeneratedApiDocsLayout.OPENAPI_TARGET);
         if (lookup.found === undefined) {
             throw new McpToolCatalogError(
                 `${packageName} is the workspace source directory ${packageDir}, and its generated MCP tool ` +

@@ -1,0 +1,15 @@
+{
+    "name": "dtos-a",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/dtos-a"
+            }
+        },
+        "openapi-components-generate": {
+            "dependsOn": [
+                "build"
+            ]
+        }
+    }
+}

@@ -66,8 +66,23 @@ export class GenerateOutputLookup {
 export class GeneratedApiDocsLayout {
     /** The target the nx plugin infers on a project tagged `generate:openapi`. */
     static readonly OPENAPI_TARGET = 'openapi-generate';
+    /**
+     * The target the nx plugin infers on a DTO library tagged `generate:openapi-components`: it writes
+     * the library's components-only `components.openapi.json`, which contract documents `$ref` (#1058).
+     */
+    static readonly COMPONENTS_TARGET = 'openapi-components-generate';
     /** The target the nx plugin infers on a project tagged `generate:docs-site`. */
     static readonly DOCS_TARGET = 'docs-generate';
+    /** The file a DTO library's components-only document is written to, beside its package.json. */
+    static readonly COMPONENTS_FILE = 'components.openapi.json';
+
+    /** The tag that opts a project into `generateTarget` — what a cure tells the reader to add. */
+    // webpieces-disable no-function-outside-class -- static lookup on the class that owns the target names
+    static tagOf(generateTarget: string): string {
+        return generateTarget === GeneratedApiDocsLayout.COMPONENTS_TARGET
+            ? 'generate:openapi-components'
+            : 'generate:openapi';
+    }
 
     constructor(
         /** Workspace-relative project root, e.g. `libraries/apis/internal/lang-apis`. */
@@ -76,15 +91,22 @@ export class GeneratedApiDocsLayout {
         readonly targets: LayoutTargets,
     ) {}
 
-    /** The target `openapi-generate` dependsOn, and that target's outputPath. */
-    outputTarget(): GenerateOutputLookup {
+    /**
+     * The target `generateTarget` dependsOn, and that target's outputPath.
+     *
+     * @param generateTarget the generating target whose output directory is asked for —
+     *   {@link OPENAPI_TARGET} for a contract library's documents and catalogs, {@link COMPONENTS_TARGET}
+     *   for a DTO library's components document. Both write into the outputPath of the ONE sibling
+     *   target they dependsOn.
+     */
+    outputTarget(generateTarget: string): GenerateOutputLookup {
         const where = `${this.projectRoot}/project.json`;
-        const generate = this.targets[GeneratedApiDocsLayout.OPENAPI_TARGET];
+        const generate = this.targets[generateTarget];
         if (generate === undefined) {
             return this.refuse(
-                `${this.projectName} has no ${GeneratedApiDocsLayout.OPENAPI_TARGET} target.`,
-                `Tag the project "generate:openapi" in ${where} and state targets.` +
-                    `${GeneratedApiDocsLayout.OPENAPI_TARGET} (its dependsOn and options) there.`,
+                `${this.projectName} has no ${generateTarget} target.`,
+                `Tag the project "${GeneratedApiDocsLayout.tagOf(generateTarget)}" in ${where} and state targets.` +
+                    `${generateTarget} (its dependsOn and options) there.`,
             );
         }
         const siblings = (generate.dependsOn ?? [])
@@ -92,12 +114,12 @@ export class GeneratedApiDocsLayout {
             .filter((name: string | undefined): name is string => name !== undefined);
         if (siblings.length !== 1) {
             return this.refuse(
-                `${this.projectName}:${GeneratedApiDocsLayout.OPENAPI_TARGET} must dependsOn exactly ONE ` +
+                `${this.projectName}:${generateTarget} must dependsOn exactly ONE ` +
                     `target of its own project — the build step whose outputPath it writes into — and it ` +
                     `names ${siblings.length === 0 ? 'none' : siblings.join(', ')}.`,
-                `Set "dependsOn": ["build"] on targets.${GeneratedApiDocsLayout.OPENAPI_TARGET} in ${where}, ` +
+                `Set "dependsOn": ["build"] on targets.${generateTarget} in ${where}, ` +
                     `where "build" is the @nx/js:tsc target (dependents pull generation in with ` +
-                    `"^${GeneratedApiDocsLayout.OPENAPI_TARGET}" in nx.json targetDefaults).`,
+                    `"^${generateTarget}" in nx.json targetDefaults).`,
             );
         }
         const targetName = siblings[0]!;
@@ -105,7 +127,7 @@ export class GeneratedApiDocsLayout {
             ?.outputPath;
         if (typeof declared !== 'string' || declared.trim() === '') {
             return this.refuse(
-                `${this.projectName}:${targetName} — the target ${GeneratedApiDocsLayout.OPENAPI_TARGET} ` +
+                `${this.projectName}:${targetName} — the target ${generateTarget} ` +
                     `dependsOn — declares no options.outputPath, so there is no build output to write the ` +
                     `documents into.`,
                 `Declare targets.${targetName}.options.outputPath in ${where}.`,

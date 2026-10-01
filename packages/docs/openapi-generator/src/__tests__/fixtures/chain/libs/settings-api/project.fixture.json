@@ -1,0 +1,15 @@
+{
+    "name": "settings-api",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/settings-api"
+            }
+        },
+        "openapi-generate": {
+            "dependsOn": [
+                "build"
+            ]
+        }
+    }
+}

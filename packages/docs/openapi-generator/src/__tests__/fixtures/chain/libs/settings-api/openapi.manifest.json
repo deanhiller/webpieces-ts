@@ -1,0 +1,11 @@
+{
+    "title": "Settings API",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "src/SettingsApi.ts",
+            "tag": "Settings"
+        }
+    ],
+    "securitySchemeNames": []
+}

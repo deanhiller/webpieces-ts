@@ -1,0 +1,15 @@
+{
+    "name": "agent-api",
+    "targets": {
+        "build": {
+            "options": {
+                "outputPath": "dist/libs/agent-api"
+            }
+        },
+        "openapi-generate": {
+            "dependsOn": [
+                "build"
+            ]
+        }
+    }
+}

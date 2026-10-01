@@ -21,6 +21,7 @@ Nothing here re-reads the source and no generated file is ever an input, so the 
 - **The document-wide error contract**, with the body read from a real TS type by the compiler
 - **The folded `nameConstant` response header**, on every success response
 - **The unmapped-type guard** — a refusal naming the JSON pointer of every field with no schema
+- **Chained documents (#1058)** — a `"kind": "components"` manifest → `components.openapi.json`, every type a DTO library exports and declares, `info.version` the package version. A contract document defines only its own package's schemas and `$ref`s every other package's into that package's components document (package-qualified URI, located by the `McpToolCatalog.fromPackages` lookup). It FAILS CLOSED on a package that publishes none, and writes a self-contained `*.bundled.json` beside each split document. `mcp-openapi.json` and the MCP catalogs stay fully inlined and need no components document
 - The DERIVED sentences on each operation's `description` — whether it is safe to retry, whether it reaches an external system, and (in the private document only) what triggers it — plus the operation-to-hint mapping table once in `info.description`
 
 ## Out of Scope

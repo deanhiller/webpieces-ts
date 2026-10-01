@@ -10,7 +10,9 @@
  */
 export { ApiDocExtractor } from './extract/ApiDocExtractor';
 export { ApiDocExtractionError } from './extract/ApiDocExtractionError';
+export { DeclaringPackage, PackageOfFile } from './extract/PackageOfFile';
 export {
+    ApiComponentsModel,
     ApiDocModel,
     DocumentedApiKey,
     DocumentedApiKeyCredential,
@@ -20,6 +22,7 @@ export {
     DocumentedField,
     DocumentedMcpTool,
     DocumentedType,
+    TypeNameCollision,
     UnionDiscriminator,
     UnmappedType,
 } from './model/ApiDocModel';

@@ -1,0 +1,141 @@
+[
+  {
+    "name": "list_passages",
+    "methodName": "listPassages",
+    "description": "Lists a lesson's passages.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lessonNumber": {
+          "type": "number",
+          "description": "The lesson, 1-100."
+        },
+        "lessonType": {
+          "type": "string",
+          "description": "How the lesson is built.",
+          "enum": [
+            "training",
+            "numbered"
+          ]
+        },
+        "narrator": {
+          "type": "string",
+          "description": "Only passages narrated as this gender.",
+          "enum": [
+            "female",
+            "male"
+          ]
+        }
+      },
+      "required": [
+        "lessonNumber",
+        "lessonType"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "passages": {
+          "type": "array",
+          "description": "Every passage, in reading order.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "passageId": {
+                "type": "string",
+                "description": "The passage's identifier."
+              },
+              "voice": {
+                "type": "object",
+                "description": "The voice it is read in.",
+                "properties": {
+                  "voiceId": {
+                    "type": "string",
+                    "description": "The voice's identifier."
+                  },
+                  "gender": {
+                    "type": "string",
+                    "description": "Who the voice sounds like.",
+                    "enum": [
+                      "female",
+                      "male"
+                    ]
+                  }
+                },
+                "required": [
+                  "voiceId",
+                  "gender"
+                ],
+                "additionalProperties": false
+              },
+              "narrator": {
+                "type": "string",
+                "description": "Who narrates it.",
+                "enum": [
+                  "female",
+                  "male"
+                ]
+              }
+            },
+            "required": [
+              "passageId",
+              "voice",
+              "narrator"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "descriptions": {
+          "type": "object",
+          "description": "This library's own descriptions of the lesson.",
+          "properties": {
+            "learner": {
+              "type": "string",
+              "description": "What a learner reads."
+            },
+            "teacher": {
+              "type": "string",
+              "description": "What a teacher reads."
+            }
+          },
+          "required": [
+            "learner",
+            "teacher"
+          ],
+          "additionalProperties": false
+        },
+        "translations": {
+          "type": "object",
+          "description": "The shared, per-language descriptions — a DIFFERENT type with the same name.",
+          "properties": {
+            "en": {
+              "type": "string",
+              "description": "The English description."
+            },
+            "es": {
+              "type": "string",
+              "description": "The Spanish description."
+            }
+          },
+          "required": [
+            "en"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "passages",
+        "descriptions",
+        "translations"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

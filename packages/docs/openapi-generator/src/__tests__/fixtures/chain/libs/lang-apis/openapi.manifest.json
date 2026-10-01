@@ -1,0 +1,11 @@
+{
+    "title": "Lang API",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "src/LangLessonApi.ts",
+            "tag": "Lessons"
+        }
+    ],
+    "securitySchemeNames": []
+}

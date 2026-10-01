@@ -1,0 +1,7 @@
+{
+    "kind": "components",
+    "title": "Shared voice DTOs",
+    "entries": [
+        "src/index.ts"
+    ]
+}
