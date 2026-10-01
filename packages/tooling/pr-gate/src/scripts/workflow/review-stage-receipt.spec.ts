@@ -33,6 +33,19 @@ describe('ReviewStageReceiptService', () => {
         expect(read?.reviewersBriefed).toEqual(['db-reviewer']);
     });
 
+    // Issue #1062: which briefed checklists are OPTIONAL is what lets an unrun one stay off the round's roster.
+    it('round-trips optionalBriefed, and a receipt without it reads as none', () => {
+        const repo = tmpRepo();
+        const written = new ReviewStageReceipt('abc123', true, 'cmd', 'now', ['db-reviewer', 'docs-reviewer']);
+        written.optionalBriefed = ['docs-reviewer'];
+        svc().write(repo, 'feat', written);
+        expect(svc().read(repo, 'feat')?.optionalBriefed).toEqual(['docs-reviewer']);
+
+        const p = svc().receiptPath(repo, 'feat');
+        fs.writeFileSync(p, JSON.stringify({ headSha: 'abc123', reviewersBriefed: ['db-reviewer'] }));
+        expect(svc().read(repo, 'feat')?.optionalBriefed).toEqual([]);
+    });
+
     /**
      * ABSENT is the case that matters most. A repo with NO checklists has nothing else forcing stage ②:
      * `assertEveryReviewerRan` is vacuous there, and summary.json — the only other interlock — is a file the

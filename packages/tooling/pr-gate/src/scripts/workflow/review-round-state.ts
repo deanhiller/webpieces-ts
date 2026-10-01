@@ -56,9 +56,9 @@ export class ReviewRoundPlan {
  */
 export class RoundSnapshot {
     round: number;       // 0 = no round has started
-    roster: string[];    // the checklists briefed in `round`
+    roster: string[];    // the REQUIRED checklists briefed in `round`, plus the optional ones that submitted in it
     headSha: string;     // the commit `round` was briefed on
-    complete: boolean;   // every checklist on the roster has a verdict in `round`
+    complete: boolean;   // every REQUIRED checklist briefed in `round` has a verdict in it (issue #1062)
 
     constructor(round: number, roster: string[], headSha: string, complete: boolean) {
         this.round = round;
@@ -153,8 +153,14 @@ export class ReviewRoundStateService {
         const round = Math.max(this.highestRound(summaryPath), briefed);
         if (round < 1) return new RoundSnapshot(0, [], '', false);
         if (receipt !== null && receipt.round === round) {
-            return new RoundSnapshot(round, receipt.reviewersBriefed.slice(), receipt.headSha,
-                this.everyVerdictIn(summaryPath, receipt.reviewersBriefed, round));
+            // Only a REQUIRED checklist holds the round open (issue #1062). An optional one counts only if it
+            // actually ran — a red from it still opens the next round — and one nobody chose to run is not
+            // waited on, so an all-optional briefing nobody ran is complete with an empty roster.
+            const optional = new Set<string>(receipt.optionalBriefed);
+            const required = receipt.reviewersBriefed.filter((id: string): boolean => !optional.has(id));
+            const roster = receipt.reviewersBriefed.filter((id: string): boolean =>
+                !optional.has(id) || this.hasVerdict(summaryPath, id, round));
+            return new RoundSnapshot(round, roster, receipt.headSha, this.everyVerdictIn(summaryPath, required, round));
         }
         // The receipt names an older round (or is gone): the files are the record, so the roster is exactly
         // the checklists that have a verdict in this round, and the reviewed HEAD is what their provenance says.
@@ -175,7 +181,11 @@ export class ReviewRoundStateService {
         return this.snapshot(summaryPath, receipt).round >= 1;
     }
 
-    /** The frozen checklist set: every checklist briefed in any round — see {@link roundStarted}. */
+    /**
+     * The frozen checklist set: every checklist briefed in any round — see {@link roundStarted}. It keeps an
+     * optional checklist that was offered but never run, so its dashboard row reads "optional, not run"
+     * rather than "not briefed"; it never holds a round open (see {@link snapshot}).
+     */
     briefedChecklistIds(summaryPath: string, receipt: ReviewStageReceipt | null): string[] {
         const ids = new Set<string>(this.verdictChecklistIds(summaryPath));
         if (receipt !== null && receipt.round >= 1) for (const id of receipt.reviewersBriefed) ids.add(id);
@@ -363,7 +373,7 @@ export class ReviewRoundStateService {
     }
 
     private everyVerdictIn(summaryPath: string, roster: readonly string[], round: number): boolean {
-        return roster.length > 0 && roster.every((id: string): boolean => this.hasVerdict(summaryPath, id, round));
+        return roster.every((id: string): boolean => this.hasVerdict(summaryPath, id, round));
     }
 
     /** `review-round<N>-<id>.json` → `<id>`; '' for the fixes record, a provenance file, or anything else. */

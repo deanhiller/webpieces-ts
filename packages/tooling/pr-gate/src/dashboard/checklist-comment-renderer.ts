@@ -212,8 +212,8 @@ export class ChecklistCommentRenderer {
         return row.ran && !this.declined(row) && !row.notBriefed;
     }
 
-    // Applied, optional, and carrying no verdict — i.e. the human was offered this review and said no (or
-    // `--no-optional` skipped the offer). Never true of a required checklist: one of those with no verdict
+    // Applied, optional, and carrying no verdict — i.e. the human was offered this review and said no.
+    // Never true of a required checklist: one of those with no verdict
     // does not reach a PR at all.
     private declined(row: ChecklistCommentRow): boolean {
         return row.ran && !row.required && (row.status === CK_MISSING || row.status === '');

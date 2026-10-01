@@ -24,21 +24,6 @@ import {
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-/** The `--no-optional` decision, as data (per CLAUDE.md) rather than a bare boolean parameter. */
-export class ReviewUpsertPrOptions {
-    /**
-     * true ⇒ the human ALREADY said to submit without the optional reviews, so stage ② must not print the
-     * block telling the AI to offer them. It changes nothing about what BLOCKS: required checklists are
-     * unaffected, and an optional checklist that already has a red verdict on this branch still refuses the
-     * PR at finish. This only suppresses the offer.
-     */
-    skipOptional: boolean;
-
-    constructor(skipOptional = false) {
-        this.skipOptional = skipOptional;
-    }
-}
-
 /**
  * `wp-review-upsert-pr` — STAGE ② of the three-stage PR flow, between `wp-start-upsert-pr` (sync from main)
  * and `wp-finish-upsert-pr` (post the PR).
@@ -99,14 +84,14 @@ export class ReviewUpsertPrCommand {
      * printed nothing for 600 seconds — after a full build. Guarding the pipe without first shrinking the
      * output would only have traded that kill for a flooded context.
      */
-    async run(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
+    async run(): Promise<void> {
         // A /hotfix/ branch has no review stage — it publishes with wp-upsert-hotfix-pr (issue #1057).
         this.hotfixRedirect.assertNotHotfix('wp-review-upsert-pr');
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        await this.stageConsole.withCapture(repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot, opts));
+        await this.stageConsole.withCapture(repoRoot, REVIEW_CONSOLE_LOG, (): Promise<void> => this.runStage(repoRoot));
     }
 
-    private async runStage(repoRoot: string, opts: ReviewUpsertPrOptions): Promise<void> {
+    private async runStage(repoRoot: string): Promise<void> {
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         const featureName = this.aiBranchName.getFeatureName();
@@ -127,13 +112,16 @@ export class ReviewUpsertPrCommand {
         if (shouldBrief) {
             const receipt = new ReviewStageReceipt(scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt, recordedReviewers);
             receipt.scopeHashes = scan.scopeHashes;
+            // Which briefed checklists are OPTIONAL: a round is complete once every REQUIRED one has a
+            // verdict, and an optional one joins the round only if it actually submitted (issue #1062).
+            receipt.optionalBriefed = briefings.filter((b: ReviewerBriefing): boolean => !b.required).map((b: ReviewerBriefing): string => b.checklistId);
             // A global round begins only when a non-empty fixed roster is actually briefed.
             receipt.round = recordedReviewers.length === 0 ? 0 : plan.round;
             receipt.maxReviewerRounds = plan.maxRounds;
             this.receipts.write(repoRoot, featureName, receipt);
         }
         this.reportActiveHatches(repoRoot);
-        this.report(repoRoot, featureName, scan, briefings, opts, plan, config);
+        this.report(repoRoot, featureName, scan, briefings, plan, config);
     }
 
     /**
@@ -237,7 +225,7 @@ export class ReviewUpsertPrCommand {
      * obeyed the first line and posted a PR with no review at all.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[], opts: ReviewUpsertPrOptions, plan: ReviewRoundPlan, config: PrGateConfig): void {
+    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[], plan: ReviewRoundPlan, config: PrGateConfig): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.summaryPath);
         input.definedCount = scan.defined.length;
         input.applicableCount = scan.applicable.length;
@@ -245,7 +233,6 @@ export class ReviewUpsertPrCommand {
         input.formatErrors = scan.formatErrors.slice();
         input.briefings = briefings.slice();
         input.refused = this.refusals(scan);
-        input.skipOptional = opts.skipOptional;
         input.reviewer = config.reviewer;
         // Straight off the SCAN — the one place `experimental.turnOffAllReviewers` is read. This command
         // deliberately does NOT consult the home config itself: a second read is a second answer, and the

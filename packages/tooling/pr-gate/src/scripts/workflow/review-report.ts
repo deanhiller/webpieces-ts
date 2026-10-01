@@ -52,12 +52,6 @@ export class ReviewReportInput {
     briefings: ReviewerBriefing[];  // one per applicable checklist, already written to disk
     refused: RefusedReviewer[];     // of the owed ones, those that already ran and said no (see RefusedReviewer)
     /**
-     * `--no-optional` was passed: the human has already said to submit without the optional reviews, so the
-     * block that offers them is replaced by a one-line statement that they were skipped. It never suppresses
-     * a REQUIRED reviewer, and it is not a gate — nothing about what blocks the PR changes.
-     */
-    skipOptional: boolean;
-    /**
      * `experimental.turnOffAllReviewers` is TRUE in `~/.webpieces/config.json`, so NO reviewer ran and
      * none will — the REQUIRED ones included. Nothing else in this class may be read as evidence of that:
      * `applicableCount` is 0 under suppression exactly as it is on a docs-only PR that matched nothing,
@@ -104,7 +98,6 @@ export class ReviewReportInput {
         this.formatErrors = [];
         this.briefings = [];
         this.refused = [];
-        this.skipOptional = false;
         this.reviewersSuppressed = false;
         this.suppressed = [];
         this.round = 1;
@@ -183,7 +176,7 @@ export class ReviewReport {
         // from the first line of this block is that no reviewer looked at this branch.
         if (input.reviewersSuppressed) return '② ⚫ ALL REVIEWERS SUPPRESSED — write the PR summary, then finish\n';
         if (this.requiredOwed(input).length > 0) return `② GLOBAL REVIEW ROUND ${input.round} OF ${input.maxReviewerRounds} — write the PR summary, spawn reviewers, then finish\n`;
-        if (this.offerableOwed(input).length > 0) return '② Write the PR summary, offer the optional reviewers, then finish\n';
+        if (this.optionalOwed(input).length > 0) return '② Write the PR summary, offer the optional reviewers, then finish\n';
         return '② Write the PR summary, then finish\n';
     }
 
@@ -208,9 +201,8 @@ export class ReviewReport {
         // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
         // correcting the file sitting right there.
         for (const e of input.formatErrors) lines.push(`  ⛔ ${e}`);
-        lines.push(...this.skippedLines(input));
         lines.push(...this.notBriefedLines(input));
-        if (this.actionableOwed(input).length === 0) lines.push('', this.allClear(input));
+        if (this.owedReviewers(input).length === 0) lines.push('', this.allClear());
         if (lines.length === 0) return '';
         return '\n' + lines.join('\n') + '\n';
     }
@@ -314,22 +306,6 @@ export class ReviewReport {
     }
 
     /**
-     * `--no-optional`, stated as a VERDICT rather than left silent. Named individually, not just counted: the
-     * whole reason the human is allowed to skip these is that they know this diff, and the only way they can
-     * catch "wait, not THAT one" is to see which ones went unreviewed.
-     */
-    private skippedLines(input: ReviewReportInput): string[] {
-        const skipped = this.optionalOwed(input);
-        if (!input.skipOptional || skipped.length === 0) return [];
-        return [
-            '',
-            `  ⏭️  ${skipped.length} OPTIONAL checklist(s) matched this diff and were SKIPPED (--no-optional):`,
-            ...skipped.map((b: ReviewerBriefing): string => `       ${b.checklistId} — ${this.why(b)}`),
-            '      Not blocking. Drop the flag and re-run this command to offer them after all.',
-        ];
-    }
-
-    /**
      * The all-clear, then the RULE that makes it actionable.
      *
      * "nothing to spawn" on its own is a description of the current state, and an agent that has just been
@@ -342,15 +318,9 @@ export class ReviewReport {
      *
      * The refusal warning is not decoration: `wp-write-review` refuses a second verdict for a round, so a
      * gratuitous re-spawn costs a whole subagent run and records nothing.
-     *
-     * It must NOT claim everything was reviewed when optional reviews were skipped — that is the one sentence
-     * that would turn a deliberate skip into a false record of a review that happened.
      */
-    private allClear(input: ReviewReportInput): string {
-        const headline = input.skipOptional && this.optionalOwed(input).length > 0
-            ? '✅ Nothing left to spawn — every REQUIRED checklist is reviewed (optional ones skipped above).'
-            : '✅ Every checklist that applies is already reviewed — nothing to spawn.';
-        return headline + '\n' + this.oncePerBranchRule();
+    private allClear(): string {
+        return '✅ Every checklist that applies is already reviewed — nothing to spawn.\n' + this.oncePerBranchRule();
     }
 
     /**
@@ -394,7 +364,7 @@ export class ReviewReport {
         if (input.roundAction === ROUND_ACTION_RECORD) return this.roundText.recordStep(input.round, input.maxReviewerRounds);
         if (input.roundAction === ROUND_ACTION_FINISH) return this.cappedFinishStep(input);
         const required = this.requiredOwed(input);
-        const offerable = this.offerableOwed(input);
+        const offerable = this.optionalOwed(input);
         // Numbered by what is actually PRINTED, so the numbers a reader sees are 1..n with no gaps: write
         // summary.json, then a spawn step only if anything must run, then an offer step only if anything may.
         let step = 1;
@@ -515,9 +485,8 @@ export class ReviewReport {
             '         "None — required only" choice. Do not ask one question per reviewer. Then spawn ONLY',
             '         what they picked, the same way as any other reviewer.',
             '',
-            '         If they pick none, that is a complete answer: go straight to the final step. If they',
-            '         told you up front to submit without reviews, re-run this stage as',
-            '         `pnpm wp-review-upsert-pr --no-optional` and this step disappears.',
+            '         If they pick none, that is a complete answer: go straight to the final step. An',
+            '         optional checklist that is not run never holds up a review round.',
             '',
             '         NOTE: whichever ones you DO run, their verdicts count in full — a red verdict from an',
             '         optional reviewer blocks the PR exactly like a required one.',
@@ -586,21 +555,9 @@ export class ReviewReport {
         return this.owedReviewers(input).filter((b: ReviewerBriefing): boolean => b.required);
     }
 
-    // Owed and optional. Still listed under `--no-optional` (as a skip verdict), just never as a step.
+    // Owed and optional — offered to the human in ONE batched question, never spawned unasked.
     private optionalOwed(input: ReviewReportInput): ReviewerBriefing[] {
         return this.owedReviewers(input).filter((b: ReviewerBriefing): boolean => !b.required);
-    }
-
-    // The optional ones the human is actually to be ASKED about — none, once they have already answered.
-    private offerableOwed(input: ReviewReportInput): ReviewerBriefing[] {
-        return input.skipOptional ? [] : this.optionalOwed(input);
-    }
-
-    // Everything the AI still has to act on. Distinct from `owedReviewers`: a skipped optional checklist is
-    // owed a verdict it will never get, and treating it as pending work is what would print a spawn
-    // instruction for a review the human just declined.
-    private actionableOwed(input: ReviewReportInput): ReviewerBriefing[] {
-        return [...this.requiredOwed(input), ...this.offerableOwed(input)];
     }
 
     /**

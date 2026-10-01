@@ -6,7 +6,7 @@ import { CliExitError } from './cli-exit-error';
  * written for the reader who has to DECIDE whether to pass it, not as a restatement of the name.
  */
 export class CliFlag {
-    name: string;        // including the leading dashes, e.g. '--no-optional'
+    name: string;        // including the leading dashes, e.g. '--dry-run'
     description: string;
     /**
      * The flag MAY carry a value: `--resolve dean/ONE-2275` or `--resolve=dean/ONE-2275`.
@@ -157,7 +157,7 @@ export class CliArgs {
             }
             scan.present.push(name);
             if (!flag.takesValue) {
-                // `--no-optional=x` is a typo, not an accepted flag: the value would be silently dropped.
+                // `--dry-run=x` is a typo, not an accepted flag: the value would be silently dropped.
                 if (eq > 0) scan.unknown.push(token);
                 continue;
             }
