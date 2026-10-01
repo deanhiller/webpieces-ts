@@ -48,9 +48,10 @@ const COMPONENTS_DOCUMENT = 'components.openapi';
 /** Every cure for a type reached in a package that publishes no components document. */
 const PUBLISH_COMPONENTS_CURE =
     'Move each type into a DTO library that publishes a components document — as a `…Dto` string ' +
-    'enum when it is a string-literal union — or tag its package "generate:openapi-components" so ' +
-    'it publishes one (a "kind": "components" openapi.manifest.json naming its entry files). A ' +
-    "document references another package's schema; it never copies one in.";
+    'enum when it is a string-literal union — or make its package publish one: a "kind": ' +
+    '"components" openapi.manifest.json naming its entry files, rendered by wp-openapi into the ' +
+    "directory the package is packed from. A document references another package's schema; it " +
+    'never copies one in.';
 
 /** The OpenAPI version this generator writes. See the class doc for why 3.1 and not 3.0. */
 const OPENAPI_VERSION = '3.1.0';
@@ -354,8 +355,8 @@ export class OpenApiGenerator {
             throw new OpenApiGenerationError(
                 `${stale.length} type(s) ${fileName} references are missing from their package's components document`,
                 where,
-                'Regenerate the upstream components document — it is older than its source ' +
-                    '(nx orders it first through "^openapi-components-generate").',
+                'Regenerate the upstream components document with wp-openapi before this one — it is ' +
+                    'older than its source.',
                 stale,
             );
         }

@@ -395,7 +395,7 @@ describe('fail closed — OpenAPI documents only', () => {
         );
         expect(failure.pointers.join('\n')).toContain('has no openapi-components-generate target');
         expect(failure.cure).toContain('`…Dto` string enum');
-        expect(failure.cure).toContain('"generate:openapi-components"');
+        expect(failure.cure).toContain('"kind": "components" openapi.manifest.json');
         expect(fs.existsSync(chain.outDir('settings-api'))).toBe(false);
     });
 
