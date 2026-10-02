@@ -37,6 +37,7 @@ import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
 import { GenerateTargets, RawProjectJson, RawProjectJsonReader } from './generate-targets';
+import { RulesTarget } from './rules-target';
 
 /**
  * Circular dependency checking options
@@ -179,8 +180,14 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
+    // One root policy target. webpieces.config.json is not a shared input of every product project;
+    // this virtual project is its sole Nx owner and the gate runs it before affected CI.
     // Add per-project targets (circular-deps, ci, di-graph)
     addPerProjectTargets(results, projectFiles, opts, context);
+
+    // Append the virtual root project after concrete projects so callers that select the first result
+    // for a project.json still receive that project's inferred targets.
+    new RulesTarget().add(results, projectFiles);
 
     return results;
 }
@@ -250,6 +257,9 @@ function addPerProjectTargets(
 
         // Skip root (workspace manifest, not a project)
         if (projectRoot === '.') continue;
+        // The scoped root policy project declares check/ci itself. It has no product source to lint,
+        // compile or test, so the ordinary per-project aggregate would recreate irrelevant fan-out.
+        if (projectRoot === 'rules') continue;
 
         // Skip projects inside a nested git repo (vendored clones under repositories/): they are
         // separate repos and must not be swept into this workspace's `nx affected` graph.

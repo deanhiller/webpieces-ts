@@ -1,0 +1,36 @@
+{
+    "name": "rules",
+    "$schema": "../node_modules/nx/schemas/project-schema.json",
+    "projectType": "application",
+    "root": "rules",
+    "targets": {
+        "check": {
+            "executor": "nx:run-commands",
+            "cache": true,
+            "inputs": ["rulesConfig"],
+            "options": {
+                "command": "node -e \"require('@webpieces/rules-config').loadAndValidate(process.cwd()); console.log('✅ webpieces.config.json is valid')\"",
+                "cwd": "."
+            }
+        },
+        "ci": {
+            "executor": "nx:noop",
+            "cache": true,
+            "inputs": ["rulesConfig"],
+            "dependsOn": ["check"],
+            "metadata": {
+                "description": "Validate only the root rules policy"
+            }
+        },
+        "hotfix-ci": {
+            "executor": "nx:noop",
+            "cache": true,
+            "inputs": ["rulesConfig"],
+            "dependsOn": [],
+            "metadata": {
+                "description": "No product checks belong to the root rules policy project"
+            }
+        }
+    },
+    "tags": ["type:tooling", "role:app", "framework:node"]
+}

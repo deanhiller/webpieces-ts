@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget } from './plugin';
+import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget, createNodesV2 } from './plugin';
+import type { CreateNodesContextV2, CreateNodesResultV2, ProjectConfiguration } from '@nx/devkit';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { specTempDirs } from '@webpieces/rules-config';
@@ -82,12 +83,44 @@ describe('createHotfixCiTarget', () => {
     });
 });
 
+describe('rules:check root policy target', () => {
+    it('is inferred once with only the scoped rulesConfig named input', async (): Promise<void> => {
+        const root = tmpRoot();
+        fs.mkdirSync(path.join(root, 'architecture'));
+        fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
+        const createNodes = createNodesV2[1];
+        const results: CreateNodesResultV2 = await createNodes(
+            ['package.json'],
+            {},
+            { workspaceRoot: root } as CreateNodesContextV2,
+        );
+        let rules: ProjectConfiguration | undefined;
+        for (const row of results) rules = rules ?? row[1].projects?.['rules'];
+        expect(rules?.root).toBe('.');
+        expect(rules?.targets?.['check']).toMatchObject({
+            executor: '@webpieces/nx-webpieces-rules:validate-rules-config',
+            cache: true,
+            inputs: ['rulesConfig'],
+        });
+    });
+
+    it('keeps webpieces.config.json out of project default inputs', (): void => {
+        const nx = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'nx.json'), 'utf8')) as {
+            namedInputs: Record<string, string[]>;
+        };
+        expect(nx.namedInputs['default']).toEqual(['{projectRoot}/**/*']);
+        expect(nx.namedInputs['rulesConfig']).toContain('{workspaceRoot}/webpieces.config.json');
+        expect(JSON.stringify(nx.namedInputs['default'])).not.toContain('rulesConfig');
+        expect(JSON.stringify(nx.namedInputs['default'])).not.toContain('webpieces.config.json');
+    });
+});
+
 // ---------------------------------------------------------------------------------------------------
 // A rule that turnOffRuleWhileOnBranch can switch off produces a BRANCH-DEPENDENT verdict, so a CACHED
 // target that runs one must carry the branch in its hash. Without this, a hatched branch caches a green
 // under hash H and any later PR that leaves the same files untouched hashes to H and replays it — the
-// relaxation escapes the branch that opted in. nx.json's sharedGlobals entry for webpieces.config.json is
-// the other half (it busts the cache when a hatch is EDITED); neither half is sufficient alone.
+// relaxation escapes the branch that opted in. Root config validity is owned separately by rules:check;
+// branch-sensitive rule targets still need this identity input for their own cached verdicts.
 // ---------------------------------------------------------------------------------------------------
 describe('branch identity is in the hash of every CACHED rule-running target', () => {
     function hasBranchInputs(inputs: unknown): boolean {
@@ -106,9 +139,9 @@ describe('branch identity is in the hash of every CACHED rule-running target', (
         expect(hasBranchInputs(targets.versionsLocked().inputs)).toBe(true);
     });
 
-    // Scoped, NOT global: an uncached target re-runs anyway, and pushing branch identity into
-    // sharedGlobals would make every task in the workspace hash branch-uniquely and destroy cross-branch
-    // cache reuse fleet-wide.
+    // Scoped, NOT global: an uncached target re-runs anyway, and pushing branch identity into the
+    // workspace default input would make every task hash branch-uniquely and destroy cross-branch cache
+    // reuse fleet-wide.
     it('an UNCACHED validator is left alone', () => {
         const tsInSrc = new ValidationTargets().tsInSrc();
         expect(tsInSrc.cache).toBe(false);

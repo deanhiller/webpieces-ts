@@ -129,7 +129,15 @@ async function main(): Promise<void> {
         const runner = new NxStepRunner(root, gracePeriod, new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS), new SurvivorReporter(), new ProcessGroupKiller());
         const hotfix = new BranchIdentity().isHotfix();
 
-        // Run the architecture + code validators first (this also runs the wiring guard,
+        // Validate the root policy exactly once. webpieces.config.json is deliberately NOT a
+        // sharedGlobal Nx input: making every project hash depend on it turned a policy-only edit into
+        // a workspace-wide compile/lint/test. The scoped rules project preserves the gate without that
+        // fan-out.
+        const rules = await runner.run(['run', 'rules:check'], 'rules:check');
+        // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
+        if (rules !== 0) process.exit(rules);
+
+        // Run the architecture + code validators next (this also runs the wiring guard,
         // which fails loudly if nx.json no longer wires validators into the build).
         if (!hotfix && fs.existsSync(path.join(root, 'architecture'))) {
             const validateCode = await runner.run(['run', 'architecture:validate-complete'], 'architecture:validate-complete');
